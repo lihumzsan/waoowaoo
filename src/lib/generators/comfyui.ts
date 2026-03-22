@@ -1,4 +1,5 @@
 import { getProviderConfig } from '@/lib/api-config'
+import { logWarn as _ulogWarn } from '@/lib/logging/core'
 import { runComfyUiTxt2Img } from '@/lib/providers/comfyui/client'
 import { COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
 import { BaseImageGenerator, type GenerateResult, type ImageGenerateParams } from './base'
@@ -29,10 +30,9 @@ export class ComfyUIImageGenerator extends BaseImageGenerator {
     const { userId, prompt, referenceImages = [], options = {} } = params
 
     if (referenceImages.length > 0) {
-      return {
-        success: false,
-        error: 'COMFYUI_IMAGE_REF_NOT_SUPPORTED: 本地 ComfyUI 当前仅支持文生图，暂不支持参考图',
-      }
+      _ulogWarn(
+        `[ComfyUI] reference images provided (${referenceImages.length}) but current adapter only supports text-to-image; fallback to txt2img`,
+      )
     }
 
     const providerId = typeof options.provider === 'string' ? options.provider : 'comfyui'

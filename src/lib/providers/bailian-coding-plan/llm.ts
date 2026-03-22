@@ -14,7 +14,7 @@ const DEFAULT_BASE_URL = 'https://coding.dashscope.aliyuncs.com/v1'
  * OpenAI SDK 默认会在「请求超时」后自动重试（maxRetries=2 → 最多 3 次），
  * 单次 timeout 30s 时总等待约 90s 才抛错，看起来像「神秘 91s 超时」。
  */
-const CODING_PLAN_COMPLETION_TIMEOUT_MS = 180_000
+const CODING_PLAN_COMPLETION_TIMEOUT_MS = 360_000
 
 export interface BailianCodingPlanLlmCompletionParams {
   modelId: string

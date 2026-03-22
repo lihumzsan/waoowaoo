@@ -65,10 +65,12 @@ function buildPanelPromptContext(params: {
     shotType: string | null
     cameraMove: string | null
     description: string | null
+    imagePrompt: string | null
     videoPrompt: string | null
     location: string | null
     characters: string | null
     srtSegment: string | null
+    sourceText: string
     photographyRules: string | null
     actingNotes: string | null
   }
@@ -117,10 +119,11 @@ function buildPanelPromptContext(params: {
       shot_type: params.panel.shotType || '',
       camera_move: params.panel.cameraMove || '',
       description: params.panel.description || '',
+      image_prompt: params.panel.imagePrompt || '',
       video_prompt: params.panel.videoPrompt || '',
       location: params.panel.location || '',
       characters: panelCharacters,
-      source_text: params.panel.srtSegment || '',
+      source_text: params.panel.sourceText || '',
       photography_rules: parseJsonUnknown(params.panel.photographyRules),
       acting_notes: parseJsonUnknown(params.panel.actingNotes),
     },
@@ -148,6 +151,22 @@ function buildPanelPrompt(params: {
       style: params.styleText,
     },
   })
+}
+
+function buildResolvedSourceText(panel: {
+  description: string | null
+  srtSegment: string | null
+  videoPrompt: string | null
+  imagePrompt: string | null
+}): string {
+  const sections = [
+    panel.description ? `scene_description: ${panel.description}` : '',
+    panel.srtSegment ? `source_text: ${panel.srtSegment}` : '',
+    panel.videoPrompt ? `video_prompt: ${panel.videoPrompt}` : '',
+    panel.imagePrompt ? `image_prompt: ${panel.imagePrompt}` : '',
+  ].filter((item) => item.trim().length > 0)
+
+  return sections.join('\n')
 }
 
 export async function handlePanelImageTask(job: Job<TaskJobData>) {
@@ -197,16 +216,24 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const artStyle = getArtStylePrompt(modelConfig.artStyle, job.data.locale)
   if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
   const aspectRatio = projectData.videoRatio
+  const sourceText = buildResolvedSourceText({
+    description: panel.description,
+    srtSegment: panel.srtSegment,
+    videoPrompt: panel.videoPrompt,
+    imagePrompt: panel.imagePrompt,
+  })
   const promptContext = buildPanelPromptContext({
     panel: {
       id: panel.id,
       shotType: panel.shotType,
       cameraMove: panel.cameraMove,
       description: panel.description,
+      imagePrompt: panel.imagePrompt,
       videoPrompt: panel.videoPrompt,
       location: panel.location,
       characters: panel.characters,
       srtSegment: panel.srtSegment,
+      sourceText,
       photographyRules: panel.photographyRules,
       actingNotes: panel.actingNotes,
     },
@@ -217,13 +244,22 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     locale: job.data.locale,
     aspectRatio,
     styleText: artStyle || '与参考图风格一致',
-    sourceText: panel.srtSegment || panel.description || '',
+    sourceText,
     contextJson,
   })
   logger.info({
     message: 'panel image prompt resolved',
     details: {
       promptLength: prompt.length,
+      promptSource: {
+        description: panel.description || '',
+        srtSegment: panel.srtSegment || '',
+        videoPrompt: panel.videoPrompt || '',
+        imagePrompt: panel.imagePrompt || '',
+        resolvedSourceText: sourceText,
+      },
+      promptContextJson: contextJson,
+      promptText: prompt,
     },
   })
 

@@ -33,7 +33,7 @@ export async function completeBailianLlm(
   const client = new OpenAI({
     apiKey: _params.apiKey,
     baseURL,
-    timeout: 30_000,
+    timeout: 60_000,
   })
   const completion = await client.chat.completions.create({
     model: _params.modelId,

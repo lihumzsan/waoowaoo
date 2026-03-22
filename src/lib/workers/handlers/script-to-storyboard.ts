@@ -40,7 +40,7 @@ import {
 } from './script-to-storyboard-atomic-retry'
 
 type AnyObj = Record<string, unknown>
-const MAX_VOICE_ANALYZE_ATTEMPTS = 2
+const MAX_VOICE_ANALYZE_ATTEMPTS = 4
 
 function buildWorkflowWorkerId(job: Job<TaskJobData>, label: string) {
   return `${label}:${job.queueName}:${job.data.taskId}`

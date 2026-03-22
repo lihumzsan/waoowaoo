@@ -34,6 +34,7 @@ interface StoredProvider {
   id?: string
   name?: string
   apiKey?: string
+  baseUrl?: string
 }
 
 interface UserModelOption {
@@ -157,6 +158,23 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
   return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
 }
 
+function getProviderKey(providerId: string): string {
+  const normalized = providerId.trim()
+  const separator = normalized.indexOf(':')
+  return separator >= 0 ? normalized.slice(0, separator) : normalized
+}
+
+function hasProviderRuntimeReadyConfig(provider: StoredProvider): boolean {
+  if (hasStoredProviderApiKey(provider)) return true
+  const providerId = typeof provider.id === 'string' ? provider.id.trim() : ''
+  if (!providerId) return false
+  const providerKey = getProviderKey(providerId)
+  if (providerKey === 'comfyui') {
+    return typeof provider.baseUrl === 'string' && provider.baseUrl.trim().length > 0
+  }
+  return false
+}
+
 function isUserSelectableModel(model: StoredModel): boolean {
   if (model.type !== 'audio') return true
   const modelId = toModelId(model)
@@ -178,7 +196,7 @@ export const GET = apiHandler(async () => {
   const providers: StoredProvider[] = parseStoredProviders(pref?.customProviders)
 
   const providerNameMap = new Map<string, string>()
-  const providerIdsWithApiKey = new Set<string>()
+  const providerIdsWithRuntimeConfig = new Set<string>()
   providers.forEach((provider) => {
     const providerId = typeof provider?.id === 'string' ? provider.id.trim() : ''
     if (!providerId) return
@@ -186,7 +204,7 @@ export const GET = apiHandler(async () => {
     if (provider?.name && typeof provider.name === 'string') {
       providerNameMap.set(providerId, provider.name)
     }
-    if (hasStoredProviderApiKey(provider)) providerIdsWithApiKey.add(providerId)
+    if (hasProviderRuntimeReadyConfig(provider)) providerIdsWithRuntimeConfig.add(providerId)
   })
 
   const grouped: UserModelsPayload = {
@@ -206,7 +224,7 @@ export const GET = apiHandler(async () => {
     if (!modelKey) continue
 
     const provider = toProvider(model)
-    if (!provider || !providerIdsWithApiKey.has(provider)) continue
+    if (!provider || !providerIdsWithRuntimeConfig.has(provider)) continue
     const modelId = toModelId(model)
     const option: UserModelOption = {
       value: modelKey,

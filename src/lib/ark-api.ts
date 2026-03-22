@@ -15,8 +15,8 @@ const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
 // 超时配置
 const DEFAULT_TIMEOUT_MS = 60 * 1000  // 60秒
-const MAX_RETRIES = 3
-const RETRY_DELAY_BASE_MS = 2000  // 2秒起始延迟
+const MAX_RETRIES = 6
+const RETRY_DELAY_BASE_MS = 4000  // 4秒起始延迟
 
 function normalizeError(error: unknown): {
     name?: string
@@ -343,7 +343,7 @@ async function fetchWithRetry(
 
         // 如果不是最后一次尝试，等待后重试
         if (attempt < maxRetries) {
-            const delayMs = RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1)  // 指数退避：2s, 4s, 8s
+            const delayMs = RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1)  // 指数退避：4s, 8s, 16s...
             _ulogInfo(`${logPrefix} 等待 ${delayMs / 1000} 秒后重试...`)
             await new Promise(resolve => setTimeout(resolve, delayMs))
         }

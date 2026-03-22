@@ -129,7 +129,6 @@ export function useStoryboardStageController({
     previewImage,
     setPreviewImage,
     regeneratePanelImage,
-    regenerateAllPanelsIndividually,
     selectPanelCandidate,
     selectPanelCandidateIndex,
     cancelPanelCandidate,
@@ -159,6 +158,7 @@ export function useStoryboardStageController({
     handleSetLocation,
     handleRemoveCharacter,
     handleRemoveLocation,
+    regeneratePanelImageWithLatestPrompt,
     runningCount,
     pendingPanelCount,
     handleGenerateAllPanels,
@@ -176,6 +176,7 @@ export function useStoryboardStageController({
     getPanelEditData,
     updatePanelEdit,
     debouncedSave,
+    savePanelWithData,
     regeneratePanelImage,
     modifyPanelImage,
     addCharacterToPanel,
@@ -190,6 +191,16 @@ export function useStoryboardStageController({
     isTransitioning,
   })
 
+  const regenerateAllPanelsIndividuallyWithLatestPrompt = useCallback(async (storyboardId: string) => {
+    const storyboard = localStoryboards.find((item) => item.id === storyboardId)
+    if (!storyboard) return
+    const panels = getTextPanels(storyboard)
+    const pendingPanels = panels.filter((panel) => !panel.imageUrl && !panel.imageTaskRunning)
+    await Promise.all(
+      pendingPanels.map((panel) => regeneratePanelImageWithLatestPrompt(panel.id)),
+    )
+  }, [getTextPanels, localStoryboards, regeneratePanelImageWithLatestPrompt])
+
   return {
     localStoryboards, setLocalStoryboards, sortedStoryboards, expandedClips, toggleExpandedClip,
     getClipInfo, getTextPanels, getPanelEditData, updatePanelEdit, formatClipTitle, totalPanels, storyboardStartIndex,
@@ -198,7 +209,7 @@ export function useStoryboardStageController({
     submittingVariantPanelId, generatePanelVariant,
     submittingStoryboardIds, submittingPanelImageIds, selectingCandidateIds,
     editingPanel, setEditingPanel, modifyingPanels, isDownloadingImages, previewImage, setPreviewImage,
-    regeneratePanelImage, regenerateAllPanelsIndividually, selectPanelCandidate, selectPanelCandidateIndex,
+    regeneratePanelImage: regeneratePanelImageWithLatestPrompt, regenerateAllPanelsIndividually: regenerateAllPanelsIndividuallyWithLatestPrompt, selectPanelCandidate, selectPanelCandidateIndex,
     cancelPanelCandidate, getPanelCandidates, modifyPanelImage, downloadAllImages, clearStoryboardError,
     assetPickerPanel, setAssetPickerPanel, aiDataPanel, setAIDataPanel, isEpisodeBatchSubmitting,
     getDefaultAssetsForClip, handleEditSubmit, handlePanelUpdate, handleAddCharacter, handleSetLocation, handleRemoveCharacter, handleRemoveLocation,
