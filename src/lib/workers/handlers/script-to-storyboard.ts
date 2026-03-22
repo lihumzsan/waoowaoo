@@ -126,7 +126,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
   const model = await resolveAnalysisModel({
     userId: job.data.userId,
     inputModel,
-    projectAnalysisModel: novelData.analysisModel,
+    projectId,
   })
   const [llmCapabilityOptions, workflowConcurrency] = await Promise.all([
     resolveProjectModelCapabilityGenerationOptions({

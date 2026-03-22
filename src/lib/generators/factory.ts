@@ -29,6 +29,8 @@ import {
     SiliconFlowImageGenerator,
     SiliconFlowVideoGenerator,
 } from './official'
+import { ComfyUIImageGenerator } from './comfyui'
+import { ComfyUIVideoGenerator } from './comfyui-video'
 
 /**
  * 根据 provider 创建图片生成器
@@ -67,6 +69,8 @@ export function createImageGenerator(provider: string, modelId?: string): ImageG
             return new BailianImageGenerator()
         case 'siliconflow':
             return new SiliconFlowImageGenerator()
+        case 'comfyui':
+            return new ComfyUIImageGenerator()
         default:
             throw new Error(`Unknown image generator provider: ${provider}`)
     }
@@ -96,6 +100,8 @@ export function createVideoGenerator(provider: string): VideoGenerator {
             return new BailianVideoGenerator()
         case 'siliconflow':
             return new SiliconFlowVideoGenerator()
+        case 'comfyui':
+            return new ComfyUIVideoGenerator()
         default:
             throw new Error(`Unknown video generator provider: ${provider}`)
     }

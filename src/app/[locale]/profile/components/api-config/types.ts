@@ -112,6 +112,15 @@ export const PRESET_MODELS: PresetModel[] = [
     // 阿里云百炼文本模型
     { modelId: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', type: 'llm', provider: 'bailian' },
     { modelId: 'qwen3.5-flash', name: 'Qwen 3.5 Flash', type: 'llm', provider: 'bailian' },
+    // 阿里云百炼 Coding Plan 文本模型（仅文本处理）
+    { modelId: 'qwen3.5-plus', name: '千问 3.5 Plus', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'qwen3-max-2026-01-23', name: '千问 3 Max', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'qwen3-coder-next', name: '千问 Coder Next', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'qwen3-coder-plus', name: '千问 Coder Plus', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'glm-5', name: '智谱 GLM-5', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'glm-4.7', name: '智谱 GLM-4.7', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'kimi-k2.5', name: 'Kimi K2.5', type: 'llm', provider: 'bailian-coding-plan' },
+    { modelId: 'MiniMax-M2.5', name: 'MiniMax M2.5', type: 'llm', provider: 'bailian-coding-plan' },
     // MiniMax 官方文本模型
     { modelId: 'MiniMax-M2.5', name: 'MiniMax M2.5', type: 'llm', provider: 'minimax' },
     { modelId: 'MiniMax-M2.5-highspeed', name: 'MiniMax M2.5 Highspeed', type: 'llm', provider: 'minimax' },
@@ -132,6 +141,10 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'imagen-4.0-generate-001', name: 'Imagen 4', type: 'image', provider: 'google' },
     { modelId: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4 Ultra', type: 'image', provider: 'google' },
     { modelId: 'imagen-4.0-fast-generate-001', name: 'Imagen 4 Fast', type: 'image', provider: 'google' },
+    // 本地 ComfyUI 图片：模型 ID = workflows/<标识>.json 的文件名（默认 Qwen 文生图）
+    { modelId: 'qwen-image-txt2img', name: 'ComfyUI · Qwen 文生图', type: 'image', provider: 'comfyui' },
+    // 本地 ComfyUI 视频：须在 workflows/<标识>.json 放置 API 格式工作流
+    { modelId: 'comfyui-video', name: 'ComfyUI · 本地视频（需配置工作流 JSON）', type: 'video', provider: 'comfyui' },
     // 视频模型
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },
@@ -201,10 +214,12 @@ export const PRESET_PROVIDERS: Omit<Provider, 'apiKey' | 'hasApiKey'>[] = [
     { id: 'ark', name: 'Volcengine Ark' },
     { id: 'google', name: 'Google AI Studio' },
     { id: 'bailian', name: 'Alibaba Bailian' },
+    { id: 'bailian-coding-plan', name: '阿里云百炼 Coding Plan', baseUrl: 'https://coding.dashscope.aliyuncs.com/v1' },
     { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
     { id: 'minimax', name: 'MiniMax Hailuo', baseUrl: 'https://api.minimaxi.com/v1' },
     { id: 'vidu', name: 'Vidu' },
     { id: 'fal', name: 'FAL' },
+    { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
 ]
 
 const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
@@ -212,7 +227,9 @@ const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
     minimax: '海螺 MiniMax',
     vidu: '生数科技 Vidu',
     bailian: '阿里云百炼',
+    'bailian-coding-plan': '阿里云百炼 Coding Plan',
     siliconflow: '硅基流动',
+    comfyui: '本地 ComfyUI',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -378,6 +395,24 @@ export const PROVIDER_TUTORIALS: ProviderTutorial[] = [
             {
                 text: 'bailian_step1',
                 url: 'https://bailian.console.aliyun.com/cn-beijing/?tab=model#/api-key'
+            }
+        ]
+    },
+    {
+        providerId: 'bailian-coding-plan',
+        steps: [
+            {
+                text: 'bailian_coding_plan_step1',
+                url: 'https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=dashboard#/efm/coding_plan'
+            }
+        ]
+    },
+    {
+        providerId: 'comfyui',
+        steps: [
+            {
+                text: 'comfyui_step1',
+                url: 'https://github.com/comfyanonymous/ComfyUI'
             }
         ]
     },

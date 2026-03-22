@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   encodeModelKey,
   PRESET_MODELS,
@@ -187,11 +187,40 @@ export function buildProviderConnectionPayload(params: {
     }
   }
 
-  return {
+  const payload: ProviderConnectionPayload = {
     apiType: params.providerKey,
     apiKey,
     ...(llmModel ? { llmModel } : {}),
   }
+  if (params.providerKey === 'bailian-coding-plan' && compatibleBaseUrl) {
+    payload.baseUrl = compatibleBaseUrl
+  }
+  if (params.providerKey === 'comfyui' && compatibleBaseUrl) {
+    payload.baseUrl = compatibleBaseUrl
+  }
+  return payload
+}
+
+/** 连通性测试用的 Base URL：正在编辑地址时用输入框内容，否则用已保存值（避免未点保存仍测旧端口如 8188）。 */
+export function resolveBaseUrlForProviderTest(params: {
+  providerKey: string
+  isEditingUrl: boolean
+  tempUrl: string
+  savedBaseUrl?: string
+}): string | undefined {
+  const { providerKey, isEditingUrl, tempUrl, savedBaseUrl } = params
+  const needsUrl =
+    providerKey === 'comfyui' ||
+    providerKey === 'bailian-coding-plan' ||
+    providerKey === 'openai-compatible' ||
+    providerKey === 'gemini-compatible'
+  if (!needsUrl) return savedBaseUrl?.trim() || undefined
+  if (isEditingUrl) {
+    const draft = tempUrl.trim()
+    return draft.length > 0 ? draft : undefined
+  }
+  const saved = savedBaseUrl?.trim()
+  return saved && saved.length > 0 ? saved : undefined
 }
 
 export function buildCustomPricingFromModelForm(
@@ -369,6 +398,13 @@ export function useProviderCardState({
   const [tempKey, setTempKey] = useState(provider.apiKey || '')
   const [tempUrl, setTempUrl] = useState(provider.baseUrl || '')
   const [showTutorial, setShowTutorial] = useState(false)
+
+  // 父级保存后同步地址，避免输入框与已保存值不一致
+  useEffect(() => {
+    if (!isEditingUrl) {
+      setTempUrl(provider.baseUrl || '')
+    }
+  }, [provider.baseUrl, provider.id, isEditingUrl])
   const [showAddForm, setShowAddForm] = useState<ProviderCardModelType | null>(null)
   const [newModel, setNewModel] = useState<ModelFormState>(EMPTY_MODEL_FORM)
   const [batchMode, setBatchMode] = useState(false)
@@ -386,7 +422,7 @@ export function useProviderCardState({
     (presetProvider) => presetProvider.id === provider.id,
   )
   const showBaseUrlEdit =
-    ['gemini-compatible', 'openai-compatible'].includes(providerKey) &&
+    ['gemini-compatible', 'openai-compatible', 'comfyui'].includes(providerKey) &&
     Boolean(onUpdateBaseUrl)
   const tutorial = getProviderTutorial(provider.id)
 
@@ -465,7 +501,12 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: tempKey,
-        baseUrl: provider.baseUrl,
+        baseUrl: resolveBaseUrlForProviderTest({
+          providerKey,
+          isEditingUrl,
+          tempUrl,
+          savedBaseUrl: provider.baseUrl,
+        }),
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -489,7 +530,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, providerKey, tempKey])
+  }, [defaultModels.analysisModel, doSaveKey, isEditingUrl, models, provider.baseUrl, providerKey, tempKey, tempUrl])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -507,7 +548,12 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: provider.apiKey || '',
-        baseUrl: provider.baseUrl,
+        baseUrl: resolveBaseUrlForProviderTest({
+          providerKey,
+          isEditingUrl,
+          tempUrl,
+          savedBaseUrl: provider.baseUrl,
+        }),
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -522,7 +568,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, models, provider.apiKey, provider.baseUrl, providerKey])
+  }, [defaultModels.analysisModel, isEditingUrl, models, provider.apiKey, provider.baseUrl, providerKey, tempUrl])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')

@@ -1,0 +1,115 @@
+{
+  "37": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen\\qwen_image_2512_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "38": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "39": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen\\qwen_image_vae.safetensors"
+    }
+  },
+  "83": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["37", 0],
+      "lora_name": "qwen\\Qwen-Image-Lightning-8steps-V2.0-bf16.safetensors",
+      "strength_model": 1
+    }
+  },
+  "76": {
+    "class_type": "PathchSageAttentionKJ",
+    "inputs": {
+      "model": ["83", 0],
+      "sage_attention": "auto",
+      "allow_compile": false
+    }
+  },
+  "66": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": ["76", 0],
+      "shift": 3.5
+    }
+  },
+  "70": {
+    "class_type": "ImpactInt",
+    "inputs": { "value": 1024 }
+  },
+  "71": {
+    "class_type": "ImpactInt",
+    "inputs": { "value": 1536 }
+  },
+  "72": {
+    "class_type": "Int",
+    "inputs": { "Number": "1" }
+  },
+  "58": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": ["70", 0],
+      "height": ["71", 0],
+      "batch_size": ["72", 0]
+    }
+  },
+  "67": {
+    "class_type": "CR Text",
+    "inputs": {
+      "text": ""
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["38", 0],
+      "text": ["67", 0]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["38", 0],
+      "text": " "
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["66", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["58", 0],
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["3", 0],
+      "vae": ["39", 0]
+    }
+  },
+  "60": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["8", 0],
+      "filename_prefix": "waoowaoo"
+    }
+  }
+}

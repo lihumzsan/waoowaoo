@@ -116,6 +116,10 @@
   "audioAndLipsync": "Audio & Lip Sync",
   "configureApiKey": "Configure API Key",
   "enterApiKey": "Enter API Key",
+  "optional": "optional",
+  "comfyuiNoKey": "No key (local)",
+  "comfyuiBaseUrlPlaceholder": "http://127.0.0.1:8188 (change port if yours differs, e.g. :8878)",
+  "comfyuiWorkflowKeyPlaceholder": "Workflow id, e.g. qwen-image-txt2img or workflows/*.json basename",
   "testConnection": "Test Connection",
   "testing": "Testing...",
   "testPassed": "Connection test passed",
@@ -177,6 +181,8 @@
       "openai_compatible_step1": "Enter any OpenAI-compatible service Base URL and API key",
       "gemini_compatible_step1": "Enter any Gemini-compatible service Base URL and API key",
       "bailian_step1": "Go to Alibaba Cloud Bailian console and get an API Key",
+      "bailian_coding_plan_step1": "Go to Alibaba Cloud Model Studio, enable Coding Plan and get the dedicated API Key",
+      "comfyui_step1": "Install and run ComfyUI; set Base URL. Default image workflow id is qwen-image-txt2img (requires matching models & custom nodes). For custom graphs, add API-format <key>.json under src/lib/providers/comfyui/workflows/; Model ID = key without extension. Optional .meta.json for prompt/size—see workflows/README.",
       "siliconflow_step1": "Go to SiliconFlow console and create an API Key"
     }
   },

@@ -19,7 +19,9 @@ export interface TestProviderResult {
 
 type PresetProviderType = 'ark' | 'google' | 'openrouter' | 'minimax' | 'fal' | 'vidu'
   | 'bailian'
+  | 'bailian-coding-plan'
   | 'siliconflow'
+  | 'comfyui'
 type CompatibleProviderType = 'openai-compatible' | 'gemini-compatible'
 
 type TestProviderPayload = {
@@ -771,6 +773,148 @@ async function testSiliconFlowProvider(apiKey: string): Promise<TestProviderResu
 }
 
 // ---------------------------------------------------------------------------
+// ComfyUI (local, image — connectivity via /queue)
+// ---------------------------------------------------------------------------
+
+/** Base URL for server-side fetch (must be reachable from Node, not only from the browser). */
+function normalizeComfyUiBaseUrlForTest(raw: string): string {
+  let s = raw.trim().replace(/\/+$/, '')
+  if (!s) return s
+  if (!/^https?:\/\//i.test(s)) {
+    s = `http://${s}`
+  }
+  try {
+    const u = new URL(s)
+    if ((u.hostname === 'localhost' || u.hostname === '127.0.0.1') && !u.port && !s.includes(':8188')) {
+      u.port = '8188'
+      return u.toString().replace(/\/$/, '')
+    }
+  } catch {
+    // keep s as-is
+  }
+  return s
+}
+
+function extractFetchFailureDetail(error: unknown): string {
+  if (!(error instanceof Error)) return String(error).slice(0, 400)
+  const parts: string[] = [error.message]
+  const c = error.cause
+  if (c instanceof Error) parts.push(c.message)
+  else if (typeof c === 'object' && c !== null && 'code' in c) {
+    parts.push(String((c as { code?: unknown }).code))
+  }
+  return parts.filter(Boolean).join(' | ').slice(0, 500)
+}
+
+function comfyUiConnectionUserMessage(error: unknown): string {
+  const detail = extractFetchFailureDetail(error).toLowerCase()
+  const refused = detail.includes('econnrefused') || detail.includes('connection refused')
+  const timedOut = detail.includes('timeout') || detail.includes('timed out')
+  const notFound = detail.includes('enotfound') || detail.includes('getaddrinfo')
+  let zh = '无法从本应用服务端访问 ComfyUI（请求在 Next.js 服务器上发出，不是浏览器直连）。'
+  if (refused) {
+    zh += ' 常见原因：① ComfyUI 未启动或端口不对（详情里的 GET 地址即为本次请求，若仍是 :8188 而你在用其他端口，请修改 Base URL 后点保存，或在编辑 Base URL 时直接点测试）；② Docker 内 127.0.0.1 指向容器，改用 host.docker.internal；③ WSL2 与 Windows 混用时填宿主机 IP。'
+  } else if (timedOut) {
+    zh += ' 连接超时，请检查防火墙或 ComfyUI 是否监听 0.0.0.0。'
+  } else if (notFound) {
+    zh += ' 域名解析失败，请检查 Base URL 主机名是否正确。'
+  } else {
+    zh += ' 请确认 Base URL 与运行网站的环境一致（与浏览器能打开 ComfyUI 不是同一回事）。'
+  }
+  return zh
+}
+
+async function testComfyUiProvider(baseUrl: string): Promise<TestProviderResult> {
+  const steps: TestStep[] = []
+  const normalized = normalizeComfyUiBaseUrlForTest(baseUrl)
+  if (!normalized) {
+    steps.push({ name: 'models', status: 'fail', message: 'Missing baseUrl' })
+    return { success: false, steps }
+  }
+
+  const queueUrl = `${normalized}/queue`
+
+  try {
+    const res = await fetch(queueUrl, {
+      method: 'GET',
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      steps.push({
+        name: 'models',
+        status: 'fail',
+        message: `HTTP ${res.status}`,
+        detail: text.slice(0, 300),
+      })
+      return { success: false, steps }
+    }
+    steps.push({
+      name: 'models',
+      status: 'pass',
+      message: 'ComfyUI server reachable (/queue)',
+      detail: normalized !== baseUrl.trim().replace(/\/+$/, '') ? `Resolved URL: ${normalized}` : undefined,
+    })
+    return { success: true, steps }
+  } catch (error) {
+    steps.push({
+      name: 'models',
+      status: 'fail',
+      message: comfyUiConnectionUserMessage(error),
+      detail: `${extractFetchFailureDetail(error)} | GET ${queueUrl}`,
+    })
+    return { success: false, steps }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bailian Coding Plan (text-only, OpenAI-compatible)
+// ---------------------------------------------------------------------------
+
+const BAILIAN_CODING_PLAN_BASE_URL = 'https://coding.dashscope.aliyuncs.com/v1'
+
+async function testBailianCodingPlanProvider(
+  apiKey: string,
+  baseUrl?: string,
+): Promise<TestProviderResult> {
+  const steps: TestStep[] = []
+  const model = 'qwen3.5-plus'
+  const resolvedBaseUrl = (baseUrl?.trim() || BAILIAN_CODING_PLAN_BASE_URL).replace(/\/+$/, '')
+
+  try {
+    // 轻量探活：与 completeBailianCodingPlanLlm（长提示、长输出、更长 timeout）不是同一负载
+    const client = new OpenAI({
+      apiKey,
+      baseURL: resolvedBaseUrl.endsWith('/v1') ? resolvedBaseUrl : `${resolvedBaseUrl}/v1`,
+      timeout: 30_000,
+      maxRetries: 0,
+    })
+    const response = await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: 'hi' }],
+      max_tokens: 20,
+      temperature: 0,
+    })
+    const answer = response.choices[0]?.message?.content?.trim() || ''
+    steps.push({
+      name: 'textGen',
+      status: 'pass',
+      model,
+      message: answer ? `Response: ${answer.slice(0, 80)}` : 'OK',
+    })
+    return { success: true, steps }
+  } catch (error) {
+    steps.push({
+      name: 'textGen',
+      status: 'fail',
+      model,
+      message: toErrorMessage(error),
+    })
+    return { success: false, steps }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Bailian (zero-inference probes)
 // ---------------------------------------------------------------------------
 
@@ -835,7 +979,7 @@ async function testBailianProvider(apiKey: string): Promise<TestProviderResult> 
 export async function testProviderConnection(payload: TestProviderPayload): Promise<TestProviderResult> {
   const { apiType, baseUrl, apiKey, llmModel } = payload
 
-  if (!apiKey) {
+  if (!apiKey && apiType !== 'comfyui') {
     return {
       success: false,
       steps: [{ name: 'models', status: 'fail', message: 'Missing apiKey' }],
@@ -869,6 +1013,10 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
       return testViduProvider(apiKey)
     case 'bailian':
       return testBailianProvider(apiKey)
+    case 'bailian-coding-plan':
+      return testBailianCodingPlanProvider(apiKey, baseUrl)
+    case 'comfyui':
+      return testComfyUiProvider(baseUrl || '')
     case 'siliconflow':
       return testSiliconFlowProvider(apiKey)
     default:

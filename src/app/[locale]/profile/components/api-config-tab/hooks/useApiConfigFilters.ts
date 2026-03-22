@@ -25,6 +25,8 @@ const MODEL_PROVIDER_KEYS = [
   'ark',
   'google',
   'bailian',
+  'bailian-coding-plan',
+  'comfyui',
   'openrouter',
   'minimax',
   'vidu',

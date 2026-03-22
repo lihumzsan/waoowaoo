@@ -189,9 +189,10 @@ const OPTIONAL_PRICING_PROVIDER_KEYS = new Set([
   'openai-compatible',
   'gemini-compatible',
   'bailian',
+  'bailian-coding-plan',
   'siliconflow',
 ])
-const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
+const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'bailian-coding-plan', 'siliconflow'])
 const RETIRED_PROVIDER_KEYS = new Set(['qwen'])
 const MINIMAX_OFFICIAL_BASE_URL = 'https://api.minimaxi.com/v1'
 

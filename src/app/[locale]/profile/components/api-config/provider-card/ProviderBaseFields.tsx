@@ -17,10 +17,16 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
         return 'https://your-api-domain.com'
       case 'openai-compatible':
         return 'https://api.openai.com/v1'
+      case 'comfyui':
+        return t('comfyuiBaseUrlPlaceholder')
       default:
         return 'http://localhost:8000'
     }
   })()
+
+  const comfyUiAddressOnly =
+    state.providerKey === 'comfyui' && !provider.apiKey && Boolean(provider.baseUrl?.trim())
+  const showApiKeyAsConfigured = provider.hasApiKey || comfyUiAddressOnly
 
   return (
     <>
@@ -35,7 +41,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
                 type="text"
                 value={state.tempKey}
                 onChange={(event) => state.setTempKey(event.target.value)}
-                placeholder={t('enterApiKey')}
+                placeholder={state.providerKey === 'comfyui' ? `${t('enterApiKey')} (${t('optional')})` : t('enterApiKey')}
                 className="glass-input-base flex-1 px-3 py-1.5 text-[12px]"
                 disabled={state.keyTestStatus === 'testing'}
                 autoFocus
@@ -63,23 +69,29 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
             </div>
           ) : (
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {provider.hasApiKey ? (
+              {showApiKeyAsConfigured ? (
                 <>
                   <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap rounded-lg bg-[var(--glass-bg-surface)] px-3 py-1.5 font-mono text-[12px] text-[var(--glass-text-secondary)]">
-                    {state.showKey ? provider.apiKey : state.maskedKey}
+                    {comfyUiAddressOnly
+                      ? (state.showKey ? t('comfyuiNoKey') : '••••••')
+                      : state.showKey
+                        ? provider.apiKey
+                        : state.maskedKey}
                   </span>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      onClick={() => state.setShowKey(!state.showKey)}
-                      className="glass-icon-btn-sm"
-                      title={state.showKey ? t('hide') : t('show')}
-                    >
-                      {state.showKey ? (
-                        <AppIcon name="eye" className="h-4 w-4" />
-                      ) : (
-                        <AppIcon name="eyeOff" className="h-4 w-4" />
-                      )}
-                    </button>
+                    {!comfyUiAddressOnly && (
+                      <button
+                        onClick={() => state.setShowKey(!state.showKey)}
+                        className="glass-icon-btn-sm"
+                        title={state.showKey ? t('hide') : t('show')}
+                      >
+                        {state.showKey ? (
+                          <AppIcon name="eye" className="h-4 w-4" />
+                        ) : (
+                          <AppIcon name="eyeOff" className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={state.startEditKey}
                       className="glass-icon-btn-sm"

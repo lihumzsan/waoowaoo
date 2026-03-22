@@ -64,6 +64,14 @@ function normalizeProviderBaseUrl(providerId: string, rawBaseUrl?: string): stri
   if (providerKey === 'minimax') {
     return 'https://api.minimaxi.com/v1'
   }
+  if (providerKey === 'bailian-coding-plan') {
+    const baseUrl = readTrimmedString(rawBaseUrl)
+    return baseUrl || 'https://coding.dashscope.aliyuncs.com/v1'
+  }
+  if (providerKey === 'comfyui') {
+    const baseUrl = readTrimmedString(rawBaseUrl)
+    return baseUrl || 'http://127.0.0.1:8188'
+  }
 
   const baseUrl = readTrimmedString(rawBaseUrl)
   if (!baseUrl) return undefined
@@ -419,14 +427,14 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   const { providers } = await readUserConfig(userId)
   const provider = pickProviderStrict(providers, providerId)
 
-  if (!provider.apiKey) {
+  if (!provider.apiKey && getProviderKey(provider.id) !== 'comfyui') {
     throw new Error(`PROVIDER_API_KEY_MISSING: ${provider.id}`)
   }
 
   return {
     id: provider.id,
     name: provider.name,
-    apiKey: decryptApiKey(provider.apiKey),
+    apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
     baseUrl: normalizeProviderBaseUrl(provider.id, provider.baseUrl),
     apiMode: provider.apiMode,
     gatewayRoute: provider.gatewayRoute,

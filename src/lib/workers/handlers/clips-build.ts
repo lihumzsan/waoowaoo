@@ -60,7 +60,7 @@ export async function handleClipsBuildTask(job: Job<TaskJobData>) {
   const analysisModel = await resolveAnalysisModel({
     userId: job.data.userId,
     inputModel: payload.model,
-    projectAnalysisModel: novelData.analysisModel,
+    projectId: job.data.projectId,
   })
 
   const episode = await prisma.novelPromotionEpisode.findUnique({

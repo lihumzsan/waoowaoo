@@ -31,5 +31,12 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "boolOn": "On",
-    "boolOff": "Off"
+    "boolOff": "Off",
+    "noModelsInList": "No models of this type are available. Add and enable them in Profile → API / Model configuration (provider API keys required).",
+    "noImageModelsBannerTitle": "No image models available yet",
+    "noImageModelsBannerBody": "Character / location / storyboard / edit dropdowns only list models marked as type “image” and enabled in your configuration. Text-only models (e.g. Qwen, Coding Plan) will not appear here. Add image providers such as FAL, ComfyUI, or Gemini in the configuration center and ensure the provider API key is set.",
+    "noVideoModelsBannerTitle": "No video models available yet",
+    "noVideoModelsBannerBody": "Add and enable models of type “video” in Profile → API / Model configuration.",
+    "noAudioModelsBannerTitle": "No speech models available yet",
+    "noAudioModelsBannerBody": "Add and enable models of type “audio” in Profile → API / Model configuration."
 }

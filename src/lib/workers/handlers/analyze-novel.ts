@@ -67,7 +67,7 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
   const analysisModel = await resolveAnalysisModel({
     userId: job.data.userId,
     inputModel: payload.model,
-    projectAnalysisModel: novelData.analysisModel,
+    projectId: job.data.projectId,
   })
 
   const firstEpisode = await prisma.novelPromotionEpisode.findFirst({

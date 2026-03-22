@@ -116,6 +116,10 @@
   "audioAndLipsync": "语音与唇形同步",
   "configureApiKey": "配置 API Key",
   "enterApiKey": "请输入 API Key",
+  "optional": "可选",
+  "comfyuiNoKey": "本地无需 Key",
+  "comfyuiBaseUrlPlaceholder": "http://127.0.0.1:8188（非默认端口请改成你的端口，如 :8878）",
+  "comfyuiWorkflowKeyPlaceholder": "工作流标识，如 qwen-image-txt2img 或与 workflows 下 .json 文件名一致",
   "testConnection": "测试连接",
   "testing": "正在测试...",
   "testPassed": "连接测试通过",
@@ -177,6 +181,8 @@
       "openai_compatible_step1": "填写任意 OpenAI 协议兼容服务的 Base URL 与 API Key",
       "gemini_compatible_step1": "填写任意 Gemini 协议兼容服务的 Base URL 与 API Key",
       "bailian_step1": "进入阿里云百炼平台，获取 API Key",
+      "bailian_coding_plan_step1": "进入阿里云 Model Studio，开通 Coding Plan 并获取专属 API Key",
+      "comfyui_step1": "安装并启动 ComfyUI，Base URL 填实际地址。图片默认工作流标识 qwen-image-txt2img（Qwen 文生图，需本机已安装对应模型与自定义节点）。自定义请放 API 格式 <标识>.json 到 src/lib/providers/comfyui/workflows/，模型 ID 与文件名（无扩展名）一致；可选 .meta.json 注入提示词与宽高，见该目录 README。",
       "siliconflow_step1": "进入硅基流动控制台，创建 API Key"
     }
   },

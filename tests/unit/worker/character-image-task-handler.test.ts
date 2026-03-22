@@ -88,7 +88,7 @@ describe('worker character-image-task-handler behavior', () => {
 
   it('characterModel not configured -> explicit error', async () => {
     utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '', artStyle: 'realistic' })
-    await expect(handleCharacterImageTask(buildJob({}))).rejects.toThrow('Character model not configured')
+    await expect(handleCharacterImageTask(buildJob({}))).rejects.toThrow(/CHARACTER_IMAGE_MODEL_NOT_CONFIGURED/)
   })
 
   it('success path -> uses primary appearance as reference and persists imageUrls', async () => {

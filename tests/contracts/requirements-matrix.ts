@@ -119,6 +119,7 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     tests: [
       'tests/integration/provider/fal-provider.contract.test.ts',
       'tests/integration/provider/openai-compat-provider.contract.test.ts',
+      'tests/integration/provider/comfyui-provider.contract.test.ts',
       'tests/unit/task/async-poll-external-id.test.ts',
     ],
   },
@@ -145,6 +146,14 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     tests: [
       'tests/unit/api-config/provider-card-tutorial-modal.test.ts',
     ],
+  },
+  {
+    id: 'REQ-USER-API-CONFIG-CATALOG',
+    feature: 'User API config route catalog',
+    userValue: '用户 API 配置主路由保留在契约路由清单中',
+    risk: '路由重构时遗漏注册导致契约缺口',
+    priority: 'P2',
+    tests: ['tests/integration/api/contract/user-project-routes.catalog.test.ts'],
   },
   {
     id: 'REQ-INFRA-PUBLIC-ROUTES',

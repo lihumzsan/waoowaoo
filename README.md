@@ -100,6 +100,12 @@ npx prisma db push
 npm run dev
 ```
 
+> [!TIP]
+> **本地 ComfyUI**：官方默认端口为 `8188`。若你的 ComfyUI 使用其他端口（例如 `8878`），请在 **设置中心 → API 配置 → ComfyUI** 的 Base URL 填写完整地址，如 `http://127.0.0.1:8878`，不要沿用界面里的默认 `8188`。方式三在本机运行 Next.js 时，服务端与浏览器在同一台电脑，一般使用 `http://127.0.0.1:你的端口` 即可通过「测试连接」。
+
+> [!TIP]
+> **ComfyUI 工作流**：图片默认使用仓库内 `qwen-image-txt2img`（Qwen 文生图 API 图）。自定义请将 ComfyUI **API 格式** JSON 放到 `src/lib/providers/comfyui/workflows/<标识>.json`，模型 ID 填 `<标识>`。说明见该目录 `README.md`。
+
 > [!WARNING]
 > 跳过 `npx prisma db push` 会导致所有数据库表不存在，启动后报错 `The table 'tasks' does not exist`。请务必先运行此命令再启动开发服务器。
 

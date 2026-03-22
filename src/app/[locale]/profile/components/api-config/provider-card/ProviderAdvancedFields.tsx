@@ -11,6 +11,12 @@ import type {
   ProviderCardTranslator,
 } from './types'
 
+function providerHasCredentials(provider: ProviderCardProps['provider']): boolean {
+  const key = getProviderKey(provider.id)
+  if (key === 'comfyui') return !!(provider.hasApiKey || provider.baseUrl?.trim())
+  return !!provider.hasApiKey
+}
+
 interface ProviderAdvancedFieldsProps {
   provider: ProviderCardProps['provider']
   onToggleModel: ProviderCardProps['onToggleModel']
@@ -134,6 +140,8 @@ export function ProviderAdvancedFields({
   state,
 }: ProviderAdvancedFieldsProps) {
   const providerKey = getProviderKey(provider.id)
+  const modelIdPlaceholder =
+    providerKey === 'comfyui' ? t('comfyuiWorkflowKeyPlaceholder') : t('modelActualId')
   const addableModelTypes = new Set<ProviderCardModelType>(getAddableModelTypesForProvider(provider.id))
   const visibleTypes = useMemo(
     () => getVisibleModelTypesForProvider(provider.id, state.groupedModels),
@@ -220,7 +228,7 @@ export function ProviderAdvancedFields({
               onChange={(event) =>
                 state.setNewModel({ ...state.newModel, modelId: event.target.value })
               }
-              placeholder={t('modelActualId')}
+              placeholder={modelIdPlaceholder}
               className={`glass-input-base flex-1 px-3 py-1.5 text-[12px] font-mono ${currentType === 'video' && state.batchMode && provider.id === 'ark' ? 'rounded-r-none' : ''}`}
             />
             {currentType === 'video' && state.batchMode && provider.id === 'ark' && (
@@ -275,7 +283,7 @@ export function ProviderAdvancedFields({
                 onToggleModel={onToggleModel}
                 onDeleteModel={onDeleteModel}
                 onUpdateModel={onUpdateModel}
-                hasApiKey={!!provider.hasApiKey}
+                hasApiKey={providerHasCredentials(provider)}
               />
             ))}
           </div>
@@ -321,7 +329,7 @@ export function ProviderAdvancedFields({
               onChange={(event) =>
                 state.setNewModel({ ...state.newModel, modelId: event.target.value })
               }
-              placeholder={t('modelActualId')}
+              placeholder={modelIdPlaceholder}
               className="glass-input-base flex-1 px-3 py-1.5 text-[12px] font-mono"
             />
             <button
@@ -390,7 +398,11 @@ function ModelRow({
                 state.setEditModel({ ...state.editModel, modelId: event.target.value })
               }
               className="glass-input-base w-full px-3 py-1.5 text-[12px] font-mono"
-              placeholder={t('modelActualId')}
+              placeholder={
+                getProviderKey(model.provider) === 'comfyui'
+                  ? t('comfyuiWorkflowKeyPlaceholder')
+                  : t('modelActualId')
+              }
             />
             {hasPriceText && (
               <div className="text-xs text-[var(--glass-text-tertiary)]">{priceText}</div>

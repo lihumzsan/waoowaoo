@@ -88,10 +88,13 @@ export function mergeProvidersForDisplay(
             const providerBaseUrl = providerKey === 'minimax'
                 ? matchedPreset.baseUrl
                 : (savedProvider.baseUrl || matchedPreset.baseUrl)
+            const hasApiKeyResolved = providerKey === 'comfyui'
+                ? apiKey.length > 0 || Boolean(providerBaseUrl?.trim())
+                : apiKey.length > 0
             merged.push({
                 ...matchedPreset,
                 apiKey,
-                hasApiKey: apiKey.length > 0,
+                hasApiKey: hasApiKeyResolved,
                 hidden: savedProvider.hidden === true,
                 baseUrl: providerBaseUrl,
                 apiMode: savedProvider.apiMode,
@@ -539,9 +542,13 @@ export function useProviders(): UseProvidersReturn {
     // 提供商操作
     const updateProviderApiKey = useCallback((providerId: string, apiKey: string) => {
         setProviders(prev => {
-            const next = prev.map(p =>
-                p.id === providerId ? { ...p, apiKey, hasApiKey: !!apiKey } : p
-            )
+            const next = prev.map((p) => {
+                if (p.id !== providerId) return p
+                const key = getProviderKey(providerId)
+                const hasKey = !!apiKey
+                const comfyReady = key === 'comfyui' && Boolean(p.baseUrl?.trim())
+                return { ...p, apiKey, hasApiKey: hasKey || comfyReady }
+            })
             latestProvidersRef.current = next
             void performSave(undefined, true)
             return next
@@ -648,9 +655,16 @@ export function useProviders(): UseProvidersReturn {
 
     const updateProviderBaseUrl = useCallback((providerId: string, baseUrl: string) => {
         setProviders(prev => {
-            const next = prev.map(p =>
-                p.id === providerId ? { ...p, baseUrl } : p
-            )
+            const next = prev.map((p) => {
+                if (p.id !== providerId) return p
+                const key = getProviderKey(providerId)
+                const comfyReady = key === 'comfyui' && Boolean(baseUrl.trim())
+                const nextP = { ...p, baseUrl }
+                if (key === 'comfyui') {
+                    return { ...nextP, hasApiKey: comfyReady || !!p.apiKey }
+                }
+                return nextP
+            })
             latestProvidersRef.current = next
             void performSave(undefined, true)
             return next

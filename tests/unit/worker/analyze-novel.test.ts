@@ -8,6 +8,7 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     update: vi.fn(async () => ({})),
   },
+  userPreference: { findUnique: vi.fn() },
   novelPromotionEpisode: { findFirst: vi.fn() },
   novelPromotionCharacter: { create: vi.fn(async () => ({ id: 'char-new-1' })) },
   novelPromotionLocation: { create: vi.fn(async () => ({ id: 'loc-new-1' })) },
@@ -75,6 +76,7 @@ describe('worker analyze-novel behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
+    prismaMock.userPreference.findUnique.mockResolvedValue({ analysisModel: null })
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
       mode: 'novel-promotion',
