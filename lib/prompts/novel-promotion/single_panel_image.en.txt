@@ -25,3 +25,5 @@ Execution rules:
 3. Repaint the background according to shot type and angle.
 4. If storyboard conflicts with source text, keep narrative logic from source text.
 5. Keep final visual style consistent with provided references.
+6. If a reference image clearly contradicts the panel text (e.g. text says indoor night office, ref is outdoor portrait), follow the text and do not copy the wrong subject/setting from the reference.
+7. If the panel has no characters / is an empty establishing shot, do not add people; paint only the environment from the text even if a location reference shows a person.

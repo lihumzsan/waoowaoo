@@ -247,6 +247,22 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     sourceText,
     contextJson,
   })
+  /**
+   * 专用：排查图文不符时 grep「PANEL_IMAGE_PROMPT」或 details.panelImagePrompt。
+   * audit: true — 默认 LOG_LEVEL=ERROR 时仍会输出（与 API 侧 audit 一致）；否则 logger.info 会被静默丢弃。
+   */
+  logger.info({
+    audit: true,
+    action: 'panel_image.prompt.full',
+    message: '[PANEL_IMAGE_PROMPT] 画面提示词=发送给图像模型的最终全文（含模板+JSON+风格等）',
+    details: {
+      panelId,
+      promptCharCount: prompt.length,
+      panelImagePrompt: prompt,
+      resolvedSourceText: sourceText,
+      storyboardContextJson: contextJson,
+    },
+  })
   logger.info({
     message: 'panel image prompt resolved',
     details: {
@@ -258,8 +274,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
         imagePrompt: panel.imagePrompt || '',
         resolvedSourceText: sourceText,
       },
-      promptContextJson: contextJson,
-      promptText: prompt,
     },
   })
 

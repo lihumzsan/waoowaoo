@@ -15,6 +15,21 @@ import { createScopedLogger } from '@/lib/logging/core'
 
 const DEFAULT_CANDIDATE_COUNT = 1
 
+function buildResolvedSourceText(panel: {
+  description: string | null
+  srtSegment: string | null
+  videoPrompt: string | null
+  imagePrompt: string | null
+} | null): string {
+  if (!panel) return ''
+  return [
+    panel.description ? `scene_description: ${panel.description}` : '',
+    panel.srtSegment ? `source_text: ${panel.srtSegment}` : '',
+    panel.videoPrompt ? `video_prompt: ${panel.videoPrompt}` : '',
+    panel.imagePrompt ? `image_prompt: ${panel.imagePrompt}` : '',
+  ].filter((item) => item.trim().length > 0).join('\n')
+}
+
 export const POST = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -59,12 +74,15 @@ export const POST = apiHandler(async (
     },
   })
 
-  logger.info({
+  logger.event({
+    level: 'INFO',
+    audit: true,
     message: 'panel image submit snapshot',
     details: {
       panelId,
       candidateCount,
       panelSnapshot: panel,
+      resolvedSourceText: buildResolvedSourceText(panel),
     },
   })
 

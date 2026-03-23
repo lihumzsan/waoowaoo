@@ -1,5 +1,6 @@
 {
-  "positivePrompt": { "nodeId": "67", "field": "text" },
+  "positivePrompt": { "nodeId": "6", "field": "text" },
+  "negativePrompt": { "nodeId": "7", "field": "text" },
   "latentWidth": { "nodeId": "70", "field": "value" },
   "latentHeight": { "nodeId": "71", "field": "value" }
 }
