@@ -12,7 +12,10 @@ const prismaMock = vi.hoisted(() => ({
   novelPromotionEpisode: { findFirst: vi.fn() },
   novelPromotionCharacter: { create: vi.fn(async () => ({ id: 'char-new-1' })) },
   novelPromotionLocation: { create: vi.fn(async () => ({ id: 'loc-new-1' })) },
-  locationImage: { create: vi.fn(async () => ({})) },
+  locationImage: {
+    create: vi.fn(async () => ({})),
+    createMany: vi.fn(async () => ({ count: 1 })),
+  },
 }))
 
 const llmMock = vi.hoisted(() => ({
@@ -50,6 +53,7 @@ vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: {
     NP_AGENT_CHARACTER_PROFILE: 'char',
     NP_SELECT_LOCATION: 'loc',
+    NP_SELECT_PROP: 'prop',
   },
   buildPrompt: vi.fn(() => 'analysis-prompt'),
 }))
@@ -77,6 +81,9 @@ describe('worker analyze-novel behavior', () => {
     vi.clearAllMocks()
 
     prismaMock.userPreference.findUnique.mockResolvedValue({ analysisModel: null })
+    prismaMock.novelPromotionLocation.create
+      .mockResolvedValueOnce({ id: 'loc-new-1' })
+      .mockResolvedValueOnce({ id: 'prop-new-1' })
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
       mode: 'novel-promotion',
@@ -116,6 +123,14 @@ describe('worker analyze-novel behavior', () => {
           },
         ],
       }))
+      .mockReturnValueOnce(JSON.stringify({
+        props: [
+          {
+            name: '金箍棒',
+            summary: '一根两头包裹金片的黑铁长棍',
+          },
+        ],
+      }))
   })
 
   it('no global text and no episode text -> explicit error', async () => {
@@ -139,8 +154,10 @@ describe('worker analyze-novel behavior', () => {
       success: true,
       characters: [{ id: 'char-new-1' }],
       locations: [{ id: 'loc-new-1' }],
+      props: [{ id: 'prop-new-1' }],
       characterCount: 1,
       locationCount: 1,
+      propCount: 1,
     })
 
     expect(prismaMock.novelPromotionCharacter.create).toHaveBeenCalledWith(
@@ -163,12 +180,24 @@ describe('worker analyze-novel behavior', () => {
       }),
     )
 
-    expect(prismaMock.locationImage.create).toHaveBeenCalledWith({
-      data: {
-        locationId: 'loc-new-1',
-        imageIndex: 0,
-        description: '雨夜街道',
-      },
+    expect(prismaMock.locationImage.create).not.toHaveBeenCalled()
+    expect(prismaMock.locationImage.createMany).toHaveBeenNthCalledWith(1, {
+      data: [
+        {
+          locationId: 'loc-new-1',
+          imageIndex: 0,
+          description: '雨夜街道',
+        },
+      ],
+    })
+    expect(prismaMock.locationImage.createMany).toHaveBeenNthCalledWith(2, {
+      data: [
+        {
+          locationId: 'prop-new-1',
+          imageIndex: 0,
+          description: '一根两头包裹金片的黑铁长棍',
+        },
+      ],
     })
 
     expect(prismaMock.novelPromotionProject.update).toHaveBeenCalledWith({

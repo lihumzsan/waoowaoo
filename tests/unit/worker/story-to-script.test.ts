@@ -42,6 +42,7 @@ const orchestratorMock = vi.hoisted(() => ({
 const helperMock = vi.hoisted(() => ({
   persistAnalyzedCharacters: vi.fn(async () => [{ id: 'character-new-1' }]),
   persistAnalyzedLocations: vi.fn(async () => [{ id: 'location-new-1' }]),
+  persistAnalyzedProps: vi.fn(async () => [{ id: 'prop-new-1' }]),
   persistClips: vi.fn(async () => [{ clipKey: 'clip-1', id: 'clip-row-1' }]),
 }))
 const workflowLeaseMock = vi.hoisted(() => ({
@@ -81,8 +82,9 @@ vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: {
     NP_AGENT_CHARACTER_PROFILE: 'a',
     NP_SELECT_LOCATION: 'b',
-    NP_AGENT_CLIP: 'c',
-    NP_SCREENPLAY_CONVERSION: 'd',
+    NP_SELECT_PROP: 'c',
+    NP_AGENT_CLIP: 'd',
+    NP_SCREENPLAY_CONVERSION: 'e',
   },
   getPromptTemplate: vi.fn(() => 'prompt-template'),
 }))
@@ -92,6 +94,7 @@ vi.mock('@/lib/workers/handlers/story-to-script-helpers', () => ({
   parseTemperature: vi.fn(() => 0.7),
   persistAnalyzedCharacters: helperMock.persistAnalyzedCharacters,
   persistAnalyzedLocations: helperMock.persistAnalyzedLocations,
+  persistAnalyzedProps: helperMock.persistAnalyzedProps,
   persistClips: helperMock.persistClips,
   resolveClipRecordId: (clipIdMap: Map<string, string>, clipId: string) => clipIdMap.get(clipId) ?? null,
 }))
@@ -141,7 +144,7 @@ describe('worker story-to-script behavior', () => {
       id: 'np-project-1',
       analysisModel: 'llm::analysis-1',
       characters: [{ id: 'char-1', name: 'Hero', introduction: 'hero intro' }],
-      locations: [{ id: 'loc-1', name: 'Old Town', summary: 'town' }],
+      locations: [{ id: 'loc-1', name: 'Old Town', summary: 'town', assetKind: 'location' }],
     })
 
     prismaMock.novelPromotionEpisode.findUnique.mockResolvedValue({
@@ -153,7 +156,9 @@ describe('worker story-to-script behavior', () => {
     orchestratorMock.runStoryToScriptOrchestrator.mockResolvedValue({
       analyzedCharacters: [{ name: 'New Hero' }],
       analyzedLocations: [{ name: 'Market' }],
-      clipList: [{ clipId: 'clip-1', content: 'clip content' }],
+      analyzedProps: [{ name: 'Knife', summary: 'bronze dagger' }],
+      propsObject: { props: [{ name: 'Knife', summary: 'bronze dagger' }] },
+      clipList: [{ clipId: 'clip-1', content: 'clip content', props: ['Knife'] }],
       screenplayResults: [
         {
           clipId: 'clip-1',
@@ -165,6 +170,7 @@ describe('worker story-to-script behavior', () => {
         clipCount: 1,
         screenplaySuccessCount: 1,
         screenplayFailedCount: 0,
+        propCount: 1,
       },
     })
   })
@@ -185,12 +191,13 @@ describe('worker story-to-script behavior', () => {
       screenplayFailedCount: 0,
       persistedCharacters: 1,
       persistedLocations: 1,
+      persistedProps: 1,
       persistedClips: 1,
     })
 
     expect(helperMock.persistClips).toHaveBeenCalledWith({
       episodeId: 'episode-1',
-      clipList: [{ clipId: 'clip-1', content: 'clip content' }],
+      clipList: [{ clipId: 'clip-1', content: 'clip content', props: ['Knife'] }],
     })
 
     expect(prismaMock.novelPromotionClip.update).toHaveBeenCalledWith({
@@ -205,6 +212,8 @@ describe('worker story-to-script behavior', () => {
     orchestratorMock.runStoryToScriptOrchestrator.mockResolvedValueOnce({
       analyzedCharacters: [],
       analyzedLocations: [],
+      analyzedProps: [],
+      propsObject: { props: [] },
       clipList: [],
       screenplayResults: [
         {
