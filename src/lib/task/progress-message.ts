@@ -23,8 +23,10 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.SCREENPLAY_CONVERT]: 'progress.taskType.screenplayConvert',
   [TASK_TYPE.VOICE_ANALYZE]: 'progress.taskType.voiceAnalyze',
   [TASK_TYPE.ANALYZE_GLOBAL]: 'progress.taskType.analyzeGlobal',
+  [TASK_TYPE.AI_STORY_EXPAND]: 'progress.taskType.aiStoryExpand',
   [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'progress.taskType.aiModifyAppearance',
   [TASK_TYPE.AI_MODIFY_LOCATION]: 'progress.taskType.aiModifyLocation',
+  [TASK_TYPE.AI_MODIFY_PROP]: 'progress.taskType.aiModifyProp',
   [TASK_TYPE.AI_MODIFY_SHOT_PROMPT]: 'progress.taskType.aiModifyShotPrompt',
   [TASK_TYPE.ANALYZE_SHOT_VARIANTS]: 'progress.taskType.analyzeShotVariants',
   [TASK_TYPE.AI_CREATE_CHARACTER]: 'progress.taskType.aiCreateCharacter',
@@ -37,6 +39,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: 'progress.taskType.assetHubAiDesignLocation',
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: 'progress.taskType.assetHubAiModifyCharacter',
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: 'progress.taskType.assetHubAiModifyLocation',
+  [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: 'progress.taskType.assetHubAiModifyProp',
   [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: 'progress.taskType.assetHubReferenceToCharacter',
 }
 
@@ -63,6 +66,8 @@ const STAGE_LABELS: Record<string, string> = {
   script_to_storyboard_step: 'progress.stage.scriptToStoryboardStep',
   script_to_storyboard_persist: 'progress.stage.scriptToStoryboardPersist',
   script_to_storyboard_persist_done: 'progress.stage.scriptToStoryboardPersistDone',
+  ai_story_expand_prepare: 'progress.stage.aiStoryExpandPrepare',
+  ai_story_expand_done: 'progress.stage.aiStoryExpandDone',
   insert_panel_generate_text: 'progress.stage.insertPanelGenerateText',
   insert_panel_persist: 'progress.stage.insertPanelPersist',
   polling_external: 'progress.stage.pollingExternal',

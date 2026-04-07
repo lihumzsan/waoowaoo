@@ -10,10 +10,10 @@
     "appearances": "appearances",
     "images": "images",
     "cancel": "Cancel",
-    "confirmCopy": "Confirm Copy",
-    "copyFromGlobal": "Copy from Asset Hub",
-    "copySuccess": "Copy successful",
-    "copyFailed": "Copy failed",
+    "confirmCopy": "Confirm Import",
+    "copyFromGlobal": "Import from Asset Hub",
+    "copySuccess": "Import successful",
+    "copyFailed": "Import failed",
     "preview": "Preview",
     "stop": "Stop"
 }

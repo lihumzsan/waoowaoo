@@ -36,7 +36,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const sharedMock = vi.hoisted(() => ({
-  generateLabeledImageToCos: vi.fn(async () => 'cos/global-character-generated.png'),
+  generateCleanImageToStorage: vi.fn(async () => 'cos/global-character-generated.png'),
   parseJsonStringArray: vi.fn(() => [] as string[]),
 }))
 
@@ -70,7 +70,7 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   )
   return {
     ...actual,
-    generateLabeledImageToCos: sharedMock.generateLabeledImageToCos,
+    generateCleanImageToStorage: sharedMock.generateCleanImageToStorage,
     parseJsonStringArray: sharedMock.parseJsonStringArray,
   }
 })

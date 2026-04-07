@@ -21,7 +21,7 @@ export interface PanelEditData {
   cameraMove: string | null
   description: string | null
   location: string | null
-  characters: { name: string; appearance: string }[]
+  characters: { name: string; appearance: string; slot?: string }[]
   srtStart: number | null
   srtEnd: number | null
   duration: number | null
@@ -75,7 +75,7 @@ export default function PanelEditForm({
 
 interface CharacterPickerModalProps {
   projectId: string
-  currentCharacters: { name: string; appearance: string }[]
+  currentCharacters: { name: string; appearance: string; slot?: string }[]
   onSelect: (charName: string, appearance: string) => void
   onClose: () => void
 }

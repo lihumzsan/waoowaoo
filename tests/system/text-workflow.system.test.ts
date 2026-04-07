@@ -65,13 +65,14 @@ vi.mock('@/lib/novel-promotion/script-to-storyboard/orchestrator', async () => {
       clipPanels: [
         {
           clipId: textState.orchestratorClipId,
-          panels: [
+          clipIndex: 0,
+          finalPanels: [
             {
-              panelIndex: 1,
-              shotType: 'close-up',
-              cameraMove: 'static',
+              panel_number: 1,
+              shot_type: 'close-up',
+              camera_move: 'static',
               description: 'system generated panel',
-              videoPrompt: 'system video prompt',
+              video_prompt: 'system video prompt',
               location: 'Office',
               characters: ['Narrator'],
             },
@@ -212,8 +213,8 @@ describe('system - text workflows', () => {
         content: 'Hello world',
         emotionStrength: 0.8,
         matchedPanel: {
-          storyboardId: 'storyboard-1',
-          panelIndex: 1,
+          storyboardId: seeded.clip.id,
+          panelIndex: 0,
         },
       },
     ]
@@ -261,7 +262,7 @@ describe('system - text workflows', () => {
         speaker: 'Narrator',
         content: 'Hello world',
         matchedPanelId: expect.any(String),
-        matchedPanelIndex: 1,
+        matchedPanelIndex: 0,
       },
     ])
 
@@ -283,8 +284,8 @@ describe('system - text workflows', () => {
         content: 'Retry success',
         emotionStrength: 0.4,
         matchedPanel: {
-          storyboardId: 'storyboard-1',
-          panelIndex: 1,
+          storyboardId: seeded.clip.id,
+          panelIndex: 0,
         },
       },
     ]

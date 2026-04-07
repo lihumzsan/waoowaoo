@@ -380,7 +380,7 @@ export function ModelDropdownV4(props: ModelDropdownTestProps) {
                     {/* Top: Models */}
                     <div className="px-3 pt-3 pb-2 bg-[var(--glass-bg-base)]">
                         <div className="text-[12px] font-bold text-[var(--glass-text-secondary)] mb-2 px-1">选择模型</div>
-                        <div className="overflow-y-auto max-h-[160px] custom-scrollbar space-y-1 pr-1">
+                        <div className="overflow-y-auto max-h-[160px] app-scrollbar space-y-1 pr-1">
                             {props.models.map(m => {
                                 const active = m.value === props.value
                                 return (

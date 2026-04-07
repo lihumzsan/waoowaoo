@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
 import { removeLocationPromptSuffix } from '@/lib/constants'
+import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import type { TaskJobData } from '@/lib/task/types'
@@ -52,12 +53,14 @@ export async function handleModifyLocationTask(job: Job<TaskJobData>, payload: A
   const parsed = parseJsonObject(responseText)
   const prompt = readRequiredString(parsed.prompt, 'prompt')
   const modifiedDescription = removeLocationPromptSuffix(prompt)
+  const availableSlots = normalizeLocationAvailableSlots(parsed.available_slots)
 
   await assertTaskActive(job, 'ai_modify_location_persist')
   const updatedLocation = await persistLocationDescription({
     locationId,
     imageIndex,
     modifiedDescription,
+    availableSlots,
   })
 
   await reportTaskProgress(job, 96, {
@@ -71,6 +74,7 @@ export async function handleModifyLocationTask(job: Job<TaskJobData>, payload: A
     success: true,
     prompt,
     modifiedDescription,
+    availableSlots,
     location: updatedLocation,
   }
 }

@@ -82,6 +82,51 @@ describe('bailian video provider', () => {
     })
   })
 
+  it('submits wan2.7 i2v task without last frame', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        output: {
+          task_id: 'task-wan27-i2v',
+          task_status: 'PENDING',
+        },
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    const result = await generateBailianVideo({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/frame.png',
+      prompt: '让人物转身看向镜头',
+      options: {
+        provider: 'bailian',
+        modelId: 'wan2.7-i2v',
+        modelKey: 'bailian::wan2.7-i2v',
+      },
+    })
+
+    const firstCall = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit] | undefined
+    expect(firstCall).toBeDefined()
+    if (!firstCall) {
+      throw new Error('missing fetch call')
+    }
+    expect(firstCall[0]).toBe('https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis')
+    expect(firstCall[1].body).toBe(JSON.stringify({
+      model: 'wan2.7-i2v',
+      input: {
+        img_url: 'https://example.com/frame.png',
+        prompt: '让人物转身看向镜头',
+      },
+    }))
+    expect(result).toEqual({
+      success: true,
+      async: true,
+      requestId: 'task-wan27-i2v',
+      externalId: 'BAILIAN:VIDEO:task-wan27-i2v',
+    })
+  })
+
   it('submits kf2v task with first and last frame', async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -133,6 +178,53 @@ describe('bailian video provider', () => {
       async: true,
       requestId: 'task-kf2v-1',
       externalId: 'BAILIAN:VIDEO:task-kf2v-1',
+    })
+  })
+
+  it('submits wan2.7 i2v task with first and last frame', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        output: {
+          task_id: 'task-wan27-flf',
+          task_status: 'PENDING',
+        },
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    const result = await generateBailianVideo({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: '从清晨过渡到夜晚',
+      options: {
+        provider: 'bailian',
+        modelId: 'wan2.7-i2v',
+        modelKey: 'bailian::wan2.7-i2v',
+        lastFrameImageUrl: 'https://example.com/last.png',
+      },
+    })
+
+    const firstCall = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit] | undefined
+    expect(firstCall).toBeDefined()
+    if (!firstCall) {
+      throw new Error('missing fetch call')
+    }
+    expect(firstCall[0]).toBe('https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis')
+    expect(firstCall[1].body).toBe(JSON.stringify({
+      model: 'wan2.7-i2v',
+      input: {
+        first_frame_url: 'https://example.com/first.png',
+        last_frame_url: 'https://example.com/last.png',
+        prompt: '从清晨过渡到夜晚',
+      },
+    }))
+    expect(result).toEqual({
+      success: true,
+      async: true,
+      requestId: 'task-wan27-flf',
+      externalId: 'BAILIAN:VIDEO:task-wan27-flf',
     })
   })
 

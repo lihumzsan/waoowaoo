@@ -173,7 +173,11 @@ export function getFilteredFullDescription(characters: CharacterAsset[], clipCha
 }
 
 // 根据 clip.location 筛选场景描述
-export function getFilteredLocationsDescription(locations: LocationAsset[], clipLocation: string | null): string {
+export function getFilteredLocationsDescription(
+    locations: LocationAsset[],
+    clipLocation: string | null,
+    locale: Locale = 'zh',
+): string {
     return compileAssetPromptFragments(buildPromptAssetContext({
         characters: [],
         locations,
@@ -181,6 +185,7 @@ export function getFilteredLocationsDescription(locations: LocationAsset[], clip
         clipCharacters: [],
         clipLocation,
         clipProps: [],
+        locale,
     })).locationDescriptionText
 }
 
@@ -405,7 +410,11 @@ export async function executePhase2(
     const clipProps = parseClipProps(clip.props)
 
     const filteredFullDescription = getFilteredFullDescription(novelPromotionData.characters, clipCharacters)
-    const filteredLocationsDescription = getFilteredLocationsDescription(novelPromotionData.locations, clipLocation)
+    const filteredLocationsDescription = getFilteredLocationsDescription(
+        novelPromotionData.locations,
+        clipLocation,
+        locale,
+    )
     const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
         characters: [],
         locations: [],
@@ -588,7 +597,11 @@ export async function executePhase3(
     const clipProps = parseClipProps(clip.props)
 
     const filteredFullDescription = getFilteredFullDescription(novelPromotionData.characters, clipCharacters)
-    const filteredLocationsDescription = getFilteredLocationsDescription(novelPromotionData.locations, clipLocation)
+    const filteredLocationsDescription = getFilteredLocationsDescription(
+        novelPromotionData.locations,
+        clipLocation,
+        locale,
+    )
     const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
         characters: [],
         locations: [],

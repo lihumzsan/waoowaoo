@@ -20,6 +20,7 @@ import { useWorkspaceAutoRun } from './useWorkspaceAutoRun'
 import { buildWorkspaceControllerViewModel } from './workspace-controller-view-model'
 import type { NovelPromotionWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
+import { resolveEpisodeStageArtifacts } from '@/lib/novel-promotion/stage-readiness'
 
 export function useNovelPromotionWorkspaceController({
   project,
@@ -38,7 +39,7 @@ export function useNovelPromotionWorkspaceController({
   const { onRefresh } = useWorkspaceProvider()
 
   const projectSnapshot = useWorkspaceProjectSnapshot({ project, episode, urlStage })
-  const { currentStage, episodeStoryboards, ...projectSection } = projectSnapshot
+  const { currentStage, ...projectSection } = projectSnapshot
 
   const assetsLoading = false
   const assetsLoadingState = assetsLoading
@@ -116,6 +117,11 @@ export function useNovelPromotionWorkspaceController({
     execution.storyToScriptStream.isRunning ||
     execution.storyToScriptStream.isRecoveredRunning ||
     execution.storyToScriptStream.status === 'running'
+  const isScriptToStoryboardRunning =
+    execution.scriptToStoryboardStream.isRunning ||
+    execution.scriptToStoryboardStream.isRecoveredRunning ||
+    execution.scriptToStoryboardStream.status === 'running'
+  const stageArtifacts = resolveEpisodeStageArtifacts(episode)
 
   const isAnyOperationRunning =
     isStartingStoryToScript ||
@@ -124,8 +130,8 @@ export function useNovelPromotionWorkspaceController({
     execution.isAssetAnalysisRunning ||
     execution.isConfirmingAssets ||
     execution.isTransitioning ||
-    execution.storyToScriptStream.isRunning ||
-    execution.scriptToStoryboardStream.isRunning
+    isStoryToScriptRunning ||
+    isScriptToStoryboardRunning
 
   useWorkspaceAutoRun({
     searchParams,
@@ -140,9 +146,7 @@ export function useNovelPromotionWorkspaceController({
 
   const capsuleNavItems = useWorkspaceStageNavigation({
     isAnyOperationRunning,
-    episode,
-    projectCharacterCount: projectSnapshot.projectCharacters.length,
-    episodeStoryboards,
+    stageArtifacts,
     t,
   })
 

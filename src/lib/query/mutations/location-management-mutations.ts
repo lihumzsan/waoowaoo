@@ -3,6 +3,7 @@ import { logError as _ulogError } from '@/lib/logging/core'
 import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
+import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 import { resolveTaskResponse } from '@/lib/task/client'
 import { apiFetch } from '@/lib/api-fetch'
 import {
@@ -149,10 +150,12 @@ export function useUpdateProjectLocationDescription(projectId: string) {
             locationId,
             description,
             imageIndex,
+            availableSlots,
         }: {
             locationId: string
             description: string
             imageIndex?: number
+            availableSlots?: LocationAvailableSlot[]
         }) => {
             return await requestJsonWithError(`/api/novel-promotion/${projectId}/location`, {
                 method: 'PATCH',
@@ -161,6 +164,7 @@ export function useUpdateProjectLocationDescription(projectId: string) {
                     locationId,
                     imageIndex: typeof imageIndex === 'number' ? imageIndex : 0,
                     description,
+                    ...(availableSlots ? { availableSlots } : {}),
                 }),
             }, 'Failed to update location description')
         },
@@ -199,7 +203,39 @@ export function useAiModifyProjectLocationDescription(projectId: string) {
                 },
                 'Failed to modify location description',
             )
-            return resolveTaskResponse<{ prompt?: string; modifiedDescription?: string }>(response)
+            return resolveTaskResponse<{ prompt?: string; modifiedDescription?: string; availableSlots?: LocationAvailableSlot[] }>(response)
+        },
+    })
+}
+
+export function useAiModifyProjectPropDescription(projectId: string) {
+    return useMutation({
+        mutationFn: async ({
+            propId,
+            variantId,
+            currentDescription,
+            modifyInstruction,
+        }: {
+            propId: string
+            variantId?: string
+            currentDescription: string
+            modifyInstruction: string
+        }) => {
+            const response = await requestTaskResponseWithError(
+                `/api/novel-promotion/${projectId}/ai-modify-prop`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        propId,
+                        variantId,
+                        currentDescription,
+                        modifyInstruction,
+                    }),
+                },
+                'Failed to modify prop description',
+            )
+            return resolveTaskResponse<{ modifiedDescription?: string }>(response)
         },
     })
 }
@@ -220,7 +256,7 @@ export function useAiCreateProjectLocation(projectId: string) {
                 },
                 'Failed to design location',
             )
-            return await resolveTaskResponse<{ prompt?: string }>(response)
+            return await resolveTaskResponse<{ prompt?: string; availableSlots?: LocationAvailableSlot[] }>(response)
         },
     })
 }
@@ -240,6 +276,7 @@ export function useCreateProjectLocation(projectId: string) {
             description: string
             artStyle?: string
             count?: number
+            availableSlots?: LocationAvailableSlot[]
         }) =>
             await requestJsonWithError(
                 `/api/novel-promotion/${projectId}/location`,
@@ -258,18 +295,26 @@ export function useCreateProjectLocation(projectId: string) {
  * AI 设计项目角色文案
  */
 
-export function useConfirmProjectLocationSelection(projectId: string) {
+export function useConfirmProjectLocationSelection(
+    projectId: string,
+    kind: 'location' | 'prop' = 'location',
+) {
     const queryClient = useQueryClient()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
     return useMutation({
         mutationFn: async ({ locationId }: { locationId: string }) =>
             await requestJsonWithError(
-                `/api/novel-promotion/${projectId}/location/confirm-selection`,
+                `/api/assets/${locationId}/select-render`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ locationId }),
+                    body: JSON.stringify({
+                        scope: 'project',
+                        kind,
+                        projectId,
+                        confirm: true,
+                    }),
                 },
                 '确认选择失败',
             ),

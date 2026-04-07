@@ -54,6 +54,7 @@ describe('location-backed assets service', () => {
       novelPromotionProjectId: 'novel-project-1',
       name: 'Bronze Dagger',
       summary: 'Old bronze dagger',
+      initialDescription: 'A bronze dagger with a carved handle and weathered blade',
       kind: 'prop',
     })
 
@@ -62,7 +63,8 @@ describe('location-backed assets service', () => {
         {
           locationId: result.id,
           imageIndex: 0,
-          description: 'Old bronze dagger',
+          description: 'A bronze dagger with a carved handle and weathered blade',
+          availableSlots: '[]',
         },
       ],
     })
@@ -83,11 +85,13 @@ describe('location-backed assets service', () => {
           locationId: 'location-1',
           imageIndex: 0,
           description: 'Night street',
+          availableSlots: '[]',
         },
         {
           locationId: 'location-1',
           imageIndex: 1,
           description: 'Rainy alley',
+          availableSlots: '[]',
         },
       ],
     })

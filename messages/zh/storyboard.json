@@ -346,7 +346,22 @@
         "actingNotes": "演技指导 (acting_notes)",
         "actingTitle": "演技指导",
         "actingDescription": "表演指令",
-        "noActingData": "无演技数据"
+        "noActingData": "无演技数据",
+        "appearance": "外貌描述",
+        "appearanceReadonly": "外貌（只读）",
+        "slot": "站位（slot）",
+        "slotUnset": "未指定",
+        "framePosition": "画面站位",
+        "screenPosition": "屏幕位置",
+        "actingGuide": "表演指导",
+        "photoEnv": "摄影环境",
+        "availableSlots": "场景可用位置",
+        "optional": "可选",
+        "reference": "参考",
+        "aiRequired": "AI 必读",
+        "characterDetails": "角色详情",
+        "shotAndScene": "镜头 · 场景",
+        "jsonCheck": "JSON 核查"
     },
     "insertModal": {
         "insertBetween": "在 #{before} 和 #{after} 之间插入",

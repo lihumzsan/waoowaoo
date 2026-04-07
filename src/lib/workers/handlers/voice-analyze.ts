@@ -36,14 +36,10 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
     where: { id: projectId },
     select: {
       id: true,
-      mode: true,
     },
   })
   if (!project) {
     throw new Error('Project not found')
-  }
-  if (project.mode !== 'novel-promotion') {
-    throw new Error('Not a novel promotion project')
   }
 
   const novelPromotionData = await prisma.novelPromotionProject.findUnique({

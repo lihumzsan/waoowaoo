@@ -396,22 +396,69 @@
   background: var(--glass-accent-from);
 }
 
-.glass-provider-model-scroll {
+:where(
+  .app-scrollbar,
+  .overflow-auto,
+  .overflow-scroll,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-x-scroll,
+  .overflow-y-scroll
+) {
   scrollbar-width: thin;
   scrollbar-color: var(--glass-stroke-strong) transparent;
+  scrollbar-gutter: stable;
 }
 
-.glass-provider-model-scroll::-webkit-scrollbar {
+:where(
+  .app-scrollbar,
+  .overflow-auto,
+  .overflow-scroll,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-x-scroll,
+  .overflow-y-scroll
+)::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 
-.glass-provider-model-scroll::-webkit-scrollbar-track {
+:where(
+  .app-scrollbar,
+  .overflow-auto,
+  .overflow-scroll,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-x-scroll,
+  .overflow-y-scroll
+)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.glass-provider-model-scroll::-webkit-scrollbar-thumb {
+:where(
+  .app-scrollbar,
+  .overflow-auto,
+  .overflow-scroll,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-x-scroll,
+  .overflow-y-scroll
+)::-webkit-scrollbar-thumb {
   background: var(--glass-stroke-strong);
   border-radius: 999px;
   border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:where(
+  .app-scrollbar,
+  .overflow-auto,
+  .overflow-scroll,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-x-scroll,
+  .overflow-y-scroll
+)::-webkit-scrollbar-thumb:hover {
+  background: var(--glass-stroke-focus);
   background-clip: content-box;
 }

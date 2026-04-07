@@ -44,8 +44,8 @@ export const GET = apiHandler(async (
     data: { lastAccessedAt: new Date() }
   }).catch(err => _ulogError('更新访问时间失败:', err))
 
-  // 这个API只返回基础项目信息
-  // 模式特定的数据应该通过各自的API获取（如 /api/novel-promotion/[projectId]）
+  // 这个 API 只返回基础项目信息
+  // 项目附属业务数据通过各自的 API 获取（如 /api/novel-promotion/[projectId]）
   const projectWithSignedUrls = addSignedUrlsToProject(project)
 
   return NextResponse.json({ project: projectWithSignedUrls })

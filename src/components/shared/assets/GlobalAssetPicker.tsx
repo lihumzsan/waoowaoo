@@ -8,6 +8,13 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
+import type {
+  AssetSummary,
+  CharacterAssetSummary,
+  LocationAssetSummary,
+  PropAssetSummary,
+  VoiceAssetSummary,
+} from '@/lib/assets/contracts'
 
 interface GlobalAssetPickerProps {
     isOpen: boolean
@@ -17,67 +24,30 @@ interface GlobalAssetPickerProps {
     loading?: boolean
 }
 
-interface GlobalCharacterAppearance {
-    id: string
-    imageUrl: string | null
-    imageUrls: string[]
-    selectedIndex: number | null
-}
-
-interface GlobalCharacter {
-    id: string
-    name: string
-    folderId: string | null
-    customVoiceUrl: string | null
-    appearances: GlobalCharacterAppearance[]
-}
-
-interface GlobalLocationImage {
-    id: string
-    imageIndex: number
-    imageUrl: string | null
-    isSelected: boolean
-}
-
-interface GlobalLocation {
-    id: string
-    name: string
-    summary: string | null
-    folderId: string | null
-    images: GlobalLocationImage[]
-}
-
-type GlobalProp = GlobalLocation
-
-interface GlobalVoice {
-    id: string
-    name: string
-    description: string | null
-    folderId: string | null
-    customVoiceUrl: string | null
-    voiceId: string | null
-    voiceType: string
-    voicePrompt: string | null
-    gender: string | null
-    language: string
-}
-
 /** 从 appearances 中提取预览图 URL */
-function getCharacterPreview(char: GlobalCharacter): string | null {
-    const first = char.appearances?.[0]
-    if (!first) return null
-    // 优先使用 selectedIndex 指向的图
-    if (first.selectedIndex != null && first.imageUrls?.[first.selectedIndex]) {
-        return first.imageUrls[first.selectedIndex]
-    }
-    return first.imageUrl || first.imageUrls?.[0] || null
+function getCharacterPreview(char: CharacterAssetSummary): string | null {
+    const primaryVariant = char.variants.find((variant) => variant.index === 0) || char.variants[0]
+    if (!primaryVariant) return null
+    const selectedRenderIndex = primaryVariant.selectionState.selectedRenderIndex
+    const selectedRender = selectedRenderIndex !== null
+        ? primaryVariant.renders.find((render) => render.index === selectedRenderIndex)
+        : null
+    return selectedRender?.imageUrl
+        || primaryVariant.renders.find((render) => render.isSelected)?.imageUrl
+        || primaryVariant.renders[0]?.imageUrl
+        || null
 }
 
-/** 从 images 中提取预览图 URL */
-function getLocationPreview(loc: GlobalLocation): string | null {
-    const selected = loc.images?.find(img => img.isSelected)
-    if (selected?.imageUrl) return selected.imageUrl
-    return loc.images?.[0]?.imageUrl || null
+/** 从 variants/renders 中提取预览图 URL */
+function getVisualAssetPreview(asset: LocationAssetSummary | PropAssetSummary): string | null {
+    const selectedVariant = asset.selectedVariantId
+        ? asset.variants.find((variant) => variant.id === asset.selectedVariantId)
+        : null
+    const targetVariant = selectedVariant || asset.variants[0]
+    if (!targetVariant) return null
+    return targetVariant.renders.find((render) => render.isSelected)?.imageUrl
+        || targetVariant.renders[0]?.imageUrl
+        || null
 }
 
 // 内联 SVG 图标组件
@@ -122,7 +92,7 @@ export default function GlobalAssetPicker({
             const res = await apiFetch('/api/assets?scope=global&kind=character')
             if (!res.ok) throw new Error('Failed to fetch characters')
             const data = await res.json()
-            return data.assets as GlobalCharacter[]
+            return data.assets as CharacterAssetSummary[]
         },
         enabled: type === 'character',
     })
@@ -132,7 +102,7 @@ export default function GlobalAssetPicker({
             const res = await apiFetch('/api/assets?scope=global&kind=location')
             if (!res.ok) throw new Error('Failed to fetch locations')
             const data = await res.json()
-            return data.assets as GlobalLocation[]
+            return data.assets as LocationAssetSummary[]
         },
         enabled: type === 'location',
     })
@@ -142,7 +112,7 @@ export default function GlobalAssetPicker({
             const res = await apiFetch('/api/assets?scope=global&kind=prop')
             if (!res.ok) throw new Error('Failed to fetch props')
             const data = await res.json()
-            return data.assets as GlobalProp[]
+            return data.assets as PropAssetSummary[]
         },
         enabled: type === 'prop',
     })
@@ -152,15 +122,15 @@ export default function GlobalAssetPicker({
             const res = await apiFetch('/api/assets?scope=global&kind=voice')
             if (!res.ok) throw new Error('Failed to fetch voices')
             const data = await res.json()
-            return data.assets as GlobalVoice[]
+            return data.assets as VoiceAssetSummary[]
         },
         enabled: type === 'voice',
     })
 
-    const characters = (charactersQuery.data || []) as GlobalCharacter[]
-    const locations = (locationsQuery.data || []) as GlobalLocation[]
-    const props = (propsQuery.data || []) as GlobalProp[]
-    const voices = (voicesQuery.data || []) as GlobalVoice[]
+    const characters = (charactersQuery.data || []) as CharacterAssetSummary[]
+    const locations = (locationsQuery.data || []) as LocationAssetSummary[]
+    const props = (propsQuery.data || []) as PropAssetSummary[]
+    const voices = (voicesQuery.data || []) as VoiceAssetSummary[]
     const isLoading = type === 'character'
         ? charactersQuery.isFetching
         : type === 'location'
@@ -249,7 +219,7 @@ export default function GlobalAssetPicker({
 
     const filteredVoices = voices.filter(v =>
         v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (v.description && v.description.toLowerCase().includes(searchQuery.toLowerCase()))
+        (v.voiceMeta.description && v.voiceMeta.description.toLowerCase().includes(searchQuery.toLowerCase()))
     )
 
     // 播放/暂停音频预览
@@ -302,9 +272,9 @@ export default function GlobalAssetPicker({
 
     return (
         <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50">
-            <div className="glass-surface-modal w-[600px] max-h-[80vh] flex flex-col">
+                <div className="glass-surface-modal w-[600px] max-h-[80vh] flex flex-col">
                 {/* 头部 */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--glass-stroke-base)]">
+                <div className="flex items-center justify-between px-6 py-4">
                     <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">
                         {type === 'character' ? t('selectCharacter') : type === 'location' ? t('selectLocation') : type === 'prop' ? t('selectProp') : t('selectVoice')}
                     </h2>
@@ -314,7 +284,7 @@ export default function GlobalAssetPicker({
                 </div>
 
                 {/* 搜索栏 */}
-                <div className="px-6 py-3 border-b border-[var(--glass-stroke-base)]">
+                <div className="px-6 pb-3">
                     <div className="relative">
                         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--glass-text-tertiary)]" />
                         <input
@@ -369,13 +339,13 @@ export default function GlobalAssetPicker({
                                             )}
 
                                             {/* 预览图 */}
-                                            <div className="aspect-square rounded-lg overflow-hidden bg-[var(--glass-bg-muted)] mb-2 relative">
+                                            <div className="aspect-[3/2] rounded-lg overflow-hidden bg-[var(--glass-bg-muted)] mb-2 relative">
                                                 {charPreview ? (
                                                     <MediaImageWithLoading
                                                         src={charPreview}
                                                         alt={char.name}
                                                         containerClassName="w-full h-full"
-                                                        className="w-full h-full object-cover cursor-zoom-in"
+                                                        className="w-full h-full object-contain cursor-zoom-in"
                                                         onClick={(e) => {
                                                             e.stopPropagation()
                                                             setPreviewImage(charPreview)
@@ -383,7 +353,7 @@ export default function GlobalAssetPicker({
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-[var(--glass-text-tertiary)]">
-                                                        <UserIcon className="w-12 h-12" />
+                                                        <PhotoIcon className="w-12 h-12" />
                                                     </div>
                                                 )}
                                             </div>
@@ -391,17 +361,13 @@ export default function GlobalAssetPicker({
                                             {/* 名称 */}
                                             <div className="text-center">
                                                 <p className="font-medium text-sm text-[var(--glass-text-primary)] truncate">{char.name}</p>
-                                                <p className="text-xs text-[var(--glass-text-secondary)] mt-1">
-                                                    {char.appearances?.length || 0} {t('appearances')}
-                                                    {char.customVoiceUrl && ' · Voice'}
-                                                </p>
                                             </div>
                                         </div>
                                     )
                                 })
                             ) : type === 'location' ? (
                                 filteredLocations.map((loc) => {
-                                    const locPreview = getLocationPreview(loc)
+                                    const locPreview = getVisualAssetPreview(loc)
                                     return (
                                         <div
                                             key={loc.id}
@@ -440,7 +406,7 @@ export default function GlobalAssetPicker({
                                             <div className="text-center">
                                                 <p className="font-medium text-sm text-[var(--glass-text-primary)] truncate">{loc.name}</p>
                                                 <p className="text-xs text-[var(--glass-text-secondary)] mt-1">
-                                                    {loc.images?.length || 0} {t('images')}
+                                                    {loc.variants.length} {t('images')}
                                                 </p>
                                             </div>
                                         </div>
@@ -448,7 +414,7 @@ export default function GlobalAssetPicker({
                                 })
                             ) : type === 'prop' ? (
                                 filteredProps.map((prop) => {
-                                    const propPreview = getLocationPreview(prop)
+                                    const propPreview = getVisualAssetPreview(prop)
                                     return (
                                         <div
                                             key={prop.id}
@@ -482,7 +448,7 @@ export default function GlobalAssetPicker({
                                             <div className="text-center">
                                                 <p className="font-medium text-sm text-[var(--glass-text-primary)] truncate">{prop.name}</p>
                                                 <p className="text-xs text-[var(--glass-text-secondary)] mt-1">
-                                                    {prop.images?.length || 0} {t('images')}
+                                                    {prop.variants.length} {t('images')}
                                                 </p>
                                             </div>
                                         </div>
@@ -491,8 +457,9 @@ export default function GlobalAssetPicker({
                             ) : (
                                 // 音色列表渲染 - 与资产中心 VoiceCard 风格统一
                                 filteredVoices.map((voice) => {
-                                    const genderIcon = voice.gender === 'male' ? 'M' : voice.gender === 'female' ? 'F' : ''
-                                    const isVoicePlaying = previewAudio === voice.customVoiceUrl && isPlayingAudio
+                                    const genderIcon = voice.voiceMeta.gender === 'male' ? 'M' : voice.voiceMeta.gender === 'female' ? 'F' : ''
+                                    const previewVoiceUrl = voice.voiceMeta.customVoiceUrl
+                                    const isVoicePlaying = previewAudio === previewVoiceUrl && isPlayingAudio
                                     return (
                                         <div
                                             key={voice.id}
@@ -523,9 +490,9 @@ export default function GlobalAssetPicker({
                                                 )}
 
                                                 {/* 试听按钮 - 圆形，与 VoiceCard 统一 */}
-                                                {voice.customVoiceUrl && (
+                                                {previewVoiceUrl && (
                                                     <button
-                                                        onClick={(e) => handlePlayAudio(voice.customVoiceUrl!, e)}
+                                                        onClick={(e) => handlePlayAudio(previewVoiceUrl, e)}
                                                         className={`absolute bottom-2 right-2 w-10 h-10 rounded-full glass-btn-base flex items-center justify-center transition-all ${isVoicePlaying
                                                             ? 'glass-btn-tone-info animate-pulse'
                                                             : 'glass-btn-secondary text-[var(--glass-tone-info-fg)]'
@@ -543,11 +510,11 @@ export default function GlobalAssetPicker({
                                             {/* 信息区域 */}
                                             <div className="p-3">
                                                 <h3 className="font-medium text-[var(--glass-text-primary)] text-sm truncate">{voice.name}</h3>
-                                                {voice.description && (
-                                                    <p className="mt-1 text-xs text-[var(--glass-text-secondary)] line-clamp-2">{voice.description}</p>
+                                                {voice.voiceMeta.description && (
+                                                    <p className="mt-1 text-xs text-[var(--glass-text-secondary)] line-clamp-2">{voice.voiceMeta.description}</p>
                                                 )}
-                                                {voice.voicePrompt && !voice.description && (
-                                                    <p className="mt-1 text-xs text-[var(--glass-text-tertiary)] line-clamp-2 italic">{voice.voicePrompt}</p>
+                                                {voice.voiceMeta.voicePrompt && !voice.voiceMeta.description && (
+                                                    <p className="mt-1 text-xs text-[var(--glass-text-tertiary)] line-clamp-2 italic">{voice.voiceMeta.voicePrompt}</p>
                                                 )}
                                             </div>
                                         </div>

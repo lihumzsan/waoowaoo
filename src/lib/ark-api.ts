@@ -70,10 +70,12 @@ interface ArkImageGenerationResponse {
 interface ArkVideoTaskRequest {
     model: string
     content: Array<{
-        type: 'image_url' | 'text' | 'draft_task'
+        type: 'image_url' | 'video_url' | 'audio_url' | 'text' | 'draft_task'
         image_url?: { url: string }
+        video_url?: { url: string }
+        audio_url?: { url: string }
         text?: string
-        role?: 'first_frame' | 'last_frame' | 'reference_image'
+        role?: 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio'
         draft_task?: { id: string }
     }>
     resolution?: '480p' | '720p' | '1080p'
@@ -88,16 +90,32 @@ interface ArkVideoTaskRequest {
     execution_expires_after?: number
     generate_audio?: boolean
     draft?: boolean
+    tools?: Array<{
+        type: 'web_search'
+    }>
 }
 
 interface ArkVideoTaskResponse {
     id: string
     model: string
-    status: 'processing' | 'succeeded' | 'failed'
-    content?: Array<{
-        type: 'video_url'
-        video_url: { url: string }
+    status: 'processing' | 'queued' | 'running' | 'succeeded' | 'failed'
+    content?: {
+        video_url?: string
+        image_url?: string
+        audio_url?: string
+    } | Array<{
+        type?: 'video_url' | 'image_url' | 'audio_url'
+        video_url?: { url?: string }
+        image_url?: { url?: string }
+        audio_url?: { url?: string }
     }>
+    usage?: {
+        completion_tokens?: number
+        total_tokens?: number
+        tool_usage?: {
+            web_search?: number
+        }
+    }
     error?: {
         code: string
         message: string
@@ -132,6 +150,7 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
         'execution_expires_after',
         'generate_audio',
         'draft',
+        'tools',
     ])
     for (const key of Object.keys(request)) {
         if (!allowedTopLevelKeys.has(key)) {
@@ -159,7 +178,7 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
         if (!isInteger(request.duration)) {
             throw new Error('ARK_VIDEO_REQUEST_INVALID: duration must be integer')
         }
-        if (request.duration !== -1 && (request.duration < 2 || request.duration > 12)) {
+        if (request.duration !== -1 && (request.duration < 2 || request.duration > 15)) {
             throw new Error(`ARK_VIDEO_REQUEST_INVALID: duration=${request.duration}`)
         }
     }
@@ -211,6 +230,18 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
         }
     }
 
+    if (request.tools !== undefined) {
+        if (!Array.isArray(request.tools)) {
+            throw new Error('ARK_VIDEO_REQUEST_INVALID: tools must be array')
+        }
+        for (let index = 0; index < request.tools.length; index += 1) {
+            const tool = request.tools[index]
+            if (!isRecord(tool) || tool.type !== 'web_search') {
+                throw new Error(`ARK_VIDEO_REQUEST_INVALID: tools[${index}].type=${String((tool as { type?: unknown })?.type)}`)
+            }
+        }
+    }
+
     for (let index = 0; index < request.content.length; index += 1) {
         const item = request.content[index]
         const path = `content[${index}]`
@@ -234,6 +265,32 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
                 && item.role !== 'first_frame'
                 && item.role !== 'last_frame'
                 && item.role !== 'reference_image'
+            ) {
+                throw new Error(`ARK_VIDEO_REQUEST_INVALID: ${path}.role=${String(item.role)}`)
+            }
+            continue
+        }
+
+        if (item.type === 'video_url') {
+            if (!isRecord(item.video_url) || !isNonEmptyString(item.video_url.url)) {
+                throw new Error(`ARK_VIDEO_REQUEST_INVALID: ${path}.video_url.url is required`)
+            }
+            if (
+                item.role !== undefined
+                && item.role !== 'reference_video'
+            ) {
+                throw new Error(`ARK_VIDEO_REQUEST_INVALID: ${path}.role=${String(item.role)}`)
+            }
+            continue
+        }
+
+        if (item.type === 'audio_url') {
+            if (!isRecord(item.audio_url) || !isNonEmptyString(item.audio_url.url)) {
+                throw new Error(`ARK_VIDEO_REQUEST_INVALID: ${path}.audio_url.url is required`)
+            }
+            if (
+                item.role !== undefined
+                && item.role !== 'reference_audio'
             ) {
                 throw new Error(`ARK_VIDEO_REQUEST_INVALID: ${path}.role=${String(item.role)}`)
             }

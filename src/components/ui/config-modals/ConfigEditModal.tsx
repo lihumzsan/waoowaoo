@@ -364,7 +364,7 @@ export function SettingsModal({
                     </div>
                 </div>
                 <p className="text-[12px] text-[var(--glass-text-tertiary)] mb-6">{t('subtitle')}</p>
-                <div className="space-y-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                <div className="space-y-5 flex-1 min-h-0 overflow-y-auto app-scrollbar">
                     <div className="glass-surface-soft p-5 sm:p-6 space-y-4">
                         <h3 className="text-sm font-semibold text-[var(--glass-text-tertiary)]">{t('visualSettings')}</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

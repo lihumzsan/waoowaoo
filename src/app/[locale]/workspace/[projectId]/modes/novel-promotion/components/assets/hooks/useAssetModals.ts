@@ -31,10 +31,12 @@ interface EditingProp {
     propId: string
     propName: string
     summary: string
+    description: string
     variantId?: string
 }
 
 interface ImageEditModal {
+    assetType: 'location' | 'prop'
     locationId: string
     imageIndex: number
     locationName: string
@@ -137,20 +139,24 @@ export function useAssetModals({
     }
 
     const handleEditProp = (prop: Prop) => {
+        const firstImage = prop.images?.[0]
         setEditingProp({
             propId: prop.id,
             propName: prop.name,
-            summary: prop.summary || prop.images?.[0]?.description || '',
-            variantId: prop.images?.[0]?.id,
+            summary: prop.summary || '',
+            description: firstImage?.description || prop.summary || '',
+            variantId: firstImage?.id,
         })
     }
 
     // 打开场景图片编辑弹窗
-    const handleOpenLocationImageEdit = (locationId: string, imageIndex: number) => {
-        const location = locations.find(l => l.id === locationId)
+    const handleOpenLocationImageEdit = (locationId: string, imageIndex: number, assetType: 'location' | 'prop' = 'location') => {
+        const assetsOfType = assetType === 'prop' ? props : locations
+        const location = assetsOfType.find(l => l.id === locationId)
         if (!location) return
 
         setImageEditModal({
+            assetType,
             locationId,
             imageIndex,
             locationName: location.name

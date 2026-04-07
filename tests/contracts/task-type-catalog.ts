@@ -31,8 +31,10 @@ const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.SCREENPLAY_CONVERT]: 'tests/unit/worker/screenplay-convert.test.ts',
   [TASK_TYPE.VOICE_ANALYZE]: 'tests/unit/worker/voice-analyze.test.ts',
   [TASK_TYPE.ANALYZE_GLOBAL]: 'tests/unit/worker/analyze-global.test.ts',
+  [TASK_TYPE.AI_STORY_EXPAND]: 'tests/unit/worker/ai-story-expand.test.ts',
   [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'tests/unit/worker/shot-ai-prompt-appearance.test.ts',
   [TASK_TYPE.AI_MODIFY_LOCATION]: 'tests/unit/worker/shot-ai-prompt-location.test.ts',
+  [TASK_TYPE.AI_MODIFY_PROP]: 'tests/unit/helpers/prop-modify-task-registration.test.ts',
   [TASK_TYPE.AI_MODIFY_SHOT_PROMPT]: 'tests/unit/worker/shot-ai-prompt-shot.test.ts',
   [TASK_TYPE.ANALYZE_SHOT_VARIANTS]: 'tests/unit/worker/shot-ai-variants.test.ts',
   [TASK_TYPE.AI_CREATE_CHARACTER]: 'tests/unit/worker/shot-ai-tasks.test.ts',
@@ -45,6 +47,7 @@ const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: 'tests/unit/worker/asset-hub-ai-design.test.ts',
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: 'tests/unit/worker/asset-hub-ai-modify.test.ts',
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: 'tests/unit/worker/asset-hub-ai-modify.test.ts',
+  [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: 'tests/unit/helpers/prop-modify-task-registration.test.ts',
   [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: 'tests/unit/worker/reference-to-character.test.ts',
 } as const satisfies Record<TaskType, string>
 

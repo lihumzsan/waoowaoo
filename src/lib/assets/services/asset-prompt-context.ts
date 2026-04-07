@@ -1,4 +1,10 @@
 import { buildCharactersIntroduction } from '@/lib/constants'
+import {
+  formatLocationAvailableSlotsText,
+  parseLocationAvailableSlots,
+} from '@/lib/location-available-slots'
+
+type PromptLocale = 'zh' | 'en'
 
 export type ClipCharacterRef = string | { name?: string | null }
 
@@ -20,6 +26,7 @@ export type PromptLocationAsset = {
   images?: Array<{
     isSelected?: boolean
     description?: string | null
+    availableSlots?: string | null
   }>
 }
 
@@ -35,6 +42,7 @@ export type PromptAssetContextInput = {
   clipCharacters: ClipCharacterRef[]
   clipLocation: string | null
   clipProps: string[]
+  locale?: PromptLocale
 }
 
 export type PromptAssetContext = {
@@ -134,7 +142,14 @@ export function buildPromptAssetContext(input: PromptAssetContextInput): PromptA
     ? input.locations.find((location) => normalizeName(location.name) === normalizeName(environmentName))
     : null
   const selectedImage = matchedLocation?.images?.find((image) => image.isSelected) ?? matchedLocation?.images?.[0]
-  const locationDescriptionText = selectedImage?.description || '无'
+  const locationDescription = selectedImage?.description || '无'
+  const locationSlotsText = formatLocationAvailableSlotsText(
+    parseLocationAvailableSlots(selectedImage?.availableSlots),
+    input.locale ?? 'zh',
+  )
+  const locationDescriptionText = locationSlotsText
+    ? `${locationDescription}\n\n${locationSlotsText}`
+    : locationDescription
 
   return {
     subjectNames,

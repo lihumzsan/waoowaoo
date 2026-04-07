@@ -10,10 +10,10 @@
     "appearances": "个形象",
     "images": "张图片",
     "cancel": "取消",
-    "confirmCopy": "确认复制",
-    "copyFromGlobal": "从资产中心复制",
-    "copySuccess": "复制成功",
-    "copyFailed": "复制失败",
+    "confirmCopy": "确认导入",
+    "copyFromGlobal": "从资产中心导入",
+    "copySuccess": "导入成功",
+    "copyFailed": "导入失败",
     "preview": "试听",
     "stop": "停止"
 }

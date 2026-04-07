@@ -4,7 +4,6 @@ import { buildMockRequest } from '../../../helpers/request'
 
 type AuthState = {
   authenticated: boolean
-  projectMode: 'novel-promotion' | 'other'
 }
 
 type SubmitResult = {
@@ -28,7 +27,6 @@ type DirectRouteCase = {
 
 const authState = vi.hoisted<AuthState>(() => ({
   authenticated: true,
-  projectMode: 'novel-promotion',
 }))
 
 const submitTaskMock = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<SubmitResult>>())
@@ -218,14 +216,14 @@ vi.mock('@/lib/api-auth', () => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: authState.projectMode },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
     requireProjectAuthLight: async (projectId: string) => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: authState.projectMode },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
   }
@@ -395,11 +393,32 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
   },
   {
     routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
-    body: { videoModel: 'fal::video-model', storyboardId: 'storyboard-1', panelIndex: 0 },
+    body: {
+      videoModel: 'ark::doubao-seedance-2-0-260128',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      generationOptions: {
+        resolution: '720p',
+        duration: 5,
+      },
+      firstLastFrame: {
+        flModel: 'ark::doubao-seedance-2-0-260128',
+      },
+    },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.VIDEO_PANEL,
     expectedTargetType: 'NovelPromotionPanel',
     expectedProjectId: 'project-1',
+    expectedPayloadSubset: {
+      videoModel: 'ark::doubao-seedance-2-0-260128',
+      generationOptions: {
+        resolution: '720p',
+        duration: 5,
+      },
+      firstLastFrame: {
+        flModel: 'ark::doubao-seedance-2-0-260128',
+      },
+    },
   },
   {
     routeFile: 'src/app/api/novel-promotion/[projectId]/insert-panel/route.ts',
@@ -534,7 +553,6 @@ describe('api contract - direct submit routes (behavior)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.authenticated = true
-    authState.projectMode = 'novel-promotion'
     let seq = 0
     submitTaskMock.mockImplementation(async () => ({
       taskId: `task-${++seq}`,

@@ -1,5 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
+import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import {
@@ -16,6 +17,10 @@ import {
   normalizeReferenceImagesForGeneration,
   normalizeToBase64ForGeneration,
 } from '@/lib/media/outbound-image'
+import {
+  type LocationAvailableSlot,
+  stringifyLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 import {
   AnyObj,
   parseImageUrls,
@@ -35,6 +40,7 @@ interface LocationImageRecord {
   id: string
   locationId: string
   description: string | null
+  availableSlots?: string | null
   imageUrl: string | null
   previousDescription: string | null
   location: {
@@ -138,7 +144,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
             descriptions: appearance.descriptions,
             fallbackDescription: appearance.description,
             index: imageIndex,
-            nextDescription,
+            nextDescription: nextDescription.prompt,
           })
         }
       } catch (err) {
@@ -163,7 +169,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     return { type, appearanceId: appearance.id, imageIndex, imageUrl: cosKey }
   }
 
-  if (type === 'location') {
+  if (type === 'location' || type === 'prop') {
     const locationImageId = pickFirstString(payload.locationImageId, payload.targetId, job.data.targetId)
     let locationImage: LocationImageRecord | null = locationImageId
       ? await prisma.locationImage.findUnique({
@@ -199,23 +205,30 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs)
     const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
 
-    const prompt = `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
+    const isProp = type === 'prop'
+    const prompt = isProp
+      ? `请根据以下指令修改道具图片，保持道具主体、结构和关键材质一致：\n${modifyInstruction}`
+      : `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
+    const aspectRatio = isProp ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     const source = await resolveImageSourceFromGeneration(job, {
       userId: job.data.userId,
       modelId: editModel,
       prompt,
       options: {
         referenceImages,
-        aspectRatio: '1:1',
+        aspectRatio,
         ...(resolution ? { resolution } : {}),
       },
     })
 
-    const label = locationImage.location?.name || '场景'
+    const label = locationImage.location?.name || (isProp ? '道具' : '场景')
     const labeled = await withLabelBar(source, label)
-    const cosKey = await uploadImageSourceToCos(labeled, 'location-modify', locationImage.id)
+    const cosKey = await uploadImageSourceToCos(labeled, isProp ? 'prop-modify' : 'location-modify', locationImage.id)
 
-    let extractedDescription: string | undefined
+    let extractedDescription: {
+      prompt: string
+      availableSlots: LocationAvailableSlot[]
+    } | null = null
     if (locationImage.description && modifyInstruction) {
       try {
         const userModels = await getUserModels(job.data.userId)
@@ -225,27 +238,31 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
             userId: job.data.userId,
             model: analysisModel,
             locale: job.data.locale,
-            type: 'location',
+            type: isProp ? 'prop' : 'location',
             currentDescription: locationImage.description,
             modifyInstruction,
             referenceImages: normalizedExtras,
             locationName: locationImage.location?.name || '场景',
+            propName: isProp ? (locationImage.location?.name || '道具') : undefined,
             projectId: job.data.projectId,
           })
         }
       } catch (err) {
-        logger.warn({ message: '项目场景描述同步失败，不影响改图结果', details: { error: String(err) } })
+        logger.warn({ message: isProp ? '项目道具描述同步失败，不影响改图结果' : '项目场景描述同步失败，不影响改图结果', details: { error: String(err) } })
       }
     }
 
-    await assertTaskActive(job, 'persist_location_modify')
+    await assertTaskActive(job, isProp ? 'persist_prop_modify' : 'persist_location_modify')
     await prisma.locationImage.update({
       where: { id: locationImage.id },
       data: {
         previousImageUrl: locationImage.imageUrl,
         previousDescription: locationImage.description || null,
         imageUrl: cosKey,
-        ...(extractedDescription ? { description: extractedDescription } : {}),
+        ...(extractedDescription ? {
+          description: extractedDescription.prompt,
+          availableSlots: stringifyLocationAvailableSlots(extractedDescription.availableSlots),
+        } : {}),
       },
     })
 

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { ApiError } from '@/lib/api-errors'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { updateImageLabel } from '@/lib/image-label'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
@@ -24,75 +25,12 @@ export function renderLabelText(input: {
 
 export async function updateAssetRenderLabel(input: UpdateAssetRenderLabelInput) {
   if (input.scope === 'global') {
-    return updateGlobalAssetRenderLabel(input)
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'GLOBAL_ASSET_LABEL_UPDATES_DISABLED',
+      message: 'Global asset images no longer support label updates',
+    })
   }
   return updateProjectAssetRenderLabel(input)
-}
-
-async function updateGlobalAssetRenderLabel(input: UpdateAssetRenderLabelInput) {
-  if (input.kind === 'character') {
-    const character = await prisma.globalCharacter.findUnique({
-      where: { id: input.assetId },
-      include: { appearances: true },
-    })
-    if (!character) {
-      throw new Error('Global character not found')
-    }
-
-    await Promise.all(character.appearances.map(async (appearance) => {
-      const newImageUrls = await Promise.all(
-        decodeImageUrlsFromDb(appearance.imageUrls, 'globalCharacterAppearance.imageUrls').map(async (imageUrl) => updateImageLabel(
-          imageUrl,
-          renderLabelText({
-            kind: 'character',
-            assetName: input.newName,
-            variantLabel: appearance.changeReason,
-          }),
-          {
-            generateNewKey: true,
-            keyPrefix: 'asset-label-rename',
-          },
-        )),
-      )
-      const firstImageUrl = newImageUrls[0] ?? null
-      await prisma.globalCharacterAppearance.update({
-        where: { id: appearance.id },
-        data: {
-          imageUrls: encodeImageUrls(newImageUrls),
-          imageUrl: firstImageUrl,
-        },
-      })
-    }))
-    return
-  }
-
-  const location = await prisma.globalLocation.findUnique({
-    where: { id: input.assetId },
-    include: { images: true },
-  })
-  if (!location) {
-    throw new Error('Global location not found')
-  }
-  await Promise.all(location.images.map(async (image) => {
-    if (!image.imageUrl) {
-      return
-    }
-    const nextImageUrl = await updateImageLabel(
-      image.imageUrl,
-      renderLabelText({
-        kind: input.kind === 'prop' ? 'prop' : 'location',
-        assetName: input.newName,
-      }),
-      {
-        generateNewKey: true,
-        keyPrefix: 'asset-label-rename',
-      },
-    )
-    await prisma.globalLocationImage.update({
-      where: { id: image.id },
-      data: { imageUrl: nextImageUrl },
-    })
-  }))
 }
 
 async function updateProjectAssetRenderLabel(input: UpdateAssetRenderLabelInput) {

@@ -5,7 +5,6 @@ import { buildMockRequest } from '../../../helpers/request'
 
 type AuthState = {
   authenticated: boolean
-  projectMode: 'novel-promotion' | 'other'
 }
 
 type LLMRouteCase = {
@@ -23,7 +22,6 @@ type RouteContext = {
 
 const authState = vi.hoisted<AuthState>(() => ({
   authenticated: true,
-  projectMode: 'novel-promotion',
 }))
 
 const maybeSubmitLLMTaskMock = vi.hoisted(() =>
@@ -57,6 +55,23 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(async () => ({
       id: 'global-location-1',
       userId: 'user-1',
+      name: '遗物匕首',
+    })),
+    findFirst: vi.fn(async () => ({
+      id: 'global-location-1',
+      userId: 'user-1',
+      name: '遗物匕首',
+    })),
+  },
+  novelPromotionProject: {
+    findUnique: vi.fn(async () => ({
+      id: 'novel-project-1',
+    })),
+  },
+  novelPromotionLocation: {
+    findFirst: vi.fn(async () => ({
+      id: 'project-prop-1',
+      name: '遗物匕首',
     })),
   },
 }))
@@ -77,14 +92,14 @@ vi.mock('@/lib/api-auth', () => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: authState.projectMode },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
     requireProjectAuthLight: async (projectId: string) => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: authState.projectMode },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
   }
@@ -149,6 +164,18 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'global-asset-hub',
   },
   {
+    routeFile: 'src/app/api/asset-hub/ai-modify-prop/route.ts',
+    body: {
+      propId: 'global-location-1',
+      variantId: 'prop-variant-1',
+      currentDescription: 'old prop desc',
+      modifyInstruction: 'make it look older',
+    },
+    expectedTaskType: TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP,
+    expectedTargetType: 'GlobalLocation',
+    expectedProjectId: 'global-asset-hub',
+  },
+  {
     routeFile: 'src/app/api/asset-hub/reference-to-character/route.ts',
     body: { referenceImageUrl: 'https://example.com/ref.png' },
     expectedTaskType: TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER,
@@ -172,6 +199,13 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
+    routeFile: 'src/app/api/user/ai-story-expand/route.ts',
+    body: { prompt: '宫廷复仇女主回京' },
+    expectedTaskType: TASK_TYPE.AI_STORY_EXPAND,
+    expectedTargetType: 'HomeAiStoryExpand',
+    expectedProjectId: 'home-ai-write',
+  },
+  {
     routeFile: 'src/app/api/novel-promotion/[projectId]/ai-modify-appearance/route.ts',
     body: {
       characterId: 'character-1',
@@ -193,6 +227,19 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.AI_MODIFY_LOCATION,
+    expectedTargetType: 'NovelPromotionLocation',
+    expectedProjectId: 'project-1',
+  },
+  {
+    routeFile: 'src/app/api/novel-promotion/[projectId]/ai-modify-prop/route.ts',
+    body: {
+      propId: 'project-prop-1',
+      variantId: 'project-prop-variant-1',
+      currentDescription: 'old prop',
+      modifyInstruction: 'add engraved details',
+    },
+    params: { projectId: 'project-1' },
+    expectedTaskType: TASK_TYPE.AI_MODIFY_PROP,
     expectedTargetType: 'NovelPromotionLocation',
     expectedProjectId: 'project-1',
   },
@@ -322,7 +369,6 @@ describe('api contract - llm observe routes (behavior)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.authenticated = true
-    authState.projectMode = 'novel-promotion'
     maybeSubmitLLMTaskMock.mockResolvedValue(
       NextResponse.json({
         success: true,
@@ -336,7 +382,7 @@ describe('api contract - llm observe routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(ROUTE_CASES.length).toBe(22)
+    expect(ROUTE_CASES.length).toBe(25)
   })
 
   for (const routeCase of ROUTE_CASES) {

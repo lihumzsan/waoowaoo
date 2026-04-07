@@ -16,9 +16,19 @@ Rules:
 3. Output in English only.
 4. Start with scene name: "[{location_name}] ..."
 5. No protagonist actions, dialogue, or narrative plot.
+6. Make the scene spatially specific enough for controllable image generation, with visible structure, depth, and stable anchors.
+7. Keep at least 3 clear anchor objects or anchor areas visible in the modified scene.
+8. Regenerate 2-6 `available_slots` that stay consistent with the modified scene.
+9. Each `available_slots` item must be one complete descriptive placement phrase, not a short token and not an object.
+10. Do not mention posture, action, or emotion in `available_slots`.
+11. Every anchor mentioned in `available_slots` must also appear in the modified scene description.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:
 {
-  "prompt": "modified location description"
+  "prompt": "modified location description",
+  "available_slots": [
+    "the position beneath the throne steps at the center of the hall",
+    "the open space between the left column and the long table"
+  ]
 }

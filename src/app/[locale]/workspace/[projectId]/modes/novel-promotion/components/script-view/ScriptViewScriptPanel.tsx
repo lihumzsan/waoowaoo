@@ -141,7 +141,7 @@ export default function ScriptViewScriptPanel({
       </div>
 
       <div className="flex-1 glass-surface-elevated overflow-hidden flex flex-col relative w-full min-h-[300px]">
-        <div className="lg:absolute lg:inset-0 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+        <div className="lg:absolute lg:inset-0 overflow-y-auto p-6 space-y-4 app-scrollbar">
           {clips.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-[var(--glass-text-tertiary)]">
               <AppIcon name="fileFold" className="h-10 w-10 mb-2" />

@@ -1,7 +1,8 @@
 {
-  "title": "Quick Start",
+  "title": "From Inspiration to Screen",
   "subtitle": "Describe your story and let AI generate cinematic short dramas",
   "inputPlaceholder": "Enter your story idea, novel excerpt, or script outline...",
+  "defaultProjectName": "New Project {timestamp}",
   "startCreation": "Start Creating",
   "recentProjects": "Recent Projects",
   "viewAll": "View All Projects",
@@ -11,5 +12,15 @@
     "minutesAgo": "{n}m ago",
     "hoursAgo": "{n}h ago",
     "daysAgo": "{n}d ago"
+  },
+  "aiWrite": {
+    "trigger": "AI Write",
+    "modalTitle": "AI Writing Assistant",
+    "modalSubtitle": "Enter your idea and let AI generate a complete story",
+    "inputLabel": "Enter your creative idea",
+    "placeholder": "Enter keywords, story outline, or a short idea...\n\ne.g.\n• ancient palace, revenge, mystery, female lead\n• Act 1: The heroine returns to the capital; Act 2: A chance encounter at the royal banquet",
+    "hint": "💡 You can enter keywords, story outlines, or creative descriptions. AI will expand your input into a complete story",
+    "startAiWrite": "Start AI Writing",
+    "cancel": "Cancel"
   }
 }

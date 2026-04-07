@@ -17,6 +17,12 @@ describe('bailian video capabilities catalog', () => {
     }
   })
 
+  it('registers wan2.7 i2v as dual-mode', () => {
+    const capabilities = findBuiltinCapabilities('video', 'bailian', 'wan2.7-i2v')
+    expect(capabilities?.video?.generationModeOptions).toEqual(['normal', 'firstlastframe'])
+    expect(capabilities?.video?.firstlastframe).toBe(true)
+  })
+
   it('registers bailian kf2v models as firstlastframe-only', () => {
     const models = [
       'wan2.2-kf2v-flash',

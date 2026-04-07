@@ -70,7 +70,7 @@ export function RatioSelector({ value, onChange, options }: RatioSelectorProps) 
 
       {isOpen && (
         <div
-          className="glass-surface-modal absolute z-50 mt-1 left-0 right-0 p-3 max-h-60 overflow-y-auto custom-scrollbar"
+          className="glass-surface-modal absolute z-50 mt-1 left-0 right-0 p-3 max-h-60 overflow-y-auto app-scrollbar"
           style={{ minWidth: '300px' }}
         >
           <div className="grid grid-cols-5 gap-2">

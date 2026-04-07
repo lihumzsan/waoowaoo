@@ -28,13 +28,14 @@ const runScriptToStoryboardOrchestratorMock = vi.hoisted(() =>
     clipPanels: [
       {
         clipId: 'clip-1',
-        panels: [
+        clipIndex: 0,
+        finalPanels: [
           {
-            panelIndex: 1,
-            shotType: 'close-up',
-            cameraMove: 'static',
+            panel_number: 1,
+            shot_type: 'close-up',
+            camera_move: 'static',
             description: 'panel desc',
-            videoPrompt: 'panel prompt',
+            video_prompt: 'panel prompt',
             location: 'room',
             characters: ['Narrator'],
           },
@@ -48,7 +49,7 @@ const runScriptToStoryboardOrchestratorMock = vi.hoisted(() =>
   })),
 )
 const parseVoiceLinesJsonMock = vi.hoisted(() => vi.fn())
-const persistStoryboardsAndPanelsMock = vi.hoisted(() => vi.fn())
+const persistStoryboardOutputsMock = vi.hoisted(() => vi.fn())
 const parseStoryboardRetryTargetMock = vi.hoisted(() => vi.fn())
 const runScriptToStoryboardAtomicRetryMock = vi.hoisted(() => vi.fn())
 const workflowLeaseMock = vi.hoisted(() => ({
@@ -171,11 +172,11 @@ vi.mock('@/lib/workers/handlers/script-to-storyboard-helpers', () => ({
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null
     return value as Record<string, unknown>
   },
-  buildStoryboardJson: vi.fn(() => '[]'),
+  buildStoryboardJsonFromClipPanels: vi.fn(() => '[]'),
   parseEffort: vi.fn(() => null),
   parseTemperature: vi.fn(() => 0.7),
   parseVoiceLinesJson: parseVoiceLinesJsonMock,
-  persistStoryboardsAndPanels: persistStoryboardsAndPanelsMock,
+  persistStoryboardOutputs: persistStoryboardOutputsMock,
   toPositiveInt: (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return null
     const n = Math.floor(value)
@@ -244,7 +245,6 @@ describe('worker script-to-storyboard behavior', () => {
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
       name: 'Project One',
-      mode: 'novel-promotion',
     })
 
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
@@ -269,33 +269,41 @@ describe('worker script-to-storyboard behavior', () => {
       ],
     })
 
-    prismaMock.$transaction.mockImplementation(async (fn: (tx: {
-      novelPromotionVoiceLine: {
-        deleteMany: (args: { where: Record<string, unknown> }) => Promise<unknown>
-        create: (args: { data: Record<string, unknown>; select: { id: boolean } }) => Promise<{ id: string }>
-      }
-    }) => Promise<unknown>) => {
-      const tx = {
-        novelPromotionVoiceLine: {
-          deleteMany: async (args: { where: Record<string, unknown> }) => {
-            txState.deletedWhereClauses.push(args.where)
-            return undefined
-          },
-          create: async (args: { data: Record<string, unknown>; select: { id: boolean } }) => {
-            txState.createdRows.push(args.data)
-            return { id: `voice-${txState.createdRows.length}` }
-          },
-        },
-      }
-      return await fn(tx)
-    })
+    prismaMock.$transaction.mockReset()
 
-    persistStoryboardsAndPanelsMock.mockResolvedValue([
-      {
-        storyboardId: 'storyboard-1',
-        panels: [{ id: 'panel-1', panelIndex: 1 }],
-      },
-    ])
+    persistStoryboardOutputsMock.mockImplementation(async ({ voiceLineRows }: { voiceLineRows: VoiceLineInput[] | null }) => {
+      const rows = voiceLineRows || []
+      txState.createdRows = rows.map((row) => ({
+        episodeId: 'episode-1',
+        lineIndex: row.lineIndex,
+        speaker: row.speaker,
+        content: row.content,
+        emotionStrength: row.emotionStrength,
+        matchedPanelId: 'panel-1',
+        matchedStoryboardId: 'storyboard-1',
+        matchedPanelIndex: row.matchedPanel.panelIndex,
+      }))
+      txState.deletedWhereClauses = [
+        rows.length === 0
+          ? { episodeId: 'episode-1' }
+          : {
+            episodeId: 'episode-1',
+            lineIndex: {
+              notIn: rows.map((row) => row.lineIndex),
+            },
+          },
+      ]
+      return {
+        persistedStoryboards: [
+          {
+            storyboardId: 'storyboard-1',
+            clipId: 'clip-1',
+            panels: [{ id: 'panel-1', panelIndex: 1 }],
+          },
+        ],
+        voiceLineCount: rows.length,
+      }
+    })
 
     parseVoiceLinesJsonMock.mockReturnValue(baseVoiceRows())
   })
@@ -447,7 +455,7 @@ describe('worker script-to-storyboard behavior', () => {
     })
     expect(runScriptToStoryboardAtomicRetryMock).toHaveBeenCalledTimes(1)
     expect(runScriptToStoryboardOrchestratorMock).not.toHaveBeenCalled()
-    expect(persistStoryboardsAndPanelsMock).toHaveBeenCalledWith({
+    expect(persistStoryboardOutputsMock).toHaveBeenCalledWith({
       episodeId: 'episode-1',
       clipPanels: [
         {
@@ -462,6 +470,7 @@ describe('worker script-to-storyboard behavior', () => {
           ],
         },
       ],
+      voiceLineRows: null,
     })
   })
 })

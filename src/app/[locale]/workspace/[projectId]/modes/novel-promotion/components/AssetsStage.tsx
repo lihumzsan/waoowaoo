@@ -463,7 +463,7 @@ export default function AssetsStage({
             onRegenerateGroup={handleRegenerateLocationGroup}
             onUndo={handleUndoLocation}
             onImageClick={setPreviewImage}
-            onImageEdit={(locId, imgIdx) => handleOpenLocationImageEdit(locId, imgIdx)}
+            onImageEdit={(locId, imgIdx) => handleOpenLocationImageEdit(locId, imgIdx, 'location')}
             onCopyFromGlobal={handleCopyLocationFromGlobal}
             filterIds={episodeAssetIds?.locIds ?? null}
           />
@@ -488,7 +488,7 @@ export default function AssetsStage({
               void propAssetActions.revertRender({ id: propId }).catch(() => undefined)
             }}
             onImageClick={setPreviewImage}
-            onImageEdit={() => undefined}
+            onImageEdit={(propId, imgIdx) => handleOpenLocationImageEdit(propId, imgIdx, 'prop')}
             onCopyFromGlobal={handleCopyPropFromGlobal}
             filterIds={episodeAssetIds?.propIds ?? null}
           />

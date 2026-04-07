@@ -68,5 +68,6 @@ export async function handleAssetHubAIDesignTask(job: Job<TaskJobData>) {
 
   return {
     prompt: result.prompt,
+    availableSlots: result.availableSlots ?? [],
   }
 }

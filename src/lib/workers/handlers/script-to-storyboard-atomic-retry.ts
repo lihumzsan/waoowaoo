@@ -334,6 +334,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   runId: string
   retryTarget: StoryboardRetryTarget
   retryStepAttempt: number
+  locale?: 'zh' | 'en'
   clip: StoryboardClipInput
   clipIndex: number
   totalClipCount: number
@@ -352,6 +353,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   const filteredLocationsDescription = getFilteredLocationsDescription(
     params.novelPromotionData.locations || [],
     clipLocation,
+    params.locale ?? 'zh',
   )
   const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
     characters: [],

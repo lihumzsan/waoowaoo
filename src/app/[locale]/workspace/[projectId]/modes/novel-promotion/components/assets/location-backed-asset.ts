@@ -1,7 +1,10 @@
 import type { Location, Prop } from '@/types/project'
 
-export function canGenerateLocationBackedAsset(asset: Location | Prop): boolean {
-  if (asset.summary && asset.summary.trim().length > 0) {
+export function canGenerateLocationBackedAsset(
+  asset: Location | Prop,
+  assetType: 'location' | 'prop',
+): boolean {
+  if (assetType === 'location' && asset.summary && asset.summary.trim().length > 0) {
     return true
   }
 

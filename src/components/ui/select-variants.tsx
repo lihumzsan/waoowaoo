@@ -134,7 +134,7 @@ export function SelectVariantCard({
                         className="glass-surface-modal z-[9999] overflow-hidden flex flex-col rounded-xl shadow-xl border border-[var(--glass-stroke-base)] py-1"
                         style={panelStyle}
                     >
-                        <div className="overflow-y-auto custom-scrollbar px-1 py-1 max-h-full">
+                        <div className="overflow-y-auto app-scrollbar px-1 py-1 max-h-full">
                             {options.map((opt) => {
                                 const isSelected = value === opt.value
                                 return (
@@ -279,7 +279,7 @@ export function SelectVariantMinimal({
                         className="glass-surface-modal z-[9999] overflow-hidden flex flex-col rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-[var(--glass-stroke-subtle)] py-1 bg-gradient-to-b from-[var(--glass-bg-surface-strong)] to-[var(--glass-bg-surface)] backdrop-blur-md"
                         style={panelStyle}
                     >
-                        <div className="overflow-y-auto custom-scrollbar px-1 py-1 max-h-full">
+                        <div className="overflow-y-auto app-scrollbar px-1 py-1 max-h-full">
                             {options.map((opt) => {
                                 const isSelected = value === opt.value
                                 return (
@@ -411,7 +411,7 @@ export function SelectVariantGhost({
                         className="glass-surface-modal z-[9999] overflow-hidden flex flex-col rounded-xl shadow-lg border border-[var(--glass-stroke-subtle)] py-1"
                         style={panelStyle}
                     >
-                        <div className="overflow-y-auto custom-scrollbar p-1 max-h-full space-y-0.5">
+                        <div className="overflow-y-auto app-scrollbar p-1 max-h-full space-y-0.5">
                             {options.map((opt) => {
                                 const isSelected = value === opt.value
                                 return (

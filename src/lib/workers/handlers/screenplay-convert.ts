@@ -33,14 +33,10 @@ export async function handleScreenplayConvertTask(job: Job<TaskJobData>) {
     select: {
       id: true,
       name: true,
-      mode: true,
     },
   })
   if (!project) {
     throw new Error('Project not found')
-  }
-  if (project.mode !== 'novel-promotion') {
-    throw new Error('Not a novel promotion project')
   }
 
   const novelData = await prisma.novelPromotionProject.findUnique({

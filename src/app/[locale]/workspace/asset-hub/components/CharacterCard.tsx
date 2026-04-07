@@ -91,7 +91,8 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
     }
 
     const imageUrls = appearance?.imageUrls || []
-    const hasMultipleImages = imageUrls.filter(u => isValidUrl(u)).length > 1
+    const generatedImageCount = imageUrls.filter(u => isValidUrl(u)).length
+    const hasMultipleImages = generatedImageCount > 1
     const effectiveSelectedIndex: number | null = appearance?.selectedIndex ?? null
     const currentImageUrl = appearance?.imageUrl || (effectiveSelectedIndex !== null ? imageUrls[effectiveSelectedIndex] : null) || imageUrls.find(u => u) || null
     const hasPreviousVersion = !!(appearance?.previousImageUrl || (appearance?.previousImageUrls && appearance.previousImageUrls.length > 0))
@@ -250,22 +251,27 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                     <div className="flex items-center gap-1">
                         <ImageGenerationInlineCountButton
                             prefix={isAppearanceTaskRunning ? (
-                                <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+                                <>
+                                    <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+                                    <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)]">{tAssets('image.regenCountPrefix')}</span>
+                                </>
                             ) : (
-                                <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
+                                <>
+                                    <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
+                                    <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)]">{tAssets('image.regenCountPrefix')}</span>
+                                </>
                             )}
-                            suffix={null}
                             value={generationCount}
                             options={getImageGenerationCountOptions('character')}
                             onValueChange={setGenerationCount}
                             onClick={() => {
                                 _ulogInfo('[CharacterCard] 多图模式 - 重新生成按钮点击, characterId:', character.id, 'appearanceCount:', appearanceCount)
-                                handleGenerate(generationCount)
+                                handleGenerate(generatedImageCount)
                             }}
                             disabled={isAppearanceTaskRunning}
-                            ariaLabel={tAssets('image.selectCount')}
-                            className="inline-flex h-6 items-center gap-0.5 rounded px-1 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
-                            selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-[10px] font-semibold text-[var(--glass-tone-info-fg)] outline-none cursor-pointer leading-none transition-colors"
+                            showCountControl={false}
+                            ariaLabel={tAssets('image.regenCountPrefix')}
+                            className="inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
                         />
                         {hasPreviousVersion && (
                             <button onClick={handleUndo} className="glass-btn-base glass-btn-soft h-6 w-6 rounded-md" title={tAssets('image.undo')}>
@@ -385,14 +391,14 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
             <input ref={voiceInputRef} type="file" accept="audio/*" onChange={handleUploadVoice} className="hidden" />
 
             {/* 图片区域 */}
-            <div className="relative bg-[var(--glass-bg-muted)] min-h-[100px]">
+            <div className="relative aspect-[3/2] bg-[var(--glass-bg-muted)]">
                 {displayImageUrl ? (
                     <>
                         <MediaImageWithLoading
                             src={displayImageUrl}
                             alt={character.name}
-                            containerClassName="w-full min-h-[120px]"
-                            className="w-full h-auto object-contain cursor-zoom-in"
+                            containerClassName="h-full w-full"
+                            className="h-full w-full object-contain cursor-zoom-in"
                             onClick={() => onImageClick?.(displayImageUrl)}
                         />
                         {/* 操作按钮 - 非生成时显示 */}
@@ -416,7 +422,7 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                         )}
                     </>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-12 text-[var(--glass-text-tertiary)]">
+                    <div className="flex h-full flex-col items-center justify-center px-4 py-6 text-[var(--glass-text-tertiary)]">
                         <AppIcon name="image" className="w-12 h-12 mb-3" />
                         <ImageGenerationInlineCountButton
                             prefix={<span>{tAssets('image.generateCountPrefix')}</span>}

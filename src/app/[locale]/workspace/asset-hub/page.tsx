@@ -45,6 +45,7 @@ export default function AssetHubPage() {
     })
     const characterActions = useAssetActions({ scope: 'global', kind: 'character' })
     const locationActions = useAssetActions({ scope: 'global', kind: 'location' })
+    const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
     const refreshAssets = useRefreshAssets({ scope: 'global' })
 
     const loading = foldersLoading || assetsLoading
@@ -58,7 +59,7 @@ export default function AssetHubPage() {
     const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null)
     const [previewImage, setPreviewImage] = useState<string | null>(null)
     const [imageEditModal, setImageEditModal] = useState<{
-        type: 'character' | 'location'
+        type: 'character' | 'location' | 'prop'
         id: string
         name: string
         imageIndex: number
@@ -101,6 +102,7 @@ export default function AssetHubPage() {
         propId: string
         propName: string
         summary: string
+        description: string
         variantId?: string
     } | null>(null)
 
@@ -159,7 +161,7 @@ export default function AssetHubPage() {
     }
 
     // 打开图片编辑弹窗
-    const handleOpenImageEdit = (type: 'character' | 'location', id: string, name: string, imageIndex: number, appearanceIndex?: number) => {
+    const handleOpenImageEdit = (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number, appearanceIndex?: number) => {
         setImageEditModal({ type, id, name, imageIndex, appearanceIndex })
     }
 
@@ -186,6 +188,15 @@ export default function AssetHubPage() {
                 imageIndex,
                 modifyPrompt,
                 extraImageUrls
+            }).catch(() => {
+                alert(t('editFailed'))
+            })
+        } else if (type === 'prop') {
+            void propActions.modifyRender({
+                id,
+                imageIndex,
+                modifyPrompt,
+                extraImageUrls,
             }).catch(() => {
                 alert(t('editFailed'))
             })
@@ -290,13 +301,14 @@ export default function AssetHubPage() {
             id: string
             name: string
             summary: string | null
-            images: Array<{ id: string; imageIndex: number }>
+            images: Array<{ id: string; imageIndex: number; description: string | null }>
         }
         const variant = typedProp.images.find((image) => image.imageIndex === imageIndex)
         setPropEditModal({
             propId: typedProp.id,
             propName: typedProp.name,
             summary: typedProp.summary || '',
+            description: variant?.description || typedProp.summary || '',
             variantId: variant?.id,
         })
     }
@@ -615,6 +627,7 @@ export default function AssetHubPage() {
                     propId={propEditModal.propId}
                     propName={propEditModal.propName}
                     summary={propEditModal.summary}
+                    description={propEditModal.description}
                     variantId={propEditModal.variantId}
                     onClose={() => setPropEditModal(null)}
                     onRefresh={refreshAssets}

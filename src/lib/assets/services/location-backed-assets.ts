@@ -1,6 +1,10 @@
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import {
+  type LocationAvailableSlot,
+  stringifyLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 
 export type LocationBackedAssetKind = 'location' | 'prop'
 
@@ -28,6 +32,7 @@ type LocationBackedImageRow = {
   id: string
   imageIndex: number
   description: string | null
+  availableSlots: string | null
   imageUrl: string | null
   imageMediaId: string | null
   previousImageUrl: string | null
@@ -88,6 +93,7 @@ async function readProjectLocationBackedImages(locationIds: string[]): Promise<M
       id,
       imageIndex,
       description,
+      availableSlots,
       imageUrl,
       imageMediaId,
       previousImageUrl,
@@ -111,6 +117,7 @@ async function readGlobalLocationBackedImages(locationIds: string[]): Promise<Ma
       id,
       imageIndex,
       description,
+      availableSlots,
       imageUrl,
       imageMediaId,
       previousImageUrl,
@@ -184,6 +191,7 @@ export async function createProjectLocationBackedAsset(input: {
   novelPromotionProjectId: string
   name: string
   summary: string
+  initialDescription?: string
   kind: LocationBackedAssetKind
 }): Promise<{ id: string }> {
   const id = randomUUID()
@@ -212,8 +220,9 @@ export async function createProjectLocationBackedAsset(input: {
   `)
   await seedProjectLocationBackedImageSlots({
     locationId: id,
-    fallbackDescription: input.summary,
-    descriptions: [input.summary],
+    fallbackDescription: input.initialDescription ?? input.summary,
+    descriptions: [input.initialDescription ?? input.summary],
+    availableSlots: [],
   })
   return { id }
 }
@@ -223,6 +232,7 @@ export async function createGlobalLocationBackedAsset(input: {
   folderId?: string | null
   name: string
   summary: string
+  initialDescription?: string
   artStyle?: string | null
   kind: LocationBackedAssetKind
 }): Promise<{ id: string }> {
@@ -252,8 +262,9 @@ export async function createGlobalLocationBackedAsset(input: {
   `)
   await seedGlobalLocationBackedImageSlots({
     locationId: id,
-    fallbackDescription: input.summary,
-    descriptions: [input.summary],
+    fallbackDescription: input.initialDescription ?? input.summary,
+    descriptions: [input.initialDescription ?? input.summary],
+    availableSlots: [],
   })
   return { id }
 }
@@ -262,17 +273,31 @@ export async function seedProjectLocationBackedImageSlots(input: {
   locationId: string
   fallbackDescription: string
   descriptions?: string[]
+  availableSlots?: LocationAvailableSlot[]
+  locationImageModel?: {
+    createMany: (args: {
+      data: Array<{
+        locationId: string
+        imageIndex: number
+        description: string
+        availableSlots: string
+      }>
+    }) => Promise<unknown>
+  }
 }): Promise<void> {
   const descriptions = normalizeSeedDescriptions(input)
   if (descriptions.length === 0) {
     return
   }
+  const availableSlots = stringifyLocationAvailableSlots(input.availableSlots ?? [])
 
-  await prisma.locationImage.createMany({
+  const locationImageModel = input.locationImageModel ?? prisma.locationImage
+  await locationImageModel.createMany({
     data: descriptions.map((description, imageIndex) => ({
       locationId: input.locationId,
       imageIndex,
       description,
+      availableSlots,
     })),
   })
 }
@@ -281,17 +306,20 @@ export async function seedGlobalLocationBackedImageSlots(input: {
   locationId: string
   fallbackDescription: string
   descriptions?: string[]
+  availableSlots?: LocationAvailableSlot[]
 }): Promise<void> {
   const descriptions = normalizeSeedDescriptions(input)
   if (descriptions.length === 0) {
     return
   }
+  const availableSlots = stringifyLocationAvailableSlots(input.availableSlots ?? [])
 
   await prisma.globalLocationImage.createMany({
     data: descriptions.map((description, imageIndex) => ({
       locationId: input.locationId,
       imageIndex,
       description,
+      availableSlots,
     })),
   })
 }

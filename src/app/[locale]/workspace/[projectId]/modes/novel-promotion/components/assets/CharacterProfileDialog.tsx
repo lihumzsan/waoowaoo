@@ -101,11 +101,11 @@ export default function CharacterProfileDialog({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--glass-overlay)]" onClick={onClose}>
             <div
-                className="bg-[var(--glass-bg-surface)] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4"
+                className="bg-[var(--glass-bg-surface)] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col m-4"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* 头部 */}
-                <div className="sticky top-0 bg-[var(--glass-bg-surface)] border-b border-[var(--glass-stroke-base)] px-6 py-4 flex items-center justify-between">
+                <div className="bg-[var(--glass-bg-surface)] border-b border-[var(--glass-stroke-base)] px-6 py-4 flex items-center justify-between shrink-0">
                     <h2 className="text-xl font-semibold text-[var(--glass-text-primary)]">{t('characterProfile.editDialogTitle', { name: characterName })}</h2>
                     <button
                         onClick={onClose}
@@ -116,7 +116,7 @@ export default function CharacterProfileDialog({
                 </div>
 
                 {/* 表单内容 */}
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 overflow-y-auto app-scrollbar flex-1 min-h-0">
                     {/* 角色层级 */}
                     <div>
                         <label className="block text-sm font-medium text-[var(--glass-text-secondary)] mb-2">{t('characterProfile.importanceLevel')}</label>
@@ -261,7 +261,7 @@ export default function CharacterProfileDialog({
                 </div>
 
                 {/* 底部按钮 */}
-                <div className="sticky bottom-0 bg-[var(--glass-bg-surface)] border-t border-[var(--glass-stroke-base)] px-6 py-4 flex gap-3 justify-end">
+                <div className="bg-[var(--glass-bg-surface)] border-t border-[var(--glass-stroke-base)] px-6 py-4 flex gap-3 justify-end shrink-0">
                     <button
                         onClick={onClose}
                         disabled={isSaving}

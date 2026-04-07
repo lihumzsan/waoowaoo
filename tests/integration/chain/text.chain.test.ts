@@ -14,7 +14,7 @@ const queueState = vi.hoisted(() => ({
 
 const prismaMock = vi.hoisted(() => ({
   project: {
-    findUnique: vi.fn(async () => ({ id: 'project-1', mode: 'novel-promotion' })),
+    findUnique: vi.fn(async () => ({ id: 'project-1' })),
   },
   novelPromotionProject: {
     findFirst: vi.fn(async () => ({ id: 'np-project-1' })),

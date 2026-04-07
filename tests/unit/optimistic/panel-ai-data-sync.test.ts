@@ -70,6 +70,22 @@ describe('panel ai data sync helpers', () => {
     })
   })
 
+  it('preserves slot on remaining characters after removal', () => {
+    const synced = syncPanelCharacterDependentJson({
+      characters: [
+        { name: '甲', appearance: '初始形象', slot: '餐桌左侧靠桌边的位置' },
+        { name: '乙', appearance: '初始形象', slot: '餐桌右侧靠桌边的位置' },
+      ],
+      removeIndex: 0,
+      actingNotesJson: null,
+      photographyRulesJson: null,
+    })
+
+    expect(synced.characters).toEqual([
+      { name: '乙', appearance: '初始形象', slot: '餐桌右侧靠桌边的位置' },
+    ])
+  })
+
   it('supports double-serialized JSON string inputs', () => {
     const actingNotes = JSON.stringify([{ name: '甲', acting: '动作' }])
     const doubleSerialized = JSON.stringify(actingNotes)

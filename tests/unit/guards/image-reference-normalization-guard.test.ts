@@ -47,7 +47,7 @@ describe('image reference normalization guard', () => {
     expect(
       inspectImageReferenceNormalization('src/lib/workers/handlers/bad-handler.ts', content),
     ).toEqual([
-      'src/lib/workers/handlers/bad-handler.ts uses resolveImageSourceFromGeneration with referenceImages but does not reference normalizeReferenceImagesForGeneration/normalizeToBase64ForGeneration/generateLabeledImageToCos',
+      'src/lib/workers/handlers/bad-handler.ts uses resolveImageSourceFromGeneration with referenceImages but does not reference normalizeReferenceImagesForGeneration/normalizeToBase64ForGeneration/generateProjectLabeledImageToStorage/generateCleanImageToStorage',
     ])
   })
 })

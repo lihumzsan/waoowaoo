@@ -94,7 +94,7 @@ export function WorldContextModal({ isOpen, onClose, text, onChange }: WorldCont
             value={text}
             onChange={(event) => handleTextChange(event.target.value)}
             placeholder={t('placeholder')}
-            className="glass-textarea-base flex-1 text-base resize-none leading-relaxed placeholder:text-[var(--glass-text-tertiary)]/70 custom-scrollbar p-4"
+            className="glass-textarea-base app-scrollbar flex-1 text-base resize-none leading-relaxed placeholder:text-[var(--glass-text-tertiary)]/70 p-4"
           />
         </div>
 

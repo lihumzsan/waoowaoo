@@ -22,6 +22,7 @@
     "downloadSuccess": "Download Complete",
     "downloadFailed": "Download Failed",
     "downloadEmpty": "No image assets to download",
+    "filteredEmptyHint": "Click \"New Asset\" to add assets",
     "newFolder": "New Folder",
     "editFolder": "Edit Folder",
     "deleteFolder": "Delete Folder",

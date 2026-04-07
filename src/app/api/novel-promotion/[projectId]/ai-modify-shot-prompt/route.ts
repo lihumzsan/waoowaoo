@@ -11,7 +11,7 @@ export const POST = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
-  const { session, project } = authResult
+  const { session } = authResult
 
   const body = await request.json().catch(() => ({}))
   const currentPrompt = typeof body?.currentPrompt === 'string' ? body.currentPrompt.trim() : ''
@@ -19,10 +19,6 @@ export const POST = apiHandler(async (
   if (!currentPrompt || !modifyInstruction) {
     throw new ApiError('INVALID_PARAMS')
   }
-  if (project.mode !== 'novel-promotion') {
-    throw new ApiError('INVALID_PARAMS')
-  }
-
   const panelId = typeof body?.panelId === 'string' ? body.panelId.trim() : ''
   const episodeId = typeof body?.episodeId === 'string' ? body.episodeId.trim() : ''
 

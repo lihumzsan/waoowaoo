@@ -23,6 +23,11 @@
   "createFailed": "创建项目失败",
   "analysisModelRequiredAfterCreate": "项目已创建。请先前往个人设置配置默认模型（至少设置分析模型），否则无法使用。",
   "updateFailed": "更新项目失败",
+  "validation": {
+    "nameRequired": "项目名称不能为空。",
+    "nameTooLong": "项目名称不能超过 100 个字符。",
+    "descriptionTooLong": "项目描述不能超过 500 个字符。"
+  },
   "deleteFailed": "删除项目失败",
   "totalProjects": "共 {count} 个项目",
   "statsEpisodes": "章节数",

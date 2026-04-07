@@ -123,7 +123,12 @@ export async function waitExternalResult(
           externalId,
         },
       })
-      return { url, status, ...(status.downloadHeaders ? { downloadHeaders: status.downloadHeaders } : {}) }
+      return {
+        url,
+        status,
+        ...(typeof status.actualVideoTokens === 'number' ? { actualVideoTokens: status.actualVideoTokens } : {}),
+        ...(status.downloadHeaders ? { downloadHeaders: status.downloadHeaders } : {}),
+      }
     }
 
     if (status.status === 'failed') {
@@ -419,7 +424,7 @@ export async function resolveVideoSourceFromGeneration(
     }
     pollProgress?: { start?: number; end?: number }
   },
-): Promise<{ url: string; downloadHeaders?: Record<string, string> }> {
+): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
   const logger = scopedWorkerUtilLogger(job, 'worker.video.generate_source')
   const startedAt = Date.now()
 
@@ -441,6 +446,7 @@ export async function resolveVideoSourceFromGeneration(
     })
     return {
       url: polled.url,
+      ...(typeof polled.actualVideoTokens === 'number' ? { actualVideoTokens: polled.actualVideoTokens } : {}),
       ...(polled.downloadHeaders ? { downloadHeaders: polled.downloadHeaders } : {}),
     }
   }
@@ -522,6 +528,7 @@ export async function resolveVideoSourceFromGeneration(
   })
   return {
     url: polled.url,
+    ...(typeof polled.actualVideoTokens === 'number' ? { actualVideoTokens: polled.actualVideoTokens } : {}),
     ...(polled.downloadHeaders ? { downloadHeaders: polled.downloadHeaders } : {}),
   }
 }

@@ -8,7 +8,9 @@ import {
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
+    requestTaskResponseWithError,
 } from './mutation-shared'
+import { resolveTaskResponse } from '@/lib/task/client'
 
 export function useModifyProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
@@ -26,7 +28,7 @@ export function useModifyProjectCharacterImage(projectId: string) {
             modifyPrompt: string
             extraImageUrls?: string[]
         }) => {
-            return await requestJsonWithError(`/api/assets/${params.characterId}/modify-render`, {
+            const response = await requestTaskResponseWithError(`/api/assets/${params.characterId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -36,6 +38,7 @@ export function useModifyProjectCharacterImage(projectId: string) {
                     ...params,
                 }),
             }, 'Failed to modify image')
+            return await resolveTaskResponse(response)
         },
         onMutate: ({ appearanceId }) => {
             upsertTaskTargetOverlay(queryClient, {

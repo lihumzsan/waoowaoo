@@ -1,7 +1,8 @@
 {
-  "title": "快速开始",
+  "title": "从灵感到银幕",
   "subtitle": "描述你想要创作的故事，AI 为你智能生成影视短剧",
   "inputPlaceholder": "输入你的故事创意、小说片段或剧本大纲...",
+  "defaultProjectName": "新项目 {timestamp}",
   "startCreation": "开始创作",
   "recentProjects": "最近项目",
   "viewAll": "查看全部项目",
@@ -11,5 +12,15 @@
     "minutesAgo": "{n}分钟前",
     "hoursAgo": "{n}小时前",
     "daysAgo": "{n}天前"
+  },
+  "aiWrite": {
+    "trigger": "AI 帮我写",
+    "modalTitle": "AI 创作助手",
+    "modalSubtitle": "输入你的创意，让 AI 帮你生成完整故事",
+    "inputLabel": "输入你的创意内容",
+    "placeholder": "输入关键词、故事大纲或简短创意...\n\n例如：\n• 古代宫廷 复仇 悬疑 女主角\n• 第一幕：女主回到京城，暗访旧宅；第二幕：宫廷宴会偶遇仇人之子",
+    "hint": "💡 可以输入关键词、故事大纲、创意描述，AI 会根据你的输入扩展生成完整的故事内容",
+    "startAiWrite": "开始 AI 创作",
+    "cancel": "取消"
   }
 }

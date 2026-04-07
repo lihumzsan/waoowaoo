@@ -462,7 +462,7 @@ export default function ScriptViewAssetsPanel({
       </div>
 
       <div className="relative z-10 flex-1 min-h-0 glass-surface-modal overflow-hidden p-4 pr-3">
-        <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1 custom-scrollbar">
+        <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1 app-scrollbar">
           {assetsLoading && characters.length === 0 && locations.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-[var(--glass-text-tertiary)] animate-pulse">
               <TaskStatusInline state={assetsLoadingState} />
@@ -490,7 +490,7 @@ export default function ScriptViewAssetsPanel({
           {showAddChar && mounted && createPortal(
             <div ref={charEditorPopoverRef} className="fixed right-4 bottom-4 z-[80] glass-surface-modal w-[min(24rem,calc(100vw-2rem))] h-[min(560px,calc(100vh-2rem))] p-3 animate-fadeIn flex flex-col shadow-2xl">
               <div className="shrink-0 text-xs text-[var(--glass-text-tertiary)]">{tCommon('edit')} · {tScript('asset.activeCharacters')}</div>
-              <div className="mt-3 flex-1 min-h-0 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="mt-3 flex-1 min-h-0 space-y-4 overflow-y-auto pr-1 app-scrollbar">
                 {isAllClipsMode && (
                   <div className="rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)]/40 p-2 text-[11px] text-[var(--glass-text-tertiary)]">
                     当前为“全部片段”视图，文案要求仅在单片段视图可编辑
@@ -646,7 +646,7 @@ export default function ScriptViewAssetsPanel({
           {showAddLoc && mounted && createPortal(
             <div ref={locEditorPopoverRef} className="fixed right-4 bottom-4 z-[80] glass-surface-modal w-[min(24rem,calc(100vw-2rem))] h-[min(560px,calc(100vh-2rem))] p-3 animate-fadeIn flex flex-col shadow-2xl">
               <div className="shrink-0 text-xs text-[var(--glass-text-tertiary)]">{tCommon('edit')} · {tScript('asset.activeLocations')}</div>
-              <div className="mt-3 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="mt-3 flex-1 min-h-0 overflow-y-auto pr-1 app-scrollbar">
                 {isAllClipsMode && (
                   <div className="mb-3 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)]/40 p-2 text-[11px] text-[var(--glass-text-tertiary)]">
                     当前为“全部片段”视图，场景文案要求仅在单片段视图可编辑
@@ -775,7 +775,7 @@ export default function ScriptViewAssetsPanel({
           {showAddProp && mounted && createPortal(
             <div ref={propEditorPopoverRef} className="fixed right-4 bottom-4 z-[80] glass-surface-modal w-[min(24rem,calc(100vw-2rem))] h-[min(560px,calc(100vh-2rem))] p-3 animate-fadeIn flex flex-col shadow-2xl">
               <div className="shrink-0 text-xs text-[var(--glass-text-tertiary)]">{tCommon('edit')} · 道具</div>
-              <div className="mt-3 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="mt-3 flex-1 min-h-0 overflow-y-auto pr-1 app-scrollbar">
                 <div className="grid grid-cols-2 gap-2">
                   {props.map((prop) => {
                     const isSelected = pendingPropIds.has(prop.id)

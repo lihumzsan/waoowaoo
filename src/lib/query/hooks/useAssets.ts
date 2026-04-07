@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
+import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '@/lib/query/keys'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import {
@@ -398,8 +399,9 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to modify asset render')
     }
+    const result = await resolveTaskResponse(response)
     invalidateScopeQueries(queryClient, input)
-    return response.json()
+    return result
   }
 
   const copyFromGlobal = async (payload: { targetId: string; globalAssetId: string }) => {

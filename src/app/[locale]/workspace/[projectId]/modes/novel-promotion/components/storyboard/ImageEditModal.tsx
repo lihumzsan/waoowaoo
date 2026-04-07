@@ -95,15 +95,15 @@ export default function ImageEditModal({
   return (
     <div className="fixed inset-0 bg-[var(--glass-overlay)] z-50 flex items-center justify-center p-4">
       <div
-        className="bg-[var(--glass-bg-surface)] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-[var(--glass-bg-surface)] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
         onPaste={handlePaste}
       >
-        <div className="p-6 border-b">
+        <div className="p-6 border-b shrink-0">
           <h3 className="text-lg font-bold text-[var(--glass-text-primary)]">{t('imageEdit.title')}</h3>
           <p className="text-sm text-[var(--glass-text-tertiary)] mt-1">{t('imageEdit.subtitle')}</p>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto app-scrollbar flex-1 min-h-0">
           <div>
             <label className="block text-sm font-medium text-[var(--glass-text-secondary)] mb-2">{t('prompts.aiInstruction')}</label>
             <textarea

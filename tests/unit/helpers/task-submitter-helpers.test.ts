@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
-import { normalizeTaskPayload } from '@/lib/task/submitter'
+import { isActiveTaskStatus, normalizeTaskPayload, shouldAttachNewTaskToReusableRun } from '@/lib/task/submitter'
 
 describe('task submitter helpers', () => {
   it('fills default flow metadata when payload misses flow fields', () => {
@@ -55,5 +55,15 @@ describe('task submitter helpers', () => {
     expect(meta.flowStageIndex).toBe(3)
     expect(meta.flowStageTotal).toBe(7)
     expect(meta.flowStageTitle).toBe('Meta')
+  })
+
+  it('reuses linked runs only while the existing task is still active', () => {
+    expect(isActiveTaskStatus('queued')).toBe(true)
+    expect(isActiveTaskStatus('processing')).toBe(true)
+    expect(isActiveTaskStatus('completed')).toBe(false)
+    expect(shouldAttachNewTaskToReusableRun('queued')).toBe(false)
+    expect(shouldAttachNewTaskToReusableRun('processing')).toBe(false)
+    expect(shouldAttachNewTaskToReusableRun('failed')).toBe(true)
+    expect(shouldAttachNewTaskToReusableRun(null)).toBe(true)
   })
 })

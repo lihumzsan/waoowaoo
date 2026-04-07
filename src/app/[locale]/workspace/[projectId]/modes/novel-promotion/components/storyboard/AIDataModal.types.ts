@@ -1,5 +1,11 @@
 'use client'
 
+export interface AIDataCharacter {
+  name: string
+  appearance: string
+  slot?: string
+}
+
 export interface PhotographyCharacter {
   name: string
   screen_position: string
@@ -47,7 +53,7 @@ export interface AIDataModalProps {
   cameraMove: string | null
   description: string | null
   location: string | null
-  characters: string[]
+  characters: AIDataCharacter[]
   videoPrompt: string | null
   photographyRules: PhotographyRules | null
   actingNotes: ActingNotes | ActingCharacter[] | null

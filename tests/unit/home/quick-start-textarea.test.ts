@@ -6,7 +6,7 @@ import HomePage from '@/app/[locale]/home/page'
 import {
   HOME_QUICK_START_MIN_ROWS,
   resolveTextareaTargetHeight,
-} from '@/lib/home/quick-start-textarea'
+} from '@/lib/ui/textarea-height'
 
 vi.mock('next-auth/react', () => ({
   useSession: () => ({
@@ -23,15 +23,33 @@ vi.mock('@/components/Navbar', () => ({
   default: () => createElement('nav', null, 'Navbar'),
 }))
 
+vi.mock('@/components/story-input/StoryInputComposer', () => ({
+  default: ({
+    minRows,
+    textareaClassName,
+    primaryAction,
+    secondaryActions,
+  }: {
+    minRows: number
+    textareaClassName?: string
+    primaryAction: React.ReactNode
+    secondaryActions?: React.ReactNode
+  }) => createElement(
+    'section',
+    {
+      'data-min-rows': String(minRows),
+      'data-textarea-class': textareaClassName,
+    },
+    secondaryActions,
+    primaryAction,
+    'StoryInputComposer',
+  ),
+}))
+
 vi.mock('@/components/ui/icons', () => ({
   AppIcon: ({ name, ...props }: { name: string } & Record<string, unknown>) =>
     createElement('span', { ...props, 'data-icon': name }),
   IconGradientDefs: (props: Record<string, unknown>) => createElement('span', props),
-}))
-
-vi.mock('@/components/selectors/RatioStyleSelectors', () => ({
-  RatioSelector: (props: Record<string, unknown>) => createElement('div', props, 'RatioSelector'),
-  StyleSelector: (props: Record<string, unknown>) => createElement('div', props, 'StyleSelector'),
 }))
 
 vi.mock('@/i18n/navigation', () => ({
@@ -59,6 +77,10 @@ vi.mock('@/lib/home/create-project-launch', () => ({
   createHomeProjectLaunch: vi.fn(),
 }))
 
+vi.mock('@/lib/home/ai-story-expand', () => ({
+  expandHomeStory: vi.fn(),
+}))
+
 describe('resolveTextareaTargetHeight', () => {
   it('keeps the home quick-start input at least three rows tall', () => {
     expect(resolveTextareaTargetHeight({
@@ -84,6 +106,8 @@ describe('HomePage quick-start input', () => {
     const html = renderToStaticMarkup(createElement(HomePage))
 
     expect(HOME_QUICK_START_MIN_ROWS).toBe(3)
-    expect(html).toContain('rows="3"')
+    expect(html).toContain('StoryInputComposer')
+    expect(html).toContain('data-min-rows="3"')
+    expect(html).toContain('data-textarea-class="px-0 pt-0 pb-3 align-top"')
   })
 })

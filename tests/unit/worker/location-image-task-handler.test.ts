@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getArtStylePrompt } from '@/lib/constants'
+import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, getArtStylePrompt } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const utilsMock = vi.hoisted(() => ({
@@ -20,7 +20,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const sharedMock = vi.hoisted(() => ({
-  generateLabeledImageToCos: vi.fn(async () => 'cos/location-generated-1.png'),
+  generateProjectLabeledImageToStorage: vi.fn(async () => 'cos/location-generated-1.png'),
 }))
 
 vi.mock('@/lib/workers/utils', () => utilsMock)
@@ -32,7 +32,7 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   )
   return {
     ...actual,
-    generateLabeledImageToCos: sharedMock.generateLabeledImageToCos,
+    generateProjectLabeledImageToStorage: sharedMock.generateProjectLabeledImageToStorage,
   }
 })
 
@@ -63,6 +63,9 @@ describe('worker location-image-task-handler behavior', () => {
       locationId: 'location-1',
       imageIndex: 0,
       description: '雨夜街道',
+      availableSlots: JSON.stringify([
+        '街道左侧靠墙的留白位置',
+      ]),
       location: { name: 'Old Town' },
     })
 
@@ -75,6 +78,9 @@ describe('worker location-image-task-handler behavior', () => {
           locationId: 'location-1',
           imageIndex: 0,
           description: '雨夜街道',
+          availableSlots: JSON.stringify([
+            '街道左侧靠墙的留白位置',
+          ]),
         },
       ],
     })
@@ -94,17 +100,32 @@ describe('worker location-image-task-handler behavior', () => {
       locationIds: ['location-1'],
     })
 
-    expect(sharedMock.generateLabeledImageToCos).toHaveBeenCalledWith(
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: `雨夜街道，${animeStylePrompt}`,
+        prompt: expect.stringContaining('雨夜街道'),
         label: 'Old Town',
         targetId: 'location-image-1',
-        options: expect.objectContaining({ aspectRatio: '1:1' }),
+        options: expect.objectContaining({ aspectRatio: LOCATION_IMAGE_RATIO }),
       }),
     )
-    const generationCall = sharedMock.generateLabeledImageToCos.mock.calls[0] as unknown as [{ prompt: string }] | undefined
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('可站位置：'),
+      }),
+    )
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('街道左侧靠墙的留白位置'),
+      }),
+    )
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('必须使用宽广完整的场景全景构图'),
+      }),
+    )
+    const generationCall = sharedMock.generateProjectLabeledImageToStorage.mock.calls[0] as unknown as [{ prompt: string }] | undefined
     expect(generationCall).toBeTruthy()
-    if (!generationCall) throw new Error('expected generateLabeledImageToCos call')
+    if (!generationCall) throw new Error('expected generateProjectLabeledImageToStorage call')
     const generationInput = generationCall[0]
     expect(generationInput.prompt.split(animeStylePrompt).length - 1).toBe(1)
 
@@ -117,9 +138,9 @@ describe('worker location-image-task-handler behavior', () => {
   it('payload artStyle overrides project artStyle in prompt', async () => {
     await handleLocationImageTask(buildJob({ imageIndex: 0, artStyle: 'realistic' }))
 
-    expect(sharedMock.generateLabeledImageToCos).toHaveBeenCalledWith(
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: `雨夜街道，${getArtStylePrompt('realistic', 'zh')}`,
+        prompt: expect.stringContaining(getArtStylePrompt('realistic', 'zh')),
       }),
     )
   })
@@ -148,11 +169,21 @@ describe('worker location-image-task-handler behavior', () => {
       updated: 1,
       locationIds: ['location-1'],
     })
-    expect(sharedMock.generateLabeledImageToCos).toHaveBeenCalledTimes(1)
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledTimes(1)
     expect(prismaMock.locationImage.update).toHaveBeenCalledTimes(1)
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
       data: { imageUrl: 'cos/location-generated-1.png' },
     })
+  })
+
+  it('uses the same aspect ratio as character generation for prop images', async () => {
+    await handleLocationImageTask(buildJob({ type: 'prop', imageIndex: 0 }))
+
+    expect(sharedMock.generateProjectLabeledImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ aspectRatio: PROP_IMAGE_RATIO }),
+      }),
+    )
   })
 })

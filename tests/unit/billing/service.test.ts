@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { calcText, calcVoice } from '@/lib/billing/cost'
+import { calcText, calcVideo, calcVoice } from '@/lib/billing/cost'
 import type { TaskBillingInfo } from '@/lib/task/types'
 
 const ledgerMock = vi.hoisted(() => ({
@@ -226,6 +226,34 @@ describe('billing/service', () => {
         maxFrozenCost: calcVoice(5),
         action: 'voice_line_generate',
         metadata: { foo: 'bar' },
+        ...overrides,
+      }
+    }
+
+    function buildSeedance2VideoTaskInfo(
+      overrides: Partial<Extract<TaskBillingInfo, { billable: true }>> = {},
+    ): Extract<TaskBillingInfo, { billable: true }> {
+      return {
+        billable: true,
+        source: 'task',
+        taskType: 'video_panel',
+        apiType: 'video',
+        model: 'doubao-seedance-2-0-260128',
+        quantity: 1,
+        unit: 'video',
+        maxFrozenCost: calcVideo('doubao-seedance-2-0-260128', '720p', 1, {
+          resolution: '720p',
+          duration: 5,
+          aspectRatio: '16:9',
+          containsVideoInput: false,
+        }),
+        action: 'video_panel_generate',
+        metadata: {
+          resolution: '720p',
+          duration: 5,
+          aspectRatio: '16:9',
+          containsVideoInput: false,
+        },
         ...overrides,
       }
     }
@@ -466,6 +494,25 @@ describe('billing/service', () => {
       expect(ledgerMock.increasePendingFreezeAmount).toHaveBeenCalledTimes(1)
       expect(ledgerMock.confirmChargeWithRecord).toHaveBeenCalled()
       expect((settled as Extract<TaskBillingInfo, { billable: true }>).chargedCost).toBeCloseTo(calcVoice(50), 8)
+    })
+
+    it('settleTaskBilling charges Seedance 2.0 videos from exact usage tokens', async () => {
+      ledgerMock.confirmChargeWithRecord.mockResolvedValueOnce(true)
+
+      const settled = await settleTaskBilling({
+        id: 'task_seedance2_actual_tokens',
+        userId: 'u1',
+        projectId: 'p1',
+        billingInfo: buildSeedance2VideoTaskInfo({
+          modeSnapshot: 'ENFORCE',
+          freezeId: 'freeze_seedance2_actual_tokens',
+        }),
+      }, {
+        result: { actualVideoTokens: 120_000 },
+      })
+
+      expect(ledgerMock.increasePendingFreezeAmount).toHaveBeenCalledTimes(1)
+      expect((settled as Extract<TaskBillingInfo, { billable: true }>).chargedCost).toBeCloseTo(5.52, 8)
     })
 
     it('settleTaskBilling keeps quoted charge when text usage has no token counts', async () => {

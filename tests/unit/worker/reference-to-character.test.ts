@@ -177,6 +177,8 @@ describe('worker reference-to-character', () => {
 
     expect(result).toEqual(expect.objectContaining({ success: true }))
     expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(3)
+    expect(fontsMock.initializeFonts).not.toHaveBeenCalled()
+    expect(fontsMock.createLabelSVG).not.toHaveBeenCalled()
 
     const { prompt, options } = readGenerateCall(0)
     expect(prompt).toContain('冷静黑发角色')
@@ -201,6 +203,8 @@ describe('worker reference-to-character', () => {
 
     expect(result).toEqual(expect.objectContaining({ success: true }))
     expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(3)
+    expect(fontsMock.initializeFonts).not.toHaveBeenCalled()
+    expect(fontsMock.createLabelSVG).not.toHaveBeenCalled()
 
     const { prompt, options } = readGenerateCall(0)
     expect(prompt).toContain('BASE_REFERENCE_PROMPT')
@@ -236,5 +240,21 @@ describe('worker reference-to-character', () => {
     const cosKeys = (result as { cosKeys?: string[] }).cosKeys
     expect(cosKeys).toHaveLength(5)
     expect(cosKeys?.every((item) => item.startsWith('cos/reference-key-'))).toBe(true)
+  })
+
+  it('adds project label bars only for project reference generation', async () => {
+    const job = buildJob(
+      {
+        referenceImageUrls: ['https://example.com/ref-a.png'],
+        characterName: 'Hero',
+        count: 1,
+      },
+      TASK_TYPE.REFERENCE_TO_CHARACTER,
+    )
+
+    await handleReferenceToCharacterTask(job)
+
+    expect(fontsMock.initializeFonts).toHaveBeenCalledTimes(1)
+    expect(fontsMock.createLabelSVG).toHaveBeenCalledTimes(1)
   })
 })

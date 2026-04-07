@@ -29,6 +29,7 @@ export {
     useUpdateLocationSummary,
     useAiModifyCharacterDescription,
     useAiModifyLocationDescription,
+    useAiModifyPropDescription,
     useUploadAssetHubTempMedia,
     useAiDesignCharacter,
     useExtractAssetHubReferenceCharacterDescription,

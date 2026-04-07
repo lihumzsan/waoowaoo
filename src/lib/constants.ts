@@ -66,6 +66,8 @@ export const BANANA_RESOLUTION_OPTIONS = [
 export const BANANA_MODELS = ['banana', 'banana-2', 'gemini-3-pro-image-preview', 'gemini-3-pro-image-preview-batch']
 
 export const VIDEO_MODELS = [
+  { value: 'doubao-seedance-2-0-260128', label: 'Seedance 2.0' },
+  { value: 'doubao-seedance-2-0-fast-260128', label: 'Seedance 2.0 Fast' },
   { value: 'doubao-seedance-1-0-pro-fast-251015', label: 'Seedance 1.0 Pro Fast' },
   { value: 'doubao-seedance-1-0-pro-fast-251015-batch', label: 'Seedance 1.0 Pro Fast (批量) 省50%' },
   { value: 'doubao-seedance-1-0-lite-i2v-250428', label: 'Seedance 1.0 Lite' },
@@ -90,11 +92,18 @@ export const SEEDANCE_BATCH_MODELS = [
   'doubao-seedance-1-0-lite-i2v-250428-batch',
 ]
 
-// 支持生成音频的模型（仅 Seedance 1.5 Pro 支持，包含批量版本）
-export const AUDIO_SUPPORTED_MODELS = ['doubao-seedance-1-5-pro-251215', 'doubao-seedance-1-5-pro-251215-batch']
+// 支持生成音频的模型
+export const AUDIO_SUPPORTED_MODELS = [
+  'doubao-seedance-2-0-260128',
+  'doubao-seedance-2-0-fast-260128',
+  'doubao-seedance-1-5-pro-251215',
+  'doubao-seedance-1-5-pro-251215-batch',
+]
 
 // 首尾帧视频模型（能力权威来源是 standards/capabilities；此常量仅作静态兜底展示）
 export const FIRST_LAST_FRAME_MODELS = [
+  { value: 'doubao-seedance-2-0-260128', label: 'Seedance 2.0 (首尾帧)' },
+  { value: 'doubao-seedance-2-0-fast-260128', label: 'Seedance 2.0 Fast (首尾帧)' },
   { value: 'doubao-seedance-1-5-pro-251215', label: 'Seedance 1.5 Pro (首尾帧)' },
   { value: 'doubao-seedance-1-5-pro-251215-batch', label: 'Seedance 1.5 Pro (首尾帧/批量) 省50%' },
   { value: 'doubao-seedance-1-0-pro-250528', label: 'Seedance 1.0 Pro (首尾帧)' },
@@ -106,6 +115,7 @@ export const FIRST_LAST_FRAME_MODELS = [
 ]
 
 export const VIDEO_RESOLUTIONS = [
+  { value: '480p', label: '480p' },
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' }
 ]
@@ -181,15 +191,23 @@ export function getArtStylePrompt(
 // 角色形象生成的系统后缀（始终添加到提示词末尾，不显示给用户）- 左侧面部特写+右侧三视图
 export const CHARACTER_PROMPT_SUFFIX = '角色设定图，画面分为左右两个区域：【左侧区域】占约1/3宽度，是角色的正面特写（如果是人类则展示完整正脸，如果是动物/生物则展示最具辨识度的正面形态）；【右侧区域】占约2/3宽度，是角色三视图横向排列（从左到右依次为：正面全身、侧面全身、背面全身），三视图高度一致。纯白色背景，无其他元素。'
 
+// 道具图片生成的系统后缀（固定白底三视图资产图）
+export const PROP_PROMPT_SUFFIX = '道具设定图，画面分为左右两个区域：【左侧区域】占约1/3宽度，是道具主体的主视图特写；【右侧区域】占约2/3宽度，是同一道具的三视图横向排列（从左到右依次为：正面、侧面、背面），三视图高度一致。纯白色背景，主体居中完整展示，无人物、无手部、无桌面陈设、无环境背景、无其他元素。'
+
 // 场景图片生成的系统后缀（已禁用四视图，直接生成单张场景图）
 export const LOCATION_PROMPT_SUFFIX = ''
 
-// 角色图片生成比例（16:9横版，左侧面部特写+右侧全身）
-export const CHARACTER_IMAGE_RATIO = '16:9'
+// 角色资产图生成比例（当前角色设定图实际使用 3:2）
+export const CHARACTER_ASSET_IMAGE_RATIO = '3:2'
+// 历史保留：旧注释中曾写 16:9，但当前资产图生成统一以 CHARACTER_ASSET_IMAGE_RATIO 为准
+export const CHARACTER_IMAGE_RATIO = CHARACTER_ASSET_IMAGE_RATIO
 // 角色图片尺寸（用于Seedream API）
 export const CHARACTER_IMAGE_SIZE = '3840x2160'  // 16:9 横版
 // 角色图片尺寸（用于Banana API）
-export const CHARACTER_IMAGE_BANANA_RATIO = '3:2'
+export const CHARACTER_IMAGE_BANANA_RATIO = CHARACTER_ASSET_IMAGE_RATIO
+
+// 道具图片生成比例（与角色资产图保持一致）
+export const PROP_IMAGE_RATIO = CHARACTER_ASSET_IMAGE_RATIO
 
 // 场景图片生成比例（1:1 正方形单张场景）
 export const LOCATION_IMAGE_RATIO = '1:1'
@@ -209,6 +227,17 @@ export function addCharacterPromptSuffix(prompt: string): string {
   if (!prompt) return CHARACTER_PROMPT_SUFFIX
   const cleanPrompt = removeCharacterPromptSuffix(prompt)
   return `${cleanPrompt}${cleanPrompt ? '，' : ''}${CHARACTER_PROMPT_SUFFIX}`
+}
+
+export function removePropPromptSuffix(prompt: string): string {
+  if (!prompt) return ''
+  return prompt.replace(PROP_PROMPT_SUFFIX, '').replace(/，$/, '').trim()
+}
+
+export function addPropPromptSuffix(prompt: string): string {
+  if (!prompt) return PROP_PROMPT_SUFFIX
+  const cleanPrompt = removePropPromptSuffix(prompt)
+  return `${cleanPrompt}${cleanPrompt ? '，' : ''}${PROP_PROMPT_SUFFIX}`
 }
 
 // 从提示词中移除场景系统后缀（用于显示给用户）

@@ -10,9 +10,10 @@ import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core
  * - Seedance 1.0 Pro (doubao-seedance-1-0-pro-250528)
  * - Seedance 1.0 Lite (doubao-seedance-1-0-lite-i2v-250428)
  * - Seedance 1.5 Pro (doubao-seedance-1-5-pro-251215)
+ * - Seedance 2.0 / 2.0 Fast
  * - 支持批量模式 (-batch 后缀)
  * - 支持首尾帧模式
- * - 支持音频生成 (Seedance 1.5 Pro)
+ * - 支持音频生成
  */
 
 import {
@@ -56,7 +57,21 @@ interface ArkVideoOptions {
 
 type ArkVideoContentItem =
     | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string }; role?: 'first_frame' | 'last_frame' | 'reference_image' }
+    | {
+        type: 'image_url'
+        image_url: { url: string }
+        role?: 'first_frame' | 'last_frame' | 'reference_image'
+    }
+    | {
+        type: 'video_url'
+        video_url: { url: string }
+        role: 'reference_video'
+    }
+    | {
+        type: 'audio_url'
+        audio_url: { url: string }
+        role: 'reference_audio'
+    }
 
 interface ArkSeedanceModelSpec {
     durationMin: number
@@ -104,6 +119,24 @@ const ARK_SEEDANCE_MODEL_SPECS: Record<string, ArkSeedanceModelSpec> = {
         supportsDraft: true,
         supportsFrames: false,
         resolutionOptions: ['480p', '720p', '1080p'],
+    },
+    'doubao-seedance-2-0-260128': {
+        durationMin: 4,
+        durationMax: 15,
+        supportsFirstLastFrame: true,
+        supportsGenerateAudio: true,
+        supportsDraft: false,
+        supportsFrames: false,
+        resolutionOptions: ['480p', '720p'],
+    },
+    'doubao-seedance-2-0-fast-260128': {
+        durationMin: 4,
+        durationMax: 15,
+        supportsFirstLastFrame: true,
+        supportsGenerateAudio: true,
+        supportsDraft: false,
+        supportsFrames: false,
+        resolutionOptions: ['480p', '720p'],
     },
 }
 

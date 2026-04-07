@@ -35,6 +35,14 @@ function normalizeStatuses(values: string[]): RunStatus[] {
   return next
 }
 
+function isActiveRunStatus(status: RunStatus) {
+  return (
+    status === RUN_STATUS.QUEUED
+    || status === RUN_STATUS.RUNNING
+    || status === RUN_STATUS.CANCELING
+  )
+}
+
 export const GET = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
@@ -48,6 +56,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const statuses = normalizeStatuses(query.getAll('status'))
   const limitRaw = Number.parseInt(query.get('limit') || '50', 10)
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50
+  const activeOnlyQuery = statuses.length > 0 && statuses.every(isActiveRunStatus)
+  const scopedActiveRecoveryQuery =
+    activeOnlyQuery
+    && !!workflowType
+    && !!targetType
+    && !!targetId
   const runs = await listRuns({
     userId: session.user.id,
     projectId: projectId || undefined,
@@ -57,6 +71,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     episodeId: episodeId || undefined,
     statuses: statuses.length > 0 ? statuses : undefined,
     limit,
+    recoverableOnly: scopedActiveRecoveryQuery,
+    latestOnly: scopedActiveRecoveryQuery,
   })
   return NextResponse.json({ runs })
 })

@@ -29,5 +29,9 @@ Rules:
 2. Keep continuity across neighboring panels.
 3. Adapt to scene_type and story rhythm.
 4. Technical notes must be directly actionable by image/video generation.
-5. JSON only, no markdown.
-6. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+5. If characters already carry `slot`, treat it as a preferred placement anchor, not an absolute boundary.
+6. When a panel is about movement, entry/exit, path traversal, transition space, temporary space, empty space, imagination, dream, memory, or abstract/non-literal space, composition and placement may deviate from a static slot if the shot logic requires it.
+7. Treat `slot` as one full placement phrase from the location context, not as a short token, whenever you reference it.
+8. Do not shorten, rewrite, summarize, or replace a provided `slot` phrase with a short token.
+9. JSON only, no markdown.
+10. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.

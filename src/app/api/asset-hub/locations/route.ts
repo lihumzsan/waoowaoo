@@ -5,6 +5,10 @@ import { ApiError, apiHandler } from '@/lib/api-errors'
 import { attachMediaFieldsToGlobalLocation } from '@/lib/media/attach'
 import { isArtStyleValue } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import {
+    normalizeLocationAvailableSlots,
+    stringifyLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 
 // 获取用户所有场景（支持 folderId 筛选）
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -45,6 +49,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     const body = await request.json()
     const { name, summary, folderId, artStyle } = body
+    const availableSlots = normalizeLocationAvailableSlots((body as Record<string, unknown>).availableSlots)
     const count = Object.prototype.hasOwnProperty.call(body as Record<string, unknown>, 'count')
         ? normalizeImageGenerationCount('location', (body as Record<string, unknown>).count)
         : 1
@@ -84,6 +89,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             locationId: location.id,
             imageIndex,
             description: summary?.trim() || name.trim(),
+            availableSlots: stringifyLocationAvailableSlots(availableSlots),
         }))
     })
 

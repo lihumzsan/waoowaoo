@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PROP_IMAGE_RATIO } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData, type TaskType } from '@/lib/task/types'
 
 const utilsMock = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const promptMock = vi.hoisted(() => ({
   PROMPT_IDS: {
     NP_CHARACTER_DESCRIPTION_UPDATE: 'np_character_description_update',
     NP_LOCATION_DESCRIPTION_UPDATE: 'np_location_description_update',
+    NP_PROP_DESCRIPTION_UPDATE: 'np_prop_description_update',
   },
   buildPrompt: vi.fn(({ promptId }: { promptId: string }) => `${promptId}-prompt`),
 }))
@@ -200,6 +202,16 @@ describe('modify image syncs descriptions after edit', () => {
     await handleAssetHubModifyTask(job)
 
     expect(aiRuntimeMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+    expect(utilsMock.stripLabelBar).not.toHaveBeenCalled()
+    expect(utilsMock.withLabelBar).not.toHaveBeenCalled()
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          referenceImages: ['https://signed/current-image.png', 'https://ref.example/b.png'],
+        }),
+      }),
+    )
 
     const globalCharacterUpdateCall = prismaMock.globalCharacterAppearance.update.mock.calls.at(-1) as [unknown] | undefined
     const updateArg = globalCharacterUpdateCall?.[0]
@@ -246,11 +258,78 @@ describe('modify image syncs descriptions after edit', () => {
 
     await handleAssetHubModifyTask(job)
 
+    expect(utilsMock.stripLabelBar).not.toHaveBeenCalled()
+    expect(utilsMock.withLabelBar).not.toHaveBeenCalled()
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          referenceImages: ['https://signed/current-image.png', 'https://ref.example/location.png'],
+        }),
+      }),
+    )
+
     const globalLocationUpdateCall = prismaMock.globalLocationImage.update.mock.calls.at(-1) as [unknown] | undefined
     const updateArg = globalLocationUpdateCall?.[0]
     const updateData = getUpdateData(updateArg)
     expect(updateData.previousDescription).toBe('global location description')
     expect(updateData.description).toBe('VISION_UPDATED_LOCATION')
     expect(updateData.imageUrl).toBe('cos/new-global-location-image.png')
+  })
+
+  it('syncs project prop descriptions for pure text edits', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({ text: '{"prompt":"TEXT_UPDATED_PROP"}' })
+
+    const job = buildJob(TASK_TYPE.MODIFY_ASSET_IMAGE, {
+      type: 'prop',
+      locationId: 'location-1',
+      imageIndex: 0,
+      modifyPrompt: '把表面改成拉丝银色，并增加刻纹',
+    })
+
+    await handleModifyAssetImageTask(job)
+
+    const locationUpdateCall = prismaMock.locationImage.update.mock.calls.at(-1) as [unknown] | undefined
+    const updateData = getUpdateData(locationUpdateCall?.[0])
+    expect(updateData.previousDescription).toBe('old location description')
+    expect(updateData.description).toBe('TEXT_UPDATED_PROP')
+    expect(updateData.imageUrl).toBe('cos/new-image.png')
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          aspectRatio: PROP_IMAGE_RATIO,
+        }),
+      }),
+    )
+  })
+
+  it('syncs asset-hub prop descriptions for reference-image edits', async () => {
+    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/new-global-prop-image.png')
+    aiRuntimeMock.executeAiVisionStep.mockResolvedValueOnce({ text: '{"prompt":"VISION_UPDATED_PROP"}' })
+
+    const job = buildJob(TASK_TYPE.ASSET_HUB_MODIFY, {
+      type: 'prop',
+      id: 'global-location-1',
+      imageIndex: 0,
+      modifyPrompt: '改成磨砂银色餐具，去掉多余反光',
+      extraImageUrls: ['https://ref.example/prop.png'],
+    })
+
+    await handleAssetHubModifyTask(job)
+
+    const globalLocationUpdateCall = prismaMock.globalLocationImage.update.mock.calls.at(-1) as [unknown] | undefined
+    const updateData = getUpdateData(globalLocationUpdateCall?.[0])
+    expect(updateData.previousDescription).toBe('global location description')
+    expect(updateData.description).toBe('VISION_UPDATED_PROP')
+    expect(updateData.imageUrl).toBe('cos/new-global-prop-image.png')
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          aspectRatio: PROP_IMAGE_RATIO,
+        }),
+      }),
+    )
   })
 })

@@ -29,7 +29,7 @@ interface LocationSectionProps {
     // 🔥 V6.6 重构：重命名为 handleGenerateImage
     handleGenerateImage: (type: 'character' | 'location' | 'prop', id: string, appearanceId?: string, count?: number) => Promise<void>
     onSelectImage: (locationId: string, imageIndex: number | null) => void
-    onConfirmSelection: (locationId: string) => void
+    onConfirmSelection: (locationId: string) => Promise<void> | void
     onRegenerateSingle: (locationId: string, imageIndex: number) => Promise<void>
     onRegenerateGroup: (locationId: string, count?: number) => Promise<void>
     onUndo: (locationId: string) => void
@@ -149,7 +149,7 @@ export default function LocationSection({
                         activeTaskKeys={activeTaskKeys}
                         onClearTaskKey={onClearTaskKey}
                         projectId={projectId}
-                        onConfirmSelection={assetType === 'location' ? onConfirmSelection : undefined}
+                        onConfirmSelection={onConfirmSelection}
                     />
                 ))}
             </div>

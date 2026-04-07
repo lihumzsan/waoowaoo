@@ -33,4 +33,5 @@ Execution rules:
 1. Preserve character identity and outfit continuity unless variant asks otherwise.
 2. Preserve location continuity.
 3. Change framing/angle/composition according to target shot and camera move.
-4. Keep one-frame output only, no text overlays.
+4. If characters_info or location_asset includes fixed slots / available slots, keep every visible character anchored to the same fixed slot instead of drifting to another area.
+5. Keep one-frame output only, no text overlays.

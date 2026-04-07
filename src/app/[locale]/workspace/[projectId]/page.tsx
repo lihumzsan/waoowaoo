@@ -18,6 +18,7 @@ import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapa
 import { AppIcon } from '@/components/ui/icons'
 import { readConfiguredAnalysisModel, shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { useRouter } from '@/i18n/navigation'
+import { readApiErrorMessage } from '@/lib/api/read-error-message'
 
 // 有效的stage值
 const VALID_STAGES = ['config', 'script', 'assets', 'text-storyboard', 'storyboard', 'videos', 'voice', 'editor'] as const
@@ -209,8 +210,7 @@ export default function ProjectDetailPage() {
     })
 
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error || t('createFailed'))
+      throw new Error(await readApiErrorMessage(res, t('createFailed')))
     }
 
     const data = await res.json()

@@ -6,7 +6,9 @@ const prismaMock = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   novelPromotionProject: { findUnique: vi.fn() },
   novelPromotionEpisode: { findUnique: vi.fn() },
+  $transaction: vi.fn(),
   novelPromotionClip: { update: vi.fn(async () => ({})) },
+  locationImage: { createMany: vi.fn(async () => ({ count: 0 })) },
 }))
 
 const workerMock = vi.hoisted(() => ({
@@ -133,11 +135,11 @@ function buildJob(payload: Record<string, unknown>, episodeId: string | null = '
 describe('worker story-to-script behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => Promise<unknown>) => await fn(prismaMock))
 
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
       name: 'Project One',
-      mode: 'novel-promotion',
     })
 
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
@@ -195,10 +197,10 @@ describe('worker story-to-script behavior', () => {
       persistedClips: 1,
     })
 
-    expect(helperMock.persistClips).toHaveBeenCalledWith({
+    expect(helperMock.persistClips).toHaveBeenCalledWith(expect.objectContaining({
       episodeId: 'episode-1',
       clipList: [{ clipId: 'clip-1', content: 'clip content', props: ['Knife'] }],
-    })
+    }))
 
     expect(prismaMock.novelPromotionClip.update).toHaveBeenCalledWith({
       where: { id: 'clip-row-1' },

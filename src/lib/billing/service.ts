@@ -9,6 +9,7 @@ import {
   calcLipSync,
   calcText,
   calcVideo,
+  calcVideoByTokens,
   calcVoice,
   calcVoiceDesign,
   type ModelCustomPricing,
@@ -306,6 +307,18 @@ function resolveTaskActual(
   }
 
   const payload = options?.result && typeof options.result === 'object' ? options.result : null
+  const actualVideoTokens = payload
+    ? asNumber((payload as Record<string, unknown>).actualVideoTokens)
+    : null
+  if (info.apiType === 'video' && actualVideoTokens !== null && actualVideoTokens >= 0) {
+    return {
+      actualCost: calcVideoByTokens(info.model, actualVideoTokens, info.metadata),
+      actualQuantity: actualVideoTokens,
+      metadata: {
+        actualVideoTokens,
+      },
+    }
+  }
   const actualQuantity = payload
     ? asNumber(
       (payload as Record<string, unknown>).actualQuantity

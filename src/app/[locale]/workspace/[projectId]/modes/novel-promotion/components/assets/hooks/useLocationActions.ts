@@ -58,7 +58,7 @@ export function useLocationActions({
     const regenerateGroup = useRegenerateLocationGroup(projectId)
     const deleteLocationMutation = useDeleteProjectLocation(projectId)
     const selectLocationImageMutation = useSelectProjectLocationImage(projectId)
-    const confirmLocationSelectionMutation = useConfirmProjectLocationSelection(projectId)
+    const confirmLocationSelectionMutation = useConfirmProjectLocationSelection(projectId, assetType)
     const updateLocationDescriptionMutation = useUpdateProjectLocationDescription(projectId)
 
     // 删除场景
@@ -96,9 +96,6 @@ export function useLocationActions({
 
     // 确认选择并删除其他候选图片
     const handleConfirmLocationSelection = useCallback(async (locationId: string) => {
-        if (assetType === 'prop') {
-            return
-        }
         try {
             await confirmLocationSelectionMutation.mutateAsync({ locationId })
             showToast?.(`✓ ${t('image.confirmSuccess')}`, 'success')

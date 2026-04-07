@@ -276,10 +276,6 @@ export const PATCH = apiHandler(async (
 
   const body = await request.json()
 
-  if (project.mode !== 'novel-promotion') {
-    throw new ApiError('INVALID_PARAMS')
-  }
-
   const currentProjectConfig = await prisma.novelPromotionProject.findUnique({
     where: { projectId },
     select: {

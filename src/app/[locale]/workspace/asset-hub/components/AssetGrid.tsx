@@ -23,7 +23,7 @@ interface AssetGridProps {
     isDownloading?: boolean
     selectedFolderId: string | null
     onImageClick?: (url: string) => void
-    onImageEdit?: (type: 'character' | 'location', id: string, name: string, imageIndex: number, appearanceIndex?: number) => void
+    onImageEdit?: (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number, appearanceIndex?: number) => void
     onVoiceDesign?: (characterId: string, characterName: string) => void
     onCharacterEdit?: (character: unknown, appearance: unknown) => void
     onLocationEdit?: (location: unknown, imageIndex: number) => void
@@ -282,6 +282,21 @@ export function AssetGrid({
     }
 
     const isEmpty = characters.length === 0 && locations.length === 0 && props.length === 0 && voices.length === 0
+    const visibleAssetCount = (() => {
+        switch (filter) {
+            case 'character':
+                return characters.length
+            case 'location':
+                return locations.length
+            case 'prop':
+                return props.length
+            case 'voice':
+                return voices.length
+            case 'all':
+            default:
+                return characters.length + locations.length + props.length + voices.length
+        }
+    })()
 
     const tabs = [
         { id: 'all', label: t('allAssets') },
@@ -300,6 +315,8 @@ export function AssetGrid({
                     options={tabs.map(tab => ({ value: tab.id, label: tab.label }))}
                     value={filter}
                     onChange={(val) => setFilter(val as 'all' | 'character' | 'location' | 'prop' | 'voice')}
+                    layout="compact"
+                    className="min-w-max"
                 />
 
                 {/* 右侧操作按钮 */}
@@ -332,6 +349,20 @@ export function AssetGrid({
                     </div>
                     <p className="text-[var(--glass-text-secondary)] mb-2">{t('emptyState')}</p>
                     <p className="text-sm text-[var(--glass-text-tertiary)]">{t('emptyStateHint')}</p>
+                    <div className="mt-6 flex justify-center">
+                        <AddAssetDropdown
+                            onAddCharacter={onAddCharacter}
+                            onAddLocation={onAddLocation}
+                            onAddProp={onAddProp}
+                            onAddVoice={onAddVoice}
+                        />
+                    </div>
+                </div>
+            ) : visibleAssetCount === 0 ? (
+                <div className="flex min-h-[320px] items-center justify-center">
+                    <p className="text-sm text-[var(--glass-text-tertiary)]">
+                        {t('filteredEmptyHint')}
+                    </p>
                 </div>
             ) : (
                 <div className="space-y-8">

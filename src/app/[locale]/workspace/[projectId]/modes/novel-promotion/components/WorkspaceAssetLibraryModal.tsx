@@ -57,7 +57,7 @@ export default function WorkspaceAssetLibraryModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar" data-asset-scroll-container="1">
+        <div className="flex-1 overflow-y-auto p-6 app-scrollbar" data-asset-scroll-container="1">
           {assetsLoading && !hasCharacters && !hasLocations && (
             <div className="flex flex-col items-center justify-center h-64 text-[var(--glass-text-tertiary)] animate-pulse">
               <TaskStatusInline state={assetsLoadingState} className="text-base [&>span]:text-base" />

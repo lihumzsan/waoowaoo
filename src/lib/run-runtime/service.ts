@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { selectRecoverableRun } from '@/lib/run-runtime/recovery'
 import { resolveRetryInvalidationStepKeys } from '@/lib/workflow-engine/dependencies'
 import {
   RUN_EVENT_TYPE,
@@ -243,6 +244,24 @@ function mapRunRow(run: GraphRunRow) {
     createdAt: run.createdAt.toISOString(),
     updatedAt: run.updatedAt.toISOString(),
   }
+}
+
+function mapRunRowToRecoverableRecord(run: GraphRunRow) {
+  return {
+    id: run.id,
+    status: run.status,
+    createdAt: run.createdAt.toISOString(),
+    updatedAt: run.updatedAt.toISOString(),
+    leaseExpiresAt: toIso(run.leaseExpiresAt),
+    heartbeatAt: toIso(run.heartbeatAt),
+  }
+}
+
+function filterRecoverableRunRows(rows: GraphRunRow[]): GraphRunRow[] {
+  if (rows.length === 0) return []
+  const recoverableRunId = selectRecoverableRun(rows.map(mapRunRowToRecoverableRecord)).runId
+  if (!recoverableRunId) return []
+  return rows.filter((row) => row.id === recoverableRunId)
 }
 
 function mapStepRow(step: GraphStepRow) {
@@ -718,9 +737,9 @@ export async function findReusableActiveRun(params: {
       { updatedAt: 'desc' },
       { createdAt: 'desc' },
     ],
-    take: 1,
+    take: 20,
   })
-  const row = rows[0]
+  const row = filterRecoverableRunRows(rows)[0] || null
   return row ? mapRunRow(row) : null
 }
 
@@ -839,10 +858,19 @@ export async function listRuns(input: ListRunsInput) {
       ...(input.episodeId ? { episodeId: input.episodeId } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [
+      { updatedAt: 'desc' },
+      { createdAt: 'desc' },
+    ],
     take: safeLimit,
   })
-  return rows.map(mapRunRow)
+  const filteredRows = input.recoverableOnly
+    ? filterRecoverableRunRows(rows)
+    : rows
+  const latestRows = input.latestOnly
+    ? filteredRows.slice(0, 1)
+    : filteredRows
+  return latestRows.map(mapRunRow)
 }
 
 export async function requestRunCancel(params: {

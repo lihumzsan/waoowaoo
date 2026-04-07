@@ -67,7 +67,7 @@ export default function WorkspaceRunStreamConsoles({
 
   const showStoryToScriptConsole =
     storyToScriptStream.isVisible &&
-    (storyToScriptStream.stages.length > 0 || !!storyToScriptStream.errorMessage)
+    (storyToScriptStream.stages.length > 0 || !!storyToScriptStream.errorMessage || storyToScriptActive)
   const storyFallbackStatus: LLMStageViewItem['status'] =
     storyToScriptStream.status === 'failed' ? 'failed' : 'processing'
   const storyToScriptStages = storyToScriptStream.stages.length > 0
@@ -96,7 +96,7 @@ export default function WorkspaceRunStreamConsoles({
     storyToScriptSelectedStage?.status === 'processing'
   const showScriptToStoryboardConsole =
     scriptToStoryboardStream.isVisible &&
-    (scriptToStoryboardStream.stages.length > 0 || !!scriptToStoryboardStream.errorMessage)
+    (scriptToStoryboardStream.stages.length > 0 || !!scriptToStoryboardStream.errorMessage || scriptToStoryboardActive)
   const storyboardFallbackStatus: LLMStageViewItem['status'] =
     scriptToStoryboardStream.status === 'failed' ? 'failed' : 'processing'
   const scriptToStoryboardStages = scriptToStoryboardStream.stages.length > 0

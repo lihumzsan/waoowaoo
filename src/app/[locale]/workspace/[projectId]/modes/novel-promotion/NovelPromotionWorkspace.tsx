@@ -42,13 +42,11 @@ function NovelPromotionWorkspaceContent(props: NovelPromotionWorkspaceProps) {
 
   const showStoryToScriptMinBadge =
     storyToScriptStream.isVisible &&
-    storyToScriptStream.stages.length > 0 &&
     storyToScriptActive &&
     vm.execution.storyToScriptConsoleMinimized
 
   const showScriptToStoryboardMinBadge =
     scriptToStoryboardStream.isVisible &&
-    scriptToStoryboardStream.stages.length > 0 &&
     scriptToStoryboardActive &&
     vm.execution.scriptToStoryboardConsoleMinimized
 

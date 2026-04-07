@@ -142,7 +142,7 @@ export default function CharacterSection({
         if (!element) return
         const scrollContainer = (element.closest('[data-asset-scroll-container="1"]') ||
             document.querySelector('[data-asset-scroll-container="1"]') ||
-            element.closest('.custom-scrollbar')) as HTMLElement | null
+            element.closest('.app-scrollbar')) as HTMLElement | null
 
         if (scrollAnimationRef.current !== null) {
             window.cancelAnimationFrame(scrollAnimationRef.current)
@@ -287,18 +287,18 @@ export default function CharacterSection({
                                         {t("character.assetCount", { count: sortedAppearances.length })}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    {/* 从资产中心复制按钮 */}
+                                <div className="flex flex-col items-end gap-1.5">
+                                    {/* 从资产中心导入按钮 */}
                                     <button
                                         onClick={() => onCopyFromGlobal(character.id)}
                                         className="text-xs text-[var(--glass-tone-info-fg)] hover:text-[var(--glass-tone-info-fg)] flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--glass-tone-info-bg)] transition-colors"
                                     >
-                                        <AppIcon name="copy" className="w-4 h-4" />
+                                        <AppIcon name="arrowDownCircle" className="w-4 h-4" />
                                         {t("character.copyFromGlobal")}
                                     </button>
                                     <button
                                         onClick={() => onDeleteCharacter(character.id)}
-                                        className="text-xs text-[var(--glass-tone-danger-fg)] hover:text-[var(--glass-tone-danger-fg)] flex items-center gap-1"
+                                        className="text-xs text-[var(--glass-tone-danger-fg)] hover:text-[var(--glass-tone-danger-fg)] flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--glass-tone-danger-bg)] transition-colors"
                                     >
                                         <AppIcon name="trash" className="w-4 h-4" />
                                         {t("character.delete")}

@@ -77,14 +77,10 @@ export async function handleStoryToScriptTask(job: Job<TaskJobData>) {
     select: {
       id: true,
       name: true,
-      mode: true,
     },
   })
   if (!project) {
     throw new Error('Project not found')
-  }
-  if (project.mode !== 'novel-promotion') {
-    throw new Error('Not a novel promotion project')
   }
 
   // Register project name for per-project log file routing
@@ -348,37 +344,39 @@ export async function handleStoryToScriptTask(job: Job<TaskJobData>) {
           },
         })
 
-        let clipRecord = await prisma.novelPromotionClip.findFirst({
-          where: {
-            episodeId,
-            startText: asString(retryClip.startText) || null,
-            endText: asString(retryClip.endText) || null,
-          },
-          select: { id: true },
-        })
-        if (!clipRecord) {
-          const clipModel = prisma.novelPromotionClip as unknown as {
-            create: (args: { data: Record<string, unknown>; select: { id: true } }) => Promise<{ id: string }>
-          }
-          clipRecord = await clipModel.create({
-            data: {
+        await prisma.$transaction(async (tx) => {
+          let clipRecord = await tx.novelPromotionClip.findFirst({
+            where: {
               episodeId,
               startText: asString(retryClip.startText) || null,
               endText: asString(retryClip.endText) || null,
-              summary: asString(retryClip.summary),
-              location: asString(retryClip.location) || null,
-              characters: Array.isArray(retryClip.characters) ? JSON.stringify(retryClip.characters) : null,
-              props: Array.isArray(retryClip.props) ? JSON.stringify(retryClip.props) : null,
-              content: clipContent,
             },
             select: { id: true },
           })
-        }
-        await prisma.novelPromotionClip.update({
-          where: { id: clipRecord.id },
-          data: {
-            screenplay: JSON.stringify(screenplay),
-          },
+          if (!clipRecord) {
+            const clipModel = tx.novelPromotionClip as unknown as {
+              create: (args: { data: Record<string, unknown>; select: { id: true } }) => Promise<{ id: string }>
+            }
+            clipRecord = await clipModel.create({
+              data: {
+                episodeId,
+                startText: asString(retryClip.startText) || null,
+                endText: asString(retryClip.endText) || null,
+                summary: asString(retryClip.summary),
+                location: asString(retryClip.location) || null,
+                characters: Array.isArray(retryClip.characters) ? JSON.stringify(retryClip.characters) : null,
+                props: Array.isArray(retryClip.props) ? JSON.stringify(retryClip.props) : null,
+                content: clipContent,
+              },
+              select: { id: true },
+            })
+          }
+          await tx.novelPromotionClip.update({
+            where: { id: clipRecord.id },
+            data: {
+              screenplay: JSON.stringify(screenplay),
+            },
+          })
         })
 
         await reportTaskProgress(job, 96, {
@@ -533,40 +531,53 @@ export async function handleStoryToScriptTask(job: Job<TaskJobData>) {
           .map((item) => String(item.name || '').toLowerCase()),
       )
 
-      const createdCharacters = await persistAnalyzedCharacters({
-        projectInternalId: novelData.id,
-        existingNames: existingCharacterNames,
-        analyzedCharacters: result.analyzedCharacters,
-      })
-
-      const createdLocations = await persistAnalyzedLocations({
-        projectInternalId: novelData.id,
-        existingNames: existingLocationNames,
-        analyzedLocations: result.analyzedLocations,
-      })
-      const createdProps = await persistAnalyzedProps({
-        projectInternalId: novelData.id,
-        existingNames: existingPropNames,
-        analyzedProps: result.analyzedProps,
-      })
-
-      const createdClipRows = await persistClips({
-        episodeId,
-        clipList: result.clipList,
-      })
-      const clipIdMap = new Map(createdClipRows.map((item) => [item.clipKey, item.id]))
-
-      for (const screenplayResult of result.screenplayResults) {
-        if (!screenplayResult.success || !screenplayResult.screenplay) continue
-        const clipRecordId = resolveClipRecordId(clipIdMap, screenplayResult.clipId)
-        if (!clipRecordId) continue
-        await prisma.novelPromotionClip.update({
-          where: { id: clipRecordId },
-          data: {
-            screenplay: JSON.stringify(screenplayResult.screenplay),
-          },
+      const persistedResult = await prisma.$transaction(async (tx) => {
+        const createdCharacters = await persistAnalyzedCharacters({
+          projectInternalId: novelData.id,
+          existingNames: existingCharacterNames,
+          analyzedCharacters: result.analyzedCharacters,
+          db: tx,
         })
-      }
+
+        const createdLocations = await persistAnalyzedLocations({
+          projectInternalId: novelData.id,
+          existingNames: existingLocationNames,
+          analyzedLocations: result.analyzedLocations,
+          db: tx,
+        })
+        const createdProps = await persistAnalyzedProps({
+          projectInternalId: novelData.id,
+          existingNames: existingPropNames,
+          analyzedProps: result.analyzedProps,
+          db: tx,
+        })
+
+        const createdClipRows = await persistClips({
+          episodeId,
+          clipList: result.clipList,
+          db: tx,
+        })
+        const clipIdMap = new Map(createdClipRows.map((item) => [item.clipKey, item.id]))
+
+        for (const screenplayResult of result.screenplayResults) {
+          if (!screenplayResult.success || !screenplayResult.screenplay) continue
+          const clipRecordId = resolveClipRecordId(clipIdMap, screenplayResult.clipId)
+          if (!clipRecordId) continue
+          await tx.novelPromotionClip.update({
+            where: { id: clipRecordId },
+            data: {
+              screenplay: JSON.stringify(screenplayResult.screenplay),
+            },
+          })
+        }
+
+        return {
+          createdCharacters,
+          createdLocations,
+          createdProps,
+          createdClipRows,
+        }
+      })
 
       await reportTaskProgress(job, 96, {
         stage: 'story_to_script_persist_done',
@@ -579,10 +590,10 @@ export async function handleStoryToScriptTask(job: Job<TaskJobData>) {
         clipCount: result.summary.clipCount,
         screenplaySuccessCount: result.summary.screenplaySuccessCount,
         screenplayFailedCount: result.summary.screenplayFailedCount,
-        persistedCharacters: createdCharacters.length,
-        persistedLocations: createdLocations.length,
-        persistedProps: createdProps.length,
-        persistedClips: createdClipRows.length,
+        persistedCharacters: persistedResult.createdCharacters.length,
+        persistedLocations: persistedResult.createdLocations.length,
+        persistedProps: persistedResult.createdProps.length,
+        persistedClips: persistedResult.createdClipRows.length,
       }
     },
   })

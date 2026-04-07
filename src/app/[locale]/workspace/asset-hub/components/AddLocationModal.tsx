@@ -9,6 +9,7 @@ import { useImageGenerationCount } from '@/lib/image-generation/use-image-genera
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
+import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 
 interface AddLocationModalProps {
     folderId: string | null
@@ -33,6 +34,7 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
     const [summary, setSummary] = useState('')
     const [aiInstruction, setAiInstruction] = useState('')
     const [artStyle, setArtStyle] = useState('american-comic')
+    const [availableSlots, setAvailableSlots] = useState<LocationAvailableSlot[]>([])
 
     const aiDesignMutation = useAiDesignLocation()
     const createLocationMutation = useCreateAssetHubLocation()
@@ -63,6 +65,7 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
         try {
             const data = await aiDesignMutation.mutateAsync(aiInstruction.trim())
             setSummary(data.prompt || '')
+            setAvailableSlots(Array.isArray(data.availableSlots) ? data.availableSlots : [])
             setAiInstruction('')
         } catch (error) {
             _ulogError('AI设计失败:', error)
@@ -80,6 +83,7 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
                 folderId,
                 artStyle,
                 count: locationGenerationCount,
+                availableSlots,
             })
             onSuccess()
         } catch (error) {
@@ -89,8 +93,8 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
 
     return (
         <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 p-4">
-            <div className="glass-surface-modal max-w-lg w-full max-h-[85vh] overflow-y-auto">
-                <div className="p-6">
+            <div className="glass-surface-modal max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col">
+                <div className="p-6 overflow-y-auto app-scrollbar flex-1 min-h-0">
                     {/* 标题 */}
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-semibold text-[var(--glass-text-primary)]">

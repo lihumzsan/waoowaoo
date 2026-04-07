@@ -6,6 +6,11 @@ import { logError as _ulogError } from '@/lib/logging/core'
 
 import { executeAiTextStep } from '@/lib/ai-runtime'
 import { withTextBilling } from '@/lib/billing'
+import { safeParseJsonObject } from '@/lib/json-repair'
+import {
+    type LocationAvailableSlot,
+    normalizeLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import type { Locale } from '@/i18n/routing'
 
@@ -26,6 +31,7 @@ export interface AIDesignOptions {
 export interface AIDesignResult {
     success: boolean
     prompt?: string
+    availableSlots?: LocationAvailableSlot[]
     error?: string
 }
 
@@ -111,22 +117,12 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
     }
 
     // 解析 JSON 响应
-    let parsedResponse
+    let parsedResponse: Record<string, unknown>
     try {
-        parsedResponse = JSON.parse(aiResponse)
+        parsedResponse = safeParseJsonObject(aiResponse)
     } catch {
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-            try {
-                parsedResponse = JSON.parse(jsonMatch[0])
-            } catch {
-                _ulogError('[AI Design] AI 响应解析失败:', aiResponse)
-                return { success: false, error: 'AI返回格式错误' }
-            }
-        } else {
-            _ulogError('[AI Design] AI 响应解析失败:', aiResponse)
-            return { success: false, error: 'AI返回格式错误' }
-        }
+        _ulogError('[AI Design] AI 响应解析失败:', aiResponse)
+        return { success: false, error: 'AI返回格式错误' }
     }
 
     if (!parsedResponse.prompt) {
@@ -135,6 +131,9 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
 
     return {
         success: true,
-        prompt: parsedResponse.prompt
+        prompt: typeof parsedResponse.prompt === 'string' ? parsedResponse.prompt : '',
+        availableSlots: assetType === 'location'
+            ? normalizeLocationAvailableSlots(parsedResponse.available_slots)
+            : [],
     }
 }

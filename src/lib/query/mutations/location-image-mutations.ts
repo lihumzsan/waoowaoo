@@ -10,7 +10,9 @@ import {
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
+    requestTaskResponseWithError,
 } from './mutation-shared'
+import { resolveTaskResponse } from '@/lib/task/client'
 
 interface SelectProjectLocationImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -187,7 +189,7 @@ export function useModifyProjectLocationImage(projectId: string) {
             modifyPrompt: string
             extraImageUrls?: string[]
         }) => {
-            return await requestJsonWithError(`/api/assets/${params.locationId}/modify-render`, {
+            const response = await requestTaskResponseWithError(`/api/assets/${params.locationId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -197,6 +199,7 @@ export function useModifyProjectLocationImage(projectId: string) {
                     ...params,
                 }),
             }, 'Failed to modify image')
+            return await resolveTaskResponse(response)
         },
         onMutate: ({ locationId }) => {
             upsertTaskTargetOverlay(queryClient, {

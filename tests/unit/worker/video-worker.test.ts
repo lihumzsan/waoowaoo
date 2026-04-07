@@ -27,7 +27,7 @@ const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getProjectModels: vi.fn(async () => ({ videoRatio: '16:9' })),
   resolveLipSyncVideoSource: vi.fn(async () => 'https://provider.example/lipsync.mp4'),
-  resolveVideoSourceFromGeneration: vi.fn<(...args: unknown[]) => Promise<{ url: string; downloadHeaders?: Record<string, string> }>>(async () => ({ url: 'https://provider.example/video.mp4' })),
+  resolveVideoSourceFromGeneration: vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(async () => ({ url: 'https://provider.example/video.mp4' })),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
   uploadVideoSourceToCos: vi.fn(async () => 'cos/lip-sync/video.mp4'),
 }))
@@ -194,6 +194,34 @@ describe('worker video processor behavior', () => {
         Authorization: 'Bearer oa-key',
       },
     )
+  })
+
+  it('VIDEO_PANEL: 将 Ark 返回的实际视频 token 用量透传到任务结果', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    utilsMock.resolveVideoSourceFromGeneration.mockResolvedValueOnce({
+      url: 'https://provider.example/video.mp4',
+      actualVideoTokens: 108000,
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'ark::doubao-seedance-2-0-260128',
+        generationOptions: {
+          duration: 5,
+          resolution: '720p',
+        },
+      },
+    })
+
+    const result = await processor!(job) as { panelId: string; videoUrl: string; actualVideoTokens: number }
+    expect(result).toEqual({
+      panelId: 'panel-1',
+      videoUrl: 'cos/lip-sync/video.mp4',
+      actualVideoTokens: 108000,
+    })
   })
 
   it('LIP_SYNC: 缺少 panel 时显式失败', async () => {

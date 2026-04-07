@@ -85,6 +85,8 @@ export type ListRunsInput = {
   episodeId?: string
   statuses?: RunStatus[]
   limit?: number
+  recoverableOnly?: boolean
+  latestOnly?: boolean
 }
 
 export type StateRef = {

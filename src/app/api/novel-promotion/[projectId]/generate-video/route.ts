@@ -37,6 +37,16 @@ function resolveVideoGenerationMode(payload: unknown): 'normal' | 'firstlastfram
   return isRecord(payload.firstLastFrame) ? 'firstlastframe' : 'normal'
 }
 
+function isSeedance2Model(modelKey: string): boolean {
+  const parsed = parseModelKeyStrict(modelKey)
+  if (!parsed) return false
+  return parsed.provider === 'ark'
+    && (
+      parsed.modelId === 'doubao-seedance-2-0-260128'
+      || parsed.modelId === 'doubao-seedance-2-0-fast-260128'
+    )
+}
+
 function resolveVideoModelKeyFromPayload(payload: Record<string, unknown>): string | null {
   const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
   if (firstLast && typeof firstLast.flModel === 'string' && parseModelKeyStrict(firstLast.flModel)) {
@@ -126,7 +136,10 @@ async function validateVideoCapabilityCombination(input: {
   const resolution = resolveBuiltinPricing({
     apiType: 'video',
     model: modelKey,
-    selections: resolvedOptions,
+    selections: {
+      ...resolvedOptions,
+      ...(isSeedance2Model(modelKey) ? { containsVideoInput: false } : {}),
+    },
   })
   if (resolution.status === 'missing_capability_match') {
     throw new ApiError('INVALID_PARAMS', {

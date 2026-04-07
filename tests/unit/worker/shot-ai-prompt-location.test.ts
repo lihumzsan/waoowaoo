@@ -52,7 +52,7 @@ describe('worker shot-ai-prompt-location behavior', () => {
     vi.clearAllMocks()
     persistMock.resolveAnalysisModel.mockResolvedValue({ id: 'np-1', analysisModel: 'llm::analysis' })
     persistMock.requireProjectLocation.mockResolvedValue({ id: 'location-1', name: 'Old Town' })
-    runtimeMock.runShotPromptCompletion.mockResolvedValue('{"prompt":"updated location description"}')
+    runtimeMock.runShotPromptCompletion.mockResolvedValue('{"prompt":"updated location description","available_slots":["街道左侧靠墙的留白位置"]}')
     persistMock.persistLocationDescription.mockResolvedValue({ id: 'location-1', images: [] })
   })
 
@@ -85,10 +85,12 @@ describe('worker shot-ai-prompt-location behavior', () => {
       locationId: 'location-1',
       imageIndex: 2,
       modifiedDescription: 'updated location description',
+      availableSlots: ['街道左侧靠墙的留白位置'],
     })
     expect(result).toEqual(expect.objectContaining({
       success: true,
       modifiedDescription: 'updated location description',
+      availableSlots: ['街道左侧靠墙的留白位置'],
       location: { id: 'location-1', images: [] },
     }))
   })

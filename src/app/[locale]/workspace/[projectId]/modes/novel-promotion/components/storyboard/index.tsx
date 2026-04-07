@@ -237,7 +237,7 @@ export default function StoryboardStage({
             cameraMove={modalRuntime.aiDataRuntime.panelData.cameraMove}
             description={modalRuntime.aiDataRuntime.panelData.description}
             location={modalRuntime.aiDataRuntime.panelData.location}
-            characters={modalRuntime.aiDataRuntime.characterNames}
+            characters={modalRuntime.aiDataRuntime.characters}
             videoPrompt={modalRuntime.aiDataRuntime.panelData.videoPrompt}
             photographyRules={modalRuntime.aiDataRuntime.photographyRules}
             actingNotes={modalRuntime.aiDataRuntime.actingNotes}

@@ -14,12 +14,8 @@ export const POST = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
-  const { session, project } = authResult
+  const { session } = authResult
   const body = await request.json().catch(() => ({}))
-
-  if (project.mode !== 'novel-promotion') {
-    throw new ApiError('INVALID_PARAMS')
-  }
 
   const asyncTaskResponse = await maybeSubmitLLMTask({
     request,

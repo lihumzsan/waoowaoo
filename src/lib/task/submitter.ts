@@ -48,6 +48,14 @@ function resolveRunIdFromPayload(payload: unknown): string | null {
   return runIdFromMeta || null
 }
 
+export function isActiveTaskStatus(status: string | null | undefined) {
+  return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
+}
+
+export function shouldAttachNewTaskToReusableRun(reusableRunTaskStatus: string | null | undefined) {
+  return !isActiveTaskStatus(reusableRunTaskStatus)
+}
+
 export function normalizeTaskPayload(type: TaskType, payload?: Record<string, unknown> | null) {
   const nextPayload = {
     ...(payload || {}),
@@ -146,22 +154,19 @@ export async function submitTask(params: {
         targetId: params.targetId,
       })
     : null
+  const reusableRunTask = reusableRun?.taskId
+    ? await getTaskById(reusableRun.taskId)
+    : null
 
-  if (runCentricTask && reusableRun?.taskId) {
-    const existingTask = await getTaskById(reusableRun.taskId)
-    if (
-      existingTask
-      && (existingTask.status === TASK_STATUS.QUEUED || existingTask.status === TASK_STATUS.PROCESSING)
-    ) {
+  if (runCentricTask && reusableRun && reusableRunTask && isActiveTaskStatus(reusableRunTask.status)) {
       return {
         success: true,
         async: true,
-        taskId: existingTask.id,
+        taskId: reusableRunTask.id,
         runId: reusableRun.id,
-        status: existingTask.status,
+        status: reusableRunTask.status,
         deduped: true as const,
       }
-    }
   }
 
   const { task, deduped } = await createTask({
@@ -177,8 +182,11 @@ export async function submitTask(params: {
     maxAttempts: params.maxAttempts,
     billingInfo: resolvedBillingInfo || null,
   })
-  let runId = reusableRun?.id || resolveRunIdFromPayload(task.payload)
-  if (!deduped && reusableRun && runId) {
+  const reusableRunId = reusableRun && shouldAttachNewTaskToReusableRun(reusableRunTask?.status)
+    ? (reusableRun?.id || null)
+    : null
+  let runId = reusableRunId || resolveRunIdFromPayload(task.payload)
+  if (!deduped && reusableRunId && runId) {
     const payloadWithRunId = {
       ...normalizedPayload,
       runId,

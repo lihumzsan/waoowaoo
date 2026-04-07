@@ -140,6 +140,7 @@ export default function CharacterCard({
   const imageUrlsWithIndex = rawImageUrls
     .map((url, idx) => ({ url, originalIndex: idx }))
     .filter((item) => !!item.url) as { url: string; originalIndex: number }[]
+  const generatedImageCount = imageUrlsWithIndex.length
 
   const hasMultipleImages = imageUrlsWithIndex.length > 1
   const selectedIndex = appearance.selectedIndex ?? null
@@ -218,22 +219,24 @@ export default function CharacterCard({
       <>
         <ImageGenerationInlineCountButton
           prefix={isGroupTaskRunning ? (
-            <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+            <>
+              <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+              <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)] ml-0.5">{t('image.regenCountPrefix')}</span>
+            </>
           ) : (
             <>
               <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
               <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)] ml-0.5">{t('image.regenCountPrefix')}</span>
             </>
           )}
-          suffix={<span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)]">{t('image.regenCountSuffix')}</span>}
           value={generationCount}
           options={getImageGenerationCountOptions('character')}
           onValueChange={setGenerationCount}
-          onClick={() => onRegenerate(generationCount)}
+          onClick={() => onRegenerate(generatedImageCount)}
           disabled={isAppearanceTaskRunning || isAnyTaskRunning || uploadImage.isPending}
-          ariaLabel={t('image.regenCountAriaLabel')}
-          className="inline-flex h-6 items-center gap-0.5 rounded px-1 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
-          selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-[10px] font-semibold text-[var(--glass-tone-info-fg)] outline-none cursor-pointer leading-none transition-colors"
+          showCountControl={false}
+          ariaLabel={t('image.regenCountPrefix')}
+          className="inline-flex h-6 items-center justify-center rounded-md px-1.5 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
         />
         {onUndo && (appearance.previousImageUrl || appearance.previousImageUrls.length > 0) && (
           <button
@@ -451,6 +454,7 @@ export default function CharacterCard({
           mode="single"
           characterName={character.name}
           changeReason={appearance.changeReason}
+          aspectClassName="aspect-[3/2]"
           currentImageUrl={currentImageUrl}
           selectedIndex={selectedIndex}
           hasMultipleImages={hasMultipleImages}

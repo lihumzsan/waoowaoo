@@ -20,7 +20,7 @@ export interface StoryboardPanel {
   shot_type: string
   camera_move: string | null
   description: string
-  characters: { name: string; appearance: string }[]
+  characters: { name: string; appearance: string; slot?: string }[]
   location?: string
   srt_range?: string
   duration?: number
@@ -112,12 +112,22 @@ export function useStoryboardState({
     return sortedPanels.map((p) => {
       const parsedChars = p.characters ? JSON.parse(p.characters) : []
       const characters = Array.isArray(parsedChars)
-        ? parsedChars.filter((item): item is { name: string; appearance: string } => (
-          typeof item === 'object'
-          && item !== null
-          && typeof (item as { name?: unknown }).name === 'string'
-          && typeof (item as { appearance?: unknown }).appearance === 'string'
-        ))
+        ? parsedChars.flatMap((item): Array<{ name: string; appearance: string; slot?: string }> => {
+          if (
+            typeof item !== 'object'
+            || item === null
+            || typeof (item as { name?: unknown }).name !== 'string'
+            || typeof (item as { appearance?: unknown }).appearance !== 'string'
+          ) {
+            return []
+          }
+          const candidate = item as { name: string; appearance: string; slot?: unknown }
+          return [{
+            name: candidate.name,
+            appearance: candidate.appearance,
+            slot: typeof candidate.slot === 'string' ? candidate.slot : undefined,
+          }]
+        })
         : []
       return {
         id: p.id,

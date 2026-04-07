@@ -18,9 +18,18 @@ Rules:
 2. Return one complete updated description in English.
 3. Keep scene name at the beginning: "[{location_name}] ..."
 4. No protagonist actions or story narration.
+5. Keep the scene spatially specific, with visible structure, depth, and stable anchors.
+6. Also regenerate 2-6 `available_slots` that match the updated scene.
+7. Each `available_slots` item must be one complete descriptive placement phrase, not a short token and not an object.
+8. Do not mention posture, action, or emotion in `available_slots`.
+9. Every anchor mentioned in `available_slots` must also appear clearly in the updated scene description.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:
 {
-  "prompt": "updated location description"
+  "prompt": "updated location description",
+  "available_slots": [
+    "the outer-side position beside the rear window desks",
+    "the open floor directly below the center of the blackboard"
+  ]
 }

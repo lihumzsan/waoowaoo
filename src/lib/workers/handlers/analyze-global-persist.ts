@@ -10,6 +10,8 @@ import {
   type CharacterBrief,
 } from './analyze-global-parse'
 import { seedProjectLocationBackedImageSlots } from '@/lib/assets/services/location-backed-assets'
+import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
+import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 
 export type AnalyzeGlobalStats = {
   totalChunks: number
@@ -166,6 +168,7 @@ export async function persistAnalyzeGlobalChunk(params: {
         : (readText(loc.description) ? [readText(loc.description)] : [])
       const descriptions = descriptionsRaw.map((item) => readText(item)).filter(Boolean)
       const cleanDescriptions = descriptions.map((item) => removeLocationPromptSuffix(item))
+      const availableSlots = normalizeLocationAvailableSlots(loc.available_slots)
 
       const created = await prisma.novelPromotionLocation.create({
         data: {
@@ -182,6 +185,7 @@ export async function persistAnalyzeGlobalChunk(params: {
         locationId: created.id,
         descriptions: cleanDescriptions,
         fallbackDescription: summary || name,
+        availableSlots,
       })
 
       params.existingLocationNames.push(name)
@@ -195,7 +199,12 @@ export async function persistAnalyzeGlobalChunk(params: {
   for (const prop of params.propsData.props || []) {
     const name = readText(prop.name).trim()
     const summary = readText(prop.summary).trim()
-    if (!name || !summary) {
+    const description = resolvePropVisualDescription({
+      name,
+      summary,
+      description: readText(prop.description).trim(),
+    })
+    if (!name || !summary || !description) {
       params.stats.skippedProps += 1
       continue
     }
@@ -217,8 +226,9 @@ export async function persistAnalyzeGlobalChunk(params: {
       })
       await seedProjectLocationBackedImageSlots({
         locationId: created.id,
-        descriptions: [summary],
-        fallbackDescription: summary,
+        descriptions: [description],
+        fallbackDescription: description,
+        availableSlots: [],
       })
       params.existingPropNames.push(name)
       params.stats.newProps += 1

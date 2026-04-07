@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey } from '@/lib/storage'
 import sharp from 'sharp'
-import { initializeFonts, createLabelSVG } from '@/lib/fonts'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
@@ -45,7 +44,6 @@ interface AssetHubUploadDb {
  * 上传用户自定义图片作为角色或场景资产
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-    await initializeFonts()
     const db = prisma as unknown as AssetHubUploadDb
 
     // 🔐 统一权限验证
@@ -59,9 +57,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const id = formData.get('id') as string
     const appearanceIndex = formData.get('appearanceIndex') as string | null
     const imageIndex = formData.get('imageIndex') as string | null
-    const labelText = formData.get('labelText') as string
+    const labelTextValue = formData.get('labelText')
+    const labelText = typeof labelTextValue === 'string' ? labelTextValue : ''
 
-    if (!file || !type || !id || !labelText) {
+    if (!file || !type || !id || (type === 'location' && !labelText.trim())) {
         throw new ApiError('INVALID_PARAMS')
     }
 
@@ -69,18 +68,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    const meta = await sharp(buffer).metadata()
-    const w = meta.width || 2160
-    const h = meta.height || 2160
-    const fontSize = Math.floor(h * 0.04)
-    const pad = Math.floor(fontSize * 0.5)
-    const barH = fontSize + pad * 2
-
-    const svg = await createLabelSVG(w, barH, fontSize, pad, labelText)
-
     const processed = await sharp(buffer)
-        .extend({ top: barH, bottom: 0, left: 0, right: 0, background: { r: 0, g: 0, b: 0, alpha: 1 } })
-        .composite([{ input: svg, top: 0, left: 0 }])
         .jpeg({ quality: 90, mozjpeg: true })
         .toBuffer()
 

@@ -8,6 +8,7 @@ import {
   invalidateGlobalCharacters,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
+import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 
 export function useAiDesignLocation() {
   return useMutation({
@@ -21,7 +22,7 @@ export function useAiDesignLocation() {
         },
         'Failed to design location',
       )
-      return resolveTaskResponse<{ prompt?: string }>(response)
+      return resolveTaskResponse<{ prompt?: string; availableSlots?: LocationAvailableSlot[] }>(response)
     },
   })
 }
@@ -37,6 +38,7 @@ export function useCreateAssetHubLocation() {
       folderId: string | null
       artStyle: string
       count?: number
+      availableSlots?: LocationAvailableSlot[]
     }) => {
       return await requestJsonWithError('/api/asset-hub/locations', {
         method: 'POST',

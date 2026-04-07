@@ -1,18 +1,21 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
+import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import {
   assertTaskActive,
   getUserModels,
   resolveImageSourceFromGeneration,
-  stripLabelBar,
   toSignedUrlIfCos,
   uploadImageSourceToCos,
-  withLabelBar,
 } from '../utils'
 import {
   normalizeReferenceImagesForGeneration,
 } from '@/lib/media/outbound-image'
+import {
+  type LocationAvailableSlot,
+  stringifyLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 import {
   AnyObj,
   parseImageUrls,
@@ -51,6 +54,7 @@ interface GlobalLocationImageRecord {
   id: string
   imageIndex: number
   description: string | null
+  availableSlots?: string | null
   imageUrl: string | null
   previousDescription: string | null
 }
@@ -119,9 +123,8 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const requiredReference = await stripLabelBar(currentUrl)
     const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs)
-    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
+    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
     const currentDescription = readIndexedDescription({
       descriptions: appearance.descriptions,
       fallbackDescription: appearance.description,
@@ -140,12 +143,10 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
       },
     })
 
-    const label = `${character.name} - ${appearance.changeReason || '形象'}`
-    const labeled = await withLabelBar(source, label)
-    const cosKey = await uploadImageSourceToCos(labeled, 'global-character-modify', appearance.id)
+    const imageKey = await uploadImageSourceToCos(source, 'global-character-modify', appearance.id)
 
     while (imageUrls.length <= targetImageIndex) imageUrls.push('')
-    imageUrls[targetImageIndex] = cosKey
+    imageUrls[targetImageIndex] = imageKey
 
     const selectedIndex = appearance.selectedIndex
     const shouldUpdateMain = selectedIndex === targetImageIndex || selectedIndex === null || imageUrls.length === 1
@@ -166,7 +167,7 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
           descriptions: appearance.descriptions,
           fallbackDescription: appearance.description,
           index: targetImageIndex,
-          nextDescription,
+          nextDescription: nextDescription.prompt,
         })
       } catch (err) {
         logger.warn({ message: '资产库角色描述同步失败', details: { error: String(err) } })
@@ -182,15 +183,15 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
         previousDescription: appearance.description || null,
         previousDescriptions: appearance.descriptions ?? null,
         imageUrls: encodeImageUrls(imageUrls),
-        imageUrl: shouldUpdateMain ? cosKey : appearance.imageUrl,
+        imageUrl: shouldUpdateMain ? imageKey : appearance.imageUrl,
         ...(descriptionFields || {}),
       },
     })
 
-    return { type: payload.type, appearanceId: appearance.id, imageUrl: cosKey }
+    return { type: payload.type, appearanceId: appearance.id, imageUrl: imageKey }
   }
 
-  if (payload.type === 'location') {
+  if (payload.type === 'location' || payload.type === 'prop') {
     const location = await db.globalLocation.findFirst({
       where: { id: payload.id, userId },
       include: { images: true },
@@ -212,55 +213,64 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const requiredReference = await stripLabelBar(currentUrl)
     const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs)
-    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
+    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
 
-    const prompt = `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
+    const isProp = payload.type === 'prop'
+    const prompt = isProp
+      ? `请根据以下指令修改道具图片，保持道具主体、结构和关键材质一致：\n${modifyInstruction}`
+      : `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
+    const aspectRatio = isProp ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     const source = await resolveImageSourceFromGeneration(job, {
       userId,
       modelId: editModel,
       prompt,
       options: {
         referenceImages,
-        aspectRatio: '1:1',
+        aspectRatio,
         ...(resolution ? { resolution } : {}),
       },
     })
 
-    const labeled = await withLabelBar(source, location.name)
-    const cosKey = await uploadImageSourceToCos(labeled, 'global-location-modify', locationImage.id)
+    const imageKey = await uploadImageSourceToCos(source, isProp ? 'global-prop-modify' : 'global-location-modify', locationImage.id)
 
-    let extractedDescription: string | undefined
+    let extractedDescription: {
+      prompt: string
+      availableSlots: LocationAvailableSlot[]
+    } | null = null
     if (locationImage.description && modifyInstruction && userModels.analysisModel) {
       try {
         extractedDescription = await generateModifiedAssetDescription({
           userId,
           model: userModels.analysisModel,
           locale: job.data.locale,
-          type: 'location',
+          type: isProp ? 'prop' : 'location',
           currentDescription: locationImage.description,
           modifyInstruction,
           referenceImages: normalizedExtras,
           locationName: location.name,
+          propName: isProp ? location.name : undefined,
         })
       } catch (err) {
-        logger.warn({ message: '资产库场景描述同步失败', details: { error: String(err) } })
+        logger.warn({ message: isProp ? '资产库道具描述同步失败' : '资产库场景描述同步失败', details: { error: String(err) } })
       }
     }
 
-    await assertTaskActive(job, 'persist_global_location_modify')
+    await assertTaskActive(job, isProp ? 'persist_global_prop_modify' : 'persist_global_location_modify')
     await db.globalLocationImage.update({
       where: { id: locationImage.id },
       data: {
         previousImageUrl: locationImage.imageUrl,
         previousDescription: locationImage.description || null,
-        imageUrl: cosKey,
-        ...(extractedDescription ? { description: extractedDescription } : {}),
+        imageUrl: imageKey,
+        ...(extractedDescription ? {
+          description: extractedDescription.prompt,
+          availableSlots: stringifyLocationAvailableSlots(extractedDescription.availableSlots),
+        } : {}),
       },
     })
 
-    return { type: payload.type, locationImageId: locationImage.id, imageUrl: cosKey }
+    return { type: payload.type, locationImageId: locationImage.id, imageUrl: imageKey }
   }
 
   throw new Error(`Unsupported asset-hub modify type: ${String(payload.type)}`)

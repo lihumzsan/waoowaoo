@@ -5,6 +5,7 @@ import {
   calcLipSync,
   calcText,
   calcVideo,
+  calcVideoByTokens,
   calcVoice,
   calcVoiceDesign,
 } from '@/lib/billing/cost'
@@ -85,6 +86,37 @@ describe('billing/cost', () => {
       resolution: '720p',
       duration: 1,
     })).toThrow('Unsupported video capability pricing')
+  })
+
+  it('estimates Seedance 2.0 video pricing from official token formula', () => {
+    const cost = calcVideo('doubao-seedance-2-0-260128', '720p', 1, {
+      resolution: '720p',
+      duration: 5,
+      aspectRatio: '16:9',
+      containsVideoInput: false,
+    })
+
+    expect(cost).toBeCloseTo(4.968, 8)
+  })
+
+  it('applies Seedance 2.0 video-input token floor for quoted pricing', () => {
+    const cost = calcVideo('doubao-seedance-2-0-fast-260128', '720p', 1, {
+      resolution: '720p',
+      duration: 5,
+      aspectRatio: '16:9',
+      containsVideoInput: true,
+      inputVideoSeconds: 2,
+    })
+
+    expect(cost).toBeCloseTo(4.2768, 8)
+  })
+
+  it('settles Seedance 2.0 videos from exact usage tokens', () => {
+    const cost = calcVideoByTokens('doubao-seedance-2-0-260128', 120_000, {
+      containsVideoInput: false,
+    })
+
+    expect(cost).toBeCloseTo(5.52, 8)
   })
 
   it('supports minimax capability-aware video pricing', () => {

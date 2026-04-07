@@ -81,7 +81,7 @@ export function installAuthMocks() {
       if (state.projectAuthMode === 'not_found') return notFoundResponse()
       return {
         session: state.session,
-        project: { id: projectId, userId: state.session.user.id, name: 'project', mode: 'novel-promotion' },
+        project: { id: projectId, userId: state.session.user.id, name: 'project' },
         novelData: { id: 'novel-data-id' },
       }
     },

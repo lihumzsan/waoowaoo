@@ -81,6 +81,10 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
       'clip_content',
     ],
   },
+  [PROMPT_IDS.NP_AI_STORY_EXPAND]: {
+    pathStem: 'novel-promotion/ai_story_expand',
+    variableKeys: ['input'],
+  },
   [PROMPT_IDS.NP_CHARACTER_CREATE]: {
     pathStem: 'novel-promotion/character_create',
     variableKeys: ['user_input'],
@@ -120,6 +124,10 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
   [PROMPT_IDS.NP_LOCATION_REGENERATE]: {
     pathStem: 'novel-promotion/location_regenerate',
     variableKeys: ['location_name', 'current_descriptions'],
+  },
+  [PROMPT_IDS.NP_PROP_DESCRIPTION_UPDATE]: {
+    pathStem: 'novel-promotion/prop_description_update',
+    variableKeys: ['prop_name', 'original_description', 'modify_instruction', 'image_context'],
   },
   [PROMPT_IDS.NP_SCREENPLAY_CONVERSION]: {
     pathStem: 'novel-promotion/screenplay_conversion',

@@ -32,6 +32,7 @@ const ROUTE_FILES = [
   'src/app/api/asset-hub/ai-design-location/route.ts',
   'src/app/api/asset-hub/ai-modify-character/route.ts',
   'src/app/api/asset-hub/ai-modify-location/route.ts',
+  'src/app/api/asset-hub/ai-modify-prop/route.ts',
   'src/app/api/asset-hub/appearances/route.ts',
   'src/app/api/asset-hub/character-voice/route.ts',
   'src/app/api/asset-hub/characters/[characterId]/appearances/[appearanceIndex]/route.ts',
@@ -72,6 +73,7 @@ const ROUTE_FILES = [
   'src/app/api/novel-promotion/[projectId]/ai-create-location/route.ts',
   'src/app/api/novel-promotion/[projectId]/ai-modify-appearance/route.ts',
   'src/app/api/novel-promotion/[projectId]/ai-modify-location/route.ts',
+  'src/app/api/novel-promotion/[projectId]/ai-modify-prop/route.ts',
   'src/app/api/novel-promotion/[projectId]/ai-modify-shot-prompt/route.ts',
   'src/app/api/novel-promotion/[projectId]/analyze-global/route.ts',
   'src/app/api/novel-promotion/[projectId]/analyze-shot-variants/route.ts',
@@ -163,6 +165,7 @@ const ROUTE_FILES = [
   'src/app/api/user/balance/route.ts',
   'src/app/api/user/costs/details/route.ts',
   'src/app/api/user/costs/route.ts',
+  'src/app/api/user/ai-story-expand/route.ts',
   'src/app/api/user/models/route.ts',
   'src/app/api/user/transactions/route.ts',
 ] as const

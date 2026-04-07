@@ -27,7 +27,7 @@ type StoryboardRecord = {
 const authMock = vi.hoisted(() => ({
   requireProjectAuthLight: vi.fn(async () => ({
     session: { user: { id: 'user-1' } },
-    project: { id: 'project-1', userId: 'user-1', mode: 'novel-promotion' },
+    project: { id: 'project-1', userId: 'user-1' },
   })),
   isErrorResponse: vi.fn((value: unknown) => value instanceof Response),
 }))

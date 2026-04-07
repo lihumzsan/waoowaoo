@@ -58,7 +58,7 @@
         "characterCount": "{count} Characters",
         "updateFailed": "Update description failed",
         "addFailed": "Add character failed",
-        "copyFromGlobal": "Copy from Asset Hub"
+        "copyFromGlobal": "Import from Asset Hub"
     },
     "location": {
         "add": "Add Location",
@@ -83,7 +83,9 @@
         "deleteFailed": "Delete failed: {error}",
         "name": "Prop Name",
         "summary": "Summary",
-        "summaryPlaceholder": "Describe the prop",
+        "summaryPlaceholder": "One-line human summary of the prop, without plot usage",
+        "description": "Image Description",
+        "descriptionPlaceholder": "Describe only the prop itself: material, color, structure, and decoration",
         "regenerateImage": "Regenerate",
         "addFailed": "Add prop failed"
     },
@@ -171,8 +173,10 @@
         "scenePrompt": "Scene Description Prompt",
         "appearancePrompt": "Appearance Description Prompt",
         "smartModify": "Smart Modify",
+        "modifyDescription": "AI Modify Description",
         "modifyPlaceholder": "e.g.: Change to night, add moonlight, add curtains...",
         "modifyPlaceholderCharacter": "e.g.: Change hair to blonde, height to 180cm, wear black suit...",
+        "modifyPlaceholderProp": "e.g.: change to brushed silver, add carvings to the handle, remove ruby decoration...",
         "modifying": "Smart modifying...",
         "modifyFailed": "Modification failed",
         "editCharacter": "Edit Character",
@@ -344,12 +348,15 @@
     "imageEdit": {
         "editCharacterImage": "Edit Character Image",
         "editLocationImage": "Edit Location Image",
+        "editPropImage": "Edit Prop Image",
         "characterLabel": "Character: {name}",
         "locationLabel": "Location: {name}",
+        "propLabel": "Prop: {name}",
         "editInstruction": "Edit Instruction",
         "subtitle": "Enter an edit instruction and optionally upload reference images",
         "characterPlaceholder": "Describe what you want to change, e.g.: Change hair to blonde, add glasses, change to casual clothes...",
         "locationPlaceholder": "Describe what you want to change, e.g.: Add more trees, change to night scene...",
+        "propPlaceholder": "Describe what you want to change, e.g.: change to brushed silver metal, add carved patterns to the handle, remove gem decoration...",
         "storyboardPlaceholder": "Describe what you want to change, e.g.: Change background color, adjust character expression...",
         "noAssetHint": "No assets, click \"Add Asset\" to select",
         "referenceImages": "Reference Images",

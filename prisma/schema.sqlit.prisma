@@ -58,6 +58,7 @@ model LocationImage {
   locationId          String
   imageIndex          Int
   description         String?
+  availableSlots      String?
   imageUrl            String?
   isSelected          Boolean                @default(false)
   createdAt           DateTime               @default(now())
@@ -347,7 +348,6 @@ model Project {
   id                 String                 @id @default(uuid())
   name               String
   description        String?
-  mode               String                 @default("novel-promotion")
   userId             String
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @default(now()) @updatedAt
@@ -737,6 +737,7 @@ model GlobalLocationImage {
   locationId          String
   imageIndex          Int
   description         String?
+  availableSlots      String?
   imageUrl            String?
   imageMediaId        String?
   imageMedia          MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)

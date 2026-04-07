@@ -348,7 +348,7 @@ export function ModelCapabilityDropdown({
                                 <div className="text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2.5">
                                     {t('paramConfig')}
                                 </div>
-                                <div className="max-h-[156px] overflow-y-auto custom-scrollbar pr-1">
+                                <div className="max-h-[156px] overflow-y-auto app-scrollbar pr-1">
                                     <div className="space-y-3">
                                         {visibleCapabilityFields.map((def) => {
                                             const currentVal = capabilityOverrides[def.field] !== undefined

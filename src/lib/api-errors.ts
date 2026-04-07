@@ -31,6 +31,7 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/story-to-script(?:-|\/|$)/,
   /\/script-to-storyboard(?:-|\/|$)/,
   /\/screenplay-conversion(?:\/|$)/,
+  /\/ai-story-expand(?:\/|$)/,
   /\/voice-(?:analyze|design|generate)(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
   /\/modify-(?:asset|storyboard)-image(?:\/|$)/,

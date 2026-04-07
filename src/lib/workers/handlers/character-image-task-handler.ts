@@ -1,6 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { addCharacterPromptSuffix, getArtStylePrompt, isArtStyleValue, PRIMARY_APPEARANCE_INDEX, type ArtStyleValue } from '@/lib/constants'
+import { CHARACTER_ASSET_IMAGE_RATIO, addCharacterPromptSuffix, getArtStylePrompt, isArtStyleValue, PRIMARY_APPEARANCE_INDEX, type ArtStyleValue } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -13,7 +13,7 @@ import {
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
 import {
   AnyObj,
-  generateLabeledImageToCos,
+  generateProjectLabeledImageToStorage,
   parseImageUrls,
   parseJsonStringArray,
   pickFirstString,
@@ -157,7 +157,7 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
       index,
     })
 
-    const cosKey = await generateLabeledImageToCos({
+    const imageKey = await generateProjectLabeledImageToStorage({
       job,
       userId,
       modelId,
@@ -167,14 +167,14 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
       keyPrefix: 'character',
       options: {
         referenceImages: primaryReferenceImages.length > 0 ? primaryReferenceImages : undefined,
-        aspectRatio: '3:2',
+        aspectRatio: CHARACTER_ASSET_IMAGE_RATIO,
       },
     })
 
     while (nextImageUrls.length <= index) {
       nextImageUrls.push('')
     }
-    nextImageUrls[index] = cosKey
+    nextImageUrls[index] = imageKey
   }
 
   const selectedIndex = appearance.selectedIndex

@@ -149,7 +149,8 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 Pro', type: 'video', provider: 'ark' },
-    { modelId: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0（待上线）', type: 'video', provider: 'ark' },
+    { modelId: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0', type: 'video', provider: 'ark' },
+    { modelId: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-pro-250528', name: 'Seedance 1.0 Pro', type: 'video', provider: 'ark' },
     // Google Veo
     { modelId: 'veo-3.1-generate-preview', name: 'Veo 3.1', type: 'video', provider: 'google' },
@@ -158,6 +159,7 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'veo-3.0-fast-generate-001', name: 'Veo 3.0 Fast', type: 'video', provider: 'google' },
     { modelId: 'veo-2.0-generate-001', name: 'Veo 2.0', type: 'video', provider: 'google' },
     // 阿里云百炼图生视频模型
+    { modelId: 'wan2.7-i2v', name: 'Wan2.7 I2V', type: 'video', provider: 'bailian' },
     { modelId: 'wan2.6-i2v-flash', name: 'Wan2.6 I2V Flash', type: 'video', provider: 'bailian' },
     { modelId: 'wan2.6-i2v', name: 'Wan2.6 I2V', type: 'video', provider: 'bailian' },
     { modelId: 'wan2.5-i2v-preview', name: 'Wan2.5 I2V Preview', type: 'video', provider: 'bailian' },
@@ -197,9 +199,7 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'vidu2.0', name: 'Vidu 2.0', type: 'video', provider: 'vidu' },
 ]
 
-const PRESET_COMING_SOON_MODEL_KEYS = new Set<string>([
-    encodeModelKey('ark', 'doubao-seedance-2-0-260128'),
-])
+const PRESET_COMING_SOON_MODEL_KEYS = new Set<string>([])
 
 export function isPresetComingSoonModel(provider: string, modelId: string): boolean {
     return PRESET_COMING_SOON_MODEL_KEYS.has(encodeModelKey(provider, modelId))

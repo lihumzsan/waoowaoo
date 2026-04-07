@@ -12,7 +12,11 @@ Requirements:
 2. Keep the scene name prefix in each line: "[{location_name}] ..."
 3. Output in English only.
 4. Keep environment-only description (no protagonist actions).
-5. Keep each variant concise and image-generation friendly.
+5. Keep each variant specific enough for controllable image generation, with visible structure, depth, and stable anchors.
+6. Also generate 2-6 shared `available_slots` for this location.
+7. Each `available_slots` item must be one complete descriptive placement phrase, not a short token and not an object.
+8. Do not mention posture, action, or emotion in `available_slots`.
+9. Every anchor mentioned in `available_slots` must remain valid across all three regenerated descriptions.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:
@@ -21,5 +25,9 @@ Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to c
     "[{location_name}] variant 1",
     "[{location_name}] variant 2",
     "[{location_name}] variant 3"
+  ],
+  "available_slots": [
+    "the position beneath the throne steps at the center of the hall",
+    "the position against the inner wall beside the rear doorway"
   ]
 }

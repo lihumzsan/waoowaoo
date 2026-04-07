@@ -8,6 +8,7 @@ const BAILIAN_CATALOG: Readonly<Record<OfficialModelModality, readonly string[]>
   ],
   image: [],
   video: [
+    'wan2.7-i2v',
     'wan2.6-i2v-flash',
     'wan2.6-i2v',
     'wan2.5-i2v-preview',

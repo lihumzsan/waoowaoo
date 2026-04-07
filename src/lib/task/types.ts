@@ -60,8 +60,10 @@ export const TASK_TYPE = {
   SCREENPLAY_CONVERT: 'screenplay_convert',
   VOICE_ANALYZE: 'voice_analyze',
   ANALYZE_GLOBAL: 'analyze_global',
+  AI_STORY_EXPAND: 'ai_story_expand',
   AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
   AI_MODIFY_LOCATION: 'ai_modify_location',
+  AI_MODIFY_PROP: 'ai_modify_prop',
   AI_MODIFY_SHOT_PROMPT: 'ai_modify_shot_prompt',
   ANALYZE_SHOT_VARIANTS: 'analyze_shot_variants',
   AI_CREATE_CHARACTER: 'ai_create_character',
@@ -74,6 +76,7 @@ export const TASK_TYPE = {
   ASSET_HUB_AI_DESIGN_LOCATION: 'asset_hub_ai_design_location',
   ASSET_HUB_AI_MODIFY_CHARACTER: 'asset_hub_ai_modify_character',
   ASSET_HUB_AI_MODIFY_LOCATION: 'asset_hub_ai_modify_location',
+  ASSET_HUB_AI_MODIFY_PROP: 'asset_hub_ai_modify_prop',
   ASSET_HUB_REFERENCE_TO_CHARACTER: 'asset_hub_reference_to_character',
 } as const
 

@@ -8,11 +8,17 @@
 import { useTranslations } from 'next-intl'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import '@/styles/animations.css'
+import AiWriteModal from '@/components/home/AiWriteModal'
+import LongTextDetectionPrompt from '@/components/story-input/LongTextDetectionPrompt'
+import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import { ART_STYLES, VIDEO_RATIOS } from '@/lib/constants'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
-import { RatioSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
+import { DEFAULT_STYLE_PRESET_VALUE, STYLE_PRESETS } from '@/lib/style-presets'
+import { PROJECT_STORY_INPUT_MIN_ROWS } from '@/lib/ui/textarea-height'
+import { apiFetch } from '@/lib/api-fetch'
+import { expandHomeStory } from '@/lib/home/ai-story-expand'
 
 /** 触发智能分集建议的字数阈值 */
 const LONG_TEXT_THRESHOLD = 1000
@@ -58,6 +64,7 @@ export default function NovelInputStage({
   onArtStyleChange
 }: NovelInputStageProps) {
   const t = useTranslations('novelPromotion')
+  const homeT = useTranslations('home')
 
   // ── IME 组合输入处理 ──
   // 中文/日文/韩文输入法在组合（composing）期间会持续触发 onChange，
@@ -66,6 +73,9 @@ export default function NovelInputStage({
   // 解决方案：组合期间仅更新本地 state，组合结束后再同步到父组件。
   const isComposingRef = useRef(false)
   const [localText, setLocalText] = useState(novelText)
+  const [stylePresetValue, setStylePresetValue] = useState<string>(DEFAULT_STYLE_PRESET_VALUE)
+  const [aiWriteOpen, setAiWriteOpen] = useState(false)
+  const [aiWriteLoading, setAiWriteLoading] = useState(false)
 
   // 当父组件的 novelText 变化（非本地编辑触发）时，同步到本地 state
   useEffect(() => {
@@ -73,15 +83,6 @@ export default function NovelInputStage({
       setLocalText(novelText)
     }
   }, [novelText])
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value
-    setLocalText(newValue)
-    // 仅在非 IME 组合状态下才同步到父组件
-    if (!isComposingRef.current) {
-      onNovelTextChange(newValue)
-    }
-  }
 
   const handleCompositionStart = () => {
     isComposingRef.current = true
@@ -106,23 +107,25 @@ export default function NovelInputStage({
     }
   }, [localText, onNext, onSmartSplit])
 
-  // 当前配置展示文案
-  const ratioDisplayLabel = (VIDEO_RATIOS.find((option) => option.value === videoRatio) ?? VIDEO_RATIOS[0])?.label
-  const artStyleDisplayLabel = (ART_STYLES.find((option) => option.value === artStyle) ?? ART_STYLES[0])?.label
+  const handleAiWriteStart = useCallback(async (prompt: string) => {
+    if (aiWriteLoading) return
+    setAiWriteLoading(true)
+    try {
+      const result = await expandHomeStory({
+        apiFetch,
+        prompt,
+      })
 
-  // 不同比例适合的素材类型文案映射（完整句子，用于 info 悬浮层）
-  const ratioUsageTextMap: Record<string, string> = {
-    '1:1': t('storyInput.ratioUsage.1_1'),
-    '9:16': t('storyInput.ratioUsage.9_16'),
-    '16:9': t('storyInput.ratioUsage.16_9'),
-    '4:3': t('storyInput.ratioUsage.4_3'),
-    '3:4': t('storyInput.ratioUsage.3_4'),
-    '2:3': t('storyInput.ratioUsage.2_3'),
-    '3:2': t('storyInput.ratioUsage.3_2'),
-    '4:5': t('storyInput.ratioUsage.4_5'),
-    '5:4': t('storyInput.ratioUsage.5_4'),
-    '21:9': t('storyInput.ratioUsage.21_9'),
-  }
+      setLocalText(result.expandedText)
+      onNovelTextChange(result.expandedText)
+      setAiWriteOpen(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed'
+      window.alert(message)
+    } finally {
+      setAiWriteLoading(false)
+    }
+  }, [aiWriteLoading, onNovelTextChange])
 
   // 下拉中使用的简短标签（低信息密度）
   const ratioUsageTagMap: Record<string, string> = {
@@ -138,13 +141,9 @@ export default function NovelInputStage({
     '21:9': t('storyInput.ratioUsageTag.21_9'),
   }
 
-  const getRatioUsageText = (ratio: string): string =>
-    ratioUsageTextMap[ratio] ?? t('storyInput.videoRatioHint')
-
   const getRatioUsageTag = (ratio: string): string =>
     ratioUsageTagMap[ratio] ?? ''
 
-  const ratioUsageText = getRatioUsageText(videoRatio)
   const stageSwitchingState = isSwitchingStage
     ? resolveTaskPresentationState({
       phase: 'processing',
@@ -168,81 +167,82 @@ export default function NovelInputStage({
       )}
 
       {/* 主输入区域（含底部工具栏） */}
-      <div className="glass-surface-elevated overflow-hidden relative z-10">
-        <div className="p-6 pb-0">
-          {/* 字数统计 */}
-          <div className="flex items-center justify-end mb-3">
-            <span className="glass-chip glass-chip-neutral text-xs">
-              {t("storyInput.wordCount")} {localText.length}
-            </span>
-          </div>
-
-          {/* 剧本输入框 */}
-          <textarea
-            value={localText}
-            onChange={handleTextChange}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            placeholder={`请输入您的剧本或小说内容...\n\nAI 将根据您的文本智能分析：\n• 自动识别场景切换\n• 提取角色对话和动作\n• 生成分镜脚本\n\n例如：\n清晨，阳光透过窗帘洒进房间。小明揉着惺忪的睡眼从床上坐起，看了一眼床头的闹钟——已经八点了！他猛地跳下床，手忙脚乱地开始穿衣服...`}
-            className="glass-textarea-base custom-scrollbar h-80 px-4 py-3 text-base resize-none placeholder:text-[var(--glass-text-tertiary)]"
-            disabled={isSubmittingTask || isSwitchingStage}
-          />
-        </div>
-
-        {/* 底部工具栏：比例 + 风格 + 开始创作（内嵌在输入框卡片内） */}
-        <div className="flex items-end gap-3 px-6 py-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-[160px] flex-shrink-0">
-              <RatioSelector
-                value={videoRatio}
-                onChange={(value) => onVideoRatioChange?.(value)}
-                options={VIDEO_RATIOS.map((option) => ({
-                  ...option,
-                  recommended: option.value === '9:16'
-                }))}
-                getUsage={getRatioUsageTag}
-              />
-            </div>
-            <div className="w-[160px] flex-shrink-0">
-              <StyleSelector
-                value={artStyle}
-                onChange={(value) => onArtStyleChange?.(value)}
-                options={ART_STYLES.map((option) => ({
-                  ...option,
-                  recommended: option.value === 'realistic'
-                }))}
-              />
-            </div>
-          </div>
-          <button
-            onClick={handleStartClick}
-            disabled={!hasContent || isSubmittingTask || isSwitchingStage}
-            className="glass-btn-base glass-btn-primary px-5 py-2.5 text-sm flex-shrink-0 disabled:opacity-50 flex items-center gap-2"
-          >
-            {isSwitchingStage ? (
-              <TaskStatusInline state={stageSwitchingState} className="text-white [&>span]:text-white [&_svg]:text-white" />
-            ) : (
-              <>
-                <span>{t("smartImport.manualCreate.button")}</span>
-                <AppIcon name="arrowRight" className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* 配置提示 */}
-        <div className="px-6 pb-4 space-y-1 text-center">
-          <p className="text-xs text-[var(--glass-text-secondary)]">
-            {t("storyInput.currentConfigSummary", {
-              ratio: ratioDisplayLabel,
-              style: artStyleDisplayLabel
-            })}
-          </p>
-          <p className="text-xs text-[var(--glass-text-tertiary)]">
-            {t("storyInput.moreConfig")}
-          </p>
-        </div>
+      <div className="relative z-10">
+        <StoryInputComposer
+          value={localText}
+          onValueChange={(value) => {
+            setLocalText(value)
+            if (!isComposingRef.current) {
+              onNovelTextChange(value)
+            }
+          }}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          placeholder={`请输入您的剧本或小说内容...\n\nAI 将根据您的文本智能分析：\n• 自动识别场景切换\n• 提取角色对话和动作\n• 生成分镜脚本\n\n例如：\n清晨，阳光透过窗帘洒进房间。小明揉着惺忪的睡眼从床上坐起，看了一眼床头的闹钟——已经八点了！他猛地跳下床，手忙脚乱地开始穿衣服...`}
+          minRows={PROJECT_STORY_INPUT_MIN_ROWS}
+          maxHeightViewportRatio={0.5}
+          disabled={isSubmittingTask || isSwitchingStage}
+          videoRatio={videoRatio}
+          onVideoRatioChange={(value) => onVideoRatioChange?.(value)}
+          ratioOptions={VIDEO_RATIOS.map((option) => ({
+            ...option,
+            recommended: option.value === '9:16'
+          }))}
+          getRatioUsage={getRatioUsageTag}
+          artStyle={artStyle}
+          onArtStyleChange={(value) => onArtStyleChange?.(value)}
+          styleOptions={ART_STYLES.map((option) => ({
+            ...option,
+            recommended: option.value === 'realistic'
+          }))}
+          stylePresetValue={stylePresetValue}
+          onStylePresetChange={setStylePresetValue}
+          stylePresetOptions={STYLE_PRESETS}
+          textareaClassName="px-0 pt-0 pb-3 align-top"
+          primaryAction={(
+            <button
+              onClick={handleStartClick}
+              disabled={!hasContent || isSubmittingTask || isSwitchingStage}
+              className="glass-btn-base glass-btn-primary h-10 flex-shrink-0 px-5 text-sm disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSwitchingStage ? (
+                <TaskStatusInline state={stageSwitchingState} className="text-white [&>span]:text-white [&_svg]:text-white" />
+              ) : (
+                <>
+                  <span>{t("smartImport.manualCreate.button")}</span>
+                  <AppIcon name="arrowRight" className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          )}
+          secondaryActions={(
+            <button
+              onClick={() => setAiWriteOpen(true)}
+              disabled={isSubmittingTask || isSwitchingStage}
+              className="glass-btn-base flex h-10 flex-shrink-0 items-center gap-1.5 border border-[var(--glass-stroke-strong)] px-3 text-sm transition-all hover:border-[var(--glass-tone-info-fg)]/40"
+            >
+              <AppIcon name="sparkles" className="w-4 h-4 text-[#7c3aed]" />
+              <span
+                className="font-medium"
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6, #7c3aed)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                {homeT('aiWrite.trigger')}
+              </span>
+            </button>
+          )}
+        />
       </div>
+      <AiWriteModal
+        open={aiWriteOpen}
+        loading={aiWriteLoading}
+        onClose={() => setAiWriteOpen(false)}
+        onStart={(prompt) => void handleAiWriteStart(prompt)}
+        t={(key: string) => homeT(`aiWrite.${key}`)}
+      />
 
       {/* 资产库引导提示 */}
       <div className="glass-surface p-4">
@@ -286,88 +286,29 @@ export default function NovelInputStage({
         </div>
       )}
 
-      {/* 长文本检测 — 智能分集强引导弹窗 */}
-      {showLongTextPrompt && (
-        <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="w-full max-w-lg mx-4 relative">
-            {/* 渐变描边外壳 */}
-            <div
-              className="rounded-2xl p-[1.5px]"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4)' }}
-            >
-              <div className="glass-surface-modal rounded-2xl p-6 space-y-5">
-                {/* 标题行 */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))' }}
-                  >
-                    <AppIcon name="sparkles" className="w-5 h-5 text-[#7c3aed]" />
-                  </div>
-                  <h3 className="text-lg font-bold text-[var(--glass-text-primary)]">
-                    {t('storyInput.longTextDetection.title')}
-                  </h3>
-                </div>
-
-                {/* 描述 */}
-                <p className="text-sm text-[var(--glass-text-secondary)] leading-relaxed">
-                  {t('storyInput.longTextDetection.description', { count: localText.trim().length.toLocaleString() })}
-                </p>
-
-                {/* 强烈推荐文案 */}
-                <div
-                  className="p-4 rounded-xl text-sm leading-relaxed"
-                  style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08))' }}
-                >
-                  <p
-                    className="font-semibold"
-                    style={{
-                      background: 'linear-gradient(135deg, #3b82f6, #7c3aed)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    {t('storyInput.longTextDetection.strongRecommend')}
-                  </p>
-                </div>
-
-                {/* 按钮区域 */}
-                <div className="flex flex-col gap-3 pt-1">
-                  {/* 智能分集 — 主按钮 */}
-                  <button
-                    onClick={() => {
-                      setShowLongTextPrompt(false)
-                      onSmartSplit?.(localText)
-                    }}
-                    className="w-full py-3.5 rounded-xl text-white font-semibold text-base flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98]"
-                    style={{ background: 'linear-gradient(135deg, #3b82f6, #7c3aed)' }}
-                  >
-                    <AppIcon name="sparkles" className="w-5 h-5" />
-                    <span>{t('storyInput.longTextDetection.smartSplit')}</span>
-                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                      {t('storyInput.longTextDetection.smartSplitRecommend')}
-                    </span>
-                  </button>
-
-                  {/* 直接创作 — 弱化按钮 */}
-                  <button
-                    onClick={() => {
-                      setShowLongTextPrompt(false)
-                      onNext()
-                    }}
-                    className="w-full py-2.5 text-sm text-[var(--glass-text-tertiary)] hover:text-[var(--glass-text-secondary)] transition-colors"
-                  >
-                    {t('storyInput.longTextDetection.continueAnyway')}
-                    <span className="text-xs ml-1 opacity-60">
-                      — {t('storyInput.longTextDetection.singleEpisodeWarning')}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <LongTextDetectionPrompt
+        open={showLongTextPrompt}
+        copy={{
+          title: t('storyInput.longTextDetection.title'),
+          description: t('storyInput.longTextDetection.description', {
+            count: localText.trim().length.toLocaleString(),
+          }),
+          strongRecommend: t('storyInput.longTextDetection.strongRecommend'),
+          smartSplitLabel: t('storyInput.longTextDetection.smartSplit'),
+          smartSplitBadge: t('storyInput.longTextDetection.smartSplitRecommend'),
+          continueLabel: t('storyInput.longTextDetection.continueAnyway'),
+          continueHint: t('storyInput.longTextDetection.singleEpisodeWarning'),
+        }}
+        onClose={() => setShowLongTextPrompt(false)}
+        onSmartSplit={() => {
+          setShowLongTextPrompt(false)
+          onSmartSplit?.(localText)
+        }}
+        onContinue={() => {
+          setShowLongTextPrompt(false)
+          onNext()
+        }}
+      />
     </div>
   )
 }

@@ -1,11 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { updateAssetRenderLabel } from '@/lib/assets/services/asset-label'
 
 /**
  * POST /api/asset-hub/update-asset-label
- * 更新资产中心图片上的黑边标识符（修改名字后调用）
+ * 资产中心不再支持图片黑边标识更新
  */
 export const POST = apiHandler(async (request: NextRequest) => {
     const authResult = await requireUserAuth()
@@ -21,15 +20,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     void appearanceIndex
 
-    if (type === 'character' || type === 'location') {
-        await updateAssetRenderLabel({
-            scope: 'global',
-            kind: type,
-            assetId: id,
-            newName,
-        })
-        return NextResponse.json({ success: true })
+    if (type !== 'character' && type !== 'location') {
+        throw new ApiError('INVALID_PARAMS')
     }
 
-    throw new ApiError('INVALID_PARAMS')
+    throw new ApiError('INVALID_PARAMS', {
+        code: 'GLOBAL_ASSET_LABEL_UPDATES_DISABLED',
+        message: 'Global asset images no longer support label updates',
+    })
 })

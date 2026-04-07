@@ -34,6 +34,7 @@ export async function persistLocationDescription(params: {
   locationId: string
   imageIndex: number
   modifiedDescription: string
+  availableSlots?: LocationAvailableSlot[]
 }) {
   const locationImage = await prisma.locationImage.findFirst({
     where: {
@@ -48,7 +49,10 @@ export async function persistLocationDescription(params: {
 
   await prisma.locationImage.update({
     where: { id: locationImage.id },
-    data: { description: params.modifiedDescription },
+    data: {
+      description: params.modifiedDescription,
+      ...(params.availableSlots ? { availableSlots: stringifyLocationAvailableSlots(params.availableSlots) } : {}),
+    },
   })
 
   return await prisma.novelPromotionLocation.findUnique({

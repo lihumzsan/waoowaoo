@@ -3,6 +3,7 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import {
   handleModifyAppearanceTask,
   handleModifyLocationTask,
+  handleModifyPropTask,
   handleModifyShotPromptTask,
   type AnyObj,
 } from './shot-ai-prompt'
@@ -15,6 +16,8 @@ export async function handleShotAITask(job: Job<TaskJobData>) {
       return await handleModifyAppearanceTask(job, payload)
     case TASK_TYPE.AI_MODIFY_LOCATION:
       return await handleModifyLocationTask(job, payload)
+    case TASK_TYPE.AI_MODIFY_PROP:
+      return await handleModifyPropTask(job, payload)
     case TASK_TYPE.AI_MODIFY_SHOT_PROMPT:
       return await handleModifyShotPromptTask(job, payload)
     case TASK_TYPE.ANALYZE_SHOT_VARIANTS:

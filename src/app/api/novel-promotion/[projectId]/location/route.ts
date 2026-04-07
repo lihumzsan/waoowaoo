@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { removeLocationPromptSuffix, isArtStyleValue, type ArtStyleValue } from '@/lib/constants'
+import {
+  normalizeLocationAvailableSlots,
+  stringifyLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 import { requireProjectAuth, requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -56,6 +60,7 @@ export const POST = apiHandler(async (
   const name = normalizeString(body.name)
   const description = normalizeString(body.description)
   const summary = normalizeString(body.summary)
+  const availableSlots = normalizeLocationAvailableSlots(body.availableSlots)
   const count = Object.prototype.hasOwnProperty.call(body, 'count')
     ? normalizeImageGenerationCount('location', body.count)
     : 1
@@ -91,6 +96,7 @@ export const POST = apiHandler(async (
       locationId: location.id,
       imageIndex,
       description: cleanDescription,
+      availableSlots: stringifyLocationAvailableSlots(availableSlots),
     })),
   })
 
@@ -141,7 +147,12 @@ export const PATCH = apiHandler(async (
       where: {
         locationId_imageIndex: { locationId, imageIndex }
       },
-      data: { description: cleanDescription }
+      data: {
+        description: cleanDescription,
+        ...(Object.prototype.hasOwnProperty.call(body, 'availableSlots')
+          ? { availableSlots: stringifyLocationAvailableSlots(normalizeLocationAvailableSlots(body.availableSlots)) }
+          : {}),
+      }
     })
     return NextResponse.json({ success: true, image })
   }

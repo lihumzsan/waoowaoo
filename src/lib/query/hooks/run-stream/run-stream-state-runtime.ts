@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunStreamEvent } from '@/lib/novel-promotion/run-stream/types'
 import { applyRunStreamEvent } from './state-machine'
-import { clearRunSnapshot, loadRunSnapshot, saveRunSnapshot } from './snapshot'
 import { subscribeRecoveredRun } from './recovered-run-subscription'
 import { executeRunRequest } from './run-request-executor'
 import { deriveRunStreamView } from './run-stream-view'
 import type { RunResult, RunState, RunStreamView, UseRunStreamStateOptions } from './types'
 import { apiFetch } from '@/lib/api-fetch'
+import { startRecoveryProbe } from './recovery-probe'
 
 export type {
   RunResult,
@@ -18,8 +18,6 @@ export type {
 } from './types'
 
 const TASK_STREAM_TIMEOUT_MS = 1000 * 60 * 30
-const PROBE_COOLDOWN_MS = 60_000
-const probedScopes = new Map<string, number>()
 
 export function useRunStreamState<TParams extends Record<string, unknown>>(
   options: UseRunStreamStateOptions<TParams>,
@@ -40,7 +38,6 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
   const [isRecoveredRunning, setIsRecoveredRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const finalResultRef = useRef<RunResult | null>(null)
-  const hydratedStorageKeyRef = useRef<string | null>(null)
   const resolveActiveRunIdRef = useRef(resolveActiveRunId)
   const storageKey = useMemo(() => {
     if (storageScopeKey) {
@@ -62,59 +59,39 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
   }, [resolveActiveRunId])
 
   useEffect(() => {
-    if (!projectId) return
-    if (hydratedStorageKeyRef.current === storageKey) return
-    hydratedStorageKeyRef.current = storageKey
-    const snapshotRunState = loadRunSnapshot(storageKey)
-    if (!snapshotRunState) return
-    setRunState(snapshotRunState)
-    if (snapshotRunState.status === 'running') {
-      setIsRecoveredRunning(true)
-    }
-  }, [projectId, storageKey])
-
-  useEffect(() => {
     if (!projectId || !resolveActiveRunIdRef.current) return
 
-    const lastProbed = probedScopes.get(storageKey)
-    if (lastProbed && Date.now() - lastProbed < PROBE_COOLDOWN_MS) return
-    probedScopes.set(storageKey, Date.now())
-
     if (runStateRef.current) return
-    const existingSnapshot = loadRunSnapshot(storageKey)
-    if (existingSnapshot) return
 
-    let cancelled = false
-    void (async () => {
-      const activeRunId = await resolveActiveRunIdRef.current?.({
-        projectId,
-        storageScopeKey,
-      }).catch(() => null)
-      if (cancelled || !activeRunId) return
-      const now = Date.now()
-      setRunState((prev) => {
-        if (prev) return prev
-        return {
-          runId: activeRunId,
-          status: 'running',
-          startedAt: now,
-          updatedAt: now,
-          terminalAt: null,
-          errorMessage: '',
-          summary: null,
-          payload: null,
-          stepsById: {},
-          stepOrder: [],
-          activeStepId: null,
-          selectedStepId: null,
-        }
-      })
-      setIsRecoveredRunning(true)
-    })()
-
-    return () => {
-      cancelled = true
-    }
+    return startRecoveryProbe({
+      projectId,
+      storageKey,
+      storageScopeKey,
+      hasRunState: () => runStateRef.current !== null,
+      resolveActiveRunId: (context) =>
+        resolveActiveRunIdRef.current?.(context) ?? Promise.resolve(null),
+      onRecovered: (activeRunId) => {
+        const now = Date.now()
+        setRunState((prev) => {
+          if (prev) return prev
+          return {
+            runId: activeRunId,
+            status: 'running',
+            startedAt: now,
+            updatedAt: now,
+            terminalAt: null,
+            errorMessage: '',
+            summary: null,
+            payload: null,
+            stepsById: {},
+            stepOrder: [],
+            activeStepId: null,
+            selectedStepId: null,
+          }
+        })
+        setIsRecoveredRunning(true)
+      },
+    })
   }, [projectId, storageKey, storageScopeKey])
 
   useEffect(() => {
@@ -149,11 +126,6 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
       setIsRecoveredRunning(false)
     }
   }, [isRecoveredRunning, runState, runState?.status])
-
-  useEffect(() => {
-    if (!projectId) return
-    saveRunSnapshot(storageKey, runState)
-  }, [projectId, runState, storageKey])
 
   const run = useCallback(
     async (params: TParams): Promise<RunResult> => {
@@ -270,8 +242,7 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
     setRunState(null)
     finalResultRef.current = null
     setIsRecoveredRunning(false)
-    clearRunSnapshot(storageKey)
-  }, [storageKey, stop])
+  }, [stop])
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 500)

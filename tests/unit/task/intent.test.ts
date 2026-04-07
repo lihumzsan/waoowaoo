@@ -7,6 +7,7 @@ describe('resolveTaskIntent', () => {
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_CHARACTER)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_LOCATION)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.VIDEO_PANEL)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.AI_STORY_EXPAND)).toBe('generate')
   })
 
   it('maps regenerate and modify task types', () => {

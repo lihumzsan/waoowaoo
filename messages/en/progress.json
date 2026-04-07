@@ -65,8 +65,10 @@
     "screenplayConvert": "Screenplay conversion",
     "voiceAnalyze": "Voice line analysis",
     "analyzeGlobal": "Global analysis",
+    "aiStoryExpand": "AI story expansion",
     "aiModifyAppearance": "Character description modify",
     "aiModifyLocation": "Location description modify",
+    "aiModifyProp": "Prop description modify",
     "aiModifyShotPrompt": "Shot prompt modify",
     "analyzeShotVariants": "Shot variant analysis",
     "aiCreateCharacter": "Project character design",
@@ -79,6 +81,7 @@
     "assetHubAiDesignLocation": "Asset hub location design",
     "assetHubAiModifyCharacter": "Asset hub character modify",
     "assetHubAiModifyLocation": "Asset hub location modify",
+    "assetHubAiModifyProp": "Asset hub prop modify",
     "assetHubReferenceToCharacter": "Asset hub reference to character"
   },
   "stage": {
@@ -104,6 +107,8 @@
     "scriptToStoryboardStep": "Execute script-to-storyboard step",
     "scriptToStoryboardPersist": "Persist script-to-storyboard output",
     "scriptToStoryboardPersistDone": "Storyboard and voice output persisted",
+    "aiStoryExpandPrepare": "Prepare AI story expansion",
+    "aiStoryExpandDone": "AI story expansion completed",
     "insertPanelGenerateText": "Generate inserted panel text",
     "insertPanelPersist": "Persist inserted panel",
     "pollingExternal": "Waiting for external service",

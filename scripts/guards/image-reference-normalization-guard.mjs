@@ -13,7 +13,8 @@ export const NORMALIZATION_HELPER_ALLOWLIST = new Set([
 const ACCEPTED_NORMALIZATION_MARKERS = [
   /\bnormalizeReferenceImagesForGeneration\s*\(/,
   /\bnormalizeToBase64ForGeneration\s*\(/,
-  /\bgenerateLabeledImageToCos\s*\(/,
+  /\bgenerateProjectLabeledImageToStorage\s*\(/,
+  /\bgenerateCleanImageToStorage\s*\(/,
 ]
 
 function fail(title, details = []) {
@@ -56,7 +57,7 @@ export function inspectImageReferenceNormalization(relPath, content) {
   if (!usesGenerationReferenceImages(content)) return []
   if (hasNormalizationMarker(content)) return []
   return [
-    `${relPath} uses resolveImageSourceFromGeneration with referenceImages but does not reference normalizeReferenceImagesForGeneration/normalizeToBase64ForGeneration/generateLabeledImageToCos`,
+    `${relPath} uses resolveImageSourceFromGeneration with referenceImages but does not reference normalizeReferenceImagesForGeneration/normalizeToBase64ForGeneration/generateProjectLabeledImageToStorage/generateCleanImageToStorage`,
   ]
 }
 

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { canGenerateLocationBackedAsset, resolveLocationBackedGenerateType } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/assets/location-backed-asset'
 
 describe('location-backed asset generation rules', () => {
-  it('allows props to generate from summary even before any image slot exists', () => {
+  it('requires props to have a visual description before generation', () => {
     expect(canGenerateLocationBackedAsset({
       id: 'prop-1',
       name: '金箍棒',
       summary: '一根两头包裹金片的黑铁长棍',
       images: [],
-    })).toBe(true)
+    }, 'prop')).toBe(false)
   })
 
   it('allows locations to generate from seeded image descriptions', () => {
@@ -27,7 +27,7 @@ describe('location-backed asset generation rules', () => {
           isSelected: false,
         },
       ],
-    })).toBe(true)
+    }, 'location')).toBe(true)
   })
 
   it('routes prop generation through the prop branch', () => {

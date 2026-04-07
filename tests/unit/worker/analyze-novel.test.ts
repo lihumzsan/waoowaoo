@@ -33,10 +33,15 @@ vi.mock('@/lib/llm-client', () => llmMock)
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
   withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),
 }))
-vi.mock('@/lib/constants', () => ({
-  getArtStylePrompt: vi.fn(() => 'cinematic style'),
-  removeLocationPromptSuffix: vi.fn((text: string) => text.replace(' [SUFFIX]', '')),
-}))
+vi.mock('@/lib/constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/constants')>()
+  return {
+    ...actual,
+    getArtStylePrompt: vi.fn(() => 'cinematic style'),
+    removeLocationPromptSuffix: vi.fn((text: string) => text.replace(' [SUFFIX]', '')),
+    removePropPromptSuffix: vi.fn((text: string) => text),
+  }
+})
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: workerMock.reportTaskProgress }))
 vi.mock('@/lib/workers/utils', () => ({ assertTaskActive: workerMock.assertTaskActive }))
 vi.mock('@/lib/workers/handlers/llm-stream', () => ({
@@ -86,7 +91,6 @@ describe('worker analyze-novel behavior', () => {
       .mockResolvedValueOnce({ id: 'prop-new-1' })
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
-      mode: 'novel-promotion',
     })
 
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
@@ -127,7 +131,8 @@ describe('worker analyze-novel behavior', () => {
         props: [
           {
             name: '金箍棒',
-            summary: '一根两头包裹金片的黑铁长棍',
+            summary: '孙悟空随身铁棍法器',
+            description: '一根黑铁长棍，两端包裹金色金属箍，表面磨损发亮，杆身笔直厚重',
           },
         ],
       }))
@@ -187,6 +192,7 @@ describe('worker analyze-novel behavior', () => {
           locationId: 'loc-new-1',
           imageIndex: 0,
           description: '雨夜街道',
+          availableSlots: '[]',
         },
       ],
     })
@@ -195,7 +201,8 @@ describe('worker analyze-novel behavior', () => {
         {
           locationId: 'prop-new-1',
           imageIndex: 0,
-          description: '一根两头包裹金片的黑铁长棍',
+          description: '一根黑铁长棍，两端包裹金色金属箍，表面磨损发亮，杆身笔直厚重',
+          availableSlots: '[]',
         },
       ],
     })

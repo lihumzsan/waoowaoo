@@ -24,6 +24,8 @@ import {
   resolveDisplayImageSlots,
 } from '@/lib/image-generation/slot-state'
 import { AppIcon } from '@/components/ui/icons'
+import { AI_EDIT_BUTTON_CLASS, AI_EDIT_ICON_CLASS } from '@/components/ui/ai-edit-style'
+import AISparklesIcon from '@/components/ui/icons/AISparklesIcon'
 
 interface LocationImage {
   id: string
@@ -50,7 +52,7 @@ interface LocationCardProps {
   location: Location
   assetType?: 'location' | 'prop'
   onImageClick?: (url: string) => void
-  onImageEdit?: (type: 'character' | 'location', id: string, name: string, imageIndex: number) => void
+  onImageEdit?: (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number) => void
   onEdit?: (location: Location, imageIndex: number) => void
 }
 
@@ -94,10 +96,11 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const isTaskRunning = serverTaskRunning || transientSubmitting
   const displaySelectionImages = resolveDisplayImageSlots(orderedImages, {
     hasRunningTask: isTaskRunning,
-    requestedCount: generationCount,
+    requestedCount: generatedImageCount > 1 ? generatedImageCount : generationCount,
   })
   const displaySlotCount = displaySelectionImages.length
   const hasMultipleImages = generatedImageCount > 1
+  const singleImageAspectClassName = assetType === 'prop' ? 'aspect-[3/2]' : 'aspect-square'
   const displayTaskPresentation = isTaskRunning
     ? resolveTaskPresentationState({
       phase: 'processing',
@@ -226,19 +229,24 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
           <div className="flex items-center gap-1 ml-2">
             <ImageGenerationInlineCountButton
               prefix={isTaskRunning ? (
-                <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+                <>
+                  <TaskStatusInline state={displayTaskPresentation} className="[&_span]:sr-only [&_svg]:text-[var(--glass-tone-info-fg)]" />
+                  <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)]">{tAssets('image.regenCountPrefix')}</span>
+                </>
               ) : (
-                <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
+                <>
+                  <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
+                  <span className="text-[10px] font-medium text-[var(--glass-tone-info-fg)]">{tAssets('image.regenCountPrefix')}</span>
+                </>
               )}
-              suffix={null}
               value={generationCount}
               options={getImageGenerationCountOptions('location')}
               onValueChange={setGenerationCount}
-              onClick={() => handleGenerate(generationCount)}
+              onClick={() => handleGenerate(generatedImageCount)}
               disabled={isTaskRunning}
-              ariaLabel={tAssets('image.selectCount')}
-              className="inline-flex h-6 items-center gap-0.5 rounded px-1 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
-              selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-[10px] font-semibold text-[var(--glass-tone-info-fg)] outline-none cursor-pointer leading-none transition-colors"
+              showCountControl={false}
+              ariaLabel={tAssets('image.regenCountPrefix')}
+              className="inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
             />
             {hasPreviousVersion && (
               <button onClick={handleUndo} className="glass-btn-base glass-btn-soft h-6 w-6 rounded-md" title={tAssets('image.undo')}>
@@ -375,14 +383,14 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
 
       {/* 图片区域 */}
-      <div className="relative bg-[var(--glass-bg-muted)] min-h-[100px]">
+      <div className={`relative bg-[var(--glass-bg-muted)] ${singleImageAspectClassName}`}>
         {displayImageUrl ? (
           <>
             <MediaImageWithLoading
               src={displayImageUrl}
               alt={location.name}
-              containerClassName="w-full min-h-[120px]"
-              className="w-full h-auto object-contain cursor-zoom-in"
+              containerClassName="h-full w-full"
+              className="h-full w-full object-contain cursor-zoom-in"
               onClick={() => onImageClick?.(displayImageUrl)}
             />
             {/* 操作按钮 - 非生成时显示 */}
@@ -391,8 +399,11 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
                 <button onClick={() => fileInputRef.current?.click()} disabled={uploadImage.isPending} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                   <AppIcon name="upload" className="w-4 h-4 text-[var(--glass-tone-success-fg)]" />
                 </button>
-                      <button onClick={() => onImageEdit?.('location', location.id, location.name, currentImageIndex)} className="glass-btn-base glass-btn-tone-info h-7 w-7 rounded-full">
-                        <AppIcon name="edit" className="w-4 h-4" />
+                      <button
+                        onClick={() => onImageEdit?.(assetType === 'prop' ? 'prop' : 'location', location.id, location.name, currentImageIndex)}
+                        className={`h-7 w-7 rounded-full flex items-center justify-center transition-all active:scale-95 ${AI_EDIT_BUTTON_CLASS}`}
+                      >
+                        <AISparklesIcon className={`w-4 h-4 ${AI_EDIT_ICON_CLASS}`} />
                       </button>
                 <button onClick={() => handleGenerate()} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                   <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
@@ -406,8 +417,8 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
             )}
           </>
         ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-[var(--glass-text-tertiary)]">
-                <AppIcon name="globe2" className="w-12 h-12 mb-3" />
+            <div className="flex h-full flex-col items-center justify-center px-4 py-6 text-[var(--glass-text-tertiary)]">
+                <AppIcon name="image" className="w-12 h-12 mb-3" />
             <ImageGenerationInlineCountButton
               prefix={<span>{tAssets('image.generateCountPrefix')}</span>}
               suffix={<span>{tAssets('image.generateCountSuffix')}</span>}

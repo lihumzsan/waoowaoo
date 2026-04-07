@@ -23,7 +23,7 @@ Output format (single JSON object only):
 {
   "panel_number": 0,
   "description": "visual description",
-  "characters": [{ "name": "Character Name", "appearance": "appearance name" }],
+  "characters": [{ "name": "Character Name", "appearance": "appearance name", "slot": "the position beneath the throne steps at the center of the hall" }],
   "location": "location name",
   "scene_type": "daily",
   "source_text": "source text or transition shot",
@@ -37,5 +37,8 @@ Rules:
 1. Return one object only (not array).
 2. Keep narrative and spatial continuity between previous and next panel.
 3. Use valid character and location names from provided context.
-4. JSON only, no markdown.
-5. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+4. If location details include available slots, treat them as preferred anchors. Reuse a provided `slot` for characters who are stably positioned in the scene.
+5. You may omit `slot` when the inserted panel is mainly about movement, entry/exit, path traversal, transition space, temporary space, empty space, imagination, dream, memory, or abstract/non-literal space.
+6. If `slot` is used, it must copy one full placement phrase from the available slots list verbatim. Do not shorten or rename it.
+7. JSON only, no markdown.
+8. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.

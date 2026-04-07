@@ -515,6 +515,50 @@
   {
     "apiType": "video",
     "provider": "ark",
+    "modelId": "doubao-seedance-2-0-260128",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "containsVideoInput": false
+          },
+          "amount": 46
+        },
+        {
+          "when": {
+            "containsVideoInput": true
+          },
+          "amount": 28
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "ark",
+    "modelId": "doubao-seedance-2-0-fast-260128",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "containsVideoInput": false
+          },
+          "amount": 37
+        },
+        {
+          "when": {
+            "containsVideoInput": true
+          },
+          "amount": 22
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "ark",
     "modelId": "doubao-seedance-1-0-pro-fast-251015",
     "pricing": {
       "mode": "capability",

@@ -34,6 +34,7 @@ export function PropCreationModal({
   const { count, setCount } = useImageGenerationCount('location')
   const [name, setName] = useState('')
   const [summary, setSummary] = useState('')
+  const [description, setDescription] = useState('')
   const [artStyle, setArtStyle] = useState('american-comic')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingState = isSubmitting
@@ -56,12 +57,13 @@ export function PropCreationModal({
   }, [isSubmitting, onClose])
 
   const handleSubmit = async (generateAfterCreate: boolean) => {
-    if (!name.trim() || !summary.trim()) return
+    if (!name.trim() || !summary.trim() || !description.trim()) return
     try {
       setIsSubmitting(true)
       const result = await actions.create({
         name: name.trim(),
         summary: summary.trim(),
+        description: description.trim(),
         folderId,
         artStyle,
       }) as { assetId?: string }
@@ -112,14 +114,26 @@ export function PropCreationModal({
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="glass-field-label block">
-                {t('prop.summary')} <span className="text-[var(--glass-tone-danger-fg)]">*</span>
+          <div className="space-y-2">
+            <label className="glass-field-label block">
+              {t('prop.summary')} <span className="text-[var(--glass-tone-danger-fg)]">*</span>
               </label>
               <textarea
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
                 placeholder={t('prop.summaryPlaceholder')}
+                className="glass-textarea-base w-full h-36 px-3 py-2 text-sm resize-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="glass-field-label block">
+                {t('prop.description')} <span className="text-[var(--glass-tone-danger-fg)]">*</span>
+              </label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder={t('prop.descriptionPlaceholder')}
                 className="glass-textarea-base w-full h-36 px-3 py-2 text-sm resize-none"
               />
             </div>
@@ -136,7 +150,7 @@ export function PropCreationModal({
           </button>
           <button
             onClick={() => void handleSubmit(false)}
-            disabled={isSubmitting || !name.trim() || !summary.trim()}
+            disabled={isSubmitting || !name.trim() || !summary.trim() || !description.trim()}
             className="glass-btn-base glass-btn-secondary px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2"
           >
             {isSubmitting ? (
@@ -152,7 +166,7 @@ export function PropCreationModal({
             options={getImageGenerationCountOptions('location')}
             onValueChange={setCount}
             onClick={() => void handleSubmit(true)}
-            actionDisabled={!name.trim() || !summary.trim()}
+            actionDisabled={!name.trim() || !summary.trim() || !description.trim()}
             selectDisabled={isSubmitting}
             ariaLabel={t('common.selectGenerateCount')}
             className="glass-btn-base glass-btn-primary flex items-center justify-center gap-1 rounded-lg px-4 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"

@@ -55,8 +55,10 @@
         "title": "新建道具",
         "name": "道具名称",
         "namePlaceholder": "请输入道具名称",
-        "summary": "道具描述",
-        "summaryPlaceholder": "请输入道具描述..."
+        "summary": "简要说明",
+        "summaryPlaceholder": "一句话说明这是什么道具，不写剧情用途...",
+        "description": "图片描述",
+        "descriptionPlaceholder": "只写道具本体的材质、颜色、结构和装饰细节..."
     },
     "artStyle": {
         "title": "画面风格"

@@ -1,17 +1,19 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { addCharacterPromptSuffix, addLocationPromptSuffix, getArtStylePrompt } from '@/lib/constants'
+import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, addCharacterPromptSuffix, addLocationPromptSuffix, addPropPromptSuffix, getArtStylePrompt } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
+import { buildLocationImagePromptCore } from '@/lib/location-image-prompt'
+import { buildPropImagePromptCore } from '@/lib/prop-image-prompt'
 import {
   assertTaskActive,
   getUserModels,
 } from '../utils'
 import {
   AnyObj,
-  generateLabeledImageToCos,
+  generateCleanImageToStorage,
   parseJsonStringArray,
 } from './image-task-handler-shared'
 
@@ -32,6 +34,7 @@ interface GlobalCharacterRecord {
 interface GlobalLocationImageRecord {
   id: string
   description: string | null
+  availableSlots?: string | null
 }
 
 interface GlobalLocationRecord {
@@ -91,19 +94,18 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
     for (let i = 0; i < count; i++) {
       const raw = base[i] || base[0]
       const prompt = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
-      const cosKey = await generateLabeledImageToCos({
+      const imageKey = await generateCleanImageToStorage({
         job,
         userId,
         modelId,
         prompt,
-        label: `${character.name} - ${appearance.changeReason || '形象'}`,
         targetId: `${appearance.id}-${i}`,
         keyPrefix: 'global-character',
         options: {
-          aspectRatio: '3:2',
+          aspectRatio: CHARACTER_ASSET_IMAGE_RATIO,
         },
       })
-      imageUrls.push(cosKey)
+      imageUrls.push(imageKey)
     }
 
     await assertTaskActive(job, 'persist_global_character_image')
@@ -119,7 +121,7 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
     return { type: payload.type, appearanceId: appearance.id, imageCount: imageUrls.length }
   }
 
-  if (payload.type === 'location') {
+  if (payload.type === 'location' || payload.type === 'prop') {
     const locationId = typeof payload.id === 'string' ? payload.id : null
     if (!locationId) throw new Error('Global location id missing')
 
@@ -140,25 +142,37 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
 
     for (const image of targetImages) {
       if (!image.description) continue
-      const prompt = artStyle ? `${addLocationPromptSuffix(image.description)}，${artStyle}` : addLocationPromptSuffix(image.description)
+      const promptCore = payload.type === 'prop'
+        ? buildPropImagePromptCore({
+          description: image.description,
+        })
+        : buildLocationImagePromptCore({
+          description: image.description,
+          availableSlotsRaw: image.availableSlots,
+          locale: job.data.locale === 'en' ? 'en' : 'zh',
+        })
+      const promptWithSuffix = payload.type === 'prop'
+        ? addPropPromptSuffix(promptCore)
+        : addLocationPromptSuffix(promptCore)
+      const prompt = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+      const aspectRatio = payload.type === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
 
-      const cosKey = await generateLabeledImageToCos({
+      const imageKey = await generateCleanImageToStorage({
         job,
         userId,
         modelId,
         prompt,
-        label: location.name,
         targetId: image.id,
         keyPrefix: 'global-location',
         options: {
-          aspectRatio: '1:1',
+          aspectRatio,
         },
       })
 
       await assertTaskActive(job, 'persist_global_location_image')
       await db.globalLocationImage.update({
         where: { id: image.id },
-        data: { imageUrl: cosKey },
+        data: { imageUrl: imageKey },
       })
     }
 

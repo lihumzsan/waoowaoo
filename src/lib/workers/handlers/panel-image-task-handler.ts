@@ -21,6 +21,9 @@ import {
   resolveNovelData,
 } from './image-task-handler-shared'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
+import {
+  parseLocationAvailableSlots,
+} from '@/lib/location-available-slots'
 
 function parseJsonUnknown(raw: string | null | undefined): unknown | null {
   if (!raw) return null
@@ -97,6 +100,7 @@ function buildPanelPromptContext(params: {
       name: character.name,
       appearance: matchedAppearance?.changeReason || null,
       description: matchedAppearance ? pickAppearanceDescription(matchedAppearance) : '无角色外貌数据',
+      slot: reference.slot || null,
     }
   })
 
@@ -110,6 +114,7 @@ function buildPanelPromptContext(params: {
     return {
       name: matchedLocation.name,
       description: selectedImage?.description || null,
+      available_slots: parseLocationAvailableSlots(selectedImage?.availableSlots),
     }
   })()
 

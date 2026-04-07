@@ -64,13 +64,13 @@ export function useStoryboardAiDataRuntime({
     const panelData = getPanelEditData(panel)
     const photographyRules = parseJsonSafely(panel.photographyRules, 'photographyRules')
     const actingNotes = parseJsonSafely(panel.actingNotes, 'actingNotes')
-    const characterNames = panelData.characters.map((character) => character.name)
+    const characters = panelData.characters.map((character) => ({ ...character }))
 
     return {
       panelData,
       panel,
       storyboardId: storyboard.id,
-      characterNames,
+      characters,
       photographyRules,
       actingNotes,
     }

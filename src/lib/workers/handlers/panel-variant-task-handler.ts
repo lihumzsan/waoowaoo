@@ -12,6 +12,10 @@ import {
 } from '../utils'
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
 import {
+  formatLocationAvailableSlotsText,
+  parseLocationAvailableSlots,
+} from '@/lib/location-available-slots'
+import {
   AnyObj,
   findCharacterByName,
   parseImageUrls,
@@ -75,7 +79,8 @@ function buildCharactersInfo(
     const character = findCharacterByName(projectData.characters || [], item.name)
     const intro = character?.introduction || ''
     const appearance = item.appearance || '默认形象'
-    return `- ${item.name}（${appearance}）${intro ? `：${intro}` : ''}`
+    const slotText = item.slot ? `，固定位置：${item.slot}` : ''
+    return `- ${item.name}（${appearance}${slotText}）${intro ? `：${intro}` : ''}`
   }).join('\n')
 }
 
@@ -98,9 +103,28 @@ function buildLocationAssetDescription(params: {
   includeLocationAsset: boolean
   locationName: string
   locale: TaskJobData['locale']
+  projectData: Awaited<ReturnType<typeof resolveNovelData>>
 }): string {
   if (params.locationName) {
-    if (params.includeLocationAsset) return `场景：${params.locationName}`
+    if (params.includeLocationAsset) {
+      const location = (params.projectData.locations || []).find(
+        (item) => item.name.toLowerCase() === params.locationName.toLowerCase(),
+      )
+      const selectedImage = location?.images?.find((image) => image.isSelected) ?? location?.images?.[0]
+      const description = selectedImage?.description?.trim()
+      const slotsText = formatLocationAvailableSlotsText(
+        parseLocationAvailableSlots(selectedImage?.availableSlots),
+        params.locale,
+      )
+      const parts = [
+        params.locale === 'en' ? `Location: ${params.locationName}` : `场景：${params.locationName}`,
+      ]
+      if (description) {
+        parts.push(params.locale === 'en' ? `Scene description: ${description}` : `场景描述：${description}`)
+      }
+      if (slotsText) parts.push(slotsText)
+      return parts.join('\n')
+    }
     return params.locale === 'en' ? 'Location reference disabled' : '未使用场景参考图'
   }
   return params.locale === 'en' ? 'No location reference' : '无场景参考'
@@ -235,6 +259,7 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
       includeLocationAsset,
       locationName,
       locale: job.data.locale,
+      projectData,
     }),
     aspectRatio,
     style: artStyle || '与参考图风格一致',

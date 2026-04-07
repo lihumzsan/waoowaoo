@@ -70,6 +70,7 @@ export type ClipStoryboardPanels = {
 
 export type ScriptToStoryboardOrchestratorInput = {
   concurrency?: number
+  locale?: 'zh' | 'en'
   clips: ClipInput[]
   novelPromotionData: {
     characters: CharacterAsset[]
@@ -303,20 +304,26 @@ export async function runScriptToStoryboardOrchestrator(
   const phase2ActingByClipId = new Map<string, ActingDirection[]>()
   const phase3PanelsByClipId = new Map<string, StoryboardPanel[]>()
 
-  const phase1Results = await mapWithConcurrency(
+  const clipPanels = await mapWithConcurrency(
     clips,
     concurrency,
-    async (clip, i) => {
-      const clipIndex = i + 1
+    async (clip, index): Promise<ClipStoryboardPanels> => {
+      const clipIndex = index + 1
       const clipContent = typeof clip.content === 'string' ? clip.content.trim() : ''
       if (!clipContent) {
         throw new Error(`Clip ${formatClipId(clip)} content is empty`)
       }
       const clipCharacters = parseClipCharacters(clip.characters)
+      const clipLocation = clip.location || null
       const clipProps = parseClipProps(clip.props ?? null)
       const filteredAppearanceList = getFilteredAppearanceList(novelPromotionData.characters || [], clipCharacters)
       const filteredFullDescription = getFilteredFullDescription(novelPromotionData.characters || [], clipCharacters)
-      const filteredPropDescription = compileAssetPromptFragments(buildPromptAssetContext({
+      const filteredLocationsDescription = getFilteredLocationsDescription(
+        novelPromotionData.locations || [],
+        clipLocation,
+        input.locale ?? 'zh',
+      )
+      const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
         characters: [],
         locations: [],
         props: novelPromotionData.props || [],
@@ -342,7 +349,7 @@ export async function runScriptToStoryboardOrchestrator(
         .replace('{characters_introduction}', charactersIntroduction)
         .replace('{characters_appearance_list}', filteredAppearanceList)
         .replace('{characters_full_description}', filteredFullDescription)
-        .replace('{props_description}', filteredPropDescription)
+        .replace('{props_description}', filteredPropsDescription)
         .replace('{clip_json}', clipJson)
 
       const screenplay = parseScreenplay(clip.screenplay)
@@ -373,44 +380,7 @@ export async function runScriptToStoryboardOrchestrator(
           return panels
         },
       )
-
-      return {
-        clipId: clip.id,
-        planPanels,
-      }
-    },
-  )
-
-  for (const result of phase1Results) {
-    phase1PanelsByClipId.set(result.clipId, result.planPanels)
-  }
-
-  const clipPanels = await mapWithConcurrency(
-    clips,
-    concurrency,
-    async (clip, index): Promise<ClipStoryboardPanels> => {
-      const clipIndex = index + 1
-      const clipCharacters = parseClipCharacters(clip.characters)
-      const clipLocation = clip.location || null
-      const clipProps = parseClipProps(clip.props ?? null)
-      const planPanels = phase1PanelsByClipId.get(clip.id) || []
-      if (planPanels.length === 0) {
-        throw new Error(`Missing phase1 result for clip ${formatClipId(clip)}`)
-      }
-
-      const filteredFullDescription = getFilteredFullDescription(novelPromotionData.characters || [], clipCharacters)
-      const filteredLocationsDescription = getFilteredLocationsDescription(
-        novelPromotionData.locations || [],
-        clipLocation,
-      )
-      const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
-        characters: [],
-        locations: [],
-        props: novelPromotionData.props || [],
-        clipCharacters: [],
-        clipLocation: null,
-        clipProps,
-      })).propsDescriptionText
+      phase1PanelsByClipId.set(clip.id, planPanels)
 
       const phase2Meta = withStepMeta(
         `clip_${clip.id}_phase2_cinematography`,

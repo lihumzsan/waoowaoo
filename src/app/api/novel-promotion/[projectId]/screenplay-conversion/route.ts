@@ -22,11 +22,7 @@ export const POST = apiHandler(async (
 
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
-  const { session, project } = authResult
-
-  if (project.mode !== 'novel-promotion') {
-    throw new ApiError('INVALID_PARAMS')
-  }
+  const { session } = authResult
 
   const asyncTaskResponse = await maybeSubmitLLMTask({
     request,

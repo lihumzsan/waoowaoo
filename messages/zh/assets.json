@@ -58,7 +58,7 @@
         "characterCount": "{count} 个角色",
         "updateFailed": "更新描述失败",
         "addFailed": "添加角色失败",
-        "copyFromGlobal": "从资产中心复制"
+        "copyFromGlobal": "从资产中心导入"
     },
     "location": {
         "add": "添加场景",
@@ -82,8 +82,10 @@
         "deleteConfirm": "确定要删除这个道具吗？",
         "deleteFailed": "删除失败: {error}",
         "name": "道具名",
-        "summary": "简要描述",
-        "summaryPlaceholder": "描述这个道具",
+        "summary": "简要说明",
+        "summaryPlaceholder": "一句话说明这是什么道具，不写剧情用途",
+        "description": "图片描述",
+        "descriptionPlaceholder": "只写道具本体的材质、颜色、结构和装饰细节",
         "regenerateImage": "重新生成",
         "addFailed": "添加道具失败"
     },
@@ -171,8 +173,10 @@
         "scenePrompt": "场景描述提示词",
         "appearancePrompt": "形象描述提示词",
         "smartModify": "智能修改",
+        "modifyDescription": "AI修改描述",
         "modifyPlaceholder": "例如：改成夜晚，添加月光，增加窗帘...",
         "modifyPlaceholderCharacter": "例如：把头发改成金色、身高改为180cm、穿黑色西装...",
+        "modifyPlaceholderProp": "例如：改成磨砂银质、手柄增加雕花、去掉红宝石装饰...",
         "modifying": "智能修改中...",
         "modifyFailed": "修改失败",
         "editCharacter": "编辑角色",
@@ -344,12 +348,15 @@
     "imageEdit": {
         "editCharacterImage": "编辑人物图片",
         "editLocationImage": "编辑场景图片",
+        "editPropImage": "编辑道具图片",
         "characterLabel": "人物: {name}",
         "locationLabel": "场景: {name}",
+        "propLabel": "道具: {name}",
         "editInstruction": "修改指令",
         "subtitle": "输入修改指令，可选择上传参考图片",
         "characterPlaceholder": "描述你想要修改的内容，例如：把头发改成金色、添加眼镜、换成休闲装...",
         "locationPlaceholder": "描述你想要修改的内容，例如：添加更多树木、改成夜晚场景...",
+        "propPlaceholder": "描述你想要修改的内容，例如：改成银色金属材质、刀柄增加雕纹、去掉宝石装饰...",
         "storyboardPlaceholder": "描述你想要修改的内容，例如：改变背景颜色、调整人物表情...",
         "noAssetHint": "暂无资产，点击\"添加资产\"选择",
         "referenceImages": "参考图片",

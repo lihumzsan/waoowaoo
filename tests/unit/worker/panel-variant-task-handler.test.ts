@@ -30,7 +30,16 @@ const sharedMock = vi.hoisted(() => ({
         imageUrl: 'cos/hero-default.png',
       }],
     }],
-    locations: [{ name: 'Old Town', images: [] }],
+    locations: [{
+      name: 'Old Town',
+      images: [{
+        isSelected: true,
+        description: '老街中央留出明确人物站位',
+        availableSlots: JSON.stringify([
+          '街道左侧靠墙的留白位置',
+        ]),
+      }],
+    }],
   })),
 }))
 
@@ -63,12 +72,15 @@ vi.mock('@/lib/prompt-i18n', () => ({
 
 import { handlePanelVariantTask } from '@/lib/workers/handlers/panel-variant-task-handler'
 
-function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
+function buildJob(
+  payload: Record<string, unknown>,
+  locale: TaskJobData['locale'] = 'zh',
+): Job<TaskJobData> {
   return {
     data: {
       taskId: 'task-panel-variant-1',
       type: TASK_TYPE.PANEL_VARIANT,
-      locale: 'zh',
+      locale,
       projectId: 'project-1',
       episodeId: 'episode-1',
       targetType: 'NovelPromotionPanel',
@@ -90,7 +102,7 @@ describe('worker panel-variant-task-handler behavior', () => {
           storyboardId: 'storyboard-1',
           imageUrl: null,
           location: 'Old Town',
-          characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+          characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: '街道左侧靠墙的留白位置' }]),
         }
       }
       if (args.where.id === 'panel-source') {
@@ -145,6 +157,12 @@ describe('worker panel-variant-task-handler behavior', () => {
       where: { id: 'panel-new' },
       data: { imageUrl: 'cos/panel-variant-new.png' },
     })
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({
+        characters_info: expect.stringContaining('固定位置：街道左侧靠墙的留白位置'),
+        location_asset: expect.stringContaining('街道左侧靠墙的留白位置'),
+      }),
+    }))
 
     expect(result).toEqual({
       panelId: 'panel-new',
@@ -175,6 +193,32 @@ describe('worker panel-variant-task-handler behavior', () => {
       variables: expect.objectContaining({
         character_assets: '未使用角色参考图',
         location_asset: '未使用场景参考图',
+      }),
+    }))
+  })
+
+  it('uses localized slot labels in english variant prompts', async () => {
+    const payload = {
+      newPanelId: 'panel-new',
+      sourcePanelId: 'panel-source',
+      variant: {
+        title: 'Rainy night version',
+        description: 'Keep the same staging but change the mood',
+        video_prompt: 'Keep the same staging but change the mood',
+      },
+    }
+
+    await handlePanelVariantTask(buildJob(payload, 'en'))
+
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      locale: 'en',
+      variables: expect.objectContaining({
+        location_asset: expect.stringContaining('Available character slots:'),
+      }),
+    }))
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({
+        location_asset: expect.not.stringContaining('可站位置：'),
       }),
     }))
   })

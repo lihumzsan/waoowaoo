@@ -4,8 +4,8 @@ import { useCallback } from 'react'
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { isAbortError } from '@/lib/error-utils'
 import {
+  useAssetActions,
   useModifyProjectCharacterImage,
-  useModifyProjectLocationImage,
   useUndoProjectCharacterImage,
   useUndoProjectLocationImage,
   useUpdateProjectAppearanceDescription,
@@ -29,6 +29,7 @@ interface EditingLocationState {
 }
 
 interface LocationImageEditState {
+  assetType: 'location' | 'prop'
   locationId: string
   imageIndex: number
   locationName: string
@@ -73,7 +74,8 @@ export function useAssetsImageEdit({
   closeCharacterImageEditModal,
 }: UseAssetsImageEditParams) {
   const modifyCharacterImage = useModifyProjectCharacterImage(projectId)
-  const modifyLocationImage = useModifyProjectLocationImage(projectId)
+  const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
+  const propAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'prop' })
   const undoCharacterImage = useUndoProjectCharacterImage(projectId)
   const undoLocationImage = useUndoProjectLocationImage(projectId)
   const updateAppearanceDescription = useUpdateProjectAppearanceDescription(projectId)
@@ -111,29 +113,31 @@ export function useAssetsImageEdit({
 
   const handleLocationImageEdit = useCallback(async (modifyPrompt: string, extraImageUrls?: string[]) => {
     if (!imageEditModal) return
-    const { locationId, imageIndex, locationName } = imageEditModal
+    const { assetType, locationId, imageIndex, locationName } = imageEditModal
 
     closeImageEditModal()
 
-    _ulogInfo(`[场景编辑] 开始编辑 ${locationName}, locationId=${locationId}, imageIndex=${imageIndex}`)
+    const assetLabel = assetType === 'prop' ? '道具' : '场景'
+    const editAction = assetType === 'prop' ? propAssetActions : locationAssetActions
 
-    modifyLocationImage.mutate(
-      { locationId, imageIndex, modifyPrompt, extraImageUrls },
-      {
-        onSuccess: (data) => {
-          const result = (data || {}) as { descriptionUpdated?: boolean }
-          _ulogInfo(`[场景编辑] ✅ 完成: ${locationName}`)
-          const descNote = result.descriptionUpdated ? t('stage.updateSuccess') : ''
-          showToast(`${locationName} ${t('image.editSuccess')}${descNote}`, 'success')
-        },
-        onError: (error: unknown) => {
-          _ulogInfo(`[场景编辑] ❌ 失败: ${locationName}`, error)
-          if (isAbortError(error)) return
-          showToast(`${t('image.editFailed')}: ${getErrorMessage(error)}`, 'error')
-        },
-      },
-    )
-  }, [closeImageEditModal, imageEditModal, modifyLocationImage, showToast, t])
+    _ulogInfo(`[${assetLabel}编辑] 开始编辑 ${locationName}, locationId=${locationId}, imageIndex=${imageIndex}`)
+
+    void editAction.modifyRender({
+      id: locationId,
+      imageIndex,
+      modifyPrompt,
+      extraImageUrls,
+    }).then((data) => {
+      const result = (data || {}) as { descriptionUpdated?: boolean }
+      _ulogInfo(`[${assetLabel}编辑] ✅ 完成: ${locationName}`)
+      const descNote = result.descriptionUpdated ? t('stage.updateSuccess') : ''
+      showToast(`${locationName} ${t('image.editSuccess')}${descNote}`, 'success')
+    }).catch((error: unknown) => {
+      _ulogInfo(`[${assetLabel}编辑] ❌ 失败: ${locationName}`, error)
+      if (isAbortError(error)) return
+      showToast(`${t('image.editFailed')}: ${getErrorMessage(error)}`, 'error')
+    })
+  }, [closeImageEditModal, imageEditModal, locationAssetActions, propAssetActions, showToast, t])
 
   const handleCharacterImageEdit = useCallback(async (modifyPrompt: string, extraImageUrls?: string[]) => {
     if (!characterImageEditModal) return

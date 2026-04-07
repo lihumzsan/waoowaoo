@@ -11,6 +11,8 @@ import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import { shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
+import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { validateProjectDraft } from '@/lib/projects/validation'
 
 interface ProjectStats {
   episodes: number
@@ -45,6 +47,24 @@ function formatProjectCost(amount: number, currency = DEFAULT_BILLING_CURRENCY):
   return `¥${amount.toFixed(2)}`
 }
 
+function toProjectValidationMessage(
+  issue: ReturnType<typeof validateProjectDraft>,
+  t: ReturnType<typeof useTranslations>,
+): string | null {
+  if (!issue) return null
+
+  switch (issue.code) {
+    case 'PROJECT_NAME_REQUIRED':
+      return t('validation.nameRequired')
+    case 'PROJECT_NAME_TOO_LONG':
+      return t('validation.nameTooLong')
+    case 'PROJECT_DESCRIPTION_TOO_LONG':
+      return t('validation.descriptionTooLong')
+  }
+
+  return null
+}
+
 export default function WorkspacePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -52,12 +72,14 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: ''
   })
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const [editFormData, setEditFormData] = useState({
     name: '',
     description: ''
@@ -124,6 +146,7 @@ export default function WorkspacePage() {
 
   // 打开新建项目弹窗并检测模型配置
   const openCreateModal = useCallback(() => {
+    setCreateError(null)
     setShowCreateModal(true)
     // 异步检测模型配置状态
     void (async () => {
@@ -146,8 +169,13 @@ export default function WorkspacePage() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.name.trim()) return
+    const validationMessage = toProjectValidationMessage(validateProjectDraft(formData), t)
+    if (validationMessage) {
+      setCreateError(validationMessage)
+      return
+    }
 
+    setCreateError(null)
     setCreateLoading(true)
     try {
       const response = await apiFetch('/api/projects', {
@@ -155,10 +183,7 @@ export default function WorkspacePage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          ...formData,
-          mode: 'novel-promotion' // 固定为 novel-promotion
-        })
+        body: JSON.stringify(formData)
       })
 
       if (response.ok) {
@@ -184,11 +209,11 @@ export default function WorkspacePage() {
           router.push({ pathname: '/profile' })
         }
       } else {
-        alert(t('createFailed'))
+        setCreateError(await readApiErrorMessage(response, t('createFailed')))
       }
     } catch (error) {
       _ulogError('创建项目失败:', error)
-      alert(t('createFailed'))
+      setCreateError(error instanceof Error ? error.message : t('createFailed'))
     } finally {
       setCreateLoading(false)
     }
@@ -210,8 +235,15 @@ export default function WorkspacePage() {
 
   const handleEditProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingProject || !editFormData.name.trim()) return
+    if (!editingProject) return
 
+    const validationMessage = toProjectValidationMessage(validateProjectDraft(editFormData), t)
+    if (validationMessage) {
+      setEditError(validationMessage)
+      return
+    }
+
+    setEditError(null)
     setCreateLoading(true)
     try {
       const response = await apiFetch(`/api/projects/${editingProject.id}`, {
@@ -229,10 +261,10 @@ export default function WorkspacePage() {
         setEditingProject(null)
         setEditFormData({ name: '', description: '' })
       } else {
-        alert(t('updateFailed'))
+        setEditError(await readApiErrorMessage(response, t('updateFailed')))
       }
-    } catch {
-      alert(t('updateFailed'))
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : t('updateFailed'))
     } finally {
       setCreateLoading(false)
     }
@@ -279,6 +311,7 @@ export default function WorkspacePage() {
     e.preventDefault()  // 阻止 Link 导航
     e.stopPropagation()
     setEditingProject(project)
+    setEditError(null)
     setEditFormData({
       name: project.name,
       description: project.description || ''
@@ -577,7 +610,12 @@ export default function WorkspacePage() {
                   id="name"
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value })
+                    if (createError) {
+                      setCreateError(null)
+                    }
+                  }}
                   className="glass-input-base w-full px-3 py-2"
                   placeholder={t('projectNamePlaceholder')}
                   maxLength={100}
@@ -592,18 +630,29 @@ export default function WorkspacePage() {
                 <textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, description: e.target.value })
+                    if (createError) {
+                      setCreateError(null)
+                    }
+                  }}
                   className="glass-textarea-base w-full px-3 py-2"
                   placeholder={t('projectDescriptionPlaceholder')}
                   rows={3}
                   maxLength={500}
                 />
               </div>
+              {createError && (
+                <p className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+                  {createError}
+                </p>
+              )}
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false)
+                    setCreateError(null)
                     setFormData({ name: '', description: '' })
                   }}
                   className="glass-btn-base glass-btn-secondary px-4 py-2"
@@ -638,7 +687,12 @@ export default function WorkspacePage() {
                   id="edit-name"
                   type="text"
                   value={editFormData.name}
-                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  onChange={(e) => {
+                    setEditFormData({ ...editFormData, name: e.target.value })
+                    if (editError) {
+                      setEditError(null)
+                    }
+                  }}
                   className="glass-input-base w-full px-3 py-2"
                   placeholder={t('projectNamePlaceholder')}
                   maxLength={100}
@@ -652,19 +706,30 @@ export default function WorkspacePage() {
                 <textarea
                   id="edit-description"
                   value={editFormData.description}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  onChange={(e) => {
+                    setEditFormData({ ...editFormData, description: e.target.value })
+                    if (editError) {
+                      setEditError(null)
+                    }
+                  }}
                   className="glass-textarea-base w-full px-3 py-2"
                   placeholder={t('projectDescriptionPlaceholder')}
                   rows={3}
                   maxLength={500}
                 />
               </div>
+              {editError && (
+                <p className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+                  {editError}
+                </p>
+              )}
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditModal(false)
                     setEditingProject(null)
+                    setEditError(null)
                     setEditFormData({ name: '', description: '' })
                   }}
                   className="glass-btn-base glass-btn-secondary px-4 py-2"

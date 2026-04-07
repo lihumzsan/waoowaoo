@@ -78,7 +78,10 @@ describe('worker asset-hub-ai-design behavior', () => {
       projectId: 'global-asset-hub',
       skipBilling: true,
     }))
-    expect(result).toEqual({ prompt: 'generated prompt' })
+    expect(result).toEqual({
+      prompt: 'generated prompt',
+      availableSlots: [],
+    })
   })
 
   it('location type success -> passes location assetType', async () => {

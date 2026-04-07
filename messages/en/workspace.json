@@ -23,6 +23,11 @@
   "createFailed": "Failed to create project",
   "analysisModelRequiredAfterCreate": "Project created. Please configure default models in Profile first (at minimum an analysis model), or the project cannot be used.",
   "updateFailed": "Failed to update project",
+  "validation": {
+    "nameRequired": "Project name is required.",
+    "nameTooLong": "Project name cannot exceed 100 characters.",
+    "descriptionTooLong": "Project description cannot exceed 500 characters."
+  },
   "deleteFailed": "Failed to delete project",
   "totalProjects": "{count} projects in total",
   "statsEpisodes": "Episodes",

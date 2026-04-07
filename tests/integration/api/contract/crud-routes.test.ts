@@ -68,14 +68,14 @@ vi.mock('@/lib/api-auth', () => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: 'novel-promotion' },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
     requireProjectAuthLight: async (projectId: string) => {
       if (!authState.authenticated) return unauthorized()
       return {
         session: { user: { id: 'user-1' } },
-        project: { id: projectId, userId: 'user-1', mode: 'novel-promotion' },
+        project: { id: projectId, userId: 'user-1' },
       }
     },
   }

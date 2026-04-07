@@ -26,16 +26,16 @@ export default function VideoPromptModal({
 
   return (
     <div className="fixed inset-0 bg-[var(--glass-overlay)] flex items-center justify-center z-50" onClick={onCancel}>
-      <div className="bg-[var(--glass-bg-surface)] rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[var(--glass-bg-surface)] rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* 标题栏 */}
-        <div className="sticky top-0 bg-[var(--glass-bg-surface)] border-b px-6 py-4 flex items-center justify-between">
+        <div className="bg-[var(--glass-bg-surface)] border-b px-6 py-4 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">{t('promptModal.title', { number: panelIndex + 1 })}</h3>
           <button onClick={onCancel} className="text-[var(--glass-text-tertiary)] hover:text-[var(--glass-text-secondary)]">
             <AppIcon name="close" className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto app-scrollbar flex-1 min-h-0">
           {/* 镜头信息 */}
           <div className="p-3 bg-[var(--glass-bg-muted)] rounded-lg text-sm space-y-1">
             <div className="flex items-center gap-2">

@@ -17,8 +17,16 @@ For each selected location, generate 3 wide-angle environment descriptions.
 Each description should:
 - start with location name in brackets: "[Location Name] ..."
 - describe spatial layout, depth layers, major objects, and lighting direction
+- define at least 3 stable anchor objects or anchor areas that can support later character placement
+- make the usable open space around those anchors visually clear
 - remain environment-only (no named protagonist actions)
 - use concise, production-ready English
+
+If the source location is generic, such as 「classroom」, 「office」, or 「living room」, you must proactively make it specific enough for controllable image generation:
+- define the visible main structure
+- define foreground, midground, and background
+- define at least 3 stable anchor areas and nearby open space
+- avoid vague noun piles
 
 Output format (JSON only):
 {
@@ -28,6 +36,11 @@ Output format (JSON only):
       "summary": "short usage summary",
       "has_crowd": false,
       "crowd_description": "",
+      "available_slots": [
+        "the position beneath the throne steps at the center of the palace hall",
+        "the open space between the left column and the long table",
+        "the position against the inner wall beside the rear doorway"
+      ],
       "descriptions": [
         "[location_name] description 1",
         "[location_name] description 2",
@@ -40,5 +53,10 @@ Output format (JSON only):
 Strict constraints:
 1. JSON only.
 2. If no valid location exists, return: {"locations":[]}.
-3. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+3. Each location must include 2-6 `available_slots`.
+4. Each `available_slots` item must be a complete descriptive placement phrase, not a short token and not an object.
+5. Slot descriptions must be concrete and reusable, tied to visible anchors such as the outer side of a desk row, the open floor before the blackboard, the inner side of a doorway, the space beside a window wall.
+6. Do not mention character posture, action, or emotion inside `available_slots`. Describe position only.
+7. Every anchor mentioned in `available_slots` must also appear clearly in the location descriptions.
+8. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
   

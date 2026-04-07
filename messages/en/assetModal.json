@@ -55,8 +55,10 @@
         "title": "New Prop",
         "name": "Prop Name",
         "namePlaceholder": "Enter prop name",
-        "summary": "Prop Description",
-        "summaryPlaceholder": "Describe the prop..."
+        "summary": "Summary",
+        "summaryPlaceholder": "One-line human summary of the prop, without plot usage...",
+        "description": "Image Description",
+        "descriptionPlaceholder": "Describe only the prop itself: material, color, structure, and decoration..."
     },
     "artStyle": {
         "title": "Art Style"

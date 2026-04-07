@@ -28,6 +28,7 @@ interface CharacterLike {
 
 interface LocationImageLike {
   description?: string | null
+  availableSlots?: string | null
   imageIndex?: number
   isSelected: boolean
   imageUrl: string | null
@@ -53,6 +54,7 @@ interface PanelLike {
 export interface PanelCharacterReference {
   name: string
   appearance?: string
+  slot?: string
 }
 
 interface NovelDataDb {
@@ -93,7 +95,51 @@ export function pickFirstString(...values: unknown[]) {
   return null
 }
 
-export async function generateLabeledImageToCos(params: {
+async function generateImageToStorage(params: {
+  job: Job<TaskJobData>
+  userId: string
+  modelId: string
+  prompt: string
+  targetId: string
+  keyPrefix: string
+  options?: {
+    referenceImages?: string[]
+    aspectRatio?: string
+    size?: string
+  }
+  label?: string
+}) {
+  const source = await resolveImageSourceFromGeneration(params.job, {
+    userId: params.userId,
+    modelId: params.modelId,
+    prompt: params.prompt,
+    options: params.options,
+  })
+
+  const uploadSource = params.label
+    ? await withLabelBar(source, params.label)
+    : source
+  const cosKey = await uploadImageSourceToCos(uploadSource, params.keyPrefix, params.targetId)
+  return cosKey
+}
+
+export async function generateCleanImageToStorage(params: {
+  job: Job<TaskJobData>
+  userId: string
+  modelId: string
+  prompt: string
+  targetId: string
+  keyPrefix: string
+  options?: {
+    referenceImages?: string[]
+    aspectRatio?: string
+    size?: string
+  }
+}) {
+  return await generateImageToStorage(params)
+}
+
+export async function generateProjectLabeledImageToStorage(params: {
   job: Job<TaskJobData>
   userId: string
   modelId: string
@@ -107,16 +153,7 @@ export async function generateLabeledImageToCos(params: {
     size?: string
   }
 }) {
-  const source = await resolveImageSourceFromGeneration(params.job, {
-    userId: params.userId,
-    modelId: params.modelId,
-    prompt: params.prompt,
-    options: params.options,
-  })
-
-  const labeled = await withLabelBar(source, params.label)
-  const cosKey = await uploadImageSourceToCos(labeled, params.keyPrefix, params.targetId)
-  return cosKey
+  return await generateImageToStorage(params)
 }
 
 export async function resolveNovelData(projectId: string) {
@@ -145,11 +182,12 @@ export function parsePanelCharacterReferences(value: string | null | undefined):
       .map((item: unknown) => {
         if (typeof item === 'string') return { name: item }
         if (!item || typeof item !== 'object') return null
-        const candidate = item as { name?: unknown; appearance?: unknown }
+        const candidate = item as { name?: unknown; appearance?: unknown; slot?: unknown }
         if (typeof candidate.name === 'string') {
           return {
             name: candidate.name,
             appearance: typeof candidate.appearance === 'string' ? candidate.appearance : undefined,
+            slot: typeof candidate.slot === 'string' ? candidate.slot : undefined,
           }
         }
         return null

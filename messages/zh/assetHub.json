@@ -22,6 +22,7 @@
     "downloadSuccess": "下载完成",
     "downloadFailed": "下载失败",
     "downloadEmpty": "当前没有可下载的图片资产",
+    "filteredEmptyHint": "点击新建资产添加资产",
     "newFolder": "新建文件夹",
     "editFolder": "编辑文件夹",
     "deleteFolder": "删除文件夹",

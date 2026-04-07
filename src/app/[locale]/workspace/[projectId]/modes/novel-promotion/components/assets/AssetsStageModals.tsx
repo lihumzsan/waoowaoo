@@ -35,10 +35,12 @@ interface EditingPropState {
   propId: string
   propName: string
   summary: string
+  description: string
   variantId?: string
 }
 
 interface LocationImageEditModalState {
+  assetType: 'location' | 'prop'
   locationName: string
 }
 
@@ -140,7 +142,7 @@ export default function AssetsStageModals({
 
       {imageEditModal && (
         <ImageEditModal
-          type="location"
+          type={imageEditModal.assetType}
           name={imageEditModal.locationName}
           onClose={closeImageEditModal}
           onConfirm={handleLocationImageEdit}
@@ -238,6 +240,7 @@ export default function AssetsStageModals({
           propId={editingProp.propId}
           propName={editingProp.propName}
           summary={editingProp.summary}
+          description={editingProp.description}
           variantId={editingProp.variantId}
           projectId={projectId}
           onClose={closeEditingProp}

@@ -4,6 +4,25 @@ import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { isArtStyleValue } from '@/lib/constants'
+import { resolveTaskLocale } from '@/lib/task/resolve-locale'
+import {
+  formatProjectValidationIssue,
+  normalizeProjectDraft,
+  validateProjectDraft,
+  type ProjectDraftInput,
+} from '@/lib/projects/validation'
+
+function readProjectDraftBody(body: unknown): ProjectDraftInput {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { name: '' }
+  }
+
+  const payload = body as Record<string, unknown>
+  return {
+    name: typeof payload.name === 'string' ? payload.name : '',
+    description: typeof payload.description === 'string' ? payload.description : null,
+  }
+}
 
 // GET - 获取用户的项目（支持分页和搜索）
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -169,31 +188,31 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (isErrorResponse(authResult)) return authResult
   const { session } = authResult
 
-  const { name, description } = await request.json()
-
-  if (!name || name.trim().length === 0) {
-    throw new ApiError('INVALID_PARAMS')
+  const body = await request.json()
+  const draft = readProjectDraftBody(body)
+  const validationIssue = validateProjectDraft(draft)
+  if (validationIssue) {
+    const locale = resolveTaskLocale(request, body) ?? 'zh'
+    throw new ApiError('INVALID_PARAMS', {
+      code: validationIssue.code,
+      field: validationIssue.field,
+      ...(typeof validationIssue.limit === 'number' ? { limit: validationIssue.limit } : {}),
+      message: formatProjectValidationIssue(validationIssue, locale),
+    })
   }
 
-  if (name.length > 100) {
-    throw new ApiError('INVALID_PARAMS')
-  }
-
-  if (description && description.length > 500) {
-    throw new ApiError('INVALID_PARAMS')
-  }
+  const { name, description } = normalizeProjectDraft(draft)
 
   // 获取用户偏好配置
   const userPreference = await prisma.userPreference.findUnique({
     where: { userId: session.user.id }
   })
 
-  // 创建基础项目（mode 固定为 novel-promotion）
+  // 创建基础项目
   const project = await prisma.project.create({
     data: {
       name: name.trim(),
       description: description?.trim() || null,
-      mode: 'novel-promotion',
       userId: session.user.id
     }
   })

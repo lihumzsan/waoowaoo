@@ -10,6 +10,7 @@ import { useAiCreateProjectLocation, useCreateProjectLocation } from '@/lib/quer
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
+import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 
 interface AddLocationModalProps {
   projectId: string
@@ -58,6 +59,7 @@ export default function AddLocationModal({
   const [description, setDescription] = useState('')
   const [aiInstruction, setAiInstruction] = useState('')
   const [artStyle, setArtStyle] = useState('american-comic')
+  const [availableSlots, setAvailableSlots] = useState<LocationAvailableSlot[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAiDesigning, setIsAiDesigning] = useState(false)
   const aiDesigningState = isAiDesigning
@@ -87,6 +89,7 @@ export default function AddLocationModal({
         userInstruction: aiInstruction,
       })
       setDescription(data.prompt || '')
+      setAvailableSlots(Array.isArray(data.availableSlots) ? data.availableSlots : [])
       setAiInstruction('')
     } catch (error: unknown) {
       if (getErrorStatus(error) === 402) {
@@ -113,6 +116,7 @@ export default function AddLocationModal({
         description: description.trim(),
         artStyle,
         count: locationGenerationCount,
+        availableSlots,
       })
       onSuccess()
       onClose()
@@ -129,8 +133,8 @@ export default function AddLocationModal({
 
   return (
     <div className="fixed inset-0 bg-[var(--glass-overlay)] flex items-center justify-center z-50 p-4">
-      <div className="bg-[var(--glass-bg-surface)] rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-        <div className="p-6">
+      <div className="bg-[var(--glass-bg-surface)] rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="p-6 overflow-y-auto app-scrollbar flex-1 min-h-0">
           {/* 标题 */}
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-[var(--glass-text-primary)]">

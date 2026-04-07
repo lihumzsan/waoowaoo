@@ -270,8 +270,7 @@ export function ProviderAdvancedFields({
 
       <div className="glass-surface-soft rounded-xl p-2">
         <div
-          className="glass-provider-model-scroll h-[280px] overflow-y-auto pr-1"
-          style={{ scrollbarGutter: 'stable' }}
+          className="app-scrollbar h-[280px] overflow-y-auto pr-1"
         >
           <div className="space-y-2">
             {currentModels.map((model, index) => (

@@ -346,7 +346,22 @@
         "actingNotes": "Acting Direction (acting_notes)",
         "actingTitle": "Acting Direction",
         "actingDescription": "Performance Notes",
-        "noActingData": "No acting data"
+        "noActingData": "No acting data",
+        "appearance": "Appearance",
+        "appearanceReadonly": "Appearance (read-only)",
+        "slot": "Slot",
+        "slotUnset": "Unset",
+        "framePosition": "Frame Position",
+        "screenPosition": "Screen Position",
+        "actingGuide": "Acting Direction",
+        "photoEnv": "Photography Settings",
+        "availableSlots": "Available Slots",
+        "optional": "Optional",
+        "reference": "Reference",
+        "aiRequired": "AI Required",
+        "characterDetails": "Character Details",
+        "shotAndScene": "Shot · Scene",
+        "jsonCheck": "JSON Review"
     },
     "insertModal": {
         "insertBetween": "Insert between #{before} and #{after}",

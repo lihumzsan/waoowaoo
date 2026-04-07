@@ -21,12 +21,29 @@ const sharedMock = vi.hoisted(() => ({
   resolveNovelData: vi.fn(async () => ({
     videoRatio: '16:9',
     characters: [],
-    locations: [],
+    locations: [
+      {
+        name: 'Old Town',
+        images: [
+          {
+            isSelected: true,
+            description: '雨夜街道',
+            availableSlots: JSON.stringify([
+              '街道左侧靠墙的留白位置',
+            ]),
+          },
+        ],
+      },
+    ],
   })),
 }))
 
 const outboundMock = vi.hoisted(() => ({
   normalizeReferenceImagesForGeneration: vi.fn(async () => ['normalized-ref-1']),
+}))
+
+const promptMock = vi.hoisted(() => ({
+  buildPrompt: vi.fn(() => 'panel-image-prompt'),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -56,7 +73,7 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
 })
 vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: { NP_SINGLE_PANEL_IMAGE: 'np_single_panel_image' },
-  buildPrompt: vi.fn(() => 'panel-image-prompt'),
+  buildPrompt: promptMock.buildPrompt,
 }))
 
 import { handlePanelImageTask } from '@/lib/workers/handlers/panel-image-task-handler'
@@ -88,9 +105,10 @@ describe('worker panel-image-task-handler behavior', () => {
       shotType: 'close-up',
       cameraMove: 'static',
       description: 'hero close-up',
+      imagePrompt: 'panel anchor prompt',
       videoPrompt: 'dramatic',
       location: 'Old Town',
-      characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+      characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: '街道左侧靠墙的留白位置' }]),
       srtSegment: '台词片段',
       photographyRules: null,
       actingNotes: null,
@@ -134,6 +152,16 @@ describe('worker panel-image-task-handler behavior', () => {
         }),
       }),
     )
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({
+        storyboard_text_json_input: expect.stringContaining('"slot": "街道左侧靠墙的留白位置"'),
+      }),
+    }))
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({
+        storyboard_text_json_input: expect.stringContaining('"available_slots"'),
+      }),
+    }))
 
     expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
       where: { id: 'panel-1' },
@@ -155,6 +183,7 @@ describe('worker panel-image-task-handler behavior', () => {
       shotType: 'close-up',
       cameraMove: 'static',
       description: 'hero close-up',
+      imagePrompt: null,
       videoPrompt: 'dramatic',
       location: 'Old Town',
       characters: '[]',

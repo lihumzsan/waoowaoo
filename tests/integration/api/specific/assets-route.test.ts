@@ -24,6 +24,8 @@ const createAssetMock = vi.hoisted(() => vi.fn())
 const updateAssetMock = vi.hoisted(() => vi.fn())
 const removeAssetMock = vi.hoisted(() => vi.fn())
 const updateAssetVariantMock = vi.hoisted(() => vi.fn())
+const selectAssetRenderMock = vi.hoisted(() => vi.fn())
+const revertAssetRenderMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/assets/services/read-assets', () => ({
@@ -40,8 +42,8 @@ vi.mock('@/lib/assets/services/asset-actions', () => ({
   removeAsset: removeAssetMock,
   updateAssetVariant: updateAssetVariantMock,
   submitAssetModifyTask: vi.fn(),
-  selectAssetRender: vi.fn(),
-  revertAssetRender: vi.fn(),
+  selectAssetRender: selectAssetRenderMock,
+  revertAssetRender: revertAssetRenderMock,
 }))
 
 describe('api specific - unified assets routes', () => {
@@ -55,6 +57,8 @@ describe('api specific - unified assets routes', () => {
     updateAssetMock.mockResolvedValue({ success: true })
     removeAssetMock.mockResolvedValue({ success: true })
     updateAssetVariantMock.mockResolvedValue({ success: true })
+    selectAssetRenderMock.mockResolvedValue({ success: true })
+    revertAssetRenderMock.mockResolvedValue({ success: true })
   })
 
   it('GET /api/assets reads global assets with the authenticated user scope', async () => {
@@ -113,6 +117,7 @@ describe('api specific - unified assets routes', () => {
         projectId: 'project-1',
         name: '青铜匕首',
         summary: '古旧短刃，雕纹手柄',
+        description: '一把短小青铜匕首，雕纹手柄，刃面磨损发暗',
       },
     })
 
@@ -128,6 +133,7 @@ describe('api specific - unified assets routes', () => {
         projectId: 'project-1',
         name: '青铜匕首',
         summary: '古旧短刃，雕纹手柄',
+        description: '一把短小青铜匕首，雕纹手柄，刃面磨损发暗',
       },
       access: {
         scope: 'project',
@@ -164,6 +170,28 @@ describe('api specific - unified assets routes', () => {
       projectId: 'project-1',
       newName: '林夏',
     })
+  })
+
+  it('POST /api/asset-hub/update-asset-label explicitly rejects global image label updates', async () => {
+    const mod = await import('@/app/api/asset-hub/update-asset-label/route')
+    const req = buildMockRequest({
+      path: '/api/asset-hub/update-asset-label',
+      method: 'POST',
+      body: {
+        type: 'character',
+        id: 'asset-1',
+        newName: '林夏',
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({}) })
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(authMock.requireUserAuth).toHaveBeenCalled()
+    expect(body.error.code).toBe('INVALID_PARAMS')
+    expect(body.error.message).toBe('Global asset images no longer support label updates')
+    expect(updateAssetRenderLabelMock).not.toHaveBeenCalled()
   })
 
   it('PATCH /api/assets/[assetId] updates a global prop through the unified route', async () => {
@@ -302,6 +330,44 @@ describe('api specific - unified assets routes', () => {
         kind: 'prop',
         projectId: 'project-1',
         description: '古旧短刃，雕纹手柄',
+      },
+      access: {
+        scope: 'project',
+        userId: 'user-1',
+        projectId: 'project-1',
+      },
+    })
+    expect(body).toEqual({ success: true })
+  })
+
+  it('POST /api/assets/[assetId]/select-render confirms a project prop through the unified route', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/select-render/route')
+    const req = buildMockRequest({
+      path: '/api/assets/prop-1/select-render',
+      method: 'POST',
+      body: {
+        scope: 'project',
+        kind: 'prop',
+        projectId: 'project-1',
+        confirm: true,
+      },
+    })
+
+    const res = await mod.POST(req, {
+      params: Promise.resolve({ assetId: 'prop-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(authMock.requireProjectAuthLight).toHaveBeenCalledWith('project-1')
+    expect(selectAssetRenderMock).toHaveBeenCalledWith({
+      kind: 'prop',
+      assetId: 'prop-1',
+      body: {
+        scope: 'project',
+        kind: 'prop',
+        projectId: 'project-1',
+        confirm: true,
       },
       access: {
         scope: 'project',

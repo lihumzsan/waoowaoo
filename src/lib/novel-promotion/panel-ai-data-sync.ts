@@ -1,6 +1,7 @@
 export interface PanelCharacterRef {
   name: string
   appearance: string
+  slot?: string
 }
 
 type JsonRecord = Record<string, unknown>
