@@ -35,10 +35,9 @@ import {
   resolveLlmRuntimeModel,
 } from './runtime-shared'
 import { completeBailianLlm } from '@/lib/providers/bailian'
-import { completeBailianCodingPlanLlm } from '@/lib/providers/bailian-coding-plan'
 import { completeSiliconFlowLlm } from '@/lib/providers/siliconflow'
 
-const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'bailian-coding-plan', 'siliconflow'])
+const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
 
 function toRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -245,42 +244,6 @@ export async function chatCompletion(
 
       if (providerKey === 'bailian') {
         const completion = await completeBailianLlm({
-          modelId: resolvedModelId,
-          messages,
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-          temperature,
-        })
-        const completionParts = getCompletionParts(completion)
-        logLlmRawOutput({
-          userId,
-          projectId,
-          provider: providerKey,
-          modelId: resolvedModelId,
-          modelKey: selection.modelKey,
-          stream: false,
-          action: options.action,
-          text: completionParts.text,
-          reasoning: completionParts.reasoning,
-          usage: completionUsageSummary(completion),
-        })
-        recordCompletionUsage(resolvedModelId, completion)
-        llmLogger.info({
-          action: 'llm.call.success',
-          message: 'llm call succeeded',
-          provider: providerKey,
-          durationMs: Date.now() - attemptStartedAt,
-          details: {
-            model: resolvedModelId,
-            attempt,
-            maxRetries,
-          },
-        })
-        return completion
-      }
-
-      if (providerKey === 'bailian-coding-plan') {
-        const completion = await completeBailianCodingPlanLlm({
           modelId: resolvedModelId,
           messages,
           apiKey: providerConfig.apiKey,

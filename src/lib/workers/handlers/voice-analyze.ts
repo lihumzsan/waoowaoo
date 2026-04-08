@@ -81,7 +81,7 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
   const analysisModel = await resolveAnalysisModel({
     userId: job.data.userId,
     inputModel: payload.model,
-    projectId: job.data.projectId,
+    projectAnalysisModel: novelPromotionData.analysisModel,
   })
 
   const charactersLibName = novelPromotionData.characters.length > 0

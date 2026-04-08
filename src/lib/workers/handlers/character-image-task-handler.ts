@@ -75,12 +75,7 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   const userId = job.data.userId
   const models = await getProjectModels(projectId, userId)
   const modelId = models.characterModel
-  if (!modelId) {
-    throw new Error(
-      'CHARACTER_IMAGE_MODEL_NOT_CONFIGURED: 未配置角色图像模型。请在「设置中心 → 项目设置」为该小说项目选择角色图模型，'
-        + '或在「用户偏好」中设置默认角色图模型（与文本分析 / Coding Plan 不是同一项）。',
-    )
-  }
+  if (!modelId) throw new Error('Character model not configured')
 
   const appearanceId = pickFirstString(job.data.targetId, payload.appearanceId)
   let appearance: CharacterAppearanceRecord | null = null

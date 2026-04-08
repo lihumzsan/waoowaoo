@@ -154,25 +154,20 @@ function parseStoredProviders(rawProviders: string | null | undefined): StoredPr
   return parsedUnknown as StoredProvider[]
 }
 
-function hasStoredProviderApiKey(provider: StoredProvider): boolean {
-  return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
+function getProviderKey(providerId?: string): string {
+  if (!providerId) return ''
+  const trimmed = providerId.trim()
+  const colonIndex = trimmed.indexOf(':')
+  return colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex)
 }
 
-function getProviderKey(providerId: string): string {
-  const normalized = providerId.trim()
-  const separator = normalized.indexOf(':')
-  return separator >= 0 ? normalized.slice(0, separator) : normalized
-}
-
-function hasProviderRuntimeReadyConfig(provider: StoredProvider): boolean {
-  if (hasStoredProviderApiKey(provider)) return true
-  const providerId = typeof provider.id === 'string' ? provider.id.trim() : ''
-  if (!providerId) return false
-  const providerKey = getProviderKey(providerId)
-  if (providerKey === 'comfyui') {
-    return typeof provider.baseUrl === 'string' && provider.baseUrl.trim().length > 0
+function hasStoredProviderConnection(provider: StoredProvider): boolean {
+  if (typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0) {
+    return true
   }
-  return false
+  return getProviderKey(provider.id) === 'comfyui'
+    && typeof provider.baseUrl === 'string'
+    && provider.baseUrl.trim().length > 0
 }
 
 function isUserSelectableModel(model: StoredModel): boolean {
@@ -196,7 +191,7 @@ export const GET = apiHandler(async () => {
   const providers: StoredProvider[] = parseStoredProviders(pref?.customProviders)
 
   const providerNameMap = new Map<string, string>()
-  const providerIdsWithRuntimeConfig = new Set<string>()
+  const providerIdsWithConnection = new Set<string>()
   providers.forEach((provider) => {
     const providerId = typeof provider?.id === 'string' ? provider.id.trim() : ''
     if (!providerId) return
@@ -204,7 +199,7 @@ export const GET = apiHandler(async () => {
     if (provider?.name && typeof provider.name === 'string') {
       providerNameMap.set(providerId, provider.name)
     }
-    if (hasProviderRuntimeReadyConfig(provider)) providerIdsWithRuntimeConfig.add(providerId)
+    if (hasStoredProviderConnection(provider)) providerIdsWithConnection.add(providerId)
   })
 
   const grouped: UserModelsPayload = {
@@ -224,7 +219,7 @@ export const GET = apiHandler(async () => {
     if (!modelKey) continue
 
     const provider = toProvider(model)
-    if (!provider || !providerIdsWithRuntimeConfig.has(provider)) continue
+    if (!provider || !providerIdsWithConnection.has(provider)) continue
     const modelId = toModelId(model)
     const option: UserModelOption = {
       value: modelKey,

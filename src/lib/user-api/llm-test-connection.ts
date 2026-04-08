@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { ApiError } from '@/lib/api-errors'
+import { probeBailian } from '@/lib/providers/bailian/probe'
 
 type SupportedProvider =
   | 'openrouter'
@@ -108,18 +109,22 @@ async function testOpenAICompatibleConnection(params: {
   return {}
 }
 
-async function testBailianProbe(apiKey: string): Promise<{ model?: string }> {
-  const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/models', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
+async function testBailianProbe(apiKey: string, preferredModel?: string): Promise<{ model?: string; answer?: string }> {
+  const result = await probeBailian({
+    apiKey,
+    preferredModelIds: preferredModel ? [preferredModel] : [],
   })
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Bailian probe failed (${response.status}): ${error}`)
+
+  if (!result.success) {
+    const failure = result.steps.find((step) => step.status === 'fail')
+    const detail = failure?.detail ? `: ${failure.detail}` : ''
+    throw new Error(`${failure?.message || 'Bailian probe failed'}${detail}`)
   }
-  const data = await response.json() as { data?: Array<{ id?: string }> }
-  const firstModel = Array.isArray(data.data) ? data.data.find((item) => typeof item.id === 'string')?.id : undefined
-  return { model: firstModel }
+
+  return {
+    model: result.model,
+    answer: result.answer,
+  }
 }
 
 async function testSiliconFlowProbe(apiKey: string): Promise<{ model?: string; answer?: string }> {
@@ -191,7 +196,7 @@ export async function testLlmConnection(payload: TestConnectionPayload): Promise
       return { provider, message: 'openai 连接成功', ...tested }
     }
     case 'bailian': {
-      const tested = await testBailianProbe(apiKey)
+      const tested = await testBailianProbe(apiKey, requestedModel || undefined)
       return { provider, message: 'bailian 连接成功', ...tested }
     }
     case 'siliconflow': {

@@ -5,7 +5,6 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const prismaMock = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   novelPromotionProject: { findUnique: vi.fn() },
-  userPreference: { findUnique: vi.fn() },
   novelPromotionEpisode: { findUnique: vi.fn() },
   novelPromotionClip: {
     findMany: vi.fn(async () => []),
@@ -86,8 +85,7 @@ describe('worker clips-build behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    prismaMock.userPreference.findUnique.mockResolvedValue({ analysisModel: null })
-    prismaMock.project.findUnique.mockResolvedValue({ id: 'project-1', mode: 'novel-promotion' })
+    prismaMock.project.findUnique.mockResolvedValue({ id: 'project-1' })
 
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
       id: 'np-project-1',

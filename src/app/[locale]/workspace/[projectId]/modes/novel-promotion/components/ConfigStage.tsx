@@ -10,7 +10,7 @@ import type { SplitEpisode } from './smart-import/types'
 
 /**
  * 配置阶段 — 整合 NovelInputStage + 长文本智能分集
- *
+ * 
  * 当用户输入长文本（>1000字）并点击"开始创作"时，
  * 弹出引导卡片建议使用智能分集。
  * 选择"智能分集"后，直接进入 SmartImportWizard 的分析流程。

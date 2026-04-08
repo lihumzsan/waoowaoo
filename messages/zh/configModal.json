@@ -32,12 +32,5 @@
     "cancel": "取消",
     "delete": "删除",
     "boolOn": "开",
-    "boolOff": "关",
-    "noModelsInList": "当前没有可用的此类模型。请先到「个人中心 → 配置中心」添加并启用对应类型的模型（需填写提供商 API Key）。",
-    "noImageModelsBannerTitle": "还没有可用的「图像」模型",
-    "noImageModelsBannerBody": "人物 / 场景 / 分镜 / 修图 下拉框只显示配置中心里类型为「图像」且已启用的模型。仅有「文本/LLM」模型（如千问、Coding Plan）不会出现在这里。请在配置中心添加 FAL、ComfyUI、Gemini 等图像能力，并确保对应提供商已填写 API Key。",
-    "noVideoModelsBannerTitle": "还没有可用的「视频」模型",
-    "noVideoModelsBannerBody": "请先在「个人中心 → 配置中心」添加类型为「视频」的模型并启用。",
-    "noAudioModelsBannerTitle": "还没有可用的「语音」模型",
-    "noAudioModelsBannerBody": "请先在「个人中心 → 配置中心」添加类型为「语音」的模型并启用。"
+    "boolOff": "关"
 }

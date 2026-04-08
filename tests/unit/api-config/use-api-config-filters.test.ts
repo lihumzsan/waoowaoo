@@ -116,4 +116,44 @@ describe('api config filters', () => {
       'ark',
     ])
   })
+
+  it('limits bailian coding plan providers to supported text models only', () => {
+    const providers: Provider[] = [
+      { id: 'bailian', name: 'Alibaba Bailian', hasApiKey: true, apiKey: 'sk-sp-demo' },
+    ]
+    const models: CustomModel[] = [
+      {
+        modelId: 'qwen3.5-plus',
+        modelKey: 'bailian::qwen3.5-plus',
+        name: 'Qwen 3.5 Plus',
+        type: 'llm',
+        provider: 'bailian',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'qwen3.5-flash',
+        modelKey: 'bailian::qwen3.5-flash',
+        name: 'Qwen 3.5 Flash',
+        type: 'llm',
+        provider: 'bailian',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'wan2.7-i2v',
+        modelKey: 'bailian::wan2.7-i2v',
+        name: 'Wan2.7 I2V',
+        type: 'video',
+        provider: 'bailian',
+        price: 0,
+        enabled: true,
+      },
+    ]
+
+    const result = useApiConfigFilters({ providers, models })
+
+    expect(result.getEnabledModelsByType('llm').map((model) => model.modelId)).toEqual(['qwen3.5-plus'])
+    expect(result.getEnabledModelsByType('video')).toEqual([])
+  })
 })

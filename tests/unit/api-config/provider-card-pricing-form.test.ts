@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   getAddableModelTypesForProvider,
+  groupComfyUiModelsByCategory,
   getVisibleModelTypesForProvider,
+  parseComfyUiWorkflowParts,
   shouldShowOpenAICompatVideoHint,
 } from '@/app/[locale]/profile/components/api-config/provider-card/ProviderAdvancedFields'
 import {
@@ -40,6 +42,153 @@ describe('provider card pricing form behavior', () => {
     expect(shouldShowOpenAICompatVideoHint('openai-compatible:oa-1', 'image')).toBe(false)
     expect(shouldShowOpenAICompatVideoHint('gemini-compatible:gm-1', 'video')).toBe(false)
     expect(shouldShowOpenAICompatVideoHint('ark', 'video')).toBe(false)
+  })
+
+  it('parses comfyui workflow ids into root, category, and workflow parts', () => {
+    expect(parseComfyUiWorkflowParts('baseimage/图片编辑/qwen单图编辑')).toEqual({
+      root: 'baseimage',
+      category: '图片编辑',
+      workflow: 'qwen单图编辑',
+    })
+
+    expect(parseComfyUiWorkflowParts('baseaudio/多人/LongCat-two')).toEqual({
+      root: 'baseaudio',
+      category: '多人',
+      workflow: 'LongCat-two',
+    })
+  })
+
+  it('groups comfyui models by second-level category', () => {
+    const groups = groupComfyUiModelsByCategory([
+      {
+        modelId: 'baseimage/图片生成/Flux2Klein文生图',
+        modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+        name: 'ComfyUI · Flux2Klein 文生图',
+        type: 'image',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'baseimage/图片编辑/qwen单图编辑',
+        modelKey: 'comfyui::baseimage/图片编辑/qwen单图编辑',
+        name: 'ComfyUI · Qwen 单图编辑',
+        type: 'image',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'baseimage/图片编辑/qwen双图编辑',
+        modelKey: 'comfyui::baseimage/图片编辑/qwen双图编辑',
+        name: 'ComfyUI · Qwen 双图编辑',
+        type: 'image',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toMatchObject({
+      key: 'baseimage/图片生成',
+      root: 'baseimage',
+      category: '图片生成',
+    })
+    expect(groups[0]?.models).toHaveLength(1)
+    expect(groups[1]).toMatchObject({
+      key: 'baseimage/图片编辑',
+      root: 'baseimage',
+      category: '图片编辑',
+    })
+    expect(groups[1]?.models.map((model) => model.modelId)).toEqual([
+      'baseimage/图片编辑/qwen单图编辑',
+      'baseimage/图片编辑/qwen双图编辑',
+    ])
+  })
+
+  it('groups comfyui audio workflows by second-level category', () => {
+    const groups = groupComfyUiModelsByCategory([
+      {
+        modelId: 'baseaudio/单人/LongCat-one',
+        modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+        name: 'ComfyUI · LongCat 单人',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'baseaudio/多人/LongCat-two',
+        modelKey: 'comfyui::baseaudio/多人/LongCat-two',
+        name: 'ComfyUI · LongCat 多人',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'baseaudio/多人/s2-two',
+        modelKey: 'comfyui::baseaudio/多人/s2-two',
+        name: 'ComfyUI · S2 多人',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'baseaudio/三人/s2-three',
+        modelKey: 'comfyui::baseaudio/三人/s2-three',
+        name: 'ComfyUI · S2 三人',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+    ])
+
+    expect(groups).toHaveLength(3)
+    expect(groups.map((group) => group.key)).toEqual([
+      'baseaudio/单人',
+      'baseaudio/多人',
+      'baseaudio/三人',
+    ])
+    expect(groups[1]?.models.map((model) => model.modelId)).toEqual([
+      'baseaudio/多人/LongCat-two',
+      'baseaudio/多人/s2-two',
+    ])
+  })
+
+  it('shows the audio tab when the provider has audio models', () => {
+    const visible = getVisibleModelTypesForProvider(
+      'comfyui',
+      {
+        image: [
+          {
+            modelId: 'baseimage/图片生成/Flux2Klein文生图',
+            modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+            name: 'ComfyUI · Flux2Klein 文生图',
+            type: 'image',
+            provider: 'comfyui',
+            price: 0,
+            enabled: true,
+          },
+        ],
+        audio: [
+          {
+            modelId: 'baseaudio/多人/LongCat-two',
+            modelKey: 'comfyui::baseaudio/多人/LongCat-two',
+            name: 'ComfyUI · LongCat 多人',
+            type: 'audio',
+            provider: 'comfyui',
+            price: 0,
+            enabled: true,
+          },
+        ],
+      },
+    )
+
+    expect(visible).toEqual(['image', 'audio'])
   })
 
   it('keeps payload without customPricing when pricing toggle is off', () => {

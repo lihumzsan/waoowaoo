@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeProvidersForDisplay } from '@/app/[locale]/profile/components/api-config/hooks'
+import { applyComfyUiPresetDefaults, mergeProvidersForDisplay } from '@/app/[locale]/profile/components/api-config/hooks'
 import type { Provider } from '@/app/[locale]/profile/components/api-config/types'
 
 describe('useProviders provider order merge', () => {
@@ -61,5 +61,148 @@ describe('useProviders provider order merge', () => {
       apiKey: 'mm-key',
       hasApiKey: true,
     })
+  })
+
+  it('treats comfyui as ready when a baseUrl is available even without an apiKey', () => {
+    const presetProviders: Provider[] = [
+      { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
+    ]
+    const savedProviders: Provider[] = [
+      { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188', apiKey: '' },
+    ]
+
+    const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 'comfyui',
+      baseUrl: 'http://127.0.0.1:8188',
+      hasApiKey: true,
+    })
+  })
+
+  it('applies comfyui fallback defaults and enables the default workflows', () => {
+    const result = applyComfyUiPresetDefaults({
+      models: [
+        {
+          modelId: 'baseimage/图片分镜/Qwen剧情分镜制作',
+          modelKey: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
+          name: 'ComfyUI · Qwen 剧情分镜制作',
+          type: 'image',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+        {
+          modelId: 'baseimage/图片生成/Flux2Klein文生图',
+          modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+          name: 'ComfyUI · Flux2Klein 文生图',
+          type: 'image',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+        {
+          modelId: 'baseimage/图片编辑/qwen单图编辑',
+          modelKey: 'comfyui::baseimage/图片编辑/qwen单图编辑',
+          name: 'ComfyUI · Qwen 单图编辑',
+          type: 'image',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+        {
+          modelId: 'basevideo/图生视频/LTX2.3图生视频快速版',
+          modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+          name: 'ComfyUI · LTX 2.3 图生视频',
+          type: 'video',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+        {
+          modelId: 'baseaudio/多人/LongCat-two',
+          modelKey: 'comfyui::baseaudio/多人/LongCat-two',
+          name: 'ComfyUI · LongCat 多人',
+          type: 'audio',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {},
+    })
+
+    expect(result.changed).toBe(true)
+    expect(result.defaultModels).toMatchObject({
+      characterModel: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+      locationModel: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+      storyboardModel: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
+      editModel: 'comfyui::baseimage/图片编辑/qwen单图编辑',
+      videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+      audioModel: 'comfyui::baseaudio/多人/LongCat-two',
+    })
+    expect(result.models.every((model) => model.enabled)).toBe(true)
+  })
+
+  it('does not overwrite an existing explicit default model selection', () => {
+    const result = applyComfyUiPresetDefaults({
+      models: [
+        {
+          modelId: 'custom-image-model',
+          modelKey: 'custom::image-model',
+          name: 'Custom Image Model',
+          type: 'image',
+          provider: 'custom',
+          price: 0,
+          enabled: true,
+        },
+        {
+          modelId: 'baseimage/图片生成/Flux2Klein文生图',
+          modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+          name: 'ComfyUI · Flux2Klein 文生图',
+          type: 'image',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {
+        characterModel: 'custom::image-model',
+      },
+    })
+
+    expect(result.defaultModels.characterModel).toBe('custom::image-model')
+    expect(result.models[1]?.enabled).toBe(true)
+  })
+
+  it('does not overwrite an existing explicit audio default model selection', () => {
+    const result = applyComfyUiPresetDefaults({
+      models: [
+        {
+          modelId: 'custom-audio-model',
+          modelKey: 'custom::audio-model',
+          name: 'Custom Audio Model',
+          type: 'audio',
+          provider: 'custom',
+          price: 0,
+          enabled: true,
+        },
+        {
+          modelId: 'baseaudio/多人/LongCat-two',
+          modelKey: 'comfyui::baseaudio/多人/LongCat-two',
+          name: 'ComfyUI · LongCat 多人',
+          type: 'audio',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {
+        audioModel: 'custom::audio-model',
+      },
+    })
+
+    expect(result.defaultModels.audioModel).toBe('custom::audio-model')
+    expect(result.models[1]?.enabled).toBe(true)
   })
 })

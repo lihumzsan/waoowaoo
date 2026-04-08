@@ -3,6 +3,13 @@ import path from 'node:path'
 
 let loaded = false
 
+function resolveEnvPaths() {
+  return [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '.env.test'),
+  ]
+}
+
 function parseEnvLine(line: string) {
   const trimmed = line.trim()
   if (!trimmed || trimmed.startsWith('#')) return null
@@ -19,6 +26,20 @@ function parseEnvLine(line: string) {
   return { key, value: unquoted }
 }
 
+function deriveTestDatabaseUrl(databaseUrl: string) {
+  try {
+    const parsed = new URL(databaseUrl)
+    const databaseName = parsed.pathname.replace(/^\//, '').trim()
+    const nextDatabaseName = databaseName.endsWith('_test')
+      ? databaseName
+      : `${databaseName || 'waoowaoo'}_test`
+    parsed.pathname = `/${nextDatabaseName}`
+    return parsed.toString()
+  } catch {
+    return databaseUrl
+  }
+}
+
 export function loadTestEnv() {
   if (loaded) return
   loaded = true
@@ -29,8 +50,8 @@ export function loadTestEnv() {
     }
   }
 
-  const envPath = path.resolve(process.cwd(), '.env.test')
-  if (fs.existsSync(envPath)) {
+  for (const envPath of resolveEnvPaths()) {
+    if (!fs.existsSync(envPath)) continue
     const content = fs.readFileSync(envPath, 'utf8')
     for (const line of content.split('\n')) {
       const pair = parseEnvLine(line)
@@ -43,9 +64,10 @@ export function loadTestEnv() {
 
   setIfMissing('NODE_ENV', 'test')
   setIfMissing('BILLING_MODE', 'OFF')
-  setIfMissing('DATABASE_URL', 'mysql://root:root@127.0.0.1:3307/waoowaoo_test')
+  const baseDatabaseUrl = mutableEnv.DATABASE_URL || 'mysql://root:waoowaoo123@127.0.0.1:13306/waoowaoo'
+  mutableEnv.DATABASE_URL = deriveTestDatabaseUrl(baseDatabaseUrl)
   setIfMissing('REDIS_HOST', '127.0.0.1')
-  setIfMissing('REDIS_PORT', '6380')
+  setIfMissing('REDIS_PORT', '16379')
 }
 
 loadTestEnv()

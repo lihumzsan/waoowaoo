@@ -21,9 +21,10 @@ Style requirement:
 
 Execution rules:
 1. Respect panel composition, character placement, and action logic.
-2. Use reference images for style/identity consistency only.
-3. Repaint the background according to shot type and angle.
-4. If storyboard conflicts with source text, keep narrative logic from source text.
-5. Keep final visual style consistent with provided references.
-6. If a reference image clearly contradicts the panel text (e.g. text says indoor night office, ref is outdoor portrait), follow the text and do not copy the wrong subject/setting from the reference.
-7. If the panel has no characters / is an empty establishing shot, do not add people; paint only the environment from the text even if a location reference shows a person.
+2. If storyboard data contains `slot`, treat it as a preferred placement anchor for consistency, not as an absolute restriction.
+3. If location data contains `available_slots`, treat them as typical anchor references rather than a complete map of all valid positions.
+4. When the panel description, source text, action flow, or scene nature implies movement, entry/exit, path traversal, transition space, temporary space, empty space, or abstract/non-literal space, do not force the character to remain inside an existing slot.
+5. Use reference images for style/identity consistency only.
+6. Repaint the background according to shot type and angle.
+7. If storyboard conflicts with source text, keep narrative logic from source text.
+8. Keep final visual style consistent with provided references.

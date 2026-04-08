@@ -1,7 +1,6 @@
 'use client'
 
 import LLMStageStreamCard, { type LLMStageViewItem } from '@/components/llm-console/LLMStageStreamCard'
-import { useToast } from '@/contexts/ToastContext'
 import { useTranslations } from 'next-intl'
 
 type RunStreamStep = {
@@ -55,7 +54,6 @@ export default function WorkspaceRunStreamConsoles({
   hideMinimizedBadges,
 }: WorkspaceRunStreamConsolesProps) {
   const t = useTranslations('progress')
-  const { showToast } = useToast()
   const storyToScriptActive =
     storyToScriptStream.isRunning ||
     storyToScriptStream.isRecoveredRunning ||
@@ -131,19 +129,12 @@ export default function WorkspaceRunStreamConsoles({
     const input = typeof window !== 'undefined'
       ? window.prompt('可选：输入重试模型（留空使用当前模型）')
       : null
-    if (input === null) return
     const modelOverride = typeof input === 'string' ? input.trim() : ''
-    try {
-      await stream.retryStep({
-        stepId,
-        modelOverride: modelOverride || undefined,
-        reason: 'user_retry_from_console',
-      })
-      showToast('已提交重试，请稍候…', 'info', 2800)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      showToast(`重试失败：${message}`, 'error', 6000)
-    }
+    await stream.retryStep({
+      stepId,
+      modelOverride: modelOverride || undefined,
+      reason: 'user_retry_from_console',
+    })
   }
 
   return (

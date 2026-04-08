@@ -1,16 +1,9 @@
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { executeAiTextStep } from '@/lib/ai-runtime'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { getProjectModelConfig, buildImageBillingPayload } from '@/lib/config-service'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { createScopedLogger } from '@/lib/logging/core'
 import { validateProfileData, stringifyProfileData } from '@/types/character-profile'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
-import { submitTask } from '@/lib/task/submitter'
-import { hasCharacterAppearanceOutput } from '@/lib/task/has-output'
-import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
@@ -21,108 +14,11 @@ import {
   readText,
   resolveProjectModel,
 } from './character-profile-helpers'
-import { resolveAnalysisModel } from './resolve-analysis-model'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 
-const logger = createScopedLogger({ module: 'worker.character-profile' })
-
 type ConfirmProfileOptions = {
   suppressProgress?: boolean
-}
-
-/**
- * 与 POST /api/.../generate-image（character）对齐：确认档案后自动入队主形象生图（ComfyUI / FAL 等由项目「角色图模型」决定）。
- */
-async function tryEnqueuePrimaryAppearanceImage(job: Job<TaskJobData>, characterId: string, primaryAppearanceId: string) {
-  const projectId = job.data.projectId
-  const userId = job.data.userId
-  const locale = job.data.locale
-
-  const projectModelConfig = await getProjectModelConfig(projectId, userId)
-  if (!projectModelConfig.characterModel) {
-    logger.warn({
-      action: 'post_confirm_image_skipped',
-      message: 'skip auto character image: character model not configured',
-      projectId,
-      details: { characterId, primaryAppearanceId },
-    })
-    return null
-  }
-
-  const count = normalizeImageGenerationCount('character', undefined)
-  const basePayload: Record<string, unknown> = {
-    type: 'character',
-    id: characterId,
-    appearanceId: primaryAppearanceId,
-    count,
-  }
-
-  const hasOutputAtStart = await hasCharacterAppearanceOutput({
-    appearanceId: primaryAppearanceId,
-    characterId,
-    appearanceIndex: 0,
-  })
-
-  let billingPayload: Record<string, unknown>
-  try {
-    billingPayload = await buildImageBillingPayload({
-      projectId,
-      userId,
-      imageModel: projectModelConfig.characterModel,
-      basePayload,
-    })
-  } catch (error) {
-    logger.warn({
-      action: 'post_confirm_image_skipped',
-      message: 'skip auto character image: billing/capability payload failed',
-      projectId,
-      details: {
-        characterId,
-        primaryAppearanceId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    })
-    return null
-  }
-
-  try {
-    const submitResult = await submitTask({
-      userId,
-      locale,
-      projectId,
-      type: TASK_TYPE.IMAGE_CHARACTER,
-      targetType: 'CharacterAppearance',
-      targetId: primaryAppearanceId,
-      payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
-      dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:${primaryAppearanceId}:${count}`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, billingPayload),
-      requestId: null,
-    })
-    logger.info({
-      action: 'post_confirm_image_enqueued',
-      message: 'enqueued character image after profile confirm',
-      projectId,
-      details: {
-        characterId,
-        primaryAppearanceId,
-        imageTaskId: submitResult.taskId,
-      },
-    })
-    return submitResult.taskId
-  } catch (error) {
-    logger.warn({
-      action: 'post_confirm_image_enqueue_failed',
-      message: 'auto character image submitTask failed (profile already saved)',
-      projectId,
-      details: {
-        characterId,
-        primaryAppearanceId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    })
-    return null
-  }
 }
 
 async function handleConfirmProfile(
@@ -133,10 +29,6 @@ async function handleConfirmProfile(
   const suppressProgress = options.suppressProgress === true
   const characterId = readRequiredString(payload.characterId, 'characterId')
   const project = await resolveProjectModel(job.data.projectId)
-  const analysisModel = await resolveAnalysisModel({
-    userId: job.data.userId,
-    projectId: job.data.projectId,
-  })
 
   const character = await prisma.novelPromotionCharacter.findFirst({
     where: {
@@ -199,7 +91,7 @@ async function handleConfirmProfile(
     async () =>
       await executeAiTextStep({
         userId: job.data.userId,
-        model: analysisModel,
+        model: project.novelPromotionData!.analysisModel!,
         messages: [{ role: 'user', content: promptTemplate }],
         temperature: 0.7,
         projectId: job.data.projectId,
@@ -246,7 +138,7 @@ async function handleConfirmProfile(
     imageUrls: string
     previousImageUrls: string
   }> = []
-  const createdAppearanceIds: string[] = []
+
   for (let appIndex = 0; appIndex < appearances.length; appIndex++) {
     const app = appearances[appIndex]
     await assertTaskActive(job, 'character_profile_confirm_create_appearance')
@@ -269,10 +161,9 @@ async function handleConfirmProfile(
     })
 
     for (const appearanceRow of appearanceRows) {
-      const created = await tx.characterAppearance.create({
+      await tx.characterAppearance.create({
         data: appearanceRow,
       })
-      createdAppearanceIds.push(created.id)
     }
 
     await tx.novelPromotionCharacter.update({
@@ -284,20 +175,12 @@ async function handleConfirmProfile(
     })
   })
 
-  /** 前端 useProfileManagement 传 generateImage: true；此前未消费该字段，导致确认后不会走 ComfyUI/生图队列 */
-  const generateImage = payload.generateImage === true
-  const primaryAppearanceId = createdAppearanceIds[0]
-  let followUpImageTaskId: string | null = null
-  if (generateImage && primaryAppearanceId) {
-    followUpImageTaskId = await tryEnqueuePrimaryAppearanceImage(job, character.id, primaryAppearanceId)
-  }
-
   if (!suppressProgress) {
     await reportTaskProgress(job, 96, {
       stage: 'character_profile_confirm_done',
       stageLabel: '角色档案确认完成',
       displayMode: 'detail',
-      meta: { characterId, followUpImageTaskId },
+      meta: { characterId },
     })
   }
 
@@ -308,7 +191,6 @@ async function handleConfirmProfile(
       profileConfirmed: true,
       appearances,
     },
-    followUpImageTaskId,
   }
 }
 

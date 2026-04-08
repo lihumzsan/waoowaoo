@@ -63,6 +63,34 @@ describe('bailian llm provider', () => {
     expect(completion.choices[0]?.message?.content).toBe('ok')
   })
 
+  it('routes sk-sp api keys to bailian coding endpoint', async () => {
+    await completeBailianLlm({
+      modelId: 'qwen3.5-plus',
+      messages: [{ role: 'user', content: 'hello' }],
+      apiKey: 'sk-sp-demo',
+    })
+
+    expect(openAiCtorMock).toHaveBeenCalledWith({
+      apiKey: 'sk-sp-demo',
+      baseURL: 'https://coding.dashscope.aliyuncs.com/v1',
+      timeout: 30_000,
+    })
+  })
+
+  it('accepts newly registered coding plan llm models', async () => {
+    await completeBailianLlm({
+      modelId: 'glm-5',
+      messages: [{ role: 'user', content: 'hello' }],
+      apiKey: 'sk-sp-demo',
+    })
+
+    expect(createChatCompletionMock).toHaveBeenCalledWith({
+      model: 'glm-5',
+      messages: [{ role: 'user', content: 'hello' }],
+      temperature: 0.7,
+    })
+  })
+
   it('fails fast when model is not in official bailian catalog', async () => {
     await expect(
       completeBailianLlm({

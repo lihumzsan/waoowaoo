@@ -11,12 +11,6 @@ import type {
   ProviderCardTranslator,
 } from './types'
 
-function providerHasCredentials(provider: ProviderCardProps['provider']): boolean {
-  const key = getProviderKey(provider.id)
-  if (key === 'comfyui') return !!(provider.hasApiKey || provider.baseUrl?.trim())
-  return !!provider.hasApiKey
-}
-
 interface ProviderAdvancedFieldsProps {
   provider: ProviderCardProps['provider']
   onToggleModel: ProviderCardProps['onToggleModel']
@@ -24,6 +18,12 @@ interface ProviderAdvancedFieldsProps {
   onUpdateModel: ProviderCardProps['onUpdateModel']
   t: ProviderCardTranslator
   state: UseProviderCardStateResult
+}
+
+function providerHasCredentials(provider: ProviderCardProps['provider']): boolean {
+  const key = getProviderKey(provider.id)
+  if (key === 'comfyui') return !!(provider.hasApiKey || provider.baseUrl?.trim())
+  return !!provider.hasApiKey
 }
 
 const TypeIcon = ({
@@ -68,10 +68,79 @@ const typeLabel = (type: ProviderCardModelType, t: ProviderCardTranslator) => {
 
 const MODEL_TYPES: readonly ProviderCardModelType[] = ['llm', 'image', 'video', 'audio']
 
-export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
+type ComfyUiWorkflowParts = {
+  root: string
+  category: string
+  workflow: string
+}
+
+type ComfyUiCategoryGroup = {
+  key: string
+  root: string
+  category: string
+  models: CustomModel[]
+}
+
+export function parseComfyUiWorkflowParts(modelId: string): ComfyUiWorkflowParts | null {
+  const segments = modelId
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (segments.length < 3) return null
+
+  const [root, category, ...workflowParts] = segments
+  const workflow = workflowParts.join('/').trim()
+  if (!root || !category || !workflow) return null
+
+  return {
+    root,
+    category,
+    workflow,
+  }
+}
+
+export function groupComfyUiModelsByCategory(models: CustomModel[]): ComfyUiCategoryGroup[] {
+  const groups = new Map<string, ComfyUiCategoryGroup>()
+
+  for (const model of models) {
+    const parts = parseComfyUiWorkflowParts(model.modelId)
+    if (!parts) continue
+
+    const groupKey = `${parts.root}/${parts.category}`
+    const existingGroup = groups.get(groupKey)
+    if (existingGroup) {
+      existingGroup.models.push(model)
+      continue
+    }
+
+    groups.set(groupKey, {
+      key: groupKey,
+      root: parts.root,
+      category: parts.category,
+      models: [model],
+    })
+  }
+
+  return Array.from(groups.values())
+}
+
+function getAllowedModelTypesForProvider(
+  providerId: string,
+  options?: { isBailianCodingPlan?: boolean },
+): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
+  if (providerKey === 'bailian' && options?.isBailianCodingPlan) return ['llm']
   if (providerKey === 'openai-compatible') return ['llm', 'image', 'video']
   return ['llm', 'image', 'video', 'audio']
+}
+
+export function getAddableModelTypesForProvider(
+  providerId: string,
+  options?: { isBailianCodingPlan?: boolean; allowManualAdd?: boolean },
+): ProviderCardModelType[] {
+  if (options?.allowManualAdd === false) return []
+  return getAllowedModelTypesForProvider(providerId, options)
 }
 
 export function shouldShowOpenAICompatVideoHint(
@@ -89,13 +158,16 @@ function shouldShowDefaultTabs(providerId: string): boolean {
 export function getVisibleModelTypesForProvider(
   providerId: string,
   groupedModels: Partial<Record<ProviderCardModelType, CustomModel[]>>,
+  options?: { isBailianCodingPlan?: boolean },
 ): ProviderCardModelType[] {
   const shouldShowAllTabs = shouldShowDefaultTabs(providerId)
+  const allowedTypes = getAllowedModelTypesForProvider(providerId, options)
   if (shouldShowAllTabs) {
-    return getAddableModelTypesForProvider(providerId)
+    return allowedTypes
   }
 
   return MODEL_TYPES.filter((type) => {
+    if (!allowedTypes.includes(type)) return false
     const modelsOfType = groupedModels[type]
     return Array.isArray(modelsOfType) && modelsOfType.length > 0
   })
@@ -140,12 +212,16 @@ export function ProviderAdvancedFields({
   state,
 }: ProviderAdvancedFieldsProps) {
   const providerKey = getProviderKey(provider.id)
-  const modelIdPlaceholder =
-    providerKey === 'comfyui' ? t('comfyuiWorkflowKeyPlaceholder') : t('modelActualId')
-  const addableModelTypes = new Set<ProviderCardModelType>(getAddableModelTypesForProvider(provider.id))
+  const allowManualAdd = !(providerKey === 'bailian' && state.isBailianCodingPlan)
+  const addableModelTypes = new Set<ProviderCardModelType>(getAddableModelTypesForProvider(provider.id, {
+    isBailianCodingPlan: state.isBailianCodingPlan,
+    allowManualAdd,
+  }))
   const visibleTypes = useMemo(
-    () => getVisibleModelTypesForProvider(provider.id, state.groupedModels),
-    [provider.id, state.groupedModels],
+    () => getVisibleModelTypesForProvider(provider.id, state.groupedModels, {
+      isBailianCodingPlan: state.isBailianCodingPlan,
+    }),
+    [provider.id, state.groupedModels, state.isBailianCodingPlan],
   )
   const [activeType, setActiveType] = useState<ProviderCardModelType | null>(
     visibleTypes[0] ?? null,
@@ -164,13 +240,24 @@ export function ProviderAdvancedFields({
 
   const currentType = activeType ?? visibleTypes[0] ?? null
   const currentModels = currentType ? (state.groupedModels[currentType] ?? []) : []
+  const providerReadyForToggle = providerHasCredentials(provider)
   const shouldShowAddButton =
     !!currentType
     && addableModelTypes.has(currentType)
     && state.showAddForm !== currentType
-  const defaultAddType: ProviderCardModelType = providerKey === 'openrouter' ? 'llm' : 'image'
+  const defaultAddType: ProviderCardModelType = visibleTypes[0]
+    ?? Array.from(addableModelTypes)[0]
+    ?? (providerKey === 'openrouter' ? 'llm' : 'image')
   const useTabbedLayout = state.hasModels || shouldShowDefaultTabs(provider.id)
   const shouldShowVideoHint = shouldShowOpenAICompatVideoHint(provider.id, currentType)
+  const comfyUiCategoryGroups = useMemo(
+    () => (providerKey === 'comfyui' ? groupComfyUiModelsByCategory(currentModels) : []),
+    [currentModels, providerKey],
+  )
+  const shouldShowComfyUiCategorySections =
+    providerKey === 'comfyui'
+    && (currentType === 'image' || currentType === 'video' || currentType === 'audio')
+    && comfyUiCategoryGroups.length > 0
 
   return useTabbedLayout ? (
     <div className="space-y-2.5 p-3">
@@ -228,7 +315,7 @@ export function ProviderAdvancedFields({
               onChange={(event) =>
                 state.setNewModel({ ...state.newModel, modelId: event.target.value })
               }
-              placeholder={modelIdPlaceholder}
+              placeholder={t('modelActualId')}
               className={`glass-input-base flex-1 px-3 py-1.5 text-[12px] font-mono ${currentType === 'video' && state.batchMode && provider.id === 'ark' ? 'rounded-r-none' : ''}`}
             />
             {currentType === 'video' && state.batchMode && provider.id === 'ark' && (
@@ -272,20 +359,65 @@ export function ProviderAdvancedFields({
         <div
           className="app-scrollbar h-[280px] overflow-y-auto pr-1"
         >
-          <div className="space-y-2">
-            {currentModels.map((model, index) => (
-              <ModelRow
-                key={`${model.modelKey}-${index}`}
-                model={model}
-                t={t}
-                state={state}
-                onToggleModel={onToggleModel}
-                onDeleteModel={onDeleteModel}
-                onUpdateModel={onUpdateModel}
-                hasApiKey={providerHasCredentials(provider)}
-              />
-            ))}
-          </div>
+          {shouldShowComfyUiCategorySections ? (
+            <div className="space-y-3">
+              {comfyUiCategoryGroups.map((group) => (
+                <div
+                  key={group.key}
+                  className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/80 p-2.5"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-semibold text-[var(--glass-text-primary)]">
+                          {group.category}
+                        </span>
+                        <span className="rounded-full bg-[var(--glass-tone-neutral-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--glass-tone-neutral-fg)]">
+                          {group.models.length}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--glass-text-tertiary)]">
+                        {group.root}
+                      </div>
+                    </div>
+                    <div className="shrink-0 rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[10px] text-[var(--glass-text-secondary)]">
+                      {typeLabel(currentType, t)}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {group.models.map((model, index) => (
+                      <ModelRow
+                        key={`${group.key}-${model.modelKey}-${index}`}
+                        model={model}
+                        t={t}
+                        state={state}
+                        onToggleModel={onToggleModel}
+                        onDeleteModel={onDeleteModel}
+                        onUpdateModel={onUpdateModel}
+                        hasApiKey={providerReadyForToggle}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {currentModels.map((model, index) => (
+                <ModelRow
+                  key={`${model.modelKey}-${index}`}
+                  model={model}
+                  t={t}
+                  state={state}
+                  onToggleModel={onToggleModel}
+                  onDeleteModel={onDeleteModel}
+                  onUpdateModel={onUpdateModel}
+                  hasApiKey={providerReadyForToggle}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -294,15 +426,17 @@ export function ProviderAdvancedFields({
       {state.showAddForm === null ? (
         <div className="text-center">
           <p className="mb-3 text-[12px] text-[var(--glass-text-tertiary)]">{t('noModelsForProvider')}</p>
-          <div className="flex items-center justify-center">
-            <button
-              onClick={() => state.setShowAddForm(defaultAddType)}
-              className="glass-btn-base glass-btn-soft px-3 py-1.5 text-[12px]"
-            >
-              <AppIcon name="plus" className="h-3.5 w-3.5" />
-              {t('addModel')}
-            </button>
-          </div>
+          {addableModelTypes.size > 0 && (
+            <div className="flex items-center justify-center">
+              <button
+                onClick={() => state.setShowAddForm(defaultAddType)}
+                className="glass-btn-base glass-btn-soft px-3 py-1.5 text-[12px]"
+              >
+                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                {t('addModel')}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="glass-surface-soft rounded-xl p-3">
@@ -328,7 +462,7 @@ export function ProviderAdvancedFields({
               onChange={(event) =>
                 state.setNewModel({ ...state.newModel, modelId: event.target.value })
               }
-              placeholder={modelIdPlaceholder}
+              placeholder={t('modelActualId')}
               className="glass-input-base flex-1 px-3 py-1.5 text-[12px] font-mono"
             />
             <button
@@ -375,6 +509,13 @@ function ModelRow({
   const isComingSoonModel = isPresetComingSoonModel(model.provider, model.modelId)
   const toggleDisabled = isComingSoonModel || !hasApiKey
   const rowDisabledClass = model.enabled ? '' : 'opacity-50'
+  const comfyUiParts = getProviderKey(model.provider) === 'comfyui'
+    ? parseComfyUiWorkflowParts(model.modelId)
+    : null
+  const displayName = comfyUiParts?.workflow || model.name
+  const displayMeta = comfyUiParts
+    ? `${comfyUiParts.root}/${comfyUiParts.category}/${comfyUiParts.workflow}`
+    : model.modelId
 
   return (
     <div className={`group flex items-center justify-between gap-2 rounded-xl bg-[var(--glass-bg-surface)] px-3 py-2 transition-colors hover:bg-[var(--glass-bg-surface-strong)] ${rowDisabledClass}`}>
@@ -397,11 +538,7 @@ function ModelRow({
                 state.setEditModel({ ...state.editModel, modelId: event.target.value })
               }
               className="glass-input-base w-full px-3 py-1.5 text-[12px] font-mono"
-              placeholder={
-                getProviderKey(model.provider) === 'comfyui'
-                  ? t('comfyuiWorkflowKeyPlaceholder')
-                  : t('modelActualId')
-              }
+              placeholder={t('modelActualId')}
             />
             {hasPriceText && (
               <div className="text-xs text-[var(--glass-text-tertiary)]">{priceText}</div>
@@ -432,7 +569,7 @@ function ModelRow({
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-[12px] font-semibold ${model.enabled ? 'text-[var(--glass-text-primary)]' : 'text-[var(--glass-text-secondary)]'}`}>
-                {model.name}
+                {displayName}
               </span>
               {state.isDefaultModel(model) && model.enabled && (
                 <span className="shrink-0 rounded-md bg-[var(--glass-text-primary)] px-1.5 py-0.5 text-[10px] leading-none text-white">
@@ -443,7 +580,7 @@ function ModelRow({
                 <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">{priceText}</span>
               )}
             </div>
-            <span className="break-all text-[11px] text-[var(--glass-text-tertiary)]">{model.modelId}</span>
+            <span className="break-all text-[11px] text-[var(--glass-text-tertiary)]">{displayMeta}</span>
           </div>
 
           <div className="flex items-center gap-1.5">

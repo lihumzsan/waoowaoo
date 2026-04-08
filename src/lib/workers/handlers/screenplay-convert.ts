@@ -52,7 +52,7 @@ export async function handleScreenplayConvertTask(job: Job<TaskJobData>) {
   const analysisModel = await resolveAnalysisModel({
     userId: job.data.userId,
     inputModel: payload.model,
-    projectId: job.data.projectId,
+    projectAnalysisModel: novelData.analysisModel,
   })
 
   const episode = await prisma.novelPromotionEpisode.findUnique({

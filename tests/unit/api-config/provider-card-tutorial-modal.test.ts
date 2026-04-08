@@ -28,6 +28,8 @@ function createState(tutorial: ProviderTutorial): UseProviderCardStateResult {
   return {
     providerKey: 'ark',
     isPresetProvider: true,
+    isBailianCodingPlan: false,
+    bailianFixedBaseUrl: null,
     showBaseUrlEdit: false,
     tutorial,
     groupedModels: {},

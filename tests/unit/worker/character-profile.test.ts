@@ -10,9 +10,7 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => ({})),
   },
   characterAppearance: {
-    create: vi.fn(async (args: { data: { characterId: string; appearanceIndex: number } }) => ({
-      id: `appearance-${args.data.characterId}-${args.data.appearanceIndex}`,
-    })),
+    create: vi.fn(async () => ({})),
     deleteMany: vi.fn(async () => ({ count: 1 })),
   },
 }))
@@ -35,27 +33,6 @@ const helperMock = vi.hoisted(() => ({
 const workerMock = vi.hoisted(() => ({
   reportTaskProgress: vi.fn(async () => undefined),
   assertTaskActive: vi.fn(async () => undefined),
-}))
-
-const submitTaskMock = vi.hoisted(() =>
-  vi.fn(async () => ({
-    success: true,
-    async: true,
-    taskId: 'follow-up-image-task-1',
-    status: 'queued',
-    deduped: false,
-  })),
-)
-
-const configServiceMock = vi.hoisted(() => ({
-  getProjectModelConfig: vi.fn(async () => ({
-    characterModel: 'openai-compatible::test-image-model',
-    artStyle: 'realistic',
-  })),
-  buildImageBillingPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
-    ...input.basePayload,
-    imageModel: 'openai-compatible::test-image-model',
-  })),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -88,17 +65,6 @@ vi.mock('@/lib/workers/handlers/character-profile-helpers', async () => {
     resolveProjectModel: helperMock.resolveProjectModel,
   }
 })
-vi.mock('@/lib/workers/handlers/resolve-analysis-model', () => ({
-  resolveAnalysisModel: vi.fn(async () => 'bailian-coding-plan::qwen3.5-plus'),
-}))
-vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
-vi.mock('@/lib/config-service', () => ({
-  getProjectModelConfig: configServiceMock.getProjectModelConfig,
-  buildImageBillingPayload: configServiceMock.buildImageBillingPayload,
-}))
-vi.mock('@/lib/task/has-output', () => ({
-  hasCharacterAppearanceOutput: vi.fn(async () => false),
-}))
 vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: { NP_AGENT_CHARACTER_VISUAL: 'np_agent_character_visual' },
   buildPrompt: vi.fn(() => 'character-visual-prompt'),
@@ -174,7 +140,7 @@ describe('worker character-profile behavior', () => {
   })
 
   it('confirm profile success -> rebuilds appearances and marks profileConfirmed', async () => {
-    const job = buildJob(TASK_TYPE.CHARACTER_PROFILE_CONFIRM, { characterId: 'character-1', generateImage: false })
+    const job = buildJob(TASK_TYPE.CHARACTER_PROFILE_CONFIRM, { characterId: 'character-1' })
     const result = await handleCharacterProfileTask(job)
 
     expect(prismaMock.characterAppearance.deleteMany).toHaveBeenCalledWith({
@@ -199,36 +165,11 @@ describe('worker character-profile behavior', () => {
 
     expect(result).toEqual(expect.objectContaining({
       success: true,
-      followUpImageTaskId: null,
       character: expect.objectContaining({
         id: 'character-1',
         profileConfirmed: true,
       }),
     }))
-    expect(submitTaskMock).not.toHaveBeenCalled()
-  })
-
-  it('confirm profile with generateImage -> enqueues IMAGE_CHARACTER for primary appearance', async () => {
-    const job = buildJob(TASK_TYPE.CHARACTER_PROFILE_CONFIRM, {
-      characterId: 'character-1',
-      generateImage: true,
-    })
-    const result = await handleCharacterProfileTask(job)
-
-    expect(submitTaskMock).toHaveBeenCalledTimes(1)
-    expect(submitTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: TASK_TYPE.IMAGE_CHARACTER,
-        targetType: 'CharacterAppearance',
-        targetId: 'appearance-character-1-0',
-      }),
-    )
-    expect(result).toEqual(
-      expect.objectContaining({
-        success: true,
-        followUpImageTaskId: 'follow-up-image-task-1',
-      }),
-    )
   })
 
   it('batch confirm -> loops through all unconfirmed characters and returns count', async () => {

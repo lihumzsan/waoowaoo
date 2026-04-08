@@ -22,7 +22,6 @@ interface UseStoryboardPanelAssetActionsProps {
   getPanelEditData: (panel: StoryboardPanel) => PanelEditData
   updatePanelEdit: (panelId: string, panel: StoryboardPanel, updates: Partial<PanelEditData>) => void
   debouncedSave: (panelId: string, storyboardId: string) => void
-  savePanelWithData: (storyboardId: string, panelData: PanelEditData) => Promise<void>
   regeneratePanelImage: (panelId: string, count?: number, force?: boolean) => Promise<void>
   modifyPanelImage: (
     storyboardId: string,
@@ -73,7 +72,6 @@ export function useStoryboardPanelAssetActions({
   getPanelEditData,
   updatePanelEdit,
   debouncedSave,
-  savePanelWithData,
   regeneratePanelImage,
   modifyPanelImage,
   addCharacterToPanel,
@@ -168,26 +166,12 @@ export function useStoryboardPanelAssetActions({
     },
     [setPanelLocation, updatePanelEdit],
   )
-
-  const regeneratePanelImageWithLatestPrompt = useCallback(
-    async (panelId: string, count: number = 1, force: boolean = false) => {
-      const storyboard = localStoryboards.find((item) => getTextPanels(item).some((itemPanel) => itemPanel.id === panelId))
-      const panel = storyboard ? getTextPanels(storyboard).find((item) => item.id === panelId) : null
-      if (storyboard && panel) {
-        const snapshot = getPanelEditData(panel)
-        await savePanelWithData(storyboard.id, snapshot)
-      }
-      await regeneratePanelImage(panelId, count, force)
-    },
-    [getPanelEditData, getTextPanels, localStoryboards, regeneratePanelImage, savePanelWithData],
-  )
-
   const { runningCount, pendingPanelCount, handleGenerateAllPanels } =
     useStoryboardBatchPanelGeneration({
       sortedStoryboards,
       submittingPanelImageIds,
       getTextPanels,
-      regeneratePanelImage: regeneratePanelImageWithLatestPrompt,
+      regeneratePanelImage,
       setIsEpisodeBatchSubmitting,
     })
 
@@ -199,7 +183,6 @@ export function useStoryboardPanelAssetActions({
     handleSetLocation,
     handleRemoveCharacter,
     handleRemoveLocation,
-    regeneratePanelImageWithLatestPrompt,
     runningCount,
     pendingPanelCount,
     handleGenerateAllPanels,

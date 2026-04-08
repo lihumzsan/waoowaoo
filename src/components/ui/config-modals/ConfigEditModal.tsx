@@ -392,36 +392,6 @@ export function SettingsModal({
                         {!modelsLoaded && (
                             <div className="text-xs text-[var(--glass-text-tertiary)]">{t('loadingModels')}</div>
                         )}
-                        {modelsLoaded && userModels.image.length === 0 && (
-                            <div className="rounded-xl border border-[var(--glass-tone-warning-bg)] bg-[var(--glass-tone-warning-bg)]/25 px-4 py-3">
-                                <p className="text-sm font-semibold text-[var(--glass-tone-warning-fg)] mb-1">
-                                    {t('noImageModelsBannerTitle')}
-                                </p>
-                                <p className="text-xs leading-relaxed text-[var(--glass-text-secondary)]">
-                                    {t('noImageModelsBannerBody')}
-                                </p>
-                            </div>
-                        )}
-                        {modelsLoaded && normalVideoModels.length === 0 && (
-                            <div className="rounded-xl border border-[var(--glass-tone-warning-bg)] bg-[var(--glass-tone-warning-bg)]/25 px-4 py-3">
-                                <p className="text-sm font-semibold text-[var(--glass-tone-warning-fg)] mb-1">
-                                    {t('noVideoModelsBannerTitle')}
-                                </p>
-                                <p className="text-xs leading-relaxed text-[var(--glass-text-secondary)]">
-                                    {t('noVideoModelsBannerBody')}
-                                </p>
-                            </div>
-                        )}
-                        {modelsLoaded && userModels.audio.length === 0 && (
-                            <div className="rounded-xl border border-[var(--glass-tone-warning-bg)] bg-[var(--glass-tone-warning-bg)]/25 px-4 py-3">
-                                <p className="text-sm font-semibold text-[var(--glass-tone-warning-fg)] mb-1">
-                                    {t('noAudioModelsBannerTitle')}
-                                </p>
-                                <p className="text-xs leading-relaxed text-[var(--glass-text-secondary)]">
-                                    {t('noAudioModelsBannerBody')}
-                                </p>
-                            </div>
-                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('analysisModel')}</label>
@@ -451,8 +421,6 @@ export function SettingsModal({
                                     onCapabilityChange={(field, rawValue, sample) => {
                                         applyCapabilityOverride(characterModel, field, rawValue, sample)
                                     }}
-                                    placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
 
@@ -468,8 +436,6 @@ export function SettingsModal({
                                     onCapabilityChange={(field, rawValue, sample) => {
                                         applyCapabilityOverride(locationModel, field, rawValue, sample)
                                     }}
-                                    placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
 
@@ -485,8 +451,6 @@ export function SettingsModal({
                                     onCapabilityChange={(field, rawValue, sample) => {
                                         applyCapabilityOverride(imageModel, field, rawValue, sample)
                                     }}
-                                    placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
 
@@ -502,8 +466,6 @@ export function SettingsModal({
                                     onCapabilityChange={(field, rawValue, sample) => {
                                         applyCapabilityOverride(editModel, field, rawValue, sample)
                                     }}
-                                    placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
 
@@ -519,8 +481,6 @@ export function SettingsModal({
                                     onCapabilityChange={(field, rawValue, sample) => {
                                         applyCapabilityOverride(videoModel, field, rawValue, sample)
                                     }}
-                                    placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
 
@@ -537,7 +497,6 @@ export function SettingsModal({
                                         applyCapabilityOverride(audioModel, field, rawValue, sample)
                                     }}
                                     placeholder={t('pleaseSelect')}
-                                    listEmptyMessage={t('noModelsInList')}
                                 />
                             </div>
                         </div>

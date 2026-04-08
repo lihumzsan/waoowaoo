@@ -17,16 +17,10 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
         return 'https://your-api-domain.com'
       case 'openai-compatible':
         return 'https://api.openai.com/v1'
-      case 'comfyui':
-        return t('comfyuiBaseUrlPlaceholder')
       default:
         return 'http://localhost:8000'
     }
   })()
-
-  const comfyUiAddressOnly =
-    state.providerKey === 'comfyui' && !provider.apiKey && Boolean(provider.baseUrl?.trim())
-  const showApiKeyAsConfigured = provider.hasApiKey || comfyUiAddressOnly
 
   return (
     <>
@@ -41,7 +35,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
                 type="text"
                 value={state.tempKey}
                 onChange={(event) => state.setTempKey(event.target.value)}
-                placeholder={state.providerKey === 'comfyui' ? `${t('enterApiKey')} (${t('optional')})` : t('enterApiKey')}
+                placeholder={t('enterApiKey')}
                 className="glass-input-base flex-1 px-3 py-1.5 text-[12px]"
                 disabled={state.keyTestStatus === 'testing'}
                 autoFocus
@@ -69,29 +63,23 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
             </div>
           ) : (
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {showApiKeyAsConfigured ? (
+              {provider.hasApiKey ? (
                 <>
                   <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap rounded-lg bg-[var(--glass-bg-surface)] px-3 py-1.5 font-mono text-[12px] text-[var(--glass-text-secondary)]">
-                    {comfyUiAddressOnly
-                      ? (state.showKey ? t('comfyuiNoKey') : '••••••')
-                      : state.showKey
-                        ? provider.apiKey
-                        : state.maskedKey}
+                    {state.showKey ? provider.apiKey : state.maskedKey}
                   </span>
                   <div className="flex shrink-0 items-center gap-1">
-                    {!comfyUiAddressOnly && (
-                      <button
-                        onClick={() => state.setShowKey(!state.showKey)}
-                        className="glass-icon-btn-sm"
-                        title={state.showKey ? t('hide') : t('show')}
-                      >
-                        {state.showKey ? (
-                          <AppIcon name="eye" className="h-4 w-4" />
-                        ) : (
-                          <AppIcon name="eyeOff" className="h-4 w-4" />
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => state.setShowKey(!state.showKey)}
+                      className="glass-icon-btn-sm"
+                      title={state.showKey ? t('hide') : t('show')}
+                    >
+                      {state.showKey ? (
+                        <AppIcon name="eye" className="h-4 w-4" />
+                      ) : (
+                        <AppIcon name="eyeOff" className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       onClick={state.startEditKey}
                       className="glass-icon-btn-sm"
@@ -114,6 +102,27 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
           )}
         </div>
       </div>
+
+      {state.isBailianCodingPlan && state.bailianFixedBaseUrl && (
+        <div className="px-3.5 pt-2">
+          <div className="glass-surface-soft rounded-xl px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-secondary)]">
+                Coding Plan
+              </span>
+              <span className="text-[11px] text-[var(--glass-text-secondary)]">
+                OpenAI-compatible endpoint
+              </span>
+            </div>
+            <p className="mt-1 break-all font-mono text-[11px] text-[var(--glass-text-primary)]">
+              {state.bailianFixedBaseUrl}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--glass-text-tertiary)]">
+              Text models only for this key type.
+            </p>
+          </div>
+        </div>
+      )}
 
       {state.keyTestStatus !== 'idle' && (
         <div className="px-3.5 pt-2">
@@ -221,9 +230,21 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
 
             {/* Failure warning */}
             {state.keyTestStatus === 'failed' && (
-              <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 px-3 py-2 text-[11px] text-[var(--glass-text-primary)]">
-                <span className="mt-0.5 shrink-0 text-sm">&#9888;</span>
-                <span>{t('testWarning')}</span>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 px-3 py-2 text-[11px] text-[var(--glass-text-primary)]">
+                  <span className="mt-0.5 shrink-0 text-sm">&#9888;</span>
+                  <span>{t('testWarning')}</span>
+                </div>
+                {state.isEditing && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={state.handleForceSaveKey}
+                      className="glass-btn-base glass-btn-soft px-2.5 py-1 text-[12px] font-medium"
+                    >
+                      {t('addAnyway')}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

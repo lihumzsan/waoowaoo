@@ -64,10 +64,6 @@ function normalizeProviderBaseUrl(providerId: string, rawBaseUrl?: string): stri
   if (providerKey === 'minimax') {
     return 'https://api.minimaxi.com/v1'
   }
-  if (providerKey === 'bailian-coding-plan') {
-    const baseUrl = readTrimmedString(rawBaseUrl)
-    return baseUrl || 'https://coding.dashscope.aliyuncs.com/v1'
-  }
   if (providerKey === 'comfyui') {
     const baseUrl = readTrimmedString(rawBaseUrl)
     return baseUrl || 'http://127.0.0.1:8188'
@@ -512,5 +508,8 @@ export async function hasApiConfig(userId: string): Promise<boolean> {
   })
 
   const providers = parseCustomProviders(pref?.customProviders)
-  return providers.some((provider) => !!provider.apiKey)
+  return providers.some((provider) => {
+    if (provider.apiKey) return true
+    return getProviderKey(provider.id) === 'comfyui' && !!readTrimmedString(provider.baseUrl)
+  })
 }

@@ -68,8 +68,6 @@ export interface ModelCapabilityDropdownProps {
     booleanToggles?: CapabilityBooleanToggle[]
     /** Optional: control dropdown placement strategy. Defaults to 'auto'. */
     placementMode?: 'auto' | 'downward'
-    /** When `models` is empty, shown inside the open panel (avoid zero-height flex collapse). */
-    listEmptyMessage?: string
 }
 
 const DEFAULT_PANEL_MAX_HEIGHT = 520
@@ -124,7 +122,6 @@ export function ModelCapabilityDropdown({
     compact = false,
     booleanToggles = [],
     placementMode = 'auto',
-    listEmptyMessage,
 }: ModelCapabilityDropdownProps) {
     const t = useTranslations('configModal')
     const tv = useTranslations('video')
@@ -285,60 +282,55 @@ export function ModelCapabilityDropdown({
             {isOpen && createPortal(
                 <div
                     ref={panelRef}
-                    className={`glass-surface-modal z-[9999] overflow-hidden flex flex-col rounded-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] ${models.length === 0 ? 'min-h-[200px]' : ''}`}
+                    className="glass-surface-modal z-[9999] overflow-hidden flex flex-col rounded-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.1)]"
                     style={panelStyle}
                 >
-                    {/* Model list — 无选项时列表区高度会为 0（flex 塌陷），导致面板「打开但看不见」 */}
-                    <div className={`px-2 pb-2 min-h-0 flex-1 overflow-y-auto custom-scrollbar ${models.length === 0 ? 'min-h-[160px] flex items-center justify-center' : ''}`}>
-                        {models.length === 0 ? (
-                            <p className="px-4 text-center text-[13px] leading-relaxed text-[var(--glass-text-tertiary)]">
-                                {listEmptyMessage || t('noModelsInList')}
-                            </p>
-                        ) : (
-                            (() => {
-                                const grouped = new Map<string, ModelCapabilityOption[]>()
-                                for (const m of models) {
-                                    const key = m.providerName || m.provider || 'Other'
-                                    if (!grouped.has(key)) grouped.set(key, [])
-                                    grouped.get(key)!.push(m)
-                                }
-                                return Array.from(grouped.entries()).map(([providerLabel, groupModels]) => (
-                                    <div key={providerLabel} className="mb-1">
-                                        <div className="sticky top-0 z-10 px-2 pt-2 pb-1 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md">
-                                            <span className="text-[11px] font-bold text-[var(--glass-text-tertiary)] tracking-wide">
-                                                {providerLabel}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            {groupModels.map((m) => (
-                                                <button
-                                                    key={m.value}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (m.disabled) return
-                                                        onModelChange(m.value)
-                                                    }}
-                                                    disabled={m.disabled}
-                                                    className={`w-full text-left px-4 py-2 transition-all border-l-[3px] ${value === m.value
-                                                        ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-bg-surface-strong)] font-bold'
-                                                        : m.disabled
-                                                            ? 'border-transparent text-[var(--glass-text-tertiary)] opacity-60 cursor-not-allowed'
-                                                            : 'border-transparent hover:bg-[var(--glass-bg-hover)]'
-                                                        }`}
-                                                >
-                                                    <span className={value === m.value
-                                                        ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)]`
-                                                        : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)]`
-                                                    }>
-                                                        {m.label}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
+                    {/* Model list */}
+                    <div className="px-2 pb-2 min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                        {(() => {
+                            // Group models by provider
+                            const grouped = new Map<string, ModelCapabilityOption[]>()
+                            for (const m of models) {
+                                const key = m.providerName || m.provider || 'Other'
+                                if (!grouped.has(key)) grouped.set(key, [])
+                                grouped.get(key)!.push(m)
+                            }
+                            return Array.from(grouped.entries()).map(([providerLabel, groupModels]) => (
+                                <div key={providerLabel} className="mb-1">
+                                    <div className="sticky top-0 z-10 px-2 pt-2 pb-1 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md">
+                                        <span className="text-[11px] font-bold text-[var(--glass-text-tertiary)] tracking-wide">
+                                            {providerLabel}
+                                        </span>
                                     </div>
-                                ))
-                            })()
-                        )}
+                                    <div className="space-y-0.5">
+                                        {groupModels.map((m) => (
+                                            <button
+                                                key={m.value}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (m.disabled) return
+                                                    onModelChange(m.value)
+                                                }}
+                                                disabled={m.disabled}
+                                                className={`w-full text-left px-4 py-2 transition-all border-l-[3px] ${value === m.value
+                                                    ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-bg-surface-strong)] font-bold'
+                                                    : m.disabled
+                                                        ? 'border-transparent text-[var(--glass-text-tertiary)] opacity-60 cursor-not-allowed'
+                                                        : 'border-transparent hover:bg-[var(--glass-bg-hover)]'
+                                                    }`}
+                                            >
+                                                <span className={value === m.value
+                                                    ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)]`
+                                                    : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)]`
+                                                }>
+                                                    {m.label}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        })()}
                     </div>
 
                     {/* Capability params: fixed at panel bottom */}

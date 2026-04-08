@@ -1,50 +1,43 @@
 import { getProviderConfig } from '@/lib/api-config'
 import { runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
+import { COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
-/**
- * 本地 ComfyUI 视频：由 workflows/<workflowKey>.json 定义整图；可选 .meta.json 注入 prompt。
- * 当前不注入产品侧首帧 imageUrl，请在工作流内自行处理输入。
- */
 export class ComfyUIVideoGenerator extends BaseVideoGenerator {
   protected async doGenerate(params: VideoGenerateParams): Promise<GenerateResult> {
-    const { userId, prompt, options = {} } = params
-
+    const { userId, imageUrl, prompt, options = {} } = params
     const providerId = typeof options.provider === 'string' ? options.provider : 'comfyui'
     const { baseUrl } = await getProviderConfig(userId, providerId)
+
     if (!baseUrl) {
       return {
         success: false,
-        error: 'COMFYUI_BASE_URL_MISSING: 请在 API 配置中填写 ComfyUI 服务地址',
+        error: 'COMFYUI_BASE_URL_MISSING: configure your ComfyUI Base URL first',
       }
     }
 
-    const workflowKey =
-      typeof options.modelId === 'string' && options.modelId.trim()
-        ? options.modelId.trim()
-        : ''
-
-    if (!workflowKey) {
-      return {
-        success: false,
-        error: 'COMFYUI_VIDEO_WORKFLOW_KEY_MISSING: 请在视频模型中配置工作流标识（与 workflows 目录下 JSON 文件名一致）',
-      }
-    }
+    const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
 
     try {
       const { videoBase64, mimeType } = await runComfyUiVideoWorkflow({
         baseUrl,
         workflowKey,
         prompt: prompt || '',
+        firstFrameImageUrl: imageUrl,
+        lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
       })
-      const dataUrl = `data:${mimeType};base64,${videoBase64}`
+
       return {
         success: true,
-        videoUrl: dataUrl,
+        videoUrl: `data:${mimeType};base64,${videoBase64}`,
       }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      return { success: false, error: message.slice(0, 500) }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+      }
     }
   }
 }

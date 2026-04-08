@@ -73,7 +73,6 @@ function buildPanelPromptContext(params: {
     location: string | null
     characters: string | null
     srtSegment: string | null
-    sourceText: string
     photographyRules: string | null
     actingNotes: string | null
   }
@@ -128,7 +127,7 @@ function buildPanelPromptContext(params: {
       video_prompt: params.panel.videoPrompt || '',
       location: params.panel.location || '',
       characters: panelCharacters,
-      source_text: params.panel.sourceText || '',
+      source_text: params.panel.srtSegment || '',
       photography_rules: parseJsonUnknown(params.panel.photographyRules),
       acting_notes: parseJsonUnknown(params.panel.actingNotes),
     },
@@ -156,22 +155,6 @@ function buildPanelPrompt(params: {
       style: params.styleText,
     },
   })
-}
-
-function buildResolvedSourceText(panel: {
-  description: string | null
-  srtSegment: string | null
-  videoPrompt: string | null
-  imagePrompt: string | null
-}): string {
-  const sections = [
-    panel.description ? `scene_description: ${panel.description}` : '',
-    panel.srtSegment ? `source_text: ${panel.srtSegment}` : '',
-    panel.videoPrompt ? `video_prompt: ${panel.videoPrompt}` : '',
-    panel.imagePrompt ? `image_prompt: ${panel.imagePrompt}` : '',
-  ].filter((item) => item.trim().length > 0)
-
-  return sections.join('\n')
 }
 
 export async function handlePanelImageTask(job: Job<TaskJobData>) {
@@ -221,12 +204,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const artStyle = getArtStylePrompt(modelConfig.artStyle, job.data.locale)
   if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
   const aspectRatio = projectData.videoRatio
-  const sourceText = buildResolvedSourceText({
-    description: panel.description,
-    srtSegment: panel.srtSegment,
-    videoPrompt: panel.videoPrompt,
-    imagePrompt: panel.imagePrompt,
-  })
   const promptContext = buildPanelPromptContext({
     panel: {
       id: panel.id,
@@ -238,7 +215,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
       location: panel.location,
       characters: panel.characters,
       srtSegment: panel.srtSegment,
-      sourceText,
       photographyRules: panel.photographyRules,
       actingNotes: panel.actingNotes,
     },
@@ -249,36 +225,13 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     locale: job.data.locale,
     aspectRatio,
     styleText: artStyle || '与参考图风格一致',
-    sourceText,
+    sourceText: panel.srtSegment || panel.description || '',
     contextJson,
-  })
-  /**
-   * 专用：排查图文不符时 grep「PANEL_IMAGE_PROMPT」或 details.panelImagePrompt。
-   * audit: true — 默认 LOG_LEVEL=ERROR 时仍会输出（与 API 侧 audit 一致）；否则 logger.info 会被静默丢弃。
-   */
-  logger.info({
-    audit: true,
-    action: 'panel_image.prompt.full',
-    message: '[PANEL_IMAGE_PROMPT] 画面提示词=发送给图像模型的最终全文（含模板+JSON+风格等）',
-    details: {
-      panelId,
-      promptCharCount: prompt.length,
-      panelImagePrompt: prompt,
-      resolvedSourceText: sourceText,
-      storyboardContextJson: contextJson,
-    },
   })
   logger.info({
     message: 'panel image prompt resolved',
     details: {
       promptLength: prompt.length,
-      promptSource: {
-        description: panel.description || '',
-        srtSegment: panel.srtSegment || '',
-        videoPrompt: panel.videoPrompt || '',
-        imagePrompt: panel.imagePrompt || '',
-        resolvedSourceText: sourceText,
-      },
     },
   })
 

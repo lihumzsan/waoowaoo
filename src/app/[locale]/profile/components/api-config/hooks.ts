@@ -23,6 +23,8 @@ import {
     DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
     normalizeWorkflowConcurrencyValue,
 } from '@/lib/workflow-concurrency'
+import { isBailianCodingPlanApiKey } from '@/lib/providers/bailian/base-url'
+import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
 
 interface DefaultModels {
     analysisModel?: string
@@ -121,6 +123,58 @@ export function mergeProvidersForDisplay(
     }
 
     return merged
+}
+
+const COMFYUI_PRESET_DEFAULT_MODEL_IDS = {
+    characterModel: 'baseimage/图片生成/Flux2Klein文生图',
+    locationModel: 'baseimage/图片生成/Flux2Klein文生图',
+    storyboardModel: 'baseimage/图片分镜/Qwen剧情分镜制作',
+    editModel: 'baseimage/图片编辑/qwen单图编辑',
+    videoModel: 'basevideo/图生视频/LTX2.3图生视频快速版',
+    audioModel: 'baseaudio/多人/LongCat-two',
+} as const
+
+function hasComfyUiPresetDefaultField(field: string): field is keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS {
+    return Object.prototype.hasOwnProperty.call(COMFYUI_PRESET_DEFAULT_MODEL_IDS, field)
+}
+
+export function applyComfyUiPresetDefaults(params: {
+    models: CustomModel[]
+    defaultModels: DefaultModels
+}): { models: CustomModel[]; defaultModels: DefaultModels; changed: boolean } {
+    const nextModels = [...params.models]
+    const nextDefaultModels: DefaultModels = { ...params.defaultModels }
+    const modelKeySet = new Set(nextModels.map((model) => model.modelKey))
+    let changed = false
+
+    for (const [field, modelId] of Object.entries(COMFYUI_PRESET_DEFAULT_MODEL_IDS)) {
+        if (!hasComfyUiPresetDefaultField(field)) continue
+        const modelIndex = nextModels.findIndex((model) => model.provider === 'comfyui' && model.modelId === modelId)
+        if (modelIndex < 0) continue
+
+        const targetModel = nextModels[modelIndex]
+        if (!targetModel) continue
+
+        const currentDefaultModelKey = nextDefaultModels[field]
+        if (!currentDefaultModelKey || !modelKeySet.has(currentDefaultModelKey)) {
+            nextDefaultModels[field] = targetModel.modelKey
+            changed = true
+        }
+
+        if (!targetModel.enabled) {
+            nextModels[modelIndex] = {
+                ...targetModel,
+                enabled: true,
+            }
+            changed = true
+        }
+    }
+
+    return {
+        models: nextModels,
+        defaultModels: nextDefaultModels,
+        changed,
+    }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -238,6 +292,25 @@ function applyPricingDisplay(model: CustomModel, map: PricingDisplayMap): Custom
     }
 }
 
+function shouldPersistEnabledModel(
+    model: CustomModel,
+    providersById: Map<string, Provider>,
+): boolean {
+    if (!model.enabled) return false
+
+    const provider = providersById.get(model.provider)
+    if (!provider) return true
+
+    if (getProviderKey(model.provider) !== 'bailian') return true
+    if (getProviderKey(provider.id) !== 'bailian') return true
+    if (!isBailianCodingPlanApiKey(provider.apiKey)) return true
+
+    return isBailianCodingPlanSupportedModel({
+        modelId: model.modelId,
+        type: model.type,
+    })
+}
+
 export function useProviders(): UseProvidersReturn {
     const locale = useLocale()
     const t = useTranslations('apiConfig')
@@ -300,7 +373,9 @@ export function useProviders(): UseProvidersReturn {
 
             // 合并预设和已保存的提供商，保持 savedProviders 的顺序不变（拖拽排序依赖）
             const savedProviders: Provider[] = data.providers || []
-            setProviders(mergeProvidersForDisplay(savedProviders, presetProviders))
+            const mergedProviders = mergeProvidersForDisplay(savedProviders, presetProviders)
+            setProviders(mergedProviders)
+            latestProvidersRef.current = mergedProviders
 
             // 合并预设和已保存的模型
             const savedModelsRaw = data.models || []
@@ -342,15 +417,40 @@ export function useProviders(): UseProvidersReturn {
                 enabled: (m as CustomModel & { enabled?: boolean }).enabled !== false,
             }))
 
-            setModels([...allModels, ...customModels])
+            const mergedModels = [...allModels, ...customModels]
+            const normalizedDefaultModels = isRecord(data.defaultModels)
+                ? (data.defaultModels as DefaultModels)
+                : {}
+            const shouldApplyComfyUiDefaults =
+                savedProviders.some((provider) => getProviderKey(provider.id) === 'comfyui')
+                || savedModels.some((model: CustomModel) => getProviderKey(model.provider) === 'comfyui')
+            const comfyUiResolved = shouldApplyComfyUiDefaults
+                ? applyComfyUiPresetDefaults({
+                    models: mergedModels,
+                    defaultModels: normalizedDefaultModels,
+                })
+                : {
+                    models: mergedModels,
+                    defaultModels: normalizedDefaultModels,
+                    changed: false,
+                }
+
+            setModels(comfyUiResolved.models)
+            latestModelsRef.current = comfyUiResolved.models
 
             // 加载默认模型配置
-            if (data.defaultModels) {
-                setDefaultModels(data.defaultModels)
-            }
-            setWorkflowConcurrency(parseWorkflowConcurrency((data as { workflowConcurrency?: unknown }).workflowConcurrency))
+            setDefaultModels(comfyUiResolved.defaultModels)
+            latestDefaultModelsRef.current = comfyUiResolved.defaultModels
+            const nextWorkflowConcurrency = parseWorkflowConcurrency((data as { workflowConcurrency?: unknown }).workflowConcurrency)
+            setWorkflowConcurrency(nextWorkflowConcurrency)
+            latestWorkflowConcurrencyRef.current = nextWorkflowConcurrency
             if (data.capabilityDefaults && typeof data.capabilityDefaults === 'object') {
-                setCapabilityDefaults(data.capabilityDefaults as CapabilitySelections)
+                const nextCapabilityDefaults = data.capabilityDefaults as CapabilitySelections
+                setCapabilityDefaults(nextCapabilityDefaults)
+                latestCapabilityDefaultsRef.current = nextCapabilityDefaults
+            }
+            if (comfyUiResolved.changed) {
+                void performSave({ defaultModels: comfyUiResolved.defaultModels }, true, true)
             }
             loadedSuccessfully = true
         } catch (error) {
@@ -394,7 +494,8 @@ export function useProviders(): UseProvidersReturn {
             const currentDefaultModels = overrides?.defaultModels ?? latestDefaultModelsRef.current
             const currentWorkflowConcurrency = overrides?.workflowConcurrency ?? latestWorkflowConcurrencyRef.current
             const currentCapabilityDefaults = overrides?.capabilityDefaults ?? latestCapabilityDefaultsRef.current
-            const enabledModels = currentModels.filter(m => m.enabled)
+            const providersById = new Map(currentProviders.map((provider) => [provider.id, provider] as const))
+            const enabledModels = currentModels.filter((model) => shouldPersistEnabledModel(model, providersById))
             const res = await apiFetch('/api/user/api-config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },

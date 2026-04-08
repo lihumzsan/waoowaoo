@@ -1,9 +1,8 @@
-import { execSync } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import mysql from 'mysql2/promise'
 import Redis from 'ioredis'
 import { loadTestEnv } from './env'
-import { runGlobalTeardown } from './global-teardown'
+import { execSync } from 'node:child_process'
 
 function parseDbUrl(dbUrl: string) {
   const url = new URL(dbUrl)
@@ -26,9 +25,10 @@ async function waitForMysql(maxAttempts = 180) {
         port: db.port,
         user: db.user,
         password: db.password,
-        database: db.database,
         connectTimeout: 5_000,
       })
+      await conn.query(`CREATE DATABASE IF NOT EXISTS \`${db.database}\``)
+      await conn.changeUser({ database: db.database })
       await conn.query('SELECT 1')
       await conn.end()
       return
@@ -43,7 +43,7 @@ async function waitForMysql(maxAttempts = 180) {
 async function waitForRedis(maxAttempts = 60) {
   const redis = new Redis({
     host: process.env.REDIS_HOST || '127.0.0.1',
-    port: Number(process.env.REDIS_PORT || '6380'),
+    port: Number(process.env.REDIS_PORT || '16379'),
     maxRetriesPerRequest: 1,
     lazyConnect: true,
   })
@@ -75,16 +75,6 @@ export default async function globalSetup() {
     return async () => {}
   }
 
-  execSync('docker compose -f docker-compose.test.yml down -v --remove-orphans', {
-    cwd: process.cwd(),
-    stdio: 'inherit',
-  })
-
-  execSync('docker compose -f docker-compose.test.yml up -d --remove-orphans', {
-    cwd: process.cwd(),
-    stdio: 'inherit',
-  })
-
   await waitForMysql()
   await waitForRedis()
 
@@ -94,6 +84,6 @@ export default async function globalSetup() {
   })
 
   return async () => {
-    await runGlobalTeardown()
+    return
   }
 }

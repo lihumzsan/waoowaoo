@@ -93,19 +93,6 @@ vi.mock('@/lib/config-service', () => ({
     image: 5,
     video: 5,
   })),
-  getProjectModelConfig: vi.fn(async () => ({
-    analysisModel: 'llm::analysis-1',
-    characterModel: null,
-    locationModel: null,
-    storyboardModel: null,
-    editModel: null,
-    videoModel: null,
-    audioModel: null,
-    videoRatio: '16:9',
-    artStyle: null,
-    capabilityDefaults: {},
-    capabilityOverrides: {},
-  })),
 }))
 
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
@@ -380,7 +367,7 @@ describe('worker script-to-storyboard behavior', () => {
         stage: 'script_to_storyboard_step',
         stepId: 'voice_analyze',
         stepAttempt: 2,
-        message: '台词分析失败，准备重试 (2/4)',
+        message: '台词分析失败，准备重试 (2/2)',
       }),
     )
   })

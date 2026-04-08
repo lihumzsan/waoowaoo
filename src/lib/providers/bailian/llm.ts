@@ -4,6 +4,7 @@ import {
   type OfficialModelModality,
 } from '@/lib/providers/official/model-registry'
 import { ensureBailianCatalogRegistered } from './catalog'
+import { resolveBailianCompatibleBaseUrl } from './base-url'
 import type { BailianLlmMessage } from './types'
 
 export interface BailianLlmCompletionParams {
@@ -27,13 +28,14 @@ export async function completeBailianLlm(
   _params: BailianLlmCompletionParams,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   assertRegistered(_params.modelId)
-  const baseURL = typeof _params.baseUrl === 'string' && _params.baseUrl.trim()
-    ? _params.baseUrl.trim()
-    : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const baseURL = resolveBailianCompatibleBaseUrl({
+    apiKey: _params.apiKey,
+    baseUrl: _params.baseUrl,
+  })
   const client = new OpenAI({
     apiKey: _params.apiKey,
     baseURL,
-    timeout: 60_000,
+    timeout: 30_000,
   })
   const completion = await client.chat.completions.create({
     model: _params.modelId,

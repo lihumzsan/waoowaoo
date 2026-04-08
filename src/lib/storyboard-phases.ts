@@ -319,7 +319,7 @@ export async function executePhase1(
     // 调用AI（失败后重试一次）
     let planPanels: StoryboardPanel[] = []
 
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             const planResult = await executeAiTextStep({
                 userId: session.user.id,
@@ -366,7 +366,7 @@ export async function executePhase1(
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error)
             _ulogError(`[Phase 1] Clip ${clipId}: 第${attempt}次尝试失败: ${message}`)
-            if (attempt === 4) throw error
+            if (attempt === 2) throw error
         }
     }
 
@@ -436,7 +436,7 @@ export async function executePhase2(
     let photographyRules: PhotographyRule[] = []
 
     // 失败后重试一次
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             const cinematographerResult = await executeAiTextStep({
                 userId: session.user.id,
@@ -479,7 +479,7 @@ export async function executePhase2(
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e)
             _ulogError(`[Phase 2] Clip ${clipId}: 第${attempt}次尝试失败: ${message}`)
-            if (attempt === 4) throw e
+            if (attempt === 2) throw e
         }
     }
 
@@ -522,7 +522,7 @@ export async function executePhase2Acting(
     let actingDirections: ActingDirection[] = []
 
     // 失败后重试一次
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             const actingResult = await executeAiTextStep({
                 userId: session.user.id,
@@ -565,7 +565,7 @@ export async function executePhase2Acting(
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e)
             _ulogError(`[Phase 2-Acting] Clip ${clipId}: 第${attempt}次尝试失败: ${message}`)
-            if (attempt === 4) throw e
+            if (attempt === 2) throw e
         }
     }
 
@@ -629,7 +629,7 @@ export async function executePhase3(
     let finalPanels: StoryboardPanel[] = []
 
     // 失败后重试一次
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             const detailResult = await executeAiTextStep({
                 userId: session.user.id,
@@ -694,7 +694,7 @@ export async function executePhase3(
         } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e)
             _ulogError(`[Phase 3] Clip ${clipId}: 第${attempt}次尝试失败: ${message}`)
-            if (attempt === 4) throw e
+            if (attempt === 2) throw e
         }
     }
 

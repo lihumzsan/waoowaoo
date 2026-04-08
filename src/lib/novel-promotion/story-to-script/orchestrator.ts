@@ -145,12 +145,13 @@ function extractAnalyzedLocations(obj: Record<string, unknown>): Record<string, 
   return toObjectArray(obj.locations)
 }
 
-const MAX_STEP_ATTEMPTS = 6
-const MAX_SPLIT_BOUNDARY_ATTEMPTS = 4
-const MAX_RETRY_DELAY_MS = 20_000
 function extractAnalyzedProps(obj: Record<string, unknown>): Record<string, unknown>[] {
   return toObjectArray(obj.props)
 }
+
+const MAX_STEP_ATTEMPTS = 3
+const MAX_SPLIT_BOUNDARY_ATTEMPTS = 2
+const MAX_RETRY_DELAY_MS = 10_000
 const CLIP_BOUNDARY_SUFFIX = `
 
 [Boundary Constraints]
@@ -163,7 +164,7 @@ function wait(ms: number) {
 }
 
 function computeRetryDelayMs(attempt: number) {
-  const base = Math.min(2_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
+  const base = Math.min(1_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
   const jitter = Math.floor(Math.random() * 300)
   return base + jitter
 }

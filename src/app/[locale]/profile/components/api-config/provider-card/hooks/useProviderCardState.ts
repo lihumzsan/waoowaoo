@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   encodeModelKey,
   PRESET_MODELS,
@@ -19,6 +19,11 @@ import type {
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+  BAILIAN_CODING_COMPAT_BASE_URL,
+  isBailianCodingPlanApiKey,
+} from '@/lib/providers/bailian/base-url'
+import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
 import {
   useAssistantChat,
   type AssistantDraftModel,
@@ -101,6 +106,48 @@ function isLlmProtocol(value: unknown): value is LlmProtocolType {
 
 function readProbeFailureCode(value: unknown): string {
   return typeof value === 'string' ? value : 'PROBE_INCONCLUSIVE'
+}
+
+const DEFAULT_PROVIDER_CARD_MODEL_TYPES: ProviderCardModelType[] = ['llm', 'image', 'video', 'audio']
+
+export function getProviderCardAllowedModelTypes(params: {
+  providerKey: string
+  apiKey?: string
+}): ProviderCardModelType[] {
+  if (params.providerKey === 'bailian' && isBailianCodingPlanApiKey(params.apiKey)) {
+    return ['llm']
+  }
+
+  if (params.providerKey === 'openai-compatible') {
+    return ['llm', 'image', 'video']
+  }
+
+  return DEFAULT_PROVIDER_CARD_MODEL_TYPES
+}
+
+export function shouldShowProviderModelInCard(params: {
+  providerKey: string
+  apiKey?: string
+  model: CustomModel
+}): boolean {
+  const allowedTypes = getProviderCardAllowedModelTypes({
+    providerKey: params.providerKey,
+    apiKey: params.apiKey,
+  })
+
+  const modelType = toProviderCardModelType(params.model.type)
+  if (!modelType || !allowedTypes.includes(modelType)) {
+    return false
+  }
+
+  if (params.providerKey === 'bailian' && isBailianCodingPlanApiKey(params.apiKey)) {
+    return isBailianCodingPlanSupportedModel({
+      modelId: params.model.modelId,
+      type: params.model.type,
+    })
+  }
+
+  return true
 }
 
 export function shouldProbeModelLlmProtocol(params: {
@@ -187,40 +234,11 @@ export function buildProviderConnectionPayload(params: {
     }
   }
 
-  const payload: ProviderConnectionPayload = {
+  return {
     apiType: params.providerKey,
     apiKey,
     ...(llmModel ? { llmModel } : {}),
   }
-  if (params.providerKey === 'bailian-coding-plan' && compatibleBaseUrl) {
-    payload.baseUrl = compatibleBaseUrl
-  }
-  if (params.providerKey === 'comfyui' && compatibleBaseUrl) {
-    payload.baseUrl = compatibleBaseUrl
-  }
-  return payload
-}
-
-/** 连通性测试用的 Base URL：正在编辑地址时用输入框内容，否则用已保存值（避免未点保存仍测旧端口如 8188）。 */
-export function resolveBaseUrlForProviderTest(params: {
-  providerKey: string
-  isEditingUrl: boolean
-  tempUrl: string
-  savedBaseUrl?: string
-}): string | undefined {
-  const { providerKey, isEditingUrl, tempUrl, savedBaseUrl } = params
-  const needsUrl =
-    providerKey === 'comfyui' ||
-    providerKey === 'bailian-coding-plan' ||
-    providerKey === 'openai-compatible' ||
-    providerKey === 'gemini-compatible'
-  if (!needsUrl) return savedBaseUrl?.trim() || undefined
-  if (isEditingUrl) {
-    const draft = tempUrl.trim()
-    return draft.length > 0 ? draft : undefined
-  }
-  const saved = savedBaseUrl?.trim()
-  return saved && saved.length > 0 ? saved : undefined
 }
 
 export function buildCustomPricingFromModelForm(
@@ -319,6 +337,8 @@ function toProviderCardModelType(type: CustomModel['type']): ProviderCardModelTy
 export interface UseProviderCardStateResult {
   providerKey: string
   isPresetProvider: boolean
+  isBailianCodingPlan: boolean
+  bailianFixedBaseUrl: string | null
   showBaseUrlEdit: boolean
   tutorial: ReturnType<typeof getProviderTutorial>
   groupedModels: ProviderCardGroupedModels
@@ -398,13 +418,6 @@ export function useProviderCardState({
   const [tempKey, setTempKey] = useState(provider.apiKey || '')
   const [tempUrl, setTempUrl] = useState(provider.baseUrl || '')
   const [showTutorial, setShowTutorial] = useState(false)
-
-  // 父级保存后同步地址，避免输入框与已保存值不一致
-  useEffect(() => {
-    if (!isEditingUrl) {
-      setTempUrl(provider.baseUrl || '')
-    }
-  }, [provider.baseUrl, provider.id, isEditingUrl])
   const [showAddForm, setShowAddForm] = useState<ProviderCardModelType | null>(null)
   const [newModel, setNewModel] = useState<ModelFormState>(EMPTY_MODEL_FORM)
   const [batchMode, setBatchMode] = useState(false)
@@ -418,16 +431,24 @@ export function useProviderCardState({
 
   const providerKey = getProviderKey(provider.id)
   const assistantEnabled = providerKey === 'openai-compatible'
+  const providerModeApiKey = isEditing ? tempKey : provider.apiKey || ''
+  const isBailianCodingPlan = providerKey === 'bailian' && isBailianCodingPlanApiKey(providerModeApiKey)
   const isPresetProvider = PRESET_PROVIDERS.some(
     (presetProvider) => presetProvider.id === provider.id,
   )
   const showBaseUrlEdit =
-    ['gemini-compatible', 'openai-compatible', 'comfyui'].includes(providerKey) &&
+    ['gemini-compatible', 'openai-compatible'].includes(providerKey) &&
     Boolean(onUpdateBaseUrl)
   const tutorial = getProviderTutorial(provider.id)
 
   const groupedModels: ProviderCardGroupedModels = {}
   for (const model of models) {
+    if (!shouldShowProviderModelInCard({
+      providerKey,
+      apiKey: providerModeApiKey,
+      model,
+    })) continue
+
     const groupedType = toProviderCardModelType(model.type)
     if (!groupedType) continue
     if (!groupedModels[groupedType]) {
@@ -501,12 +522,7 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: tempKey,
-        baseUrl: resolveBaseUrlForProviderTest({
-          providerKey,
-          isEditingUrl,
-          tempUrl,
-          savedBaseUrl: provider.baseUrl,
-        }),
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -530,7 +546,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, doSaveKey, isEditingUrl, models, provider.baseUrl, providerKey, tempKey, tempUrl])
+  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -548,12 +564,7 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: provider.apiKey || '',
-        baseUrl: resolveBaseUrlForProviderTest({
-          providerKey,
-          isEditingUrl,
-          tempUrl,
-          savedBaseUrl: provider.baseUrl,
-        }),
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -568,7 +579,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, isEditingUrl, models, provider.apiKey, provider.baseUrl, providerKey, tempUrl])
+  }, [defaultModels.analysisModel, models, provider.apiKey, provider.baseUrl, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')
@@ -823,6 +834,8 @@ export function useProviderCardState({
   return {
     providerKey,
     isPresetProvider,
+    isBailianCodingPlan,
+    bailianFixedBaseUrl: isBailianCodingPlan ? BAILIAN_CODING_COMPAT_BASE_URL : null,
     showBaseUrlEdit,
     tutorial,
     groupedModels,

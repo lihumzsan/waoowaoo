@@ -54,9 +54,7 @@ export function ProviderCardShell({
   const compatibilityLayerLabel = getCompatibilityLayerBadgeLabel(provider.id, t)
   const providerKey = getProviderKey(provider.id)
   const isVerifiable = VERIFIABLE_PROVIDER_KEYS.has(providerKey)
-  const comfyUiReady = providerKey === 'comfyui' && Boolean(provider.baseUrl?.trim())
-  const canTest = isVerifiable && (providerKey === 'comfyui' ? comfyUiReady : !!provider.hasApiKey)
-  const showConnected = providerKey === 'comfyui' ? comfyUiReady : !!provider.hasApiKey
+  const canTest = isVerifiable && !!provider.hasApiKey
   const isHidden = provider.hidden === true
   const hiddenToggleLabel = isHidden
     ? (showProviderLabel || t('showProvider'))
@@ -97,8 +95,8 @@ export function ProviderCardShell({
             </span>
           )}
           {/* 连接状态图标 */}
-          <span title={showConnected ? t('connected') : t('notConfigured')}>
-            <StatusIcon connected={showConnected} />
+          <span title={provider.hasApiKey ? t('connected') : t('notConfigured')}>
+            <StatusIcon connected={!!provider.hasApiKey} />
           </span>
         </div>
         <div className="flex items-center gap-1.5">

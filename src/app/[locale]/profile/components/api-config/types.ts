@@ -111,16 +111,9 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'doubao-seed-1-6-lite-251015', name: 'Doubao Seed 1.6 Lite', type: 'llm', provider: 'ark' },
     // 阿里云百炼文本模型
     { modelId: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', type: 'llm', provider: 'bailian' },
+    { modelId: 'glm-5', name: 'GLM 5', type: 'llm', provider: 'bailian' },
+    { modelId: 'kimi-k2.5', name: 'Kimi K2.5', type: 'llm', provider: 'bailian' },
     { modelId: 'qwen3.5-flash', name: 'Qwen 3.5 Flash', type: 'llm', provider: 'bailian' },
-    // 阿里云百炼 Coding Plan 文本模型（仅文本处理）
-    { modelId: 'qwen3.5-plus', name: '千问 3.5 Plus', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'qwen3-max-2026-01-23', name: '千问 3 Max', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'qwen3-coder-next', name: '千问 Coder Next', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'qwen3-coder-plus', name: '千问 Coder Plus', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'glm-5', name: '智谱 GLM-5', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'glm-4.7', name: '智谱 GLM-4.7', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'kimi-k2.5', name: 'Kimi K2.5', type: 'llm', provider: 'bailian-coding-plan' },
-    { modelId: 'MiniMax-M2.5', name: 'MiniMax M2.5', type: 'llm', provider: 'bailian-coding-plan' },
     // MiniMax 官方文本模型
     { modelId: 'MiniMax-M2.5', name: 'MiniMax M2.5', type: 'llm', provider: 'minimax' },
     { modelId: 'MiniMax-M2.5-highspeed', name: 'MiniMax M2.5 Highspeed', type: 'llm', provider: 'minimax' },
@@ -141,11 +134,20 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'imagen-4.0-generate-001', name: 'Imagen 4', type: 'image', provider: 'google' },
     { modelId: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4 Ultra', type: 'image', provider: 'google' },
     { modelId: 'imagen-4.0-fast-generate-001', name: 'Imagen 4 Fast', type: 'image', provider: 'google' },
-    // 本地 ComfyUI 图片：模型 ID = workflows/<标识>.json 的文件名（默认 Qwen 文生图）
-    { modelId: 'qwen-image-txt2img', name: 'ComfyUI · Qwen 文生图', type: 'image', provider: 'comfyui' },
-    // 本地 ComfyUI 视频：须在 workflows/<标识>.json 放置 API 格式工作流
-    { modelId: 'comfyui-video', name: 'ComfyUI · 本地视频（需配置工作流 JSON）', type: 'video', provider: 'comfyui' },
+    { modelId: 'baseimage/图片分镜/Qwen剧情分镜制作', name: 'ComfyUI · Qwen 剧情分镜制作', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片生成/Flux2Klein文生图', name: 'ComfyUI · Flux2Klein 文生图', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片生成/ZImageTurbo造相', name: 'ComfyUI · ZImageTurbo 造相', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片编辑/qwen单图编辑', name: 'ComfyUI · Qwen 单图编辑', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片编辑/qwen双图编辑', name: 'ComfyUI · Qwen 双图编辑', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片编辑/qwen三图编辑', name: 'ComfyUI · Qwen 三图编辑', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片编辑/Flux2多图编辑', name: 'ComfyUI · Flux2 多图编辑', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片视角切换/单图视角切换', name: 'ComfyUI · 单图视角切换', type: 'image', provider: 'comfyui' },
+    { modelId: 'baseimage/图片视角切换/单图视角切换提示词版本', name: 'ComfyUI · 单图视角切换提示词版', type: 'image', provider: 'comfyui' },
     // 视频模型
+    { modelId: 'basevideo/图生视频/LTX2.3图生视频快速版', name: 'ComfyUI · LTX 2.3 图生视频', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/图生视频/ltx2.3-图生视频-没字幕版', name: 'ComfyUI · LTX 2.3 图生视频无字幕版', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/图生视频/Wan2.2Remix图生视频', name: 'ComfyUI · Wan 2.2 Remix 图生视频', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/首尾帧/ltx2.3首尾帧', name: 'ComfyUI · LTX 2.3 首尾帧', type: 'video', provider: 'comfyui' },
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 Pro', type: 'video', provider: 'ark' },
@@ -174,6 +176,11 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'fal-ai/kling-video/v3/pro/image-to-video', name: 'Kling 3 Pro', type: 'video', provider: 'fal' },
 
     // 音频模型
+    { modelId: 'baseaudio/单人/LongCat-one', name: 'ComfyUI · LongCat 单人', type: 'audio', provider: 'comfyui' },
+    { modelId: 'baseaudio/单人/s2-one', name: 'ComfyUI · S2 单人', type: 'audio', provider: 'comfyui' },
+    { modelId: 'baseaudio/多人/LongCat-two', name: 'ComfyUI · LongCat 多人', type: 'audio', provider: 'comfyui' },
+    { modelId: 'baseaudio/多人/s2-two', name: 'ComfyUI · S2 多人', type: 'audio', provider: 'comfyui' },
+    { modelId: 'baseaudio/三人/s2-three', name: 'ComfyUI · S2 三人', type: 'audio', provider: 'comfyui' },
     { modelId: 'fal-ai/index-tts-2/text-to-speech', name: 'IndexTTS 2', type: 'audio', provider: 'fal' },
     { modelId: 'qwen3-tts-vd-2026-01-26', name: 'Qwen3 TTS', type: 'audio', provider: 'bailian' },
     { modelId: 'qwen-voice-design', name: 'Qwen Voice Design', type: 'audio', provider: 'bailian' },
@@ -214,7 +221,6 @@ export const PRESET_PROVIDERS: Omit<Provider, 'apiKey' | 'hasApiKey'>[] = [
     { id: 'ark', name: 'Volcengine Ark' },
     { id: 'google', name: 'Google AI Studio' },
     { id: 'bailian', name: 'Alibaba Bailian' },
-    { id: 'bailian-coding-plan', name: '阿里云百炼 Coding Plan', baseUrl: 'https://coding.dashscope.aliyuncs.com/v1' },
     { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
     { id: 'minimax', name: 'MiniMax Hailuo', baseUrl: 'https://api.minimaxi.com/v1' },
     { id: 'vidu', name: 'Vidu' },
@@ -227,9 +233,7 @@ const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
     minimax: '海螺 MiniMax',
     vidu: '生数科技 Vidu',
     bailian: '阿里云百炼',
-    'bailian-coding-plan': '阿里云百炼 Coding Plan',
     siliconflow: '硅基流动',
-    comfyui: '本地 ComfyUI',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -395,24 +399,6 @@ export const PROVIDER_TUTORIALS: ProviderTutorial[] = [
             {
                 text: 'bailian_step1',
                 url: 'https://bailian.console.aliyun.com/cn-beijing/?tab=model#/api-key'
-            }
-        ]
-    },
-    {
-        providerId: 'bailian-coding-plan',
-        steps: [
-            {
-                text: 'bailian_coding_plan_step1',
-                url: 'https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=dashboard#/efm/coding_plan'
-            }
-        ]
-    },
-    {
-        providerId: 'comfyui',
-        steps: [
-            {
-                text: 'comfyui_step1',
-                url: 'https://github.com/comfyanonymous/ComfyUI'
             }
         ]
     },

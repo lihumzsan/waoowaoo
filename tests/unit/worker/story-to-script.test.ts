@@ -23,19 +23,6 @@ const configMock = vi.hoisted(() => ({
     image: 5,
     video: 5,
   })),
-  getProjectModelConfig: vi.fn(async () => ({
-    analysisModel: 'llm::analysis-1',
-    characterModel: null,
-    locationModel: null,
-    storyboardModel: null,
-    editModel: null,
-    videoModel: null,
-    audioModel: null,
-    videoRatio: '16:9',
-    artStyle: null,
-    capabilityDefaults: {},
-    capabilityOverrides: {},
-  })),
 }))
 
 const orchestratorMock = vi.hoisted(() => ({

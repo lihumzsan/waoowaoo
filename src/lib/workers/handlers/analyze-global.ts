@@ -57,7 +57,7 @@ export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
 
   const analysisModel = await resolveAnalysisModel({
     userId: job.data.userId,
-    projectId: job.data.projectId,
+    projectAnalysisModel: novelData.analysisModel,
   })
 
   let allContent = ''

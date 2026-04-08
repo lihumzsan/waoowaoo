@@ -3,6 +3,10 @@
 import { useMemo } from 'react'
 import type { CustomModel, Provider } from '../../api-config'
 import { PRESET_PROVIDERS, getProviderKey } from '../../api-config'
+import {
+  isBailianCodingPlanApiKey,
+} from '@/lib/providers/bailian/base-url'
+import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
 
 interface UseApiConfigFiltersParams {
   providers: Provider[]
@@ -25,8 +29,6 @@ const MODEL_PROVIDER_KEYS = [
   'ark',
   'google',
   'bailian',
-  'bailian-coding-plan',
-  'comfyui',
   'openrouter',
   'minimax',
   'vidu',
@@ -53,6 +55,18 @@ function hasProviderApiKey(provider: Provider | undefined): boolean {
   if (provider.hasApiKey === true) return true
   const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
   return apiKey.length > 0
+}
+
+function shouldHideModelForProviderMode(model: CustomModel, provider: Provider | undefined): boolean {
+  if (!provider) return false
+  if (getProviderKey(model.provider) !== 'bailian') return false
+  if (getProviderKey(provider.id) !== 'bailian') return false
+  if (!isBailianCodingPlanApiKey(provider.apiKey)) return false
+
+  return !isBailianCodingPlanSupportedModel({
+    modelId: model.modelId,
+    type: model.type,
+  })
 }
 
 export function useApiConfigFilters({
@@ -108,6 +122,7 @@ export function useApiConfigFilters({
       if (!isDefaultModelType(model.type)) continue
       const provider = providersById.get(model.provider)
       if (!hasProviderApiKey(provider)) continue
+      if (shouldHideModelForProviderMode(model, provider)) continue
 
       const option: EnabledModelOption = {
         ...model,

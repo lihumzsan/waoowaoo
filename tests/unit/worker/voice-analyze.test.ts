@@ -10,7 +10,6 @@ const txState = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   novelPromotionProject: { findUnique: vi.fn() },
-  userPreference: { findUnique: vi.fn() },
   novelPromotionEpisode: { findUnique: vi.fn() },
   $transaction: vi.fn(),
 }))
@@ -83,8 +82,7 @@ describe('worker voice-analyze behavior', () => {
     txState.createdRows = []
     txState.deletedWhereClauses = []
 
-    prismaMock.project.findUnique.mockResolvedValue({ id: 'project-1', mode: 'novel-promotion' })
-    prismaMock.userPreference.findUnique.mockResolvedValue({ analysisModel: null })
+    prismaMock.project.findUnique.mockResolvedValue({ id: 'project-1' })
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
       id: 'np-project-1',
       analysisModel: 'llm::analysis-1',
