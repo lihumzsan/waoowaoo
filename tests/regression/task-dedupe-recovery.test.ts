@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
-import { createTask } from '@/lib/task/service'
+import { createTask, tryUpdateTaskProgress } from '@/lib/task/service'
 import { prisma } from '../helpers/prisma'
 import { resetBillingState } from '../helpers/db-reset'
 import { createTestProject, createTestUser } from '../helpers/billing-fixtures'
@@ -103,6 +103,53 @@ describe('regression - task dedupe recovery', () => {
       status: TASK_STATUS.FAILED,
       errorCode: 'RECONCILE_ORPHAN',
       dedupeKey: null,
+    })
+  })
+
+  it('preserves locale and original payload fields when updating task progress', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const task = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        type: TASK_TYPE.IMAGE_CHARACTER,
+        targetType: 'CharacterAppearance',
+        targetId: 'appearance-regression-1',
+        status: TASK_STATUS.PROCESSING,
+        payload: {
+          appearanceId: 'appearance-regression-1',
+          changeReason: '初始形象',
+          meta: { locale: 'zh' },
+        },
+        queuedAt: new Date(),
+        startedAt: new Date(),
+      },
+    })
+
+    const updated = await tryUpdateTaskProgress(task.id, 65, {
+      stage: 'generate_character_image',
+      runId: 'run-regression-1',
+      meta: { provider: 'comfyui' },
+    })
+
+    expect(updated).toBe(true)
+
+    const refreshed = await prisma.task.findUnique({
+      where: { id: task.id },
+      select: { progress: true, payload: true },
+    })
+
+    expect(refreshed?.progress).toBe(65)
+    expect(refreshed?.payload).toMatchObject({
+      appearanceId: 'appearance-regression-1',
+      changeReason: '初始形象',
+      stage: 'generate_character_image',
+      runId: 'run-regression-1',
+      meta: {
+        locale: 'zh',
+        provider: 'comfyui',
+      },
     })
   })
 })

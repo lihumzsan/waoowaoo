@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { resolveTaskResponse } from '@/lib/task/client'
+import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
 import {
   requestJsonWithError,
   requestTaskResponseWithError,
@@ -30,6 +31,7 @@ export function useDesignAssetHubVoice() {
       previewText: string
       preferredName: string
       language: 'zh'
+      characterId?: string
     }) => {
       const response = await requestTaskResponseWithError(
         '/api/asset-hub/voice-design',
@@ -46,6 +48,8 @@ export function useDesignAssetHubVoice() {
         targetModel?: string
         audioBase64?: string
         requestId?: string
+        finalPrompt?: string
+        normalizedVoicePrompt?: string
       }>(response)
     },
   })
@@ -80,7 +84,7 @@ export function useSaveDesignedAssetHubVoice() {
           description: null,
           folderId: payload.folderId,
           voiceId: payload.voiceId,
-          voiceType: 'qwen-designed',
+          voiceType: isComfyUiDesignedVoiceId(payload.voiceId) ? 'comfyui-designed' : 'qwen-designed',
           customVoiceUrl: uploadData.key,
           voicePrompt: payload.voicePrompt,
           gender: null,

@@ -26,6 +26,7 @@ export const POST = apiHandler(async (
   const locale = resolveRequiredTaskLocale(request, body)
   const voicePrompt = typeof body.voicePrompt === 'string' ? body.voicePrompt.trim() : ''
   const previewText = typeof body.previewText === 'string' ? body.previewText.trim() : ''
+  const characterId = typeof body.characterId === 'string' ? body.characterId.trim() : ''
   const preferredName = typeof body.preferredName === 'string' && body.preferredName.trim()
     ? body.preferredName.trim()
     : 'custom_voice'
@@ -41,13 +42,14 @@ export const POST = apiHandler(async (
   }
 
   const digest = createHash('sha1')
-    .update(`${session.user.id}:${projectId}:${voicePrompt}:${previewText}:${preferredName}:${language}`)
+    .update(`${session.user.id}:${projectId}:${characterId}:${voicePrompt}:${previewText}:${preferredName}:${language}`)
     .digest('hex')
     .slice(0, 16)
 
   const payload = {
     voicePrompt,
     previewText,
+    ...(characterId ? { characterId } : {}),
     preferredName,
     language,
     displayMode: 'detail' as const}

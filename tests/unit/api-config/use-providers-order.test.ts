@@ -128,6 +128,15 @@ describe('useProviders provider order merge', () => {
           price: 0,
           enabled: false,
         },
+        {
+          modelId: 'baseaudio/音色/s2-se',
+          modelKey: 'comfyui::baseaudio/音色/s2-se',
+          name: 'ComfyUI · S2 音色',
+          type: 'audio',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
       ],
       defaultModels: {},
     })
@@ -140,6 +149,7 @@ describe('useProviders provider order merge', () => {
       editModel: 'comfyui::baseimage/图片编辑/qwen单图编辑',
       videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
       audioModel: 'comfyui::baseaudio/多人/LongCat-two',
+      voiceDesignModel: 'comfyui::baseaudio/音色/s2-se',
     })
     expect(result.models.every((model) => model.enabled)).toBe(true)
   })
@@ -203,6 +213,37 @@ describe('useProviders provider order merge', () => {
     })
 
     expect(result.defaultModels.audioModel).toBe('custom::audio-model')
+    expect(result.models[1]?.enabled).toBe(true)
+  })
+
+  it('migrates the legacy bailian voice-design default to comfyui fish audio s2', () => {
+    const result = applyComfyUiPresetDefaults({
+      models: [
+        {
+          modelId: 'qwen-voice-design',
+          modelKey: 'bailian::qwen-voice-design',
+          name: 'Qwen Voice Design',
+          type: 'audio',
+          provider: 'bailian',
+          price: 0,
+          enabled: true,
+        },
+        {
+          modelId: 'baseaudio/闊宠壊/s2-se',
+          modelKey: 'comfyui::baseaudio/闊宠壊/s2-se',
+          name: 'ComfyUI 路 S2 闊宠壊',
+          type: 'audio',
+          provider: 'comfyui',
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {
+        voiceDesignModel: 'bailian::qwen-voice-design',
+      },
+    })
+
+    expect(result.defaultModels.voiceDesignModel).toBe('comfyui::baseaudio/闊宠壊/s2-se')
     expect(result.models[1]?.enabled).toBe(true)
   })
 })

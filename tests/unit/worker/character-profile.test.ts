@@ -10,14 +10,17 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => ({})),
   },
   characterAppearance: {
-    create: vi.fn(async () => ({})),
+    create: vi.fn(async (args: { data: { appearanceIndex: number, characterId: string } }) => ({
+      id: `appearance-${args.data.appearanceIndex}`,
+      appearanceIndex: args.data.appearanceIndex,
+      characterId: args.data.characterId,
+    })),
     deleteMany: vi.fn(async () => ({ count: 1 })),
   },
 }))
 
-const llmMock = vi.hoisted(() => ({
-  chatCompletion: vi.fn(async () => ({ id: 'completion-1' })),
-  getCompletionContent: vi.fn(),
+const aiRuntimeMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(async () => ({ text: '{}' })),
 }))
 
 const helperMock = vi.hoisted(() => ({
@@ -35,8 +38,49 @@ const workerMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
 }))
 
+const configServiceMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(async () => ({
+    analysisModel: 'llm::analysis-1',
+    characterModel: 'image::character-1',
+    locationModel: 'image::location-1',
+    storyboardModel: null,
+    editModel: null,
+    videoModel: null,
+    audioModel: null,
+    videoRatio: '16:9',
+    artStyle: 'american-comic',
+    capabilityDefaults: {},
+    capabilityOverrides: {},
+  })),
+  buildImageBillingPayload: vi.fn(async (input: {
+    basePayload: Record<string, unknown>
+    imageModel: string | null
+  }) => ({
+    ...input.basePayload,
+    imageModel: input.imageModel,
+  })),
+}))
+
+const hasOutputMock = vi.hoisted(() => ({
+  hasCharacterAppearanceOutput: vi.fn(async () => false),
+}))
+
+const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
+  success: true,
+  async: true,
+  taskId: 'task-image-1',
+  status: 'queued',
+  deduped: false,
+})))
+
+const billingMock = vi.hoisted(() => ({
+  buildDefaultTaskBillingInfo: vi.fn(() => ({ billable: false })),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/llm-client', () => llmMock)
+vi.mock('@/lib/ai-runtime', () => aiRuntimeMock)
+vi.mock('@/lib/billing', () => billingMock)
+vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/types/character-profile', () => ({
   validateProfileData: vi.fn(() => true),
   stringifyProfileData: vi.fn((value: unknown) => JSON.stringify(value)),
@@ -44,6 +88,8 @@ vi.mock('@/types/character-profile', () => ({
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
   withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),
 }))
+vi.mock('@/lib/task/has-output', () => hasOutputMock)
+vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: workerMock.reportTaskProgress }))
 vi.mock('@/lib/workers/utils', () => ({ assertTaskActive: workerMock.assertTaskActive }))
 vi.mock('@/lib/workers/handlers/llm-stream', () => ({
@@ -95,20 +141,20 @@ describe('worker character-profile behavior', () => {
       return await callback(prismaMock)
     })
 
-    llmMock.getCompletionContent.mockReturnValue(
-      JSON.stringify({
+    aiRuntimeMock.executeAiTextStep.mockResolvedValue({
+      text: JSON.stringify({
         characters: [
           {
             appearances: [
               {
-                change_reason: '默认形象',
-                descriptions: ['黑发，冷静，风衣'],
+                change_reason: 'default look',
+                descriptions: ['black hair, calm, trench coat'],
               },
             ],
           },
         ],
       }),
-    )
+    })
 
     prismaMock.novelPromotionCharacter.findFirst.mockImplementation(async (args: { where: { id: string } }) => ({
       id: args.where.id,
@@ -150,11 +196,14 @@ describe('worker character-profile behavior', () => {
       data: expect.objectContaining({
         characterId: 'character-1',
         appearanceIndex: 0,
-        changeReason: '默认形象',
-        description: '黑发，冷静，风衣',
+        changeReason: 'default look',
+        description: 'black hair, calm, trench coat',
       }),
+      select: {
+        id: true,
+        appearanceIndex: true,
+      },
     })
-
     expect(prismaMock.novelPromotionCharacter.update).toHaveBeenCalledWith({
       where: { id: 'character-1' },
       data: {
@@ -162,14 +211,15 @@ describe('worker character-profile behavior', () => {
         profileConfirmed: true,
       },
     })
-
     expect(result).toEqual(expect.objectContaining({
       success: true,
       character: expect.objectContaining({
         id: 'character-1',
         profileConfirmed: true,
       }),
+      imageTask: null,
     }))
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('batch confirm -> loops through all unconfirmed characters and returns count', async () => {
@@ -181,6 +231,7 @@ describe('worker character-profile behavior', () => {
       count: 2,
     })
     expect(prismaMock.characterAppearance.create).toHaveBeenCalledTimes(2)
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('reconfirm with existing appearances -> replaces old rows instead of colliding on unique index', async () => {
@@ -195,5 +246,52 @@ describe('worker character-profile behavior', () => {
       where: { characterId: 'character-1' },
     })
     expect(prismaMock.characterAppearance.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('confirm profile with generateImage -> submits a character image task for the primary appearance', async () => {
+    const job = buildJob(TASK_TYPE.CHARACTER_PROFILE_CONFIRM, {
+      characterId: 'character-1',
+      generateImage: true,
+    })
+
+    const result = await handleCharacterProfileTask(job)
+
+    expect(configServiceMock.buildImageBillingPayload).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      imageModel: 'image::character-1',
+      basePayload: expect.objectContaining({
+        id: 'character-1',
+        type: 'character',
+        appearanceId: 'appearance-0',
+        count: 3,
+      }),
+    })
+    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_CHARACTER,
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-0',
+      dedupeKey: 'image_character:appearance-0:3',
+      payload: expect.objectContaining({
+        id: 'character-1',
+        appearanceId: 'appearance-0',
+        count: 3,
+        imageModel: 'image::character-1',
+        ui: expect.objectContaining({
+          hasOutputAtStart: false,
+        }),
+      }),
+    }))
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      imageTask: {
+        taskId: 'task-image-1',
+        status: 'queued',
+        deduped: false,
+      },
+    }))
   })
 })

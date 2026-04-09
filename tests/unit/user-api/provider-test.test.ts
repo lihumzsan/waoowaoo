@@ -1,9 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { testProviderConnection } from '@/lib/user-api/provider-test'
 
+const listComfyUiWorkflowKeysMock = vi.hoisted(() =>
+  vi.fn(() => ['baseimage/图片生成/Flux2Klein文生图']),
+)
+
+const hasComfyUiWorkflowKeyMock = vi.hoisted(() =>
+  vi.fn((workflowKey: string) => workflowKey === 'baseimage/图片生成/Flux2Klein文生图'),
+)
+
+vi.mock('@/lib/providers/comfyui/workflow-registry', () => ({
+  COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID: 'baseimage/图片生成/Flux2Klein文生图',
+  hasComfyUiWorkflowKey: hasComfyUiWorkflowKeyMock,
+  listComfyUiWorkflowKeys: listComfyUiWorkflowKeysMock,
+}))
+
 const fetchMock = vi.hoisted(() =>
   vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
+
+    if (url.includes('/queue')) {
+      return new Response(JSON.stringify({ queue_running: [] }), { status: 200 })
+    }
 
     if (url.includes('dashscope.aliyuncs.com/compatible-mode/v1/models')) {
       return new Response(JSON.stringify({ data: [{ id: 'qwen-plus' }] }), { status: 200 })
@@ -47,6 +65,10 @@ describe('provider test connection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('fetch', fetchMock)
+    listComfyUiWorkflowKeysMock.mockReturnValue(['baseimage/图片生成/Flux2Klein文生图'])
+    hasComfyUiWorkflowKeyMock.mockImplementation(
+      (workflowKey: string) => workflowKey === 'baseimage/图片生成/Flux2Klein文生图',
+    )
   })
 
   it('passes bailian probe with models step and credits skip', async () => {
@@ -222,5 +244,54 @@ describe('provider test connection', () => {
       status: 'fail',
       message: 'Network error: socket hang up',
     })
+  })
+
+  it('passes ComfyUI probe when the server and default workflow are both available', async () => {
+    const result = await testProviderConnection({
+      apiType: 'comfyui',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8188',
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.steps).toEqual([
+      {
+        name: 'models',
+        status: 'pass',
+        message: 'ComfyUI server reachable (/queue)',
+      },
+      {
+        name: 'imageGen',
+        status: 'pass',
+        message: 'Found 1 local workflows',
+        detail: 'baseimage/图片生成/Flux2Klein文生图',
+      },
+    ])
+  })
+
+  it('fails ComfyUI probe when no local workflow files are registered', async () => {
+    listComfyUiWorkflowKeysMock.mockReturnValue([])
+    hasComfyUiWorkflowKeyMock.mockReturnValue(false)
+
+    const result = await testProviderConnection({
+      apiType: 'comfyui',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8188',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.steps).toEqual([
+      {
+        name: 'models',
+        status: 'pass',
+        message: 'ComfyUI server reachable (/queue)',
+      },
+      {
+        name: 'imageGen',
+        status: 'fail',
+        message: 'No local ComfyUI workflows found',
+        detail: 'Set COMFYUI_WORKFLOW_ROOT or restore src/lib/providers/comfyui/workflows. Expected workflow: baseimage/图片生成/Flux2Klein文生图.json',
+      },
+    ])
   })
 })

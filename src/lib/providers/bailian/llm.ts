@@ -15,6 +15,20 @@ export interface BailianLlmCompletionParams {
   temperature?: number
 }
 
+const DEFAULT_BAILIAN_LLM_TIMEOUT_MS = 3 * 60 * 1000
+
+function resolveBailianLlmTimeoutMs(): number {
+  const raw = process.env.BAILIAN_LLM_TIMEOUT_MS
+  if (!raw) return DEFAULT_BAILIAN_LLM_TIMEOUT_MS
+
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_BAILIAN_LLM_TIMEOUT_MS
+  }
+
+  return parsed
+}
+
 function assertRegistered(modelId: string): void {
   ensureBailianCatalogRegistered()
   assertOfficialModelRegistered({
@@ -35,7 +49,7 @@ export async function completeBailianLlm(
   const client = new OpenAI({
     apiKey: _params.apiKey,
     baseURL,
-    timeout: 30_000,
+    timeout: resolveBailianLlmTimeoutMs(),
   })
   const completion = await client.chat.completions.create({
     model: _params.modelId,

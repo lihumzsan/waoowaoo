@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
 
 interface VoiceDesignPayload {
     voiceId?: string
@@ -15,6 +16,11 @@ interface CharacterVoiceJsonBody {
     voiceType?: string | null
     voiceId?: string | null
     customVoiceUrl?: string | null
+    audioBase64?: string | null
+}
+
+function readDesignedVoiceType(voiceId: string) {
+    return isComfyUiDesignedVoiceId(voiceId) ? 'comfyui-designed' : 'qwen-designed'
 }
 
 interface AssetHubCharacterVoiceDb {
@@ -40,7 +46,15 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // 处理 JSON 请求（AI 声音设计）
     if (contentType.includes('application/json')) {
         const body = (await request.json()) as CharacterVoiceJsonBody
-        const { characterId, voiceDesign } = body
+        const characterId = typeof body.characterId === 'string' ? body.characterId.trim() : ''
+        const voiceDesign = body.voiceDesign || (
+            body.voiceId && body.audioBase64
+                ? {
+                    voiceId: body.voiceId,
+                    audioBase64: body.audioBase64,
+                }
+                : undefined
+        )
 
         if (!characterId || !voiceDesign) {
             throw new ApiError('INVALID_PARAMS')
@@ -66,7 +80,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         await db.globalCharacter.update({
             where: { id: characterId },
             data: {
-                voiceType: 'qwen-designed',
+                voiceType: readDesignedVoiceType(voiceId),
                 voiceId: voiceId,
                 customVoiceUrl: cosUrl
             }

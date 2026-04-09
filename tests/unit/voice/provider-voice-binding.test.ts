@@ -100,6 +100,26 @@ describe('provider voice binding', () => {
     expect(hasAnyVoiceBinding({ speakerVoice: map.BailianSpeaker })).toBe(true)
   })
 
+  it('does not treat a comfyui-designed voice id as a bailian binding', () => {
+    const binding = resolveVoiceBindingForProvider({
+      providerKey: 'bailian',
+      character: {
+        customVoiceUrl: 'voice/comfy-preview.wav',
+        voiceId: 'comfyui:preview-voice',
+        voiceType: 'comfyui-designed',
+      },
+      speakerVoice: null,
+    })
+
+    expect(binding).toBeNull()
+    expect(hasAnyVoiceBinding({
+      character: {
+        customVoiceUrl: 'voice/comfy-preview.wav',
+        voiceId: 'comfyui:preview-voice',
+      },
+    })).toBe(true)
+  })
+
   it('throws explicitly when a speaker entry has no usable binding', () => {
     expect(() => parseSpeakerVoiceMap(JSON.stringify({
       Narrator: {

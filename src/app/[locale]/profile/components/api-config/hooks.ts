@@ -132,10 +132,21 @@ const COMFYUI_PRESET_DEFAULT_MODEL_IDS = {
     editModel: 'baseimage/图片编辑/qwen单图编辑',
     videoModel: 'basevideo/图生视频/LTX2.3图生视频快速版',
     audioModel: 'baseaudio/多人/LongCat-two',
+    voiceDesignModel: 'baseaudio/\u97f3\u8272/s2-se',
 } as const
+
+const LEGACY_VOICE_DESIGN_MODEL_KEYS = new Set([
+    'bailian::qwen-voice-design',
+])
 
 function hasComfyUiPresetDefaultField(field: string): field is keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS {
     return Object.prototype.hasOwnProperty.call(COMFYUI_PRESET_DEFAULT_MODEL_IDS, field)
+}
+
+function matchesComfyUiPresetDefaultModel(field: keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS, model: CustomModel, modelId: string): boolean {
+    if (model.provider !== 'comfyui') return false
+    if (model.modelId === modelId) return true
+    return field === 'voiceDesignModel' && model.modelId.endsWith('/s2-se')
 }
 
 export function applyComfyUiPresetDefaults(params: {
@@ -149,14 +160,17 @@ export function applyComfyUiPresetDefaults(params: {
 
     for (const [field, modelId] of Object.entries(COMFYUI_PRESET_DEFAULT_MODEL_IDS)) {
         if (!hasComfyUiPresetDefaultField(field)) continue
-        const modelIndex = nextModels.findIndex((model) => model.provider === 'comfyui' && model.modelId === modelId)
+        const modelIndex = nextModels.findIndex((model) => matchesComfyUiPresetDefaultModel(field, model, modelId))
         if (modelIndex < 0) continue
 
         const targetModel = nextModels[modelIndex]
         if (!targetModel) continue
 
         const currentDefaultModelKey = nextDefaultModels[field]
-        if (!currentDefaultModelKey || !modelKeySet.has(currentDefaultModelKey)) {
+        const shouldReplaceLegacyVoiceDesignDefault = field === 'voiceDesignModel'
+            && typeof currentDefaultModelKey === 'string'
+            && LEGACY_VOICE_DESIGN_MODEL_KEYS.has(currentDefaultModelKey)
+        if (!currentDefaultModelKey || !modelKeySet.has(currentDefaultModelKey) || shouldReplaceLegacyVoiceDesignDefault) {
             nextDefaultModels[field] = targetModel.modelKey
             changed = true
         }

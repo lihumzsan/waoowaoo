@@ -33,6 +33,16 @@ function buildBaseConfig() {
   }
 }
 
+function buildSubscriberConfig() {
+  return {
+    ...buildBaseConfig(),
+    // Subscriber connections can be resubscribed by ioredis during reconnects.
+    // Disabling ready check avoids issuing regular commands like INFO while the
+    // socket is already back in subscriber mode.
+    enableReadyCheck: false,
+  }
+}
+
 function onConnectLog(scope: string, client: Redis) {
   client.on('connect', () => _ulogDebug(`[Redis:${scope}] connected ${REDIS_HOST}:${REDIS_PORT}`))
   client.on('error', (err) => _ulogError(`[Redis:${scope}] error:`, err.message))
@@ -67,7 +77,7 @@ export const queueRedis = singleton.queue || (singleton.queue = createQueueRedis
 
 export function createSubscriber() {
   const client = new Redis({
-    ...buildBaseConfig(),
+    ...buildSubscriberConfig(),
     maxRetriesPerRequest: null,
   })
   onConnectLog('sub', client)

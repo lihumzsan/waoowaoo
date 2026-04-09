@@ -40,6 +40,7 @@ export function useDesignProjectVoice(projectId: string) {
             previewText: string
             preferredName: string
             language: 'zh'
+            characterId?: string
         }) => {
             const response = await requestTaskResponseWithError(
                 `/api/novel-promotion/${projectId}/voice-design`,
@@ -56,6 +57,8 @@ export function useDesignProjectVoice(projectId: string) {
                 targetModel?: string
                 audioBase64?: string
                 requestId?: string
+                finalPrompt?: string
+                normalizedVoicePrompt?: string
             }>(response)
         },
     })

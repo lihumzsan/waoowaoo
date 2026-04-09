@@ -23,6 +23,7 @@ type MediaRef = {
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|bmp)$/i
 const VIDEO_EXTENSIONS = /\.(mp4|webm|gif|mov|mkv|avi)$/i
+const AUDIO_EXTENSIONS = /\.(wav|mp3|ogg|m4a|flac|aac)$/i
 
 function guessMimeFromFilename(filename: string): string {
   const lower = filename.toLowerCase()
@@ -36,6 +37,12 @@ function guessMimeFromFilename(filename: string): string {
   if (lower.endsWith('.mov')) return 'video/quicktime'
   if (lower.endsWith('.mkv')) return 'video/x-matroska'
   if (lower.endsWith('.avi')) return 'video/x-msvideo'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.ogg')) return 'audio/ogg'
+  if (lower.endsWith('.m4a')) return 'audio/mp4'
+  if (lower.endsWith('.flac')) return 'audio/flac'
+  if (lower.endsWith('.aac')) return 'audio/aac'
   return 'application/octet-stream'
 }
 
@@ -64,12 +71,15 @@ function collectMediaRefsFromOutputs(outputs: Record<string, Record<string, unkn
   return refs
 }
 
-function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video'): MediaRef | null {
+function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video' | 'audio'): MediaRef | null {
   if (refs.length === 0) return null
   if (expect === 'image') {
     return refs.find((ref) => IMAGE_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
   }
-  return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+  if (expect === 'video') {
+    return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+  }
+  return refs.find((ref) => AUDIO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
 }
 
 function parseDataUrl(source: string): { buffer: Buffer; mimeType: string; filename: string } | null {
@@ -181,7 +191,7 @@ async function uploadComfyUiImages(baseUrl: string, imageUrls: string[]): Promis
 export async function runComfyUiWorkflow(params: {
   baseUrl: string
   workflow: ComfyUiWorkflowGraph
-  expect: 'image' | 'video'
+  expect: 'image' | 'video' | 'audio'
 }): Promise<{ dataBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const promptResponse = await fetch(`${base}/prompt`, {
@@ -310,6 +320,28 @@ export async function runComfyUiVideoWorkflow(params: {
     expect: 'video',
   })
   return { videoBase64: dataBase64, mimeType }
+}
+
+export async function runComfyUiAudioWorkflow(params: {
+  baseUrl: string
+  workflowKey: string
+  prompt: string
+}): Promise<{ audioBase64: string; mimeType: string }> {
+  const base = normalizeComfyBaseUrl(params.baseUrl)
+  const workflow = resolveComfyUiWorkflow(params.workflowKey.trim(), {
+    prompt: params.prompt,
+  })
+
+  const { dataBase64, mimeType } = await runComfyUiWorkflow({
+    baseUrl: base,
+    workflow,
+    expect: 'audio',
+  })
+
+  return {
+    audioBase64: dataBase64,
+    mimeType,
+  }
 }
 
 export async function probeComfyUiServer(baseUrl: string): Promise<{ ok: boolean; message: string }> {

@@ -2,18 +2,35 @@ import { resolveUnifiedErrorCode } from './codes'
 import { getUserMessageByCode } from './user-messages'
 import { normalizeAnyError } from './normalize'
 
-/** 从原始错误消息中提取面向用户的关键细节 */
+function extractComfyUiWorkflowDisplay(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== 'string') return null
+  if (!raw.toLowerCase().includes('comfyui_workflow_not_found')) return null
+
+  const workflowMatch = raw.match(/COMFYUI_WORKFLOW_NOT_FOUND:\s*([^,\n]+)/i)
+  const workflowId = workflowMatch?.[1]?.trim()
+
+  if (workflowId) {
+    return `\u672a\u627e\u5230\u672c\u5730 ComfyUI \u5de5\u4f5c\u6d41\u3002\u8bf7\u68c0\u67e5 COMFYUI_WORKFLOW_ROOT \u6216\u5de5\u4f5c\u6d41\u76ee\u5f55\u3002\u7f3a\u5c11\u5de5\u4f5c\u6d41\uff1a${workflowId}.json`
+  }
+
+  return '\u672a\u627e\u5230\u672c\u5730 ComfyUI \u5de5\u4f5c\u6d41\u3002\u8bf7\u68c0\u67e5 COMFYUI_WORKFLOW_ROOT \u6216\u5de5\u4f5c\u6d41\u76ee\u5f55\u3002'
+}
+
 function extractProviderDetail(raw: string | null | undefined): string | null {
   if (!raw || typeof raw !== 'string') return null
-  // 优先从 JSON 体中提取 "message" 字段（ARK / OpenRouter / 多数 OpenAI 兼容 API）
+
+  const comfyUiDetail = extractComfyUiWorkflowDisplay(raw)
+  if (comfyUiDetail) return comfyUiDetail
+
   const jsonMatch = raw.match(/\{.*"message"\s*:\s*"([^"]+)"/)
   if (jsonMatch?.[1]) return jsonMatch[1]
-  // 兜底：移除内部前缀如 "[ARK Image] 图片生成失败: " ，保留核心描述
+
   const cleaned = raw
-    .replace(/^\[[\w\s]+\]\s*/g, '')           // [ARK Image]
-    .replace(/^[\w\s]+失败:\s*/g, '')           // 图片生成失败:
-    .replace(/^\d{3}\s*-\s*/g, '')              // 400 -
+    .replace(/^\[[\w\s]+\]\s*/g, '')
+    .replace(/^[\w\s]+\u5931\u8d25:\s*/g, '')
+    .replace(/^\d{3}\s*-\s*/g, '')
     .trim()
+
   return cleaned || null
 }
 
@@ -22,9 +39,15 @@ export function resolveErrorDisplay(input?: {
   message?: string | null
 } | null) {
   if (!input) return null
-  // code 和 message 都为空时，表示没有错误，直接返回 null
-  // 如果不做这个判断，normalizeAnyError 会对空输入兜底返回 INTERNAL_ERROR，导致所有面板误报
   if (!input.code && !input.message) return null
+
+  const comfyUiDisplay = extractComfyUiWorkflowDisplay(input.message)
+  if (comfyUiDisplay) {
+    return {
+      code: 'MISSING_CONFIG',
+      message: comfyUiDisplay,
+    }
+  }
 
   const code = resolveUnifiedErrorCode(input.code)
   if (code && code !== 'INTERNAL_ERROR') {
@@ -35,7 +58,7 @@ export function resolveErrorDisplay(input?: {
         message: userMessage,
       }
     }
-    // 尝试从原始 message 中提取 API 返回的具体细节
+
     const detail = extractProviderDetail(input.message)
     return {
       code,
@@ -43,12 +66,11 @@ export function resolveErrorDisplay(input?: {
     }
   }
 
-  // 当 code 是兜底的 INTERNAL_ERROR 或 code 缺失时，尝试从 message 推断更具体的错误码
-  // 这样像"敏感内容"、"余额不足"、"网络错误"等具体错误能正确显示
   const normalized = normalizeAnyError(
     { code: input.code || undefined, message: input.message || undefined },
     { context: 'api' },
   )
+
   if (normalized?.code) {
     const userMessage = getUserMessageByCode(normalized.code)
     const detail = extractProviderDetail(input.message)

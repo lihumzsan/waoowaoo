@@ -585,6 +585,7 @@ export default function AssetHubPage() {
             {voiceDesignCharacter && (
                 <VoiceDesignDialog
                     isOpen={!!voiceDesignCharacter}
+                    characterId={voiceDesignCharacter.id}
                     speaker={voiceDesignCharacter.name}
                     hasExistingVoice={voiceDesignCharacter.hasExistingVoice}
                     onClose={() => setVoiceDesignCharacter(null)}

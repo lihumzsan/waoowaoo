@@ -7,12 +7,15 @@ export type VoiceDesignMutationPayload = {
   previewText: string
   preferredName: string
   language: 'zh'
+  characterId?: string
 }
 
 export type VoiceDesignMutationResult = {
   voiceId?: string
   audioBase64?: string
   detail?: string
+  finalPrompt?: string
+  normalizedVoicePrompt?: string
 }
 
 export type GeneratedVoice = {

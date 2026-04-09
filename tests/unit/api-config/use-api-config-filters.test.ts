@@ -156,4 +156,39 @@ describe('api config filters', () => {
     expect(result.getEnabledModelsByType('llm').map((model) => model.modelId)).toEqual(['qwen3.5-plus'])
     expect(result.getEnabledModelsByType('video')).toEqual([])
   })
+
+  it('treats the comfyui s2 voice workflow as a voice-design candidate when baseUrl is present', () => {
+    const providers: Provider[] = [
+      { id: 'comfyui', name: 'ComfyUI', hasApiKey: false, baseUrl: 'http://127.0.0.1:8188' },
+      { id: 'bailian', name: 'Alibaba Bailian', hasApiKey: true, apiKey: 'k-bl' },
+    ]
+    const models: CustomModel[] = [
+      {
+        modelId: 'baseaudio/音色/s2-se',
+        modelKey: 'comfyui::baseaudio/音色/s2-se',
+        name: 'ComfyUI · S2 音色',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
+      {
+        modelId: 'qwen-voice-design',
+        modelKey: 'bailian::qwen-voice-design',
+        name: 'Qwen Voice Design',
+        type: 'audio',
+        provider: 'bailian',
+        price: 0,
+        enabled: true,
+      },
+    ]
+
+    const result = useApiConfigFilters({ providers, models })
+
+    expect(result.getEnabledModelsByType('audio').map((model) => model.modelId)).not.toContain('baseaudio/音色/s2-se')
+    expect(result.getEnabledModelsByType('voicedesign').map((model) => model.modelId)).toEqual([
+      'baseaudio/音色/s2-se',
+      'qwen-voice-design',
+    ])
+  })
 })

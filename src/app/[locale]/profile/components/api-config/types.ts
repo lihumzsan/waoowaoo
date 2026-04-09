@@ -181,6 +181,7 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'baseaudio/多人/LongCat-two', name: 'ComfyUI · LongCat 多人', type: 'audio', provider: 'comfyui' },
     { modelId: 'baseaudio/多人/s2-two', name: 'ComfyUI · S2 多人', type: 'audio', provider: 'comfyui' },
     { modelId: 'baseaudio/三人/s2-three', name: 'ComfyUI · S2 三人', type: 'audio', provider: 'comfyui' },
+    { modelId: 'baseaudio/音色/s2-se', name: 'ComfyUI · S2 音色', type: 'audio', provider: 'comfyui' },
     { modelId: 'fal-ai/index-tts-2/text-to-speech', name: 'IndexTTS 2', type: 'audio', provider: 'fal' },
     { modelId: 'qwen3-tts-vd-2026-01-26', name: 'Qwen3 TTS', type: 'audio', provider: 'bailian' },
     { modelId: 'qwen-voice-design', name: 'Qwen Voice Design', type: 'audio', provider: 'bailian' },

@@ -274,7 +274,7 @@ function cloneWorkflow(graph: ComfyUiWorkflowGraph): ComfyUiWorkflowGraph {
   return JSON.parse(JSON.stringify(graph)) as ComfyUiWorkflowGraph
 }
 
-function isConnectionValue(value: unknown): boolean {
+function isConnectionValue(value: unknown): value is [unknown, unknown, ...unknown[]] {
   return Array.isArray(value) && value.length >= 2
 }
 
@@ -306,6 +306,25 @@ function isPromptCapableNode(node: ComfyUiWorkflowGraphNode): boolean {
     || title.includes('文本')
 }
 
+function tryAssignPromptToConnectedValueNode(
+  graph: ComfyUiWorkflowGraph,
+  connection: unknown,
+  value: string,
+): boolean {
+  if (!isConnectionValue(connection)) return false
+
+  const sourceNodeId = normalizeNodeId(connection[0])
+  if (!sourceNodeId) return false
+
+  const sourceNode = graph[sourceNodeId]
+  if (!sourceNode || !isRecord(sourceNode.inputs)) return false
+  if (!Object.prototype.hasOwnProperty.call(sourceNode.inputs, 'value')) return false
+  if (isConnectionValue(sourceNode.inputs.value)) return false
+
+  sourceNode.inputs.value = value
+  return true
+}
+
 function applyPromptHeuristics(
   graph: ComfyUiWorkflowGraph,
   prompt?: string,
@@ -321,15 +340,22 @@ function applyPromptHeuristics(
 
     for (const inputName of Object.keys(node.inputs)) {
       const field = inputName.trim().toLowerCase()
-      if (!field || isConnectionValue(node.inputs[inputName])) continue
+      if (!field) continue
+      const currentValue = node.inputs[inputName]
 
       if (negativeValue && (isNegativePromptField(field) || (field === 'text' && isLikelyNegativeNode(node)))) {
-        node.inputs[inputName] = negativeValue
+        if (tryAssignPromptToConnectedValueNode(graph, currentValue, negativeValue)) continue
+        if (!isConnectionValue(currentValue)) {
+          node.inputs[inputName] = negativeValue
+        }
         continue
       }
 
       if (positiveValue && isPromptInputField(field) && !isLikelyNegativeNode(node)) {
-        node.inputs[inputName] = positiveValue
+        if (tryAssignPromptToConnectedValueNode(graph, currentValue, positiveValue)) continue
+        if (!isConnectionValue(currentValue)) {
+          node.inputs[inputName] = positiveValue
+        }
       }
     }
   }

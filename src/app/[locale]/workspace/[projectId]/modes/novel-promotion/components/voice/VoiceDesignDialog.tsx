@@ -8,6 +8,7 @@ import { useDesignProjectVoice } from '@/lib/query/hooks'
 
 interface VoiceDesignDialogProps {
   isOpen: boolean
+  characterId?: string
   speaker: string
   hasExistingVoice?: boolean
   onClose: () => void
@@ -17,6 +18,7 @@ interface VoiceDesignDialogProps {
 
 export default function VoiceDesignDialog({
   isOpen,
+  characterId,
   speaker,
   hasExistingVoice = false,
   onClose,
@@ -28,7 +30,10 @@ export default function VoiceDesignDialog({
   const handleDesignVoice = async (
     payload: VoiceDesignMutationPayload,
   ): Promise<VoiceDesignMutationResult> => {
-    return await designVoiceMutation.mutateAsync(payload)
+    return await designVoiceMutation.mutateAsync({
+      ...payload,
+      ...(characterId ? { characterId } : {}),
+    })
   }
 
   return (

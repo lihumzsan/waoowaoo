@@ -56,6 +56,12 @@ describe('provider card pricing form behavior', () => {
       category: '多人',
       workflow: 'LongCat-two',
     })
+
+    expect(parseComfyUiWorkflowParts('baseaudio/音色/s2-se')).toEqual({
+      root: 'baseaudio',
+      category: '音色',
+      workflow: 's2-se',
+    })
   })
 
   it('groups comfyui models by second-level category', () => {
@@ -145,17 +151,30 @@ describe('provider card pricing form behavior', () => {
         price: 0,
         enabled: true,
       },
+      {
+        modelId: 'baseaudio/音色/s2-se',
+        modelKey: 'comfyui::baseaudio/音色/s2-se',
+        name: 'ComfyUI · S2 音色',
+        type: 'audio',
+        provider: 'comfyui',
+        price: 0,
+        enabled: true,
+      },
     ])
 
-    expect(groups).toHaveLength(3)
+    expect(groups).toHaveLength(4)
     expect(groups.map((group) => group.key)).toEqual([
       'baseaudio/单人',
       'baseaudio/多人',
       'baseaudio/三人',
+      'baseaudio/音色',
     ])
     expect(groups[1]?.models.map((model) => model.modelId)).toEqual([
       'baseaudio/多人/LongCat-two',
       'baseaudio/多人/s2-two',
+    ])
+    expect(groups[3]?.models.map((model) => model.modelId)).toEqual([
+      'baseaudio/音色/s2-se',
     ])
   })
 

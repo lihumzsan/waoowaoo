@@ -1,3 +1,5 @@
+import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
+
 type VoiceSource = 'character' | 'speaker'
 
 export type SupportedAudioProviderKey = 'fal' | 'bailian'
@@ -5,6 +7,7 @@ export type SupportedAudioProviderKey = 'fal' | 'bailian'
 export interface CharacterVoiceFields {
   customVoiceUrl?: string | null
   voiceId?: string | null
+  voiceType?: string | null
 }
 
 export interface RawSpeakerVoiceEntry {
@@ -167,7 +170,7 @@ function toFalBinding(source: VoiceSource, referenceAudioUrl: string | null): Fa
 }
 
 function toBailianBinding(source: VoiceSource, voiceId: string | null): BailianVoiceGenerationBinding | null {
-  if (!voiceId) return null
+  if (!voiceId || isComfyUiDesignedVoiceId(voiceId)) return null
   return {
     provider: 'bailian',
     source,

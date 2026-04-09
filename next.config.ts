@@ -1,7 +1,14 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import type { NextConfig } from "next";
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
+const packageJsonPath = path.join(process.cwd(), 'package.json')
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { version?: unknown }
+const appVersion = typeof packageJson.version === 'string' && packageJson.version.trim().length > 0
+  ? packageJson.version.trim()
+  : '0.0.0'
 
 const nextConfig: NextConfig = {
   // 已删除 ignoreBuildErrors / ignoreDuringBuilds，构建保持严格门禁
@@ -10,6 +17,9 @@ const nextConfig: NextConfig = {
     'http://192.168.31.218:3000',
     'http://192.168.31.*:3000',
   ],
+  env: {
+    NEXT_PUBLIC_APP_VERSION: appVersion,
+  },
 };
 
 export default withNextIntl(nextConfig);

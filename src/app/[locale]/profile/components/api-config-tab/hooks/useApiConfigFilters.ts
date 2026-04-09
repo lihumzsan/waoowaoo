@@ -24,6 +24,7 @@ const HIDDEN_PROVIDER_KEYS = new Set(['siliconflow'])
 const PROVIDER_MODEL_TYPES: Array<'llm' | 'image' | 'video' | 'audio' | 'lipsync'> = ['llm', 'image', 'video', 'audio', 'lipsync']
 const DEFAULT_AUDIO_EXCLUDED_MODEL_IDS = new Set([
   'qwen-voice-design',
+  'baseaudio/音色/s2-se',
 ])
 const MODEL_PROVIDER_KEYS = [
   'ark',
@@ -54,7 +55,10 @@ function hasProviderApiKey(provider: Provider | undefined): boolean {
   if (!provider) return false
   if (provider.hasApiKey === true) return true
   const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
-  return apiKey.length > 0
+  if (apiKey.length > 0) return true
+  return getProviderKey(provider.id) === 'comfyui'
+    && typeof provider.baseUrl === 'string'
+    && provider.baseUrl.trim().length > 0
 }
 
 function shouldHideModelForProviderMode(model: CustomModel, provider: Provider | undefined): boolean {

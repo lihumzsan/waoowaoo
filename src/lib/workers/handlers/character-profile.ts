@@ -1,9 +1,15 @@
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { executeAiTextStep } from '@/lib/ai-runtime'
+import { buildDefaultTaskBillingInfo } from '@/lib/billing'
+import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
+import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { validateProfileData, stringifyProfileData } from '@/types/character-profile'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
+import { hasCharacterAppearanceOutput } from '@/lib/task/has-output'
+import { submitTask } from '@/lib/task/submitter'
+import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
@@ -19,6 +25,65 @@ import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 
 type ConfirmProfileOptions = {
   suppressProgress?: boolean
+}
+
+type CreatedAppearance = {
+  id: string
+  appearanceIndex: number
+}
+
+async function maybeSubmitCharacterImageTask(
+  job: Job<TaskJobData>,
+  payload: AnyObj,
+  characterId: string,
+  appearances: CreatedAppearance[],
+) {
+  if (payload.generateImage !== true) {
+    return null
+  }
+
+  const primaryAppearance = appearances.find((item) => item.appearanceIndex === 0) || appearances[0]
+  if (!primaryAppearance) {
+    return null
+  }
+
+  const count = normalizeImageGenerationCount('character', payload.count)
+  const hasOutputAtStart = await hasCharacterAppearanceOutput({
+    appearanceId: primaryAppearance.id,
+    characterId,
+    appearanceIndex: primaryAppearance.appearanceIndex,
+  })
+  const projectModelConfig = await getProjectModelConfig(job.data.projectId, job.data.userId)
+  const payloadBase: Record<string, unknown> = {
+    id: characterId,
+    type: 'character',
+    appearanceId: primaryAppearance.id,
+    count,
+    meta: {
+      triggerTaskId: job.data.taskId,
+      triggerTaskType: job.data.type,
+      locale: job.data.locale,
+    },
+  }
+  const billingPayload = await buildImageBillingPayload({
+    projectId: job.data.projectId,
+    userId: job.data.userId,
+    imageModel: projectModelConfig.characterModel,
+    basePayload: payloadBase,
+  })
+
+  return await submitTask({
+    userId: job.data.userId,
+    locale: job.data.locale,
+    requestId: job.data.trace?.requestId || null,
+    projectId: job.data.projectId,
+    type: TASK_TYPE.IMAGE_CHARACTER,
+    targetType: 'CharacterAppearance',
+    targetId: primaryAppearance.id,
+    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+    dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:${primaryAppearance.id}:${count}`,
+    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, billingPayload),
+  })
 }
 
 async function handleConfirmProfile(
@@ -138,6 +203,7 @@ async function handleConfirmProfile(
     imageUrls: string
     previousImageUrls: string
   }> = []
+  const createdAppearances: CreatedAppearance[] = []
 
   for (let appIndex = 0; appIndex < appearances.length; appIndex++) {
     const app = appearances[appIndex]
@@ -161,9 +227,14 @@ async function handleConfirmProfile(
     })
 
     for (const appearanceRow of appearanceRows) {
-      await tx.characterAppearance.create({
+      const createdAppearance = await tx.characterAppearance.create({
         data: appearanceRow,
+        select: {
+          id: true,
+          appearanceIndex: true,
+        },
       })
+      createdAppearances.push(createdAppearance)
     }
 
     await tx.novelPromotionCharacter.update({
@@ -174,6 +245,20 @@ async function handleConfirmProfile(
       },
     })
   })
+
+  let imageTask: Awaited<ReturnType<typeof maybeSubmitCharacterImageTask>> = null
+  if (payload.generateImage === true) {
+    if (!suppressProgress) {
+      await reportTaskProgress(job, 88, {
+        stage: 'character_profile_confirm_submit_image',
+        stageLabel: '提交角色生图任务',
+        displayMode: 'detail',
+        meta: { characterId },
+      })
+    }
+    await assertTaskActive(job, 'character_profile_confirm_submit_image')
+    imageTask = await maybeSubmitCharacterImageTask(job, payload, character.id, createdAppearances)
+  }
 
   if (!suppressProgress) {
     await reportTaskProgress(job, 96, {
@@ -191,6 +276,13 @@ async function handleConfirmProfile(
       profileConfirmed: true,
       appearances,
     },
+    imageTask: imageTask
+      ? {
+          taskId: imageTask.taskId,
+          status: imageTask.status,
+          deduped: imageTask.deduped,
+        }
+      : null,
   }
 }
 

@@ -1,6 +1,11 @@
 import OpenAI from 'openai'
 import { setProxy } from '../../../lib/prompts/proxy'
 import { probeBailian } from '@/lib/providers/bailian/probe'
+import {
+  COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
+  hasComfyUiWorkflowKey,
+  listComfyUiWorkflowKeys,
+} from '@/lib/providers/comfyui/workflow-registry'
 
 export type TestStepName = 'models' | 'textGen' | 'imageGen' | 'credits' | 'audioGen'
 export type TestStepStatus = 'pass' | 'fail' | 'skip'
@@ -849,6 +854,35 @@ async function testComfyUiProvider(baseUrl: string): Promise<TestProviderResult>
       status: 'pass',
       message: 'ComfyUI server reachable (/queue)',
       detail: normalized !== baseUrl.trim().replace(/\/+$/, '') ? `Resolved URL: ${normalized}` : undefined,
+    })
+
+    const workflowKeys = listComfyUiWorkflowKeys()
+    if (workflowKeys.length === 0) {
+      steps.push({
+        name: 'imageGen',
+        status: 'fail',
+        message: 'No local ComfyUI workflows found',
+        detail: `Set COMFYUI_WORKFLOW_ROOT or restore src/lib/providers/comfyui/workflows. Expected workflow: ${COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID}.json`,
+      })
+      return { success: false, steps }
+    }
+
+    if (!hasComfyUiWorkflowKey(COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID)) {
+      const preview = workflowKeys.slice(0, 5).join(', ')
+      steps.push({
+        name: 'imageGen',
+        status: 'fail',
+        message: 'Default ComfyUI image workflow is missing',
+        detail: `Expected: ${COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID}.json. Found: ${preview || 'none'}`.slice(0, 500),
+      })
+      return { success: false, steps }
+    }
+
+    steps.push({
+      name: 'imageGen',
+      status: 'pass',
+      message: `Found ${workflowKeys.length} local workflows`,
+      detail: workflowKeys.slice(0, 5).join(', ') || undefined,
     })
     return { success: true, steps }
   } catch (error) {

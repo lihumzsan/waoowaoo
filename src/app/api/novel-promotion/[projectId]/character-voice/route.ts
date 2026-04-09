@@ -4,6 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
+
+function readDesignedVoiceType(voiceId: string) {
+  return isComfyUiDesignedVoiceId(voiceId) ? 'comfyui-designed' : 'qwen-designed'
+}
 
 /**
  * PATCH /api/novel-promotion/[projectId]/character-voice
@@ -83,7 +88,7 @@ export const POST = apiHandler(async (
     const character = await prisma.novelPromotionCharacter.update({
       where: { id: characterId },
       data: {
-        voiceType: 'qwen-designed',
+        voiceType: readDesignedVoiceType(voiceId),
         voiceId: voiceId,  // 保存 AI 生成的 voice ID
         customVoiceUrl: cosUrl
       }
