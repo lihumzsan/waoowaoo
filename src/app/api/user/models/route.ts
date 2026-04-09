@@ -55,7 +55,7 @@ interface UserModelsPayload {
 }
 
 const AUDIO_MODEL_EXCLUDED_IDS = new Set([
-  'qwen-voice-design',
+  'baseaudio/\u97f3\u8272/s2-se',
 ])
 
 function isUnifiedModelType(type: unknown): type is UnifiedModelType {

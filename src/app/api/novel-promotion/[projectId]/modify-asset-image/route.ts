@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { submitAssetModifyTask } from '@/lib/assets/services/asset-actions'
 
-type LegacyProjectModifyBody = Record<string, unknown> & {
+type ProjectModifyImageRequestBody = Record<string, unknown> & {
   type?: 'character' | 'location'
   characterId?: string
   locationId?: string
@@ -17,7 +17,7 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyProjectModifyBody
+  const body = await request.json() as ProjectModifyImageRequestBody
   const assetId = body.type === 'character'
     ? body.characterId
     : body.type === 'location'

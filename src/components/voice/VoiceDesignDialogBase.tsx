@@ -1,11 +1,12 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
 import VoiceDesignGeneratorSection from './VoiceDesignGeneratorSection'
+import { readVoiceDesignDraft, writeVoiceDesignDraft } from './voice-design-draft'
 import {
   DEFAULT_VOICE_SCHEME_COUNT,
   generateVoiceDesignOptions,
@@ -19,6 +20,7 @@ export type { VoiceDesignMutationPayload, VoiceDesignMutationResult } from './vo
 interface VoiceDesignDialogBaseProps {
   isOpen: boolean
   speaker: string
+  draftScope?: string
   hasExistingVoice?: boolean
   onClose: () => void
   onSave: (voiceId: string, audioBase64: string) => void
@@ -28,6 +30,7 @@ interface VoiceDesignDialogBaseProps {
 export default function VoiceDesignDialogBase({
   isOpen,
   speaker,
+  draftScope,
   hasExistingVoice = false,
   onClose,
   onSave,
@@ -35,9 +38,10 @@ export default function VoiceDesignDialogBase({
 }: VoiceDesignDialogBaseProps) {
   const t = useTranslations('common')
   const tv = useTranslations('voice.voiceDesign')
+  const defaultPreviewText = tv('defaultPreviewText')
 
   const [voicePrompt, setVoicePrompt] = useState('')
-  const [previewText, setPreviewText] = useState(tv('defaultPreviewText'))
+  const [previewText, setPreviewText] = useState(defaultPreviewText)
   const [schemeCount, setSchemeCount] = useState(String(DEFAULT_VOICE_SCHEME_COUNT))
   const [isDesignSubmitting, setIsDesignSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +50,8 @@ export default function VoiceDesignDialogBase({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [playingIndex, setPlayingIndex] = useState<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const draftPersistReadyRef = useRef(false)
+  const generationRunRef = useRef(0)
   const designSubmittingState = isDesignSubmitting
     ? resolveTaskPresentationState({
         phase: 'processing',
@@ -55,11 +61,39 @@ export default function VoiceDesignDialogBase({
       })
     : null
 
+  useEffect(() => {
+    if (!isOpen) {
+      draftPersistReadyRef.current = false
+      return
+    }
+
+    const savedDraft = draftScope ? readVoiceDesignDraft(draftScope) : null
+    setVoicePrompt(savedDraft?.voicePrompt || '')
+    setPreviewText(savedDraft?.previewText || defaultPreviewText)
+    draftPersistReadyRef.current = false
+  }, [defaultPreviewText, draftScope, isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !draftScope) return
+    if (!draftPersistReadyRef.current) {
+      draftPersistReadyRef.current = true
+      return
+    }
+
+    writeVoiceDesignDraft(draftScope, {
+      voicePrompt,
+      previewText,
+    })
+  }, [draftScope, isOpen, previewText, voicePrompt])
+
   const handleGenerate = async () => {
     if (!voicePrompt.trim()) {
       setError(tv('pleaseSelectStyle'))
       return
     }
+
+    const generationRunId = generationRunRef.current + 1
+    generationRunRef.current = generationRunId
 
     setIsDesignSubmitting(true)
     setError(null)
@@ -73,9 +107,15 @@ export default function VoiceDesignDialogBase({
         previewText,
         defaultPreviewText: tv('defaultPreviewText'),
         onDesignVoice,
+        onVoiceGenerated: (voice) => {
+          if (generationRunRef.current !== generationRunId) return
+          setGeneratedVoices((current) => [...current, voice])
+        },
       })
+      if (generationRunRef.current !== generationRunId) return
       setGeneratedVoices(voices)
     } catch (err: unknown) {
+      if (generationRunRef.current !== generationRunId) return
       const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
       if (status === 402) {
         const detail = err instanceof Error ? (err as Error & { detail?: string }).detail : undefined
@@ -87,6 +127,7 @@ export default function VoiceDesignDialogBase({
       const message = err instanceof Error ? err.message : tv('generationError')
       setError(message === 'VOICE_DESIGN_EMPTY_RESULT' ? tv('noVoiceGenerated') : (message || tv('generationError')))
     } finally {
+      if (generationRunRef.current !== generationRunId) return
       setIsDesignSubmitting(false)
     }
   }
@@ -129,8 +170,7 @@ export default function VoiceDesignDialogBase({
   }
 
   const handleClose = () => {
-    setVoicePrompt('')
-    setPreviewText(tv('defaultPreviewText'))
+    generationRunRef.current += 1
     setSchemeCount(String(DEFAULT_VOICE_SCHEME_COUNT))
     setError(null)
     setGeneratedVoices([])
@@ -148,7 +188,7 @@ export default function VoiceDesignDialogBase({
 
   const dialogContent = (
     <>
-      <div className="fixed inset-0 z-[9999] glass-overlay" onClick={handleClose} />
+      <div className="fixed inset-0 z-[9999] glass-overlay" />
       <div
         className="fixed z-[10000] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 glass-surface-modal w-full max-w-xl overflow-hidden"
         onClick={(event) => event.stopPropagation()}
@@ -185,7 +225,7 @@ export default function VoiceDesignDialogBase({
             onGenerate={() => {
               void handleGenerate()
             }}
-            footer={(
+            footer={!isDesignSubmitting ? (
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
@@ -204,7 +244,7 @@ export default function VoiceDesignDialogBase({
                   {tv('confirmUse')}
                 </button>
               </div>
-            )}
+            ) : null}
           />
         </div>
       </div>

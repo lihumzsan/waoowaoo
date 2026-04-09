@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 
-type LegacyRevertBody = Record<string, unknown> & {
+type RevertImageRequestBody = Record<string, unknown> & {
   type?: 'character' | 'location'
   id?: string
 }
@@ -12,7 +12,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyRevertBody
+  const body = await request.json() as RevertImageRequestBody
   if ((body.type !== 'character' && body.type !== 'location') || typeof body.id !== 'string' || body.id.trim().length === 0) {
     throw new ApiError('INVALID_PARAMS')
   }

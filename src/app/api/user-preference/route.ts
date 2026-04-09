@@ -58,6 +58,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     'editModel',
     'videoModel',
     'audioModel',
+    'voiceDesignModel',
     'lipSyncModel',
     'videoRatio',
     'artStyle',

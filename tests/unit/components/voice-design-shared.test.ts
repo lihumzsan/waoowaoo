@@ -65,4 +65,44 @@ describe('voice-design-shared', () => {
       }),
     ).rejects.toThrow('VOICE_DESIGN_INVALID_RESPONSE: missing voiceId')
   })
+
+  it('emits each generated voice as soon as it becomes available', async () => {
+    const onDesignVoice = vi
+      .fn<(_: {
+        voicePrompt: string
+        previewText: string
+        preferredName: string
+        language: 'zh'
+      }) => Promise<{ voiceId: string; audioBase64: string }>>()
+      .mockResolvedValueOnce({ voiceId: 'voice-1', audioBase64: 'audio-1' })
+      .mockResolvedValueOnce({ voiceId: 'voice-2', audioBase64: 'audio-2' })
+
+    const onVoiceGenerated = vi.fn()
+
+    const result = await generateVoiceDesignOptions({
+      count: 2,
+      voicePrompt: '成熟男声',
+      previewText: '测试文案',
+      defaultPreviewText: '默认试听文案',
+      onDesignVoice,
+      onVoiceGenerated,
+      createPreferredName: (index) => `preferred-${index + 1}`,
+    })
+
+    expect(onVoiceGenerated).toHaveBeenCalledTimes(2)
+    expect(onVoiceGenerated.mock.calls).toEqual([
+      [
+        { voiceId: 'voice-1', audioBase64: 'audio-1', audioUrl: 'data:audio/wav;base64,audio-1' },
+        { index: 0, total: 2 },
+      ],
+      [
+        { voiceId: 'voice-2', audioBase64: 'audio-2', audioUrl: 'data:audio/wav;base64,audio-2' },
+        { index: 1, total: 2 },
+      ],
+    ])
+    expect(result).toEqual([
+      { voiceId: 'voice-1', audioBase64: 'audio-1', audioUrl: 'data:audio/wav;base64,audio-1' },
+      { voiceId: 'voice-2', audioBase64: 'audio-2', audioUrl: 'data:audio/wav;base64,audio-2' },
+    ])
+  })
 })

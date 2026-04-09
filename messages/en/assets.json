@@ -128,6 +128,8 @@
         "undoSuccess": "✓ Reverted to previous version",
         "editFailed": "Image edit failed",
         "editSuccess": "Image edit successful",
+        "regenerateQueued": "Regeneration task submitted",
+        "regenerateInProgress": "A regeneration task is already running",
         "regenerateFailed": "Regenerate failed: {error}"
     },
     "modal": {

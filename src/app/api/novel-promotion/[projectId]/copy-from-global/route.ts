@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { copyAssetFromGlobal } from '@/lib/assets/services/asset-actions'
 
-type LegacyCopyBody = {
+type CopyFromGlobalRequestBody = {
   type?: 'character' | 'location' | 'voice'
   targetId?: string
   globalAssetId?: string
@@ -17,7 +17,7 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyCopyBody
+  const body = await request.json() as CopyFromGlobalRequestBody
   if (
     (body.type !== 'character' && body.type !== 'location' && body.type !== 'voice')
     || typeof body.targetId !== 'string'

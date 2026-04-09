@@ -12,6 +12,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { groupAssetsByKind } from '@/lib/assets/grouping'
 import type { AssetSummary } from '@/lib/assets/contracts'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 interface AssetGridProps {
     assets: AssetSummary[]
     loading: boolean
@@ -29,6 +30,11 @@ interface AssetGridProps {
     onLocationEdit?: (location: unknown, imageIndex: number) => void
     onPropEdit?: (prop: unknown, imageIndex: number) => void
     onVoiceSelect?: (characterId: string) => void
+    characterWorkflowOptions?: UserModelOption[]
+    selectedCharacterWorkflow?: string
+    onCharacterWorkflowChange?: (modelKey: string) => Promise<void> | void
+    onBeforeCharacterGenerate?: () => Promise<void> | void
+    isCharacterWorkflowSaving?: boolean
 }
 
 // ─── 新建资产下拉菜单 ──────────────────────────────────
@@ -142,7 +148,12 @@ export function AssetGrid({
     onCharacterEdit,
     onLocationEdit,
     onPropEdit,
-    onVoiceSelect
+    onVoiceSelect,
+    characterWorkflowOptions = [],
+    selectedCharacterWorkflow,
+    onCharacterWorkflowChange,
+    onBeforeCharacterGenerate,
+    isCharacterWorkflowSaving = false,
 }: AssetGridProps) {
     const t = useTranslations('assetHub')
     const loadingState = loading
@@ -383,6 +394,11 @@ export function AssetGrid({
                                         onVoiceDesign={onVoiceDesign}
                                         onEdit={onCharacterEdit}
                                         onVoiceSelect={onVoiceSelect}
+                                        characterWorkflowOptions={characterWorkflowOptions}
+                                        selectedCharacterWorkflow={selectedCharacterWorkflow}
+                                        onCharacterWorkflowChange={onCharacterWorkflowChange}
+                                        onBeforeGenerate={onBeforeCharacterGenerate}
+                                        isCharacterWorkflowSaving={isCharacterWorkflowSaving}
                                     />
                                 ))}
                             </div>

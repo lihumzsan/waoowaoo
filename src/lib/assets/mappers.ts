@@ -33,7 +33,7 @@ type ProjectCharacterRecord = {
   name: string
   introduction?: string | null
   profileData?: string | null
-  voiceType?: 'custom' | 'qwen-designed' | 'uploaded' | null
+  voiceType?: 'custom' | 'designed' | 'uploaded' | null
   voiceId?: string | null
   customVoiceUrl?: string | null
   media?: MediaRef | null
@@ -161,7 +161,7 @@ function createVariant(params: {
 export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): CharacterAssetSummary {
   const registration = getAssetKindRegistration('character')
   const normalizedVoiceType = character.voiceType === 'custom'
-    || character.voiceType === 'qwen-designed'
+    || character.voiceType === 'designed'
     || character.voiceType === 'uploaded'
     ? character.voiceType
     : null

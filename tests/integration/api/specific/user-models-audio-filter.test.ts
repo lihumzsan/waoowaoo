@@ -20,11 +20,11 @@ const prismaMock = vi.hoisted(() => ({
           provider: 'bailian',
         },
         {
-          modelId: 'qwen-voice-design',
-          modelKey: 'bailian::qwen-voice-design',
-          name: 'Qwen Voice Design',
+          modelId: 'baseaudio/\u97f3\u8272/s2-se',
+          modelKey: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
+          name: 'ComfyUI · S2 voice design',
           type: 'audio',
-          provider: 'bailian',
+          provider: 'comfyui',
         },
       ]),
       customProviders: JSON.stringify([
@@ -32,6 +32,11 @@ const prismaMock = vi.hoisted(() => ({
           id: 'bailian',
           name: 'Alibaba Bailian',
           apiKey: 'k-bailian',
+        },
+        {
+          id: 'comfyui',
+          name: 'ComfyUI (Local)',
+          baseUrl: 'http://127.0.0.1:8188',
         },
       ]),
     })),
@@ -54,7 +59,7 @@ describe('api specific - user models audio filter', () => {
     vi.clearAllMocks()
   })
 
-  it('excludes voice design models from the audio model list', async () => {
+  it('excludes voice design workflows from the audio model list', async () => {
     const mod = await import('@/app/api/user/models/route')
     const req = buildMockRequest({
       path: '/api/user/models',

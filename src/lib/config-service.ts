@@ -119,6 +119,7 @@ export interface UserModelConfig {
   editModel: string | null
   videoModel: string | null
   audioModel: string | null
+  voiceDesignModel: string | null
   capabilityDefaults: CapabilitySelections
 }
 
@@ -184,6 +185,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     audioModel: extractModelKey(userPref?.audioModel) || null,
+    voiceDesignModel: extractModelKey(userPref?.voiceDesignModel) || null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
   }
 }

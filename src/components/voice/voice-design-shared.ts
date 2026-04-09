@@ -42,6 +42,7 @@ interface GenerateVoiceDesignOptionsParams {
   language?: 'zh'
   onDesignVoice: (payload: VoiceDesignMutationPayload) => Promise<VoiceDesignMutationResult>
   createPreferredName?: (index: number) => string
+  onVoiceGenerated?: (voice: GeneratedVoice, meta: { index: number; total: number }) => void
 }
 
 export async function generateVoiceDesignOptions({
@@ -52,6 +53,7 @@ export async function generateVoiceDesignOptions({
   language = 'zh',
   onDesignVoice,
   createPreferredName = (index) => createVoiceDesignPreferredName(index),
+  onVoiceGenerated,
 }: GenerateVoiceDesignOptionsParams): Promise<GeneratedVoice[]> {
   const trimmedPrompt = voicePrompt.trim()
   if (!trimmedPrompt) throw new Error('VOICE_PROMPT_REQUIRED')
@@ -73,10 +75,15 @@ export async function generateVoiceDesignOptions({
       throw new Error('VOICE_DESIGN_INVALID_RESPONSE: missing voiceId')
     }
 
-    voices.push({
+    const voice = {
       voiceId: result.voiceId,
       audioBase64: result.audioBase64,
       audioUrl: `data:audio/wav;base64,${result.audioBase64}`,
+    }
+    voices.push(voice)
+    onVoiceGenerated?.(voice, {
+      index,
+      total: resolvedCount,
     })
   }
 

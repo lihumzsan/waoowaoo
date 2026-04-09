@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { submitAssetModifyTask } from '@/lib/assets/services/asset-actions'
 
-type LegacyModifyBody = Record<string, unknown> & {
+type ModifyImageRequestBody = Record<string, unknown> & {
   type?: 'character' | 'location'
   id?: string
 }
@@ -12,7 +12,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyModifyBody
+  const body = await request.json() as ModifyImageRequestBody
   if ((body.type !== 'character' && body.type !== 'location') || typeof body.id !== 'string' || body.id.trim().length === 0) {
     throw new ApiError('INVALID_PARAMS')
   }

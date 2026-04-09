@@ -3,8 +3,6 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
-
 interface VoiceDesignPayload {
     voiceId?: string
     audioBase64?: string
@@ -19,8 +17,8 @@ interface CharacterVoiceJsonBody {
     audioBase64?: string | null
 }
 
-function readDesignedVoiceType(voiceId: string) {
-    return isComfyUiDesignedVoiceId(voiceId) ? 'comfyui-designed' : 'qwen-designed'
+function readDesignedVoiceType(_voiceId: string) {
+    return 'designed'
 }
 
 interface AssetHubCharacterVoiceDb {

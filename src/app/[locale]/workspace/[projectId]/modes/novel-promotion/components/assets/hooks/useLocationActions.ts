@@ -29,6 +29,13 @@ interface UseLocationActionsProps {
     showToast?: (message: string, type: 'success' | 'warning' | 'error') => void
 }
 
+type TaskSubmissionResult = {
+    success?: boolean
+    async?: boolean
+    taskId?: string
+    deduped?: boolean
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof Error) return error.message
     if (typeof error === 'object' && error !== null) {
@@ -36,6 +43,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
         if (typeof message === 'string') return message
     }
     return fallback
+}
+
+function isTaskSubmissionResult(value: unknown): value is TaskSubmissionResult {
+    return !!value && typeof value === 'object'
 }
 
 export function useLocationActions({
@@ -60,6 +71,17 @@ export function useLocationActions({
     const selectLocationImageMutation = useSelectProjectLocationImage(projectId)
     const confirmLocationSelectionMutation = useConfirmProjectLocationSelection(projectId, assetType)
     const updateLocationDescriptionMutation = useUpdateProjectLocationDescription(projectId)
+
+    const notifyRegenerationSubmitted = useCallback((result: unknown) => {
+        if (!showToast || !isTaskSubmissionResult(result)) return
+        if (result.deduped === true) {
+            showToast(t('image.regenerateInProgress'), 'warning')
+            return
+        }
+        if (result.taskId || result.async === true || result.success === true) {
+            showToast(t('image.regenerateQueued'), 'success')
+        }
+    }, [showToast, t])
 
     // 删除场景
     const handleDeleteLocation = useCallback(async (locationId: string) => {
@@ -112,9 +134,13 @@ export function useLocationActions({
     const handleRegenerateSingleLocation = useCallback(async (locationId: string, imageIndex: number) => {
         try {
             if (assetType === 'prop') {
-                await propActions.generate({ id: locationId, imageIndex })
+                const result = await propActions.generate({ id: locationId, imageIndex })
+                notifyRegenerationSubmitted(result)
+                return result
             } else {
-                await regenerateSingleImage.mutateAsync({ locationId, imageIndex })
+                const result = await regenerateSingleImage.mutateAsync({ locationId, imageIndex })
+                notifyRegenerationSubmitted(result)
+                return result
             }
         } catch (error: unknown) {
             if (!isAbortError(error)) {
@@ -122,15 +148,19 @@ export function useLocationActions({
             }
             throw error
         }
-    }, [assetType, propActions, regenerateSingleImage, t])
+    }, [assetType, notifyRegenerationSubmitted, propActions, regenerateSingleImage, t])
 
     // 整组重新生成场景图片 - 🔥 V6.7: 使用mutation hook
     const handleRegenerateLocationGroup = useCallback(async (locationId: string, count?: number) => {
         try {
             if (assetType === 'prop') {
-                await propActions.generate({ id: locationId, count })
+                const result = await propActions.generate({ id: locationId, count })
+                notifyRegenerationSubmitted(result)
+                return result
             } else {
-                await regenerateGroup.mutateAsync({ locationId, count })
+                const result = await regenerateGroup.mutateAsync({ locationId, count })
+                notifyRegenerationSubmitted(result)
+                return result
             }
         } catch (error: unknown) {
             if (!isAbortError(error)) {
@@ -138,7 +168,7 @@ export function useLocationActions({
             }
             throw error
         }
-    }, [assetType, propActions, regenerateGroup, t])
+    }, [assetType, notifyRegenerationSubmitted, propActions, regenerateGroup, t])
 
     // 更新场景描述 - 🔥 保存到服务器
     const handleUpdateLocationDescription = useCallback(async (

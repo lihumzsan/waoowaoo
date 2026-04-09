@@ -3,9 +3,9 @@ import { logError as _ulogError } from '@/lib/logging/core'
 import { apiFetch } from '@/lib/api-fetch'
 import JSZip from 'jszip'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Navbar from '@/components/Navbar'
 import { FolderSidebar } from './components/FolderSidebar'
 import { AssetGrid } from './components/AssetGrid'
@@ -22,17 +22,21 @@ import {
     useRefreshAssets,
     useGlobalFolders,
     useSSE,
+    useUserModels,
 } from '@/lib/query/hooks'
 import { queryKeys } from '@/lib/query/keys'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 
+const USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY = ['asset-hub', 'user-preference', 'character-model'] as const
+
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
     const queryClient = useQueryClient()
     const { count: characterGenerationCount } = useImageGenerationCount('character')
     const { count: locationGenerationCount } = useImageGenerationCount('location')
+    const pendingCharacterModelSaveRef = useRef<Promise<void> | null>(null)
 
     // 文件夹选择状态
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -47,9 +51,73 @@ export default function AssetHubPage() {
     const locationActions = useAssetActions({ scope: 'global', kind: 'location' })
     const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
     const refreshAssets = useRefreshAssets({ scope: 'global' })
+    const userModelsQuery = useUserModels()
+    const characterWorkflowOptions = userModelsQuery.data?.image || []
+    const characterModelQuery = useQuery({
+        queryKey: USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY,
+        queryFn: async () => {
+            const response = await apiFetch('/api/user-preference')
+            if (!response.ok) {
+                throw new Error('Failed to fetch user preference')
+            }
+            const data = await response.json()
+            return typeof data?.preference?.characterModel === 'string'
+                ? data.preference.characterModel
+                : ''
+        },
+    })
+    const updateCharacterModelMutation = useMutation({
+        mutationFn: async (modelKey: string) => {
+            const response = await apiFetch('/api/user-preference', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ characterModel: modelKey }),
+            })
+            if (!response.ok) {
+                throw new Error('Failed to update character model')
+            }
+            const data = await response.json()
+            return typeof data?.preference?.characterModel === 'string'
+                ? data.preference.characterModel
+                : modelKey
+        },
+        onMutate: async (modelKey) => {
+            await queryClient.cancelQueries({ queryKey: USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY })
+            const previous = queryClient.getQueryData<string>(USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY)
+            queryClient.setQueryData(USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY, modelKey)
+            return { previous }
+        },
+        onError: (_error, _modelKey, context) => {
+            if (context?.previous !== undefined) {
+                queryClient.setQueryData(USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY, context.previous)
+            }
+        },
+        onSuccess: (modelKey) => {
+            queryClient.setQueryData(USER_PREFERENCE_CHARACTER_MODEL_QUERY_KEY, modelKey)
+        },
+    })
+    const selectedCharacterModel = characterModelQuery.data || ''
 
     const loading = foldersLoading || assetsLoading
     useSSE({ projectId: 'global-asset-hub', enabled: true })
+
+    const handleCharacterWorkflowChange = useCallback(async (modelKey: string) => {
+        const trimmedModelKey = modelKey.trim()
+        if (!trimmedModelKey || trimmedModelKey === selectedCharacterModel) return
+        const savePromise = updateCharacterModelMutation.mutateAsync(trimmedModelKey).then(() => undefined)
+        pendingCharacterModelSaveRef.current = savePromise
+        try {
+            await savePromise
+        } finally {
+            if (pendingCharacterModelSaveRef.current === savePromise) {
+                pendingCharacterModelSaveRef.current = null
+            }
+        }
+    }, [selectedCharacterModel, updateCharacterModelMutation])
+
+    const ensureCharacterWorkflowSaved = useCallback(async () => {
+        await pendingCharacterModelSaveRef.current
+    }, [])
 
     // 弹窗状态
     const [showAddCharacter, setShowAddCharacter] = useState(false)
@@ -501,6 +569,11 @@ export default function AssetHubPage() {
                         onLocationEdit={handleOpenLocationEdit}
                         onPropEdit={handleOpenPropEdit}
                         onVoiceSelect={(characterId) => setVoicePickerCharacterId(characterId)}
+                        characterWorkflowOptions={characterWorkflowOptions}
+                        selectedCharacterWorkflow={selectedCharacterModel}
+                        onCharacterWorkflowChange={handleCharacterWorkflowChange}
+                        onBeforeCharacterGenerate={ensureCharacterWorkflowSaved}
+                        isCharacterWorkflowSaving={updateCharacterModelMutation.isPending || characterModelQuery.isLoading}
                     />
                 </div>
             </div>

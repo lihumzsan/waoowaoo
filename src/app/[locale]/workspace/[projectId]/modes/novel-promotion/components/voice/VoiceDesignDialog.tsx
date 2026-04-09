@@ -26,6 +26,9 @@ export default function VoiceDesignDialog({
   projectId,
 }: VoiceDesignDialogProps) {
   const designVoiceMutation = useDesignProjectVoice(projectId)
+  const draftScope = characterId
+    ? `project:${projectId}:character:${characterId}`
+    : `project:${projectId}:speaker:${speaker}`
 
   const handleDesignVoice = async (
     payload: VoiceDesignMutationPayload,
@@ -40,6 +43,7 @@ export default function VoiceDesignDialog({
     <VoiceDesignDialogBase
       isOpen={isOpen}
       speaker={speaker}
+      draftScope={draftScope}
       hasExistingVoice={hasExistingVoice}
       onClose={onClose}
       onSave={onSave}

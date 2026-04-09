@@ -135,10 +135,6 @@ const COMFYUI_PRESET_DEFAULT_MODEL_IDS = {
     voiceDesignModel: 'baseaudio/\u97f3\u8272/s2-se',
 } as const
 
-const LEGACY_VOICE_DESIGN_MODEL_KEYS = new Set([
-    'bailian::qwen-voice-design',
-])
-
 function hasComfyUiPresetDefaultField(field: string): field is keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS {
     return Object.prototype.hasOwnProperty.call(COMFYUI_PRESET_DEFAULT_MODEL_IDS, field)
 }
@@ -167,10 +163,7 @@ export function applyComfyUiPresetDefaults(params: {
         if (!targetModel) continue
 
         const currentDefaultModelKey = nextDefaultModels[field]
-        const shouldReplaceLegacyVoiceDesignDefault = field === 'voiceDesignModel'
-            && typeof currentDefaultModelKey === 'string'
-            && LEGACY_VOICE_DESIGN_MODEL_KEYS.has(currentDefaultModelKey)
-        if (!currentDefaultModelKey || !modelKeySet.has(currentDefaultModelKey) || shouldReplaceLegacyVoiceDesignDefault) {
+        if (!currentDefaultModelKey || !modelKeySet.has(currentDefaultModelKey)) {
             nextDefaultModels[field] = targetModel.modelKey
             changed = true
         }

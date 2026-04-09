@@ -24,6 +24,9 @@ export default function VoiceDesignDialog({
   onSave,
 }: VoiceDesignDialogProps) {
   const designVoiceMutation = useDesignAssetHubVoice()
+  const draftScope = characterId
+    ? `asset-hub:character:${characterId}`
+    : `asset-hub:speaker:${speaker}`
 
   const handleDesignVoice = async (
     payload: VoiceDesignMutationPayload,
@@ -38,6 +41,7 @@ export default function VoiceDesignDialog({
     <VoiceDesignDialogBase
       isOpen={isOpen}
       speaker={speaker}
+      draftScope={draftScope}
       hasExistingVoice={hasExistingVoice}
       onClose={onClose}
       onSave={onSave}

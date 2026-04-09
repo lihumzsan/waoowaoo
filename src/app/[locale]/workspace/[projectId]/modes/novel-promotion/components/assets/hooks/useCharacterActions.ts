@@ -30,6 +30,13 @@ interface UseCharacterActionsProps {
     showToast?: (message: string, type: 'success' | 'warning' | 'error') => void
 }
 
+type TaskSubmissionResult = {
+    success?: boolean
+    async?: boolean
+    taskId?: string
+    deduped?: boolean
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof Error) return error.message
     if (typeof error === 'object' && error !== null) {
@@ -37,6 +44,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
         if (typeof message === 'string') return message
     }
     return fallback
+}
+
+function isTaskSubmissionResult(value: unknown): value is TaskSubmissionResult {
+    return !!value && typeof value === 'object'
 }
 
 export function useCharacterActions({
@@ -59,6 +70,17 @@ export function useCharacterActions({
     const selectCharacterImageMutation = useSelectProjectCharacterImage(projectId)
     const confirmCharacterSelectionMutation = useConfirmProjectCharacterSelection(projectId)
     const updateAppearanceDescriptionMutation = useUpdateProjectAppearanceDescription(projectId)
+
+    const notifyRegenerationSubmitted = useCallback((result: unknown) => {
+        if (!showToast || !isTaskSubmissionResult(result)) return
+        if (result.deduped === true) {
+            showToast(t('image.regenerateInProgress'), 'warning')
+            return
+        }
+        if (result.taskId || result.async === true || result.success === true) {
+            showToast(t('image.regenerateQueued'), 'success')
+        }
+    }, [showToast, t])
 
     // 获取形象列表
     const getAppearances = useCallback((character: Character): CharacterAppearance[] => {
@@ -131,32 +153,34 @@ export function useCharacterActions({
         characterId: string,
         appearanceId: string,
         imageIndex: number
-    ) => {
+    ): Promise<void> => {
         try {
-            await regenerateSingleImage.mutateAsync({ characterId, appearanceId, imageIndex })
+            const result = await regenerateSingleImage.mutateAsync({ characterId, appearanceId, imageIndex })
+            notifyRegenerationSubmitted(result)
         } catch (error: unknown) {
             if (!isAbortError(error)) {
                 alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
             }
             throw error
         }
-    }, [regenerateSingleImage, t])
+    }, [notifyRegenerationSubmitted, regenerateSingleImage, t])
 
     // 整组重新生成角色图片 - 🔥 V6.7: 使用mutation hook
     const handleRegenerateCharacterGroup = useCallback(async (
         characterId: string,
         appearanceId: string,
         count?: number,
-    ) => {
+    ): Promise<void> => {
         try {
-            await regenerateGroup.mutateAsync({ characterId, appearanceId, count })
+            const result = await regenerateGroup.mutateAsync({ characterId, appearanceId, count })
+            notifyRegenerationSubmitted(result)
         } catch (error: unknown) {
             if (!isAbortError(error)) {
                 alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
             }
             throw error
         }
-    }, [regenerateGroup, t])
+    }, [notifyRegenerationSubmitted, regenerateGroup, t])
 
     // 更新形象描述 - 🔥 仍需保存到服务器
     const handleUpdateAppearanceDescription = useCallback(async (

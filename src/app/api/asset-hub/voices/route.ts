@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { ApiError, apiHandler } from '@/lib/api-errors'
 import { attachMediaFieldsToGlobalVoice } from '@/lib/media/attach'
-import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
+import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
 // 获取用户所有音色（支持 folderId 筛选）
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -67,7 +67,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
         }
     }
 
-    const customVoiceMedia = await resolveMediaRefFromLegacyValue(customVoiceUrl || null)
+    const customVoiceStorageKey = await resolveStorageKeyFromMediaValue(customVoiceUrl || null)
+    const customVoiceMedia = customVoiceStorageKey
+        ? await ensureMediaObjectFromStorageKey(customVoiceStorageKey)
+        : null
     const voice = await prisma.globalVoice.create({
         data: {
             userId: session.user.id,
@@ -75,7 +78,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
             name: name.trim(),
             description: description?.trim() || null,
             voiceId: voiceId || null,
-            voiceType: voiceType || 'qwen-designed',
+            voiceType: voiceType || 'designed',
             customVoiceUrl: customVoiceUrl || null,
             customVoiceMediaId: customVoiceMedia?.id || null,
             voicePrompt: voicePrompt?.trim() || null,

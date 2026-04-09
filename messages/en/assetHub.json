@@ -68,6 +68,9 @@
     "bindVoiceFailedDetail": "Failed to bind voice: {error}",
     "voiceDesignSaved": "AI-designed voice has been set for {name}",
     "appearanceLabel": "Appearance {index}",
+    "characterWorkflowLabel": "Image workflow",
+    "characterWorkflowPlaceholder": "Choose the text-to-image workflow for this character",
+    "characterWorkflowSaving": "Switching...",
     "voiceSettings": {
         "title": "Voice",
         "noVoice": "No voice",

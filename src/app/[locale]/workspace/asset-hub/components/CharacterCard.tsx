@@ -23,6 +23,8 @@ import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { getImageGenerationCountOptions } from '@/lib/image-generation/count'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 import { AppIcon } from '@/components/ui/icons'
+import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
 interface Appearance {
     id: string
@@ -54,9 +56,26 @@ interface CharacterCardProps {
     onVoiceDesign?: (characterId: string, characterName: string) => void
     onEdit?: (character: Character, appearance: Appearance) => void
     onVoiceSelect?: (characterId: string) => void
+    characterWorkflowOptions?: UserModelOption[]
+    selectedCharacterWorkflow?: string
+    onCharacterWorkflowChange?: (modelKey: string) => Promise<void> | void
+    onBeforeGenerate?: () => Promise<void> | void
+    isCharacterWorkflowSaving?: boolean
 }
 
-export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDesign, onEdit, onVoiceSelect }: CharacterCardProps) {
+export function CharacterCard({
+    character,
+    onImageClick,
+    onImageEdit,
+    onVoiceDesign,
+    onEdit,
+    onVoiceSelect,
+    characterWorkflowOptions = [],
+    selectedCharacterWorkflow,
+    onCharacterWorkflowChange,
+    onBeforeGenerate,
+    isCharacterWorkflowSaving = false,
+}: CharacterCardProps) {
     // 🔥 使用 mutation hooks
     const generateImage = useGenerateCharacterImage()
     const selectImage = useSelectCharacterImage()
@@ -120,9 +139,39 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
             hasOutput: !!displayImageUrl,
         })
         : null
+    const hasCharacterWorkflowOptions = characterWorkflowOptions.length > 0
+    const workflowSelector = hasCharacterWorkflowOptions ? (
+        <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-2.5">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('characterWorkflowLabel')}</span>
+                {isCharacterWorkflowSaving && (
+                    <span className="text-[11px] text-[var(--glass-tone-info-fg)]">{t('characterWorkflowSaving')}</span>
+                )}
+            </div>
+            <div className={isCharacterWorkflowSaving ? 'pointer-events-none opacity-70' : ''}>
+                <ModelCapabilityDropdown
+                    models={characterWorkflowOptions}
+                    value={selectedCharacterWorkflow || undefined}
+                    onModelChange={(modelKey) => { void onCharacterWorkflowChange?.(modelKey) }}
+                    capabilityFields={[]}
+                    capabilityOverrides={{}}
+                    onCapabilityChange={(field, rawValue, sample) => {
+                        void field
+                        void rawValue
+                        void sample
+                    }}
+                    placeholder={t('characterWorkflowPlaceholder')}
+                    compact={true}
+                />
+            </div>
+        </div>
+    ) : null
 
     // 生成图片
-    const handleGenerate = (count = generationCount) => {
+    const handleGenerate = async (count = generationCount) => {
+        if (onBeforeGenerate) {
+            await onBeforeGenerate()
+        }
         generateImage.mutate(
             {
                 characterId: character.id,
@@ -266,9 +315,9 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                             onValueChange={setGenerationCount}
                             onClick={() => {
                                 _ulogInfo('[CharacterCard] 多图模式 - 重新生成按钮点击, characterId:', character.id, 'appearanceCount:', appearanceCount)
-                                handleGenerate(generatedImageCount)
+                                void handleGenerate(generatedImageCount)
                             }}
-                            disabled={isAppearanceTaskRunning}
+                            disabled={isAppearanceTaskRunning || isCharacterWorkflowSaving}
                             showCountControl={false}
                             ariaLabel={tAssets('image.regenCountPrefix')}
                             className="inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 hover:bg-[var(--glass-tone-info-bg)] transition-colors disabled:opacity-50"
@@ -348,6 +397,12 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                 )}
 
                 {/* 音色设置 */}
+                {workflowSelector && (
+                    <div className="mt-3">
+                        {workflowSelector}
+                    </div>
+                )}
+
                 <VoiceSettings
                     characterId={character.id}
                     characterName={character.name}
@@ -410,7 +465,7 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                                 <button onClick={() => onImageEdit?.('character', character.id, character.name, effectiveSelectedIndex ?? 0, appearance.appearanceIndex)} className="glass-btn-base glass-btn-tone-info h-7 w-7 rounded-full">
                                     <AppIcon name="edit" className="w-4 h-4" />
                                 </button>
-                        <button onClick={() => handleGenerate()} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
+                        <button onClick={() => { void handleGenerate() }} disabled={isCharacterWorkflowSaving} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full disabled:opacity-50">
                                     <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
                                 </button>
                                 {hasPreviousVersion && (
@@ -430,10 +485,11 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                             value={generationCount}
                             options={getImageGenerationCountOptions('character')}
                             onValueChange={setGenerationCount}
-                            onClick={() => handleGenerate(generationCount)}
+                            onClick={() => { void handleGenerate(generationCount) }}
                             ariaLabel={tAssets('image.selectCount')}
                             className="glass-btn-base glass-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg"
                             selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-sm font-semibold text-current outline-none cursor-pointer leading-none transition-colors"
+                            disabled={isCharacterWorkflowSaving}
                         />
                     </div>
                 )}
@@ -482,6 +538,12 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onVoiceDes
                 {appearance?.description && <p className="mt-2 text-xs text-[var(--glass-text-secondary)] line-clamp-2">{appearance.description}</p>}
 
                 {/* 音色设置 */}
+                {workflowSelector && (
+                    <div className="mt-3">
+                        {workflowSelector}
+                    </div>
+                )}
+
                 <VoiceSettings
                     characterId={character.id}
                     characterName={character.name}

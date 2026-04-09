@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { selectAssetRender } from '@/lib/assets/services/asset-actions'
 
-type LegacyProjectLocationSelectBody = {
+type ProjectLocationSelectRequestBody = {
   locationId?: string
   selectedIndex?: number | null
 }
@@ -16,7 +16,7 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyProjectLocationSelectBody
+  const body = await request.json() as ProjectLocationSelectRequestBody
   if (typeof body.locationId !== 'string' || body.locationId.trim().length === 0) {
     throw new ApiError('INVALID_PARAMS')
   }

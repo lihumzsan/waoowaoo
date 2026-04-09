@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { resolveTaskResponse } from '@/lib/task/client'
-import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
 import {
   requestJsonWithError,
   requestTaskResponseWithError,
@@ -84,7 +83,7 @@ export function useSaveDesignedAssetHubVoice() {
           description: null,
           folderId: payload.folderId,
           voiceId: payload.voiceId,
-          voiceType: isComfyUiDesignedVoiceId(payload.voiceId) ? 'comfyui-designed' : 'qwen-designed',
+          voiceType: 'designed',
           customVoiceUrl: uploadData.key,
           voicePrompt: payload.voicePrompt,
           gender: null,

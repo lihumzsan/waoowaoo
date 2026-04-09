@@ -31,7 +31,7 @@ import { useUpdateProjectCharacterVoiceSettings } from '@/lib/query/mutations/ch
 interface UpdateVoiceMutation {
   mutationFn: (variables: {
     characterId: string
-    voiceType: 'qwen-designed' | 'uploaded' | 'custom' | null
+    voiceType: 'designed' | 'uploaded' | 'custom' | null
     voiceId?: string
     customVoiceUrl?: string
   }) => Promise<unknown>
@@ -50,7 +50,7 @@ describe('project character voice mutations', () => {
 
     await mutation.mutationFn({
       characterId: 'character-1',
-      voiceType: 'qwen-designed',
+      voiceType: 'designed',
       voiceId: 'voice-1',
       customVoiceUrl: 'https://example.com/audio.wav',
     })
@@ -65,7 +65,7 @@ describe('project character voice mutations', () => {
           scope: 'project',
           kind: 'character',
           projectId: 'project-1',
-          voiceType: 'qwen-designed',
+          voiceType: 'designed',
           voiceId: 'voice-1',
           customVoiceUrl: 'https://example.com/audio.wav',
         }),

@@ -2,8 +2,12 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
+const constantsMock = vi.hoisted(() => ({
+  COMFYUI_VOICE_DESIGN_WORKFLOW_ID: 'baseaudio/\u97f3\u8272/s2-se',
+  COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID: 'baseaudio/\u591a\u4eba/LongCat-two',
+}))
+
 const bailianMock = vi.hoisted(() => ({
-  createVoiceDesign: vi.fn(),
   validateVoicePrompt: vi.fn(),
   validatePreviewText: vi.fn(),
 }))
@@ -28,7 +32,7 @@ const comfyClientMock = vi.hoisted(() => ({
 
 const fishAudioMock = vi.hoisted(() => ({
   buildComfyUiDesignedVoiceId: vi.fn(() => 'comfyui:voice-preview'),
-  COMFYUI_FISH_AUDIO_S2_VOICE_DESIGN_WORKFLOW_ID: 'baseaudio/音色/s2-se',
+  COMFYUI_FISH_AUDIO_S2_VOICE_DESIGN_WORKFLOW_ID: constantsMock.COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
   generateFishAudioS2Prompt: vi.fn(),
 }))
 
@@ -66,6 +70,11 @@ vi.mock('@/lib/workers/utils', () => ({
 
 import { handleVoiceDesignTask } from '@/lib/workers/handlers/voice-design'
 
+const {
+  COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+  COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID,
+} = constantsMock
+
 function buildJob(type: TaskJobData['type'], payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     data: {
@@ -87,31 +96,24 @@ describe('worker voice-design behavior', () => {
     vi.clearAllMocks()
     bailianMock.validateVoicePrompt.mockReturnValue({ valid: true })
     bailianMock.validatePreviewText.mockReturnValue({ valid: true })
-    apiConfigMock.getProviderConfig.mockResolvedValue({ apiKey: 'bailian-key', baseUrl: 'http://127.0.0.1:8188' })
+    apiConfigMock.getProviderConfig.mockResolvedValue({ id: 'comfyui', apiKey: 'bailian-key', baseUrl: 'http://127.0.0.1:8188' })
     configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: 'bailian::qwen3.5-plus' })
-    configServiceMock.getUserModelConfig.mockResolvedValue({ analysisModel: 'bailian::qwen3.5-plus' })
-    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({ voiceDesignModel: 'bailian::qwen-voice-design' })
+    configServiceMock.getUserModelConfig.mockResolvedValue({ analysisModel: 'bailian::qwen3.5-plus', voiceDesignModel: null })
+    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({
+      voiceDesignModel: `comfyui::${COMFYUI_VOICE_DESIGN_WORKFLOW_ID}`,
+      audioModel: null,
+    })
     prismaMock.prisma.globalCharacter.findFirst.mockResolvedValue(null)
     prismaMock.prisma.novelPromotionCharacter.findFirst.mockResolvedValue(null)
-    bailianMock.createVoiceDesign.mockResolvedValue({
-      success: true,
-      voiceId: 'voice-id-1',
-      targetModel: 'bailian-tts',
-      audioBase64: 'base64-audio',
-      sampleRate: 24000,
-      responseFormat: 'mp3',
-      usageCount: 11,
-      requestId: 'req-1',
-    })
     apiConfigMock.resolveModelSelection.mockResolvedValue({
-      provider: 'bailian',
-      modelId: 'qwen-voice-design',
-      modelKey: 'bailian::qwen-voice-design',
+      provider: 'comfyui',
+      modelId: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      modelKey: `comfyui::${COMFYUI_VOICE_DESIGN_WORKFLOW_ID}`,
       mediaType: 'audio',
     })
     fishAudioMock.generateFishAudioS2Prompt.mockResolvedValue({
-      voicePrompt: '冷静理性',
-      fishText: '[冷静]你好。',
+      voicePrompt: 'calm, steady, trusted',
+      fishText: '[calm]hello there',
     })
     comfyClientMock.runComfyUiAudioWorkflow.mockResolvedValue({
       audioBase64: 'comfy-audio',
@@ -134,67 +136,147 @@ describe('worker voice-design behavior', () => {
     await expect(handleVoiceDesignTask(job)).rejects.toThrow('bad prompt')
   })
 
-  it('uses bailian voice design when the configured voiceDesignModel is bailian', async () => {
+  it('falls back to audioModel when voiceDesignModel is missing but s2-se is configured there', async () => {
+    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({
+      voiceDesignModel: null,
+      audioModel: `comfyui::${COMFYUI_VOICE_DESIGN_WORKFLOW_ID}`,
+    })
+
     const job = buildJob(TASK_TYPE.ASSET_HUB_VOICE_DESIGN, {
-      voicePrompt: '  calm female narrator  ',
-      previewText: '  hello world  ',
-      preferredName: '  custom_name  ',
-      language: 'en',
+      voicePrompt: 'steady male voice',
+      previewText: 'hello there',
+      preferredName: 'doctor_voice',
+    })
+
+    await handleVoiceDesignTask(job)
+
+    expect(apiConfigMock.resolveModelSelection).toHaveBeenCalledWith(
+      'user-1',
+      `comfyui::${COMFYUI_VOICE_DESIGN_WORKFLOW_ID}`,
+      'audio',
+    )
+    expect(comfyClientMock.runComfyUiAudioWorkflow).toHaveBeenCalled()
+  })
+
+  it('falls back to the built-in comfyui s2-se workflow when the provider is configured but the model row is missing', async () => {
+    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({
+      voiceDesignModel: null,
+      audioModel: `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`,
+    })
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([
+      {
+        provider: 'comfyui',
+        modelId: COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID,
+        modelKey: `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`,
+        type: 'audio',
+      },
+    ])
+    apiConfigMock.resolveModelSelection.mockImplementation(async (_userId: string, modelKey: string) => {
+      if (modelKey === `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`) {
+        return {
+          provider: 'comfyui',
+          modelId: COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID,
+          modelKey,
+          mediaType: 'audio',
+        }
+      }
+      throw new Error('MODEL_NOT_FOUND')
+    })
+
+    const job = buildJob(TASK_TYPE.ASSET_HUB_VOICE_DESIGN, {
+      voicePrompt: 'steady male voice',
+      previewText: 'hello there',
+      preferredName: 'doctor_voice',
     })
 
     const result = await handleVoiceDesignTask(job)
 
-    expect(apiConfigMock.resolveModelSelection).toHaveBeenCalledWith('user-1', 'bailian::qwen-voice-design', 'audio')
-    expect(apiConfigMock.getProviderConfig).toHaveBeenCalledWith('user-1', 'bailian')
-    expect(bailianMock.createVoiceDesign).toHaveBeenCalledWith({
-      voicePrompt: 'calm female narrator',
-      previewText: 'hello world',
-      preferredName: 'custom_name',
-      language: 'en',
-    }, 'bailian-key')
-
+    expect(comfyClientMock.runComfyUiAudioWorkflow).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:8188',
+      workflowKey: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      prompt: '[calm]hello there',
+    })
     expect(result).toEqual(expect.objectContaining({
       success: true,
-      voiceId: 'voice-id-1',
-      taskType: TASK_TYPE.ASSET_HUB_VOICE_DESIGN,
+      targetModel: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+    }))
+  })
+
+  it('ignores an invalid configured voiceDesignModel and falls back to the built-in comfyui s2-se workflow', async () => {
+    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({
+      voiceDesignModel: 'comfyui::baseaudio/??/s2-se',
+      audioModel: `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`,
+    })
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([
+      {
+        provider: 'comfyui',
+        modelId: COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID,
+        modelKey: `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`,
+        type: 'audio',
+      },
+    ])
+    apiConfigMock.resolveModelSelection.mockImplementation(async (_userId: string, modelKey: string) => {
+      if (modelKey === 'comfyui::baseaudio/??/s2-se') {
+        throw new Error('MODEL_NOT_FOUND')
+      }
+      if (modelKey === `comfyui::${COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID}`) {
+        return {
+          provider: 'comfyui',
+          modelId: COMFYUI_MULTI_SPEAKER_AUDIO_MODEL_ID,
+          modelKey,
+          mediaType: 'audio',
+        }
+      }
+      throw new Error('MODEL_NOT_FOUND')
+    })
+
+    const job = buildJob(TASK_TYPE.ASSET_HUB_VOICE_DESIGN, {
+      voicePrompt: 'steady male voice',
+      previewText: 'hello there',
+      preferredName: 'doctor_voice',
+    })
+
+    const result = await handleVoiceDesignTask(job)
+
+    expect(comfyClientMock.runComfyUiAudioWorkflow).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:8188',
+      workflowKey: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      prompt: '[calm]hello there',
+    })
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      targetModel: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
     }))
   })
 
   it('uses bailian to build a Fish Audio S2 prompt and then runs the comfyui workflow', async () => {
-    prismaMock.prisma.userPreference.findUnique.mockResolvedValue({ voiceDesignModel: 'comfyui::baseaudio/音色/s2-se' })
-    apiConfigMock.resolveModelSelection.mockResolvedValue({
-      provider: 'comfyui',
-      modelId: 'baseaudio/音色/s2-se',
-      modelKey: 'comfyui::baseaudio/音色/s2-se',
-      mediaType: 'audio',
-    })
     prismaMock.prisma.globalCharacter.findFirst.mockResolvedValue({
-      name: '中年医生',
-      aliases: '陈医生',
+      name: '\u4e2d\u5e74\u533b\u751f',
+      aliases: '\u9648\u8ff9',
       profileData: JSON.stringify({
         role_level: 'B',
-        archetype: '专业医生',
-        personality_tags: ['严谨', '冷静'],
-        era_period: '现代都市',
-        social_class: '中产',
-        occupation: '医生',
+        archetype: '\u4e13\u4e1a\u533b\u751f',
+        personality_tags: ['\u4e25\u8c28', '\u51b7\u9759'],
+        era_period: '\u73b0\u4ee3\u90fd\u5e02',
+        social_class: '\u4e2d\u4ea7',
+        occupation: '\u533b\u751f',
         costume_tier: 3,
-        suggested_colors: ['白'],
-        visual_keywords: ['鼻梁眼镜'],
-        gender: '男',
-        age_range: '中年',
+        suggested_colors: ['\u767d'],
+        visual_keywords: ['\u9f3b\u6881\u773c\u955c'],
+        gender: '\u7537',
+        age_range: '\u4e2d\u5e74',
       }),
       appearances: [
         {
-          changeReason: '默认',
-          description: '白大褂，戴眼镜，说话克制。',
+          changeReason: '\u9ed8\u8ba4',
+          description: '\u767d\u5927\u891b\uff0c\u6234\u773c\u955c\uff0c\u8bf4\u8bdd\u514b\u5236\u3002',
         },
       ],
     })
 
     const job = buildJob(TASK_TYPE.ASSET_HUB_VOICE_DESIGN, {
-      voicePrompt: '严谨 冷静 可信赖',
-      previewText: '请跟我来，先去做个检查。',
+      voicePrompt: '\u4e25\u8c28 \u51b7\u9759 \u53ef\u4fe1\u8d56',
+      previewText: '\u8bf7\u8ddf\u6211\u6765\uff0c\u5148\u53bb\u505a\u4e00\u4e2a\u68c0\u67e5\u3002',
       preferredName: 'doctor_voice',
       characterId: 'char-1',
     })
@@ -204,24 +286,24 @@ describe('worker voice-design behavior', () => {
     expect(fishAudioMock.generateFishAudioS2Prompt).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       model: 'bailian::qwen3.5-plus',
-      speakerName: '中年医生',
-      userVoicePrompt: '严谨 冷静 可信赖',
-      previewText: '请跟我来，先去做个检查。',
+      speakerName: '\u4e2d\u5e74\u533b\u751f',
+      userVoicePrompt: '\u4e25\u8c28 \u51b7\u9759 \u53ef\u4fe1\u8d56',
+      previewText: '\u8bf7\u8ddf\u6211\u6765\uff0c\u5148\u53bb\u505a\u4e00\u4e2a\u68c0\u67e5\u3002',
       character: expect.objectContaining({
-        name: '中年医生',
+        name: '\u4e2d\u5e74\u533b\u751f',
       }),
     }))
     expect(apiConfigMock.getProviderConfig).toHaveBeenCalledWith('user-1', 'comfyui')
     expect(comfyClientMock.runComfyUiAudioWorkflow).toHaveBeenCalledWith({
       baseUrl: 'http://127.0.0.1:8188',
-      workflowKey: 'baseaudio/音色/s2-se',
-      prompt: '[冷静]你好。',
+      workflowKey: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      prompt: '[calm]hello there',
     })
     expect(result).toEqual(expect.objectContaining({
       success: true,
       voiceId: 'comfyui:voice-preview',
       audioBase64: 'comfy-audio',
-      targetModel: 'baseaudio/音色/s2-se',
+      targetModel: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
     }))
   })
 })

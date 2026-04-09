@@ -3,7 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { submitAssetGenerateTask } from '@/lib/assets/services/asset-actions'
 
-type LegacyProjectGenerateBody = Record<string, unknown> & {
+type ProjectGenerateImageRequestBody = Record<string, unknown> & {
   type?: 'character' | 'location'
   id?: string
 }
@@ -16,7 +16,7 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json() as LegacyProjectGenerateBody
+  const body = await request.json() as ProjectGenerateImageRequestBody
   if ((body.type !== 'character' && body.type !== 'location') || typeof body.id !== 'string' || body.id.trim().length === 0) {
     throw new ApiError('INVALID_PARAMS')
   }

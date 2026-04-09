@@ -22,9 +22,12 @@ const messages = {
   assets: {
     common: {
       generateFailed: '生成失败',
+      preview: '预览',
     },
     image: {
       optionNumber: '方案 {number}',
+      useThis: '选择此方案',
+      cancelSelection: '取消选择',
     },
   },
 } as const
@@ -51,7 +54,7 @@ describe('CharacterCardGallery aspect ratio', () => {
         },
         createElement(CharacterCardGallery, {
           mode: 'single',
-          characterName: '沈烬',
+          characterName: '沈烨',
           changeReason: '默认形象',
           aspectClassName: 'aspect-[3/2]',
           currentImageUrl: null,
@@ -66,5 +69,37 @@ describe('CharacterCardGallery aspect ratio', () => {
     )
 
     expect(html).toContain('aspect-[3/2]')
+  })
+
+  it('renders selection cards as interactive buttons with a separate preview action', async () => {
+    Reflect.set(globalThis, 'React', React)
+    const { default: CharacterCardGallery } = await import('@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/assets/character-card/CharacterCardGallery')
+
+    const html = renderToStaticMarkup(
+      createElement(
+        TestIntlProvider,
+        {
+          locale: 'zh',
+          messages: messages as unknown as AbstractIntlMessages,
+          timeZone: 'Asia/Shanghai',
+        },
+        createElement(CharacterCardGallery, {
+          mode: 'selection',
+          characterId: 'character-1',
+          appearanceId: 'appearance-1',
+          characterName: '沈烨',
+          imageUrlsWithIndex: [{ url: 'https://example.com/image-1.png', originalIndex: 0 }],
+          selectedIndex: null,
+          isGroupTaskRunning: false,
+          isImageTaskRunning: () => false,
+          displayTaskPresentation: null,
+          onImageClick: () => undefined,
+          onSelectImage: () => undefined,
+        }),
+      ),
+    )
+
+    expect(html).toContain('role="button"')
+    expect(html).toContain('aria-label="预览"')
   })
 })

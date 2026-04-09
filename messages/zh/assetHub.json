@@ -68,6 +68,9 @@
     "bindVoiceFailedDetail": "绑定音色失败: {error}",
     "voiceDesignSaved": "已为 {name} 设置 AI 设计的声音",
     "appearanceLabel": "形象 {index}",
+    "characterWorkflowLabel": "生图工作流",
+    "characterWorkflowPlaceholder": "选择当前角色使用的文生图工作流",
+    "characterWorkflowSaving": "切换中...",
     "voiceSettings": {
         "title": "配音音色",
         "noVoice": "无音色",

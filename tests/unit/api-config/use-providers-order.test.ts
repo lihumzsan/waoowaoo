@@ -5,9 +5,9 @@ import type { Provider } from '@/app/[locale]/profile/components/api-config/type
 describe('useProviders provider order merge', () => {
   it('preserves saved providers order and appends missing presets at the end', () => {
     const presetProviders: Provider[] = [
-      { id: 'ark', name: '火山引擎 Ark' },
+      { id: 'ark', name: 'Volcengine Ark' },
       { id: 'google', name: 'Google AI Studio' },
-      { id: 'bailian', name: '阿里云百炼' },
+      { id: 'bailian', name: 'Alibaba Bailian' },
     ]
     const savedProviders: Provider[] = [
       { id: 'google', name: 'Google Legacy Name', apiKey: 'google-key', hidden: true },
@@ -16,6 +16,7 @@ describe('useProviders provider order merge', () => {
     ]
 
     const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+
     expect(merged.map((provider) => provider.id)).toEqual([
       'google',
       'openai-compatible:oa-2',
@@ -34,6 +35,7 @@ describe('useProviders provider order merge', () => {
     ]
 
     const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+
     expect(merged).toHaveLength(1)
     expect(merged[0]).toMatchObject({
       id: 'google',
@@ -53,6 +55,7 @@ describe('useProviders provider order merge', () => {
     ]
 
     const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+
     expect(merged).toHaveLength(1)
     expect(merged[0]).toMatchObject({
       id: 'minimax',
@@ -72,6 +75,7 @@ describe('useProviders provider order merge', () => {
     ]
 
     const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+
     expect(merged).toHaveLength(1)
     expect(merged[0]).toMatchObject({
       id: 'comfyui',
@@ -84,54 +88,54 @@ describe('useProviders provider order merge', () => {
     const result = applyComfyUiPresetDefaults({
       models: [
         {
-          modelId: 'baseimage/图片分镜/Qwen剧情分镜制作',
-          modelKey: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
-          name: 'ComfyUI · Qwen 剧情分镜制作',
+          modelId: 'baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
+          modelKey: 'comfyui::baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
+          name: 'ComfyUI · Qwen storyboard',
           type: 'image',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'baseimage/图片生成/Flux2Klein文生图',
-          modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
-          name: 'ComfyUI · Flux2Klein 文生图',
+          modelId: 'baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+          modelKey: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+          name: 'ComfyUI · Flux2Klein image',
           type: 'image',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'baseimage/图片编辑/qwen单图编辑',
-          modelKey: 'comfyui::baseimage/图片编辑/qwen单图编辑',
-          name: 'ComfyUI · Qwen 单图编辑',
+          modelId: 'baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
+          modelKey: 'comfyui::baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
+          name: 'ComfyUI · Qwen edit',
           type: 'image',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'basevideo/图生视频/LTX2.3图生视频快速版',
-          modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-          name: 'ComfyUI · LTX 2.3 图生视频',
+          modelId: 'basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
+          modelKey: 'comfyui::basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
+          name: 'ComfyUI · LTX 2.3 video',
           type: 'video',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'baseaudio/多人/LongCat-two',
-          modelKey: 'comfyui::baseaudio/多人/LongCat-two',
-          name: 'ComfyUI · LongCat 多人',
+          modelId: 'baseaudio/\u591a\u4eba/LongCat-two',
+          modelKey: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
+          name: 'ComfyUI · LongCat multi',
           type: 'audio',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'baseaudio/音色/s2-se',
-          modelKey: 'comfyui::baseaudio/音色/s2-se',
-          name: 'ComfyUI · S2 音色',
+          modelId: 'baseaudio/\u97f3\u8272/s2-se',
+          modelKey: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
+          name: 'ComfyUI · S2 voice design',
           type: 'audio',
           provider: 'comfyui',
           price: 0,
@@ -143,13 +147,13 @@ describe('useProviders provider order merge', () => {
 
     expect(result.changed).toBe(true)
     expect(result.defaultModels).toMatchObject({
-      characterModel: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
-      locationModel: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
-      storyboardModel: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
-      editModel: 'comfyui::baseimage/图片编辑/qwen单图编辑',
-      videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-      audioModel: 'comfyui::baseaudio/多人/LongCat-two',
-      voiceDesignModel: 'comfyui::baseaudio/音色/s2-se',
+      characterModel: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+      locationModel: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+      storyboardModel: 'comfyui::baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
+      editModel: 'comfyui::baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
+      videoModel: 'comfyui::basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
+      audioModel: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
+      voiceDesignModel: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
     })
     expect(result.models.every((model) => model.enabled)).toBe(true)
   })
@@ -167,9 +171,9 @@ describe('useProviders provider order merge', () => {
           enabled: true,
         },
         {
-          modelId: 'baseimage/图片生成/Flux2Klein文生图',
-          modelKey: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
-          name: 'ComfyUI · Flux2Klein 文生图',
+          modelId: 'baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+          modelKey: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
+          name: 'ComfyUI · Flux2Klein image',
           type: 'image',
           provider: 'comfyui',
           price: 0,
@@ -198,9 +202,9 @@ describe('useProviders provider order merge', () => {
           enabled: true,
         },
         {
-          modelId: 'baseaudio/多人/LongCat-two',
-          modelKey: 'comfyui::baseaudio/多人/LongCat-two',
-          name: 'ComfyUI · LongCat 多人',
+          modelId: 'baseaudio/\u591a\u4eba/LongCat-two',
+          modelKey: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
+          name: 'ComfyUI · LongCat multi',
           type: 'audio',
           provider: 'comfyui',
           price: 0,
@@ -213,37 +217,6 @@ describe('useProviders provider order merge', () => {
     })
 
     expect(result.defaultModels.audioModel).toBe('custom::audio-model')
-    expect(result.models[1]?.enabled).toBe(true)
-  })
-
-  it('migrates the legacy bailian voice-design default to comfyui fish audio s2', () => {
-    const result = applyComfyUiPresetDefaults({
-      models: [
-        {
-          modelId: 'qwen-voice-design',
-          modelKey: 'bailian::qwen-voice-design',
-          name: 'Qwen Voice Design',
-          type: 'audio',
-          provider: 'bailian',
-          price: 0,
-          enabled: true,
-        },
-        {
-          modelId: 'baseaudio/闊宠壊/s2-se',
-          modelKey: 'comfyui::baseaudio/闊宠壊/s2-se',
-          name: 'ComfyUI 路 S2 闊宠壊',
-          type: 'audio',
-          provider: 'comfyui',
-          price: 0,
-          enabled: false,
-        },
-      ],
-      defaultModels: {
-        voiceDesignModel: 'bailian::qwen-voice-design',
-      },
-    })
-
-    expect(result.defaultModels.voiceDesignModel).toBe('comfyui::baseaudio/闊宠壊/s2-se')
     expect(result.models[1]?.enabled).toBe(true)
   })
 })

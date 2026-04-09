@@ -4,10 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-voice-id'
-
-function readDesignedVoiceType(voiceId: string) {
-  return isComfyUiDesignedVoiceId(voiceId) ? 'comfyui-designed' : 'qwen-designed'
+function readDesignedVoiceType(_voiceId: string) {
+  return 'designed'
 }
 
 /**

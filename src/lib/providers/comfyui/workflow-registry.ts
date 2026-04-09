@@ -9,6 +9,8 @@ const EXTERNAL_WORKFLOW_TOOL_DIR = 'tool'
 const EXTERNAL_WORKFLOW_BASE_PREFIX = 'base'
 const UI_ONLY_INPUT_TYPE_SUFFIXES = ['UPLOAD', '_UI']
 const SEED_CONTROL_VALUES = new Set(['fixed', 'randomize', 'increment', 'decrement'])
+const CONNECTED_PROMPT_SOURCE_FIELDS = ['value', 'text', 'prompt', 'string', 'input_string']
+const COMFYUI_SAFE_RANDOM_SEED_MAX = 2_147_483_647
 
 export type ComfyUiWorkflowGraphNode = {
   class_type: string
@@ -172,6 +174,13 @@ function normalizeNodeId(value: unknown): string {
   return readTrimmedString(value)
 }
 
+function readUiLinkId(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const linkId = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(linkId)) return null
+  return Math.trunc(linkId)
+}
+
 function shouldSkipUiOnlyInput(inputDef: UiWorkflowInput): boolean {
   const inputName = readTrimmedString(inputDef.name).toLowerCase()
   const inputType = readTrimmedString(inputDef.type).toUpperCase()
@@ -184,6 +193,79 @@ function shouldSkipSeedControlValue(inputDef: UiWorkflowInput, nextValue: unknow
   const name = readTrimmedString(inputDef.name).toLowerCase()
   if (!(name === 'seed' || name === 'noise_seed' || name.endsWith('_seed'))) return false
   return typeof nextValue === 'string' && SEED_CONTROL_VALUES.has(nextValue.toLowerCase())
+}
+
+function isAnythingEverywhereNodeClass(classType: string): boolean {
+  return classType.toLowerCase().includes('anything everywhere')
+}
+
+function collectAnythingEverywhereSources(
+  nodes: unknown[],
+  linkMap: Map<number, { sourceNodeId: string; sourceSlot: number }>,
+): Map<string, [string, number]> {
+  const sources = new Map<string, [string, number]>()
+
+  for (const rawNode of nodes) {
+    if (!isRecord(rawNode)) continue
+
+    const classType = readTrimmedString(rawNode.type)
+    if (!classType || !isAnythingEverywhereNodeClass(classType)) continue
+
+    const inputDefs = Array.isArray(rawNode.inputs)
+      ? rawNode.inputs.filter((item): item is UiWorkflowInput => isRecord(item))
+      : []
+
+    for (const inputDef of inputDefs) {
+      const inputType = readTrimmedString(inputDef.type).toUpperCase()
+      if (!inputType || inputType === '*' || sources.has(inputType)) continue
+
+      const linkId = readUiLinkId(inputDef.link)
+      const linked = linkId !== null ? linkMap.get(linkId) : null
+      if (!linked) continue
+
+      sources.set(inputType, [linked.sourceNodeId, linked.sourceSlot])
+    }
+  }
+
+  return sources
+}
+
+function applyAnythingEverywhereBroadcast(
+  nodes: unknown[],
+  graph: ComfyUiWorkflowGraph,
+  sources: Map<string, [string, number]>,
+): void {
+  if (sources.size === 0) return
+
+  for (const rawNode of nodes) {
+    if (!isRecord(rawNode)) continue
+
+    const nodeId = normalizeNodeId(rawNode.id)
+    const classType = readTrimmedString(rawNode.type)
+    if (!nodeId || !classType || isAnythingEverywhereNodeClass(classType)) continue
+
+    const graphNode = graph[nodeId]
+    if (!graphNode || !isRecord(graphNode.inputs)) continue
+
+    const inputDefs = Array.isArray(rawNode.inputs)
+      ? rawNode.inputs.filter((item): item is UiWorkflowInput => isRecord(item))
+      : []
+
+    for (const inputDef of inputDefs) {
+      const inputName = readTrimmedString(inputDef.name)
+      const inputType = readTrimmedString(inputDef.type).toUpperCase()
+      if (!inputName || !inputType || inputType === '*' || shouldSkipUiOnlyInput(inputDef)) continue
+
+      const linkId = readUiLinkId(inputDef.link)
+      if (linkId !== null) continue
+      if (Object.prototype.hasOwnProperty.call(graphNode.inputs, inputName)) continue
+
+      const source = sources.get(inputType)
+      if (!source) continue
+
+      graphNode.inputs[inputName] = [source[0], source[1]]
+    }
+  }
 }
 
 function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
@@ -200,6 +282,7 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
 
   const graph: ComfyUiWorkflowGraph = {}
   const nodes = Array.isArray(raw.nodes) ? raw.nodes : []
+  const anythingEverywhereSources = collectAnythingEverywhereSources(nodes, linkMap)
   for (const rawNode of nodes) {
     if (!isRecord(rawNode)) continue
     const nodeId = normalizeNodeId(rawNode.id)
@@ -217,23 +300,21 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
       const inputName = readTrimmedString(inputDef.name)
       if (!inputName) continue
 
-      const linkId = typeof inputDef.link === 'number' ? inputDef.link : Number(inputDef.link)
-      const linked = Number.isFinite(linkId) ? linkMap.get(Math.trunc(linkId)) : null
+      const hasWidgetValue = !!inputDef.widget
+      const currentValue = hasWidgetValue ? widgetValues[widgetIndex] : undefined
+      const linkId = readUiLinkId(inputDef.link)
+      const linked = linkId !== null ? linkMap.get(linkId) : null
       if (linked) {
         inputs[inputName] = [linked.sourceNodeId, linked.sourceSlot]
-        continue
-      }
-
-      if (!inputDef.widget || shouldSkipUiOnlyInput(inputDef)) continue
-
-      const currentValue = widgetValues[widgetIndex]
-      if (currentValue !== undefined) {
+      } else if (hasWidgetValue && !shouldSkipUiOnlyInput(inputDef) && currentValue !== undefined) {
         inputs[inputName] = JSON.parse(JSON.stringify(currentValue)) as unknown
       }
-      widgetIndex += 1
 
-      if (shouldSkipSeedControlValue(inputDef, widgetValues[widgetIndex])) {
+      if (hasWidgetValue) {
         widgetIndex += 1
+        if (shouldSkipSeedControlValue(inputDef, widgetValues[widgetIndex])) {
+          widgetIndex += 1
+        }
       }
     }
 
@@ -244,6 +325,7 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
     }
   }
 
+  applyAnythingEverywhereBroadcast(nodes, graph, anythingEverywhereSources)
   return graph
 }
 
@@ -295,6 +377,18 @@ function isNegativePromptField(inputName: string): boolean {
 }
 
 function isPromptCapableNode(node: ComfyUiWorkflowGraphNode): boolean {
+  const fieldNames = Object.keys(node.inputs).map((field) => field.trim().toLowerCase())
+  if (fieldNames.some((field) =>
+    field === 'prompt'
+    || field === 'text'
+    || field === 'positive'
+    || field === 'positive_prompt'
+    || field === 'negative'
+    || field === 'negative_prompt'
+  )) {
+    return true
+  }
+
   const classType = node.class_type.toLowerCase()
   const title = readTrimmedString(node._meta?.title).toLowerCase()
   return classType.includes('prompt')
@@ -318,11 +412,16 @@ function tryAssignPromptToConnectedValueNode(
 
   const sourceNode = graph[sourceNodeId]
   if (!sourceNode || !isRecord(sourceNode.inputs)) return false
-  if (!Object.prototype.hasOwnProperty.call(sourceNode.inputs, 'value')) return false
-  if (isConnectionValue(sourceNode.inputs.value)) return false
 
-  sourceNode.inputs.value = value
-  return true
+  for (const field of CONNECTED_PROMPT_SOURCE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(sourceNode.inputs, field)) continue
+    if (isConnectionValue(sourceNode.inputs[field])) continue
+
+    sourceNode.inputs[field] = value
+    return true
+  }
+
+  return false
 }
 
 function applyPromptHeuristics(
@@ -403,13 +502,57 @@ function applyImageInjection(graph: ComfyUiWorkflowGraph, imageFilenames?: strin
   })
 }
 
+function formatDateSegment(date: Date): string {
+  const year = String(date.getFullYear())
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatTimeSegment(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}-${minutes}-${seconds}`
+}
+
+function sanitizeFilenamePrefix(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return 'waoowaoo'
+
+  const now = new Date()
+  const withExpandedMacros = trimmed
+    .replace(/%date:[^%]+%/gi, formatDateSegment(now))
+    .replace(/%time:[^%]+%/gi, formatTimeSegment(now))
+
+  const normalized = withExpandedMacros
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment) => segment.replace(/[<>:"|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '').trim())
+    .filter(Boolean)
+    .join('/')
+
+  return normalized || 'waoowaoo'
+}
+
+function applySaveOutputHeuristics(graph: ComfyUiWorkflowGraph): void {
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs)) continue
+    if (!Object.prototype.hasOwnProperty.call(node.inputs, 'filename_prefix')) continue
+    if (isConnectionValue(node.inputs.filename_prefix)) continue
+    if (typeof node.inputs.filename_prefix !== 'string') continue
+
+    node.inputs.filename_prefix = sanitizeFilenamePrefix(node.inputs.filename_prefix)
+  }
+}
+
 function assignRandomSeedValues(graph: ComfyUiWorkflowGraph): void {
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
     for (const seedField of ['seed', 'noise_seed']) {
       if (!Object.prototype.hasOwnProperty.call(node.inputs, seedField)) continue
       if (isConnectionValue(node.inputs[seedField])) continue
-      node.inputs[seedField] = Math.floor(Math.random() * 1_000_000_000_000_000)
+      node.inputs[seedField] = Math.floor(Math.random() * (COMFYUI_SAFE_RANDOM_SEED_MAX + 1))
     }
   }
 }
@@ -427,6 +570,7 @@ export function resolveComfyUiWorkflow(
   applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   applyDimensionHeuristics(graph, inject.width, inject.height)
   applyImageInjection(graph, inject.imageFilenames)
+  applySaveOutputHeuristics(graph)
   assignRandomSeedValues(graph)
   return graph
 }

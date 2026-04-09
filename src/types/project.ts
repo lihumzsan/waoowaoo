@@ -63,7 +63,7 @@ export interface Character {
   introduction?: string | null      // 角色介绍（叙述视角、称呼映射等）
   appearances: CharacterAppearance[]  // 独立表关联
   // 配音音色设置
-  voiceType?: 'custom' | 'qwen-designed' | 'uploaded' | null  // 音色类型
+  voiceType?: 'custom' | 'designed' | 'uploaded' | null  // 音色类型
   voiceId?: string | null                 // 音色 ID 或业务标识
   customVoiceUrl?: string | null          // 自定义上传的参考音频URL
   media?: MediaRef | null

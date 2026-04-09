@@ -7,6 +7,9 @@ import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
 import { AssetGrid } from '@/app/[locale]/workspace/asset-hub/components/AssetGrid'
 
+const characterCardMock = vi.hoisted(() => vi.fn((_props: unknown) => null))
+const forcedFilterState = vi.hoisted(() => ({ value: 'location' as 'all' | 'location' }))
+
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>()
 
@@ -18,7 +21,7 @@ vi.mock('react', async (importOriginal) => {
         : initialState
 
       if (resolvedInitialState === 'all') {
-        return actual.useState('location' as T)
+        return actual.useState(forcedFilterState.value as T)
       }
 
       return actual.useState(resolvedInitialState)
@@ -27,7 +30,7 @@ vi.mock('react', async (importOriginal) => {
 })
 
 vi.mock('@/app/[locale]/workspace/asset-hub/components/CharacterCard', () => ({
-  CharacterCard: () => null,
+  CharacterCard: (props: unknown) => characterCardMock(props),
 }))
 
 vi.mock('@/app/[locale]/workspace/asset-hub/components/LocationCard', () => ({
@@ -81,8 +84,9 @@ const renderWithIntl = (node: ReactElement) => {
 }
 
 describe('AssetGrid', () => {
-  it('空状态下使用与资产库一致的 compact 分段控件，并在中间显示新建资产按钮', () => {
+  it('renders the same compact segmented control style in the empty state', () => {
     Reflect.set(globalThis, 'React', React)
+    forcedFilterState.value = 'location'
 
     const html = renderWithIntl(
       createElement(AssetGrid, {
@@ -104,8 +108,9 @@ describe('AssetGrid', () => {
     expect(html).toContain('>新建资产<')
   })
 
-  it('当前筛选分类没有资产时显示添加提示文案', () => {
+  it('shows the filtered empty hint when the current tab has no assets', () => {
     Reflect.set(globalThis, 'React', React)
+    forcedFilterState.value = 'location'
 
     const html = renderWithIntl(
       createElement(AssetGrid, {
@@ -154,5 +159,98 @@ describe('AssetGrid', () => {
     )
 
     expect(html).toContain('点击新建资产添加资产')
+  })
+
+  it('passes character workflow controls to character cards', () => {
+    Reflect.set(globalThis, 'React', React)
+    characterCardMock.mockClear()
+    forcedFilterState.value = 'all'
+
+    const onCharacterWorkflowChange = vi.fn()
+    const onBeforeCharacterGenerate = vi.fn()
+
+    renderWithIntl(
+      createElement(AssetGrid, {
+        assets: [
+          {
+            id: 'character-1',
+            kind: 'character',
+            family: 'visual',
+            scope: 'project',
+            name: '角色A',
+            folderId: null,
+            capabilities: {
+              canGenerate: true,
+              canSelectRender: false,
+              canRevertRender: false,
+              canModifyRender: false,
+              canUploadRender: false,
+              canBindVoice: false,
+              canCopyFromGlobal: false,
+            },
+            taskRefs: [],
+            taskState: { isRunning: false, lastError: null },
+            variants: [
+              {
+                id: 'variant-1',
+                index: 0,
+                label: '默认形象',
+                description: '角色描述',
+                taskRefs: [],
+                renders: [],
+                selectionState: { selectedRenderIndex: null },
+                taskState: { isRunning: false, lastError: null },
+              },
+            ],
+            introduction: null,
+            profileData: null,
+            profileConfirmed: null,
+            profileTaskRefs: [],
+            profileTaskState: { isRunning: false, lastError: null },
+            voice: {
+              voiceType: null,
+              voiceId: null,
+              customVoiceUrl: null,
+              media: null,
+            },
+          },
+        ],
+        loading: false,
+        onAddCharacter: () => undefined,
+        onAddLocation: () => undefined,
+        onAddProp: () => undefined,
+        onAddVoice: () => undefined,
+        onDownloadAll: () => undefined,
+        isDownloading: false,
+        selectedFolderId: null,
+        characterWorkflowOptions: [
+          {
+            value: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+            label: 'Flux2Klein 文生图',
+            provider: 'comfyui',
+            providerName: 'ComfyUI (Local)',
+          },
+        ],
+        selectedCharacterWorkflow: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+        onCharacterWorkflowChange,
+        onBeforeCharacterGenerate,
+        isCharacterWorkflowSaving: true,
+      }),
+    )
+
+    expect(characterCardMock).toHaveBeenCalledTimes(1)
+    expect(characterCardMock).toHaveBeenCalledWith(expect.objectContaining({
+      characterWorkflowOptions: [
+        expect.objectContaining({
+          value: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+        }),
+      ],
+      selectedCharacterWorkflow: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+      onCharacterWorkflowChange,
+      onBeforeGenerate: onBeforeCharacterGenerate,
+      isCharacterWorkflowSaving: true,
+    }))
+
+    forcedFilterState.value = 'location'
   })
 })

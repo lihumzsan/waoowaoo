@@ -76,6 +76,14 @@ certificates
 
 # temporary files
 tmp/
+.tmp/
+tmp-*
+tmp-inspect/
+.tmp_check_task.ts
+debug-request.json
+.codex-dev*.log
+tmp-codex-dev-*.log
+tmp-check-*.jpg
 
 # internal AI agent config (not for public)
 AGENTS.md

@@ -46,11 +46,30 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
         {props.imageUrlsWithIndex.map(({ url, originalIndex }) => {
           const isThisSelected = props.selectedIndex === originalIndex
           const isThisTaskRunning = props.isImageTaskRunning(originalIndex) || props.isGroupTaskRunning
+          const handleSelectImage = () => {
+            if (isThisTaskRunning) return
+            props.onSelectImage?.(
+              props.characterId,
+              props.appearanceId,
+              isThisSelected ? null : originalIndex,
+            )
+          }
+
           return (
             <div key={originalIndex} className="relative group/thumb">
               <div
-                onClick={() => props.onImageClick(url)}
-                className={`rounded-lg overflow-hidden border-2 transition-all cursor-pointer relative ${isThisSelected
+                onClick={handleSelectImage}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleSelectImage()
+                  }
+                }}
+                role="button"
+                tabIndex={isThisTaskRunning ? -1 : 0}
+                aria-pressed={isThisSelected}
+                title={isThisSelected ? t('image.cancelSelection') : t('image.useThis')}
+                className={`rounded-lg overflow-hidden border-2 transition-all cursor-pointer relative focus:outline-none focus:ring-2 focus:ring-[var(--glass-focus-ring)] ${isThisSelected
                   ? 'border-[var(--glass-stroke-success)] ring-2 ring-[var(--glass-focus-ring)]'
                   : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'
                   }`}
@@ -66,6 +85,18 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
                   <TaskStatusOverlay state={props.displayTaskPresentation} />
                 )}
 
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    props.onImageClick(url)
+                  }}
+                  className="absolute top-2 left-2 w-7 h-7 rounded-full bg-[var(--glass-bg-surface-strong)] hover:bg-[var(--glass-bg-surface)] flex items-center justify-center transition-all shadow-sm"
+                  title={t('common.preview')}
+                  aria-label={t('common.preview')}
+                >
+                  <AppIcon name="eye" className="w-4 h-4" />
+                </button>
+
                 <div
                   className={`absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded ${isThisSelected ? 'bg-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-overlay)]'
                     }`}
@@ -79,9 +110,7 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (!isThisTaskRunning) {
-                      props.onSelectImage?.(props.characterId, props.appearanceId, isThisSelected ? null : originalIndex)
-                    }
+                    handleSelectImage()
                   }}
                   disabled={isThisTaskRunning}
                   className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-sm ${isThisSelected

@@ -25,7 +25,7 @@ describe('provider voice binding', () => {
   it('parses legacy bailian entry with voiceId and preview audio', () => {
     const map = parseSpeakerVoiceMap(JSON.stringify({
       Narrator: {
-        voiceType: 'qwen-designed',
+        voiceType: 'designed',
         voiceId: 'qwen-tts-vd-001',
         audioUrl: 'voice/qwen-preview.wav',
       },
@@ -33,7 +33,7 @@ describe('provider voice binding', () => {
 
     expect(map.Narrator).toEqual({
       provider: 'bailian',
-      voiceType: 'qwen-designed',
+      voiceType: 'designed',
       voiceId: 'qwen-tts-vd-001',
       previewAudioUrl: 'voice/qwen-preview.wav',
     })
@@ -43,7 +43,7 @@ describe('provider voice binding', () => {
     const map = parseSpeakerVoiceMap(JSON.stringify({
       Narrator: {
         provider: 'bailian',
-        voiceType: 'qwen-designed',
+        voiceType: 'designed',
         voiceId: 'qwen-tts-vd-001',
       },
     }))
@@ -65,7 +65,7 @@ describe('provider voice binding', () => {
     const map = parseSpeakerVoiceMap(JSON.stringify({
       Narrator: {
         provider: 'bailian',
-        voiceType: 'qwen-designed',
+        voiceType: 'designed',
         voiceId: 'qwen-tts-vd-001',
         previewAudioUrl: 'voice/qwen-preview.wav',
       },
@@ -89,7 +89,7 @@ describe('provider voice binding', () => {
       },
       BailianSpeaker: {
         provider: 'bailian',
-        voiceType: 'qwen-designed',
+        voiceType: 'designed',
         voiceId: 'qwen-tts-vd-001',
         previewAudioUrl: 'voice/qwen-preview.wav',
       },
@@ -106,7 +106,7 @@ describe('provider voice binding', () => {
       character: {
         customVoiceUrl: 'voice/comfy-preview.wav',
         voiceId: 'comfyui:preview-voice',
-        voiceType: 'comfyui-designed',
+        voiceType: 'designed',
       },
       speakerVoice: null,
     })

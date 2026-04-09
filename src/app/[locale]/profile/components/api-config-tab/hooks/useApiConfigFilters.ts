@@ -23,7 +23,6 @@ const ALWAYS_SHOW_PROVIDERS: string[] = []
 const HIDDEN_PROVIDER_KEYS = new Set(['siliconflow'])
 const PROVIDER_MODEL_TYPES: Array<'llm' | 'image' | 'video' | 'audio' | 'lipsync'> = ['llm', 'image', 'video', 'audio', 'lipsync']
 const DEFAULT_AUDIO_EXCLUDED_MODEL_IDS = new Set([
-  'qwen-voice-design',
   'baseaudio/音色/s2-se',
 ])
 const MODEL_PROVIDER_KEYS = [

@@ -56,7 +56,7 @@ export function useTTSGeneration({
         try {
             await updateVoiceSettingsMutation.mutateAsync({
                 characterId,
-                voiceType: voiceType as 'qwen-designed' | 'uploaded' | 'custom' | null,
+                voiceType: voiceType as 'designed' | 'uploaded' | 'custom' | null,
                 voiceId,
                 customVoiceUrl,
             })

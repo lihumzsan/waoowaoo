@@ -106,7 +106,7 @@ describe('api specific - speaker voice provider contract', () => {
         episodeId: 'episode-1',
         speaker: 'Narrator',
         provider: 'bailian',
-        voiceType: 'qwen-designed',
+        voiceType: 'designed',
         voiceId: 'qwen-tts-vd-001',
         previewAudioUrl: '/m/preview-audio',
       },
@@ -126,7 +126,7 @@ describe('api specific - speaker voice provider contract', () => {
     expect(resolveStorageKeyFromMediaValueMock).toHaveBeenCalledWith('/m/preview-audio')
     expect(saved.Narrator).toEqual({
       provider: 'bailian',
-      voiceType: 'qwen-designed',
+      voiceType: 'designed',
       voiceId: 'qwen-tts-vd-001',
       previewAudioUrl: 'voice/storage/preview.wav',
     })
