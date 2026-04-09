@@ -8,7 +8,6 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "prepare": "husky",
     "dev": "npm run storage:init && concurrently --kill-others \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:watchdog\" \"npm run dev:board\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev -H 0.0.0.0",
     "dev:worker": "tsx watch --env-file=.env src/lib/workers/index.ts",
@@ -177,7 +176,6 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "husky": "^9.1.7",
     "rimraf": "^6.1.2",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
