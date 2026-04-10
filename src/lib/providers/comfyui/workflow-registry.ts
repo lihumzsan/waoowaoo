@@ -28,6 +28,10 @@ export type ComfyUiWorkflowInject = {
   width?: number
   height?: number
   imageFilenames?: string[]
+  audioFilenames?: string[]
+  fps?: number
+  durationSeconds?: number
+  targetFrameCount?: number
 }
 
 type UiWorkflowInput = {
@@ -46,6 +50,8 @@ type UiWorkflow = {
     prompt?: unknown
   } | null
 }
+
+type UiWorkflowWidgetValueRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -181,6 +187,30 @@ function readUiLinkId(value: unknown): number | null {
   return Math.trunc(linkId)
 }
 
+function readUiWidgetName(inputDef: UiWorkflowInput, inputName: string): string {
+  return readTrimmedString(inputDef.widget?.name) || inputName
+}
+
+function readUiWidgetValue(
+  widgetValuesArray: unknown[] | null,
+  widgetValuesRecord: UiWorkflowWidgetValueRecord | null,
+  widgetIndex: number,
+  inputDef: UiWorkflowInput,
+  inputName: string,
+): unknown {
+  if (widgetValuesArray) return widgetValuesArray[widgetIndex]
+  if (!widgetValuesRecord) return undefined
+
+  const widgetName = readUiWidgetName(inputDef, inputName)
+  if (Object.prototype.hasOwnProperty.call(widgetValuesRecord, widgetName)) {
+    return widgetValuesRecord[widgetName]
+  }
+  if (Object.prototype.hasOwnProperty.call(widgetValuesRecord, inputName)) {
+    return widgetValuesRecord[inputName]
+  }
+  return undefined
+}
+
 function shouldSkipUiOnlyInput(inputDef: UiWorkflowInput): boolean {
   const inputName = readTrimmedString(inputDef.name).toLowerCase()
   const inputType = readTrimmedString(inputDef.type).toUpperCase()
@@ -292,7 +322,8 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
     const inputDefs = Array.isArray(rawNode.inputs)
       ? rawNode.inputs.filter((item): item is UiWorkflowInput => isRecord(item))
       : []
-    const widgetValues = Array.isArray(rawNode.widgets_values) ? rawNode.widgets_values : []
+    const widgetValuesArray = Array.isArray(rawNode.widgets_values) ? rawNode.widgets_values : null
+    const widgetValuesRecord = isRecord(rawNode.widgets_values) ? rawNode.widgets_values : null
     const inputs: Record<string, unknown> = {}
     let widgetIndex = 0
 
@@ -301,7 +332,9 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
       if (!inputName) continue
 
       const hasWidgetValue = !!inputDef.widget
-      const currentValue = hasWidgetValue ? widgetValues[widgetIndex] : undefined
+      const currentValue = hasWidgetValue
+        ? readUiWidgetValue(widgetValuesArray, widgetValuesRecord, widgetIndex, inputDef, inputName)
+        : undefined
       const linkId = readUiLinkId(inputDef.link)
       const linked = linkId !== null ? linkMap.get(linkId) : null
       if (linked) {
@@ -310,9 +343,9 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
         inputs[inputName] = JSON.parse(JSON.stringify(currentValue)) as unknown
       }
 
-      if (hasWidgetValue) {
+      if (hasWidgetValue && widgetValuesArray) {
         widgetIndex += 1
-        if (shouldSkipSeedControlValue(inputDef, widgetValues[widgetIndex])) {
+        if (shouldSkipSeedControlValue(inputDef, widgetValuesArray[widgetIndex])) {
           widgetIndex += 1
         }
       }
@@ -465,6 +498,16 @@ function clampDimension(value: number | undefined): number | null {
   return Math.max(64, Math.min(4096, Math.round(value)))
 }
 
+function clampPositiveInteger(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.max(1, Math.round(value))
+}
+
+function clampPositiveFloat(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.max(0.1, Number(value.toFixed(3)))
+}
+
 function applyDimensionHeuristics(
   graph: ComfyUiWorkflowGraph,
   width?: number,
@@ -500,6 +543,69 @@ function applyImageInjection(graph: ComfyUiWorkflowGraph, imageFilenames?: strin
     delete node.inputs.upload
     delete node.inputs.imageUI
   })
+}
+
+function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: string[]): void {
+  if (!Array.isArray(audioFilenames) || audioFilenames.length === 0) return
+
+  const loadNodes = Object.entries(graph)
+    .filter(([, node]) => node.class_type.toLowerCase().includes('loadaudio'))
+    .sort(([a], [b]) => compareNodeIds(a, b))
+
+  loadNodes.forEach(([, node], index) => {
+    const filename = audioFilenames[index]
+    if (!filename) return
+    node.inputs.audio = filename
+    delete node.inputs.audioUI
+    delete node.inputs.audioui
+    delete node.inputs.upload
+  })
+}
+
+function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: number): boolean {
+  if (!node || !isRecord(node.inputs)) return false
+
+  for (const field of ['value', 'a', 'number']) {
+    if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
+    if (isConnectionValue(node.inputs[field])) continue
+    node.inputs[field] = value
+    return true
+  }
+
+  return false
+}
+
+function applyTemporalHeuristics(
+  graph: ComfyUiWorkflowGraph,
+  fps?: number,
+  targetFrameCount?: number,
+): void {
+  const nextFps = clampPositiveFloat(fps)
+  const nextFrames = clampPositiveInteger(targetFrameCount)
+  if (nextFps === null && nextFrames === null) return
+
+  const fpsFields = new Set(['frame_rate', 'fps'])
+  const frameCountFields = new Set(['frames_number', 'frame_count', 'frames', 'length'])
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs)) continue
+
+    for (const [field, rawValue] of Object.entries(node.inputs)) {
+      const normalizedField = field.trim().toLowerCase()
+      const wantsFps = nextFps !== null && fpsFields.has(normalizedField)
+      const wantsFrames = nextFrames !== null && frameCountFields.has(normalizedField)
+      if (!wantsFps && !wantsFrames) continue
+
+      const nextValue = wantsFps ? nextFps : nextFrames!
+      if (isConnectionValue(rawValue)) {
+        const sourceNodeId = normalizeNodeId(rawValue[0])
+        if (!sourceNodeId) continue
+        if (setNumericValueOnNode(graph[sourceNodeId], nextValue)) continue
+      } else {
+        node.inputs[field] = nextValue
+      }
+    }
+  }
 }
 
 function formatDateSegment(date: Date): string {
@@ -570,6 +676,8 @@ export function resolveComfyUiWorkflow(
   applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   applyDimensionHeuristics(graph, inject.width, inject.height)
   applyImageInjection(graph, inject.imageFilenames)
+  applyAudioInjection(graph, inject.audioFilenames)
+  applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount)
   applySaveOutputHeuristics(graph)
   assignRandomSeedValues(graph)
   return graph

@@ -115,6 +115,7 @@ export {
     useAnalyzeProjectAssets,
     useGetProjectStoryboardStats,
     useUpdateProjectPanelVideoPrompt,
+    useUpdateProjectPanelVideoDurationBinding,
     useRegenerateProjectPanelImage,
     useModifyProjectStoryboardImage,
     useDownloadProjectImages,

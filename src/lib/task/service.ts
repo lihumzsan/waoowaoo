@@ -481,6 +481,35 @@ export async function tryUpdateTaskProgress(taskId: string, progress: number, pa
   return result.count > 0
 }
 
+export async function tryMarkTaskQueuedForRetry(taskId: string, payload?: Record<string, unknown> | null) {
+  const task = await withPrismaRetry(() =>
+    taskModel.findUnique({
+      where: { id: taskId },
+      select: {
+        status: true,
+        payload: true,
+      },
+    })
+  )
+  if (!task || task.status !== TASK_STATUS.PROCESSING) return false
+
+  const nextPayload = payload ? mergeTaskPayload(task.payload, payload) : task.payload
+  const result = await taskModel.updateMany({
+    where: {
+      id: taskId,
+      status: TASK_STATUS.PROCESSING,
+    },
+    data: {
+      status: TASK_STATUS.QUEUED,
+      queuedAt: new Date(),
+      startedAt: null,
+      heartbeatAt: null,
+      payload: toNullableJson(nextPayload),
+    },
+  })
+  return result.count > 0
+}
+
 export async function tryMarkTaskCompleted(taskId: string, resultPayload?: Record<string, unknown> | null) {
   const result = await taskModel.updateMany({
     where: activeTaskWhere(taskId),

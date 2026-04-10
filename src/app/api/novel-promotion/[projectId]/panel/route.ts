@@ -54,6 +54,7 @@ export const POST = apiHandler(async (
     duration,
     videoPrompt,
     firstLastFramePrompt,
+    videoDurationBinding,
   } = body
 
   if (!storyboardId) {
@@ -97,6 +98,7 @@ export const POST = apiHandler(async (
       duration: duration ?? null,
       videoPrompt: videoPrompt ?? null,
       firstLastFramePrompt: firstLastFramePrompt ?? null,
+      videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
     }
   })
 
@@ -229,7 +231,7 @@ export const PATCH = apiHandler(async (
   const panelModel = prisma.novelPromotionPanel as unknown as {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>
   }
-  const { panelId, storyboardId, panelIndex, videoPrompt, firstLastFramePrompt } = body
+  const { panelId, storyboardId, panelIndex, videoPrompt, firstLastFramePrompt, videoDurationBinding } = body
 
   // 🔥 方式1：通过 panelId 直接更新（优先）
   if (panelId) {
@@ -245,9 +247,11 @@ export const PATCH = apiHandler(async (
     const updateData: {
       videoPrompt?: string | null
       firstLastFramePrompt?: string | null
+      videoDurationBinding?: string | null
     } = {}
     if (videoPrompt !== undefined) updateData.videoPrompt = videoPrompt
     if (firstLastFramePrompt !== undefined) updateData.firstLastFramePrompt = firstLastFramePrompt
+    if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
 
     await prisma.novelPromotionPanel.update({
       where: { id: panelId },
@@ -275,12 +279,16 @@ export const PATCH = apiHandler(async (
   const updateData: {
     videoPrompt?: string | null
     firstLastFramePrompt?: string | null
+    videoDurationBinding?: string | null
   } = {}
   if (videoPrompt !== undefined) {
     updateData.videoPrompt = videoPrompt
   }
   if (firstLastFramePrompt !== undefined) {
     updateData.firstLastFramePrompt = firstLastFramePrompt
+  }
+  if (videoDurationBinding !== undefined) {
+    updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
   }
 
   // 尝试更新 Panel
@@ -303,6 +311,7 @@ export const PATCH = apiHandler(async (
         imageUrl: null,
         videoPrompt: videoPrompt ?? null,
         firstLastFramePrompt: firstLastFramePrompt ?? null,
+        videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
       }
     })
   }
@@ -346,6 +355,7 @@ export const PUT = apiHandler(async (
     actingNotes,  // 演技指导数据
     photographyRules,  // 单镜头摄影规则
   } = body
+  const videoDurationBinding = body.videoDurationBinding
 
   if (!storyboardId || panelIndex === undefined) {
     throw new ApiError('INVALID_PARAMS')
@@ -374,6 +384,7 @@ export const PUT = apiHandler(async (
     duration?: number | null
     videoPrompt?: string | null
     firstLastFramePrompt?: string | null
+    videoDurationBinding?: string | null
     actingNotes?: string | null
     photographyRules?: string | null
   } = {}
@@ -389,6 +400,7 @@ export const PUT = apiHandler(async (
   if (duration !== undefined) updateData.duration = parseNullableNumberField(duration)
   if (videoPrompt !== undefined) updateData.videoPrompt = videoPrompt
   if (firstLastFramePrompt !== undefined) updateData.firstLastFramePrompt = firstLastFramePrompt
+  if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
   // JSON 字段存为规范化 JSON 字符串
   if (actingNotes !== undefined) {
     updateData.actingNotes = toStructuredJsonField(actingNotes, 'actingNotes')
@@ -431,6 +443,7 @@ export const PUT = apiHandler(async (
         duration: duration ?? null,
         videoPrompt: videoPrompt ?? null,
         firstLastFramePrompt: firstLastFramePrompt ?? null,
+        videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
         actingNotes: actingNotes !== undefined ? toStructuredJsonField(actingNotes, 'actingNotes') : null,
         photographyRules: photographyRules !== undefined ? toStructuredJsonField(photographyRules, 'photographyRules') : null,
       }

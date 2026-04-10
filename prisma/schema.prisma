@@ -207,6 +207,7 @@ model NovelPromotionPanel {
   imageHistory      String?                   @db.Text
   videoPrompt       String?                   @db.Text
   firstLastFramePrompt String?                @db.Text
+  videoDurationBinding String?                @db.Text
   videoUrl          String?                   @db.Text
   videoGenerationMode String?                 @db.Text // 视频生成方式：normal | firstlastframe
   videoMediaId      String?

@@ -46,26 +46,89 @@ function guessMimeFromFilename(filename: string): string {
   return 'application/octet-stream'
 }
 
-function collectMediaRefsFromOutputs(outputs: Record<string, Record<string, unknown>> | undefined): MediaRef[] {
+function isMediaFilename(filename: string): boolean {
+  return IMAGE_EXTENSIONS.test(filename) || VIDEO_EXTENSIONS.test(filename) || AUDIO_EXTENSIONS.test(filename)
+}
+
+function parseMediaRefFromPathLike(raw: string): MediaRef | null {
+  const trimmed = raw.trim()
+  if (!trimmed || /\r|\n/.test(trimmed)) return null
+
+  try {
+    const parsedUrl = new URL(trimmed, 'http://comfyui.local')
+    if (parsedUrl.pathname === '/view' || parsedUrl.pathname.endsWith('/view')) {
+      const filename = parsedUrl.searchParams.get('filename')?.trim() || ''
+      if (!filename || !isMediaFilename(filename)) return null
+      return {
+        filename,
+        subfolder: parsedUrl.searchParams.get('subfolder')?.trim() || '',
+        type: parsedUrl.searchParams.get('type')?.trim() || 'output',
+      }
+    }
+  } catch {
+    // Fall back to path-like parsing below.
+  }
+
+  const normalized = trimmed
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+  const segments = normalized.split('/').filter(Boolean)
+  const filename = segments[segments.length - 1]?.trim() || ''
+  if (!filename || !isMediaFilename(filename)) return null
+
+  let type = 'output'
+  let subfolderSegments = segments.slice(0, -1)
+  const firstSegment = subfolderSegments[0]?.toLowerCase()
+  if (firstSegment === 'input' || firstSegment === 'output' || firstSegment === 'temp') {
+    type = firstSegment
+    subfolderSegments = subfolderSegments.slice(1)
+  }
+
+  return {
+    filename,
+    subfolder: subfolderSegments.join('/'),
+    type,
+  }
+}
+
+function collectMediaRefs(value: unknown, refs: MediaRef[]): void {
+  if (typeof value === 'string') {
+    const ref = parseMediaRefFromPathLike(value)
+    if (ref) refs.push(ref)
+    return
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMediaRefs(item, refs)
+    }
+    return
+  }
+
+  if (!value || typeof value !== 'object') return
+
+  const record = value as Record<string, unknown>
+  const filename = typeof record.filename === 'string' ? record.filename.trim() : ''
+  if (filename && isMediaFilename(filename)) {
+    refs.push({
+      filename,
+      subfolder: typeof record.subfolder === 'string' ? record.subfolder : '',
+      type: typeof record.type === 'string' ? record.type : 'output',
+    })
+    return
+  }
+
+  for (const nested of Object.values(record)) {
+    collectMediaRefs(nested, refs)
+  }
+}
+
+export function collectMediaRefsFromOutputs(outputs: Record<string, Record<string, unknown>> | undefined): MediaRef[] {
   const refs: MediaRef[] = []
   if (!outputs) return refs
 
   for (const block of Object.values(outputs)) {
-    if (!block || typeof block !== 'object') continue
-    for (const value of Object.values(block)) {
-      if (!Array.isArray(value)) continue
-      for (const item of value) {
-        if (!item || typeof item !== 'object') continue
-        const record = item as Record<string, unknown>
-        const filename = typeof record.filename === 'string' ? record.filename.trim() : ''
-        if (!filename) continue
-        refs.push({
-          filename,
-          subfolder: typeof record.subfolder === 'string' ? record.subfolder : '',
-          type: typeof record.type === 'string' ? record.type : 'output',
-        })
-      }
-    }
+    collectMediaRefs(block, refs)
   }
 
   return refs
@@ -188,6 +251,79 @@ async function uploadComfyUiImages(baseUrl: string, imageUrls: string[]): Promis
   return filenames
 }
 
+async function uploadComfyUiAudio(baseUrl: string, audioUrl: string, index: number): Promise<string> {
+  const { buffer, mimeType, filename } = await loadBinarySource(audioUrl)
+  const formData = new FormData()
+  formData.set(
+    'image',
+    new Blob([toBlobPart(buffer)], { type: mimeType }),
+    buildUploadFilename(filename, mimeType, index),
+  )
+  formData.set('type', 'input')
+
+  const response = await fetch(`${baseUrl}/upload/image`, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(120_000),
+  })
+  const rawText = await response.text().catch(() => '')
+  if (!response.ok) {
+    throw new Error(`COMFYUI_UPLOAD_FAILED: ${response.status} ${rawText.slice(0, 300)}`)
+  }
+
+  let payload: unknown = null
+  try {
+    payload = rawText.trim() ? JSON.parse(rawText) as unknown : null
+  } catch {
+    payload = null
+  }
+
+  const uploadedName = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as { name?: unknown }).name
+    : null
+  if (typeof uploadedName === 'string' && uploadedName.trim()) {
+    return uploadedName.trim()
+  }
+
+  throw new Error('COMFYUI_UPLOAD_FAILED: missing uploaded filename')
+}
+
+async function uploadComfyUiAudios(baseUrl: string, audioUrls: string[]): Promise<string[]> {
+  const filenames: string[] = []
+  for (let index = 0; index < audioUrls.length; index += 1) {
+    const audioUrl = audioUrls[index]
+    if (!audioUrl) continue
+    filenames.push(await uploadComfyUiAudio(baseUrl, audioUrl, index))
+  }
+  return filenames
+}
+
+let comfyUiAudioWorkflowTail: Promise<void> = Promise.resolve()
+
+function shouldSerializeComfyUiAudioWorkflow(): boolean {
+  const raw = process.env.COMFYUI_AUDIO_SERIALIZE?.trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
+}
+
+async function runSerializedComfyUiAudioWorkflow<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = comfyUiAudioWorkflowTail
+  let releaseCurrent: (() => void) | undefined
+
+  comfyUiAudioWorkflowTail = new Promise<void>((resolve) => {
+    releaseCurrent = resolve
+  })
+
+  await previous.catch(() => undefined)
+
+  try {
+    return await operation()
+  } finally {
+    if (releaseCurrent) {
+      releaseCurrent()
+    }
+  }
+}
+
 export async function runComfyUiWorkflow(params: {
   baseUrl: string
   workflow: ComfyUiWorkflowGraph
@@ -300,17 +436,31 @@ export async function runComfyUiVideoWorkflow(params: {
   prompt?: string
   firstFrameImageUrl: string
   lastFrameImageUrl?: string
+  durationSeconds?: number
+  fps?: number
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const imageFilenames = await uploadComfyUiImages(
     base,
     [params.firstFrameImageUrl, params.lastFrameImageUrl].filter((value): value is string => !!value),
   )
+  const fps = typeof params.fps === 'number' && Number.isFinite(params.fps) && params.fps > 0
+    ? params.fps
+    : undefined
+  const durationSeconds = typeof params.durationSeconds === 'number' && Number.isFinite(params.durationSeconds) && params.durationSeconds > 0
+    ? params.durationSeconds
+    : undefined
+  const targetFrameCount = fps && durationSeconds
+    ? Math.max(1, Math.round(fps * durationSeconds))
+    : undefined
   const workflow = resolveComfyUiWorkflow(
     params.workflowKey?.trim() || COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
     {
       prompt: params.prompt,
       imageFilenames,
+      fps,
+      durationSeconds,
+      targetFrameCount,
     },
   )
 
@@ -326,22 +476,33 @@ export async function runComfyUiAudioWorkflow(params: {
   baseUrl: string
   workflowKey: string
   prompt: string
+  referenceAudioUrls?: string[]
 }): Promise<{ audioBase64: string; mimeType: string }> {
-  const base = normalizeComfyBaseUrl(params.baseUrl)
-  const workflow = resolveComfyUiWorkflow(params.workflowKey.trim(), {
-    prompt: params.prompt,
-  })
+  const runWorkflow = async () => {
+    const base = normalizeComfyBaseUrl(params.baseUrl)
+    const audioFilenames = await uploadComfyUiAudios(base, params.referenceAudioUrls || [])
+    const workflow = resolveComfyUiWorkflow(params.workflowKey.trim(), {
+      prompt: params.prompt,
+      audioFilenames,
+    })
 
-  const { dataBase64, mimeType } = await runComfyUiWorkflow({
-    baseUrl: base,
-    workflow,
-    expect: 'audio',
-  })
+    const { dataBase64, mimeType } = await runComfyUiWorkflow({
+      baseUrl: base,
+      workflow,
+      expect: 'audio',
+    })
 
-  return {
-    audioBase64: dataBase64,
-    mimeType,
+    return {
+      audioBase64: dataBase64,
+      mimeType,
+    }
   }
+
+  if (shouldSerializeComfyUiAudioWorkflow()) {
+    return await runSerializedComfyUiAudioWorkflow(runWorkflow)
+  }
+
+  return await runWorkflow()
 }
 
 export async function probeComfyUiServer(baseUrl: string): Promise<{ ok: boolean; message: string }> {

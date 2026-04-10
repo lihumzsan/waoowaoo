@@ -9,6 +9,7 @@ import { usePanelPlayer } from './hooks/usePanelPlayer'
 import { usePanelPromptEditor } from './hooks/usePanelPromptEditor'
 import { usePanelVoiceManager } from './hooks/usePanelVoiceManager'
 import { usePanelLipSync } from './hooks/usePanelLipSync'
+import { usePanelVideoDurationBinding } from './hooks/usePanelVideoDurationBinding'
 
 export function useVideoPanelActions({
   panel,
@@ -42,6 +43,7 @@ export function useVideoPanelActions({
   onSavePrompt,
   onGenerateVideo,
   onUpdatePanelVideoModel,
+  onUpdatePanelVideoDurationBinding,
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
@@ -102,6 +104,12 @@ export function useVideoPanelActions({
     onLipSync,
   })
 
+  const durationBinding = usePanelVideoDurationBinding({
+    binding: panel.videoDurationBinding,
+    matchedVoiceLines,
+    selectedModel: videoModel.selectedModel,
+  })
+
   const showLipSyncSection = voiceManager.hasMatchedVoiceLines
   const canLipSync = hasVisibleBaseVideo && voiceManager.hasMatchedAudio && !taskStatus.isLipSyncTaskRunning
 
@@ -120,6 +128,7 @@ export function useVideoPanelActions({
     },
     taskStatus,
     videoModel,
+    durationBinding,
     player,
     promptEditor: {
       ...promptEditor,
@@ -146,6 +155,7 @@ export function useVideoPanelActions({
     actions: {
       onGenerateVideo,
       onUpdatePanelVideoModel,
+      onUpdatePanelVideoDurationBinding,
       onToggleLink,
       onFlModelChange,
       onFlCapabilityChange,

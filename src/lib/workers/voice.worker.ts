@@ -29,6 +29,7 @@ async function handleVoiceLineTask(job: Job<TaskJobData>) {
     episodeId,
     lineId,
     userId: job.data.userId,
+    locale: job.data.locale,
     audioModel,
   })
 

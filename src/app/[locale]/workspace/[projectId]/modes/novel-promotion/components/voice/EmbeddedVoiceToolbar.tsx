@@ -2,6 +2,14 @@
 import { useTranslations } from 'next-intl'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
+import VoiceWorkflowSelector from './VoiceWorkflowSelector'
+
+interface AudioWorkflowOption {
+    value: string
+    label: string
+    provider?: string
+    providerName?: string
+}
 
 interface EmbeddedVoiceToolbarProps {
     totalLines: number
@@ -15,6 +23,10 @@ interface EmbeddedVoiceToolbarProps {
     onAnalyze: () => void
     onDownloadAll: () => void
     onGenerateAll: () => void
+    audioWorkflowOptions: AudioWorkflowOption[]
+    selectedAudioWorkflow?: string | null
+    isUpdatingAudioWorkflow?: boolean
+    onAudioWorkflowChange: (modelKey: string) => void
 }
 
 export default function EmbeddedVoiceToolbar({
@@ -28,7 +40,11 @@ export default function EmbeddedVoiceToolbar({
     onAddLine,
     onAnalyze,
     onDownloadAll,
-    onGenerateAll
+    onGenerateAll,
+    audioWorkflowOptions,
+    selectedAudioWorkflow,
+    isUpdatingAudioWorkflow = false,
+    onAudioWorkflowChange,
 }: EmbeddedVoiceToolbarProps) {
     const t = useTranslations('voice')
     const voiceTaskRunningState = isBatchSubmitting
@@ -66,7 +82,15 @@ export default function EmbeddedVoiceToolbar({
 
     return (
         <div className="flex items-center justify-end mb-3 px-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+                {audioWorkflowOptions.length > 0 && (
+                    <VoiceWorkflowSelector
+                        models={audioWorkflowOptions}
+                        value={selectedAudioWorkflow}
+                        disabled={isBatchSubmitting || runningCount > 0 || isUpdatingAudioWorkflow}
+                        onChange={onAudioWorkflowChange}
+                    />
+                )}
                 <div className="text-xs text-[var(--glass-text-tertiary)]">
                     {t("embedded.linesStats", { total: totalLines, audio: linesWithAudio })}
                 </div>

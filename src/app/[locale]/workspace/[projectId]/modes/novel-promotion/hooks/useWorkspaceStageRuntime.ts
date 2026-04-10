@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import type { WorkspaceStageRuntimeValue } from '../WorkspaceStageRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/model-config-contract'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
+import type { BatchVideoGenerationParams, VideoDurationBinding, VideoGenerationOptions } from '../components/video'
 
 interface UseWorkspaceStageRuntimeParams {
   assetsLoading: boolean
@@ -45,6 +45,7 @@ interface UseWorkspaceStageRuntimeParams {
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => Promise<void>
   handleGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
   handleUpdateVideoPrompt: (
@@ -54,6 +55,7 @@ interface UseWorkspaceStageRuntimeParams {
     field?: 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
+  handleUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
 }
 
 export function useWorkspaceStageRuntime({
@@ -80,6 +82,7 @@ export function useWorkspaceStageRuntime({
   handleGenerateAllVideos,
   handleUpdateVideoPrompt,
   handleUpdatePanelVideoModel,
+  handleUpdatePanelVideoDurationBinding,
 }: UseWorkspaceStageRuntimeParams) {
   const resolvedUserVideoModels = useMemo(
     () => userVideoModels || [],
@@ -115,6 +118,7 @@ export function useWorkspaceStageRuntime({
     onGenerateAllVideos: handleGenerateAllVideos,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
+    onUpdatePanelVideoDurationBinding: handleUpdatePanelVideoDurationBinding,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
   }), [
     artStyle,
@@ -126,6 +130,7 @@ export function useWorkspaceStageRuntime({
     handleUpdateConfig,
     handleUpdateEpisode,
     handleUpdatePanelVideoModel,
+    handleUpdatePanelVideoDurationBinding,
     handleUpdateVideoPrompt,
     isConfirmingAssets,
     isStartingScriptToStoryboard,

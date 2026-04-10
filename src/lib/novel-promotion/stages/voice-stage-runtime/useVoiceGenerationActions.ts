@@ -27,7 +27,7 @@ interface UseVoiceGenerationActionsParams {
   speakerCharacterMap: Record<string, Character>
   speakerVoices: Record<string, SpeakerVoiceEntry>
   analyzeVoiceMutation: MutationLike<{ episodeId: string }>
-  generateVoiceMutation: MutationLike<{ episodeId: string; lineId?: string; all?: boolean }, {
+  generateVoiceMutation: MutationLike<{ episodeId: string; lineId?: string; all?: boolean; audioModel?: string }, {
     success?: boolean
     error?: string
     async?: boolean
@@ -39,6 +39,7 @@ interface UseVoiceGenerationActionsParams {
   loadData: () => Promise<void>
   notifyVoiceLinesChanged: () => void
   setPendingVoiceGenerationByLineId: React.Dispatch<React.SetStateAction<PendingVoiceGenerationMap>>
+  selectedAudioModel?: string | null
 }
 
 export function useVoiceGenerationActions({
@@ -55,6 +56,7 @@ export function useVoiceGenerationActions({
   loadData,
   notifyVoiceLinesChanged,
   setPendingVoiceGenerationByLineId,
+  selectedAudioModel,
 }: UseVoiceGenerationActionsParams) {
   const queryClient = useQueryClient()
   const [analyzing, setAnalyzing] = useState(false)
@@ -117,7 +119,11 @@ export function useVoiceGenerationActions({
     let handoffToTaskState = false
 
     try {
-      const data = await generateVoiceMutation.mutateAsync({ episodeId, lineId })
+      const data = await generateVoiceMutation.mutateAsync({
+        episodeId,
+        lineId,
+        ...(selectedAudioModel ? { audioModel: selectedAudioModel } : {}),
+      })
       if (!data?.success) {
         throw new Error(data?.error || t('errors.generateFailed'))
       }
@@ -164,6 +170,7 @@ export function useVoiceGenerationActions({
     projectId,
     queryClient,
     setPendingVoiceGenerationByLineId,
+    selectedAudioModel,
     t,
     withTaskState,
   ])
@@ -194,7 +201,11 @@ export function useVoiceGenerationActions({
     let handoffToTaskState = false
 
     try {
-      const data = await generateVoiceMutation.mutateAsync({ episodeId, all: true })
+      const data = await generateVoiceMutation.mutateAsync({
+        episodeId,
+        all: true,
+        ...(selectedAudioModel ? { audioModel: selectedAudioModel } : {}),
+      })
       if (!Array.isArray(data.taskIds) || data.taskIds.length === 0) {
         setPendingVoiceGenerationByLineId((prev) => {
           const next = { ...prev }
@@ -273,6 +284,7 @@ export function useVoiceGenerationActions({
     projectId,
     queryClient,
     setPendingVoiceGenerationByLineId,
+    selectedAudioModel,
     speakerCharacterMap,
     speakerVoices,
     t,

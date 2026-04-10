@@ -14,6 +14,13 @@ interface BindablePanelOption {
   label: string
 }
 
+interface AudioWorkflowOption {
+  value: string
+  label: string
+  provider?: string
+  providerName?: string
+}
+
 interface VoiceControlPanelProps {
   children: ReactNode
   embedded: boolean
@@ -26,6 +33,9 @@ interface VoiceControlPanelProps {
   totalLines: number
   linesWithVoice: number
   linesWithAudio: number
+  audioWorkflowOptions: AudioWorkflowOption[]
+  selectedAudioWorkflow?: string | null
+  isUpdatingAudioWorkflow?: boolean
   speakers: string[]
   speakerStats: Record<string, number>
   isLineEditorOpen: boolean
@@ -40,6 +50,7 @@ interface VoiceControlPanelProps {
   onAnalyze: () => Promise<void>
   onGenerateAll: () => Promise<void>
   onDownloadAll: () => Promise<void>
+  onAudioWorkflowChange: (modelKey: string) => void
   onStartAdd: () => void
   onOpenAssetLibraryForSpeaker: (speaker: string) => void
   onOpenInlineBinding?: (speaker: string) => void
@@ -64,6 +75,9 @@ export default function VoiceControlPanel({
   totalLines,
   linesWithVoice,
   linesWithAudio,
+  audioWorkflowOptions,
+  selectedAudioWorkflow,
+  isUpdatingAudioWorkflow = false,
   speakers,
   speakerStats,
   isLineEditorOpen,
@@ -78,6 +92,7 @@ export default function VoiceControlPanel({
   onAnalyze,
   onGenerateAll,
   onDownloadAll,
+  onAudioWorkflowChange,
   onStartAdd,
   onOpenAssetLibraryForSpeaker,
   onOpenInlineBinding,
@@ -108,6 +123,10 @@ export default function VoiceControlPanel({
           totalLines={totalLines}
           linesWithVoice={linesWithVoice}
           linesWithAudio={linesWithAudio}
+          audioWorkflowOptions={audioWorkflowOptions}
+          selectedAudioWorkflow={selectedAudioWorkflow}
+          isUpdatingAudioWorkflow={isUpdatingAudioWorkflow}
+          onAudioWorkflowChange={onAudioWorkflowChange}
         />
       ) : (
         <EmbeddedVoiceToolbar
@@ -122,6 +141,10 @@ export default function VoiceControlPanel({
           onAnalyze={onAnalyze}
           onDownloadAll={onDownloadAll}
           onGenerateAll={onGenerateAll}
+          audioWorkflowOptions={audioWorkflowOptions}
+          selectedAudioWorkflow={selectedAudioWorkflow}
+          isUpdatingAudioWorkflow={isUpdatingAudioWorkflow}
+          onAudioWorkflowChange={onAudioWorkflowChange}
         />
       )}
 

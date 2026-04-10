@@ -37,6 +37,43 @@ export interface FishAudioS2PromptResult {
   fishText: string
 }
 
+export interface FishAudioS2LinePromptInput {
+  userId: string
+  locale: Locale
+  model: string
+  projectId: string
+  speakerName: string
+  lineText: string
+  emotionPrompt?: string | null
+  emotionStrength?: number | null
+  dialogueContext?: string | null
+  sceneContext?: string | null
+  character?: VoiceDesignCharacterContext | null
+}
+
+const FISH_AUDIO_STYLE_RULES: Array<{ pattern: RegExp; tag: string }> = [
+  { pattern: /青年(?:男性|男声|男)/u, tag: '青年男声' },
+  { pattern: /中年(?:男性|男声|男)/u, tag: '中年男声' },
+  { pattern: /成熟(?:男性|男声|男)/u, tag: '成熟男声' },
+  { pattern: /少年(?:男性|男声|男)/u, tag: '少年男声' },
+  { pattern: /男性|男声|男播音|男旁白/u, tag: '男声' },
+  { pattern: /青年(?:女性|女声|女)/u, tag: '青年女声' },
+  { pattern: /中年(?:女性|女声|女)/u, tag: '中年女声' },
+  { pattern: /成熟(?:女性|女声|女)/u, tag: '成熟女声' },
+  { pattern: /少女|女孩|女生|女声|女性/u, tag: '女声' },
+  { pattern: /低沉|低音/u, tag: '低沉' },
+  { pattern: /磁性/u, tag: '磁性' },
+  { pattern: /沉稳|稳重/u, tag: '沉稳' },
+  { pattern: /冷静|冷冽/u, tag: '冷静' },
+  { pattern: /克制|内敛/u, tag: '克制' },
+  { pattern: /温和|温暖/u, tag: '温和' },
+  { pattern: /轻柔|柔和/u, tag: '轻柔' },
+  { pattern: /知性/u, tag: '知性' },
+  { pattern: /活泼|开朗/u, tag: '活泼' },
+  { pattern: /甜美/u, tag: '甜美' },
+  { pattern: /旁白|叙事|叙述/u, tag: '叙事感' },
+]
+
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -118,6 +155,59 @@ function readPromptField(parsed: Record<string, unknown>, field: string): string
   return readTrimmedString(parsed[field])
 }
 
+function collectFishAudioStyleTags(...sources: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const tags: string[] = []
+
+  for (const source of sources) {
+    const text = readTrimmedString(source)
+    if (!text) continue
+
+    for (const rule of FISH_AUDIO_STYLE_RULES) {
+      if (!rule.pattern.test(text)) continue
+      if (seen.has(rule.tag)) continue
+      seen.add(rule.tag)
+      tags.push(rule.tag)
+      if (tags.length >= 4) return tags
+    }
+  }
+
+  return tags
+}
+
+function pruneOverlappingFishAudioTags(tags: string[]): string[] {
+  const hasSpecificMale = tags.some((tag) => tag !== '男声' && tag.endsWith('男声'))
+  const hasSpecificFemale = tags.some((tag) => tag !== '女声' && tag.endsWith('女声'))
+
+  return tags.filter((tag) => {
+    if (tag === '男声' && hasSpecificMale) return false
+    if (tag === '女声' && hasSpecificFemale) return false
+    return true
+  })
+}
+
+function escapeRegExp(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function buildFishAudioS2RenderText(input: {
+  fishText: string
+  voicePrompt?: string | null
+  userVoicePrompt?: string | null
+}): string {
+  const fishText = readTrimmedString(input.fishText)
+  if (!fishText) return ''
+
+  const tags = pruneOverlappingFishAudioTags(collectFishAudioStyleTags(input.userVoicePrompt, input.voicePrompt))
+  if (tags.length === 0) return fishText
+
+  const missingTags = tags.filter((tag) => !new RegExp(`\\[${escapeRegExp(tag)}\\]`, 'u').test(fishText))
+  if (missingTags.length === 0) return fishText
+
+  const prefix = missingTags.map((tag) => `[${tag}]`).join('')
+  return `${prefix} ${fishText}`
+}
+
 export function buildComfyUiDesignedVoiceId(input: {
   workflowKey?: string
   fishText: string
@@ -171,6 +261,54 @@ export async function generateFishAudioS2Prompt(input: FishAudioS2PromptInput): 
 
   return {
     voicePrompt: voicePrompt || input.userVoicePrompt.trim(),
+    fishText,
+  }
+}
+
+export async function generateFishAudioS2LinePrompt(input: FishAudioS2LinePromptInput): Promise<FishAudioS2PromptResult> {
+  const characterContext = buildVoiceDesignCharacterContextSummary(input.character)
+  const prompt = buildPrompt({
+    promptId: PROMPT_IDS.FISH_AUDIO_S2_LINE_RENDER,
+    locale: input.locale,
+    variables: {
+      speaker_name: input.speakerName,
+      character_context: characterContext,
+      line_text: input.lineText.trim(),
+      emotion_prompt: readTrimmedString(input.emotionPrompt) || '未提供额外情绪备注。',
+      emotion_strength:
+        typeof input.emotionStrength === 'number' && Number.isFinite(input.emotionStrength)
+          ? input.emotionStrength.toFixed(2)
+          : '0.20',
+      dialogue_context: readTrimmedString(input.dialogueContext) || '未提供额外对白上下文。',
+      scene_context: readTrimmedString(input.sceneContext) || '未提供明确分镜上下文。',
+    },
+  })
+
+  const completion = await executeAiTextStep({
+    userId: input.userId,
+    model: input.model,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.4,
+    projectId: input.projectId,
+    action: 'fish_audio_s2_line_prompt',
+    meta: {
+      stepId: 'fish_audio_s2_line_prompt',
+      stepTitle: 'Fish Audio S2 line prompt',
+      stepIndex: 1,
+      stepTotal: 1,
+    },
+  })
+
+  const parsed = safeParseJsonObject(completion.text)
+  const fishText = readPromptField(parsed, 'fish_text')
+  const voicePrompt = readPromptField(parsed, 'voice_prompt')
+
+  if (!fishText) {
+    throw new Error('VOICE_LINE_PROMPT_INVALID: missing fish_text')
+  }
+
+  return {
+    voicePrompt: voicePrompt || readTrimmedString(input.emotionPrompt),
     fishText,
   }
 }

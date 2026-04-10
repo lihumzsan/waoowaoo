@@ -6,6 +6,7 @@ import type {
   Storyboard,
   VideoPanel,
 } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
+import { parseVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 interface TaskStateLike {
   phase?: string | null
@@ -76,8 +77,10 @@ export function useVideoPanelsProjection({
           },
           imageUrl: panel.imageUrl || undefined,
           firstLastFramePrompt: panel.firstLastFramePrompt || undefined,
+          videoDurationBinding: parseVideoDurationBinding(panel.videoDurationBinding),
           videoUrl: panel.videoUrl || undefined,
           videoGenerationMode: panel.videoGenerationMode || undefined,
+          videoTaskPhase: panelVideoState?.phase || 'idle',
           videoTaskRunning: panelVideoState?.phase === 'queued' || panelVideoState?.phase === 'processing',
           videoErrorCode:
             panelVideoState?.phase === 'failed'
@@ -90,6 +93,7 @@ export function useVideoPanelsProjection({
           videoModel: panel.videoModel || undefined,
           linkedToNextPanel: panel.linkedToNextPanel || false,
           lipSyncVideoUrl: panel.lipSyncVideoUrl || undefined,
+          lipSyncTaskPhase: panelLipState?.phase || 'idle',
           lipSyncTaskRunning: panelLipState?.phase === 'queued' || panelLipState?.phase === 'processing',
           lipSyncErrorCode:
             panelLipState?.phase === 'failed'

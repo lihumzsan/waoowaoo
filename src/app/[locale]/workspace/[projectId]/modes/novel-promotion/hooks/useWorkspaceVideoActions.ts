@@ -2,8 +2,13 @@
 
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { useGenerateVideo, useBatchGenerateVideos } from '@/lib/query/hooks/useStoryboards'
-import { useUpdateProjectPanelVideoPrompt, useUpdateProjectClip, useUpdateProjectConfig } from '@/lib/query/hooks'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
+import {
+  useUpdateProjectPanelVideoPrompt,
+  useUpdateProjectPanelVideoDurationBinding,
+  useUpdateProjectClip,
+  useUpdateProjectConfig,
+} from '@/lib/query/hooks'
+import type { BatchVideoGenerationParams, VideoDurationBinding, VideoGenerationOptions } from '../components/video'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -35,6 +40,7 @@ export function useWorkspaceVideoActions({
   const generateVideoMutation = useGenerateVideo(projectId, episodeId || null)
   const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId)
+  const updateProjectPanelVideoDurationBindingMutation = useUpdateProjectPanelVideoDurationBinding(projectId, episodeId || null)
   const updateProjectClipMutation = useUpdateProjectClip(projectId)
   const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
 
@@ -50,6 +56,7 @@ export function useWorkspaceVideoActions({
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => {
     const normalizedVideoModel = typeof videoModel === 'string' ? videoModel.trim() : ''
     if (!normalizedVideoModel) {
@@ -64,6 +71,7 @@ export function useWorkspaceVideoActions({
         videoModel: normalizedVideoModel,
         firstLastFrame,
         generationOptions,
+        videoDurationBinding,
       })
     } catch (err: unknown) {
       if (isAbortError(err)) {
@@ -123,6 +131,22 @@ export function useWorkspaceVideoActions({
     }
   }
 
+  const handleUpdatePanelVideoDurationBinding = async (
+    storyboardId: string,
+    panelIndex: number,
+    binding: VideoDurationBinding,
+  ) => {
+    try {
+      await updateProjectPanelVideoDurationBindingMutation.mutateAsync({
+        storyboardId,
+        panelIndex,
+        binding,
+      })
+    } catch (err: unknown) {
+      _ulogError(`${t('execution.updateFailed')}:`, err)
+    }
+  }
+
   const handleUpdateClip = async (clipId: string, data: unknown) => {
     if (!episodeId) {
       _ulogError('No episode selected for clip update')
@@ -142,6 +166,7 @@ export function useWorkspaceVideoActions({
     handleGenerateAllVideos,
     handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel,
+    handleUpdatePanelVideoDurationBinding,
     handleUpdateClip,
   }
 }

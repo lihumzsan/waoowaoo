@@ -22,10 +22,12 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
     )
       ? { ...panelErrorDisplayBase, message: rawErrorMessage }
       : panelErrorDisplayBase
+  const videoRunningPhase = panel.videoTaskPhase === 'queued' ? 'queued' : 'processing'
+  const lipSyncRunningPhase = panel.lipSyncTaskPhase === 'queued' ? 'queued' : 'processing'
 
   const videoRunningPresentation = isVideoTaskRunning
     ? resolveTaskPresentationState({
-      phase: 'processing',
+      phase: videoRunningPhase,
       intent: hasVisibleBaseVideo ? 'regenerate' : 'generate',
       resource: 'video',
       hasOutput: hasVisibleBaseVideo,
@@ -34,7 +36,7 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
 
   const lipSyncRunningPresentation = isLipSyncTaskRunning
     ? resolveTaskPresentationState({
-      phase: 'processing',
+      phase: lipSyncRunningPhase,
       intent: 'process',
       resource: 'video',
       hasOutput: !!panel.lipSyncVideoUrl || hasVisibleBaseVideo,
@@ -55,7 +57,7 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
       return (
         lipSyncRunningPresentation ||
         resolveTaskPresentationState({
-          phase: 'processing',
+          phase: lipSyncRunningPhase,
           intent: 'process',
           resource: 'video',
           hasOutput: !!panel.lipSyncVideoUrl || hasVisibleBaseVideo,
@@ -65,7 +67,7 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
     return (
       videoRunningPresentation ||
       resolveTaskPresentationState({
-        phase: 'processing',
+        phase: videoRunningPhase,
         intent: 'generate',
         resource: 'video',
         hasOutput: hasVisibleBaseVideo,
@@ -74,7 +76,7 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
   })()
 
   const lipSyncInlineState = resolveTaskPresentationState({
-    phase: 'processing',
+    phase: lipSyncRunningPhase,
     intent: 'process',
     resource: 'video',
     hasOutput: !!panel.lipSyncVideoUrl || hasVisibleBaseVideo,

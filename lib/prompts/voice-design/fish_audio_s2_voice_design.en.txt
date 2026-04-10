@@ -16,7 +16,7 @@ Preview text:
 {{preview_text}}
 
 Fish Audio S2 rules:
-1. Use square brackets [] for natural-language performance cues such as [calm], [lower voice], [soft laugh], [pause].
+1. Use square brackets [] for natural-language performance cues such as [冷静], [压低声音], [轻笑], [停顿].
 2. You may place cues at the start of a sentence or inline for local delivery changes.
 3. Keep cues short, concrete, and performable. Focus on tone, pacing, breath, emotion, intensity, and pauses.
 4. Do not over-tag. Usually 1 to 3 useful cues per sentence are enough.
@@ -24,6 +24,9 @@ Fish Audio S2 rules:
 6. Make the delivery match the character's age, profession, personality, status, temperament, and speaking rhythm.
 7. If the character context is sparse, rely on the user voice requirements and the semantic intent of the preview text instead of inventing lore.
 8. Output Chinese text and Chinese bracket cues only. Do not add commentary.
+9. The beginning of `fish_text` must explicitly include 1 to 4 non-negotiable voice-identity tags, prioritizing gender, age range, timbre, and temperament, for example [青年男声][低沉][冷静].
+10. If the user explicitly asks for a male voice, male speaker, young man, middle-aged man, mature man, or equivalent wording, the opening tags in `fish_text` must reflect the requested male identity. Never switch to female or omit gender.
+11. If the user explicitly asks for a female voice, female speaker, young woman, mature woman, or equivalent wording, the opening tags in `fish_text` must reflect the requested female identity. Never contradict the request.
 
 Output:
 Return JSON only. No Markdown. No extra explanation.
@@ -33,3 +36,9 @@ JSON format:
   "voice_prompt": "One concise sentence summarizing the target voice design",
   "fish_text": "The final text that can be sent directly to Fish Audio S2"
 }
+
+Additional constraints:
+- `voice_prompt` should summarize the target voice instead of repeating the entire preview text.
+- `fish_text` must preserve the core meaning and most of the original wording from the preview text.
+- The bracket cues in `fish_text` should stay natural, restrained, and performable.
+- The opening identity tags in `fish_text` must stay consistent with the user's request and the character profile, with gender correctness taking priority.

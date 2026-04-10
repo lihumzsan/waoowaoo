@@ -4,15 +4,17 @@ import { useCallback, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
-import { useEpisodeData } from '@/lib/query/hooks/useProjectData'
+import { useEpisodeData, useProjectData } from '@/lib/query/hooks/useProjectData'
 import {
   useAnalyzeProjectVoice,
   useCreateProjectVoiceLine,
   useDeleteProjectVoiceLine,
   useDownloadProjectVoices,
   useGenerateProjectVoice,
+  useUpdateProjectConfig,
   useUpdateProjectVoiceLine,
   useUpdateSpeakerVoice,
+  useUserModels,
 } from '@/lib/query/hooks'
 import VoiceLineList from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/voice-stage/VoiceLineList'
 import VoiceControlPanel from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/voice-stage/VoiceControlPanel'
@@ -57,7 +59,9 @@ export function useVoiceStageRuntime({
     throw new Error('VoiceStage requires searchParams')
   }
   const { data: assets } = useProjectAssets(projectId)
+  const { data: project } = useProjectData(projectId)
   const { data: episodeData } = useEpisodeData(projectId, episodeId)
+  const userModelsQuery = useUserModels()
   const analyzeVoiceMutation = useAnalyzeProjectVoice(projectId)
   const generateVoiceMutation = useGenerateProjectVoice(projectId)
   const createVoiceLineMutation = useCreateProjectVoiceLine(projectId)
@@ -65,7 +69,16 @@ export function useVoiceStageRuntime({
   const deleteVoiceLineMutation = useDeleteProjectVoiceLine(projectId)
   const downloadVoicesMutation = useDownloadProjectVoices(projectId)
   const updateSpeakerVoiceMutation = useUpdateSpeakerVoice(projectId)
+  const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
   const characters: Character[] = useMemo(() => (assets?.characters ?? []) as Character[], [assets?.characters])
+  const audioWorkflowOptions = useMemo(() => {
+    const rawModels = userModelsQuery.data?.audio
+    return Array.isArray(rawModels) ? rawModels : []
+  }, [userModelsQuery.data?.audio])
+  const selectedAudioWorkflow = useMemo(() => {
+    const rawValue = project?.novelPromotionData?.audioModel
+    return typeof rawValue === 'string' && rawValue.trim() ? rawValue.trim() : null
+  }, [project?.novelPromotionData?.audioModel])
   const {
     voiceLines,
     setVoiceLines,
@@ -177,7 +190,23 @@ export function useVoiceStageRuntime({
     loadData,
     notifyVoiceLinesChanged,
     setPendingVoiceGenerationByLineId,
+    selectedAudioModel: selectedAudioWorkflow,
   })
+  const handleAudioWorkflowChange = useCallback(async (modelKey: string) => {
+    const nextModelKey = modelKey.trim()
+    if (!nextModelKey || nextModelKey === selectedAudioWorkflow) return
+    try {
+      await updateProjectConfigMutation.mutateAsync({
+        key: 'audioModel',
+        value: nextModelKey,
+      })
+    } catch (error: unknown) {
+      const reason = error instanceof Error && error.message.trim()
+        ? error.message.trim()
+        : t('errors.voiceGenerateFailed')
+      alert(`${t('errors.voiceGenerateFailed')}: ${reason}`)
+    }
+  }, [selectedAudioWorkflow, t, updateProjectConfigMutation])
   const {
     getBoundPanelIdForLine,
     handleStartEditLine,
@@ -273,6 +302,9 @@ export function useVoiceStageRuntime({
         totalLines={voiceLines.length}
         linesWithVoice={linesWithVoice}
         linesWithAudio={linesWithAudio}
+        audioWorkflowOptions={audioWorkflowOptions}
+        selectedAudioWorkflow={selectedAudioWorkflow}
+        isUpdatingAudioWorkflow={updateProjectConfigMutation.isPending}
         speakers={speakers}
         speakerStats={speakerStats}
         isLineEditorOpen={isLineEditorOpen}
@@ -287,6 +319,7 @@ export function useVoiceStageRuntime({
         onAnalyze={handleAnalyze}
         onGenerateAll={handleGenerateAll}
         onDownloadAll={handleDownloadAll}
+        onAudioWorkflowChange={handleAudioWorkflowChange}
         onStartAdd={handleStartAdd}
         onOpenAssetLibraryForSpeaker={handleOpenAssetLibraryForSpeaker}
         onOpenInlineBinding={handleOpenInlineBinding}

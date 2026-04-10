@@ -421,4 +421,199 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(String(filenamePrefix)).toContain('/VX-paolaoshiAICG_')
     expect(String(filenamePrefix)).not.toContain(':')
   })
+
+  it('injects uploaded audio filenames into LoadAudio nodes for local voice workflows', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'baseaudio/prompt/test-audio-injection', {
+      nodes: [
+        {
+          id: 6,
+          type: 'LoadAudio',
+          inputs: [
+            {
+              name: 'audio',
+              type: 'COMBO',
+              widget: { name: 'audio' },
+              link: null,
+            },
+            {
+              name: 'audioUI',
+              type: 'AUDIO_UI',
+              widget: { name: 'audioUI' },
+              link: null,
+            },
+            {
+              name: 'upload',
+              type: 'AUDIOUPLOAD',
+              widget: { name: 'upload' },
+              link: null,
+            },
+          ],
+          widgets_values: ['demo.wav', null, null],
+        },
+      ],
+      links: [],
+    })
+
+    const graph = resolveComfyUiWorkflow('baseaudio/prompt/test-audio-injection', {
+      audioFilenames: ['voice-ref.wav'],
+    })
+
+    expect(graph['6']?.inputs?.audio).toBe('voice-ref.wav')
+    expect(Object.prototype.hasOwnProperty.call(graph['6']?.inputs ?? {}, 'audioUI')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(graph['6']?.inputs ?? {}, 'upload')).toBe(false)
+  })
+
+  it('injects fps and frame count into connected temporal constant nodes', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-temporal-injection', {
+      nodes: [
+        {
+          id: 23,
+          type: 'FloatConstant',
+          inputs: [
+            {
+              name: 'value',
+              type: 'FLOAT',
+              widget: { name: 'value' },
+              link: null,
+            },
+          ],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [101] }],
+          widgets_values: [25],
+        },
+        {
+          id: 27,
+          type: 'INTConstant',
+          inputs: [
+            {
+              name: 'value',
+              type: 'INT',
+              widget: { name: 'value' },
+              link: null,
+            },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [102] }],
+          widgets_values: [105],
+        },
+        {
+          id: 22,
+          type: 'LTXVConditioning',
+          inputs: [
+            { name: 'frame_rate', type: 'FLOAT', link: 101 },
+          ],
+          widgets_values: [''],
+        },
+        {
+          id: 43,
+          type: 'EmptyLTXVLatentVideo',
+          inputs: [
+            { name: 'length', type: 'INT', link: 102 },
+          ],
+          widgets_values: [''],
+        },
+      ],
+      links: [
+        [101, 23, 0, 22, 0, 'FLOAT'],
+        [102, 27, 0, 43, 0, 'INT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-temporal-injection', {
+      fps: 24,
+      targetFrameCount: 144,
+    })
+
+    expect(graph['23']?.inputs?.value).toBe(24)
+    expect(graph['27']?.inputs?.value).toBe(144)
+    expect(graph['22']?.inputs?.frame_rate).toEqual(['23', 0])
+    expect(graph['43']?.inputs?.length).toEqual(['27', 0])
+  })
+
+  it('reads widget values stored as keyed objects for VHS video workflows', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-vhs-widget-object', {
+      nodes: [
+        {
+          id: 23,
+          type: 'FloatConstant',
+          inputs: [
+            {
+              name: 'value',
+              type: 'FLOAT',
+              widget: { name: 'value' },
+              link: null,
+            },
+          ],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [127] }],
+          widgets_values: [25],
+        },
+        {
+          id: 40,
+          type: 'VHS_VideoCombine',
+          inputs: [
+            { name: 'images', type: 'IMAGE', link: 50 },
+            { name: 'audio', type: 'AUDIO', link: 51 },
+            {
+              name: 'frame_rate',
+              type: 'FLOAT',
+              widget: { name: 'frame_rate' },
+              link: 127,
+            },
+            {
+              name: 'loop_count',
+              type: 'INT',
+              widget: { name: 'loop_count' },
+            },
+            {
+              name: 'filename_prefix',
+              type: 'STRING',
+              widget: { name: 'filename_prefix' },
+            },
+            {
+              name: 'format',
+              type: 'COMBO',
+              widget: { name: 'format' },
+            },
+            {
+              name: 'pingpong',
+              type: 'BOOLEAN',
+              widget: { name: 'pingpong' },
+            },
+            {
+              name: 'save_output',
+              type: 'BOOLEAN',
+              widget: { name: 'save_output' },
+            },
+          ],
+          widgets_values: {
+            frame_rate: 32,
+            loop_count: 0,
+            filename_prefix: 'ltx/AnimateDiff',
+            format: 'video/h264-mp4',
+            pingpong: false,
+            save_output: true,
+          },
+        },
+      ],
+      links: [
+        [127, 23, 0, 40, 2, 'FLOAT'],
+      ],
+    })
+
+    const graph = loadComfyUiWorkflowJsonFile('basevideo/prompt/test-vhs-widget-object')
+
+    expect(graph?.['40']?.inputs?.frame_rate).toEqual(['23', 0])
+    expect(graph?.['40']?.inputs?.loop_count).toBe(0)
+    expect(graph?.['40']?.inputs?.filename_prefix).toBe('ltx/AnimateDiff')
+    expect(graph?.['40']?.inputs?.format).toBe('video/h264-mp4')
+    expect(graph?.['40']?.inputs?.pingpong).toBe(false)
+    expect(graph?.['40']?.inputs?.save_output).toBe(true)
+  })
 })

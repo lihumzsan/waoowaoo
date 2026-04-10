@@ -120,6 +120,47 @@ describe('provider voice binding', () => {
     })).toBe(true)
   })
 
+  it('resolves comfyui binding from character reference audio', () => {
+    const binding = resolveVoiceBindingForProvider({
+      providerKey: 'comfyui',
+      character: {
+        customVoiceUrl: 'voice/comfy-preview.wav',
+        voiceId: 'comfyui:preview-voice',
+        voiceType: 'designed',
+      },
+      speakerVoice: null,
+    })
+
+    expect(binding).toEqual({
+      provider: 'comfyui',
+      source: 'character',
+      referenceAudioUrl: 'voice/comfy-preview.wav',
+    })
+  })
+
+  it('resolves comfyui binding from bailian speaker preview audio when no character voice is present', () => {
+    const map = parseSpeakerVoiceMap(JSON.stringify({
+      Narrator: {
+        provider: 'bailian',
+        voiceType: 'designed',
+        voiceId: 'qwen-tts-vd-001',
+        previewAudioUrl: 'voice/qwen-preview.wav',
+      },
+    }))
+
+    const binding = resolveVoiceBindingForProvider({
+      providerKey: 'comfyui',
+      character: { customVoiceUrl: null, voiceId: null },
+      speakerVoice: map.Narrator,
+    })
+
+    expect(binding).toEqual({
+      provider: 'comfyui',
+      source: 'speaker',
+      referenceAudioUrl: 'voice/qwen-preview.wav',
+    })
+  })
+
   it('throws explicitly when a speaker entry has no usable binding', () => {
     expect(() => parseSpeakerVoiceMap(JSON.stringify({
       Narrator: {

@@ -14,11 +14,6 @@ const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(),
 }))
 
-const llmMock = vi.hoisted(() => ({
-  chatCompletion: vi.fn(async () => ({ id: 'completion-1' })),
-  getCompletionContent: vi.fn(() => 'voice-line-json'),
-}))
-
 const helperMock = vi.hoisted(() => ({
   parseVoiceLinesJson: vi.fn(),
   buildStoryboardJson: vi.fn(() => 'storyboard-json'),
@@ -29,8 +24,13 @@ const workerMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
 }))
 
+const resolveAnalysisModelMock = vi.hoisted(() => vi.fn(async () => 'bailian::qwen3.5-plus'))
+const executeAiTextStepMock = vi.hoisted(() => vi.fn(async () => ({ text: 'voice-line-json' })))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/llm-client', () => llmMock)
+vi.mock('@/lib/ai-runtime', () => ({
+  executeAiTextStep: executeAiTextStepMock,
+}))
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
   withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),
 }))
@@ -56,6 +56,9 @@ vi.mock('@/lib/workers/handlers/voice-analyze-helpers', () => ({
 vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: { NP_VOICE_ANALYSIS: 'np_voice_analysis' },
   buildPrompt: vi.fn(() => 'voice-analysis-prompt'),
+}))
+vi.mock('@/lib/workers/handlers/resolve-analysis-model', () => ({
+  resolveAnalysisModel: resolveAnalysisModelMock,
 }))
 
 import { handleVoiceAnalyzeTask } from '@/lib/workers/handlers/voice-analyze'
@@ -85,14 +88,14 @@ describe('worker voice-analyze behavior', () => {
     prismaMock.project.findUnique.mockResolvedValue({ id: 'project-1' })
     prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
       id: 'np-project-1',
-      analysisModel: 'llm::analysis-1',
+      analysisModel: 'bailian::qwen3.5-plus',
       characters: [{ id: 'char-1', name: 'Hero' }],
     })
 
     prismaMock.novelPromotionEpisode.findUnique.mockResolvedValue({
       id: 'episode-1',
       novelPromotionProjectId: 'np-project-1',
-      novelText: '这是可以用于台词分析的文本',
+      novelText: 'This is a dialogue analysis sample.',
       storyboards: [
         {
           id: 'storyboard-1',
@@ -106,7 +109,8 @@ describe('worker voice-analyze behavior', () => {
       {
         lineIndex: 1,
         speaker: 'Hero',
-        content: '第一句台词',
+        content: 'First dialogue line.',
+        emotionPrompt: 'calm but probing',
         emotionStrength: 0.7,
         matchedPanel: {
           storyboardId: 'storyboard-1',
@@ -116,7 +120,8 @@ describe('worker voice-analyze behavior', () => {
       {
         lineIndex: 2,
         speaker: 'Narrator',
-        content: '第二句旁白',
+        content: 'Second narration line.',
+        emotionPrompt: 'steady narration',
         emotionStrength: 0.5,
       },
     ])
@@ -124,7 +129,10 @@ describe('worker voice-analyze behavior', () => {
     prismaMock.$transaction.mockImplementation(async (fn: (tx: {
       novelPromotionVoiceLine: {
         deleteMany: (args: { where: Record<string, unknown> }) => Promise<unknown>
-        create: (args: { data: Record<string, unknown>; select: { id: boolean; speaker: boolean; matchedStoryboardId: boolean } }) => Promise<{
+        create: (args: {
+          data: Record<string, unknown>
+          select: { id: boolean; speaker: boolean; matchedStoryboardId: boolean }
+        }) => Promise<{
           id: string
           speaker: string
           matchedStoryboardId: string | null
@@ -137,7 +145,10 @@ describe('worker voice-analyze behavior', () => {
             txState.deletedWhereClauses.push(args.where)
             return undefined
           },
-          create: async (args: { data: Record<string, unknown>; select: { id: boolean; speaker: boolean; matchedStoryboardId: boolean } }) => {
+          create: async (args: {
+            data: Record<string, unknown>
+            select: { id: boolean; speaker: boolean; matchedStoryboardId: boolean }
+          }) => {
             txState.createdRows.push(args.data)
             const speaker = typeof args.data.speaker === 'string' ? args.data.speaker : 'unknown'
             const matchedStoryboardId = typeof args.data.matchedStoryboardId === 'string'
@@ -160,7 +171,7 @@ describe('worker voice-analyze behavior', () => {
     await expect(handleVoiceAnalyzeTask(job)).rejects.toThrow('episodeId is required')
   })
 
-  it('success path -> persists mapped panelId and speaker stats', async () => {
+  it('success path -> persists emotionPrompt, mapped panelId, and speaker stats', async () => {
     const job = buildJob({ episodeId: 'episode-1' })
     const result = await handleVoiceAnalyzeTask(job)
 
@@ -178,7 +189,8 @@ describe('worker voice-analyze behavior', () => {
       episodeId: 'episode-1',
       lineIndex: 1,
       speaker: 'Hero',
-      content: '第一句台词',
+      content: 'First dialogue line.',
+      emotionPrompt: 'calm but probing',
       matchedPanelId: 'panel-1',
       matchedStoryboardId: 'storyboard-1',
       matchedPanelIndex: 0,
@@ -210,7 +222,7 @@ describe('worker voice-analyze behavior', () => {
   })
 
   it('line references non-existent storyboard panel -> explicit error', async () => {
-    helperMock.parseVoiceLinesJson.mockImplementation(() => [
+    helperMock.parseVoiceLinesJson.mockReturnValue([
       {
         lineIndex: 1,
         speaker: 'Hero',

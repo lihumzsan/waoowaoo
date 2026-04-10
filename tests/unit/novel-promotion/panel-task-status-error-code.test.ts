@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { usePanelTaskStatus } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video/panel-card/runtime/hooks/usePanelTaskStatus'
+import { resolveTaskPresentationState } from '@/lib/task/presentation'
 
 describe('panel task status error code mapping', () => {
   it('uses explicit error code for user-facing panel error display', () => {
@@ -32,5 +33,26 @@ describe('panel task status error code mapping', () => {
 
     expect(result.panelErrorDisplay?.code).toBe('VIDEO_API_FORMAT_UNSUPPORTED')
     expect(result.panelErrorDisplay?.message).toBe('当前视频接口格式暂不支持。')
+  })
+  it('keeps queued video tasks in queued presentation instead of forcing processing', () => {
+    const result = usePanelTaskStatus({
+      panel: {
+        storyboardId: 'sb-1',
+        panelIndex: 0,
+        videoTaskRunning: true,
+        videoTaskPhase: 'queued',
+      },
+      hasVisibleBaseVideo: false,
+      tCommon: (key) => key,
+    })
+
+    expect(result.videoRunningPresentation).toEqual(
+      resolveTaskPresentationState({
+        phase: 'queued',
+        intent: 'generate',
+        resource: 'video',
+        hasOutput: false,
+      }),
+    )
   })
 })

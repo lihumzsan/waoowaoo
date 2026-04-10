@@ -9,6 +9,7 @@ import {
   tryMarkTaskCompleted,
   tryMarkTaskFailed,
   tryMarkTaskProcessing,
+  tryMarkTaskQueuedForRetry,
   tryUpdateTaskProgress,
   updateTaskBillingInfo,
 } from '@/lib/task/service'
@@ -558,6 +559,32 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
           requestId: data.trace?.requestId || null,
         },
       })
+
+      try {
+        const requeued = await tryMarkTaskQueuedForRetry(taskId, retryPayload)
+        if (!requeued) {
+          logger.warn({
+            action: 'worker.retry.requeue_skipped',
+            message: 'retryable task could not be moved back to queued state',
+            details: {
+              queue: job.queueName,
+              taskType: data.type,
+              taskId,
+            },
+          })
+        }
+      } catch (requeueError) {
+        logger.warn({
+          action: 'worker.retry.requeue_failed',
+          message: 'failed to move retryable task back to queued state',
+          details: {
+            queue: job.queueName,
+            taskType: data.type,
+            taskId,
+          },
+          error: requeueError instanceof Error ? requeueError.message : String(requeueError),
+        })
+      }
 
       try {
         await publishLifecycleEvent({

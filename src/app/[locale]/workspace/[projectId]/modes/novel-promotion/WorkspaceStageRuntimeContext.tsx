@@ -3,7 +3,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/model-config-contract'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from './components/video'
+import type { BatchVideoGenerationParams, VideoDurationBinding, VideoGenerationOptions } from './components/video'
 
 export interface WorkspaceStageVideoModelOption {
   value: string
@@ -46,6 +46,7 @@ export interface WorkspaceStageRuntimeValue {
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => Promise<void>
   onGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
   onUpdateVideoPrompt: (
@@ -55,6 +56,7 @@ export interface WorkspaceStageRuntimeValue {
     field?: 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
+  onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
   onOpenAssetLibraryForCharacter: (characterId?: string | null, refreshAssets?: boolean) => void
 }
 

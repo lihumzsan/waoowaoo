@@ -45,6 +45,7 @@ import {
   shouldResolveVideoSubmissionLock,
   type VideoSubmissionBaseline,
 } from './video-stage-runtime/immediate-video-submission'
+import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 
 export type { VideoStageShellProps } from './video-stage-runtime/types'
 
@@ -77,6 +78,7 @@ export function useVideoStageRuntime({
   onBack,
   onUpdateVideoPrompt,
   onUpdatePanelVideoModel,
+  onUpdatePanelVideoDurationBinding,
   onOpenAssetLibraryForCharacter,
   onEnterEditor,
 }: VideoStageShellProps) {
@@ -338,6 +340,7 @@ export function useVideoStageRuntime({
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => {
     if (isSubmittingVideoBatch) return
 
@@ -360,7 +363,15 @@ export function useVideoStageRuntime({
     }
 
     try {
-      await onGenerateVideo(storyboardId, panelIndex, videoModel, firstLastFrame, generationOptions, panelId)
+      await onGenerateVideo(
+        storyboardId,
+        panelIndex,
+        videoModel,
+        firstLastFrame,
+        generationOptions,
+        panelId,
+        videoDurationBinding,
+      )
     } catch (error) {
       setSubmittingVideoPanelKeys((previous) => {
         if (!previous.has(panelKey)) return previous
@@ -468,6 +479,7 @@ export function useVideoStageRuntime({
       return {
         ...panel,
         videoTaskRunning: true,
+        videoTaskPhase: panel.videoTaskPhase === 'processing' ? 'processing' : 'queued',
       }
     })
   ), [allPanels, isSubmittingVideoBatch, submittingVideoPanelKeys])
@@ -555,9 +567,10 @@ export function useVideoStageRuntime({
         flCapabilityFields={flCapabilityFields}
         flMissingCapabilityFields={flMissingCapabilityFields}
         flCustomPrompts={flCustomPrompts}
-        onGenerateVideo={handleGenerateVideoWithImmediateLock}
-        onUpdatePanelVideoModel={onUpdatePanelVideoModel}
-        onLipSync={handleLipSync}
+                onGenerateVideo={handleGenerateVideoWithImmediateLock}
+                onUpdatePanelVideoModel={onUpdatePanelVideoModel}
+                onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
+                onLipSync={handleLipSync}
         onToggleLink={handleToggleLink}
         onFlModelChange={setFlModel}
         onFlCapabilityChange={setFlCapabilityValue}

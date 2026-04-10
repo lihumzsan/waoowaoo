@@ -16,6 +16,7 @@ import { assertTaskActive } from '@/lib/workers/utils'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import {
   buildComfyUiDesignedVoiceId,
+  buildFishAudioS2RenderText,
   COMFYUI_FISH_AUDIO_S2_VOICE_DESIGN_WORKFLOW_ID,
   generateFishAudioS2Prompt,
   type VoiceDesignCharacterContext,
@@ -270,6 +271,12 @@ export async function handleVoiceDesignTask(job: Job<TaskJobData>) {
     character: characterContext,
   })
 
+  const finalRenderText = buildFishAudioS2RenderText({
+    fishText: promptResult.fishText,
+    voicePrompt: promptResult.voicePrompt,
+    userVoicePrompt: voicePrompt,
+  })
+
   await reportTaskProgress(job, 75, {
     stage: 'voice_design_render',
     stageLabel: 'Running ComfyUI Fish Audio S2 workflow',
@@ -285,12 +292,12 @@ export async function handleVoiceDesignTask(job: Job<TaskJobData>) {
   const designed = await runComfyUiAudioWorkflow({
     baseUrl,
     workflowKey: selection.modelId,
-    prompt: promptResult.fishText,
+    prompt: finalRenderText,
   })
 
   const voiceId = buildComfyUiDesignedVoiceId({
     workflowKey: selection.modelId,
-    fishText: promptResult.fishText,
+    fishText: finalRenderText,
     preferredName,
   })
 
@@ -307,7 +314,7 @@ export async function handleVoiceDesignTask(job: Job<TaskJobData>) {
     audioBase64: designed.audioBase64,
     responseFormat: designed.mimeType,
     requestId: voiceId,
-    finalPrompt: promptResult.fishText,
+    finalPrompt: finalRenderText,
     normalizedVoicePrompt: promptResult.voicePrompt,
     taskType: buildTaskType(job),
   }

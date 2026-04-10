@@ -143,7 +143,11 @@ export class MinioStorageProvider implements StorageProvider {
     }
 
     try {
-      const parsed = new URL(input)
+      const parsed = new URL(input, 'http://waoowaoo.local')
+      if (parsed.pathname === '/api/storage/sign') {
+        const signedKey = parsed.searchParams.get('key')?.replace(/^\/+/, '')
+        return signedKey || null
+      }
       let pathname = parsed.pathname.replace(/^\/+/, '')
       const bucketPrefix = `${this.bucket}/`
       if (pathname.startsWith(bucketPrefix)) {

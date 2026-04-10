@@ -109,7 +109,11 @@ export default function VoiceDesignDialogBase({
         onDesignVoice,
         onVoiceGenerated: (voice) => {
           if (generationRunRef.current !== generationRunId) return
-          setGeneratedVoices((current) => [...current, voice])
+          setGeneratedVoices((current) => {
+            const next = [...current, voice]
+            setSelectedIndex((selected) => (selected === null ? 0 : selected))
+            return next
+          })
         },
       })
       if (generationRunRef.current !== generationRunId) return
@@ -225,7 +229,7 @@ export default function VoiceDesignDialogBase({
             onGenerate={() => {
               void handleGenerate()
             }}
-            footer={!isDesignSubmitting ? (
+            footer={generatedVoices.length > 0 ? (
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {

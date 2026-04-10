@@ -4,6 +4,7 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
 import { AppIcon } from '@/components/ui/icons'
 import type { VideoPanelRuntime } from './hooks/useVideoPanelActions'
+import { normalizeVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 interface VideoPanelCardBodyProps {
   runtime: VideoPanelRuntime
@@ -20,6 +21,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
     actions,
     taskStatus,
     videoModel,
+    durationBinding,
     promptEditor,
     voiceManager,
     lipSync,
@@ -50,6 +52,16 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
   const showsOutgoingLinkBadge = layout.isLinked && !!layout.nextPanel
   const showsPromptEditor = !layout.isLastFrame || layout.isLinked
   const showsFirstLastFrameActions = layout.isLinked && !!layout.nextPanel
+  const blocksVideoGenerationForMissingAudioTiming = durationBinding.isAudioDriven && !durationBinding.hasValidAudioSelection
+
+  const persistDurationBinding = (nextBinding: { mode?: 'manual' | 'match_audio'; voiceLineIds?: string[] }) => {
+    durationBinding.setLocalBinding(nextBinding)
+    void actions.onUpdatePanelVideoDurationBinding(
+      panel.storyboardId,
+      panel.panelIndex,
+      nextBinding,
+    )
+  }
 
   return (
     <div className="p-4 space-y-2">
@@ -161,6 +173,105 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
               )
             })() : (
               <>
+                <div className="mb-3 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-2.5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">时长来源</span>
+                    {durationBinding.timing ? (
+                      <span className="text-[10px] text-[var(--glass-text-tertiary)]">{durationBinding.selectedCount} 条音频</span>
+                    ) : null}
+                  </div>
+                  <div className="mb-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => persistDurationBinding({ mode: 'manual', voiceLineIds: [] })}
+                      className={`rounded-full px-3 py-1 text-[11px] transition-colors ${
+                        !durationBinding.isAudioDriven
+                          ? 'bg-[var(--glass-accent-from)] text-white'
+                          : 'bg-[var(--glass-bg-surface)] text-[var(--glass-text-secondary)]'
+                      }`}
+                    >
+                      手动
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!durationBinding.hasAvailableVoiceLines}
+                      onClick={() => {
+                        const nextBinding = normalizeVideoDurationBinding(durationBinding.localBinding)
+                        nextBinding.mode = 'match_audio'
+                        if ((nextBinding.voiceLineIds?.length ?? 0) === 0 && durationBinding.availableVoiceLines[0]?.id) {
+                          nextBinding.voiceLineIds = [durationBinding.availableVoiceLines[0].id]
+                        }
+                        persistDurationBinding(nextBinding)
+                      }}
+                      className={`rounded-full px-3 py-1 text-[11px] transition-colors disabled:opacity-50 ${
+                        durationBinding.isAudioDriven
+                          ? 'bg-[var(--glass-accent-from)] text-white'
+                          : 'bg-[var(--glass-bg-surface)] text-[var(--glass-text-secondary)]'
+                      }`}
+                    >
+                      关联音频
+                    </button>
+                  </div>
+
+                  {durationBinding.isAudioDriven && (
+                    <div className="space-y-2">
+                      {durationBinding.availableVoiceLines.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {durationBinding.availableVoiceLines.map((voiceLine) => {
+                            const checked = durationBinding.selectedVoiceLineIds.includes(voiceLine.id)
+                            const durationSeconds = typeof voiceLine.audioDuration === 'number'
+                              ? (voiceLine.audioDuration / 1000).toFixed(1)
+                              : null
+
+                            return (
+                              <label
+                                key={voiceLine.id}
+                                className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-2 py-1.5"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    const nextBinding = normalizeVideoDurationBinding(durationBinding.localBinding)
+                                    nextBinding.mode = 'match_audio'
+                                    const nextIds = new Set(nextBinding.voiceLineIds ?? [])
+                                    if (nextIds.has(voiceLine.id)) nextIds.delete(voiceLine.id)
+                                    else nextIds.add(voiceLine.id)
+                                    nextBinding.voiceLineIds = Array.from(nextIds)
+                                    persistDurationBinding(nextBinding)
+                                  }}
+                                  className="mt-0.5 h-3.5 w-3.5"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11px] font-medium text-[var(--glass-text-primary)]">
+                                    {voiceLine.speaker}
+                                    {durationSeconds ? <span className="ml-1 text-[var(--glass-text-tertiary)]">{durationSeconds}s</span> : null}
+                                  </div>
+                                  <div className="line-clamp-2 text-[10px] text-[var(--glass-text-secondary)]">{voiceLine.content}</div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-[var(--glass-text-tertiary)]">
+                          当前镜头还没有可用音频，先生成配音后才能按音频时长驱动视频。
+                        </div>
+                      )}
+
+                      {durationBinding.timing ? (
+                        <div className="rounded-lg bg-[var(--glass-tone-info-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-info-fg)]">
+                          音频总时长 {(durationBinding.timing.sourceDurationMs / 1000).toFixed(1)}s，本次按 {durationBinding.timing.targetDurationSeconds.toFixed(1)}s / {durationBinding.timing.targetFrameCount} 帧生成{durationBinding.timing.capped ? '（已按当前工作流上限截断）' : ''}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg bg-[var(--glass-tone-warning-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-warning-fg)]">
+                          请选择至少一条带时长的音频。
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() =>
@@ -171,12 +282,14 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         undefined,
                         videoModel.generationOptions,
                         panel.panelId,
+                        durationBinding.localBinding,
                       )}
                     disabled={
                       taskStatus.isVideoTaskRunning
                       || !panel.imageUrl
                       || !videoModel.selectedModel
                       || videoModel.missingCapabilityFields.length > 0
+                      || blocksVideoGenerationForMissingAudioTiming
                     }
                     className="flex-shrink-0 min-w-[90px] py-2 px-3 text-sm font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 bg-[var(--glass-accent-from)] text-white"
                   >

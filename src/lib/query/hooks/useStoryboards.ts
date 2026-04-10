@@ -7,6 +7,7 @@ import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
+import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 
 // ============ 类型定义 ============
 export interface PanelCandidate {
@@ -159,6 +160,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             panelId?: string
             videoModel: string
             generationOptions?: VideoGenerationOptions
+            videoDurationBinding?: VideoDurationBinding
             firstLastFrame?: {
                 lastFrameStoryboardId: string
                 lastFramePanelIndex: number
@@ -180,6 +182,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 }
                 videoModel: string
                 generationOptions?: VideoGenerationOptions
+                videoDurationBinding?: VideoDurationBinding
             } = {
                 storyboardId: params.storyboardId,
                 panelIndex: params.panelIndex,
@@ -193,6 +196,9 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
 
             if (params.generationOptions && typeof params.generationOptions === 'object') {
                 requestBody.generationOptions = params.generationOptions
+            }
+            if (params.videoDurationBinding && typeof params.videoDurationBinding === 'object') {
+                requestBody.videoDurationBinding = params.videoDurationBinding
             }
 
             const res = await apiFetch(`/api/novel-promotion/${projectId}/generate-video`, {

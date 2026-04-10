@@ -27,6 +27,8 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         prompt: prompt || '',
         firstFrameImageUrl: imageUrl,
         lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
+        durationSeconds: typeof options.duration === 'number' ? options.duration : undefined,
+        fps: typeof options.fps === 'number' ? options.fps : undefined,
       })
 
       return {

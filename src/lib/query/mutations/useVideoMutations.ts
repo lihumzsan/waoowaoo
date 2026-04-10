@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { invalidateQueryTemplates, requestJsonWithError } from './mutation-shared'
+import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 
 /**
  * 获取剧集可下载视频列表（项目）
@@ -80,6 +81,42 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string) {
       ),
     onSettled: () => {
       invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+    },
+  })
+}
+
+export function useUpdateProjectPanelVideoDurationBinding(projectId: string, episodeId?: string | null) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      storyboardId,
+      panelIndex,
+      binding,
+    }: {
+      storyboardId: string
+      panelIndex: number
+      binding: VideoDurationBinding
+    }) =>
+      await requestJsonWithError(
+        `/api/novel-promotion/${projectId}/panel`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storyboardId,
+            panelIndex,
+            videoDurationBinding: binding,
+          }),
+        },
+        'update failed',
+      ),
+    onSettled: () => {
+      invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+      if (episodeId) {
+        invalidateQueryTemplates(queryClient, [queryKeys.episodeData(projectId, episodeId)])
+        invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)])
+      }
     },
   })
 }

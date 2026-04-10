@@ -173,12 +173,21 @@ export default function VoiceDesignGeneratorSection({
 
       {generatedVoices.length > 0 && (
         <div className="space-y-3">
-          <div className="text-sm text-[var(--glass-text-secondary)]">{tv('selectScheme')}</div>
+          <div className="space-y-1">
+            <div className="text-sm text-[var(--glass-text-secondary)]">{tv('selectScheme')}</div>
+            {selectedIndex !== null && generatedVoices[selectedIndex] && (
+              <div className="text-xs text-[var(--glass-tone-info-fg)]">
+                {tv('selectedSchemeHint', { n: selectedIndex + 1 })}
+                {isSubmitting ? ` ${tv('moreSchemesGenerating')}` : ''}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-2">
             {generatedVoices.map((voice, index) => (
               <div
                 key={voice.voiceId}
                 onClick={() => onSelectIndex(index)}
+                aria-pressed={selectedIndex === index}
                 className={`relative p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
                   selectedIndex === index
                     ? 'border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)]'
@@ -186,9 +195,14 @@ export default function VoiceDesignGeneratorSection({
                 }`}
               >
                 {selectedIndex === index && (
-                  <div className="absolute -top-1.5 -right-1.5 w-5 h-5 glass-chip glass-chip-info rounded-full flex items-center justify-center p-0">
-                    <AppIcon name="checkSolid" className="w-3 h-3 text-white" />
-                  </div>
+                  <>
+                    <div className="absolute -top-1.5 -right-1.5 w-5 h-5 glass-chip glass-chip-info rounded-full flex items-center justify-center p-0">
+                      <AppIcon name="checkSolid" className="w-3 h-3 text-white" />
+                    </div>
+                    <div className="absolute left-2 top-2 rounded-full bg-[var(--glass-tone-info-fg)] px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+                      {tv('selectedBadge')}
+                    </div>
+                  </>
                 )}
                 <div className="text-sm font-medium text-[var(--glass-text-primary)] mb-2">{tv('schemeN', { n: index + 1 })}</div>
                 <button

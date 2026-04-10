@@ -133,17 +133,21 @@ export function useGenerateProjectVoice(projectId: string) {
             episodeId,
             lineId,
             all,
+            audioModel,
         }: {
             episodeId: string
             lineId?: string
             all?: boolean
+            audioModel?: string
         }) =>
             await requestJsonWithError<GenerateProjectVoiceResponse>(
                 `/api/novel-promotion/${projectId}/voice-generate`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(all ? { episodeId, all: true } : { episodeId, lineId }),
+                    body: JSON.stringify(all
+                        ? { episodeId, all: true, ...(audioModel ? { audioModel } : {}) }
+                        : { episodeId, lineId, ...(audioModel ? { audioModel } : {}) }),
                 },
                 'voice generate failed',
             ),

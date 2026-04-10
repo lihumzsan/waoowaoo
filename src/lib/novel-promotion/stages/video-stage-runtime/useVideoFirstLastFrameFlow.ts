@@ -5,6 +5,7 @@ import type {
   VideoGenerationOptions,
   VideoModelOption,
   VideoPanel,
+  VideoDurationBinding,
 } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import {
   normalizeVideoGenerationSelections,
@@ -53,6 +54,7 @@ interface UseVideoFirstLastFrameFlowParams {
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => Promise<void>
   t: (key: string) => string
 }

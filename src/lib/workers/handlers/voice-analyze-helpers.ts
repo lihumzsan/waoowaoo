@@ -21,6 +21,7 @@ export interface VoiceLinePayload {
   lineIndex?: number
   speaker?: string
   content?: string
+  emotionPrompt?: string
   emotionStrength?: number
   matchedPanel?: VoiceLineMatchedPanel | null
 }
@@ -36,6 +37,7 @@ function parseVoiceLinePayload(value: unknown): VoiceLinePayload | null {
     lineIndex: typeof record.lineIndex === 'number' ? record.lineIndex : undefined,
     speaker: typeof record.speaker === 'string' ? record.speaker : undefined,
     content: typeof record.content === 'string' ? record.content : undefined,
+    emotionPrompt: typeof record.emotionPrompt === 'string' ? record.emotionPrompt : undefined,
     emotionStrength: typeof record.emotionStrength === 'number' ? record.emotionStrength : undefined,
     matchedPanel: matchedPanelRaw
       ? {

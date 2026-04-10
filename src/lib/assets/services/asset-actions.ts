@@ -105,6 +105,18 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+async function normalizeStoredMediaValue(value: unknown): Promise<unknown> {
+  if (value === undefined) return undefined
+  if (value === null) return null
+
+  const storageKey = await resolveStorageKeyFromMediaValue(value)
+  if (storageKey) {
+    return storageKey
+  }
+
+  return value
+}
+
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, unknown>
@@ -945,7 +957,7 @@ async function updateGlobalAsset(input: AssetUpdateInput) {
     if (input.body.profileConfirmed !== undefined) updateData.profileConfirmed = input.body.profileConfirmed
     if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
     if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
+    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = await normalizeStoredMediaValue(input.body.customVoiceUrl)
     if (input.body.globalVoiceId !== undefined) updateData.globalVoiceId = input.body.globalVoiceId
     if (input.body.folderId !== undefined) updateData.folderId = normalizeString(input.body.folderId) || null
     const character = await prisma.globalCharacter.update({
@@ -991,7 +1003,7 @@ async function updateGlobalAsset(input: AssetUpdateInput) {
   if (input.body.description !== undefined) updateData.description = normalizeString(input.body.description) || null
   if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
   if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-  if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
+  if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = await normalizeStoredMediaValue(input.body.customVoiceUrl)
   if (input.body.voicePrompt !== undefined) updateData.voicePrompt = input.body.voicePrompt
   if (input.body.gender !== undefined) updateData.gender = input.body.gender
   if (input.body.language !== undefined) updateData.language = input.body.language
@@ -1010,7 +1022,7 @@ async function updateProjectAsset(input: AssetUpdateInput) {
     if (input.body.introduction !== undefined) updateData.introduction = normalizeString(input.body.introduction)
     if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
     if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
+    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = await normalizeStoredMediaValue(input.body.customVoiceUrl)
     if (input.body.profileConfirmed !== undefined) updateData.profileConfirmed = input.body.profileConfirmed
     const character = await prisma.novelPromotionCharacter.update({
       where: { id: input.assetId },

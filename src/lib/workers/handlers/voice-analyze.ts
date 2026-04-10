@@ -123,6 +123,7 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
     lineIndex: number
     speaker: string
     content: string
+    emotionPrompt: string | null
     emotionStrength: number
     matchedPanelId: string | null
     matchedStoryboardId: string | null
@@ -179,13 +180,16 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
 
           const matchedPanel = lineData.matchedPanel
           if (!matchedPanel) {
-            return {
-              lineIndex,
-              speaker: lineData.speaker.trim(),
-              content: lineData.content,
-              emotionStrength: Math.min(1, Math.max(0.1, lineData.emotionStrength)),
-              matchedPanelId: null,
-              matchedStoryboardId: null,
+          return {
+            lineIndex,
+            speaker: lineData.speaker.trim(),
+            content: lineData.content,
+            emotionPrompt: typeof lineData.emotionPrompt === 'string' && lineData.emotionPrompt.trim()
+              ? lineData.emotionPrompt.trim()
+              : null,
+            emotionStrength: Math.min(1, Math.max(0.1, lineData.emotionStrength)),
+            matchedPanelId: null,
+            matchedStoryboardId: null,
               matchedPanelIndex: null,
             }
           }
@@ -208,6 +212,9 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
             lineIndex,
             speaker: lineData.speaker.trim(),
             content: lineData.content,
+            emotionPrompt: typeof lineData.emotionPrompt === 'string' && lineData.emotionPrompt.trim()
+              ? lineData.emotionPrompt.trim()
+              : null,
             emotionStrength: Math.min(1, Math.max(0.1, lineData.emotionStrength)),
             matchedPanelId: panelId,
             matchedStoryboardId: storyboardId,
@@ -271,6 +278,7 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
           lineIndex: lineData.lineIndex,
           speaker: lineData.speaker,
           content: lineData.content,
+          emotionPrompt: lineData.emotionPrompt,
           emotionStrength: lineData.emotionStrength,
           matchedPanelId: lineData.matchedPanelId,
           matchedStoryboardId: lineData.matchedStoryboardId,
@@ -279,6 +287,7 @@ export async function handleVoiceAnalyzeTask(job: Job<TaskJobData>) {
         update: {
           speaker: lineData.speaker,
           content: lineData.content,
+          emotionPrompt: lineData.emotionPrompt,
           emotionStrength: lineData.emotionStrength,
           matchedPanelId: lineData.matchedPanelId,
           matchedStoryboardId: lineData.matchedStoryboardId,

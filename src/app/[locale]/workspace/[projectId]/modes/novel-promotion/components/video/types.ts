@@ -14,6 +14,12 @@ export interface VideoModelOption {
 }
 
 export type VideoGenerationMode = 'normal' | 'firstlastframe'
+export type VideoDurationMode = 'manual' | 'match_audio'
+
+export interface VideoDurationBinding {
+  mode?: VideoDurationMode
+  voiceLineIds?: string[]
+}
 
 export interface TextPanel {
   panel_number: number
@@ -45,6 +51,7 @@ export interface Panel {
   imageUrl?: string | null  // 图片URL
   videoPrompt?: string | null
   firstLastFramePrompt?: string | null
+  videoDurationBinding?: VideoDurationBinding | string | null
   videoUrl?: string | null
   videoGenerationMode?: VideoGenerationMode | null
   videoModel?: string | null
@@ -84,10 +91,12 @@ export interface VideoPanel {
   panelIndex: number
   textPanel?: TextPanel
   firstLastFramePrompt?: string
+  videoDurationBinding?: VideoDurationBinding
   imageUrl?: string
   videoUrl?: string
   videoGenerationMode?: VideoGenerationMode
   videoTaskRunning?: boolean
+  videoTaskPhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
   videoErrorMessage?: string  // 视频生成错误消息
   videoErrorCode?: string
   videoModel?: string
@@ -95,6 +104,7 @@ export interface VideoPanel {
   // 口型同步相关
   lipSyncVideoUrl?: string
   lipSyncTaskRunning?: boolean
+  lipSyncTaskPhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
   lipSyncTaskId?: string
   lipSyncErrorMessage?: string  // 口型同步错误消息
   lipSyncErrorCode?: string

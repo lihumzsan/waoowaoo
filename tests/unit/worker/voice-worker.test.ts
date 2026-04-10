@@ -17,7 +17,9 @@ const withTaskLifecycleMock = vi.hoisted(() =>
 
 vi.mock('bullmq', () => ({
   Queue: class {
-    constructor(_name: string) {}
+    constructor(...args: unknown[]) {
+      void args
+    }
 
     async add() {
       return { id: 'job-1' }
@@ -28,7 +30,8 @@ vi.mock('bullmq', () => ({
     }
   },
   Worker: class {
-    constructor(_name: string, processor: WorkerProcessor) {
+    constructor(...args: [unknown, WorkerProcessor]) {
+      const [, processor] = args
       workerState.processor = processor
     }
   },
@@ -131,6 +134,7 @@ describe('worker voice processor behavior', () => {
       episodeId: 'episode-9',
       lineId: 'line-9',
       userId: 'user-1',
+      locale: 'zh',
       audioModel: 'fal::voice-model',
     })
   })

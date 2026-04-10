@@ -32,6 +32,7 @@ const comfyClientMock = vi.hoisted(() => ({
 
 const fishAudioMock = vi.hoisted(() => ({
   buildComfyUiDesignedVoiceId: vi.fn(() => 'comfyui:voice-preview'),
+  buildFishAudioS2RenderText: vi.fn((input: { fishText: string }) => input.fishText),
   COMFYUI_FISH_AUDIO_S2_VOICE_DESIGN_WORKFLOW_ID: constantsMock.COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
   generateFishAudioS2Prompt: vi.fn(),
 }))
@@ -115,6 +116,7 @@ describe('worker voice-design behavior', () => {
       voicePrompt: 'calm, steady, trusted',
       fishText: '[calm]hello there',
     })
+    fishAudioMock.buildFishAudioS2RenderText.mockImplementation((input: { fishText: string }) => input.fishText)
     comfyClientMock.runComfyUiAudioWorkflow.mockResolvedValue({
       audioBase64: 'comfy-audio',
       mimeType: 'audio/wav',
@@ -304,6 +306,44 @@ describe('worker voice-design behavior', () => {
       voiceId: 'comfyui:voice-preview',
       audioBase64: 'comfy-audio',
       targetModel: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+    }))
+  })
+
+  it('injects normalized voice constraints into the final comfyui render text', async () => {
+    fishAudioMock.generateFishAudioS2Prompt.mockResolvedValue({
+      voicePrompt: '成熟稳重的青年男性，冷静克制',
+      fishText: '[沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+    })
+    fishAudioMock.buildFishAudioS2RenderText.mockReturnValue(
+      '[青年男声][沉稳][冷静][克制] [沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+    )
+
+    const job = buildJob(TASK_TYPE.VOICE_DESIGN, {
+      voicePrompt: '成熟稳重的青年男性，注意是男声，声音冷静和感染力',
+      previewText: '那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+      preferredName: 'chenji_voice',
+    })
+
+    const result = await handleVoiceDesignTask(job)
+
+    expect(fishAudioMock.buildFishAudioS2RenderText).toHaveBeenCalledWith({
+      fishText: '[沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+      voicePrompt: '成熟稳重的青年男性，冷静克制',
+      userVoicePrompt: '成熟稳重的青年男性，注意是男声，声音冷静和感染力',
+    })
+    expect(comfyClientMock.runComfyUiAudioWorkflow).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:8188',
+      workflowKey: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      prompt: '[青年男声][沉稳][冷静][克制] [沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+    })
+    expect(fishAudioMock.buildComfyUiDesignedVoiceId).toHaveBeenCalledWith({
+      workflowKey: COMFYUI_VOICE_DESIGN_WORKFLOW_ID,
+      fishText: '[青年男声][沉稳][冷静][克制] [沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+      preferredName: 'chenji_voice',
+    })
+    expect(result).toEqual(expect.objectContaining({
+      finalPrompt: '[青年男声][沉稳][冷静][克制] [沉稳]那年夏天，我同桌偷偷拿走我一块橡皮擦。',
+      normalizedVoicePrompt: '成熟稳重的青年男性，冷静克制',
     }))
   })
 })

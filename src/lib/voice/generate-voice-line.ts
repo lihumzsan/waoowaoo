@@ -1,4 +1,5 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
+import type { Locale } from '@/i18n/routing'
 import { fal } from '@fal-ai/client'
 import { prisma } from '@/lib/prisma'
 import { getAudioApiKey, getProviderConfig, getProviderKey, resolveModelSelectionOrSingle } from '@/lib/api-config'
@@ -6,15 +7,37 @@ import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { extractStorageKey, getSignedUrl, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { synthesizeWithBailianTTS } from '@/lib/providers/bailian'
+import { runComfyUiAudioWorkflow } from '@/lib/providers/comfyui/client'
 import {
   parseSpeakerVoiceMap,
   resolveVoiceBindingForProvider,
   type CharacterVoiceFields,
   type SpeakerVoiceMap,
 } from '@/lib/voice/provider-voice-binding'
+import { buildComfyUiLineRenderText } from '@/lib/voice/generate-voice-line-context'
 
 type CheckCancelled = () => Promise<void>
-type CharacterVoiceProfile = CharacterVoiceFields & { name: string }
+type CharacterVoiceProfile = CharacterVoiceFields & {
+  name: string
+  aliases?: string | null
+  introduction?: string | null
+  profileData?: string | null
+  appearances?: Array<{
+    changeReason?: string | null
+    description?: string | null
+  }>
+}
+
+const COMFYUI_VOICE_LINE_WORKFLOW_FALLBACKS: Record<string, string> = {
+  'baseaudio/多人/LongCat-two': 'baseaudio/单人/LongCat-one',
+  'baseaudio/多人/s2-two': 'baseaudio/单人/s2-one',
+  'baseaudio/三人/s2-three': 'baseaudio/单人/s2-one',
+}
+
+function resolveComfyUiVoiceLineWorkflowKey(modelId: string): string {
+  const normalized = modelId.trim()
+  return COMFYUI_VOICE_LINE_WORKFLOW_FALLBACKS[normalized] || normalized
+}
 
 function normalizeBailianVoiceGenerationError(errorMessage: string | null | undefined) {
   const message = typeof errorMessage === 'string' ? errorMessage.trim() : ''
@@ -149,6 +172,25 @@ async function resolveReferenceAudioUrl(referenceAudioUrl: string): Promise<stri
   return getSignedUrl(referenceAudioUrl, 3600)
 }
 
+async function resolveComfyUiReferenceAudioUrl(referenceAudioUrl: string): Promise<string> {
+  if (referenceAudioUrl.startsWith('http') || referenceAudioUrl.startsWith('data:')) {
+    return referenceAudioUrl
+  }
+
+  const storageKey = await resolveStorageKeyFromMediaValue(referenceAudioUrl)
+    ?? extractStorageKey(referenceAudioUrl)
+
+  if (storageKey) {
+    return toFetchableUrl(getSignedUrl(storageKey, 3600))
+  }
+
+  if (referenceAudioUrl.startsWith('/')) {
+    return toFetchableUrl(referenceAudioUrl)
+  }
+
+  return toFetchableUrl(getSignedUrl(referenceAudioUrl, 3600))
+}
+
 async function downloadAudioData(audioUrl: string): Promise<Buffer> {
   const response = await fetch(toFetchableUrl(audioUrl))
   if (!response.ok) {
@@ -162,6 +204,7 @@ export async function generateVoiceLine(params: {
   episodeId?: string | null
   lineId: string
   userId: string
+  locale?: Locale
   audioModel?: string
   checkCancelled?: CheckCancelled
 }) {
@@ -176,6 +219,9 @@ export async function generateVoiceLine(params: {
       content: true,
       emotionPrompt: true,
       emotionStrength: true,
+      lineIndex: true,
+      matchedStoryboardId: true,
+      matchedPanelIndex: true,
     },
   })
   if (!line) {
@@ -190,11 +236,53 @@ export async function generateVoiceLine(params: {
   const [projectData, episode] = await Promise.all([
     prisma.novelPromotionProject.findUnique({
       where: { projectId: params.projectId },
-      include: { characters: true },
+      include: {
+        characters: {
+          include: {
+            appearances: {
+              orderBy: { appearanceIndex: 'asc' },
+              select: {
+                changeReason: true,
+                description: true,
+              },
+            },
+          },
+        },
+      },
     }),
     prisma.novelPromotionEpisode.findUnique({
       where: { id: episodeId },
-      select: { speakerVoices: true },
+      select: {
+        speakerVoices: true,
+        voiceLines: {
+          orderBy: { lineIndex: 'asc' },
+          select: {
+            lineIndex: true,
+            speaker: true,
+            content: true,
+          },
+        },
+        storyboards: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            clip: {
+              select: {
+                content: true,
+              },
+            },
+            panels: {
+              orderBy: { panelIndex: 'asc' },
+              select: {
+                panelIndex: true,
+                srtSegment: true,
+                description: true,
+                characters: true,
+              },
+            },
+          },
+        },
+      },
     }),
   ])
 
@@ -220,6 +308,7 @@ export async function generateVoiceLine(params: {
     speakerVoice,
   })
   let generated: { audioData: Buffer; audioDuration: number }
+  let derivedEmotionPrompt: string | null = null
   if (providerKey === 'fal') {
     if (!voiceBinding || voiceBinding.provider !== 'fal') {
       throw new Error('请先为该发言人设置参考音频')
@@ -261,6 +350,46 @@ export async function generateVoiceLine(params: {
       audioData,
       audioDuration: result.audioDuration ?? getWavDurationFromBuffer(audioData),
     }
+  } else if (providerKey === 'comfyui') {
+    if (!voiceBinding || voiceBinding.provider !== 'comfyui') {
+      throw new Error('请先为该发言人设置参考音频')
+    }
+
+    const { baseUrl } = await getProviderConfig(params.userId, audioSelection.provider)
+    if (!baseUrl) {
+      throw new Error('COMFYUI_BASE_URL_MISSING')
+    }
+
+    const referenceAudioUrl = await resolveComfyUiReferenceAudioUrl(voiceBinding.referenceAudioUrl)
+    const workflowKey = resolveComfyUiVoiceLineWorkflowKey(audioSelection.modelId)
+    const renderPrompt = await buildComfyUiLineRenderText({
+      userId: params.userId,
+      locale: params.locale || 'zh',
+      projectId: params.projectId,
+      workflowKey,
+      speakerName: line.speaker,
+      lineIndex: line.lineIndex,
+      lineText: text,
+      emotionPrompt: line.emotionPrompt,
+      emotionStrength: line.emotionStrength ?? null,
+      character,
+      voiceLines: episode?.voiceLines || [],
+      storyboards: line.matchedStoryboardId
+        ? (episode?.storyboards || []).filter((storyboard) => storyboard.id === line.matchedStoryboardId)
+        : episode?.storyboards || [],
+    })
+    derivedEmotionPrompt = renderPrompt.derivedEmotionPrompt
+    const result = await runComfyUiAudioWorkflow({
+      baseUrl,
+      workflowKey,
+      prompt: renderPrompt.renderText || text,
+      referenceAudioUrls: [referenceAudioUrl],
+    })
+    const audioData = Buffer.from(result.audioBase64, 'base64')
+    generated = {
+      audioData,
+      audioDuration: getWavDurationFromBuffer(audioData),
+    }
   } else {
     throw new Error(`AUDIO_PROVIDER_UNSUPPORTED: ${audioSelection.provider}`)
   }
@@ -275,6 +404,7 @@ export async function generateVoiceLine(params: {
     data: {
       audioUrl: cosKey,
       audioDuration: generated.audioDuration || null,
+      ...(line.emotionPrompt ? {} : derivedEmotionPrompt ? { emotionPrompt: derivedEmotionPrompt } : {}),
     },
   })
 

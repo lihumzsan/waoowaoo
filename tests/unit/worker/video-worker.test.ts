@@ -6,12 +6,26 @@ type WorkerProcessor = (job: Job<TaskJobData>) => Promise<unknown>
 
 type PanelRow = {
   id: string
+  panelIndex: number
   videoUrl: string | null
   imageUrl: string | null
   videoPrompt: string | null
   description: string | null
   firstLastFramePrompt: string | null
   duration: number | null
+  shotType: string | null
+  cameraMove: string | null
+  location: string | null
+  characters: string | null
+  props: string | null
+  srtSegment: string | null
+  sceneType: string | null
+  storyboard: {
+    episodeId: string
+    clip: {
+      content: string | null
+    } | null
+  }
 }
 
 const workerState = vi.hoisted(() => ({
@@ -27,7 +41,10 @@ const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getProjectModels: vi.fn(async () => ({ videoRatio: '16:9' })),
   resolveLipSyncVideoSource: vi.fn(async () => 'https://provider.example/lipsync.mp4'),
-  resolveVideoSourceFromGeneration: vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(async () => ({ url: 'https://provider.example/video.mp4' })),
+  resolveVideoSourceFromGeneration:
+    vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(
+      async () => ({ url: 'https://provider.example/video.mp4' }),
+    ),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
   uploadVideoSourceToCos: vi.fn(async () => 'cos/lip-sync/video.mp4'),
 }))
@@ -43,6 +60,17 @@ const concurrencyGateMock = vi.hoisted(() => ({
     run: () => Promise<T>
   }) => await input.run()),
 }))
+const ltxPromptEnhanceMock = vi.hoisted(() => ({
+  enhanceLtx23VideoPrompt: vi.fn(async (input: { originalPrompt: string }): Promise<{
+    prompt: string
+    enhanced: boolean
+    textModel: string | null
+  }> => ({
+    prompt: input.originalPrompt,
+    enhanced: false,
+    textModel: null,
+  })),
+}))
 
 const prismaMock = vi.hoisted(() => ({
   novelPromotionPanel: {
@@ -52,6 +80,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   novelPromotionVoiceLine: {
     findUnique: vi.fn(),
+    findMany: vi.fn(async () => []),
   },
 }))
 
@@ -98,16 +127,31 @@ vi.mock('@/lib/api-config', () => ({
 }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/workers/user-concurrency-gate', () => concurrencyGateMock)
+vi.mock('@/lib/video-duration/ltx23-prompt-enhance', () => ltxPromptEnhanceMock)
 
 function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
   return {
     id: 'panel-1',
+    panelIndex: 0,
     videoUrl: 'cos/base-video.mp4',
     imageUrl: 'cos/panel-image.png',
     videoPrompt: 'panel prompt',
     description: 'panel description',
     firstLastFramePrompt: null,
     duration: 5,
+    shotType: '近景',
+    cameraMove: '缓慢推进',
+    location: '办公室',
+    characters: '中年医生',
+    props: '办公桌',
+    srtSegment: '你好，我们开始吧。',
+    sceneType: 'dialogue',
+    storyboard: {
+      episodeId: 'episode-1',
+      clip: {
+        content: '夜晚办公室对话。',
+      },
+    },
     ...(overrides || {}),
   }
 }
@@ -145,12 +189,13 @@ describe('worker video processor behavior', () => {
       audioUrl: 'cos/line-1.mp3',
       audioDuration: 1200,
     })
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([])
 
     const mod = await import('@/lib/workers/video.worker')
     mod.createVideoWorker()
   })
 
-  it('VIDEO_PANEL: 缺少 payload.videoModel 时显式失败', async () => {
+  it('VIDEO_PANEL: fails explicitly when payload.videoModel is missing', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -162,7 +207,7 @@ describe('worker video processor behavior', () => {
     await expect(processor!(job)).rejects.toThrow('VIDEO_MODEL_REQUIRED: payload.videoModel is required')
   })
 
-  it('VIDEO_PANEL: 透传异步轮询返回的下载头到 COS 上传', async () => {
+  it('VIDEO_PANEL: forwards async download headers into COS upload', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -196,7 +241,7 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: 将 Ark 返回的实际视频 token 用量透传到任务结果', async () => {
+  it('VIDEO_PANEL: passes through actual video token usage', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -224,7 +269,45 @@ describe('worker video processor behavior', () => {
     })
   })
 
-  it('LIP_SYNC: 缺少 panel 时显式失败', async () => {
+  it('VIDEO_PANEL: uses the enhanced prompt for LTX2.3 generation', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mockResolvedValueOnce({
+      prompt: 'enhanced ltx prompt',
+      enhanced: true,
+      textModel: 'bailian::qwen3.5-plus',
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+        generationOptions: {
+          duration: 5,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+      originalPrompt: 'panel prompt',
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          prompt: 'enhanced ltx prompt',
+        }),
+      }),
+    )
+  })
+
+  it('LIP_SYNC: fails explicitly when panel is missing', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -238,7 +321,7 @@ describe('worker video processor behavior', () => {
     await expect(processor!(job)).rejects.toThrow('Lip-sync panel not found')
   })
 
-  it('LIP_SYNC: 正常路径写回 lipSyncVideoUrl 并清理 lipSyncTaskId', async () => {
+  it('LIP_SYNC: writes back lipSyncVideoUrl and clears lipSyncTaskId', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -277,7 +360,7 @@ describe('worker video processor behavior', () => {
     })
   })
 
-  it('未知任务类型: 显式报错', async () => {
+  it('throws explicitly for unsupported task types', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 

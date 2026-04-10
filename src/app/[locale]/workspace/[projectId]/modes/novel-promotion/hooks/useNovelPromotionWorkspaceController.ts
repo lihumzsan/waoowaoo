@@ -174,6 +174,7 @@ export function useNovelPromotionWorkspaceController({
     handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
+    handleUpdatePanelVideoDurationBinding: videoActions.handleUpdatePanelVideoDurationBinding,
   })
 
   const uiState = {
@@ -228,6 +229,7 @@ export function useNovelPromotionWorkspaceController({
     handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
+    handleUpdatePanelVideoDurationBinding: videoActions.handleUpdatePanelVideoDurationBinding,
     handleUpdateClip: videoActions.handleUpdateClip,
   }
 

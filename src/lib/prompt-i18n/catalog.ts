@@ -10,9 +10,31 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
     pathStem: 'character-reference/character_reference_to_sheet',
     variableKeys: [],
   },
+  [PROMPT_IDS.FISH_AUDIO_S2_LINE_RENDER]: {
+    pathStem: 'voice-design/fish_audio_s2_line_render',
+    variableKeys: [
+      'speaker_name',
+      'character_context',
+      'line_text',
+      'emotion_prompt',
+      'emotion_strength',
+      'dialogue_context',
+      'scene_context',
+    ],
+  },
   [PROMPT_IDS.FISH_AUDIO_S2_VOICE_DESIGN]: {
     pathStem: 'voice-design/fish_audio_s2_voice_design',
     variableKeys: ['speaker_name', 'character_context', 'user_voice_prompt', 'preview_text'],
+  },
+  [PROMPT_IDS.LTX23_VIDEO_PROMPT_ENHANCE]: {
+    pathStem: 'video/ltx23_video_prompt_enhance',
+    variableKeys: [
+      'original_prompt',
+      'panel_context',
+      'character_context',
+      'audio_context',
+      'generation_context',
+    ],
   },
   [PROMPT_IDS.NP_AGENT_ACTING_DIRECTION]: {
     pathStem: 'novel-promotion/agent_acting_direction',

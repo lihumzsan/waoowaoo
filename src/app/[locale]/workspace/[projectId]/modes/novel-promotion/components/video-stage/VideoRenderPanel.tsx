@@ -1,7 +1,7 @@
 import { getAspectRatioConfig } from '@/lib/constants'
 import type { MutableRefObject } from 'react'
 import type { CapabilitySelections, CapabilityValue } from '@/lib/model-config-contract'
-import { VideoPanelCard, type VideoPanel, type VideoModelOption, type MatchedVoiceLine, type FirstLastFrameParams, type VideoGenerationOptions } from '../video'
+import { VideoPanelCard, type VideoPanel, type VideoModelOption, type MatchedVoiceLine, type FirstLastFrameParams, type VideoDurationBinding, type VideoGenerationOptions } from '../video'
 import type { PromptField } from '@/lib/novel-promotion/stages/video-stage-runtime/useVideoPromptState'
 
 interface VideoRenderPanelProps {
@@ -38,8 +38,10 @@ interface VideoRenderPanelProps {
     firstLastFrame?: FirstLastFrameParams,
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
+    videoDurationBinding?: VideoDurationBinding,
   ) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
+  onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
   onLipSync: (storyboardId: string, panelIndex: number, voiceLineId: string, panelId?: string) => Promise<void>
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => Promise<void>
   onFlModelChange: (model: string) => void
@@ -94,6 +96,7 @@ export default function VideoRenderPanel({
   flCustomPrompts,
   onGenerateVideo,
   onUpdatePanelVideoModel,
+  onUpdatePanelVideoDurationBinding,
   onLipSync,
   onToggleLink,
   onFlModelChange,
@@ -181,6 +184,7 @@ export default function VideoRenderPanel({
                 onSavePrompt={(value) => savePrompt(panel.storyboardId, panel.panelIndex, panelKey, value, promptField)}
                 onGenerateVideo={onGenerateVideo}
                 onUpdatePanelVideoModel={onUpdatePanelVideoModel}
+                onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
                 onToggleLink={onToggleLink}
                 onFlModelChange={onFlModelChange}
                 onFlCapabilityChange={onFlCapabilityChange}

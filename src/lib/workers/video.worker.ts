@@ -18,12 +18,40 @@ import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/model-capabilities/lookup'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { getProviderConfig } from '@/lib/api-config'
+import {
+  parseVideoDurationBinding,
+  resolveAudioDrivenVideoTiming,
+  type VideoDurationBinding,
+} from '@/lib/video-duration/audio-binding'
+import {
+  enhanceLtx23VideoPrompt,
+  type Ltx23PromptEnhancementVoiceLine,
+} from '@/lib/video-duration/ltx23-prompt-enhance'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
 type VideoOptionMap = Record<string, VideoOptionValue>
 type VideoGenerationMode = 'normal' | 'firstlastframe'
-type PanelRecord = NonNullable<Awaited<ReturnType<typeof prisma.novelPromotionPanel.findUnique>>>
+
+async function fetchPanelById(panelId: string) {
+  return await prisma.novelPromotionPanel.findUnique({
+    where: { id: panelId },
+    include: {
+      storyboard: {
+        select: {
+          episodeId: true,
+          clip: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      },
+    },
+  })
+}
+
+type PanelRecord = NonNullable<Awaited<ReturnType<typeof fetchPanelById>>>
 
 function toDurationMs(value: number | null | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
@@ -52,6 +80,18 @@ async function fetchPanelByStoryboardIndex(storyboardId: string, panelIndex: num
       storyboardId,
       panelIndex,
     },
+    include: {
+      storyboard: {
+        select: {
+          episodeId: true,
+          clip: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      },
+    },
   })
 }
 
@@ -60,7 +100,7 @@ async function getPanelForVideoTask(job: Job<TaskJobData>) {
 
   // 优先使用 targetType=NovelPromotionPanel 直接定位
   if (job.data.targetType === 'NovelPromotionPanel') {
-    const panel = await prisma.novelPromotionPanel.findUnique({ where: { id: job.data.targetId } })
+    const panel = await fetchPanelById(job.data.targetId)
     if (!panel) throw new Error('Panel not found')
     return panel
   }
@@ -77,12 +117,76 @@ async function getPanelForVideoTask(job: Job<TaskJobData>) {
   return panel
 }
 
+function readVideoDurationBindingFromPayload(payload: AnyObj): VideoDurationBinding | null {
+  const raw = payload.videoDurationBinding
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  return parseVideoDurationBinding(raw)
+}
+
+async function loadAudioDrivenVoiceLines(
+  panel: PanelRecord,
+  payload: AnyObj,
+): Promise<Ltx23PromptEnhancementVoiceLine[]> {
+  const binding = readVideoDurationBindingFromPayload(payload) ?? parseVideoDurationBinding(panel.videoDurationBinding)
+  if (binding.mode !== 'match_audio') return []
+
+  const selectedVoiceLineIds = Array.isArray(binding.voiceLineIds) ? binding.voiceLineIds : []
+  if (selectedVoiceLineIds.length === 0) return []
+
+  const voiceLines = await prisma.novelPromotionVoiceLine.findMany({
+    where: {
+      id: { in: selectedVoiceLineIds },
+      episodeId: panel.storyboard.episodeId,
+    },
+    select: {
+      id: true,
+      speaker: true,
+      content: true,
+      audioDuration: true,
+    },
+  })
+
+  const order = new Map(selectedVoiceLineIds.map((id, index) => [id, index]))
+  return voiceLines.sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0))
+}
+
+async function resolveAudioDrivenDurationOverride(
+  panel: PanelRecord,
+  payload: AnyObj,
+  modelId: string,
+  voiceLines?: Ltx23PromptEnhancementVoiceLine[],
+): Promise<{ duration: number; fps: number } | null> {
+  const binding = readVideoDurationBindingFromPayload(payload) ?? parseVideoDurationBinding(panel.videoDurationBinding)
+  if (binding.mode !== 'match_audio') return null
+
+  const selectedVoiceLineIds = Array.isArray(binding.voiceLineIds) ? binding.voiceLineIds : []
+  if (selectedVoiceLineIds.length === 0) return null
+
+  const candidates = Array.isArray(voiceLines) && voiceLines.length > 0
+    ? voiceLines
+    : await loadAudioDrivenVoiceLines(panel, payload)
+
+  const timing = resolveAudioDrivenVideoTiming({
+    binding,
+    candidates,
+    modelKey: modelId,
+  })
+
+  if (!timing) return null
+
+  return {
+    duration: timing.targetDurationSeconds,
+    fps: timing.fps,
+  }
+}
+
 async function generateVideoForPanel(
   job: Job<TaskJobData>,
   panel: PanelRecord,
   payload: AnyObj,
   modelId: string,
   projectVideoRatio: string | null | undefined,
+  projectArtStyle: string | null | undefined,
   generationOptions: VideoOptionMap,
 ): Promise<{ cosKey: string; generationMode: VideoGenerationMode; actualVideoTokens?: number }> {
   if (!panel.imageUrl) {
@@ -141,14 +245,50 @@ async function generateVideoForPanel(
     }
   }
 
+  const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, payload)
+  const audioDrivenDuration = await resolveAudioDrivenDurationOverride(panel, payload, model, linkedVoiceLines)
+  const effectiveGenerationOptions: VideoOptionMap = {
+    ...generationOptions,
+    ...(audioDrivenDuration ? {
+      duration: audioDrivenDuration.duration,
+      fps: audioDrivenDuration.fps,
+    } : {}),
+  }
+  const effectivePrompt = (
+    await enhanceLtx23VideoPrompt({
+      userId: job.data.userId,
+      locale: job.data.locale,
+      projectId: job.data.projectId,
+      modelKey: model,
+      originalPrompt: prompt,
+      panel: {
+        panelIndex: panel.panelIndex,
+        shotType: panel.shotType,
+        cameraMove: panel.cameraMove,
+        description: panel.description,
+        location: panel.location,
+        characters: panel.characters,
+        props: panel.props,
+        srtSegment: panel.srtSegment,
+        sceneType: panel.sceneType,
+        clipContent: panel.storyboard.clip?.content ?? null,
+      },
+      linkedVoiceLines,
+      durationSeconds: typeof effectiveGenerationOptions.duration === 'number' ? effectiveGenerationOptions.duration : null,
+      fps: typeof effectiveGenerationOptions.fps === 'number' ? effectiveGenerationOptions.fps : null,
+      generationMode,
+      artStyle: projectArtStyle,
+    })
+  ).prompt
+
   const generatedVideo = await resolveVideoSourceFromGeneration(job, {
     userId: job.data.userId,
     modelId: model,
     imageUrl: sourceImageBase64,
     options: {
-      prompt,
+      prompt: effectivePrompt,
       ...(projectVideoRatio ? { aspectRatio: projectVideoRatio } : {}),
-      ...generationOptions,
+      ...effectiveGenerationOptions,
       generationMode,
       ...(typeof requestedGenerateAudio === 'boolean' ? { generateAudio: requestedGenerateAudio } : {}),
       ...(lastFrameImageBase64 ? { lastFrameImageUrl: lastFrameImageBase64 } : {}),
@@ -202,6 +342,7 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     payload,
     modelId,
     projectModels.videoRatio,
+    projectModels.artStyle,
     generationOptions,
   )
 
@@ -229,7 +370,7 @@ async function handleLipSyncTask(job: Job<TaskJobData>) {
 
   let panel: PanelRecord | null = null
   if (job.data.targetType === 'NovelPromotionPanel') {
-    panel = await prisma.novelPromotionPanel.findUnique({ where: { id: job.data.targetId } })
+    panel = await fetchPanelById(job.data.targetId)
   }
 
   if (

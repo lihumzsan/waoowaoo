@@ -2,7 +2,7 @@ import { isComfyUiDesignedVoiceId } from '@/lib/voice-design/comfyui-designed-vo
 
 type VoiceSource = 'character' | 'speaker'
 
-export type SupportedAudioProviderKey = 'fal' | 'bailian'
+export type SupportedAudioProviderKey = 'fal' | 'bailian' | 'comfyui'
 
 export interface CharacterVoiceFields {
   customVoiceUrl?: string | null
@@ -46,7 +46,16 @@ export type BailianVoiceGenerationBinding = {
   voiceId: string
 }
 
-export type VoiceGenerationBinding = FalVoiceGenerationBinding | BailianVoiceGenerationBinding
+export type ComfyUiVoiceGenerationBinding = {
+  provider: 'comfyui'
+  source: VoiceSource
+  referenceAudioUrl: string
+}
+
+export type VoiceGenerationBinding =
+  | FalVoiceGenerationBinding
+  | BailianVoiceGenerationBinding
+  | ComfyUiVoiceGenerationBinding
 
 export type SpeakerVoicePatch =
   | {
@@ -154,7 +163,7 @@ export function parseSpeakerVoiceMap(raw: string | null | undefined): SpeakerVoi
 }
 
 function normalizeProviderKey(providerKey: string): SupportedAudioProviderKey | null {
-  if (providerKey === 'fal' || providerKey === 'bailian') {
+  if (providerKey === 'fal' || providerKey === 'bailian' || providerKey === 'comfyui') {
     return providerKey
   }
   return null
@@ -178,6 +187,15 @@ function toBailianBinding(source: VoiceSource, voiceId: string | null): BailianV
   }
 }
 
+function toComfyUiBinding(source: VoiceSource, referenceAudioUrl: string | null): ComfyUiVoiceGenerationBinding | null {
+  if (!referenceAudioUrl) return null
+  return {
+    provider: 'comfyui',
+    source,
+    referenceAudioUrl,
+  }
+}
+
 export function resolveVoiceBindingForProvider(params: {
   providerKey: string
   character?: CharacterVoiceFields | null
@@ -194,6 +212,19 @@ export function resolveVoiceBindingForProvider(params: {
     if (fromCharacter) return fromCharacter
     if (params.speakerVoice?.provider !== 'fal') return null
     return toFalBinding('speaker', readTrimmedString(params.speakerVoice.audioUrl))
+  }
+
+  if (providerKey === 'comfyui') {
+    const fromCharacter = toComfyUiBinding('character', characterAudioUrl)
+    if (fromCharacter) return fromCharacter
+
+    if (params.speakerVoice?.provider === 'fal') {
+      return toComfyUiBinding('speaker', readTrimmedString(params.speakerVoice.audioUrl))
+    }
+    if (params.speakerVoice?.provider === 'bailian') {
+      return toComfyUiBinding('speaker', readTrimmedString(params.speakerVoice.previewAudioUrl))
+    }
+    return null
   }
 
   const fromCharacter = toBailianBinding('character', characterVoiceId)

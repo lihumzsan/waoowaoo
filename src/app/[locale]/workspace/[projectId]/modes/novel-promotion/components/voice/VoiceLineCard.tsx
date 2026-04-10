@@ -56,14 +56,16 @@ export default function VoiceLineCard({
     const [isEmotionExpanded, setIsEmotionExpanded] = useState(false)
     const hasPanelBinding = !!onLocatePanel && !!line.matchedStoryboardId && line.matchedPanelIndex !== null && line.matchedPanelIndex !== undefined
     const locateTitle = t("lineCard.locateVideo")
-    const inlineStatusState = isVoiceTaskRunning
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'generate',
-            resource: 'audio',
-            hasOutput: !!line.audioUrl,
-        })
-        : statusState ?? null
+    const inlineStatusState = statusState ?? (
+        isVoiceTaskRunning
+            ? resolveTaskPresentationState({
+                phase: 'processing',
+                intent: 'generate',
+                resource: 'audio',
+                hasOutput: !!line.audioUrl,
+            })
+            : null
+    )
 
     return (
         <div
@@ -140,8 +142,13 @@ export default function VoiceLineCard({
             {
                 line.audioUrl && (
                     <div className="absolute top-2 right-2 flex items-center gap-1">
-                        <div className="flex items-center justify-center bg-[var(--glass-tone-success-fg)] text-white px-2 py-0.5 rounded-lg text-xs font-medium shadow-[var(--glass-shadow-sm)]">
+                        <div
+                            className="flex cursor-default items-center gap-1 bg-[var(--glass-tone-success-fg)] text-white px-2 py-0.5 rounded-lg text-xs font-medium shadow-[var(--glass-shadow-sm)]"
+                            title={t("tts.completed")}
+                            aria-label={t("tts.completed")}
+                        >
                             <AppIcon name="checkXs" className="h-3 w-3" />
+                            <span>{t("tts.completed")}</span>
                         </div>
                         <button
                             onClick={() => onDeleteAudio(line.id)}

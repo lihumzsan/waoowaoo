@@ -34,6 +34,7 @@ export default function VideoStageRoute() {
       onBack={() => runtime.onStageChange('storyboard')}
       onUpdateVideoPrompt={runtime.onUpdateVideoPrompt}
       onUpdatePanelVideoModel={runtime.onUpdatePanelVideoModel}
+      onUpdatePanelVideoDurationBinding={runtime.onUpdatePanelVideoDurationBinding}
       onOpenAssetLibraryForCharacter={(characterId) =>
         characterId
           ? runtime.onOpenAssetLibraryForCharacter(characterId, false)

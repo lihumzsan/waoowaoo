@@ -104,7 +104,7 @@ describe('billing/worker lifecycle integration', () => {
     expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('rolled_back')
   })
 
-  it('keeps task active for queue retry on retryable worker error', async () => {
+  it('moves retryable worker errors back to queued so the UI does not stay stuck in processing', async () => {
     const fixture = await createPreparedVoiceTask()
 
     await expect(
@@ -114,9 +114,10 @@ describe('billing/worker lifecycle integration', () => {
     ).rejects.toBeInstanceOf(TypeError)
 
     const task = await prisma.task.findUnique({ where: { id: fixture.taskId } })
-    expect(task?.status).toBe('processing')
+    expect(task?.status).toBe('queued')
     const billing = task?.billingInfo as TaskBillingInfo
     expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('frozen')
+    expect(task?.heartbeatAt).toBeNull()
   })
 
   it('rolls back billing on cancellation path', async () => {

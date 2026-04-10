@@ -2,6 +2,14 @@
 import { useTranslations } from 'next-intl'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
+import VoiceWorkflowSelector from './VoiceWorkflowSelector'
+
+interface AudioWorkflowOption {
+    value: string
+    label: string
+    provider?: string
+    providerName?: string
+}
 
 interface VoiceToolbarProps {
     onBack?: () => void
@@ -17,6 +25,10 @@ interface VoiceToolbarProps {
     totalLines: number
     linesWithVoice: number
     linesWithAudio: number
+    audioWorkflowOptions: AudioWorkflowOption[]
+    selectedAudioWorkflow?: string | null
+    isUpdatingAudioWorkflow?: boolean
+    onAudioWorkflowChange: (modelKey: string) => void
 }
 
 export default function VoiceToolbar({
@@ -32,7 +44,11 @@ export default function VoiceToolbar({
     allSpeakersHaveVoice,
     totalLines,
     linesWithVoice,
-    linesWithAudio
+    linesWithAudio,
+    audioWorkflowOptions,
+    selectedAudioWorkflow,
+    isUpdatingAudioWorkflow = false,
+    onAudioWorkflowChange,
 }: VoiceToolbarProps) {
     const t = useTranslations('voice')
     const voiceTaskRunningState = isBatchSubmitting
@@ -54,8 +70,16 @@ export default function VoiceToolbar({
 
     return (
         <div className="glass-surface-elevated p-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                    {audioWorkflowOptions.length > 0 && (
+                        <VoiceWorkflowSelector
+                            models={audioWorkflowOptions}
+                            value={selectedAudioWorkflow}
+                            disabled={isBatchSubmitting || runningCount > 0 || isUpdatingAudioWorkflow}
+                            onChange={onAudioWorkflowChange}
+                        />
+                    )}
                     <button
                         onClick={onBack}
                         className="flex items-center gap-2 px-5 py-2.5 bg-[var(--glass-bg-surface)] text-[var(--glass-text-secondary)] font-medium rounded-xl border border-[var(--glass-stroke-base)] hover:bg-[var(--glass-bg-muted)] hover:text-[var(--glass-tone-info-fg)] transition-all"
