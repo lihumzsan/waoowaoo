@@ -201,6 +201,11 @@ async function generateVideoForPanel(
   const persistedFirstLastPrompt = firstLastFramePayload ? panel.firstLastFramePrompt : null
   const customPrompt = typeof payload.customPrompt === 'string' ? payload.customPrompt : null
   const prompt = firstLastCustomPrompt || persistedFirstLastPrompt || customPrompt || panel.videoPrompt || panel.description
+  const promptEditedByUser = Boolean(
+    firstLastCustomPrompt
+    || customPrompt
+    || (firstLastFramePayload ? panel.firstLastFramePromptEditedByUser : panel.videoPromptEditedByUser)
+  )
   if (!prompt) {
     throw new Error(`Panel ${panel.id} has no video prompt`)
   }
@@ -278,6 +283,7 @@ async function generateVideoForPanel(
       fps: typeof effectiveGenerationOptions.fps === 'number' ? effectiveGenerationOptions.fps : null,
       generationMode,
       artStyle: projectArtStyle,
+      userEdited: promptEditedByUser,
     })
   ).prompt
 

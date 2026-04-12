@@ -261,7 +261,10 @@ vi.mock('@/lib/model-pricing/lookup', () => ({
 }))
 vi.mock('@/lib/api-config', () => ({
   resolveModelSelection: vi.fn(async () => ({
-    model: 'img::storyboard',
+    provider: 'fal',
+    modelId: 'lip-model',
+    modelKey: 'fal::lip-model',
+    mediaType: 'lipsync',
   })),
   resolveModelSelectionOrSingle: vi.fn(async (_userId: string, model: string | null | undefined) => {
     const modelKey = typeof model === 'string' && model.trim().length > 0
@@ -277,6 +280,19 @@ vi.mock('@/lib/api-config', () => ({
       mediaType: 'audio',
     }
   }),
+  getConnectedModelsByType: vi.fn(async () => ([{
+    provider: 'fal',
+    modelId: 'lip-model',
+    modelKey: 'fal::lip-model',
+    type: 'lipsync',
+    name: 'Kling Lip Sync',
+    price: 0,
+  }])),
+  getProviderConfig: vi.fn(async () => ({
+    id: 'fal',
+    name: 'FAL',
+    apiKey: 'fal-key',
+  })),
   getProviderKey: vi.fn((providerId: string) => {
     const marker = providerId.indexOf(':')
     return marker === -1 ? providerId : providerId.slice(0, marker)

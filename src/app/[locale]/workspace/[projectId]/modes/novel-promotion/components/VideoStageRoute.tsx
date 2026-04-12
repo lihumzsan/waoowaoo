@@ -29,12 +29,14 @@ export default function VideoStageRoute() {
       capabilityOverrides={runtime.capabilityOverrides}
       videoRatio={runtime.videoRatio ?? undefined}
       userVideoModels={runtime.userVideoModels}
+      lipSyncEnabled={runtime.lipSyncEnabled}
       onGenerateVideo={runtime.onGenerateVideo}
       onGenerateAllVideos={runtime.onGenerateAllVideos}
       onBack={() => runtime.onStageChange('storyboard')}
       onUpdateVideoPrompt={runtime.onUpdateVideoPrompt}
       onUpdatePanelVideoModel={runtime.onUpdatePanelVideoModel}
       onUpdatePanelVideoDurationBinding={runtime.onUpdatePanelVideoDurationBinding}
+      onRestorePreviousVideo={runtime.onRestorePreviousVideo}
       onOpenAssetLibraryForCharacter={(characterId) =>
         characterId
           ? runtime.onOpenAssetLibraryForCharacter(characterId, false)

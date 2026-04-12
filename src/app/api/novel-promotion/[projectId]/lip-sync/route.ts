@@ -8,9 +8,68 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { hasPanelLipSyncOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
-import { composeModelKey, parseModelKeyStrict } from '@/lib/model-config-contract'
+import { parseModelKeyStrict } from '@/lib/model-config-contract'
+import {
+  getConnectedModelsByType,
+  getProviderConfig,
+  resolveModelSelection,
+  resolveModelSelectionOrSingle,
+} from '@/lib/api-config'
 
-const DEFAULT_LIPSYNC_MODEL_KEY = composeModelKey('fal', 'fal-ai/kling-video/lipsync/audio-to-video')
+function isModelConfigError(code: string): boolean {
+  return (
+    code === 'MODEL_NOT_CONFIGURED'
+    || code === 'MODEL_SELECTION_REQUIRED'
+    || code === 'MODEL_NOT_FOUND'
+    || code === 'PROVIDER_API_KEY_MISSING'
+    || code === 'PROVIDER_NOT_FOUND'
+  )
+}
+
+async function ensureLipSyncModelReady(userId: string, modelKey: string): Promise<string> {
+  const selection = await resolveModelSelection(userId, modelKey, 'lipsync')
+  await getProviderConfig(userId, selection.provider)
+  return selection.modelKey
+}
+
+async function resolveLipSyncModelKey(
+  userId: string,
+  requestedLipSyncModel: string,
+  preferredLipSyncModel: string,
+): Promise<string> {
+  if (requestedLipSyncModel) {
+    return await ensureLipSyncModelReady(userId, requestedLipSyncModel)
+  }
+
+  if (preferredLipSyncModel) {
+    try {
+      return await ensureLipSyncModelReady(userId, preferredLipSyncModel)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      const code = message.split(':', 1)[0] || ''
+      if (!isModelConfigError(code)) throw error
+    }
+  }
+
+  const connectedLipSyncModels = await getConnectedModelsByType(userId, 'lipsync')
+  if (connectedLipSyncModels.length === 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MODEL_NOT_CONFIGURED',
+      field: 'lipSyncModel',
+      message: '当前未配置可用的口型同步模型，请先在设置中心配置口型同步模型。',
+    })
+  }
+
+  if (connectedLipSyncModels.length === 1) {
+    return await resolveModelSelectionOrSingle(userId, null, 'lipsync').then((selection) => selection.modelKey)
+  }
+
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'MODEL_SELECTION_REQUIRED',
+    field: 'lipSyncModel',
+    message: '当前存在多个可用的口型同步模型，请先在设置中心选择默认口型同步模型。',
+  })
+}
 
 export const POST = apiHandler(async (
   request: NextRequest,
@@ -44,7 +103,11 @@ export const POST = apiHandler(async (
     select: { lipSyncModel: true },
   })
   const preferredLipSyncModel = typeof pref?.lipSyncModel === 'string' ? pref.lipSyncModel.trim() : ''
-  const resolvedLipSyncModel = requestedLipSyncModel || preferredLipSyncModel || DEFAULT_LIPSYNC_MODEL_KEY
+  const resolvedLipSyncModel = await resolveLipSyncModelKey(
+    session.user.id,
+    requestedLipSyncModel,
+    preferredLipSyncModel,
+  )
   if (!parseModelKeyStrict(resolvedLipSyncModel)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'MODEL_KEY_INVALID',

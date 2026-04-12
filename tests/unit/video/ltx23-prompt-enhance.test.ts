@@ -44,28 +44,28 @@ describe('ltx23 video prompt enhance', () => {
     ])
     prismaMock.prisma.novelPromotionCharacter.findMany.mockResolvedValue([
       {
-        name: '中年医生',
-        aliases: '医生',
-        introduction: '一位冷静克制的专业医生。',
+        name: 'Doctor',
+        aliases: 'Psychiatrist',
+        introduction: 'A calm and professional doctor.',
         profileData: JSON.stringify({
-          gender: '男',
-          age_range: '中年',
-          archetype: '专业医生',
-          occupation: '医生',
-          personality_tags: ['严谨', '冷静'],
-          visual_keywords: ['白大褂', '银框眼镜'],
+          gender: 'male',
+          age_range: 'middle-aged',
+          archetype: 'doctor',
+          occupation: 'doctor',
+          personality_tags: ['calm', 'strict'],
+          visual_keywords: ['white coat', 'glasses'],
         }),
         appearances: [
           {
-            changeReason: '默认',
-            description: '穿白大褂，佩戴银框眼镜，说话克制稳重。',
+            changeReason: 'default',
+            description: 'Wears a white coat and silver glasses.',
           },
         ],
       },
     ])
     aiRuntimeMock.executeAiTextStep.mockResolvedValue({
       text: JSON.stringify({
-        enhanced_prompt: '固定近景，中年医生面向前方说话，口型稳定贴合台词节奏，动作克制自然。',
+        enhanced_prompt: 'Medium close-up of the doctor speaking steadily, with restrained body movement and stable mouth motion.',
       }),
     })
   })
@@ -73,17 +73,38 @@ describe('ltx23 video prompt enhance', () => {
   it('returns the original prompt for non-LTX models', async () => {
     const result = await enhanceLtx23VideoPrompt({
       userId: 'user-1',
-      locale: 'zh',
+      locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/图生视频/Wan2.2',
-      originalPrompt: '中年医生坐在桌前说话',
+      modelKey: 'comfyui::basevideo/demo/Wan2.2',
+      originalPrompt: 'doctor sits at the desk and speaks',
       panel: {
-        description: '中年医生面向前方开口说话',
+        description: 'doctor faces forward and speaks',
       },
     })
 
     expect(result).toEqual({
-      prompt: '中年医生坐在桌前说话',
+      prompt: 'doctor sits at the desk and speaks',
+      enhanced: false,
+      textModel: null,
+    })
+    expect(aiRuntimeMock.executeAiTextStep).not.toHaveBeenCalled()
+  })
+
+  it('returns the original prompt without AI enhancement when the prompt is user edited', async () => {
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-demo',
+      originalPrompt: 'two characters sit across a desk, no special effects',
+      userEdited: true,
+      panel: {
+        description: 'two characters sit across a desk in an office',
+      },
+    })
+
+    expect(result).toEqual({
+      prompt: 'two characters sit across a desk, no special effects',
       enhanced: false,
       textModel: null,
     })
@@ -93,25 +114,25 @@ describe('ltx23 video prompt enhance', () => {
   it('passes strict verbatim dialogue instructions into the enhancement prompt', async () => {
     await enhanceLtx23VideoPrompt({
       userId: 'user-1',
-      locale: 'zh',
+      locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-      originalPrompt: '中年医生面向前方开口说话，双手放在桌面上',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      originalPrompt: 'doctor faces forward and speaks with both hands on the desk',
       panel: {
         panelIndex: 2,
-        description: '中年医生面向前方开口说话，双手放在桌面上',
-        location: '办公室',
-        characters: '中年医生',
-        shotType: '平视近景',
-        cameraMove: '缓缓推近',
-        srtSegment: '陈迹你好，我现在需要问你一些问题。',
-        clipContent: '夜晚办公室里的对话场景。',
+        description: 'doctor faces forward and speaks with both hands on the desk',
+        location: 'office',
+        characters: 'Doctor',
+        shotType: 'medium close-up',
+        cameraMove: 'slow push-in',
+        srtSegment: 'Hello Chen Ji, I need to ask you some questions.',
+        clipContent: 'Late-night office dialogue scene.',
       },
       linkedVoiceLines: [
         {
           id: 'line-1',
-          speaker: '中年医生',
-          content: '陈迹你好，我现在需要问你一些问题。',
+          speaker: 'Doctor',
+          content: 'Hello Chen Ji, I need to ask you some questions.',
           audioDuration: 3030,
         },
       ],
@@ -124,28 +145,28 @@ describe('ltx23 video prompt enhance', () => {
     const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
     expect(promptText).toContain('Linked audio count: 1')
     expect(promptText).toContain('Target video duration from linked audio: 3.03 seconds.')
-    expect(promptText).toContain('严格台词约束')
-    expect(promptText).toContain('必须逐字保留到最终视频提示词里')
-    expect(promptText).toContain('中年医生必须逐字说出：“陈迹你好，我现在需要问你一些问题。”')
+    expect(promptText).toContain('Strict dialogue preservation rules:')
+    expect(promptText).toContain('must say exactly')
+    expect(promptText).toContain('Hello Chen Ji, I need to ask you some questions.')
   })
 
   it('appends the exact linked line to the final enhanced prompt', async () => {
     const result = await enhanceLtx23VideoPrompt({
       userId: 'user-1',
-      locale: 'zh',
+      locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-      originalPrompt: '中年医生面向前方开口说话，双手放在桌面上',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      originalPrompt: 'doctor faces forward and speaks with both hands on the desk',
       panel: {
-        description: '中年医生面向前方开口说话，双手放在桌面上',
-        location: '办公室',
-        characters: '中年医生',
+        description: 'doctor faces forward and speaks with both hands on the desk',
+        location: 'office',
+        characters: 'Doctor',
       },
       linkedVoiceLines: [
         {
           id: 'line-1',
-          speaker: '中年医生',
-          content: '陈迹你好，我现在需要问你一些问题。',
+          speaker: 'Doctor',
+          content: 'Hello Chen Ji, I need to ask you some questions.',
           audioDuration: 3030,
         },
       ],
@@ -155,7 +176,7 @@ describe('ltx23 video prompt enhance', () => {
     })
 
     expect(result).toEqual({
-      prompt: '固定近景，中年医生面向前方说话，口型稳定贴合台词节奏，动作克制自然。 对白必须严格说出“陈迹你好，我现在需要问你一些问题。”，口型、停顿与节奏贴合这句台词，不得改写、翻译或替换。',
+      prompt: 'Medium close-up of the doctor speaking steadily, with restrained body movement and stable mouth motion. The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions.". Match mouth movement, pauses, and timing to this exact line. Do not paraphrase, translate, or replace it.',
       enhanced: true,
       textModel: 'bailian::qwen3.5-plus',
     })
@@ -168,18 +189,18 @@ describe('ltx23 video prompt enhance', () => {
 
     const result = await enhanceLtx23VideoPrompt({
       userId: 'user-1',
-      locale: 'zh',
+      locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-      originalPrompt: '中年医生面向前方开口说话',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      originalPrompt: 'doctor faces forward and speaks',
       panel: {
-        description: '中年医生面向前方开口说话',
+        description: 'doctor faces forward and speaks',
       },
       linkedVoiceLines: [
         {
           id: 'line-1',
-          speaker: '中年医生',
-          content: '陈迹你好，我现在需要问你一些问题。',
+          speaker: 'Doctor',
+          content: 'Hello Chen Ji, I need to ask you some questions.',
           audioDuration: 3030,
         },
       ],
@@ -187,7 +208,7 @@ describe('ltx23 video prompt enhance', () => {
     })
 
     expect(result).toEqual({
-      prompt: '中年医生面向前方开口说话。对白必须严格说出“陈迹你好，我现在需要问你一些问题。”，口型、停顿与节奏贴合这句台词，不得改写、翻译或替换。',
+      prompt: 'doctor faces forward and speaks. The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions.". Match mouth movement, pauses, and timing to this exact line. Do not paraphrase, translate, or replace it.',
       enhanced: false,
       textModel: 'bailian::qwen3.5-plus',
     })

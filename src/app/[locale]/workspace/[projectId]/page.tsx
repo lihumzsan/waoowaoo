@@ -17,7 +17,7 @@ import { resolveSelectedEpisodeId } from './episode-selection'
 import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
 import { AppIcon } from '@/components/ui/icons'
 import { readConfiguredAnalysisModel, shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
-import { useRouter } from '@/i18n/navigation'
+import { usePathname, useRouter } from '@/i18n/navigation'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 
 // 有效的stage值
@@ -46,12 +46,16 @@ type NovelPromotionData = {
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId?: string }>()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   if (!params?.projectId) {
     throw new Error('ProjectDetailPage requires projectId route param')
   }
   if (!searchParams) {
     throw new Error('ProjectDetailPage requires searchParams')
+  }
+  if (!pathname) {
+    throw new Error('ProjectDetailPage requires pathname')
   }
   const projectId = params.projectId
   const t = useTranslations('workspaceDetail')
@@ -91,15 +95,10 @@ export default function ProjectDetailPage() {
         params.delete('episode')
       }
     }
-    const query = Object.fromEntries(params.entries())
-    router.replace(
-      {
-        pathname: `/workspace/${projectId}`,
-        query,
-      },
-      { scroll: false },
-    )
-  }, [router, projectId, searchParams])
+    const nextQuery = params.toString()
+    const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname
+    router.replace(nextHref, { scroll: false })
+  }, [pathname, router, searchParams])
 
   // 更新URL中的stage参数（保持向后兼容）
   const updateUrlStage = useCallback((stage: string) => {

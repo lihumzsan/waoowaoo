@@ -13,6 +13,7 @@ interface VideoRenderPanelProps {
   defaultVideoModel: string
   capabilityOverrides: CapabilitySelections
   userVideoModels?: VideoModelOption[]
+  lipSyncEnabled?: boolean
   projectId: string
   episodeId: string
   runningVoiceLineIds: Set<string>
@@ -42,6 +43,7 @@ interface VideoRenderPanelProps {
   ) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
+  onRestorePreviousVideo: (storyboardId: string, panelIndex: number, panelId?: string) => Promise<void>
   onLipSync: (storyboardId: string, panelIndex: number, voiceLineId: string, panelId?: string) => Promise<void>
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => Promise<void>
   onFlModelChange: (model: string) => void
@@ -82,6 +84,7 @@ export default function VideoRenderPanel({
   defaultVideoModel,
   capabilityOverrides,
   userVideoModels,
+  lipSyncEnabled = false,
   projectId,
   episodeId,
   runningVoiceLineIds,
@@ -97,6 +100,7 @@ export default function VideoRenderPanel({
   onGenerateVideo,
   onUpdatePanelVideoModel,
   onUpdatePanelVideoDurationBinding,
+  onRestorePreviousVideo,
   onLipSync,
   onToggleLink,
   onFlModelChange,
@@ -156,6 +160,7 @@ export default function VideoRenderPanel({
                 capabilityOverrides={capabilityOverrides}
                 videoRatio={videoRatio}
                 userVideoModels={userVideoModels}
+                lipSyncEnabled={lipSyncEnabled}
                 projectId={projectId}
                 episodeId={episodeId}
                 runningVoiceLineIds={runningVoiceLineIds}
@@ -185,6 +190,7 @@ export default function VideoRenderPanel({
                 onGenerateVideo={onGenerateVideo}
                 onUpdatePanelVideoModel={onUpdatePanelVideoModel}
                 onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
+                onRestorePreviousVideo={onRestorePreviousVideo}
                 onToggleLink={onToggleLink}
                 onFlModelChange={onFlModelChange}
                 onFlCapabilityChange={onFlCapabilityChange}

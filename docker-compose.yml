@@ -62,7 +62,10 @@ services:
 
   # ==================== App (Next.js + Workers) ====================
   app:
-    image: ghcr.io/saturndec/waoowaoo:latest
+    image: waoowaoo-local:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: waoowaoo-app
     restart: unless-stopped
     environment:
@@ -139,7 +142,7 @@ services:
         echo '║  HTTP:  http://localhost:13000                    ║' &&
         echo '║                                                  ║' &&
         echo '║  For HTTPS, run Caddy on host:                   ║' &&
-        echo '║  caddy run --config Caddyfile                    ║' &&
+        echo '║  caddy run --config caddyfile                    ║' &&
         echo '║  Then open: https://localhost:1443                ║' &&
         echo '╚══════════════════════════════════════════════════╝' &&
         echo '') &

@@ -400,7 +400,7 @@ export default function WorkspacePage() {
             projects.map((project) => (
               <Link
                 key={project.id}
-                href={{ pathname: `/workspace/${project.id}` }}
+                href={`/workspace/${project.id}`}
                 className="glass-surface cursor-pointer relative group block hover:border-[var(--glass-tone-info-fg)]/40 transition-all duration-300 overflow-hidden"
               >
                 {/* 悬停光效 */}

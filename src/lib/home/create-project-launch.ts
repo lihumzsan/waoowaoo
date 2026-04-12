@@ -16,14 +16,6 @@ interface ApiFetchLike {
   (input: string, init?: RequestInit): Promise<Response>
 }
 
-export interface HomeWorkspaceLaunchTarget {
-  pathname: string
-  query: {
-    episode: string
-    autoRun?: 'storyToScript'
-  }
-}
-
 export interface CreateHomeProjectLaunchParams {
   apiFetch: ApiFetchLike
   projectName: string
@@ -36,7 +28,7 @@ export interface CreateHomeProjectLaunchParams {
 export interface CreateHomeProjectLaunchResult {
   projectId: string
   episodeId: string
-  target: HomeWorkspaceLaunchTarget
+  target: string
 }
 
 function readObject(value: unknown): Record<string, unknown> | null {
@@ -72,14 +64,12 @@ async function readEpisodeId(response: Response): Promise<string> {
   return episodeId
 }
 
-export function buildHomeWorkspaceLaunchTarget(projectId: string, episodeId: string): HomeWorkspaceLaunchTarget {
-  return {
-    pathname: `/workspace/${projectId}`,
-    query: {
-      episode: episodeId,
-      autoRun: 'storyToScript',
-    },
-  }
+export function buildHomeWorkspaceLaunchTarget(projectId: string, episodeId: string): string {
+  const params = new URLSearchParams({
+    episode: episodeId,
+    autoRun: 'storyToScript',
+  })
+  return `/workspace/${projectId}?${params.toString()}`
 }
 
 export async function createHomeProjectLaunch({

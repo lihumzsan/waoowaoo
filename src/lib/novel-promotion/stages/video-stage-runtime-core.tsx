@@ -8,6 +8,7 @@ import {
   type VideoGenerationOptionValue,
   type VideoGenerationOptions,
   type VideoModelOption,
+  type VideoPanel,
 } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { AppIcon } from '@/components/ui/icons'
 import {
@@ -73,12 +74,14 @@ export function useVideoStageRuntime({
   capabilityOverrides,
   videoRatio = '16:9',
   userVideoModels,
+  lipSyncEnabled = false,
   onGenerateVideo,
   onGenerateAllVideos,
   onBack,
   onUpdateVideoPrompt,
   onUpdatePanelVideoModel,
   onUpdatePanelVideoDurationBinding,
+  onRestorePreviousVideo,
   onOpenAssetLibraryForCharacter,
   onEnterEditor,
 }: VideoStageShellProps) {
@@ -151,6 +154,7 @@ export function useVideoStageRuntime({
     t: (key) => t(key as never),
     allPanels,
     panelVideoPreference,
+    lipSyncEnabled,
     listEpisodeVideoUrlsMutation,
     downloadRemoteBlobMutation,
   })
@@ -472,20 +476,22 @@ export function useVideoStageRuntime({
     }
   }, [isSubmittingVideoBatch, onGenerateAllVideos])
 
-  const projectedPanels = useMemo(() => (
-    allPanels.map((panel) => {
+  const projectedPanels = useMemo<VideoPanel[]>(() => (
+    allPanels.map((panel): VideoPanel => {
       const panelKey = buildVideoSubmissionKey(panel)
       if (!isSubmittingVideoBatch && !submittingVideoPanelKeys.has(panelKey)) return panel
+      const videoTaskPhase: VideoPanel['videoTaskPhase'] =
+        panel.videoTaskPhase === 'processing' ? 'processing' : 'queued'
       return {
         ...panel,
         videoTaskRunning: true,
-        videoTaskPhase: panel.videoTaskPhase === 'processing' ? 'processing' : 'queued',
+        videoTaskPhase,
       }
     })
   ), [allPanels, isSubmittingVideoBatch, submittingVideoPanelKeys])
 
-  const runningCount = projectedPanels.filter((panel) => panel.videoTaskRunning || panel.lipSyncTaskRunning).length
-  const failedCount = allPanels.filter((panel) => !!panel.videoErrorMessage || !!panel.lipSyncErrorMessage).length
+  const runningCount = projectedPanels.filter((panel) => panel.videoTaskRunning || (lipSyncEnabled && panel.lipSyncTaskRunning)).length
+  const failedCount = allPanels.filter((panel) => !!panel.videoErrorMessage || (lipSyncEnabled && !!panel.lipSyncErrorMessage)).length
   const isAnyTaskRunning = runningCount > 0 || isSubmittingVideoBatch
   const canSubmitBatchGenerate = !!batchSelectedModel && batchMissingCapabilityFields.length === 0
 
@@ -555,6 +561,7 @@ export function useVideoStageRuntime({
         defaultVideoModel={defaultVideoModel}
         capabilityOverrides={capabilityOverrides}
         userVideoModels={normalVideoModelOptions}
+        lipSyncEnabled={lipSyncEnabled}
         projectId={projectId}
         episodeId={episodeId}
         runningVoiceLineIds={runningVoiceLineIds}
@@ -567,10 +574,11 @@ export function useVideoStageRuntime({
         flCapabilityFields={flCapabilityFields}
         flMissingCapabilityFields={flMissingCapabilityFields}
         flCustomPrompts={flCustomPrompts}
-                onGenerateVideo={handleGenerateVideoWithImmediateLock}
-                onUpdatePanelVideoModel={onUpdatePanelVideoModel}
-                onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
-                onLipSync={handleLipSync}
+        onGenerateVideo={handleGenerateVideoWithImmediateLock}
+        onUpdatePanelVideoModel={onUpdatePanelVideoModel}
+        onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
+        onRestorePreviousVideo={onRestorePreviousVideo}
+        onLipSync={handleLipSync}
         onToggleLink={handleToggleLink}
         onFlModelChange={setFlModel}
         onFlCapabilityChange={setFlCapabilityValue}

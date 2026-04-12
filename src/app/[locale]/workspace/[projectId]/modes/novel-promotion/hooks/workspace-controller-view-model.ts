@@ -127,6 +127,7 @@ interface BuildWorkspaceControllerViewModelParams {
     ) => Promise<void>
     handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
     handleUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
+    handleRestorePreviousVideo: (storyboardId: string, panelIndex: number, panelId?: string) => Promise<void>
     handleUpdateClip: (clipId: string, updates: Record<string, unknown>) => Promise<void>
   }
   stageRuntime: WorkspaceStageRuntimeValue

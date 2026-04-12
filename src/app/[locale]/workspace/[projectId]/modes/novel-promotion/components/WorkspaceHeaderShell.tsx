@@ -163,31 +163,34 @@ export default function WorkspaceHeaderShell({
           return d !== 0 ? d : a.name.localeCompare(b.name, 'zh')
         })
         return (
-          <EpisodeSelector
-            projectName={projectName}
-            episodes={sorted.map((ep) => {
-              const stageArtifacts = resolveEpisodeStageArtifacts({
-                novelText: null,
-                clips: ep.clips || [],
-                storyboards: ep.storyboards || [],
-                voiceLines: [],
-              })
-              return {
-                id: ep.id,
-                title: ep.name,
-                summary: ep.description ?? undefined,
-                status: {
-                  script: stageArtifacts.hasScript ? 'ready' as const : 'empty' as const,
-                  visual: stageArtifacts.hasVideo ? 'ready' as const : 'empty' as const,
-                },
-              }
-            })}
-            currentId={currentEpisodeId}
-            onSelect={(id) => onEpisodeSelect?.(id)}
-            onAdd={onEpisodeCreate}
-            onRename={(id, newName) => onEpisodeRename?.(id, newName)}
-            onDelete={onEpisodeDelete}
-          />
+          <div className="sticky top-20 z-40 h-0 pointer-events-none">
+            <EpisodeSelector
+              className="pointer-events-auto absolute left-6 top-0"
+              projectName={projectName}
+              episodes={sorted.map((ep) => {
+                const stageArtifacts = resolveEpisodeStageArtifacts({
+                  novelText: null,
+                  clips: ep.clips || [],
+                  storyboards: ep.storyboards || [],
+                  voiceLines: [],
+                })
+                return {
+                  id: ep.id,
+                  title: ep.name,
+                  summary: ep.description ?? undefined,
+                  status: {
+                    script: stageArtifacts.hasScript ? 'ready' as const : 'empty' as const,
+                    visual: stageArtifacts.hasVideo ? 'ready' as const : 'empty' as const,
+                  },
+                }
+              })}
+              currentId={currentEpisodeId}
+              onSelect={(id) => onEpisodeSelect?.(id)}
+              onAdd={onEpisodeCreate}
+              onRename={(id, newName) => onEpisodeRename?.(id, newName)}
+              onDelete={onEpisodeDelete}
+            />
+          </div>
         )
       })()}
 

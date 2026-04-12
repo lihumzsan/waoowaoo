@@ -176,8 +176,6 @@ const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'tex
   lipSyncModel: 'lip-sync',
   voiceDesignModel: 'voice',
 }
-const DEFAULT_LIPSYNC_MODEL_KEY = composeModelKey('fal', 'fal-ai/kling-video/lipsync/audio-to-video')
-
 /**
  * Provider keys that share pricing/capability catalogs with a canonical provider.
  * gemini-compatible uses the same models/pricing as google.
@@ -525,6 +523,35 @@ function resolveProviderByIdOrKey(providers: StoredProvider[], providerId: strin
   }
 
   return candidates[0]
+}
+
+function hasStoredProviderConnection(provider: StoredProvider | null | undefined): boolean {
+  if (!provider) return false
+  if (typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0) {
+    return true
+  }
+  return getProviderKey(provider.id) === 'comfyui'
+    && typeof provider.baseUrl === 'string'
+    && provider.baseUrl.trim().length > 0
+}
+
+function resolveConnectedDefaultModelKey(
+  rawModelKey: string | null | undefined,
+  type: UnifiedModelType,
+  models: StoredModel[],
+  providers: StoredProvider[],
+): string {
+  const modelKey = typeof rawModelKey === 'string' ? rawModelKey.trim() : ''
+  const parsed = parseModelKeyStrict(modelKey)
+  if (!parsed) return ''
+
+  const matchedModel = models.find((model) => model.modelKey === parsed.modelKey && model.type === type)
+  if (!matchedModel) return ''
+
+  const matchedProvider = resolveProviderByIdOrKey(providers, matchedModel.provider)
+  if (!hasStoredProviderConnection(matchedProvider)) return ''
+
+  return parsed.modelKey
 }
 
 function withBuiltinCapabilities(model: StoredModel): StoredModel {
@@ -1736,7 +1763,7 @@ export const GET = apiHandler(async () => {
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
     audioModel: pref?.audioModel || '',
-    lipSyncModel: pref?.lipSyncModel || DEFAULT_LIPSYNC_MODEL_KEY,
+    lipSyncModel: resolveConnectedDefaultModelKey(pref?.lipSyncModel, 'lipsync', models, providers),
     voiceDesignModel: pref?.voiceDesignModel || '',
   }
   const defaultModels = billingMode === 'OFF'

@@ -59,6 +59,14 @@ interface CustomProvider {
 
 type LlmProtocolType = 'responses' | 'chat-completions'
 
+function hasProviderConnection(provider: CustomProvider | undefined): boolean {
+  if (!provider) return false
+  if (getProviderKey(provider.id) === 'comfyui') {
+    return !!normalizeProviderBaseUrl(provider.id, provider.baseUrl)
+  }
+  return !!readTrimmedString(provider.apiKey)
+}
+
 function normalizeProviderBaseUrl(providerId: string, rawBaseUrl?: string): string | undefined {
   const providerKey = getProviderKey(providerId)
   if (providerKey === 'minimax') {
@@ -460,6 +468,15 @@ export async function getModelProvider(userId: string, model: string): Promise<s
 export async function getModelsByType(userId: string, type: ModelMediaType): Promise<CustomModel[]> {
   const models = await getUserModels(userId)
   return models.filter((model) => model.type === type)
+}
+
+export async function getConnectedModelsByType(userId: string, type: ModelMediaType): Promise<CustomModel[]> {
+  const { models, providers } = await readUserConfig(userId)
+  const providersById = new Map(providers.map((provider) => [provider.id, provider] as const))
+  return models.filter((model) => {
+    if (model.type !== type) return false
+    return hasProviderConnection(providersById.get(model.provider))
+  })
 }
 
 /**

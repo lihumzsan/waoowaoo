@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withPrismaRetry } from '@/lib/prisma-retry'
 import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
+import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
@@ -86,6 +87,65 @@ function parseTaskBillingInfo(raw: unknown): TaskBillingInfo | null {
   const billable = (raw as { billable?: unknown }).billable
   if (typeof billable !== 'boolean') return null
   return raw as TaskBillingInfo
+}
+
+const TASK_MODEL_KEY_FIELDS = new Set([
+  'model',
+  'modelKey',
+  'imageModel',
+  'videoModel',
+  'audioModel',
+  'lipSyncModel',
+  'flModel',
+  'voiceDesignModel',
+])
+
+function collectTaskModelKeys(value: unknown, keys: Set<string>) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+
+  for (const [field, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof nested === 'string' && TASK_MODEL_KEY_FIELDS.has(field)) {
+      const parsed = parseModelKeyStrict(nested)
+      if (parsed?.modelKey) {
+        keys.add(parsed.modelKey)
+      }
+    }
+
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      collectTaskModelKeys(nested, keys)
+    }
+  }
+}
+
+export function extractTaskModelKeys(input: {
+  type?: unknown
+  payload?: unknown
+  billingInfo?: unknown
+}): string[] {
+  const keys = new Set<string>()
+  const billingInfo = parseTaskBillingInfo(input.billingInfo)
+  const billingModelRaw = billingInfo && 'model' in billingInfo && typeof billingInfo.model === 'string'
+    ? billingInfo.model
+    : null
+  const billingModel = typeof billingModelRaw === 'string'
+    ? parseModelKeyStrict(billingModelRaw)
+    : null
+  if (billingModel?.modelKey) {
+    keys.add(billingModel.modelKey)
+  }
+  collectTaskModelKeys(input.payload, keys)
+  return Array.from(keys)
+}
+
+export function taskUsesComfyUiProvider(input: {
+  type?: unknown
+  payload?: unknown
+  billingInfo?: unknown
+}): boolean {
+  if (input.type === 'voice_design' || input.type === 'asset_hub_voice_design') {
+    return true
+  }
+  return extractTaskModelKeys(input).some((modelKey) => parseModelKeyStrict(modelKey)?.provider === 'comfyui')
 }
 
 function needsRollback(info: TaskBillingInfo | null): info is Extract<TaskBillingInfo, { billable: true }> {

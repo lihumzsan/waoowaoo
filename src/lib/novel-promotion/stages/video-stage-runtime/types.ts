@@ -44,6 +44,7 @@ export interface VideoStageShellProps {
   capabilityOverrides: CapabilitySelections
   videoRatio?: string
   userVideoModels?: VideoModelOption[]
+  lipSyncEnabled?: boolean
   onGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
@@ -63,6 +64,7 @@ export interface VideoStageShellProps {
   ) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
+  onRestorePreviousVideo: (storyboardId: string, panelIndex: number, panelId?: string) => Promise<void>
   onOpenAssetLibraryForCharacter?: (characterId?: string | null) => void
   onEnterEditor?: () => void
 }

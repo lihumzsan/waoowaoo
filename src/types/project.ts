@@ -180,7 +180,9 @@ export interface NovelPromotionPanel {
   media?: MediaRef | null
   imageHistory: string | null
   videoPrompt: string | null
+  videoPromptEditedByUser?: boolean
   firstLastFramePrompt?: string | null
+  firstLastFramePromptEditedByUser?: boolean
   videoDurationBinding?: string | null
   videoUrl: string | null
   videoGenerationMode?: 'normal' | 'firstlastframe' | null

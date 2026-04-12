@@ -13,6 +13,7 @@ import {
   getUserModelConfig,
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
+import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
 import { type TaskJobData } from '@/lib/task/types'
@@ -36,6 +37,11 @@ async function getTaskExistingExternalId(taskId: string): Promise<string | null>
   } catch {
     return null
   }
+}
+
+function shouldResumeTaskExternalPolling(modelKey: string | null | undefined): boolean {
+  const parsed = parseModelKeyStrict(modelKey)
+  return parsed?.provider !== 'comfyui'
 }
 
 function scopedWorkerUtilLogger(job: Job<TaskJobData>, action: string) {
@@ -185,6 +191,7 @@ export async function resolveImageSourceFromGeneration(
   const logger = scopedWorkerUtilLogger(job, 'worker.image.generate_source')
   const startedAt = Date.now()
   const allowTaskExternalIdResume = params.allowTaskExternalIdResume !== false
+    && shouldResumeTaskExternalPolling(params.modelId)
 
   // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询，不重新提交外部 API
   if (allowTaskExternalIdResume) {
@@ -311,6 +318,7 @@ export async function resolveImageSourcesFromGeneration(
   const logger = scopedWorkerUtilLogger(job, 'worker.image.generate_sources')
   const startedAt = Date.now()
   const allowTaskExternalIdResume = params.allowTaskExternalIdResume !== false
+    && shouldResumeTaskExternalPolling(params.modelId)
 
   // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询（异步只有一张）
   if (allowTaskExternalIdResume) {
@@ -427,27 +435,30 @@ export async function resolveVideoSourceFromGeneration(
 ): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
   const logger = scopedWorkerUtilLogger(job, 'worker.video.generate_source')
   const startedAt = Date.now()
+  const allowTaskExternalIdResume = shouldResumeTaskExternalPolling(params.modelId)
 
   // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询，不重新提交外部 API（避免重复扣费）
-  const resumeExternalId = await getTaskExistingExternalId(job.data.taskId)
-  if (resumeExternalId) {
-    logger.info({
-      message: 'video source generation resumed from existing external id',
-      details: { externalId: resumeExternalId, model: params.modelId },
-    })
-    const polled = await waitExternalResult(job, resumeExternalId, params.userId, {
-      progressStart: params.pollProgress?.start ?? 45,
-      progressEnd: params.pollProgress?.end ?? 94,
-    })
-    logger.info({
-      message: 'video source generation completed (resumed)',
-      durationMs: Date.now() - startedAt,
-      details: { externalId: resumeExternalId },
-    })
-    return {
-      url: polled.url,
-      ...(typeof polled.actualVideoTokens === 'number' ? { actualVideoTokens: polled.actualVideoTokens } : {}),
-      ...(polled.downloadHeaders ? { downloadHeaders: polled.downloadHeaders } : {}),
+  if (allowTaskExternalIdResume) {
+    const resumeExternalId = await getTaskExistingExternalId(job.data.taskId)
+    if (resumeExternalId) {
+      logger.info({
+        message: 'video source generation resumed from existing external id',
+        details: { externalId: resumeExternalId, model: params.modelId },
+      })
+      const polled = await waitExternalResult(job, resumeExternalId, params.userId, {
+        progressStart: params.pollProgress?.start ?? 45,
+        progressEnd: params.pollProgress?.end ?? 94,
+      })
+      logger.info({
+        message: 'video source generation completed (resumed)',
+        durationMs: Date.now() - startedAt,
+        details: { externalId: resumeExternalId },
+      })
+      return {
+        url: polled.url,
+        ...(typeof polled.actualVideoTokens === 'number' ? { actualVideoTokens: polled.actualVideoTokens } : {}),
+        ...(polled.downloadHeaders ? { downloadHeaders: polled.downloadHeaders } : {}),
+      }
     }
   }
 
@@ -547,24 +558,27 @@ export async function resolveLipSyncVideoSource(
 ): Promise<string> {
   const logger = scopedWorkerUtilLogger(job, 'worker.video.lip_sync')
   const startedAt = Date.now()
+  const allowTaskExternalIdResume = shouldResumeTaskExternalPolling(params.modelKey)
 
   // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询，不重新提交（避免重复扣费）
-  const resumeExternalId = await getTaskExistingExternalId(job.data.taskId)
-  if (resumeExternalId) {
-    logger.info({
-      message: 'lip sync generation resumed from existing external id',
-      details: { externalId: resumeExternalId },
-    })
-    const polled = await waitExternalResult(job, resumeExternalId, params.userId, {
-      progressStart: params.pollProgress?.start ?? 45,
-      progressEnd: params.pollProgress?.end ?? 94,
-    })
-    logger.info({
-      message: 'lip sync generation completed (resumed)',
-      durationMs: Date.now() - startedAt,
-      details: { externalId: resumeExternalId },
-    })
-    return polled.url
+  if (allowTaskExternalIdResume) {
+    const resumeExternalId = await getTaskExistingExternalId(job.data.taskId)
+    if (resumeExternalId) {
+      logger.info({
+        message: 'lip sync generation resumed from existing external id',
+        details: { externalId: resumeExternalId },
+      })
+      const polled = await waitExternalResult(job, resumeExternalId, params.userId, {
+        progressStart: params.pollProgress?.start ?? 45,
+        progressEnd: params.pollProgress?.end ?? 94,
+      })
+      logger.info({
+        message: 'lip sync generation completed (resumed)',
+        durationMs: Date.now() - startedAt,
+        details: { externalId: resumeExternalId },
+      })
+      return polled.url
+    }
   }
 
   logger.info({

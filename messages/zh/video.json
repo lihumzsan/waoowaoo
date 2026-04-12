@@ -1,5 +1,6 @@
 {
   "panelCard": {
+    "previousVideo": "恢复上一版",
     "play": "播放",
     "pause": "暂停",
     "retry": "重试",

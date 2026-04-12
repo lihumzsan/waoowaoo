@@ -5,15 +5,21 @@ import type { VideoPanelCardShellProps } from '../../types'
 interface UsePanelTaskStatusParams {
   panel: VideoPanelCardShellProps['panel']
   hasVisibleBaseVideo: boolean
+  lipSyncEnabled?: boolean
   tCommon: (key: string) => string
 }
 
-export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UsePanelTaskStatusParams) {
+export function usePanelTaskStatus({
+  panel,
+  hasVisibleBaseVideo,
+  lipSyncEnabled = false,
+  tCommon,
+}: UsePanelTaskStatusParams) {
   const isVideoTaskRunning = !!panel.videoTaskRunning
-  const isLipSyncTaskRunning = !!panel.lipSyncTaskRunning
-  const rawErrorMessage = panel.videoErrorMessage || panel.lipSyncErrorMessage || null
+  const isLipSyncTaskRunning = lipSyncEnabled && !!panel.lipSyncTaskRunning
+  const rawErrorMessage = panel.videoErrorMessage || (lipSyncEnabled ? panel.lipSyncErrorMessage : null) || null
   const panelErrorDisplayBase = resolveErrorDisplay({
-    code: panel.videoErrorCode || panel.lipSyncErrorCode || null,
+    code: panel.videoErrorCode || (lipSyncEnabled ? panel.lipSyncErrorCode : null) || null,
     message: rawErrorMessage,
   })
   const panelErrorDisplay =
@@ -79,7 +85,7 @@ export function usePanelTaskStatus({ panel, hasVisibleBaseVideo, tCommon }: UseP
     phase: lipSyncRunningPhase,
     intent: 'process',
     resource: 'video',
-    hasOutput: !!panel.lipSyncVideoUrl || hasVisibleBaseVideo,
+    hasOutput: lipSyncEnabled && (!!panel.lipSyncVideoUrl || hasVisibleBaseVideo),
   })
 
   return {

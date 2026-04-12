@@ -120,3 +120,39 @@ export function useUpdateProjectPanelVideoDurationBinding(projectId: string, epi
     },
   })
 }
+
+export function useRestorePreviousProjectPanelVideo(projectId: string, episodeId?: string | null) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      panelId,
+      storyboardId,
+      panelIndex,
+    }: {
+      panelId?: string
+      storyboardId?: string
+      panelIndex?: number
+    }) =>
+      await requestJsonWithError(
+        `/api/novel-promotion/${projectId}/restore-video`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            panelId,
+            storyboardId,
+            panelIndex,
+          }),
+        },
+        'restore failed',
+      ),
+    onSettled: () => {
+      invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+      if (episodeId) {
+        invalidateQueryTemplates(queryClient, [queryKeys.episodeData(projectId, episodeId)])
+        invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)])
+      }
+    },
+  })
+}

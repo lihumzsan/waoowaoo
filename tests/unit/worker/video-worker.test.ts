@@ -10,8 +10,10 @@ type PanelRow = {
   videoUrl: string | null
   imageUrl: string | null
   videoPrompt: string | null
+  videoPromptEditedByUser?: boolean
   description: string | null
   firstLastFramePrompt: string | null
+  firstLastFramePromptEditedByUser?: boolean
   duration: number | null
   shotType: string | null
   cameraMove: string | null
@@ -136,8 +138,10 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
     videoUrl: 'cos/base-video.mp4',
     imageUrl: 'cos/panel-image.png',
     videoPrompt: 'panel prompt',
+    videoPromptEditedByUser: false,
     description: 'panel description',
     firstLastFramePrompt: null,
+    firstLastFramePromptEditedByUser: false,
     duration: 5,
     shotType: '近景',
     cameraMove: '缓慢推进',
@@ -302,6 +306,38 @@ describe('worker video processor behavior', () => {
       expect.objectContaining({
         options: expect.objectContaining({
           prompt: 'enhanced ltx prompt',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: skips LTX enhancement when the saved prompt is user edited', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: '涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?',
+      videoPromptEditedByUser: true,
+    }))
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/鍥剧敓瑙嗛/LTX2.3鍥剧敓瑙嗛蹇€熺増',
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      originalPrompt: '涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?',
+      userEdited: true,
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          prompt: '涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?',
         }),
       }),
     )

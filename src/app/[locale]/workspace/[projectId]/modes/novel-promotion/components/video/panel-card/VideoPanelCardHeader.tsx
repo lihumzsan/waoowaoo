@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import TaskStatusOverlay from '@/components/task/TaskStatusOverlay'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 
@@ -17,6 +17,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
     panelKey,
     layout,
     media,
+    download,
     taskStatus,
     videoModel,
     durationBinding,
@@ -33,6 +34,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
 
   const hasVisibleBaseVideo = !!media.baseVideoUrl
   const showFirstLastFrameSwitch = layout.hasNext
+  const canRestorePreviousVideo = hasVisibleBaseVideo && !taskStatus.isVideoTaskRunning && !taskStatus.isLipSyncTaskRunning
 
   return (
     <div className="bg-[var(--glass-bg-muted)] flex items-center justify-center relative" style={{ aspectRatio: player.cssAspectRatio }}>
@@ -114,7 +116,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
       )}
 
       {/* 口型同步切换 */}
-      {panel.lipSyncVideoUrl && hasVisibleBaseVideo ? (
+      {media.lipSyncEnabled && panel.lipSyncVideoUrl && hasVisibleBaseVideo ? (
         <div
           className="absolute top-2 right-2 flex items-center bg-[var(--glass-overlay)] rounded-full p-0.5 cursor-pointer"
           onClick={(event) => {
@@ -133,10 +135,43 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
       ) : null}
 
       {/* 重新生成按钮 */}
+      {download.canDownloadCurrentVideo ? (
+        <button
+          onClick={(event) => {
+            event.stopPropagation()
+            void actions.onDownloadVideo()
+          }}
+          disabled={download.isDownloadingVideo}
+          title={t('panelCard.download')}
+          className="absolute bottom-2 right-12 bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay-strong)] text-white p-2 rounded-full transition-all z-20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <AppIcon
+            name={download.isDownloadingVideo ? 'loader' : 'download'}
+            className={`w-4 h-4 ${download.isDownloadingVideo ? 'animate-spin' : ''}`}
+          />
+        </button>
+      ) : null}
+
+      {canRestorePreviousVideo ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            void actions.onRestorePreviousVideo(panel.storyboardId, panel.panelIndex, panel.panelId)
+          }}
+          title={t('panelCard.previousVideo')}
+          aria-label={t('panelCard.previousVideo')}
+          className="absolute bottom-2 left-2 bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay-strong)] text-white px-3 py-1.5 rounded-full transition-all z-20 text-xs font-medium"
+        >
+          {t('panelCard.previousVideo')}
+        </button>
+      ) : null}
+
       {!layout.isLinked && !layout.isLastFrame && (hasVisibleBaseVideo || taskStatus.isVideoTaskRunning) && (
         <button
-          onClick={() =>
-            actions.onGenerateVideo(
+          onClick={(event) => {
+            event.stopPropagation()
+            void actions.onGenerateVideo(
               panel.storyboardId,
               panel.panelIndex,
               videoModel.selectedModel,
@@ -144,7 +179,8 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
               videoModel.generationOptions,
               panel.panelId,
               durationBinding.localBinding,
-            )}
+            )
+          }}
           disabled={
             taskStatus.isVideoTaskRunning
             || !videoModel.selectedModel

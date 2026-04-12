@@ -71,6 +71,16 @@ interface UseProvidersReturn {
     getModelsByType: (type: CustomModel['type']) => CustomModel[]
 }
 
+function hasProviderConnection(provider: Provider | undefined): boolean {
+    if (!provider) return false
+    if (provider.hasApiKey === true) return true
+    const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
+    if (apiKey.length > 0) return true
+    return getProviderKey(provider.id) === 'comfyui'
+        && typeof provider.baseUrl === 'string'
+        && provider.baseUrl.trim().length > 0
+}
+
 export function mergeProvidersForDisplay(
     savedProviders: Provider[],
     presetProviders: Provider[],
@@ -383,6 +393,11 @@ export function useProviders(): UseProvidersReturn {
             const mergedProviders = mergeProvidersForDisplay(savedProviders, presetProviders)
             setProviders(mergedProviders)
             latestProvidersRef.current = mergedProviders
+            const connectedProviderIds = new Set(
+                mergedProviders
+                    .filter((provider) => hasProviderConnection(provider))
+                    .map((provider) => provider.id),
+            )
 
             // 合并预设和已保存的模型
             const savedModelsRaw = data.models || []
@@ -404,13 +419,13 @@ export function useProviders(): UseProvidersReturn {
                 const saved = savedModels.find((m: CustomModel) =>
                     m.modelKey === presetModelKey
                 )
-                const alwaysEnabledPreset = preset.type === 'lipsync'
+                const providerReady = connectedProviderIds.has(preset.provider)
                 const mergedPreset: CustomModel = {
                     ...preset,
                     modelKey: presetModelKey,
                     enabled: isPresetComingSoonModelKey(presetModelKey)
                         ? false
-                        : (hasSavedModels ? (alwaysEnabledPreset || !!saved) : false),
+                        : (hasSavedModels ? (providerReady && !!saved) : false),
                     price: 0,
                     capabilities: saved?.capabilities ?? preset.capabilities,
                 }
@@ -421,7 +436,7 @@ export function useProviders(): UseProvidersReturn {
             ).map((m: CustomModel) => ({
                 ...applyPricingDisplay(m, pricingDisplay),
                 // 尊重服务端返回的 enabled 字段（后端对 disabled presets 会明确返回 enabled: false）
-                enabled: (m as CustomModel & { enabled?: boolean }).enabled !== false,
+                enabled: connectedProviderIds.has(m.provider) && (m as CustomModel & { enabled?: boolean }).enabled !== false,
             }))
 
             const mergedModels = [...allModels, ...customModels]

@@ -24,6 +24,21 @@ interface UseVideoPanelsProjectionParams {
   panelLipStates: TaskPresentationLike
 }
 
+function normalizeRuntimeTaskPhase(
+  value: string | null | undefined,
+): VideoPanel['videoTaskPhase'] {
+  if (
+    value === 'queued'
+    || value === 'processing'
+    || value === 'completed'
+    || value === 'failed'
+    || value === 'idle'
+  ) {
+    return value
+  }
+  return 'idle'
+}
+
 export function useVideoPanelsProjection({
   storyboards,
   clips,
@@ -57,6 +72,8 @@ export function useVideoPanelsProjection({
         const panelId = panel.id
         const panelVideoState = panelId ? panelVideoStates.getTaskState(`panel-video:${panelId}`) : null
         const panelLipState = panelId ? panelLipStates.getTaskState(`panel-lip:${panelId}`) : null
+        const videoTaskPhase = normalizeRuntimeTaskPhase(panelVideoState?.phase)
+        const lipSyncTaskPhase = normalizeRuntimeTaskPhase(panelLipState?.phase)
 
         panels.push({
           panelId,
@@ -80,28 +97,28 @@ export function useVideoPanelsProjection({
           videoDurationBinding: parseVideoDurationBinding(panel.videoDurationBinding),
           videoUrl: panel.videoUrl || undefined,
           videoGenerationMode: panel.videoGenerationMode || undefined,
-          videoTaskPhase: panelVideoState?.phase || 'idle',
-          videoTaskRunning: panelVideoState?.phase === 'queued' || panelVideoState?.phase === 'processing',
+          videoTaskPhase,
+          videoTaskRunning: videoTaskPhase === 'queued' || videoTaskPhase === 'processing',
           videoErrorCode:
-            panelVideoState?.phase === 'failed'
-              ? panelVideoState.lastError?.code || panel.videoErrorCode || undefined
+            videoTaskPhase === 'failed'
+              ? panelVideoState?.lastError?.code || panel.videoErrorCode || undefined
               : panel.videoErrorCode || undefined,
           videoErrorMessage:
-            panelVideoState?.phase === 'failed'
-              ? panelVideoState.lastError?.message || panel.videoErrorMessage || undefined
+            videoTaskPhase === 'failed'
+              ? panelVideoState?.lastError?.message || panel.videoErrorMessage || undefined
               : panel.videoErrorMessage || undefined,
           videoModel: panel.videoModel || undefined,
           linkedToNextPanel: panel.linkedToNextPanel || false,
           lipSyncVideoUrl: panel.lipSyncVideoUrl || undefined,
-          lipSyncTaskPhase: panelLipState?.phase || 'idle',
-          lipSyncTaskRunning: panelLipState?.phase === 'queued' || panelLipState?.phase === 'processing',
+          lipSyncTaskPhase,
+          lipSyncTaskRunning: lipSyncTaskPhase === 'queued' || lipSyncTaskPhase === 'processing',
           lipSyncErrorCode:
-            panelLipState?.phase === 'failed'
-              ? panelLipState.lastError?.code || panel.lipSyncErrorCode || undefined
+            lipSyncTaskPhase === 'failed'
+              ? panelLipState?.lastError?.code || panel.lipSyncErrorCode || undefined
               : panel.lipSyncErrorCode || undefined,
           lipSyncErrorMessage:
-            panelLipState?.phase === 'failed'
-              ? panelLipState.lastError?.message || panel.lipSyncErrorMessage || undefined
+            lipSyncTaskPhase === 'failed'
+              ? panelLipState?.lastError?.message || panel.lipSyncErrorMessage || undefined
               : panel.lipSyncErrorMessage || undefined,
         })
       })

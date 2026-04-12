@@ -23,6 +23,35 @@ function toStructuredJsonField(value: unknown, fieldName: string): string | null
   }
 }
 
+function normalizePromptOverrideField(value: unknown): {
+  value: string | null
+  editedByUser: boolean
+} {
+  if (value === undefined || value === null) {
+    return {
+      value: null,
+      editedByUser: false,
+    }
+  }
+
+  if (typeof value !== 'string') {
+    throw new ApiError('INVALID_PARAMS')
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return {
+      value: null,
+      editedByUser: false,
+    }
+  }
+
+  return {
+    value: normalized,
+    editedByUser: true,
+  }
+}
+
 /**
  * POST /api/novel-promotion/[projectId]/panel
  * 新增一个 Panel
@@ -80,6 +109,8 @@ export const POST = apiHandler(async (
   const maxPanelIndex = storyboard.panels.length > 0 ? storyboard.panels[0].panelIndex : -1
   const newPanelIndex = maxPanelIndex + 1
   const newPanelNumber = newPanelIndex + 1
+  const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
+  const normalizedFirstLastFramePrompt = normalizePromptOverrideField(firstLastFramePrompt)
 
   // 创建新的 Panel 记录
   const newPanel = await panelModel.create({
@@ -96,8 +127,10 @@ export const POST = apiHandler(async (
       srtStart: srtStart ?? null,
       srtEnd: srtEnd ?? null,
       duration: duration ?? null,
-      videoPrompt: videoPrompt ?? null,
-      firstLastFramePrompt: firstLastFramePrompt ?? null,
+      videoPrompt: normalizedVideoPrompt.value,
+      videoPromptEditedByUser: normalizedVideoPrompt.editedByUser,
+      firstLastFramePrompt: normalizedFirstLastFramePrompt.value,
+      firstLastFramePromptEditedByUser: normalizedFirstLastFramePrompt.editedByUser,
       videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
     }
   })
@@ -246,11 +279,21 @@ export const PATCH = apiHandler(async (
     // 构建更新数据
     const updateData: {
       videoPrompt?: string | null
+      videoPromptEditedByUser?: boolean
       firstLastFramePrompt?: string | null
+      firstLastFramePromptEditedByUser?: boolean
       videoDurationBinding?: string | null
     } = {}
-    if (videoPrompt !== undefined) updateData.videoPrompt = videoPrompt
-    if (firstLastFramePrompt !== undefined) updateData.firstLastFramePrompt = firstLastFramePrompt
+    if (videoPrompt !== undefined) {
+      const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
+      updateData.videoPrompt = normalizedVideoPrompt.value
+      updateData.videoPromptEditedByUser = normalizedVideoPrompt.editedByUser
+    }
+    if (firstLastFramePrompt !== undefined) {
+      const normalizedFirstLastFramePrompt = normalizePromptOverrideField(firstLastFramePrompt)
+      updateData.firstLastFramePrompt = normalizedFirstLastFramePrompt.value
+      updateData.firstLastFramePromptEditedByUser = normalizedFirstLastFramePrompt.editedByUser
+    }
     if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
 
     await prisma.novelPromotionPanel.update({
@@ -278,14 +321,20 @@ export const PATCH = apiHandler(async (
   // 构建更新数据
   const updateData: {
     videoPrompt?: string | null
+    videoPromptEditedByUser?: boolean
     firstLastFramePrompt?: string | null
+    firstLastFramePromptEditedByUser?: boolean
     videoDurationBinding?: string | null
   } = {}
   if (videoPrompt !== undefined) {
-    updateData.videoPrompt = videoPrompt
+    const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
+    updateData.videoPrompt = normalizedVideoPrompt.value
+    updateData.videoPromptEditedByUser = normalizedVideoPrompt.editedByUser
   }
   if (firstLastFramePrompt !== undefined) {
-    updateData.firstLastFramePrompt = firstLastFramePrompt
+    const normalizedFirstLastFramePrompt = normalizePromptOverrideField(firstLastFramePrompt)
+    updateData.firstLastFramePrompt = normalizedFirstLastFramePrompt.value
+    updateData.firstLastFramePromptEditedByUser = normalizedFirstLastFramePrompt.editedByUser
   }
   if (videoDurationBinding !== undefined) {
     updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
@@ -309,8 +358,10 @@ export const PATCH = apiHandler(async (
         panelIndex,
         panelNumber: panelIndex + 1,
         imageUrl: null,
-        videoPrompt: videoPrompt ?? null,
-        firstLastFramePrompt: firstLastFramePrompt ?? null,
+        videoPrompt: normalizePromptOverrideField(videoPrompt).value,
+        videoPromptEditedByUser: normalizePromptOverrideField(videoPrompt).editedByUser,
+        firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,
+        firstLastFramePromptEditedByUser: normalizePromptOverrideField(firstLastFramePrompt).editedByUser,
         videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
       }
     })
@@ -383,7 +434,9 @@ export const PUT = apiHandler(async (
     srtEnd?: number | null
     duration?: number | null
     videoPrompt?: string | null
+    videoPromptEditedByUser?: boolean
     firstLastFramePrompt?: string | null
+    firstLastFramePromptEditedByUser?: boolean
     videoDurationBinding?: string | null
     actingNotes?: string | null
     photographyRules?: string | null
@@ -398,8 +451,16 @@ export const PUT = apiHandler(async (
   if (srtStart !== undefined) updateData.srtStart = parseNullableNumberField(srtStart)
   if (srtEnd !== undefined) updateData.srtEnd = parseNullableNumberField(srtEnd)
   if (duration !== undefined) updateData.duration = parseNullableNumberField(duration)
-  if (videoPrompt !== undefined) updateData.videoPrompt = videoPrompt
-  if (firstLastFramePrompt !== undefined) updateData.firstLastFramePrompt = firstLastFramePrompt
+  if (videoPrompt !== undefined) {
+    const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
+    updateData.videoPrompt = normalizedVideoPrompt.value
+    updateData.videoPromptEditedByUser = normalizedVideoPrompt.editedByUser
+  }
+  if (firstLastFramePrompt !== undefined) {
+    const normalizedFirstLastFramePrompt = normalizePromptOverrideField(firstLastFramePrompt)
+    updateData.firstLastFramePrompt = normalizedFirstLastFramePrompt.value
+    updateData.firstLastFramePromptEditedByUser = normalizedFirstLastFramePrompt.editedByUser
+  }
   if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
   // JSON 字段存为规范化 JSON 字符串
   if (actingNotes !== undefined) {
@@ -441,8 +502,10 @@ export const PUT = apiHandler(async (
         srtStart: srtStart ?? null,
         srtEnd: srtEnd ?? null,
         duration: duration ?? null,
-        videoPrompt: videoPrompt ?? null,
-        firstLastFramePrompt: firstLastFramePrompt ?? null,
+        videoPrompt: normalizePromptOverrideField(videoPrompt).value,
+        videoPromptEditedByUser: normalizePromptOverrideField(videoPrompt).editedByUser,
+        firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,
+        firstLastFramePromptEditedByUser: normalizePromptOverrideField(firstLastFramePrompt).editedByUser,
         videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
         actingNotes: actingNotes !== undefined ? toStructuredJsonField(actingNotes, 'actingNotes') : null,
         photographyRules: photographyRules !== undefined ? toStructuredJsonField(photographyRules, 'photographyRules') : null,

@@ -8,6 +8,7 @@ export interface VideoPanelCardShellProps {
   capabilityOverrides: CapabilitySelections
   videoRatio?: string
   userVideoModels?: VideoModelOption[]
+  lipSyncEnabled?: boolean
   projectId: string
   episodeId?: string
   runningVoiceLineIds?: Set<string>
@@ -48,6 +49,7 @@ export interface VideoPanelCardShellProps {
   ) => void
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => void
   onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => void
+  onRestorePreviousVideo: (storyboardId: string, panelIndex: number, panelId?: string) => void
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => void
   onFlModelChange: (model: string) => void
   onFlCapabilityChange: (field: string, rawValue: string) => void

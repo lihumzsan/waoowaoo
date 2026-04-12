@@ -162,6 +162,7 @@ export function useNovelPromotionWorkspaceController({
     videoModel: projectSnapshot.videoModel,
     capabilityOverrides: projectSnapshot.capabilityOverrides,
     userVideoModels: userModels.userVideoModels || [],
+    lipSyncEnabled: (userModels.userLipSyncModels?.length || 0) > 0,
     handleUpdateEpisode: configActions.handleUpdateEpisode,
     handleUpdateConfig: configActions.handleUpdateConfig,
     runWithRebuildConfirm: rebuildState.runWithRebuildConfirm,
@@ -175,6 +176,7 @@ export function useNovelPromotionWorkspaceController({
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
     handleUpdatePanelVideoDurationBinding: videoActions.handleUpdatePanelVideoDurationBinding,
+    handleRestorePreviousVideo: videoActions.handleRestorePreviousVideo,
   })
 
   const uiState = {
@@ -230,6 +232,7 @@ export function useNovelPromotionWorkspaceController({
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
     handleUpdatePanelVideoDurationBinding: videoActions.handleUpdatePanelVideoDurationBinding,
+    handleRestorePreviousVideo: videoActions.handleRestorePreviousVideo,
     handleUpdateClip: videoActions.handleUpdateClip,
   }
 

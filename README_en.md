@@ -57,7 +57,7 @@ docker compose up -d
 ### Method 2: Clone & Docker Build (Full Control)
 
 ```bash
-git clone https://github.com/saturndec/waoowaoo.git
+git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 docker compose up -d
 ```
@@ -71,7 +71,7 @@ docker compose down && docker compose up -d --build
 ### Method 3: Local Development (For Developers)
 
 ```bash
-git clone https://github.com/saturndec/waoowaoo.git
+git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 
 # Copy environment config (must be done before npm install)
@@ -99,7 +99,7 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > [!TIP]
 > **If you experience lag**: HTTP mode may limit browser connections. Install [Caddy](https://caddyserver.com/docs/install) for HTTPS:
 > ```bash
-> caddy run --config Caddyfile
+> caddy run --config caddyfile
 > ```
 > Then visit [https://localhost:1443](https://localhost:1443)
 

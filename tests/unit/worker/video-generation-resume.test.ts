@@ -92,6 +92,30 @@ describe('worker utils video generation resume', () => {
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 
+  it('does not resume ComfyUI video generation from an old externalId after restart', async () => {
+    prismaMock.task.findUnique.mockResolvedValueOnce({ externalId: 'COMFYUI:VIDEO:old_prompt_id' })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/new-video.mp4',
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+      imageUrl: 'data:image/png;base64,QQ==',
+      options: {
+        prompt: 'animate this frame',
+      },
+    })
+
+    expect(result).toEqual({
+      url: 'https://comfy.test/new-video.mp4',
+    })
+    expect(prismaMock.task.findUnique).not.toHaveBeenCalled()
+    expect(asyncPollMock.pollAsyncTask).not.toHaveBeenCalled()
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledTimes(1)
+  })
+
   it('prevents duplicate panel candidates by skipping task externalId resume when requested', async () => {
     prismaMock.task.findUnique.mockResolvedValueOnce({ externalId: 'FAL:IMAGE:fal-ai/nano-banana-pro:req_1' })
     generatorApiMock.generateImage.mockResolvedValueOnce({
@@ -110,6 +134,28 @@ describe('worker utils video generation resume', () => {
     })
 
     expect(result).toBe('https://fal.test/new-image.png')
+    expect(prismaMock.task.findUnique).not.toHaveBeenCalled()
+    expect(asyncPollMock.pollAsyncTask).not.toHaveBeenCalled()
+    expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not resume ComfyUI image generation from an old externalId after restart', async () => {
+    prismaMock.task.findUnique.mockResolvedValueOnce({ externalId: 'COMFYUI:IMAGE:old_prompt_id' })
+    generatorApiMock.generateImage.mockResolvedValueOnce({
+      success: true,
+      imageUrl: 'https://comfy.test/new-image.png',
+    })
+
+    const result = await resolveImageSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
+      prompt: 'a cinematic portrait',
+      options: {
+        aspectRatio: '16:9',
+      },
+    })
+
+    expect(result).toBe('https://comfy.test/new-image.png')
     expect(prismaMock.task.findUnique).not.toHaveBeenCalled()
     expect(asyncPollMock.pollAsyncTask).not.toHaveBeenCalled()
     expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(1)

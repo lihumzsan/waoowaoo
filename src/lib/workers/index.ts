@@ -1,38 +1,49 @@
 import 'dotenv/config'
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { logInfo as logInfo, logError as logError } from '@/lib/logging/core'
+import { recoverTasksOnWorkerStartup } from '@/lib/task/startup-recovery'
 import { createImageWorker } from './image.worker'
 import { createVideoWorker } from './video.worker'
 import { createVoiceWorker } from './voice.worker'
 import { createTextWorker } from './text.worker'
 
-const workers = [createImageWorker(), createVideoWorker(), createVoiceWorker(), createTextWorker()]
+async function start() {
+  try {
+    await recoverTasksOnWorkerStartup()
+  } catch (error) {
+    logError('[Workers] startup recovery failed', error instanceof Error ? error.message : String(error))
+  }
 
-_ulogInfo('[Workers] started:', workers.length)
+  const workers = [createImageWorker(), createVideoWorker(), createVoiceWorker(), createTextWorker()]
 
-for (const worker of workers) {
-  worker.on('ready', () => {
-    _ulogInfo(`[Workers] ready: ${worker.name}`)
-  })
+  logInfo('[Workers] started:', workers.length)
 
-  worker.on('error', (err) => {
-    _ulogError(`[Workers] error: ${worker.name}`, err.message)
-  })
-
-  worker.on('failed', (job, err) => {
-    _ulogError(`[Workers] job failed: ${worker.name}`, {
-      jobId: job?.id,
-      taskId: job?.data?.taskId,
-      taskType: job?.data?.type,
-      error: err.message,
+  for (const worker of workers) {
+    worker.on('ready', () => {
+      logInfo(`[Workers] ready: ${worker.name}`)
     })
-  })
+
+    worker.on('error', (err) => {
+      logError(`[Workers] error: ${worker.name}`, err.message)
+    })
+
+    worker.on('failed', (job, err) => {
+      logError(`[Workers] job failed: ${worker.name}`, {
+        jobId: job?.id,
+        taskId: job?.data?.taskId,
+        taskType: job?.data?.type,
+        error: err.message,
+      })
+    })
+  }
+
+  async function shutdown(signal: string) {
+    logInfo(`[Workers] shutdown signal: ${signal}`)
+    await Promise.all(workers.map(async (worker) => await worker.close()))
+    process.exit(0)
+  }
+
+  process.on('SIGINT', () => void shutdown('SIGINT'))
+  process.on('SIGTERM', () => void shutdown('SIGTERM'))
 }
 
-async function shutdown(signal: string) {
-  _ulogInfo(`[Workers] shutdown signal: ${signal}`)
-  await Promise.all(workers.map(async (worker) => await worker.close()))
-  process.exit(0)
-}
-
-process.on('SIGINT', () => void shutdown('SIGINT'))
-process.on('SIGTERM', () => void shutdown('SIGTERM'))
+void start()

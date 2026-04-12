@@ -5,6 +5,7 @@ import { useGenerateVideo, useBatchGenerateVideos } from '@/lib/query/hooks/useS
 import {
   useUpdateProjectPanelVideoPrompt,
   useUpdateProjectPanelVideoDurationBinding,
+  useRestorePreviousProjectPanelVideo,
   useUpdateProjectClip,
   useUpdateProjectConfig,
 } from '@/lib/query/hooks'
@@ -41,6 +42,7 @@ export function useWorkspaceVideoActions({
   const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId)
   const updateProjectPanelVideoDurationBindingMutation = useUpdateProjectPanelVideoDurationBinding(projectId, episodeId || null)
+  const restorePreviousProjectPanelVideoMutation = useRestorePreviousProjectPanelVideo(projectId, episodeId || null)
   const updateProjectClipMutation = useUpdateProjectClip(projectId)
   const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
 
@@ -147,6 +149,23 @@ export function useWorkspaceVideoActions({
     }
   }
 
+  const handleRestorePreviousVideo = async (
+    storyboardId: string,
+    panelIndex: number,
+    panelId?: string,
+  ) => {
+    try {
+      await restorePreviousProjectPanelVideoMutation.mutateAsync({
+        panelId,
+        storyboardId,
+        panelIndex,
+      })
+    } catch (err: unknown) {
+      alert(`${t('execution.updateFailed')}: ${getErrorMessage(err)}`)
+      throw err
+    }
+  }
+
   const handleUpdateClip = async (clipId: string, data: unknown) => {
     if (!episodeId) {
       _ulogError('No episode selected for clip update')
@@ -167,6 +186,7 @@ export function useWorkspaceVideoActions({
     handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel,
     handleUpdatePanelVideoDurationBinding,
+    handleRestorePreviousVideo,
     handleUpdateClip,
   }
 }

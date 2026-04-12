@@ -11,6 +11,12 @@ const UI_ONLY_INPUT_TYPE_SUFFIXES = ['UPLOAD', '_UI']
 const SEED_CONTROL_VALUES = new Set(['fixed', 'randomize', 'increment', 'decrement'])
 const CONNECTED_PROMPT_SOURCE_FIELDS = ['value', 'text', 'prompt', 'string', 'input_string']
 const COMFYUI_SAFE_RANDOM_SEED_MAX = 2_147_483_647
+const OPTIONAL_MODEL_BYPASS_NODE_TYPES = new Set([
+  'ltxvsequenceparallelmultigpupatcher',
+])
+const UI_DECORATION_NODE_TYPES = new Set([
+  'note',
+])
 
 export type ComfyUiWorkflowGraphNode = {
   class_type: string
@@ -260,6 +266,121 @@ function collectAnythingEverywhereSources(
   return sources
 }
 
+function resolveSetNodeVariableName(rawNode: Record<string, unknown>): string {
+  const widgetValues = Array.isArray(rawNode.widgets_values) ? rawNode.widgets_values : []
+  const fromWidget = readTrimmedString(widgetValues[0])
+  if (fromWidget) return fromWidget
+
+  const previousName = isRecord(rawNode.properties)
+    ? readTrimmedString(rawNode.properties.previousName)
+    : ''
+  if (previousName) return previousName
+
+  const title = readTrimmedString(rawNode.title)
+  const titleMatch = /^Set_(.+)$/i.exec(title)
+  return titleMatch?.[1]?.trim() || ''
+}
+
+function collectSetNodeSources(
+  nodes: unknown[],
+  graph: ComfyUiWorkflowGraph,
+): Map<string, unknown> {
+  const sources = new Map<string, unknown>()
+
+  for (const rawNode of nodes) {
+    if (!isRecord(rawNode)) continue
+    if (readTrimmedString(rawNode.type) !== 'SetNode') continue
+
+    const nodeId = normalizeNodeId(rawNode.id)
+    if (!nodeId) continue
+
+    const graphNode = graph[nodeId]
+    if (!graphNode || !isRecord(graphNode.inputs)) continue
+
+    const variableName = resolveSetNodeVariableName(rawNode)
+    if (!variableName) continue
+
+    const firstEntry = Object.entries(graphNode.inputs)[0]
+    if (!firstEntry) continue
+
+    sources.set(variableName, cloneConnectionValue(firstEntry[1]))
+  }
+
+  return sources
+}
+
+function resolveGetNodeVariableName(rawNode: Record<string, unknown>): string {
+  const widgetValues = Array.isArray(rawNode.widgets_values) ? rawNode.widgets_values : []
+  const fromWidget = readTrimmedString(widgetValues[0])
+  if (fromWidget) return fromWidget
+
+  const title = readTrimmedString(rawNode.title)
+  const titleMatch = /^Get_(.+)$/i.exec(title)
+  return titleMatch?.[1]?.trim() || ''
+}
+
+function resolveSetGetNodes(
+  nodes: unknown[],
+  graph: ComfyUiWorkflowGraph,
+): void {
+  const sourceByVariable = collectSetNodeSources(nodes, graph)
+  if (sourceByVariable.size === 0) return
+
+  const getNodeVariableById = new Map<string, string>()
+  const removableNodeIds = new Set<string>()
+
+  for (const rawNode of nodes) {
+    if (!isRecord(rawNode)) continue
+    const nodeId = normalizeNodeId(rawNode.id)
+    if (!nodeId) continue
+
+    const nodeType = readTrimmedString(rawNode.type)
+    if (nodeType === 'SetNode') {
+      removableNodeIds.add(nodeId)
+      continue
+    }
+    if (nodeType !== 'GetNode') continue
+
+    const variableName = resolveGetNodeVariableName(rawNode)
+    if (!variableName || !sourceByVariable.has(variableName)) continue
+    getNodeVariableById.set(nodeId, variableName)
+    removableNodeIds.add(nodeId)
+  }
+
+  if (getNodeVariableById.size === 0 && !Array.from(removableNodeIds).some((id) => graph[id]?.class_type === 'SetNode')) {
+    return
+  }
+
+  for (const candidate of Object.values(graph)) {
+    if (!isRecord(candidate.inputs)) continue
+    for (const [field, rawValue] of Object.entries(candidate.inputs)) {
+      if (!isConnectionValue(rawValue)) continue
+      const sourceNodeId = normalizeNodeId(rawValue[0])
+      if (!sourceNodeId) continue
+
+      const variableName = getNodeVariableById.get(sourceNodeId)
+      if (!variableName) continue
+
+      const replacement = sourceByVariable.get(variableName)
+      if (replacement === undefined) continue
+      candidate.inputs[field] = cloneConnectionValue(replacement)
+    }
+  }
+
+  for (const nodeId of removableNodeIds) {
+    delete graph[nodeId]
+  }
+}
+
+function removeUiDecorationNodes(graph: ComfyUiWorkflowGraph): void {
+  for (const [nodeId, node] of Object.entries(graph)) {
+    const classType = node.class_type.trim().toLowerCase()
+    if (UI_DECORATION_NODE_TYPES.has(classType)) {
+      delete graph[nodeId]
+    }
+  }
+}
+
 function applyAnythingEverywhereBroadcast(
   nodes: unknown[],
   graph: ComfyUiWorkflowGraph,
@@ -359,20 +480,19 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
   }
 
   applyAnythingEverywhereBroadcast(nodes, graph, anythingEverywhereSources)
+  resolveSetGetNodes(nodes, graph)
+  removeUiDecorationNodes(graph)
   return graph
 }
 
 function readWorkflowGraphFromFile(filePath: string): ComfyUiWorkflowGraph {
   const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown
 
-  if (isUiWorkflow(parsed) && isApiWorkflowGraph(parsed.extra?.prompt)) {
-    return normalizeApiWorkflowGraph(parsed.extra.prompt)
+  if (isUiWorkflow(parsed)) {
+    return convertUiWorkflowToApiGraph(parsed)
   }
   if (isApiWorkflowGraph(parsed)) {
     return normalizeApiWorkflowGraph(parsed)
-  }
-  if (isUiWorkflow(parsed)) {
-    return convertUiWorkflowToApiGraph(parsed)
   }
 
   throw new Error(`COMFYUI_WORKFLOW_INVALID: unsupported workflow file format at ${filePath}`)
@@ -391,6 +511,36 @@ function cloneWorkflow(graph: ComfyUiWorkflowGraph): ComfyUiWorkflowGraph {
 
 function isConnectionValue(value: unknown): value is [unknown, unknown, ...unknown[]] {
   return Array.isArray(value) && value.length >= 2
+}
+
+function cloneConnectionValue(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value)) as unknown
+}
+
+function bypassOptionalModelNodes(graph: ComfyUiWorkflowGraph): void {
+  const removableNodeIds = Object.entries(graph)
+    .filter(([, node]) => OPTIONAL_MODEL_BYPASS_NODE_TYPES.has(node.class_type.trim().toLowerCase()))
+    .map(([nodeId]) => nodeId)
+    .sort(compareNodeIds)
+
+  for (const nodeId of removableNodeIds) {
+    const node = graph[nodeId]
+    if (!node || !isRecord(node.inputs)) continue
+
+    const upstreamModel = node.inputs.model
+    if (!upstreamModel) continue
+
+    for (const candidate of Object.values(graph)) {
+      if (!isRecord(candidate.inputs)) continue
+      for (const [field, rawValue] of Object.entries(candidate.inputs)) {
+        if (!isConnectionValue(rawValue)) continue
+        if (normalizeNodeId(rawValue[0]) !== nodeId) continue
+        candidate.inputs[field] = cloneConnectionValue(upstreamModel)
+      }
+    }
+
+    delete graph[nodeId]
+  }
 }
 
 function isLikelyNegativeNode(node: ComfyUiWorkflowGraphNode): boolean {
@@ -562,6 +712,22 @@ function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: strin
   })
 }
 
+function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs)) continue
+    if (node.class_type.trim().toLowerCase() !== 'imageresizekjv2') continue
+
+    const upscaleMethod = readTrimmedString(node.inputs.upscale_method).toLowerCase()
+    const device = readTrimmedString(node.inputs.device).toLowerCase()
+
+    // Current KJNodes rejects lanczos on GPU at execution time.
+    // Keep the workflow's requested lanczos resize, but move it to CPU.
+    if (upscaleMethod === 'lanczos' && device === 'gpu') {
+      node.inputs.device = 'cpu'
+    }
+  }
+}
+
 function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: number): boolean {
   if (!node || !isRecord(node.inputs)) return false
 
@@ -673,10 +839,12 @@ export function resolveComfyUiWorkflow(
   }
 
   const graph = cloneWorkflow(readWorkflowGraphFromFile(filePath))
+  bypassOptionalModelNodes(graph)
   applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   applyDimensionHeuristics(graph, inject.width, inject.height)
   applyImageInjection(graph, inject.imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
+  applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount)
   applySaveOutputHeuristics(graph)
   assignRandomSeedValues(graph)

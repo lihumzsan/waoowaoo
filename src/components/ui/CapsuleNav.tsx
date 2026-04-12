@@ -183,6 +183,7 @@ interface EpisodeSelectorProps {
     onRename?: (id: string, newName: string) => void
     onDelete?: (id: string) => void
     projectName?: string  // 项目名称，显示在左上角
+    className?: string
 }
 
 export function EpisodeSelector({
@@ -192,7 +193,8 @@ export function EpisodeSelector({
     onAdd,
     onRename,
     onDelete,
-    projectName
+    projectName,
+    className
 }: EpisodeSelectorProps) {
     const t = useTranslations('common')
     const [isOpen, setIsOpen] = useState(false)
@@ -215,9 +217,14 @@ export function EpisodeSelector({
     if (!currentEp) return null
 
     return (
-        <div className="fixed top-20 left-6 z-40" ref={menuRef}>
+        <div className={className || 'relative z-40'} ref={menuRef}>
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                type="button"
+                onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setIsOpen(!isOpen)
+                }}
                 className="glass-btn-base glass-btn-secondary flex items-center gap-3 px-4 py-3 transition-all group"
                 style={{ borderRadius: '1.5rem' }}
             >
@@ -266,6 +273,7 @@ export function EpisodeSelector({
                                             autoFocus
                                         />
                                         <button
+                                            type="button"
                                             onClick={() => {
                                                 if (editingName.trim()) {
                                                     onRename?.(ep.id, editingName.trim())
@@ -277,6 +285,7 @@ export function EpisodeSelector({
                                             <AppIcon name="check" className="w-4 h-4" />
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => setEditingId(null)}
                                             className="w-7 h-7 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
                                         >
@@ -294,6 +303,7 @@ export function EpisodeSelector({
                                             {t('deleteEpisode')}：{ep.title}
                                         </div>
                                         <button
+                                            type="button"
                                             onClick={() => {
                                                 onDelete?.(ep.id)
                                                 setDeletingId(null)
@@ -304,6 +314,7 @@ export function EpisodeSelector({
                                             {t('deleteEpisodeConfirm')}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => setDeletingId(null)}
                                             className="w-7 h-7 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
                                         >
@@ -322,7 +333,13 @@ export function EpisodeSelector({
                                         }`}
                                 >
                                     <button
-                                        onClick={() => { onSelect(ep.id); setIsOpen(false); }}
+                                        type="button"
+                                        onClick={(event) => {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            onSelect(ep.id)
+                                            setIsOpen(false)
+                                        }}
                                         className="flex-1 flex items-center gap-3 text-left"
                                     >
                                         <div className={`w-2 h-10 rounded-full ${statusColor}`} />
@@ -340,6 +357,7 @@ export function EpisodeSelector({
                                     </button>
                                     {onRename && (
                                         <button
+                                            type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 setEditingId(ep.id)
@@ -353,6 +371,7 @@ export function EpisodeSelector({
                                     )}
                                     {onDelete && (
                                         <button
+                                            type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 setDeletingId(ep.id)
@@ -371,7 +390,13 @@ export function EpisodeSelector({
                         <>
                             <div className="h-px bg-[var(--glass-bg-muted)] my-2 mx-2" />
                             <button
-                                onClick={() => { onAdd(); setIsOpen(false); }}
+                                type="button"
+                                onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    onAdd()
+                                    setIsOpen(false)
+                                }}
                                 className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-[var(--glass-text-tertiary)] hover:text-[var(--glass-tone-info-fg)] hover:bg-[var(--glass-tone-info-bg)] font-medium text-sm transition-colors"
                             >
                                 <span className="text-lg">+</span> {t('newEpisode')}

@@ -15,11 +15,18 @@ type ComfyHistoryEntry = {
   outputs?: Record<string, Record<string, unknown>>
 }
 
+type ComfyQueueResponse = {
+  queue_running?: unknown[]
+  queue_pending?: unknown[]
+}
+
 type MediaRef = {
   filename: string
   subfolder: string
   type: string
 }
+
+type ComfyPromptQueuePhase = 'pending' | 'running' | 'absent' | 'unknown'
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|bmp)$/i
 const VIDEO_EXTENSIONS = /\.(mp4|webm|gif|mov|mkv|avi)$/i
@@ -143,6 +150,95 @@ function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video' | 'audio'): Me
     return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
   }
   return refs.find((ref) => AUDIO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+}
+
+function readTimeoutOverride(value: string | undefined, fallbackMs: number): number {
+  if (!value) return fallbackMs
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackMs
+  return Math.round(parsed)
+}
+
+function getComfyUiQueueTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
+  if (expect === 'video') {
+    return readTimeoutOverride(process.env.COMFYUI_VIDEO_QUEUE_TIMEOUT_MS, 7_200_000)
+  }
+  if (expect === 'audio') {
+    return readTimeoutOverride(process.env.COMFYUI_AUDIO_QUEUE_TIMEOUT_MS, 2_700_000)
+  }
+  return readTimeoutOverride(process.env.COMFYUI_IMAGE_QUEUE_TIMEOUT_MS, 1_800_000)
+}
+
+function getComfyUiExecutionTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
+  if (expect === 'video') {
+    return readTimeoutOverride(process.env.COMFYUI_VIDEO_EXECUTION_TIMEOUT_MS, 900_000)
+  }
+  if (expect === 'audio') {
+    return readTimeoutOverride(process.env.COMFYUI_AUDIO_EXECUTION_TIMEOUT_MS, 300_000)
+  }
+  return readTimeoutOverride(process.env.COMFYUI_IMAGE_EXECUTION_TIMEOUT_MS, 300_000)
+}
+
+function getComfyUiHistoryGraceMs(expect: 'image' | 'video' | 'audio'): number {
+  if (expect === 'video') {
+    return readTimeoutOverride(process.env.COMFYUI_VIDEO_HISTORY_GRACE_MS, 30_000)
+  }
+  if (expect === 'audio') {
+    return readTimeoutOverride(process.env.COMFYUI_AUDIO_HISTORY_GRACE_MS, 15_000)
+  }
+  return readTimeoutOverride(process.env.COMFYUI_IMAGE_HISTORY_GRACE_MS, 15_000)
+}
+
+function getComfyUiQueuePollIntervalMs(expect: 'image' | 'video' | 'audio'): number {
+  if (expect === 'video') {
+    return readTimeoutOverride(process.env.COMFYUI_VIDEO_QUEUE_POLL_INTERVAL_MS, 5_000)
+  }
+  if (expect === 'audio') {
+    return readTimeoutOverride(process.env.COMFYUI_AUDIO_QUEUE_POLL_INTERVAL_MS, 2_000)
+  }
+  return readTimeoutOverride(process.env.COMFYUI_IMAGE_QUEUE_POLL_INTERVAL_MS, 2_000)
+}
+
+function readPromptIdFromQueueItem(entry: unknown): string | null {
+  if (Array.isArray(entry)) {
+    const promptId = entry[1]
+    return typeof promptId === 'string' && promptId.trim() ? promptId.trim() : null
+  }
+
+  if (!entry || typeof entry !== 'object') return null
+  const promptId = (entry as { prompt_id?: unknown }).prompt_id
+  return typeof promptId === 'string' && promptId.trim() ? promptId.trim() : null
+}
+
+export function resolveComfyUiPromptQueuePhase(
+  queue: ComfyQueueResponse | null | undefined,
+  promptId: string,
+): ComfyPromptQueuePhase {
+  if (!queue || typeof queue !== 'object') return 'unknown'
+
+  const isRunning = Array.isArray(queue.queue_running)
+    && queue.queue_running.some((entry) => readPromptIdFromQueueItem(entry) === promptId)
+  if (isRunning) return 'running'
+
+  const isPending = Array.isArray(queue.queue_pending)
+    && queue.queue_pending.some((entry) => readPromptIdFromQueueItem(entry) === promptId)
+  if (isPending) return 'pending'
+
+  return 'absent'
+}
+
+async function fetchComfyUiPromptQueuePhase(baseUrl: string, promptId: string): Promise<ComfyPromptQueuePhase> {
+  try {
+    const response = await fetch(`${baseUrl}/queue`, {
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!response.ok) return 'unknown'
+
+    const queue = await response.json() as ComfyQueueResponse
+    return resolveComfyUiPromptQueuePhase(queue, promptId)
+  } catch {
+    return 'unknown'
+  }
 }
 
 function parseDataUrl(source: string): { buffer: Buffer; mimeType: string; filename: string } | null {
@@ -352,23 +448,81 @@ export async function runComfyUiWorkflow(params: {
     throw new Error('COMFYUI_PROMPT_ERROR: missing prompt_id')
   }
 
-  const deadline = Date.now() + (params.expect === 'video' ? 600_000 : 300_000)
+  const submittedAt = Date.now()
+  const queueTimeoutMs = getComfyUiQueueTimeoutMs(params.expect)
+  const executionTimeoutMs = getComfyUiExecutionTimeoutMs(params.expect)
+  const historyGraceMs = getComfyUiHistoryGraceMs(params.expect)
+  const queuePollIntervalMs = getComfyUiQueuePollIntervalMs(params.expect)
   let mediaRef: MediaRef | null = null
+  let executionStartedAt: number | null = null
+  let leftQueueWithoutHistoryAt: number | null = null
+  let hasEverAppearedInQueue = false
+  let lastQueuePollAt = 0
+  let lastKnownQueuePhase: ComfyPromptQueuePhase = 'unknown'
 
-  while (Date.now() < deadline) {
+  while (true) {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 1000))
+
+    const now = Date.now()
     const historyResponse = await fetch(`${base}/history/${encodeURIComponent(promptId)}`, {
       signal: AbortSignal.timeout(30_000),
     })
-    if (!historyResponse.ok) continue
+    if (historyResponse.ok) {
+      const history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
+      const entry = history[promptId]
+      if (entry) {
+        const refs = collectMediaRefsFromOutputs(entry.outputs)
+        mediaRef = pickMediaRef(refs, params.expect)
+        if (mediaRef) break
 
-    const history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
-    const entry = history[promptId]
-    if (!entry) continue
+        if (executionStartedAt === null) {
+          executionStartedAt = now
+        }
+        leftQueueWithoutHistoryAt ??= now
+      }
+    }
 
-    const refs = collectMediaRefsFromOutputs(entry.outputs)
-    mediaRef = pickMediaRef(refs, params.expect)
-    if (mediaRef) break
+    if (executionStartedAt === null || leftQueueWithoutHistoryAt !== null) {
+      const shouldPollQueue = now - lastQueuePollAt >= queuePollIntervalMs
+      if (shouldPollQueue) {
+        lastQueuePollAt = now
+        const queuePhase = await fetchComfyUiPromptQueuePhase(base, promptId)
+        if (queuePhase !== 'unknown') {
+          lastKnownQueuePhase = queuePhase
+        }
+
+        if (queuePhase === 'pending') {
+          hasEverAppearedInQueue = true
+          leftQueueWithoutHistoryAt = null
+        } else if (queuePhase === 'running') {
+          hasEverAppearedInQueue = true
+          executionStartedAt ??= now
+          leftQueueWithoutHistoryAt = null
+        } else if (queuePhase === 'absent' && hasEverAppearedInQueue) {
+          executionStartedAt ??= now
+          leftQueueWithoutHistoryAt ??= now
+        }
+      }
+    }
+
+    if (executionStartedAt === null) {
+      if (now - submittedAt > queueTimeoutMs) {
+        throw new Error(`COMFYUI_QUEUE_TIMEOUT: prompt stayed queued too long without starting ${params.expect} generation`)
+      }
+      continue
+    }
+
+    if (
+      leftQueueWithoutHistoryAt !== null
+      && lastKnownQueuePhase === 'absent'
+      && now - leftQueueWithoutHistoryAt > historyGraceMs
+    ) {
+      throw new Error(`COMFYUI_HISTORY_TIMEOUT: no ${params.expect} output found`)
+    }
+
+    if (now - executionStartedAt > executionTimeoutMs) {
+      throw new Error(`COMFYUI_HISTORY_TIMEOUT: no ${params.expect} output found`)
+    }
   }
 
   if (!mediaRef) {

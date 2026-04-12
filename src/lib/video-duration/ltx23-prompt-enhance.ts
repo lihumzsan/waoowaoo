@@ -46,6 +46,7 @@ export interface EnhanceLtx23VideoPromptInput {
   fps?: number | null
   generationMode?: 'normal' | 'firstlastframe'
   artStyle?: string | null
+  userEdited?: boolean
 }
 
 export interface Ltx23PromptEnhancementResult {
@@ -245,6 +246,11 @@ function buildStrictDialogueContextText(
 ): string {
   if (!Array.isArray(voiceLines) || voiceLines.length === 0) return ''
 
+  type NormalizedDialogueLine = {
+    speaker: string
+    content: string
+  }
+
   const normalizedLines = voiceLines
     .slice(0, 4)
     .map((line, index) => {
@@ -253,7 +259,7 @@ function buildStrictDialogueContextText(
       if (!content) return ''
       return { speaker, content }
     })
-    .filter(Boolean)
+    .filter((line): line is NormalizedDialogueLine => !!line)
 
   if (normalizedLines.length === 0) return ''
 
@@ -401,6 +407,14 @@ export async function enhanceLtx23VideoPrompt(
   }
 
   if (!isLtx23VideoModel(input.modelKey)) {
+    return {
+      prompt: originalPrompt,
+      enhanced: false,
+      textModel: null,
+    }
+  }
+
+  if (input.userEdited) {
     return {
       prompt: originalPrompt,
       enhanced: false,

@@ -15,6 +15,7 @@ interface UseVideoDownloadAllParams {
   t: (key: string) => string
   allPanels: VideoPanel[]
   panelVideoPreference: Map<string, boolean>
+  lipSyncEnabled: boolean
   listEpisodeVideoUrlsMutation: MutationLike<{
     episodeId: string
     panelPreferences: Record<string, boolean>
@@ -27,6 +28,7 @@ export function useVideoDownloadAll({
   t,
   allPanels,
   panelVideoPreference,
+  lipSyncEnabled,
   listEpisodeVideoUrlsMutation,
   downloadRemoteBlobMutation,
 }: UseVideoDownloadAllParams) {
@@ -45,7 +47,9 @@ export function useVideoDownloadAll({
       const panelPreferences: Record<string, boolean> = {}
       allPanels.forEach((panel) => {
         const panelKey = `${panel.storyboardId}-${panel.panelIndex}`
-        panelPreferences[panelKey] = panelVideoPreference.get(panelKey) ?? true
+        panelPreferences[panelKey] = lipSyncEnabled
+          ? (panelVideoPreference.get(panelKey) ?? true)
+          : false
       })
 
       _ulogInfo('[下载视频] 获取视频URL列表...')
@@ -100,6 +104,7 @@ export function useVideoDownloadAll({
     allPanels,
     downloadRemoteBlobMutation,
     episodeId,
+    lipSyncEnabled,
     listEpisodeVideoUrlsMutation,
     panelVideoPreference,
     t,

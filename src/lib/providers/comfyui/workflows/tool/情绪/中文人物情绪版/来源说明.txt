@@ -1,0 +1,37 @@
+中文人物情绪版说明
+生成日期：2026-03-29
+
+一、来源
+- 数据集：CSEMOTIONS: High-Quality Mandarin Emotional Speech Dataset
+- 页面：https://huggingface.co/datasets/AIDC-AI/CSEMOTIONS
+- 语言：普通话
+- 情绪：中性、开心、愤怒、悲伤、惊讶、俏皮、恐惧
+- 采样格式：WAV，数据集说明为 48kHz / 24-bit PCM
+
+二、本次整理方式
+- 目录位置：D:\青山人物配音参考\情绪\中文人物情绪版
+- 本次共整理 14 条样本
+- 每种情绪 2 条：女声 female004 1 条，男声 male004 1 条
+- 这样做的目的是让你能在同一批中文说话人中，对比不同情绪的表现
+
+三、文件列表
+- 愤怒：female004（rows offset 1200）、male004（rows offset 3360）
+- 恐惧：female004（rows offset 1320）、male004（rows offset 3420）
+- 开心：female004（rows offset 1380）、male004（rows offset 3480）
+- 俏皮：female004（rows offset 1440）、male004（rows offset 3540）
+- 中性：female004（rows offset 1500）、male004（rows offset 3600）
+- 悲伤：female004（rows offset 1560）、male004（rows offset 3660）
+- 惊讶：female004（rows offset 1620）、male004（rows offset 3720）
+
+四、命名规则
+- 格式：CSEMOTIONS_情绪_性别_说话人.wav
+- 例子：CSEMOTIONS_开心_女_female004.wav
+
+五、许可提醒
+- 该数据集页面标注为 Apache-2.0。
+- 虽然页面给出了开源许可，若后续涉及公开发布、训练分发或商业用途，仍建议你再次核对数据集页面与论文说明。
+
+六、使用建议
+- 如果你是做“情绪参考听感”，直接按情绪文件夹试听最方便。
+- 如果你是做 TTS / 语音克隆参考，建议优先使用同一说话人的多种情绪进行对比。
+- 如果你想继续扩充，我下一步可以继续帮你补第二组中文说话人，比如 female005 / male005。

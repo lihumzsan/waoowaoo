@@ -206,7 +206,9 @@ model NovelPromotionPanel {
   imageMedia        MediaObject?              @relation("NovelPromotionPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
   imageHistory      String?                   @db.Text
   videoPrompt       String?                   @db.Text
+  videoPromptEditedByUser Boolean             @default(false)
   firstLastFramePrompt String?                @db.Text
+  firstLastFramePromptEditedByUser Boolean    @default(false)
   videoDurationBinding String?                @db.Text
   videoUrl          String?                   @db.Text
   videoGenerationMode String?                 @db.Text // 视频生成方式：normal | firstlastframe

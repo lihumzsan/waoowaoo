@@ -8,6 +8,7 @@ import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
 import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
+import { useUserModels } from './useUserModels'
 
 // ============ 类型定义 ============
 export interface PanelCandidate {
@@ -333,6 +334,8 @@ export function useRefreshStoryboards(episodeId: string | null) {
  */
 export function useLipSync(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
+    const userModelsQuery = useUserModels()
+    const availableLipSyncModels = userModelsQuery.data?.lipsync || []
 
     return useMutation({
         mutationFn: async (params: {
@@ -341,14 +344,29 @@ export function useLipSync(projectId: string | null, episodeId: string | null) {
             voiceLineId: string
             panelId?: string
         }) => {
+            if (availableLipSyncModels.length === 0) {
+                throw new Error('当前未配置可用的口型同步模型，请先在设置中心配置口型同步模型。')
+            }
+
+            const requestBody: {
+                storyboardId: string
+                panelIndex: number
+                voiceLineId: string
+                lipSyncModel?: string
+            } = {
+                storyboardId: params.storyboardId,
+                panelIndex: params.panelIndex,
+                voiceLineId: params.voiceLineId,
+            }
+
+            if (availableLipSyncModels.length === 1) {
+                requestBody.lipSyncModel = availableLipSyncModels[0]?.value
+            }
+
             const res = await apiFetch(`/api/novel-promotion/${projectId}/lip-sync`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    storyboardId: params.storyboardId,
-                    panelIndex: params.panelIndex,
-                    voiceLineId: params.voiceLineId
-                })
+                body: JSON.stringify(requestBody)
             })
 
             if (!res.ok) {

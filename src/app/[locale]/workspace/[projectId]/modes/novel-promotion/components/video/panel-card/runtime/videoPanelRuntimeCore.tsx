@@ -1,6 +1,8 @@
 'use client'
 
+import { logError as _ulogError } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
+import { useCallback } from 'react'
 import type { VideoPanelCardShellProps } from '../types'
 import { EMPTY_RUNNING_VOICE_LINE_IDS } from './shared'
 import { usePanelTaskStatus } from './hooks/usePanelTaskStatus'
@@ -10,6 +12,28 @@ import { usePanelPromptEditor } from './hooks/usePanelPromptEditor'
 import { usePanelVoiceManager } from './hooks/usePanelVoiceManager'
 import { usePanelLipSync } from './hooks/usePanelLipSync'
 import { usePanelVideoDurationBinding } from './hooks/usePanelVideoDurationBinding'
+import { useDownloadRemoteBlob } from '@/lib/query/hooks'
+import { getErrorMessage } from '@/lib/novel-promotion/stages/video-stage-runtime/utils'
+
+function inferVideoExtension(url: string, mimeType?: string | null): string {
+  if (mimeType) {
+    if (mimeType.includes('webm')) return 'webm'
+    if (mimeType.includes('quicktime')) return 'mov'
+    if (mimeType.includes('x-matroska')) return 'mkv'
+    if (mimeType.includes('avi')) return 'avi'
+    if (mimeType.includes('mp4')) return 'mp4'
+  }
+
+  try {
+    const parsed = new URL(url, window.location.origin)
+    const match = parsed.pathname.match(/\.([a-z0-9]+)$/i)
+    if (match?.[1]) return match[1].toLowerCase()
+  } catch {
+    // Ignore parse failures and fall back to mp4.
+  }
+
+  return 'mp4'
+}
 
 export function useVideoPanelActions({
   panel,
@@ -18,6 +42,7 @@ export function useVideoPanelActions({
   capabilityOverrides,
   videoRatio = '16:9',
   userVideoModels,
+  lipSyncEnabled = false,
   projectId,
   episodeId,
   runningVoiceLineIds = EMPTY_RUNNING_VOICE_LINE_IDS,
@@ -44,6 +69,7 @@ export function useVideoPanelActions({
   onGenerateVideo,
   onUpdatePanelVideoModel,
   onUpdatePanelVideoDurationBinding,
+  onRestorePreviousVideo,
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
@@ -66,8 +92,11 @@ export function useVideoPanelActions({
   const taskStatus = usePanelTaskStatus({
     panel,
     hasVisibleBaseVideo,
+    lipSyncEnabled,
     tCommon: (key: string) => tCommon(key as never),
   })
+
+  const effectiveShowLipSyncVideo = lipSyncEnabled ? showLipSyncVideo : false
 
   const videoModel = usePanelVideoModel({
     defaultVideoModel,
@@ -80,9 +109,10 @@ export function useVideoPanelActions({
     imageUrl: panel.imageUrl,
     videoUrl: visibleBaseVideoUrl,
     lipSyncVideoUrl: panel.lipSyncVideoUrl,
-    showLipSyncVideo,
+    showLipSyncVideo: effectiveShowLipSyncVideo,
     onPreviewImage,
   })
+  const downloadRemoteBlobMutation = useDownloadRemoteBlob()
 
   const promptEditor = usePanelPromptEditor({
     localPrompt,
@@ -110,8 +140,32 @@ export function useVideoPanelActions({
     selectedModel: videoModel.selectedModel,
   })
 
-  const showLipSyncSection = voiceManager.hasMatchedVoiceLines
-  const canLipSync = hasVisibleBaseVideo && voiceManager.hasMatchedAudio && !taskStatus.isLipSyncTaskRunning
+  const handleDownloadVideo = useCallback(async () => {
+    const targetUrl = player.currentVideoUrl
+    if (!targetUrl) return
+
+    try {
+      const blob = await downloadRemoteBlobMutation.mutateAsync(targetUrl)
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const isLipSyncVideo = !!panel.lipSyncVideoUrl && targetUrl === panel.lipSyncVideoUrl
+      const extension = inferVideoExtension(targetUrl, blob.type)
+
+      anchor.href = objectUrl
+      anchor.download = `shot-${panelIndex + 1}-${isLipSyncVideo ? 'lip-sync' : 'video'}.${extension}`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000)
+    } catch (error) {
+      _ulogError('[video] single download failed', error)
+      alert(`${t('stage.downloadFailed')}: ${getErrorMessage(error) || t('errors.unknownError')}`)
+    }
+  }, [downloadRemoteBlobMutation, panel.lipSyncVideoUrl, panelIndex, player.currentVideoUrl, t])
+
+  const showLipSyncSection = lipSyncEnabled && voiceManager.hasMatchedVoiceLines
+  const canLipSync = lipSyncEnabled && hasVisibleBaseVideo && voiceManager.hasMatchedAudio && !taskStatus.isLipSyncTaskRunning
 
   return {
     t,
@@ -120,11 +174,16 @@ export function useVideoPanelActions({
     panelIndex,
     panelKey,
     media: {
-      showLipSyncVideo,
+      lipSyncEnabled,
+      showLipSyncVideo: effectiveShowLipSyncVideo,
       onToggleLipSyncVideo,
       onPreviewImage,
       baseVideoUrl: visibleBaseVideoUrl,
       currentVideoUrl: player.currentVideoUrl,
+    },
+    download: {
+      isDownloadingVideo: downloadRemoteBlobMutation.isPending,
+      canDownloadCurrentVideo: !!player.currentVideoUrl,
     },
     taskStatus,
     videoModel,
@@ -154,6 +213,8 @@ export function useVideoPanelActions({
     },
     actions: {
       onGenerateVideo,
+      onRestorePreviousVideo,
+      onDownloadVideo: handleDownloadVideo,
       onUpdatePanelVideoModel,
       onUpdatePanelVideoDurationBinding,
       onToggleLink,

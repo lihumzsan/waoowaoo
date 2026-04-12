@@ -1,3 +1,74 @@
+> [!IMPORTANT]
+> 这个仓库已经补齐了跨机器启动当前项目所需的关键内容，适合直接在另一台机器拉取后继续使用：
+> - 当前代码与 Prisma schema / migrations
+> - 本地开发所需的 `docker-compose.yml`
+> - 初始化环境模板 `.env.example`
+> - 内置 ComfyUI 工作流目录 `src/lib/providers/comfyui/workflows`
+>
+> 如果你要使用这个 GitHub 仓库里的“当前版本”，请优先按下面这段流程初始化，不要使用下方旧的“仅下载预构建镜像”思路，因为那种方式不会包含这个仓库里的最新本地改动。
+
+## 当前仓库跨机器初始化
+
+### 1. 克隆当前仓库
+
+```bash
+git clone https://github.com/lihumzsan/waoowaoo.git
+cd waoowaoo
+```
+
+### 2. 纯 Docker 方式启动当前仓库代码
+
+> `docker-compose.yml` 已改为基于当前仓库源码构建，不再依赖上游预构建镜像。
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+启动完成后访问：
+
+- App: [http://localhost:13000](http://localhost:13000)
+- Bull Board: [http://localhost:13010/admin/queues](http://localhost:13010/admin/queues)
+
+### 3. 本地开发方式启动
+
+```bash
+cp .env.example .env
+npm install
+docker compose up mysql redis minio -d
+npx prisma generate
+npx prisma db push
+npm run dev
+```
+
+本地开发模式访问：
+
+- App: [http://localhost:3000](http://localhost:3000)
+- Bull Board: [http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
+
+### 4. ComfyUI 工作流说明
+
+- 仓库已经内置 `src/lib/providers/comfyui/workflows`，另一台机器即使不配置 `COMFYUI_WORKFLOW_ROOT`，也能直接使用仓库内置工作流。
+- 如果你想继续复用自己机器外部的工作流目录，可以在 `.env` 里额外设置 `COMFYUI_WORKFLOW_ROOT=/absolute/path/to/workflows`。
+
+### 5. 如果你还要迁移本地数据库数据
+
+代码、迁移脚本和工作流已经在仓库里，但运行时数据库内容不会自动进 Git。若你想把当前机器里的项目数据也迁到另一台机器，建议单独导出再导入：
+
+导出本机 Docker MySQL：
+
+```bash
+docker exec waoowaoo-mysql mysqldump -uroot -pwaoowaoo123 --databases waoowaoo > waoowaoo.sql
+```
+
+在新机器导入：
+
+```bash
+docker exec -i waoowaoo-mysql mysql -uroot -pwaoowaoo123 waoowaoo < waoowaoo.sql
+```
+
+如果你还需要迁移本地上传文件或 MinIO 对象，请一并备份对应数据目录或对象桶内容。
+
 <p align="center">
   <a href="https://www.waoowaoo.com/">
     <img src="images/cta-banner.png" alt="🚀 探索 AI 影视的下一代创作流 | 立即加入 waoowaoo 在线网页版内测候补" width="800">
@@ -64,7 +135,7 @@ docker compose up -d
 ### 方式二：克隆仓库 + Docker 构建（完全控制）
 
 ```bash
-git clone https://github.com/saturndec/waoowaoo.git
+git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 docker compose up -d
 ```
@@ -78,7 +149,7 @@ docker compose down && docker compose up -d --build
 ### 方式三：本地开发模式（开发者）
 
 ```bash
-git clone https://github.com/saturndec/waoowaoo.git
+git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 
 # 复制环境变量配置文件（必须在 npm install 之前完成）
@@ -111,7 +182,7 @@ npm run dev
 > [!TIP]
 > **如果遇到网页卡顿**：HTTP 模式下浏览器可能限制并发连接。可安装 [Caddy](https://caddyserver.com/docs/install) 启用 HTTPS：
 > ```bash
-> caddy run --config Caddyfile
+> caddy run --config caddyfile
 > ```
 > 然后访问 [https://localhost:1443](https://localhost:1443)
 

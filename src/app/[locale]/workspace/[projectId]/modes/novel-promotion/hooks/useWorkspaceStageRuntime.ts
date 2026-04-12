@@ -25,6 +25,7 @@ interface UseWorkspaceStageRuntimeParams {
     capabilities?: ModelCapabilities
     videoPricingTiers?: VideoPricingTier[]
   }> | undefined
+  lipSyncEnabled: boolean
   handleUpdateEpisode: (key: string, value: unknown) => Promise<void>
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   runWithRebuildConfirm: (action: 'storyToScript' | 'scriptToStoryboard', operation: () => Promise<void>) => Promise<void>
@@ -56,6 +57,7 @@ interface UseWorkspaceStageRuntimeParams {
   ) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   handleUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>
+  handleRestorePreviousVideo: (storyboardId: string, panelIndex: number, panelId?: string) => Promise<void>
 }
 
 export function useWorkspaceStageRuntime({
@@ -70,6 +72,7 @@ export function useWorkspaceStageRuntime({
   videoModel,
   capabilityOverrides,
   userVideoModels,
+  lipSyncEnabled,
   handleUpdateEpisode,
   handleUpdateConfig,
   runWithRebuildConfirm,
@@ -83,6 +86,7 @@ export function useWorkspaceStageRuntime({
   handleUpdateVideoPrompt,
   handleUpdatePanelVideoModel,
   handleUpdatePanelVideoDurationBinding,
+  handleRestorePreviousVideo,
 }: UseWorkspaceStageRuntimeParams) {
   const resolvedUserVideoModels = useMemo(
     () => userVideoModels || [],
@@ -101,6 +105,7 @@ export function useWorkspaceStageRuntime({
     videoModel,
     capabilityOverrides,
     userVideoModels: resolvedUserVideoModels,
+    lipSyncEnabled,
     onNovelTextChange: (value) => handleUpdateEpisode('novelText', value),
     onVideoRatioChange: (value) => handleUpdateConfig('videoRatio', value),
     onArtStyleChange: (value) => handleUpdateConfig('artStyle', value),
@@ -119,6 +124,7 @@ export function useWorkspaceStageRuntime({
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onUpdatePanelVideoDurationBinding: handleUpdatePanelVideoDurationBinding,
+    onRestorePreviousVideo: handleRestorePreviousVideo,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
   }), [
     artStyle,
@@ -131,12 +137,14 @@ export function useWorkspaceStageRuntime({
     handleUpdateEpisode,
     handleUpdatePanelVideoModel,
     handleUpdatePanelVideoDurationBinding,
+    handleRestorePreviousVideo,
     handleUpdateVideoPrompt,
     isConfirmingAssets,
     isStartingScriptToStoryboard,
     isStartingStoryToScript,
     isSubmittingTTS,
     isTransitioning,
+    lipSyncEnabled,
     openAssetLibrary,
     runScriptToStoryboardFlow,
     runStoryToScriptFlow,

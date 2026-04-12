@@ -63,6 +63,10 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       baseVideoUrl: undefined,
       currentVideoUrl: undefined,
     },
+    download: {
+      canDownloadCurrentVideo: false,
+      isDownloadingVideo: false,
+    },
     taskStatus: {
       isVideoTaskRunning: false,
       isLipSyncTaskRunning: false,
@@ -77,6 +81,12 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       setCapabilityValue: () => undefined,
       missingCapabilityFields: [],
       videoModelOptions: [],
+    },
+    durationBinding: {
+      localBinding: {
+        mode: 'manual',
+        voiceLineIds: [],
+      },
     },
     player: {
       isPlaying: false,
@@ -130,7 +140,10 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
     },
     actions: {
       onGenerateVideo: () => undefined,
+      onRestorePreviousVideo: () => undefined,
+      onDownloadVideo: () => undefined,
       onUpdatePanelVideoModel: () => undefined,
+      onUpdatePanelVideoDurationBinding: () => undefined,
       onToggleLink: () => undefined,
       onFlModelChange: () => undefined,
       onFlCapabilityChange: () => undefined,

@@ -1136,5 +1136,27 @@
         "supportGenerateAudio": false
       }
     }
+  },
+  {
+    "modelType": "video",
+    "provider": "comfyui",
+    "modelId": "basevideo/首尾帧/ltx2.3首尾帧",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6
+        ],
+        "resolutionOptions": [
+          "720p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": false
+      }
+    }
   }
 ]

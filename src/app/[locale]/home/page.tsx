@@ -349,7 +349,7 @@ export default function HomePage() {
             {projects.map((project) => (
               <Link
                 key={project.id}
-                href={{ pathname: `/workspace/${project.id}` }}
+                href={`/workspace/${project.id}`}
                 className="glass-surface cursor-pointer group hover:border-[var(--glass-tone-info-fg)]/40 transition-all duration-300 overflow-hidden relative block"
               >
                 <div className="absolute inset-0 rounded-[inherit] bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />

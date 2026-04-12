@@ -75,6 +75,68 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['64']?.inputs?.text).toEqual(['235', 0])
   })
 
+  it('prefers the latest ui nodes over stale embedded extra.prompt snapshots', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-ignore-stale-extra-prompt', {
+      nodes: [
+        {
+          id: 1,
+          type: 'CheckpointLoaderSimple',
+          inputs: [
+            {
+              name: 'ckpt_name',
+              type: 'COMBO',
+              widget: { name: 'ckpt_name' },
+              link: null,
+            },
+          ],
+          widgets_values: ['ltx\\ltx-2.3-22b-dev-fp8.safetensors'],
+        },
+        {
+          id: 28,
+          type: 'LTXVConcatAVLatent',
+          inputs: [
+            { name: 'model', type: 'MODEL', link: 101 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [101, 1, 0, 28, 0, 'MODEL'],
+      ],
+      extra: {
+        prompt: {
+          '1': {
+            class_type: 'CheckpointLoaderSimple',
+            inputs: {
+              ckpt_name: 'legacy-bad-checkpoint.safetensors',
+            },
+          },
+          '44': {
+            class_type: 'LTXVSequenceParallelMultiGPUPatcher',
+            inputs: {
+              model: ['1', 0],
+            },
+          },
+          '28': {
+            class_type: 'LTXVConcatAVLatent',
+            inputs: {
+              model: ['44', 0],
+            },
+          },
+        },
+      },
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-ignore-stale-extra-prompt')
+
+    expect(graph['1']?.inputs?.ckpt_name).toBe('ltx\\ltx-2.3-22b-dev-fp8.safetensors')
+    expect(graph['44']).toBeUndefined()
+    expect(graph['28']?.inputs?.model).toEqual(['1', 0])
+  })
+
   it('keeps linked prompt widgets aligned for downstream scalar inputs', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
@@ -615,5 +677,203 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph?.['40']?.inputs?.format).toBe('video/h264-mp4')
     expect(graph?.['40']?.inputs?.pingpong).toBe(false)
     expect(graph?.['40']?.inputs?.save_output).toBe(true)
+  })
+
+  it('bypasses optional LTX multi-GPU patcher nodes and reconnects downstream model inputs', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-optional-ltx-patcher-bypass', {
+      1: {
+        class_type: 'CheckpointLoaderSimple',
+        inputs: {
+          ckpt_name: 'ltx-2.3.safetensors',
+        },
+      },
+      28: {
+        class_type: 'LTXVConcatAVLatent',
+        inputs: {
+          model: ['44', 0],
+          video_latent: ['43', 0],
+          audio_latent: ['26', 0],
+        },
+      },
+      41: {
+        class_type: 'SamplerCustomAdvanced',
+        inputs: {
+          guider: ['17', 0],
+          latent_image: ['28', 0],
+        },
+      },
+      44: {
+        class_type: 'LTXVSequenceParallelMultiGPUPatcher',
+        inputs: {
+          torch_compile: true,
+          disable_backup: false,
+          model: ['1', 0],
+        },
+      },
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-optional-ltx-patcher-bypass')
+
+    expect(graph['44']).toBeUndefined()
+    expect(graph['28']?.inputs?.model).toEqual(['1', 0])
+    expect(graph['41']?.inputs?.latent_image).toEqual(['28', 0])
+  })
+
+  it('removes editor-only Note nodes from ui workflows before prompt submission', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-remove-note-node', {
+      nodes: [
+        {
+          id: 1,
+          type: 'CheckpointLoaderSimple',
+          inputs: [
+            {
+              name: 'ckpt_name',
+              type: 'COMBO',
+              widget: { name: 'ckpt_name' },
+              link: null,
+            },
+          ],
+          widgets_values: ['ltx\\ltx-2.3-22b-dev-fp8.safetensors'],
+        },
+        {
+          id: 259,
+          type: 'Note',
+          inputs: [],
+          widgets_values: ['workflow comment'],
+        },
+      ],
+      links: [],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-remove-note-node')
+
+    expect(graph['1']?.class_type).toBe('CheckpointLoaderSimple')
+    expect(graph['259']).toBeUndefined()
+  })
+
+  it('resolves SetNode and GetNode variables into direct upstream connections', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-resolve-set-get-nodes', {
+      nodes: [
+        {
+          id: 1,
+          type: 'FloatConstant',
+          inputs: [
+            {
+              name: 'value',
+              type: 'FLOAT',
+              widget: { name: 'value' },
+              link: null,
+            },
+          ],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [11] }],
+          widgets_values: [25],
+        },
+        {
+          id: 10,
+          type: 'SetNode',
+          title: 'Set_FLOAT',
+          inputs: [
+            {
+              name: 'FLOAT',
+              type: 'FLOAT',
+              link: 11,
+            },
+          ],
+          widgets_values: ['fps'],
+        },
+        {
+          id: 20,
+          type: 'GetNode',
+          title: 'Get_FLOAT',
+          inputs: [],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [12] }],
+          widgets_values: ['fps'],
+        },
+        {
+          id: 30,
+          type: 'VHS_VideoCombine',
+          inputs: [
+            {
+              name: 'frame_rate',
+              type: 'FLOAT',
+              link: 12,
+            },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [11, 1, 0, 10, 0, 'FLOAT'],
+        [12, 20, 0, 30, 0, 'FLOAT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-resolve-set-get-nodes')
+
+    expect(graph['10']).toBeUndefined()
+    expect(graph['20']).toBeUndefined()
+    expect(graph['30']?.inputs?.frame_rate).toEqual(['1', 0])
+  })
+
+  it('moves KJ lanczos resize nodes to cpu when the workflow requests gpu execution', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-kj-lanczos-gpu-fallback', {
+      nodes: [
+        {
+          id: 91,
+          type: 'LoadImage',
+          inputs: [
+            {
+              name: 'image',
+              type: 'COMBO',
+              widget: { name: 'image' },
+              link: null,
+            },
+            {
+              name: 'upload',
+              type: 'IMAGEUPLOAD',
+              widget: { name: 'upload' },
+              link: null,
+            },
+          ],
+          widgets_values: ['demo.png', 'image'],
+        },
+        {
+          id: 93,
+          type: 'ImageResizeKJv2',
+          inputs: [
+            { name: 'image', type: 'IMAGE', link: 108 },
+            { name: 'width', type: 'INT', widget: { name: 'width' } },
+            { name: 'height', type: 'INT', widget: { name: 'height' } },
+            { name: 'upscale_method', type: 'COMBO', widget: { name: 'upscale_method' } },
+            { name: 'keep_proportion', type: 'COMBO', widget: { name: 'keep_proportion' } },
+            { name: 'pad_color', type: 'STRING', widget: { name: 'pad_color' } },
+            { name: 'crop_position', type: 'COMBO', widget: { name: 'crop_position' } },
+            { name: 'divisible_by', type: 'INT', widget: { name: 'divisible_by' } },
+            { name: 'device', type: 'COMBO', widget: { name: 'device' } },
+          ],
+          widgets_values: [480, 832, 'lanczos', 'crop', '0, 0, 0', 'center', 16, 'gpu'],
+        },
+      ],
+      links: [
+        [108, 91, 0, 93, 0, 'IMAGE'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-kj-lanczos-gpu-fallback')
+
+    expect(graph['93']?.inputs?.upscale_method).toBe('lanczos')
+    expect(graph['93']?.inputs?.device).toBe('cpu')
   })
 })
