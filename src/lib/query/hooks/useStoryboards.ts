@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { checkApiResponse } from '@/lib/error-handler'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
+import { invalidateEpisodeQueries } from '../episode-cache'
 import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
@@ -233,7 +234,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
         onSettled: () => {
             // 🔥 刷新缓存获取最新状态
             if (episodeId && projectId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                void invalidateEpisodeQueries(queryClient, projectId, episodeId)
             }
         },
     })
@@ -283,7 +284,7 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
         onSettled: () => {
             // 🔥 刷新缓存获取最新状态
             if (episodeId && projectId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                void invalidateEpisodeQueries(queryClient, projectId, episodeId)
             }
         },
     })
@@ -398,7 +399,7 @@ export function useLipSync(projectId: string | null, episodeId: string | null) {
         onSettled: () => {
             // 请求完成后刷新数据
             if (projectId && episodeId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                void invalidateEpisodeQueries(queryClient, projectId, episodeId)
             }
         }
     })

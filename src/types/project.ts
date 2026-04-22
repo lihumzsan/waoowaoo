@@ -1,5 +1,6 @@
 import type { CapabilitySelections } from '@/lib/model-config-contract'
 import type { LocationAvailableSlot } from '@/lib/location-available-slots'
+import type { StageArtifactReadiness } from '@/lib/novel-promotion/stage-readiness'
 
 // ============================================
 // 基础项目类型
@@ -175,6 +176,7 @@ export interface NovelPromotionPanel {
   srtEnd: number | null
   duration: number | null
   imagePrompt: string | null
+  imageModel?: string | null
   imageUrl: string | null
   candidateImages?: string | null
   media?: MediaRef | null
@@ -189,6 +191,7 @@ export interface NovelPromotionPanel {
   videoMedia?: MediaRef | null
   lipSyncVideoUrl?: string | null
   lipSyncVideoMedia?: MediaRef | null
+  hasPreviousVideoVersion?: boolean
   sketchImageUrl?: string | null
   sketchImageMedia?: MediaRef | null
   previousImageUrl?: string | null
@@ -274,6 +277,7 @@ export interface NovelPromotionProject {
     novelText: string | null
     audioUrl: string | null
     srtContent: string | null
+    artifactReadiness?: StageArtifactReadiness
     createdAt: Date
     updatedAt: Date
   }>

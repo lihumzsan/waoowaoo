@@ -26,6 +26,7 @@ export interface PanelEditData {
   srtEnd: number | null
   duration: number | null
   videoPrompt: string | null
+  imageModel?: string | null
   photographyRules?: string | null
   actingNotes?: string | null
   sourceText?: string | null

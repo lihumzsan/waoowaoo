@@ -20,12 +20,12 @@ function createRuntime(): VideoPanelRuntime {
   return {
     t: (key: string, values?: Record<string, unknown>) => {
       if (key === 'panelCard.shot') return `Shot ${String(values?.number ?? '')}`
-      if (key === 'panelCard.previousVideo') return '上一条'
-      if (key === 'panelCard.download') return '下载'
+      if (key === 'panelCard.previousVideo') return 'Restore Previous'
+      if (key === 'panelCard.download') return 'Download'
       if (key === 'firstLastFrame.linkToNext') return 'link'
       if (key === 'firstLastFrame.unlinkAction') return 'unlink'
-      if (key === 'panelCard.original') return '原始'
-      if (key === 'panelCard.synced') return '同步'
+      if (key === 'panelCard.original') return 'original'
+      if (key === 'panelCard.synced') return 'synced'
       return key
     },
     tCommon: (key: string) => key,
@@ -36,6 +36,7 @@ function createRuntime(): VideoPanelRuntime {
       imageUrl: 'https://example.com/frame.jpg',
       videoUrl: 'https://example.com/video.mp4',
       videoGenerationMode: 'normal',
+      hasPreviousVideoVersion: true,
       lipSyncVideoUrl: null,
     },
     panelIndex: 2,
@@ -63,7 +64,7 @@ function createRuntime(): VideoPanelRuntime {
       overlayPresentation: { phase: 'processing' },
     },
     videoModel: {
-      selectedModel: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+      selectedModel: 'comfyui::basevideo/test',
       generationOptions: {},
       missingCapabilityFields: [],
     },
@@ -92,13 +93,26 @@ function createRuntime(): VideoPanelRuntime {
 }
 
 describe('VideoPanelCardHeader', () => {
-  it('shows previous button when a base video is available', () => {
+  it('shows previous button when a previous version exists', () => {
     const markup = renderToStaticMarkup(
       React.createElement(VideoPanelCardHeader, {
         runtime: createRuntime(),
       }),
     )
 
-    expect(markup).toContain('上一条')
+    expect(markup).toContain('Restore Previous')
+  })
+
+  it('hides previous button when no previous version exists', () => {
+    const runtime = createRuntime()
+    runtime.panel.hasPreviousVideoVersion = false
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardHeader, {
+        runtime,
+      }),
+    )
+
+    expect(markup).not.toContain('Restore Previous')
   })
 })

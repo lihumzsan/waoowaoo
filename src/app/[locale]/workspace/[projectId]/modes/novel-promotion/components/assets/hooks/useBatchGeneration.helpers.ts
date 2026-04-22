@@ -1,5 +1,5 @@
 import type { CharacterAppearance } from '@/types/project'
-import type { Character, Location } from '@/lib/query/hooks'
+import type { Character, Location, Prop } from '@/lib/query/hooks'
 
 const MANUAL_REGENERATE_TIMEOUT_MS = 90_000
 
@@ -16,7 +16,7 @@ function createCharacterGroupSignature(appearance: CharacterAppearance) {
   })
 }
 
-function createLocationGroupSignature(location: Location) {
+function createLocationGroupSignature(location: Location | Prop) {
   const normalizedImages = (location.images || []).map((image) => ({
     imageIndex: image.imageIndex,
     imageUrl: image.imageUrl || null,
@@ -30,7 +30,7 @@ function createLocationGroupSignature(location: Location) {
 export function createManualKeyBaseline(
   key: string,
   characters: Character[],
-  locations: Location[],
+  locationBackedAssets: Array<Location | Prop>,
 ): ManualRegenerationBaseline | null {
   const characterMatch = /^character-(.+)-(\d+)-(group|\d+)$/.exec(key)
   if (characterMatch) {
@@ -56,7 +56,7 @@ export function createManualKeyBaseline(
   const locationMatch = /^location-(.+)-(group|\d+)$/.exec(key)
   if (locationMatch) {
     const [, locationId, suffix] = locationMatch
-    const location = locations.find((item) => item.id === locationId)
+    const location = locationBackedAssets.find((item) => item.id === locationId)
     if (!location) return null
     const groupSignature = createLocationGroupSignature(location)
     if (suffix === 'group') return { signature: groupSignature, startedAt: Date.now() }
@@ -82,13 +82,13 @@ export function isAppearanceTaskRunning(appearance: CharacterAppearance) {
 export function shouldResolveManualKey(
   key: string,
   characters: Character[],
-  locations: Location[],
+  locationBackedAssets: Array<Location | Prop>,
   baselines: Map<string, ManualRegenerationBaseline>,
   now: number,
 ) {
   const baseline = baselines.get(key)
   if (!baseline) return true
-  const current = createManualKeyBaseline(key, characters, locations)
+  const current = createManualKeyBaseline(key, characters, locationBackedAssets)
   if (!current) return true
 
   if (now - baseline.startedAt > MANUAL_REGENERATE_TIMEOUT_MS) {
@@ -110,7 +110,7 @@ export function shouldResolveManualKey(
   const locationMatch = /^location-(.+)-(group|\d+)$/.exec(key)
   if (locationMatch) {
     const [, locationId, suffix] = locationMatch
-    const location = locations.find((item) => item.id === locationId)
+    const location = locationBackedAssets.find((item) => item.id === locationId)
     if (!location) return true
     const imageIndex = Number.parseInt(suffix, 10)
     if (suffix === 'group') {

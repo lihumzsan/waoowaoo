@@ -3,6 +3,7 @@ import type { StoryboardPanel } from './hooks/useStoryboardState'
 import type { PanelEditData } from '../PanelEditForm'
 import type { VariantData, VariantOptions } from './hooks/usePanelVariant'
 import type { PanelSaveState } from './hooks/usePanelCrudActions'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
 export interface StoryboardGroupProps {
   storyboard: NovelPromotionStoryboard
@@ -35,6 +36,8 @@ export interface StoryboardGroupProps {
   onPreviewImage: (url: string) => void
   onCloseError: () => void
   getPanelEditData: (panel: StoryboardPanel) => PanelEditData
+  storyboardWorkflowOptions: UserModelOption[]
+  defaultStoryboardWorkflow: string
   onPanelUpdate: (panelId: string, panel: StoryboardPanel, updates: Partial<PanelEditData>) => void
   onPanelDelete: (panelId: string) => void
   onOpenCharacterPicker: (panelId: string) => void
@@ -42,7 +45,7 @@ export interface StoryboardGroupProps {
   onRemoveCharacter: (panel: StoryboardPanel, index: number) => void
   onRemoveLocation: (panel: StoryboardPanel) => void
   onRetryPanelSave: (panelId: string) => void
-  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean) => void
+  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean, imageModel?: string) => void
   onOpenEditModal: (panelIndex: number) => void
   onOpenAIDataModal: (panelIndex: number) => void
   getPanelCandidates: (panel: NovelPromotionPanel) => { candidates: string[]; selectedIndex: number } | null

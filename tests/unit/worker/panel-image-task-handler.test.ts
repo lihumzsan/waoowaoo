@@ -214,4 +214,20 @@ describe('worker panel-image-task-handler behavior', () => {
       },
     })
   })
+
+  it('prefers payload imageModel over project storyboardModel', async () => {
+    const job = buildJob({
+      candidateCount: 1,
+      imageModel: 'comfyui::baseimage/图片生成/ZImageTurbo造相',
+    })
+
+    await handlePanelImageTask(job)
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: 'comfyui::baseimage/图片生成/ZImageTurbo造相',
+      }),
+    )
+  })
 })

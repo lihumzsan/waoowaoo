@@ -138,6 +138,20 @@ function extractArtifactRows<T extends JsonRecord>(payload: unknown, key: string
   return asObjectArray(record[key]) as T[]
 }
 
+function readStepOutputText(payload: unknown): string {
+  const record = asObject(payload)
+  if (!record) return ''
+  return typeof record.output === 'string' ? record.output : ''
+}
+
+function resolveStepKeyForArtifact(clipId: string, artifactType: string): string | null {
+  if (artifactType === 'storyboard.clip.phase1') return `clip_${clipId}_phase1`
+  if (artifactType === 'storyboard.clip.phase2.cine') return `clip_${clipId}_phase2_cinematography`
+  if (artifactType === 'storyboard.clip.phase2.acting') return `clip_${clipId}_phase2_acting`
+  if (artifactType === 'storyboard.clip.phase3') return `clip_${clipId}_phase3_detail`
+  return null
+}
+
 async function readArtifactRows<T extends JsonRecord>(params: {
   runId: string
   clipId: string
@@ -151,8 +165,23 @@ async function readArtifactRows<T extends JsonRecord>(params: {
     limit: 1,
   })
   const artifact = rows[0]
-  if (!artifact) return []
-  return extractArtifactRows<T>(artifact.payload, params.key)
+  const directRows = artifact ? extractArtifactRows<T>(artifact.payload, params.key) : []
+  if (directRows.length > 0) return directRows
+
+  const stepKey = resolveStepKeyForArtifact(params.clipId, params.artifactType)
+  if (!stepKey) return directRows
+
+  const stepOutputRows = await listArtifacts({
+    runId: params.runId,
+    stepKey,
+    artifactType: 'step.output',
+    limit: 1,
+  })
+  const stepOutput = stepOutputRows[0]
+  if (!stepOutput) return directRows
+  const rawOutput = readStepOutputText(stepOutput.payload)
+  if (!rawOutput) return directRows
+  return parseJsonArray<T>(rawOutput, `${params.artifactType}:step.output`)
 }
 
 function getStepNumbers(params: {

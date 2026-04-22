@@ -29,8 +29,6 @@ export function useWorkspaceProjectSnapshot({
     const capabilityOverrides = parseCapabilitySelections(projectData?.capabilityOverrides)
     return {
       projectData,
-      projectCharacters: projectData?.characters || [],
-      projectLocations: projectData?.locations || [],
       episodeStoryboards: episode?.storyboards || [],
       currentStage: urlStage === 'editor' ? 'videos' : (urlStage || 'config'),
       globalAssetText: projectData?.globalAssetText || '',

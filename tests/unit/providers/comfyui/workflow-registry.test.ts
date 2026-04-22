@@ -273,6 +273,141 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph?.['76']?.inputs?.remove_empty_lines).toBe(true)
   })
 
+  it('feeds app prompts directly into Qwen image encoders and strips text-only output nodes', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'baseimage/prompt/test-qwen-storyboard-direct-prompt', {
+      nodes: [
+        {
+          id: 103,
+          type: 'JjkText',
+          inputs: [
+            { name: 'text', type: 'STRING', widget: { name: 'text' }, link: null },
+          ],
+          outputs: [{ name: 'text', type: 'STRING', links: [9664] }],
+          widgets_values: ['old prompt'],
+        },
+        {
+          id: 95,
+          type: 'RH_LLMAPI_NODE',
+          inputs: [
+            { name: 'prompt', type: 'STRING', widget: { name: 'prompt' }, link: 9664 },
+            { name: 'temperature', type: 'FLOAT', widget: { name: 'temperature' } },
+          ],
+          outputs: [{ name: 'describe', type: 'STRING', links: [3742, 9203] }],
+          widgets_values: ['workflow prompt', 0.6],
+        },
+        {
+          id: 102,
+          type: 'ProcessString',
+          inputs: [
+            { name: 'input_string', type: 'STRING', widget: { name: 'input_string' }, link: 3742 },
+            { name: 'option', type: 'COMBO', widget: { name: 'option' } },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [3744] }],
+          widgets_values: ['', 'remove-new-lines'],
+        },
+        {
+          id: 76,
+          type: 'easy promptLine',
+          inputs: [
+            { name: 'prompt', type: 'STRING', widget: { name: 'prompt' }, link: 3744 },
+            { name: 'start_index', type: 'INT', widget: { name: 'start_index' } },
+            { name: 'max_rows', type: 'INT', widget: { name: 'max_rows' } },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [3063, 3064] }],
+          widgets_values: ['Next Scene: old', 0, 1000],
+        },
+        {
+          id: 68,
+          type: 'TextEncodeQwenImageEditPlus',
+          inputs: [
+            { name: 'prompt', type: 'STRING', widget: { name: 'prompt' }, link: 3063 },
+          ],
+          outputs: [{ name: 'CONDITIONING', type: 'CONDITIONING', links: [74] }],
+          widgets_values: [''],
+        },
+        {
+          id: 61,
+          type: 'TextEncodeQwenImageEditPlus',
+          inputs: [
+            { name: 'prompt', type: 'STRING', widget: { name: 'prompt' }, link: null },
+          ],
+          outputs: [{ name: 'CONDITIONING', type: 'CONDITIONING', links: [75] }],
+          widgets_values: ['old negative prompt'],
+        },
+        {
+          id: 56,
+          type: 'KSampler',
+          inputs: [
+            { name: 'positive', type: 'CONDITIONING', link: 74 },
+            { name: 'negative', type: 'CONDITIONING', link: 75 },
+          ],
+          outputs: [{ name: 'LATENT', type: 'LATENT', links: [1530] }],
+          widgets_values: [],
+        },
+        {
+          id: 69,
+          type: 'VAEDecode',
+          inputs: [
+            { name: 'samples', type: 'LATENT', link: 1530 },
+          ],
+          outputs: [{ name: 'IMAGE', type: 'IMAGE', links: [9232] }],
+          widgets_values: [],
+        },
+        {
+          id: 105,
+          type: 'SaveImage',
+          inputs: [
+            { name: 'images', type: 'IMAGE', link: 9232 },
+            { name: 'filename_prefix', type: 'STRING', widget: { name: 'filename_prefix' } },
+          ],
+          widgets_values: ['ComfyUI'],
+        },
+        {
+          id: 99,
+          type: 'easy showAnything',
+          inputs: [
+            { name: 'anything', type: '*', link: 3064 },
+          ],
+          widgets_values: ['old display text'],
+        },
+        {
+          id: 132,
+          type: 'ShellAgentPluginOutputText',
+          inputs: [
+            { name: 'text', type: 'STRING', widget: { name: 'text' }, link: 9203 },
+          ],
+          widgets_values: ['old output text'],
+        },
+      ],
+      links: [
+        [9664, 103, 0, 95, 0, 'STRING'],
+        [3742, 95, 0, 102, 0, 'STRING'],
+        [3744, 102, 0, 76, 0, 'STRING'],
+        [3063, 76, 0, 68, 0, 'STRING'],
+        [3064, 76, 0, 99, 0, 'STRING'],
+        [74, 68, 0, 56, 0, 'CONDITIONING'],
+        [75, 61, 0, 56, 1, 'CONDITIONING'],
+        [1530, 56, 0, 69, 0, 'LATENT'],
+        [9232, 69, 0, 105, 0, 'IMAGE'],
+        [9203, 95, 0, 132, 0, 'STRING'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('baseimage/prompt/test-qwen-storyboard-direct-prompt', {
+      prompt: 'fresh panel image prompt',
+      negativePrompt: 'bad anatomy',
+    })
+
+    expect(graph['68']?.inputs?.prompt).toBe('fresh panel image prompt')
+    expect(graph['61']?.inputs?.prompt).toBe('bad anatomy')
+    expect(graph['99']).toBeUndefined()
+    expect(graph['132']).toBeUndefined()
+    expect(graph['105']?.inputs?.images).toEqual(['69', 0])
+  })
+
   it('broadcasts Anything Everywhere sources to matching unlinked typed inputs', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
@@ -755,6 +890,41 @@ describe('comfyui workflow registry prompt injection', () => {
 
     expect(graph['1']?.class_type).toBe('CheckpointLoaderSimple')
     expect(graph['259']).toBeUndefined()
+  })
+
+  it('removes editor-only MarkdownNote nodes from ui workflows before prompt submission', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-remove-markdown-note-node', {
+      nodes: [
+        {
+          id: 1,
+          type: 'CheckpointLoaderSimple',
+          inputs: [
+            {
+              name: 'ckpt_name',
+              type: 'COMBO',
+              widget: { name: 'ckpt_name' },
+              link: null,
+            },
+          ],
+          widgets_values: ['ltx\\ltx-2.3-22b-dev-fp8.safetensors'],
+        },
+        {
+          id: 226,
+          type: 'MarkdownNote',
+          inputs: [],
+          widgets_values: ['# workflow comment'],
+        },
+      ],
+      links: [],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-remove-markdown-note-node')
+
+    expect(graph['1']?.class_type).toBe('CheckpointLoaderSimple')
+    expect(graph['226']).toBeUndefined()
   })
 
   it('resolves SetNode and GetNode variables into direct upstream connections', () => {

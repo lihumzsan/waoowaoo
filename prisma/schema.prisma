@@ -201,6 +201,7 @@ model NovelPromotionPanel {
   srtEnd            Float?
   duration          Float?
   imagePrompt       String?                   @db.Text
+  imageModel        String?                   @db.Text
   imageUrl          String?                   @db.Text
   imageMediaId      String?
   imageMedia        MediaObject?              @relation("NovelPromotionPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)

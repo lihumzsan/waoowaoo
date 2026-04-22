@@ -170,7 +170,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
 
   const projectData = await resolveNovelData(job.data.projectId)
   const modelConfig = await getProjectModels(job.data.projectId, job.data.userId)
-  const modelKey = modelConfig.storyboardModel
+  const modelKey = pickFirstString(payload.imageModel, modelConfig.storyboardModel)
   if (!modelKey) throw new Error('Storyboard model not configured')
 
   const candidateCount = clampCount(payload.candidateCount ?? payload.count, 1, 4, 1)

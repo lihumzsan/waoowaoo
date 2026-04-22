@@ -7,6 +7,7 @@ import { PanelEditData } from '../PanelEditForm'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 import PanelCard from './PanelCard'
 import type { PanelSaveState } from './hooks/usePanelCrudActions'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
 interface StoryboardPanelListProps {
   storyboardId: string
@@ -22,6 +23,8 @@ interface StoryboardPanelListProps {
   panelTaskErrorMap: Map<string, { taskId: string; message: string }>
   isPanelTaskRunning: (panel: StoryboardPanel) => boolean
   getPanelEditData: (panel: StoryboardPanel) => PanelEditData
+  storyboardWorkflowOptions: UserModelOption[]
+  defaultStoryboardWorkflow: string
   getPanelCandidates: (panel: NovelPromotionPanel) => { candidates: string[]; selectedIndex: number } | null
   onPanelUpdate: (panelId: string, panel: StoryboardPanel, updates: Partial<PanelEditData>) => void
   onPanelDelete: (panelId: string) => void
@@ -30,7 +33,7 @@ interface StoryboardPanelListProps {
   onRemoveCharacter: (panel: StoryboardPanel, index: number) => void
   onRemoveLocation: (panel: StoryboardPanel) => void
   onRetryPanelSave: (panelId: string) => void
-  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean) => void
+  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean, imageModel?: string) => void
   onOpenEditModal: (panelIndex: number) => void
   onOpenAIDataModal: (panelIndex: number) => void
   onSelectPanelCandidateIndex: (panelId: string, index: number) => void
@@ -57,6 +60,8 @@ export default function StoryboardPanelList({
   panelTaskErrorMap,
   isPanelTaskRunning,
   getPanelEditData,
+  storyboardWorkflowOptions,
+  defaultStoryboardWorkflow,
   getPanelCandidates,
   onPanelUpdate,
   onPanelDelete,
@@ -100,6 +105,7 @@ export default function StoryboardPanelList({
         const taskError = panelTaskErrorMap.get(panel.id)
         const panelFailedError = taskError?.message || null
         const panelData = getPanelEditData(panel)
+        const resolvedImageWorkflow = panelData.imageModel || defaultStoryboardWorkflow || ''
         const panelCandidateData = getPanelCandidates(panel as unknown as NovelPromotionPanel)
 
         return (
@@ -123,6 +129,9 @@ export default function StoryboardPanelList({
               isSubmittingPanelImageTask={panelTaskRunning}
               failedError={panelFailedError}
               candidateData={panelCandidateData}
+              storyboardWorkflowOptions={storyboardWorkflowOptions}
+              selectedImageWorkflow={resolvedImageWorkflow}
+              defaultImageWorkflow={defaultStoryboardWorkflow}
               onUpdate={(updates) => onPanelUpdate(panel.id, panel, updates)}
               onDelete={() => onPanelDelete(panel.id)}
               onOpenCharacterPicker={() => onOpenCharacterPicker(panel.id)}
@@ -130,7 +139,9 @@ export default function StoryboardPanelList({
               onRetrySave={() => onRetryPanelSave(panel.id)}
               onRemoveCharacter={(characterIndex) => onRemoveCharacter(panel, characterIndex)}
               onRemoveLocation={() => onRemoveLocation(panel)}
-              onRegeneratePanelImage={onRegeneratePanelImage}
+              onRegeneratePanelImage={(panelId, count, force) =>
+                onRegeneratePanelImage(panelId, count, force, resolvedImageWorkflow || undefined)
+              }
               onOpenEditModal={() => onOpenEditModal(index)}
               onOpenAIDataModal={() => onOpenAIDataModal(index)}
               onSelectCandidateIndex={onSelectPanelCandidateIndex}

@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
+import { refetchEpisodeQueries } from '@/lib/query/episode-cache'
 import { useSSE } from '@/lib/query/hooks/useSSE'
 import type { SSEEvent } from '@/lib/task/types'
 
@@ -49,7 +50,7 @@ export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceP
     }
 
     if (episodeId) {
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }))
+      promises.push(refetchEpisodeQueries(queryClient, projectId, episodeId))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.storyboards.all(episodeId) }))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.voiceLines.all(episodeId) }))
     }

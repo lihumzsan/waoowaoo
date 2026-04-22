@@ -126,8 +126,6 @@ function NovelPromotionWorkspaceContent(props: NovelPromotionWorkspaceProps) {
           onClose={vm.ui.closeAssetLibrary}
           assetsLoading={vm.ui.assetsLoading}
           assetsLoadingState={vm.ui.assetsLoadingState}
-          hasCharacters={vm.project.projectCharacters.length > 0}
-          hasLocations={vm.project.projectLocations.length > 0}
           projectId={projectId}
           isAnalyzingAssets={vm.execution.isAssetAnalysisRunning}
           focusCharacterId={vm.ui.assetLibraryFocusCharacterId}

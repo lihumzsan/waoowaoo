@@ -23,7 +23,11 @@ export interface UserModelsPayload {
     lipsync: UserModelOption[]
 }
 
-export function useUserModels() {
+interface UseUserModelsOptions {
+    enabled?: boolean
+}
+
+export function useUserModels(options: UseUserModelsOptions = {}) {
     return useQuery({
         queryKey: queryKeys.userModels.all(),
         queryFn: async () => {
@@ -40,5 +44,6 @@ export function useUserModels() {
                 lipsync: Array.isArray(data?.lipsync) ? data.lipsync : [],
             } as UserModelsPayload
         },
+        enabled: options.enabled ?? true,
     })
 }

@@ -116,6 +116,8 @@ export default function StoryboardStage({
     runningCount,
     pendingPanelCount,
     handleGenerateAllPanels,
+    storyboardWorkflowOptions,
+    defaultStoryboardWorkflow,
   } = controller
 
   const modalRuntime = useStoryboardModalRuntime({
@@ -187,6 +189,8 @@ export default function StoryboardStage({
           getClipInfo={getClipInfo}
           getTextPanels={getTextPanels}
           getPanelEditData={getPanelEditData}
+          storyboardWorkflowOptions={storyboardWorkflowOptions}
+          defaultStoryboardWorkflow={defaultStoryboardWorkflow}
           formatClipTitle={formatClipTitle}
           onToggleExpandedClip={toggleExpandedClip}
           onMoveStoryboardGroup={moveStoryboardGroup}

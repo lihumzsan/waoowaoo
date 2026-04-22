@@ -5,6 +5,7 @@ import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
 import WorkspaceTopActions from './WorkspaceTopActions'
 import type { NovelPromotionPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/model-config-contract'
+import type { StageArtifactReadiness } from '@/lib/novel-promotion/stage-readiness'
 import { resolveEpisodeStageArtifacts } from '@/lib/novel-promotion/stage-readiness'
 
 interface EpisodeSummary {
@@ -12,6 +13,7 @@ interface EpisodeSummary {
   name: string
   episodeNumber?: number
   description?: string | null
+  artifactReadiness?: StageArtifactReadiness
   clips?: unknown[]
   storyboards?: Array<{
     panels?: NovelPromotionPanel[] | null
@@ -169,6 +171,7 @@ export default function WorkspaceHeaderShell({
               projectName={projectName}
               episodes={sorted.map((ep) => {
                 const stageArtifacts = resolveEpisodeStageArtifacts({
+                  artifactReadiness: ep.artifactReadiness,
                   novelText: null,
                   clips: ep.clips || [],
                   storyboards: ep.storyboards || [],

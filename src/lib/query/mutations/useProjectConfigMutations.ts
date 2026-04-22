@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '../keys'
+import { invalidateEpisodeQueries } from '../episode-cache'
 import {
   invalidateQueryTemplates,
   requestJsonWithError,
@@ -143,10 +144,12 @@ export function useAnalyzeProjectAssets(projectId: string) {
             )
             return resolveTaskResponse(response)
         },
-        onSettled: (_, __, variables) => {
-            invalidateQueryTemplates(queryClient, [
-                queryKeys.episodeData(projectId, variables.episodeId),
-                queryKeys.projectAssets.all(projectId),
+        onSettled: async (_, __, variables) => {
+            await Promise.all([
+                invalidateEpisodeQueries(queryClient, projectId, variables.episodeId),
+                invalidateQueryTemplates(queryClient, [
+                    queryKeys.projectAssets.all(projectId),
+                ]),
             ])
         },
     })

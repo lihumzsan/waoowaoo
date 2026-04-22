@@ -3,8 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
-
-type VideoGenerationMode = 'normal' | 'firstlastframe'
+import {
+  findPreviousCompletedVideoTask,
+  readTaskGenerationMode,
+  readTaskVideoUrl,
+} from '@/lib/novel-promotion/video-restore-history'
 
 function parsePanelIndex(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
@@ -13,26 +16,6 @@ function parsePanelIndex(value: unknown): number | null {
     if (Number.isFinite(parsed)) return Math.trunc(parsed)
   }
   return null
-}
-
-function readTaskVideoUrl(result: unknown): string | null {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
-  const raw = (result as Record<string, unknown>).videoUrl
-  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
-}
-
-function readTaskGenerationMode(payload: unknown, result: unknown): VideoGenerationMode {
-  if (result && typeof result === 'object' && !Array.isArray(result)) {
-    const raw = (result as Record<string, unknown>).generationMode
-    if (raw === 'firstlastframe' || raw === 'normal') return raw
-  }
-  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    const firstLastFrame = (payload as Record<string, unknown>).firstLastFrame
-    if (firstLastFrame && typeof firstLastFrame === 'object' && !Array.isArray(firstLastFrame)) {
-      return 'firstlastframe'
-    }
-  }
-  return 'normal'
 }
 
 async function findPanelForProject(projectId: string, body: Record<string, unknown>) {
@@ -98,21 +81,15 @@ export const POST = apiHandler(async (
     },
   })
 
-  const currentVideoUrl = typeof panel.videoUrl === 'string' && panel.videoUrl.trim() ? panel.videoUrl.trim() : null
-  const previousTask = completedVideoTasks.find((task) => {
-    const taskVideoUrl = readTaskVideoUrl(task.result)
-    if (!taskVideoUrl) return false
-    if (!currentVideoUrl) return true
-    return taskVideoUrl !== currentVideoUrl
-  })
+  const previousTask = findPreviousCompletedVideoTask(panel.videoUrl, completedVideoTasks)
 
   if (!previousTask) {
-    throw new ApiError('CONFLICT', { message: 'VIDEO_PREVIOUS_NOT_FOUND' })
+    throw new ApiError('CONFLICT', { message: '没有可恢复的上一版视频' })
   }
 
   const restoredVideoUrl = readTaskVideoUrl(previousTask.result)
   if (!restoredVideoUrl) {
-    throw new ApiError('CONFLICT', { message: 'VIDEO_PREVIOUS_NOT_FOUND' })
+    throw new ApiError('CONFLICT', { message: '没有可恢复的上一版视频' })
   }
 
   const restoredGenerationMode = readTaskGenerationMode(previousTask.payload, previousTask.result)

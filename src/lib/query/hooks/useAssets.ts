@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { resolveTaskResponse } from '@/lib/task/client'
@@ -137,6 +137,7 @@ function buildQueryPath(input: AssetQueryInput): string {
 }
 
 export function useAssets(input: AssetQueryInput) {
+  const queryClient = useQueryClient()
   const assetsQuery = useQuery({
     queryKey: queryKeys.assets.list(input),
     queryFn: async () => {
@@ -161,6 +162,26 @@ export function useAssets(input: AssetQueryInput) {
   const taskStatesQuery = useTaskTargetStateMap(taskProjectId, taskTargets, {
     enabled: taskProjectId.length > 0 && taskTargets.length > 0,
   })
+
+  const lastTerminalRefreshSignatureRef = useRef('')
+  const terminalRefreshSignature = useMemo(() => {
+    return (taskStatesQuery.data ?? [])
+      .filter((state) => state.updatedAt && (state.phase === 'completed' || state.phase === 'failed'))
+      .map((state) => `${state.targetType}:${state.targetId}:${state.phase}:${state.updatedAt}`)
+      .sort()
+      .join('|')
+  }, [taskStatesQuery.data])
+
+  useEffect(() => {
+    if (!terminalRefreshSignature) return
+    if (lastTerminalRefreshSignatureRef.current === terminalRefreshSignature) return
+    lastTerminalRefreshSignatureRef.current = terminalRefreshSignature
+    invalidateScopeQueries(queryClient, {
+      scope: input.scope,
+      projectId: input.projectId,
+      kind: input.kind ?? 'character',
+    })
+  }, [input.kind, input.projectId, input.scope, queryClient, terminalRefreshSignature])
 
   const data = useMemo(() => {
     const assets = assetsQuery.data ?? []

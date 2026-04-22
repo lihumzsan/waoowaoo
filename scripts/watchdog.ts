@@ -1,22 +1,32 @@
-import { createScopedLogger } from '@/lib/logging/core'
-import { prisma } from '@/lib/prisma'
-import { addTaskJob } from '@/lib/task/queues'
-import { resolveTaskLocaleFromBody } from '@/lib/task/resolve-locale'
-import { markTaskFailed } from '@/lib/task/service'
-import { publishTaskEvent } from '@/lib/task/publisher'
-import { TASK_EVENT_TYPE, TASK_TYPE, type TaskType } from '@/lib/task/types'
-import { cleanupAllProjectLogs } from '@/lib/logging/file-writer'
+import { config as loadEnv } from 'dotenv'
+import type { TaskType } from '@/lib/task/types'
+
+// Force local scripts to honor the checked-in .env even when the parent shell
+// still carries an older DATABASE_URL (for example a prisma:// proxy URL).
+loadEnv({ path: '.env', override: true })
+
+type Logger = {
+  info(payload: Record<string, unknown>): void
+  warn(payload: Record<string, unknown>): void
+  error(payload: Record<string, unknown>): void
+}
+
+let logger: Logger
+let prisma: typeof import('@/lib/prisma')['prisma']
+let addTaskJob: typeof import('@/lib/task/queues')['addTaskJob']
+let resolveTaskLocaleFromBody: typeof import('@/lib/task/resolve-locale')['resolveTaskLocaleFromBody']
+let markTaskFailed: typeof import('@/lib/task/service')['markTaskFailed']
+let publishTaskEvent: typeof import('@/lib/task/publisher')['publishTaskEvent']
+let TASK_EVENT_TYPE: typeof import('@/lib/task/types')['TASK_EVENT_TYPE']
+let TASK_TYPE: typeof import('@/lib/task/types')['TASK_TYPE']
+let cleanupAllProjectLogs: typeof import('@/lib/logging/file-writer')['cleanupAllProjectLogs']
 
 const INTERVAL_MS = Number.parseInt(process.env.WATCHDOG_INTERVAL_MS || '30000', 10) || 30000
 const HEARTBEAT_TIMEOUT_MS = Number.parseInt(process.env.TASK_HEARTBEAT_TIMEOUT_MS || '90000', 10) || 90000
-const TASK_TYPE_SET: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
-// 每小时执行一次日志清理
+let TASK_TYPE_SET: ReadonlySet<string> = new Set()
+// 姣忓皬鏃舵墽琛屼竴娆℃棩蹇楁竻鐞?
 const LOG_CLEANUP_INTERVAL_TICKS = Math.ceil(3600_000 / INTERVAL_MS)
 let tickCount = 0
-const logger = createScopedLogger({
-  module: 'watchdog',
-  action: 'watchdog.tick',
-})
 
 function toTaskType(value: string): TaskType | null {
   if (TASK_TYPE_SET.has(value)) {
@@ -185,12 +195,11 @@ async function cleanupZombieProcessingTasks() {
 }
 
 async function tick() {
-  tickCount++
+  tickCount += 1
   const startedAt = Date.now()
   try {
     await recoverQueuedTasks()
     await cleanupZombieProcessingTasks()
-    // 每小时清理一次日志（过滤 24h 前内容）
     if (tickCount % LOG_CLEANUP_INTERVAL_TICKS === 0) {
       void cleanupAllProjectLogs()
     }
@@ -211,15 +220,54 @@ async function tick() {
   }
 }
 
-logger.info({
-  action: 'watchdog.started',
-  message: 'watchdog started',
-  details: {
-    intervalMs: INTERVAL_MS,
-    heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
-  },
-})
-void tick()
-setInterval(() => {
-  void tick()
-}, INTERVAL_MS)
+async function bootstrap() {
+  const [
+    loggingCore,
+    prismaModule,
+    taskQueues,
+    resolveLocaleModule,
+    taskService,
+    taskPublisher,
+    taskTypes,
+    fileWriter,
+  ] = await Promise.all([
+    import('@/lib/logging/core'),
+    import('@/lib/prisma'),
+    import('@/lib/task/queues'),
+    import('@/lib/task/resolve-locale'),
+    import('@/lib/task/service'),
+    import('@/lib/task/publisher'),
+    import('@/lib/task/types'),
+    import('@/lib/logging/file-writer'),
+  ])
+
+  logger = loggingCore.createScopedLogger({
+    module: 'watchdog',
+    action: 'watchdog.tick',
+  })
+  prisma = prismaModule.prisma
+  addTaskJob = taskQueues.addTaskJob
+  resolveTaskLocaleFromBody = resolveLocaleModule.resolveTaskLocaleFromBody
+  markTaskFailed = taskService.markTaskFailed
+  publishTaskEvent = taskPublisher.publishTaskEvent
+  TASK_EVENT_TYPE = taskTypes.TASK_EVENT_TYPE
+  TASK_TYPE = taskTypes.TASK_TYPE
+  TASK_TYPE_SET = new Set(Object.values(TASK_TYPE))
+  cleanupAllProjectLogs = fileWriter.cleanupAllProjectLogs
+
+  logger.info({
+    action: 'watchdog.started',
+    message: 'watchdog started',
+    details: {
+      intervalMs: INTERVAL_MS,
+      heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS,
+    },
+  })
+
+  await tick()
+  setInterval(() => {
+    void tick()
+  }, INTERVAL_MS)
+}
+
+void bootstrap()

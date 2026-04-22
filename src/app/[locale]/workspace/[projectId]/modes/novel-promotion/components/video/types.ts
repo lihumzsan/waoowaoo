@@ -65,6 +65,7 @@ export interface Panel {
   lipSyncTaskRunning?: boolean | null
   lipSyncErrorMessage?: string | null  // 口型同步错误消息
   lipSyncErrorCode?: string | null
+  hasPreviousVideoVersion?: boolean | null
 }
 
 export interface Storyboard {
@@ -99,6 +100,7 @@ export interface VideoPanel {
   videoTaskPhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
   videoErrorMessage?: string  // 视频生成错误消息
   videoErrorCode?: string
+  hasPreviousVideoVersion?: boolean
   videoModel?: string
   linkedToNextPanel?: boolean
   // 口型同步相关

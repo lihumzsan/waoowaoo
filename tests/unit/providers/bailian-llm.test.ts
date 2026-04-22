@@ -40,6 +40,7 @@ import { completeBailianLlm } from '@/lib/providers/bailian/llm'
 describe('bailian llm provider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.BAILIAN_LLM_TIMEOUT_MS
   })
 
   it('calls dashscope openai-compatible endpoint for registered qwen model', async () => {
@@ -53,7 +54,7 @@ describe('bailian llm provider', () => {
     expect(openAiCtorMock).toHaveBeenCalledWith({
       apiKey: 'bl-key',
       baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      timeout: 30_000,
+      timeout: 180_000,
     })
     expect(createChatCompletionMock).toHaveBeenCalledWith({
       model: 'qwen3.5-plus',
@@ -73,7 +74,23 @@ describe('bailian llm provider', () => {
     expect(openAiCtorMock).toHaveBeenCalledWith({
       apiKey: 'sk-sp-demo',
       baseURL: 'https://coding.dashscope.aliyuncs.com/v1',
-      timeout: 30_000,
+      timeout: 180_000,
+    })
+  })
+
+  it('respects configured bailian timeout override', async () => {
+    process.env.BAILIAN_LLM_TIMEOUT_MS = '5000'
+
+    await completeBailianLlm({
+      modelId: 'qwen3.5-plus',
+      messages: [{ role: 'user', content: 'hello' }],
+      apiKey: 'bl-key',
+    })
+
+    expect(openAiCtorMock).toHaveBeenCalledWith({
+      apiKey: 'bl-key',
+      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      timeout: 5000,
     })
   })
 
@@ -102,5 +119,25 @@ describe('bailian llm provider', () => {
 
     expect(openAiCtorMock).not.toHaveBeenCalled()
     expect(createChatCompletionMock).not.toHaveBeenCalled()
+  })
+
+  it('fails with a hard timeout when the provider request never returns', async () => {
+    vi.useFakeTimers()
+    try {
+      process.env.BAILIAN_LLM_TIMEOUT_MS = '5'
+      createChatCompletionMock.mockImplementationOnce(() => new Promise(() => {}))
+
+      const pending = completeBailianLlm({
+        modelId: 'qwen3.5-plus',
+        messages: [{ role: 'user', content: 'hello' }],
+        apiKey: 'bl-key',
+      })
+
+      const assertion = expect(pending).rejects.toThrow(/Request timed out/i)
+      await vi.advanceTimersByTimeAsync(5)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

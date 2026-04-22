@@ -3,6 +3,13 @@ import type { Project } from '@/types/project'
 import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '../keys'
 import {
+  cancelEpisodeQueries,
+  getEpisodeQueriesSnapshot,
+  invalidateEpisodeQueries,
+  restoreEpisodeQueriesSnapshot,
+  setEpisodeQueriesData,
+} from '../episode-cache'
+import {
   invalidateQueryTemplates,
   requestBlobWithError,
   requestJsonWithError,
@@ -133,16 +140,15 @@ export function useUpdateProjectEpisodeField(projectId: string) {
         'Failed to update episode',
       ),
     onMutate: async (variables) => {
-      const episodeQueryKey = queryKeys.episodeData(projectId, variables.episodeId)
       const projectQueryKey = queryKeys.projectData(projectId)
 
-      await queryClient.cancelQueries({ queryKey: episodeQueryKey })
+      await cancelEpisodeQueries(queryClient, projectId, variables.episodeId)
       await queryClient.cancelQueries({ queryKey: projectQueryKey })
 
-      const previousEpisode = queryClient.getQueryData<Record<string, unknown>>(episodeQueryKey)
+      const previousEpisodes = getEpisodeQueriesSnapshot(queryClient, projectId, variables.episodeId)
       const previousProject = queryClient.getQueryData<Project>(projectQueryKey)
 
-      queryClient.setQueryData<Record<string, unknown> | undefined>(episodeQueryKey, (prev) => {
+      setEpisodeQueriesData(queryClient, projectId, variables.episodeId, (prev) => {
         if (!prev) return prev
         return {
           ...prev,
@@ -166,20 +172,22 @@ export function useUpdateProjectEpisodeField(projectId: string) {
         }
       })
 
-      return { previousEpisode, previousProject, episodeId: variables.episodeId }
+      return { previousEpisodes, previousProject, episodeId: variables.episodeId }
     },
     onError: (_error, _variables, context) => {
-      if (context?.previousEpisode && context.episodeId) {
-        queryClient.setQueryData(queryKeys.episodeData(projectId, context.episodeId), context.previousEpisode)
+      if (context?.previousEpisodes) {
+        restoreEpisodeQueriesSnapshot(queryClient, context.previousEpisodes)
       }
       if (context?.previousProject) {
         queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
       }
     },
-    onSettled: (_, __, variables) => {
-      invalidateQueryTemplates(queryClient, [
-        queryKeys.episodeData(projectId, variables.episodeId),
-        queryKeys.projectData(projectId),
+    onSettled: async (_, __, variables) => {
+      await Promise.all([
+        invalidateEpisodeQueries(queryClient, projectId, variables.episodeId),
+        invalidateQueryTemplates(queryClient, [
+          queryKeys.projectData(projectId),
+        ]),
       ])
     },
   })
@@ -210,34 +218,35 @@ export function useUpdateProjectClip(projectId: string) {
         'update failed',
       ),
     onMutate: async (variables) => {
-      if (!variables.episodeId) return { previousEpisode: null, episodeId: null }
+      if (!variables.episodeId) return { previousEpisodes: null, episodeId: null }
 
-      const episodeQueryKey = queryKeys.episodeData(projectId, variables.episodeId)
-      await queryClient.cancelQueries({ queryKey: episodeQueryKey })
+      await cancelEpisodeQueries(queryClient, projectId, variables.episodeId)
 
-      const previousEpisode = queryClient.getQueryData<Record<string, unknown>>(episodeQueryKey)
-      queryClient.setQueryData<Record<string, unknown> | undefined>(episodeQueryKey, (prev) => {
-        if (!prev) return prev
-        const clips = Array.isArray(prev.clips) ? prev.clips : []
+      const previousEpisodes = getEpisodeQueriesSnapshot(queryClient, projectId, variables.episodeId)
+      setEpisodeQueriesData(queryClient, projectId, variables.episodeId, (prev) => {
+        if (!prev || typeof prev !== 'object') return prev
+        const episode = prev as Record<string, unknown>
+        const clips = Array.isArray(episode.clips) ? episode.clips : []
         return {
-          ...prev,
+          ...episode,
           clips: clips.map((clip: Record<string, unknown>) =>
             clip?.id === variables.clipId ? { ...clip, ...variables.data } : clip,
           ),
         }
       })
 
-      return { previousEpisode, episodeId: variables.episodeId }
+      return { previousEpisodes, episodeId: variables.episodeId }
     },
     onError: (_error, _variables, context) => {
-      if (context?.previousEpisode && context.episodeId) {
-        queryClient.setQueryData(queryKeys.episodeData(projectId, context.episodeId), context.previousEpisode)
+      if (context?.previousEpisodes) {
+        restoreEpisodeQueriesSnapshot(queryClient, context.previousEpisodes)
       }
     },
-    onSettled: (_data, _error, variables) => {
-      const queryTemplates: Array<readonly unknown[]> = [queryKeys.projectData(projectId)]
-      if (variables.episodeId) queryTemplates.push(queryKeys.episodeData(projectId, variables.episodeId))
-      invalidateQueryTemplates(queryClient, queryTemplates)
+    onSettled: async (_data, _error, variables) => {
+      await invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+      if (variables.episodeId) {
+        await invalidateEpisodeQueries(queryClient, projectId, variables.episodeId)
+      }
     },
   })
 }

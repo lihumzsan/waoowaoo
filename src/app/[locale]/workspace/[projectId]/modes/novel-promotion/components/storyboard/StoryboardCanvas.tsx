@@ -9,6 +9,7 @@ import { VariantData, VariantOptions } from './hooks/usePanelVariant'
 import type { PanelSaveState } from './hooks/usePanelCrudActions'
 import { AppIcon } from '@/components/ui/icons'
 import { GlassButton } from '@/components/ui/primitives'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
 interface StoryboardCanvasProps {
   sortedStoryboards: NovelPromotionStoryboard[]
@@ -32,6 +33,8 @@ interface StoryboardCanvasProps {
   getClipInfo: (clipId: string) => NovelPromotionClip | undefined
   getTextPanels: (storyboard: NovelPromotionStoryboard) => StoryboardPanel[]
   getPanelEditData: (panel: StoryboardPanel) => PanelEditData
+  storyboardWorkflowOptions: UserModelOption[]
+  defaultStoryboardWorkflow: string
   formatClipTitle: (clip: NovelPromotionClip | undefined) => string
   onToggleExpandedClip: (storyboardId: string) => void
   onMoveStoryboardGroup: (clipId: string, direction: 'up' | 'down') => Promise<void>
@@ -52,7 +55,7 @@ interface StoryboardCanvasProps {
   onRemoveCharacter: (panel: StoryboardPanel, index: number, storyboardId: string) => void
   onRemoveLocation: (panel: StoryboardPanel, storyboardId: string) => void
   onRetryPanelSave: (panelId: string) => void
-  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean) => void
+  onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean, imageModel?: string) => void
   onOpenEditModal: (storyboardId: string, panelIndex: number) => void
   onOpenAIDataModal: (storyboardId: string, panelIndex: number) => void
   getPanelCandidates: (panel: NovelPromotionPanel) => { candidates: string[]; selectedIndex: number } | null
@@ -94,6 +97,8 @@ export default function StoryboardCanvas({
   getClipInfo,
   getTextPanels,
   getPanelEditData,
+  storyboardWorkflowOptions,
+  defaultStoryboardWorkflow,
   formatClipTitle,
   onToggleExpandedClip,
   onMoveStoryboardGroup,
@@ -176,6 +181,8 @@ export default function StoryboardCanvas({
               onPreviewImage={onPreviewImage}
               onCloseError={() => onCloseStoryboardError(storyboard.id)}
               getPanelEditData={getPanelEditData}
+              storyboardWorkflowOptions={storyboardWorkflowOptions}
+              defaultStoryboardWorkflow={defaultStoryboardWorkflow}
               onPanelUpdate={onPanelUpdate}
               onPanelDelete={(panelId) => onPanelDelete(panelId, storyboard.id, setLocalStoryboards)}
               onOpenCharacterPicker={onOpenCharacterPicker}

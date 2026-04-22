@@ -16,8 +16,6 @@ type ScriptToStoryboardStreamState = ReturnType<typeof useScriptToStoryboardRunS
 
 interface ProjectSnapshotInput {
   projectData: unknown
-  projectCharacters: unknown[]
-  projectLocations: unknown[]
   globalAssetText: string
   novelText: string
   analysisModel: string | undefined

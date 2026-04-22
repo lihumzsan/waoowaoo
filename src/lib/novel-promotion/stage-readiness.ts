@@ -6,6 +6,18 @@ export type StageArtifactReadiness = {
   hasVoice: boolean
 }
 
+function isStageArtifactReadiness(value: unknown): value is StageArtifactReadiness {
+  if (!value || typeof value !== 'object') return false
+  const payload = value as Record<string, unknown>
+  return (
+    typeof payload.hasStory === 'boolean' &&
+    typeof payload.hasScript === 'boolean' &&
+    typeof payload.hasStoryboard === 'boolean' &&
+    typeof payload.hasVideo === 'boolean' &&
+    typeof payload.hasVoice === 'boolean'
+  )
+}
+
 type EpisodeClipLike = {
   screenplay?: string | null
   [key: string]: unknown
@@ -22,6 +34,7 @@ type StoryboardLike = {
 }
 
 type EpisodeLike = {
+  artifactReadiness?: StageArtifactReadiness | null
   novelText?: string | null
   clips?: unknown[] | null
   storyboards?: unknown[] | null
@@ -64,6 +77,9 @@ export function hasVideoArtifacts(storyboards: unknown[] | null | undefined) {
 }
 
 export function resolveEpisodeStageArtifacts(episode: EpisodeLike | null | undefined): StageArtifactReadiness {
+  if (isStageArtifactReadiness(episode?.artifactReadiness)) {
+    return episode.artifactReadiness
+  }
   return {
     hasStory: hasNonEmptyText(episode?.novelText),
     hasScript: hasScriptArtifacts(episode?.clips),

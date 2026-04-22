@@ -68,4 +68,28 @@ describe('video panels projection error code', () => {
     expect(result.allPanels[0]?.videoTaskRunning).toBe(true)
     expect(result.allPanels[0]?.videoTaskPhase).toBe('queued')
   })
+
+  it('projects previous video availability onto panel fields', () => {
+    const result = useVideoPanelsProjection({
+      clips: [{ id: 'clip-1', start: 0, end: 5, summary: 'clip' }],
+      storyboards: [{
+        id: 'sb-1',
+        clipId: 'clip-1',
+        panels: [{
+          id: 'panel-1',
+          panelIndex: 0,
+          description: 'panel',
+          hasPreviousVideoVersion: true,
+        }],
+      }],
+      panelVideoStates: {
+        getTaskState: () => null,
+      },
+      panelLipStates: {
+        getTaskState: () => null,
+      },
+    })
+
+    expect(result.allPanels[0]?.hasPreviousVideoVersion).toBe(true)
+  })
 })

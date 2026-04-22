@@ -17,7 +17,7 @@ import type { SplitEpisode } from './smart-import/types'
  */
 export default function ConfigStage() {
   const runtime = useWorkspaceStageRuntime()
-  const { episodeName, novelText } = useWorkspaceEpisodeStageData()
+  const { episodeName, novelText } = useWorkspaceEpisodeStageData('config')
   const params = useParams<{ projectId: string }>()
   const projectId = params?.projectId ?? ''
 

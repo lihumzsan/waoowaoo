@@ -10,6 +10,8 @@ import {
   useUpdateProjectConfig,
 } from '@/lib/query/hooks'
 import type { BatchVideoGenerationParams, VideoDurationBinding, VideoGenerationOptions } from '../components/video'
+import { useToast } from '@/contexts/ToastContext'
+import { useTranslations } from 'next-intl'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -38,6 +40,9 @@ export function useWorkspaceVideoActions({
   episodeId,
   t,
 }: UseWorkspaceVideoActionsParams) {
+  const { showToast } = useToast()
+  const videoT = useTranslations('video')
+  const commonT = useTranslations('common')
   const generateVideoMutation = useGenerateVideo(projectId, episodeId || null)
   const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId)
@@ -160,8 +165,12 @@ export function useWorkspaceVideoActions({
         storyboardId,
         panelIndex,
       })
+      showToast(
+        `${videoT('panelCard.previousVideo')} · ${commonT('success')}`,
+        'success',
+      )
     } catch (err: unknown) {
-      alert(`${t('execution.updateFailed')}: ${getErrorMessage(err)}`)
+      showToast(`${t('execution.updateFailed')}: ${getErrorMessage(err)}`, 'error')
       throw err
     }
   }

@@ -8,7 +8,7 @@ import { useWorkspaceProvider } from '../WorkspaceProvider'
 export default function ScriptStage() {
   const runtime = useWorkspaceStageRuntime()
   const { projectId, episodeId } = useWorkspaceProvider()
-  const { clips, storyboards } = useWorkspaceEpisodeStageData()
+  const { clips, storyboards } = useWorkspaceEpisodeStageData('workspace-visual')
 
   return (
     <ScriptView

@@ -16,6 +16,11 @@ const OPTIONAL_MODEL_BYPASS_NODE_TYPES = new Set([
 ])
 const UI_DECORATION_NODE_TYPES = new Set([
   'note',
+  'markdownnote',
+])
+const DISPLAY_ONLY_OUTPUT_NODE_TYPES = new Set([
+  'easyshowanything',
+  'shellagentpluginoutputtext',
 ])
 
 export type ComfyUiWorkflowGraphNode = {
@@ -372,10 +377,26 @@ function resolveSetGetNodes(
   }
 }
 
-function removeUiDecorationNodes(graph: ComfyUiWorkflowGraph): void {
+function normalizeUiDecorationNodeType(classType: string): string {
+  return classType.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function isUiDecorationNode(node: ComfyUiWorkflowGraphNode): boolean {
+  const normalizedClassType = normalizeUiDecorationNodeType(node.class_type)
+  if (UI_DECORATION_NODE_TYPES.has(normalizedClassType)) return true
+
+  // Some ComfyUI UIs serialize pure note widgets as custom "*Note" nodes.
+  // They carry no runnable inputs, so we can safely strip them before submit.
+  return normalizedClassType.endsWith('note') && Object.keys(node.inputs).length === 0
+}
+
+function isDisplayOnlyOutputNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return DISPLAY_ONLY_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))
+}
+
+function removeUiOnlyNodes(graph: ComfyUiWorkflowGraph): void {
   for (const [nodeId, node] of Object.entries(graph)) {
-    const classType = node.class_type.trim().toLowerCase()
-    if (UI_DECORATION_NODE_TYPES.has(classType)) {
+    if (isUiDecorationNode(node) || isDisplayOnlyOutputNode(node)) {
       delete graph[nodeId]
     }
   }
@@ -481,7 +502,7 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
 
   applyAnythingEverywhereBroadcast(nodes, graph, anythingEverywhereSources)
   resolveSetGetNodes(nodes, graph)
-  removeUiDecorationNodes(graph)
+  removeUiOnlyNodes(graph)
   return graph
 }
 
@@ -559,6 +580,51 @@ function isNegativePromptField(inputName: string): boolean {
   return inputName === 'negative' || inputName === 'negative_prompt'
 }
 
+type ConditioningRole = 'positive' | 'negative'
+
+function isTextEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return node.class_type.toLowerCase().includes('textencode')
+}
+
+function collectConditioningRolesBySource(graph: ComfyUiWorkflowGraph): Map<string, Set<ConditioningRole>> {
+  const rolesBySource = new Map<string, Set<ConditioningRole>>()
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs)) continue
+
+    for (const [field, value] of Object.entries(node.inputs)) {
+      if (!isConnectionValue(value)) continue
+
+      const normalizedField = field.trim().toLowerCase()
+      const role: ConditioningRole | null =
+        normalizedField === 'positive' || normalizedField === 'positive_prompt'
+          ? 'positive'
+          : normalizedField === 'negative' || normalizedField === 'negative_prompt'
+            ? 'negative'
+            : null
+      if (!role) continue
+
+      const sourceNodeId = normalizeNodeId(value[0])
+      if (!sourceNodeId) continue
+
+      const roles = rolesBySource.get(sourceNodeId) ?? new Set<ConditioningRole>()
+      roles.add(role)
+      rolesBySource.set(sourceNodeId, roles)
+    }
+  }
+
+  return rolesBySource
+}
+
+function getSoleConditioningRole(
+  rolesBySource: Map<string, Set<ConditioningRole>>,
+  nodeId: string,
+): ConditioningRole | null {
+  const roles = rolesBySource.get(nodeId)
+  if (!roles || roles.size !== 1) return null
+  return Array.from(roles)[0] ?? null
+}
+
 function isPromptCapableNode(node: ComfyUiWorkflowGraphNode): boolean {
   const fieldNames = Object.keys(node.inputs).map((field) => field.trim().toLowerCase())
   if (fieldNames.some((field) =>
@@ -617,13 +683,34 @@ function applyPromptHeuristics(
   if (!positiveValue && !negativeValue) return
 
   const nodeEntries = Object.entries(graph).sort(([a], [b]) => compareNodeIds(a, b))
-  for (const [, node] of nodeEntries) {
+  const conditioningRolesBySource = collectConditioningRolesBySource(graph)
+  for (const [nodeId, node] of nodeEntries) {
     if (!isRecord(node.inputs) || !isPromptCapableNode(node)) continue
 
+    const conditioningRole = getSoleConditioningRole(conditioningRolesBySource, nodeId)
     for (const inputName of Object.keys(node.inputs)) {
       const field = inputName.trim().toLowerCase()
       if (!field) continue
       const currentValue = node.inputs[inputName]
+
+      if (
+        conditioningRole === 'negative'
+        && isTextEncodeNode(node)
+        && isPromptInputField(field)
+      ) {
+        node.inputs[inputName] = negativeValue
+        continue
+      }
+
+      if (
+        positiveValue
+        && conditioningRole === 'positive'
+        && isTextEncodeNode(node)
+        && field === 'prompt'
+      ) {
+        node.inputs[inputName] = positiveValue
+        continue
+      }
 
       if (negativeValue && (isNegativePromptField(field) || (field === 'text' && isLikelyNegativeNode(node)))) {
         if (tryAssignPromptToConnectedValueNode(graph, currentValue, negativeValue)) continue

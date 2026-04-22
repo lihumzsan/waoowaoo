@@ -18,14 +18,20 @@ export type ScriptToStoryboardRunResult = RunResult
 type UseScriptToStoryboardRunStreamOptions = {
   projectId: string
   episodeId?: string | null
+  enableRecoveryProbe?: boolean
 }
 
-export function useScriptToStoryboardRunStream({ projectId, episodeId }: UseScriptToStoryboardRunStreamOptions) {
+export function useScriptToStoryboardRunStream({
+  projectId,
+  episodeId,
+  enableRecoveryProbe = true,
+}: UseScriptToStoryboardRunStreamOptions) {
   return useRunStreamState<ScriptToStoryboardRunParams>({
     projectId,
     endpoint: (pid) => `/api/novel-promotion/${pid}/script-to-storyboard-stream`,
     storageKeyPrefix: 'novel-promotion:script-to-storyboard-run',
     storageScopeKey: episodeId || undefined,
+    enableRecoveryProbe,
     resolveActiveRunId: async ({ projectId: pid, storageScopeKey }) => {
       if (!storageScopeKey) return null
       const search = new URLSearchParams({

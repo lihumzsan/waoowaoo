@@ -34,7 +34,10 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
 
   const hasVisibleBaseVideo = !!media.baseVideoUrl
   const showFirstLastFrameSwitch = layout.hasNext
-  const canRestorePreviousVideo = hasVisibleBaseVideo && !taskStatus.isVideoTaskRunning && !taskStatus.isLipSyncTaskRunning
+  const canRestorePreviousVideo = !!panel.hasPreviousVideoVersion
+    && hasVisibleBaseVideo
+    && !taskStatus.isVideoTaskRunning
+    && !taskStatus.isLipSyncTaskRunning
 
   return (
     <div className="bg-[var(--glass-bg-muted)] flex items-center justify-center relative" style={{ aspectRatio: player.cssAspectRatio }}>

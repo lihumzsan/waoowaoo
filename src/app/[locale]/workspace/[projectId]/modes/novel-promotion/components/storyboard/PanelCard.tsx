@@ -7,6 +7,8 @@ import PanelActionButtons from './PanelActionButtons'
 import { StoryboardPanel } from './hooks/useStoryboardState'
 import { GlassSurface } from '@/components/ui/primitives'
 import { AppIcon } from '@/components/ui/icons'
+import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
+import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
 interface PanelCandidateData {
   candidates: string[]
@@ -28,6 +30,9 @@ interface PanelCardProps {
   isSubmittingPanelImageTask: boolean
   failedError: string | null
   candidateData: PanelCandidateData | null
+  storyboardWorkflowOptions?: UserModelOption[]
+  selectedImageWorkflow?: string
+  defaultImageWorkflow?: string
   previousImageUrl?: string | null  // 支持撤回
   onUpdate: (updates: Partial<PanelEditData>) => void
   onDelete: () => void
@@ -65,6 +70,9 @@ export default function PanelCard({
   isSubmittingPanelImageTask,
   failedError,
   candidateData,
+  storyboardWorkflowOptions = [],
+  selectedImageWorkflow = '',
+  defaultImageWorkflow = '',
   previousImageUrl,
   onUpdate,
   onDelete,
@@ -144,6 +152,27 @@ export default function PanelCard({
 
       {/* 分镜信息编辑区 */}
       <div className="p-3">
+        {storyboardWorkflowOptions.length > 0 && (
+          <div className="mb-3 rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-2.5">
+            <div className="mb-2 text-xs font-medium text-[var(--glass-text-secondary)]">
+              生图工作流
+            </div>
+            <ModelCapabilityDropdown
+              models={storyboardWorkflowOptions}
+              value={selectedImageWorkflow || defaultImageWorkflow || undefined}
+              onModelChange={(modelKey) => onUpdate({ imageModel: modelKey })}
+              capabilityFields={[]}
+              capabilityOverrides={{}}
+              onCapabilityChange={(field, rawValue, sample) => {
+                void field
+                void rawValue
+                void sample
+              }}
+              placeholder="选择当前分镜使用的生图工作流"
+              compact={true}
+            />
+          </div>
+        )}
         <PanelEditForm
           panelData={panelData}
           isSaving={isSaving}

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { setEpisodeQueriesData } from '@/lib/query/episode-cache'
 import { queryKeys } from '@/lib/query/keys'
 import { NovelPromotionStoryboard, NovelPromotionClip, NovelPromotionPanel } from '@/types/project'
 import { PanelEditData } from '../../PanelEditForm'
@@ -24,6 +25,7 @@ export interface StoryboardPanel {
   location?: string
   srt_range?: string
   duration?: number
+  image_model?: string | null
   video_prompt?: string
   source_text?: string
   candidateImages?: string
@@ -60,7 +62,7 @@ export function useStoryboardState({
           : nextStoryboardsOrUpdater
       )
 
-      queryClient.setQueryData(queryKeys.episodeData(projectId, episodeId), (previous: unknown) => {
+      setEpisodeQueriesData(queryClient, projectId, episodeId, (previous: unknown) => {
         if (!previous || typeof previous !== 'object') return previous
         const episode = previous as { storyboards?: NovelPromotionStoryboard[] }
         const previousStoryboards = Array.isArray(episode.storyboards) ? episode.storyboards : []
@@ -140,6 +142,7 @@ export function useStoryboardState({
         characters,
         srt_range: p.srtStart && p.srtEnd ? `${p.srtStart}-${p.srtEnd}` : undefined,
         duration: p.duration ?? undefined,
+        image_model: p.imageModel ?? undefined,
         video_prompt: p.videoPrompt || undefined,
         source_text: p.srtSegment || undefined,
         candidateImages: p.candidateImages || undefined,
@@ -167,6 +170,7 @@ export function useStoryboardState({
       srtStart: null,
       srtEnd: null,
       duration: panel.duration || null,
+      imageModel: panel.image_model || null,
       videoPrompt: panel.video_prompt || null,
       photographyRules: panel.photographyRules ?? null,
       actingNotes: panel.actingNotes ?? null,

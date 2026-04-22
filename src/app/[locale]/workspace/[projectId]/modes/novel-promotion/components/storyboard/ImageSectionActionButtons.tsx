@@ -60,6 +60,7 @@ export default function ImageSectionActionButtons({
                 onRegeneratePanelImage(panelId, count, isSubmittingPanelImageTask)
               }}
               disabled={false}
+              splitInteractiveZones={true}
               ariaLabel={t('image.selectCount')}
               className={`glass-btn-base glass-btn-secondary flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] transition-all active:scale-95 ${isSubmittingPanelImageTask ? 'opacity-75' : ''}`}
               selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-[10px] font-semibold text-[var(--glass-text-primary)] outline-none cursor-pointer leading-none transition-colors"

@@ -13,7 +13,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { CharacterAppearance } from '@/types/project'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
-import { useProjectAssets, useRefreshProjectAssets, useGenerateProjectCharacterImage, useGenerateProjectLocationImage, type Character } from '@/lib/query/hooks'
+import { useProjectAssets, useRefreshProjectAssets, useGenerateProjectCharacterImage, useGenerateProjectLocationImage, type Character, type Location, type Prop } from '@/lib/query/hooks'
 import {
     createManualKeyBaseline,
     isAppearanceTaskRunning,
@@ -24,7 +24,7 @@ import {
 interface UseBatchGenerationProps {
     projectId: string
     // 🔥 V6.6：移除 onGenerateImage，内部使用 mutation hooks
-    handleGenerateImage?: (type: 'character' | 'location', id: string, appearanceId?: string, count?: number) => Promise<void> | void
+    handleGenerateImage?: (type: 'character' | 'location' | 'prop', id: string, appearanceId?: string, count?: number) => Promise<void> | void
 }
 
 export function useBatchGeneration({
@@ -36,6 +36,11 @@ export function useBatchGeneration({
     const { data: assets } = useProjectAssets(projectId)
     const characters = useMemo(() => assets?.characters ?? [], [assets?.characters])
     const locations = useMemo(() => assets?.locations ?? [], [assets?.locations])
+    const props = useMemo(() => assets?.props ?? [], [assets?.props])
+    const locationBackedAssets = useMemo<Array<Location | Prop>>(
+        () => [...locations, ...props],
+        [locations, props],
+    )
     const { count: characterGenerationCount } = useImageGenerationCount('character')
     const { count: locationGenerationCount } = useImageGenerationCount('location')
 
@@ -48,14 +53,14 @@ export function useBatchGeneration({
 
     // 🔥 内部图片生成函数
     const internalHandleGenerateImage = useCallback(async (
-        type: 'character' | 'location',
+        type: 'character' | 'location' | 'prop',
         id: string,
         appearanceId?: string,
         count?: number,
     ) => {
         if (type === 'character' && appearanceId) {
             await generateCharacterImage.mutateAsync({ characterId: id, appearanceId, count })
-        } else if (type === 'location') {
+        } else if (type === 'location' || type === 'prop') {
             await generateLocationImage.mutateAsync({ locationId: id, count })
         }
     }, [generateCharacterImage, generateLocationImage])
@@ -88,7 +93,7 @@ export function useBatchGeneration({
             }
         }
 
-        for (const location of locations) {
+        for (const location of locationBackedAssets) {
             const hasRunningTask = !!location.images?.some((img) => img.imageTaskRunning)
             if (!hasRunningTask) continue
             generated.add(`location-${location.id}-group`)
@@ -104,7 +109,7 @@ export function useBatchGeneration({
         }
 
         return generated
-    }, [characters, locations, pendingRegenerationKeys])
+    }, [characters, locationBackedAssets, pendingRegenerationKeys])
 
     useEffect(() => {
         if (pendingRegenerationKeys.size === 0) return
@@ -114,7 +119,7 @@ export function useBatchGeneration({
             let changed = false
             const next = new Set(prev)
             for (const key of prev) {
-                if (shouldResolveManualKey(key, characters, locations, pendingRegenerationBaselines, now)) {
+                if (shouldResolveManualKey(key, characters, locationBackedAssets, pendingRegenerationBaselines, now)) {
                     next.delete(key)
                     changed = true
                 }
@@ -131,19 +136,19 @@ export function useBatchGeneration({
                     changed = true
                     continue
                 }
-                if (shouldResolveManualKey(key, characters, locations, prev, now)) {
+                if (shouldResolveManualKey(key, characters, locationBackedAssets, prev, now)) {
                     next.delete(key)
                     changed = true
                 }
             }
             return changed ? next : prev
         })
-    }, [characters, locations, pendingRegenerationBaselines, pendingRegenerationKeys])
+    }, [characters, locationBackedAssets, pendingRegenerationBaselines, pendingRegenerationKeys])
 
     // 生成全部资产图片（仅缺失图片的）
     const handleGenerateAllImages = async () => {
         const tasks: Array<{
-            type: 'character' | 'location'
+            type: 'character' | 'location' | 'prop'
             id: string
             appearanceId?: string
             appearanceIndex?: number
@@ -167,11 +172,11 @@ export function useBatchGeneration({
         })
 
         // 收集场景资产
-        locations.forEach(loc => {
+        locationBackedAssets.forEach(loc => {
             const hasImage = loc.images?.some(img => img.imageUrl)
             if (!hasImage) {
                 tasks.push({
-                    type: 'location',
+                    type: props.some((prop) => prop.id === loc.id) ? 'prop' : 'location',
                     id: loc.id,
                     key: `location-${loc.id}-group`
                 })
@@ -191,7 +196,7 @@ export function useBatchGeneration({
         setPendingRegenerationBaselines(prev => {
             const next = new Map(prev)
             for (const key of allKeys) {
-                const baseline = createManualKeyBaseline(key, characters, locations)
+                const baseline = createManualKeyBaseline(key, characters, locationBackedAssets)
                 if (baseline) {
                     next.set(key, baseline)
                 }
@@ -243,7 +248,7 @@ export function useBatchGeneration({
         if (!confirm(t('toolbar.regenerateAllConfirm'))) return
 
         const tasks: Array<{
-            type: 'character' | 'location'
+            type: 'character' | 'location' | 'prop'
             id: string
             appearanceId?: string
             appearanceIndex?: number
@@ -263,9 +268,9 @@ export function useBatchGeneration({
             })
         })
 
-        locations.forEach(loc => {
+        locationBackedAssets.forEach(loc => {
             tasks.push({
-                type: 'location',
+                type: props.some((prop) => prop.id === loc.id) ? 'prop' : 'location',
                 id: loc.id,
                 key: `location-${loc.id}-group`
             })
@@ -284,7 +289,7 @@ export function useBatchGeneration({
         setPendingRegenerationBaselines(prev => {
             const next = new Map(prev)
             for (const key of allKeys) {
-                const baseline = createManualKeyBaseline(key, characters, locations)
+                const baseline = createManualKeyBaseline(key, characters, locationBackedAssets)
                 if (baseline) {
                     next.set(key, baseline)
                 }
@@ -349,13 +354,13 @@ export function useBatchGeneration({
     const registerTransientTaskKey = useCallback((key: string) => {
         setPendingRegenerationKeys(prev => new Set([...prev, key]))
         setPendingRegenerationBaselines(prev => {
-            const baseline = createManualKeyBaseline(key, characters, locations)
+            const baseline = createManualKeyBaseline(key, characters, locationBackedAssets)
             if (!baseline) return prev
             const next = new Map(prev)
             next.set(key, baseline)
             return next
         })
-    }, [characters, locations])
+    }, [characters, locationBackedAssets])
 
     return {
         // 🔥 暴露数据供组件使用

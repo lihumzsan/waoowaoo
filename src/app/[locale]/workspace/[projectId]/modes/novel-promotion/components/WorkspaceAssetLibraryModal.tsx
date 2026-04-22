@@ -10,8 +10,6 @@ interface WorkspaceAssetLibraryModalProps {
   onClose: () => void
   assetsLoading: boolean
   assetsLoadingState: TaskPresentationState | null
-  hasCharacters: boolean
-  hasLocations: boolean
   projectId: string
   isAnalyzingAssets: boolean
   focusCharacterId: string | null
@@ -25,8 +23,6 @@ export default function WorkspaceAssetLibraryModal({
   onClose,
   assetsLoading,
   assetsLoadingState,
-  hasCharacters,
-  hasLocations,
   projectId,
   isAnalyzingAssets,
   focusCharacterId,
@@ -58,7 +54,7 @@ export default function WorkspaceAssetLibraryModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 app-scrollbar" data-asset-scroll-container="1">
-          {assetsLoading && !hasCharacters && !hasLocations && (
+          {assetsLoading && (
             <div className="flex flex-col items-center justify-center h-64 text-[var(--glass-text-tertiary)] animate-pulse">
               <TaskStatusInline state={assetsLoadingState} className="text-base [&>span]:text-base" />
             </div>

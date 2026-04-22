@@ -222,4 +222,121 @@ describe('script-to-storyboard atomic retry', () => {
       runStep,
     })).rejects.toThrow('missing dependency artifact: storyboard.clip.phase3')
   })
+  it('falls back to step.output artifacts for phase3 retry dependencies', async () => {
+    listArtifactsMock.mockImplementation(async (params: {
+      runId: string
+      stepKey?: string
+      artifactType?: string
+      refId?: string
+    }) => {
+      if (params.runId !== 'run-fallback') return []
+      if (params.artifactType === 'step.output' && params.stepKey === 'clip_clip-1_phase1') {
+        return [{
+          id: 's1',
+          runId: params.runId,
+          stepKey: 'clip_clip-1_phase1',
+          artifactType: 'step.output',
+          refId: 'clip_clip-1_phase1',
+          versionHash: null,
+          payload: {
+            output: JSON.stringify([
+              { panel_number: 1, description: 'phase1-step-output', location: 'Office', source_text: 'src', characters: [] },
+            ]),
+          },
+          createdAt: '2026-03-03T00:00:00.000Z',
+        }]
+      }
+      if (params.artifactType === 'step.output' && params.stepKey === 'clip_clip-1_phase2_cinematography') {
+        return [{
+          id: 's2',
+          runId: params.runId,
+          stepKey: 'clip_clip-1_phase2_cinematography',
+          artifactType: 'step.output',
+          refId: 'clip_clip-1_phase2_cinematography',
+          versionHash: null,
+          payload: {
+            output: JSON.stringify([
+              {
+                panel_number: 1,
+                composition: 'center',
+                lighting: 'top',
+                color_palette: 'cool',
+                atmosphere: 'tense',
+                technical_notes: 'note',
+              },
+            ]),
+          },
+          createdAt: '2026-03-03T00:00:00.000Z',
+        }]
+      }
+      if (params.artifactType === 'step.output' && params.stepKey === 'clip_clip-1_phase2_acting') {
+        return [{
+          id: 's3',
+          runId: params.runId,
+          stepKey: 'clip_clip-1_phase2_acting',
+          artifactType: 'step.output',
+          refId: 'clip_clip-1_phase2_acting',
+          versionHash: null,
+          payload: {
+            output: JSON.stringify([
+              { panel_number: 1, characters: [{ name: 'Narrator', expression: 'serious' }] },
+            ]),
+          },
+          createdAt: '2026-03-03T00:00:00.000Z',
+        }]
+      }
+      return []
+    })
+
+    const runStep = vi.fn(async (_meta, _prompt, action: string) => {
+      if (action !== 'storyboard_phase3_detail') {
+        throw new Error(`unexpected action ${action}`)
+      }
+      return {
+        text: JSON.stringify([{ panel_number: 1, description: 'phase3-new', location: 'Office', source_text: 'src', characters: [] }]),
+        reasoning: '',
+      }
+    })
+
+    const result = await runScriptToStoryboardAtomicRetry({
+      runId: 'run-fallback',
+      retryTarget: {
+        stepKey: 'clip_clip-1_phase3_detail',
+        clipId: 'clip-1',
+        phase: 'phase3_detail',
+      },
+      retryStepAttempt: 4,
+      clip: {
+        id: 'clip-1',
+        content: 'clip content',
+        characters: JSON.stringify([{ name: 'Narrator' }]),
+        location: 'Office',
+        screenplay: null,
+      },
+      clipIndex: 0,
+      totalClipCount: 1,
+      novelPromotionData: {
+        characters: [{ name: 'Narrator', appearances: [] }],
+        locations: [{ name: 'Office', images: [{ description: 'room desc' }] }],
+      },
+      promptTemplates: {
+        phase1PlanTemplate: '{clip_content}',
+        phase2CinematographyTemplate: '{panels_json} {panel_count} {locations_description} {characters_info}',
+        phase2ActingTemplate: '{panels_json} {panel_count} {characters_info}',
+        phase3DetailTemplate: '{panels_json} {characters_age_gender} {locations_description}',
+      },
+      runStep,
+    })
+
+    expect(runStep).toHaveBeenCalledTimes(1)
+    expect(result.clipPanels[0]?.finalPanels[0]).toEqual(expect.objectContaining({
+      panel_number: 1,
+      description: 'phase3-new',
+      photographyPlan: expect.objectContaining({
+        composition: 'center',
+        lighting: 'top',
+      }),
+      actingNotes: [{ name: 'Narrator', expression: 'serious' }],
+    }))
+  })
 })

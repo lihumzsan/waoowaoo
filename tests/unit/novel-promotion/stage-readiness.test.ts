@@ -78,4 +78,28 @@ describe('stage readiness', () => {
       hasVoice: true,
     })
   })
+
+  it('prefers artifactReadiness when the payload already provides it', () => {
+    const readiness = resolveEpisodeStageArtifacts({
+      novelText: '',
+      clips: [],
+      storyboards: [],
+      voiceLines: [],
+      artifactReadiness: {
+        hasStory: true,
+        hasScript: true,
+        hasStoryboard: false,
+        hasVideo: false,
+        hasVoice: true,
+      },
+    })
+
+    expect(readiness).toEqual({
+      hasStory: true,
+      hasScript: true,
+      hasStoryboard: false,
+      hasVideo: false,
+      hasVoice: true,
+    })
+  })
 })

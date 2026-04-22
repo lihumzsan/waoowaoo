@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import Navbar from '@/components/Navbar'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { useProjectData, useEpisodeData, useUserModels } from '@/lib/query/hooks'
+import { invalidateEpisodeQueries } from '@/lib/query/episode-cache'
 import { queryKeys } from '@/lib/query/keys'
 import NovelPromotionWorkspace from './modes/novel-promotion/NovelPromotionWorkspace'
 import SmartImportWizard, { SplitEpisode } from './modes/novel-promotion/components/SmartImportWizard'
@@ -19,6 +20,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { readConfiguredAnalysisModel, shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import type { StageArtifactReadiness } from '@/lib/novel-promotion/stage-readiness'
 
 // 有效的stage值
 const VALID_STAGES = ['config', 'script', 'assets', 'text-storyboard', 'storyboard', 'videos', 'voice', 'editor'] as const
@@ -33,6 +35,7 @@ interface Episode {
   audioUrl?: string | null
   srtContent?: string | null
   createdAt: string
+  artifactReadiness?: StageArtifactReadiness
 }
 
 type NovelPromotionData = {
@@ -79,7 +82,7 @@ export default function ProjectDetailPage() {
   const [isModelSetupModalOpen, setIsModelSetupModalOpen] = useState(false)
   const [modelSetupSaving, setModelSetupSaving] = useState(false)
 
-  const userModelsQuery = useUserModels()
+  const userModelsQuery = useUserModels({ enabled: isModelSetupModalOpen })
   const llmModelOptions = userModelsQuery.data?.llm || []
 
   // 更新URL参数（stage 和/或 episode）
@@ -109,6 +112,7 @@ export default function ProjectDetailPage() {
   // 如果 URL 没有 stage 参数，默认使用 'config'
   // 🚧 剪辑阶段 (editor) 暂时禁用，自动重定向到成片阶段 (videos)
   const effectiveStage = currentUrlStage === 'editor' ? 'videos' : (currentUrlStage || 'config')
+  const episodeProfile = effectiveStage === 'config' ? 'config' : 'workspace-visual'
 
   // 获取剧集列表
   const novelPromotionData = project?.novelPromotionData as NovelPromotionData | undefined
@@ -129,7 +133,8 @@ export default function ProjectDetailPage() {
   // 🔥 使用 React Query 获取剧集数据
   const { data: currentEpisode } = useEpisodeData(
     projectId,
-    !isGlobalAssetsView ? selectedEpisodeId : null
+    !isGlobalAssetsView ? selectedEpisodeId : null,
+    { profile: episodeProfile },
   )
 
   // 获取导入状态
@@ -275,7 +280,7 @@ export default function ProjectDetailPage() {
     queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
     // 剧集详情也刷新
     if (selectedEpisodeId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, selectedEpisodeId) })
+      void invalidateEpisodeQueries(queryClient, projectId, selectedEpisodeId)
     }
   }
 

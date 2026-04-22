@@ -12,6 +12,8 @@ import {
   useUpdateProjectPhotographyPlan,
   useUpdateProjectPanelActingNotes,
 } from '@/lib/query/hooks'
+import { useProjectData } from '@/lib/query/hooks/useProjectData'
+import { useUserModels } from '@/lib/query/hooks/useUserModels'
 import { useStoryboardState } from './useStoryboardState'
 import { usePanelOperations } from './usePanelOperations'
 import { useStoryboardImageGeneration } from './useImageGeneration'
@@ -41,8 +43,12 @@ export function useStoryboardStageController({
   }, [])
 
   const { data: assets } = useProjectAssets(projectId)
+  const { data: project } = useProjectData(projectId)
+  const userModelsQuery = useUserModels()
   const characters: Character[] = useMemo(() => assets?.characters ?? [], [assets?.characters])
   const locations: Location[] = useMemo(() => assets?.locations ?? [], [assets?.locations])
+  const storyboardWorkflowOptions = useMemo(() => userModelsQuery.data?.image ?? [], [userModelsQuery.data?.image])
+  const defaultStoryboardWorkflow = project?.novelPromotionData?.storyboardModel ?? ''
 
   const { taskAwareStoryboards } = useStoryboardTaskAwareStoryboards({
     projectId,
@@ -205,5 +211,6 @@ export function useStoryboardStageController({
     retrySave,
     updatePhotographyPlanMutation, updatePanelActingNotesMutation,
     addingStoryboardGroupState, transitioningState, runningCount, pendingPanelCount, handleGenerateAllPanels,
+    storyboardWorkflowOptions, defaultStoryboardWorkflow,
   }
 }

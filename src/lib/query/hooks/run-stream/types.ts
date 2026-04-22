@@ -62,6 +62,7 @@ export type UseRunStreamStateOptions<TParams extends Record<string, unknown>> = 
   endpoint: (projectId: string) => string
   storageKeyPrefix: string
   storageScopeKey?: string
+  enableRecoveryProbe?: boolean
   buildRequestBody: (params: TParams) => Record<string, unknown>
   validateParams?: (params: TParams) => void
   resolveActiveRunId?: (context: { projectId: string; storageScopeKey?: string }) => Promise<string | null>

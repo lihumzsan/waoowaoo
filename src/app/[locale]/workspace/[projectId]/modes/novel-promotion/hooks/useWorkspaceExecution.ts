@@ -86,8 +86,22 @@ export function useWorkspaceExecution({
     () => readSessionBoolean(scriptToStoryboardMinimizedStorageKey),
   )
 
-  const storyToScriptStream = useStoryToScriptRunStream({ projectId, episodeId })
-  const scriptToStoryboardStream = useScriptToStoryboardRunStream({ projectId, episodeId })
+  const shouldRecoverStoryToScript = currentStage === 'config'
+  const shouldRecoverScriptToStoryboard =
+    currentStage === 'script' ||
+    currentStage === 'assets' ||
+    currentStage === 'storyboard'
+
+  const storyToScriptStream = useStoryToScriptRunStream({
+    projectId,
+    episodeId,
+    enableRecoveryProbe: shouldRecoverStoryToScript,
+  })
+  const scriptToStoryboardStream = useScriptToStoryboardRunStream({
+    projectId,
+    episodeId,
+    enableRecoveryProbe: shouldRecoverScriptToStoryboard,
+  })
   const handledStoryToScriptRunIdsRef = useRef<Set<string>>(new Set())
   const handledScriptToStoryboardRunIdsRef = useRef<Set<string>>(new Set())
   const storyToScriptWasActiveRef = useRef(false)

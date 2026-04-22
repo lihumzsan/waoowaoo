@@ -46,6 +46,8 @@ export default function StoryboardGroup({
   onPreviewImage,
   onCloseError,
   getPanelEditData,
+  storyboardWorkflowOptions,
+  defaultStoryboardWorkflow,
   onPanelUpdate,
   onPanelDelete,
   onOpenCharacterPicker,
@@ -128,9 +130,9 @@ export default function StoryboardGroup({
   }, [hasAnyImage, isSelectingCandidate, isSubmittingStoryboardTask])
 
   const handleRegeneratePanelImage = useCallback(
-    (panelId: string, count?: number, force?: boolean) => {
+    (panelId: string, count?: number, force?: boolean, imageModel?: string) => {
       clearPanelTaskError(panelId)
-      onRegeneratePanelImage(panelId, count, force)
+      onRegeneratePanelImage(panelId, count, force, imageModel)
     },
     [clearPanelTaskError, onRegeneratePanelImage],
   )
@@ -214,6 +216,8 @@ export default function StoryboardGroup({
         panelTaskErrorMap={panelTaskErrorMap}
         isPanelTaskRunning={isPanelTaskRunning}
         getPanelEditData={getPanelEditData}
+        storyboardWorkflowOptions={storyboardWorkflowOptions}
+        defaultStoryboardWorkflow={defaultStoryboardWorkflow}
         getPanelCandidates={getPanelCandidates}
         onPanelUpdate={onPanelUpdate}
         onPanelDelete={onPanelDelete}

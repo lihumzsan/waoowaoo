@@ -81,6 +81,7 @@ export const POST = apiHandler(async (
     srtStart,
     srtEnd,
     duration,
+    imageModel,
     videoPrompt,
     firstLastFramePrompt,
     videoDurationBinding,
@@ -127,6 +128,7 @@ export const POST = apiHandler(async (
       srtStart: srtStart ?? null,
       srtEnd: srtEnd ?? null,
       duration: duration ?? null,
+      imageModel: typeof imageModel === 'string' ? imageModel.trim() || null : null,
       videoPrompt: normalizedVideoPrompt.value,
       videoPromptEditedByUser: normalizedVideoPrompt.editedByUser,
       firstLastFramePrompt: normalizedFirstLastFramePrompt.value,
@@ -264,7 +266,7 @@ export const PATCH = apiHandler(async (
   const panelModel = prisma.novelPromotionPanel as unknown as {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>
   }
-  const { panelId, storyboardId, panelIndex, videoPrompt, firstLastFramePrompt, videoDurationBinding } = body
+  const { panelId, storyboardId, panelIndex, imageModel, videoPrompt, firstLastFramePrompt, videoDurationBinding } = body
 
   // 🔥 方式1：通过 panelId 直接更新（优先）
   if (panelId) {
@@ -278,12 +280,14 @@ export const PATCH = apiHandler(async (
 
     // 构建更新数据
     const updateData: {
+      imageModel?: string | null
       videoPrompt?: string | null
       videoPromptEditedByUser?: boolean
       firstLastFramePrompt?: string | null
       firstLastFramePromptEditedByUser?: boolean
       videoDurationBinding?: string | null
     } = {}
+    if (imageModel !== undefined) updateData.imageModel = typeof imageModel === 'string' ? imageModel.trim() || null : null
     if (videoPrompt !== undefined) {
       const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
       updateData.videoPrompt = normalizedVideoPrompt.value
@@ -320,12 +324,16 @@ export const PATCH = apiHandler(async (
 
   // 构建更新数据
   const updateData: {
+    imageModel?: string | null
     videoPrompt?: string | null
     videoPromptEditedByUser?: boolean
     firstLastFramePrompt?: string | null
     firstLastFramePromptEditedByUser?: boolean
     videoDurationBinding?: string | null
   } = {}
+  if (imageModel !== undefined) {
+    updateData.imageModel = typeof imageModel === 'string' ? imageModel.trim() || null : null
+  }
   if (videoPrompt !== undefined) {
     const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
     updateData.videoPrompt = normalizedVideoPrompt.value
@@ -358,6 +366,7 @@ export const PATCH = apiHandler(async (
         panelIndex,
         panelNumber: panelIndex + 1,
         imageUrl: null,
+        imageModel: typeof imageModel === 'string' ? imageModel.trim() || null : null,
         videoPrompt: normalizePromptOverrideField(videoPrompt).value,
         videoPromptEditedByUser: normalizePromptOverrideField(videoPrompt).editedByUser,
         firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,
@@ -401,6 +410,7 @@ export const PUT = apiHandler(async (
     srtStart,
     srtEnd,
     duration,
+    imageModel,
     videoPrompt,
     firstLastFramePrompt,
     actingNotes,  // 演技指导数据
@@ -433,6 +443,7 @@ export const PUT = apiHandler(async (
     srtStart?: number | null
     srtEnd?: number | null
     duration?: number | null
+    imageModel?: string | null
     videoPrompt?: string | null
     videoPromptEditedByUser?: boolean
     firstLastFramePrompt?: string | null
@@ -451,6 +462,7 @@ export const PUT = apiHandler(async (
   if (srtStart !== undefined) updateData.srtStart = parseNullableNumberField(srtStart)
   if (srtEnd !== undefined) updateData.srtEnd = parseNullableNumberField(srtEnd)
   if (duration !== undefined) updateData.duration = parseNullableNumberField(duration)
+  if (imageModel !== undefined) updateData.imageModel = typeof imageModel === 'string' ? imageModel.trim() || null : null
   if (videoPrompt !== undefined) {
     const normalizedVideoPrompt = normalizePromptOverrideField(videoPrompt)
     updateData.videoPrompt = normalizedVideoPrompt.value
@@ -502,6 +514,7 @@ export const PUT = apiHandler(async (
         srtStart: srtStart ?? null,
         srtEnd: srtEnd ?? null,
         duration: duration ?? null,
+        imageModel: typeof imageModel === 'string' ? imageModel.trim() || null : null,
         videoPrompt: normalizePromptOverrideField(videoPrompt).value,
         videoPromptEditedByUser: normalizePromptOverrideField(videoPrompt).editedByUser,
         firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,

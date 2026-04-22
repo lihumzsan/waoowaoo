@@ -74,4 +74,29 @@ describe('ImageGenerationInlineCountButton', () => {
     expect(html).not.toContain('<select')
     expect(html).not.toContain('rounded-full bg-white/12')
   })
+
+  it('can render the action and count selector as split interactive zones', () => {
+    Reflect.set(globalThis, 'React', React)
+
+    const html = renderToStaticMarkup(
+      createElement(ImageGenerationInlineCountButton, {
+        prefix: createElement('span', null, '重新生成'),
+        suffix: createElement('span', null, '张'),
+        value: 1,
+        options: [1, 2, 3],
+        onValueChange: () => undefined,
+        onClick: () => undefined,
+        splitInteractiveZones: true,
+        ariaLabel: '选择重新生成数量',
+        className: 'glass-btn-base glass-btn-secondary',
+        selectClassName: 'test-select',
+      }),
+    )
+
+    expect(html).toContain('type="button"')
+    expect(html).toContain('glass-btn-base glass-btn-secondary')
+    expect(html).toContain('<select')
+    expect(html).toContain('test-select')
+    expect(html).toContain('rounded-md px-1.5')
+  })
 })

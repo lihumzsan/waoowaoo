@@ -10,6 +10,7 @@ import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { resolveModelSelection } from '@/lib/api-config'
+import { prisma } from '@/lib/prisma'
 
 const DEFAULT_CANDIDATE_COUNT = 1
 
@@ -28,18 +29,29 @@ export const POST = apiHandler(async (
   const panelId = body?.panelId
   const count = body?.count
   const candidateCount = Math.max(1, Math.min(4, Number(count ?? DEFAULT_CANDIDATE_COUNT)))
+  const requestImageModel = typeof body?.imageModel === 'string' ? body.imageModel.trim() : ''
 
   if (!panelId) {
     throw new ApiError('INVALID_PARAMS')
   }
 
+  const panel = await prisma.novelPromotionPanel.findUnique({
+    where: { id: panelId },
+    select: { id: true, imageModel: true },
+  })
+
+  if (!panel) {
+    throw new ApiError('NOT_FOUND')
+  }
+
   const projectModelConfig = await getProjectModelConfig(projectId, session.user.id)
-  if (!projectModelConfig.storyboardModel) {
+  const selectedImageModel = requestImageModel || panel.imageModel || projectModelConfig.storyboardModel || ''
+  if (!selectedImageModel) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'STORYBOARD_MODEL_NOT_CONFIGURED'})
   }
   try {
-    await resolveModelSelection(session.user.id, projectModelConfig.storyboardModel, 'image')
+    await resolveModelSelection(session.user.id, selectedImageModel, 'image')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Storyboard image model is invalid'
     throw new ApiError('INVALID_PARAMS', {
@@ -51,11 +63,11 @@ export const POST = apiHandler(async (
     projectId,
     userId: session.user.id,
     modelType: 'image',
-    modelKey: projectModelConfig.storyboardModel})
+    modelKey: selectedImageModel})
   const billingPayload = {
     ...body,
     candidateCount,
-    imageModel: projectModelConfig.storyboardModel,
+    imageModel: selectedImageModel,
     ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {})}
 
   const hasOutputAtStart = await hasPanelImageOutput(panelId)

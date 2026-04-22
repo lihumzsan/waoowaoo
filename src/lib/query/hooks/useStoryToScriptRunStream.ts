@@ -19,14 +19,20 @@ export type StoryToScriptRunResult = RunResult
 type UseStoryToScriptRunStreamOptions = {
   projectId: string
   episodeId?: string | null
+  enableRecoveryProbe?: boolean
 }
 
-export function useStoryToScriptRunStream({ projectId, episodeId }: UseStoryToScriptRunStreamOptions) {
+export function useStoryToScriptRunStream({
+  projectId,
+  episodeId,
+  enableRecoveryProbe = true,
+}: UseStoryToScriptRunStreamOptions) {
   return useRunStreamState<StoryToScriptRunParams>({
     projectId,
     endpoint: (pid) => `/api/novel-promotion/${pid}/story-to-script-stream`,
     storageKeyPrefix: 'novel-promotion:story-to-script-run',
     storageScopeKey: episodeId || undefined,
+    enableRecoveryProbe,
     resolveActiveRunId: async ({ projectId: pid, storageScopeKey }) => {
       if (!storageScopeKey) return null
       const search = new URLSearchParams({

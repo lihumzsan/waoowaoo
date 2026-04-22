@@ -23,8 +23,12 @@ export interface UserModelsPayload {
   lipsync: UserModelOption[]
 }
 
-export function useWorkspaceUserModels() {
-  const userModelsQuery = useUserModels()
+interface UseWorkspaceUserModelsOptions {
+  enabled?: boolean
+}
+
+export function useWorkspaceUserModels(options: UseWorkspaceUserModelsOptions = {}) {
+  const userModelsQuery = useUserModels({ enabled: options.enabled })
   const userModelsForSettings = (userModelsQuery.data || null) as UserModelsPayload | null
   const userVideoModels = useMemo<UserModelOption[]>(() => {
     if (!userModelsForSettings || !Array.isArray(userModelsForSettings.video)) return []

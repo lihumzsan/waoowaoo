@@ -107,6 +107,7 @@ export function useVideoPanelsProjection({
             videoTaskPhase === 'failed'
               ? panelVideoState?.lastError?.message || panel.videoErrorMessage || undefined
               : panel.videoErrorMessage || undefined,
+          hasPreviousVideoVersion: panel.hasPreviousVideoVersion ?? false,
           videoModel: panel.videoModel || undefined,
           linkedToNextPanel: panel.linkedToNextPanel || false,
           lipSyncVideoUrl: panel.lipSyncVideoUrl || undefined,

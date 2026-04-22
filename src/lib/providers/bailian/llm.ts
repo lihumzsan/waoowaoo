@@ -29,6 +29,37 @@ function resolveBailianLlmTimeoutMs(): number {
   return parsed
 }
 
+function createBailianTimeoutError(timeoutMs: number): Error {
+  const error = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s.`) as Error & {
+    code?: string
+    retryable?: boolean
+  }
+  error.name = 'TimeoutError'
+  error.code = 'GENERATION_TIMEOUT'
+  error.retryable = true
+  return error
+}
+
+async function withBailianHardTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(createBailianTimeoutError(timeoutMs)), timeoutMs)
+        if (timer && typeof timer === 'object' && 'unref' in timer) {
+          timer.unref()
+        }
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function assertRegistered(modelId: string): void {
   ensureBailianCatalogRegistered()
   assertOfficialModelRegistered({
@@ -42,6 +73,7 @@ export async function completeBailianLlm(
   _params: BailianLlmCompletionParams,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   assertRegistered(_params.modelId)
+  const timeoutMs = resolveBailianLlmTimeoutMs()
   const baseURL = resolveBailianCompatibleBaseUrl({
     apiKey: _params.apiKey,
     baseUrl: _params.baseUrl,
@@ -49,12 +81,15 @@ export async function completeBailianLlm(
   const client = new OpenAI({
     apiKey: _params.apiKey,
     baseURL,
-    timeout: resolveBailianLlmTimeoutMs(),
+    timeout: timeoutMs,
   })
-  const completion = await client.chat.completions.create({
-    model: _params.modelId,
-    messages: _params.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    temperature: _params.temperature ?? 0.7,
-  })
+  const completion = await withBailianHardTimeout(
+    client.chat.completions.create({
+      model: _params.modelId,
+      messages: _params.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+      temperature: _params.temperature ?? 0.7,
+    }),
+    timeoutMs,
+  )
   return completion as OpenAI.Chat.Completions.ChatCompletion
 }

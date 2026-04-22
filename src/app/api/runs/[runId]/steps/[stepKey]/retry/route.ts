@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
-import { retryFailedStep, getRunById } from '@/lib/run-runtime/service'
+import { retryFailedStep, getRunById, getRunSnapshot } from '@/lib/run-runtime/service'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
@@ -70,6 +70,25 @@ export const POST = apiHandler(async (
       throw new ApiError('NOT_FOUND')
     }
     if (message === 'RUN_STEP_NOT_FAILED') {
+      const snapshot = await getRunSnapshot(runId)
+      const currentStep = snapshot?.steps.find((step) => step.stepKey === stepKey) || null
+      const alreadyRetrying =
+        !!snapshot
+        && snapshot.run.userId === session.user.id
+        && snapshot.run.status === 'running'
+        && !!currentStep
+        && (currentStep.status === 'pending' || currentStep.status === 'running')
+      if (alreadyRetrying && currentStep) {
+        return NextResponse.json({
+          success: true,
+          runId,
+          stepKey,
+          retryAttempt: currentStep.currentAttempt,
+          taskId: snapshot.run.taskId || null,
+          async: true,
+          alreadyRetrying: true,
+        })
+      }
       throw new ApiError('INVALID_PARAMS', {
         code: 'RUN_STEP_RETRY_ONLY_FAILED',
         stepKey,
@@ -119,13 +138,19 @@ export const POST = apiHandler(async (
     dedupeKey: null,
     priority: 3,
   })
+  const effectiveRunId =
+    typeof submitResult.runId === 'string' && submitResult.runId.trim()
+      ? submitResult.runId.trim()
+      : runId
 
   return NextResponse.json({
     success: true,
-    runId,
+    runId: effectiveRunId,
+    requestedRunId: runId,
     stepKey,
     retryAttempt: prepared.retryAttempt,
     taskId: submitResult.taskId,
     async: true,
+    deduped: submitResult.deduped === true,
   })
 })

@@ -7,6 +7,7 @@ type RouteContext = {
 
 const authState = vi.hoisted(() => ({ authenticated: true }))
 const getRunByIdMock = vi.hoisted(() => vi.fn())
+const getRunSnapshotMock = vi.hoisted(() => vi.fn())
 const retryFailedStepMock = vi.hoisted(() => vi.fn())
 const submitTaskMock = vi.hoisted(() => vi.fn())
 const resolveRequiredTaskLocaleMock = vi.hoisted(() => vi.fn(() => 'zh'))
@@ -28,6 +29,7 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/run-runtime/service', () => ({
   getRunById: getRunByIdMock,
+  getRunSnapshot: getRunSnapshotMock,
   retryFailedStep: retryFailedStepMock,
 }))
 
@@ -64,6 +66,21 @@ describe('api contract - run step retry route', () => {
       step: { stepKey: 'screenplay_clip_2' },
       retryAttempt: 2,
     })
+    getRunSnapshotMock.mockResolvedValue({
+      run: {
+        id: 'run-1',
+        userId: 'user-1',
+        status: 'running',
+        taskId: 'task-retry-1',
+      },
+      steps: [
+        {
+          stepKey: 'screenplay_clip_2',
+          status: 'pending',
+          currentAttempt: 2,
+        },
+      ],
+    })
     submitTaskMock.mockResolvedValue({
       success: true,
       async: true,
@@ -76,6 +93,21 @@ describe('api contract - run step retry route', () => {
 
   it('rejects retry when step is not failed', async () => {
     retryFailedStepMock.mockRejectedValue(new Error('RUN_STEP_NOT_FAILED'))
+    getRunSnapshotMock.mockResolvedValue({
+      run: {
+        id: 'run-1',
+        userId: 'user-1',
+        status: 'failed',
+        taskId: 'task-retry-1',
+      },
+      steps: [
+        {
+          stepKey: 'screenplay_clip_2',
+          status: 'completed',
+          currentAttempt: 2,
+        },
+      ],
+    })
     const route = await import('@/app/api/runs/[runId]/steps/[stepKey]/retry/route')
 
     const req = buildMockRequest({
@@ -88,6 +120,46 @@ describe('api contract - run step retry route', () => {
     } as RouteContext)
 
     expect(res.status).toBe(400)
+    expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('treats duplicate retry clicks as already retrying when step is pending', async () => {
+    retryFailedStepMock.mockRejectedValue(new Error('RUN_STEP_NOT_FAILED'))
+    getRunSnapshotMock.mockResolvedValue({
+      run: {
+        id: 'run-1',
+        userId: 'user-1',
+        status: 'running',
+        taskId: 'task-retry-1',
+      },
+      steps: [
+        {
+          stepKey: 'screenplay_clip_2',
+          status: 'pending',
+          currentAttempt: 3,
+        },
+      ],
+    })
+    const route = await import('@/app/api/runs/[runId]/steps/[stepKey]/retry/route')
+
+    const req = buildMockRequest({
+      path: '/api/runs/run-1/steps/screenplay_clip_2/retry',
+      method: 'POST',
+      body: {},
+    })
+    const res = await route.POST(req, {
+      params: Promise.resolve({ runId: 'run-1', stepKey: 'screenplay_clip_2' }),
+    } as RouteContext)
+
+    expect(res.status).toBe(200)
+    const payload = await res.json() as {
+      success: boolean
+      alreadyRetrying?: boolean
+      retryAttempt: number
+    }
+    expect(payload.success).toBe(true)
+    expect(payload.alreadyRetrying).toBe(true)
+    expect(payload.retryAttempt).toBe(3)
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
@@ -130,5 +202,42 @@ describe('api contract - run step retry route', () => {
         model: 'openai/gpt-5',
       }),
     }))
+  })
+
+  it('returns the effective active run id when retry dedupes into another running run', async () => {
+    submitTaskMock.mockResolvedValue({
+      success: true,
+      async: true,
+      taskId: 'task-retry-2',
+      runId: 'run-2',
+      status: 'processing',
+      deduped: true,
+    })
+    const route = await import('@/app/api/runs/[runId]/steps/[stepKey]/retry/route')
+
+    const req = buildMockRequest({
+      path: '/api/runs/run-1/steps/screenplay_clip_2/retry',
+      method: 'POST',
+      body: {
+        reason: 'manual retry',
+      },
+    })
+    const res = await route.POST(req, {
+      params: Promise.resolve({ runId: 'run-1', stepKey: 'screenplay_clip_2' }),
+    } as RouteContext)
+
+    expect(res.status).toBe(200)
+    const payload = await res.json() as {
+      success: boolean
+      runId: string
+      requestedRunId: string
+      taskId: string
+      deduped: boolean
+    }
+    expect(payload.success).toBe(true)
+    expect(payload.runId).toBe('run-2')
+    expect(payload.requestedRunId).toBe('run-1')
+    expect(payload.taskId).toBe('task-retry-2')
+    expect(payload.deduped).toBe(true)
   })
 })

@@ -90,7 +90,13 @@ export function useNovelPromotionWorkspaceController({
     t,
   })
 
-  const userModels = useWorkspaceUserModels()
+  const shouldLoadWorkspaceUserModels =
+    isSettingsModalOpen ||
+    currentStage === 'videos' ||
+    currentStage === 'voice'
+  const userModels = useWorkspaceUserModels({
+    enabled: shouldLoadWorkspaceUserModels,
+  })
 
   const execution = useWorkspaceExecution({
     projectId,

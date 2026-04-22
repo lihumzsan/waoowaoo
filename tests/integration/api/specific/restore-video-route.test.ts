@@ -131,7 +131,7 @@ describe('api specific - restore video route', () => {
     const json = await res.json() as { error: { code: string; message: string } }
     expect(res.status).toBe(409)
     expect(json.error.code).toBe('CONFLICT')
-    expect(json.error.message).toBe('VIDEO_PREVIOUS_NOT_FOUND')
+    expect(json.error.message).toBe('没有可恢复的上一版视频')
     expect(panelUpdateMock).not.toHaveBeenCalled()
   })
 })

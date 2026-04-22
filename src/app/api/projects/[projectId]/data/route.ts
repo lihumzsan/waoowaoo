@@ -4,27 +4,76 @@ import { prisma } from '@/lib/prisma'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
+import { resolveEpisodeStageArtifacts } from '@/lib/novel-promotion/stage-readiness'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
 }
 
+function buildEpisodeSummaryInclude() {
+  return {
+    orderBy: { episodeNumber: 'asc' as const },
+    include: {
+      clips: {
+        where: {
+          screenplay: {
+            not: null,
+          },
+          NOT: {
+            screenplay: '',
+          },
+        },
+        select: { id: true },
+        take: 1,
+      },
+      storyboards: {
+        where: {
+          panels: {
+            some: {},
+          },
+        },
+        select: {
+          id: true,
+          panels: {
+            where: {
+              videoUrl: {
+                not: null,
+              },
+              NOT: {
+                videoUrl: '',
+              },
+            },
+            select: { id: true },
+            take: 1,
+          },
+        },
+        take: 1,
+      },
+      voiceLines: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  }
+}
+
 /**
- * 统一的项目数据加载API
- * 返回项目基础信息、全局配置、全局资产和剧集列表
+ * Unified project bootstrap payload for the workspace.
+ * Keep the default response lightweight so opening a project does not
+ * eagerly hydrate the full asset library. Asset-heavy callers can opt in
+ * with `?includeAssets=1`.
  */
 export const GET = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   const { projectId } = await context.params
+  const includeAssets = new URL(request.url).searchParams.get('includeAssets') === '1'
 
-  // 🔐 统一权限验证
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
   const { session } = authResult
 
-  // 获取基础项目信息
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: { user: true }
@@ -38,54 +87,59 @@ export const GET = apiHandler(async (
     throw new ApiError('FORBIDDEN')
   }
 
-  // 🔥 更新最近访问时间（异步，不阻塞响应）
   prisma.project.update({
     where: { id: projectId },
     data: { lastAccessedAt: new Date() }
-  }).catch(err => _ulogError('更新访问时间失败:', err))
+  }).catch(err => _ulogError('Failed to update lastAccessedAt', err))
 
-  // ⚡ 并行执行：加载 novel-promotion 数据
-  // 注意：characters/locations 延迟加载，首次只获取 episodes 列表
   const novelPromotionData = await prisma.novelPromotionProject.findUnique({
     where: { projectId },
-    include: {
-      // 剧集列表（基础信息）- 首页必需
-      episodes: {
-        orderBy: { episodeNumber: 'asc' }
-      },
-      // ⚡ 角色和场景数据 - 资产显示必需
-      characters: {
-        include: {
-          appearances: true
+    include: includeAssets
+      ? {
+        episodes: buildEpisodeSummaryInclude(),
+        characters: {
+          include: {
+            appearances: true
+          },
+          orderBy: { createdAt: 'asc' }
         },
-        orderBy: { createdAt: 'asc' }
-      },
-      locations: {
-        include: {
-          images: true
-        },
-        orderBy: { createdAt: 'asc' }
+        locations: {
+          include: {
+            images: true
+          },
+          orderBy: { createdAt: 'asc' }
+        }
       }
-    }
+      : {
+        episodes: buildEpisodeSummaryInclude()
+      }
   })
 
   if (!novelPromotionData) {
     throw new ApiError('NOT_FOUND')
   }
 
-  // 转换为稳定媒体 URL（并保留兼容字段）
   const novelPromotionDataWithSignedUrls = await attachMediaFieldsToProject(novelPromotionData)
-  const filteredNovelPromotionData = {
-    ...novelPromotionDataWithSignedUrls,
-    locations: (novelPromotionDataWithSignedUrls.locations || []).filter((item) => readAssetKind(item) !== 'prop'),
-    props: (novelPromotionDataWithSignedUrls.locations || []).filter((item) => readAssetKind(item) === 'prop'),
-  }
+  const episodesWithArtifactReadiness = (novelPromotionDataWithSignedUrls.episodes || []).map((episode) => ({
+    ...episode,
+    artifactReadiness: resolveEpisodeStageArtifacts(episode),
+  }))
+
+  const serializedNovelPromotionData = includeAssets
+    ? {
+      ...novelPromotionDataWithSignedUrls,
+      episodes: episodesWithArtifactReadiness,
+      locations: (novelPromotionDataWithSignedUrls.locations || []).filter((item) => readAssetKind(item) !== 'prop'),
+      props: (novelPromotionDataWithSignedUrls.locations || []).filter((item) => readAssetKind(item) === 'prop'),
+    }
+    : {
+      ...novelPromotionDataWithSignedUrls,
+      episodes: episodesWithArtifactReadiness,
+    }
 
   const fullProject = {
     ...project,
-    novelPromotionData: filteredNovelPromotionData
-    // 🔥 不再用 userPreference 覆盖任何字段
-    // editModel 等配置应该直接使用 novelPromotionData 中的值
+    novelPromotionData: serializedNovelPromotionData
   }
 
   return NextResponse.json({ project: fullProject })

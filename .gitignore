@@ -68,6 +68,7 @@ prisma/data/
 # uploads (user data)
 uploads/
 /data/
+/local-transfer/
 
 certificates
 

@@ -27,6 +27,7 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
     endpoint,
     storageKeyPrefix,
     storageScopeKey,
+    enableRecoveryProbe = true,
     buildRequestBody,
     validateParams,
     resolveActiveRunId,
@@ -59,7 +60,7 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
   }, [resolveActiveRunId])
 
   useEffect(() => {
-    if (!projectId || !resolveActiveRunIdRef.current) return
+    if (!enableRecoveryProbe || !projectId || !resolveActiveRunIdRef.current) return
 
     if (runStateRef.current) return
 
@@ -92,7 +93,7 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
         setIsRecoveredRunning(true)
       },
     })
-  }, [projectId, storageKey, storageScopeKey])
+  }, [enableRecoveryProbe, projectId, storageKey, storageScopeKey])
 
   useEffect(() => {
     if (!projectId || !isRecoveredRunning || isLiveRunning) return
@@ -201,16 +202,47 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
       throw new Error(errorMessage)
     }
 
+    const effectiveRunId =
+      payload && typeof payload === 'object' && typeof (payload as { runId?: unknown }).runId === 'string'
+        ? ((payload as { runId: string }).runId || '').trim()
+        : ''
+    const nextRunId = effectiveRunId || runId
+    const runState = runStateRef.current
+    const existingStep = runState?.stepsById[stepId] || null
+    const retryAttempt =
+      payload && typeof payload === 'object' && typeof (payload as { retryAttempt?: unknown }).retryAttempt === 'number'
+        ? Math.max(1, Math.floor((payload as { retryAttempt: number }).retryAttempt))
+        : Math.max(1, (existingStep?.attempt || 1) + 1)
+    const alreadyRetrying =
+      payload && typeof payload === 'object' && (payload as { alreadyRetrying?: unknown }).alreadyRetrying === true
+
     applyEvent({
-      runId,
+      runId: nextRunId,
       event: 'run.start',
       ts: new Date().toISOString(),
       status: 'running',
-      message: 'retrying failed step',
+      message: alreadyRetrying ? 'retry already in progress' : 'retrying failed step',
+    })
+    applyEvent({
+      runId: nextRunId,
+      event: 'step.start',
+      ts: new Date().toISOString(),
+      status: 'running',
+      stepId,
+      stepAttempt: retryAttempt,
+      stepTitle: existingStep?.title || stepId,
+      stepIndex: existingStep?.stepIndex || undefined,
+      stepTotal: existingStep?.stepTotal || undefined,
+      dependsOn: existingStep?.dependsOn || [],
+      blockedBy: [],
+      groupId: existingStep?.groupId || undefined,
+      parallelKey: existingStep?.parallelKey || undefined,
+      retryable: existingStep?.retryable ?? true,
+      message: alreadyRetrying ? 'retry already in progress' : 'retrying failed step',
     })
     setIsRecoveredRunning(true)
     return {
-      runId,
+      runId: nextRunId,
       status: 'running',
       summary: null,
       payload: payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null,

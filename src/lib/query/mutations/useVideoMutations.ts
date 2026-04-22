@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
+import { invalidateEpisodeQueries } from '../episode-cache'
 import { invalidateQueryTemplates, requestJsonWithError } from './mutation-shared'
 import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 
@@ -114,8 +115,10 @@ export function useUpdateProjectPanelVideoDurationBinding(projectId: string, epi
     onSettled: () => {
       invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
       if (episodeId) {
-        invalidateQueryTemplates(queryClient, [queryKeys.episodeData(projectId, episodeId)])
-        invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)])
+        void Promise.all([
+          invalidateEpisodeQueries(queryClient, projectId, episodeId),
+          invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)]),
+        ])
       }
     },
   })
@@ -150,8 +153,10 @@ export function useRestorePreviousProjectPanelVideo(projectId: string, episodeId
     onSettled: () => {
       invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
       if (episodeId) {
-        invalidateQueryTemplates(queryClient, [queryKeys.episodeData(projectId, episodeId)])
-        invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)])
+        void Promise.all([
+          invalidateEpisodeQueries(queryClient, projectId, episodeId),
+          invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)]),
+        ])
       }
     },
   })

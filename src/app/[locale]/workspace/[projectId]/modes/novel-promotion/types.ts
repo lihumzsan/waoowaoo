@@ -4,6 +4,7 @@ import type {
   NovelPromotionShot,
   NovelPromotionStoryboard,
 } from '@/types/project'
+import type { StageArtifactReadiness } from '@/lib/novel-promotion/stage-readiness'
 
 export interface Episode {
   id: string
@@ -13,6 +14,7 @@ export interface Episode {
   novelText?: string | null
   audioUrl?: string | null
   srtContent?: string | null
+  artifactReadiness?: StageArtifactReadiness
   clips?: NovelPromotionClip[]
   storyboards?: NovelPromotionStoryboard[]
   shots?: NovelPromotionShot[]

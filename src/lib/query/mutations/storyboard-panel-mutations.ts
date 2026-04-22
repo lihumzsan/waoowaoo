@@ -16,11 +16,11 @@ import {
 export function useRegenerateProjectPanelImage(projectId: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async ({ panelId, count }: { panelId: string; count?: number }) => {
+        mutationFn: async ({ panelId, count, imageModel }: { panelId: string; count?: number; imageModel?: string }) => {
             const res = await apiFetch(`/api/novel-promotion/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ panelId, count: count ?? 1 }),
+                body: JSON.stringify({ panelId, count: count ?? 1, imageModel }),
             })
             if (!res.ok) {
                 const error = await res.json().catch(() => ({}))

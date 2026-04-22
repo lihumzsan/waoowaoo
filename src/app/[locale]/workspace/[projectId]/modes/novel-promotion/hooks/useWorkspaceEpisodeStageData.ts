@@ -1,6 +1,7 @@
 'use client'
 
 import { useEpisodeData } from '@/lib/query/hooks'
+import type { EpisodeDataProfile } from '@/lib/novel-promotion/episode-data-profile'
 import type { NovelPromotionClip, NovelPromotionStoryboard } from '@/types/project'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 
@@ -11,9 +12,9 @@ interface EpisodeStagePayload {
   storyboards?: NovelPromotionStoryboard[]
 }
 
-export function useWorkspaceEpisodeStageData() {
+export function useWorkspaceEpisodeStageData(profile: EpisodeDataProfile) {
   const { projectId, episodeId } = useWorkspaceProvider()
-  const { data: episodeData } = useEpisodeData(projectId, episodeId || null)
+  const { data: episodeData } = useEpisodeData(projectId, episodeId || null, { profile })
   const payload = episodeData as EpisodeStagePayload | null
 
   return {
