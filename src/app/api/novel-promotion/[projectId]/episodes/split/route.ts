@@ -1,8 +1,13 @@
 import { NextRequest } from 'next/server'
+import { createHash } from 'crypto'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { TASK_TYPE } from '@/lib/task/types'
 import { maybeSubmitLLMTask } from '@/lib/llm-observe/route-task'
+
+function hashContentForDedupe(content: string) {
+  return createHash('sha1').update(content).digest('hex').slice(0, 16)
+}
 
 /**
  * AI 分集 API（任务化）
@@ -35,7 +40,8 @@ export const POST = apiHandler(async (
     targetId: projectId,
     routePath: `/api/novel-promotion/${projectId}/episodes/split`,
     body: { content },
-    dedupeKey: `episode_split_llm:${projectId}:${content.length}`})
+    dedupeKey: `episode_split_llm:${projectId}:${hashContentForDedupe(content)}`,
+  })
   if (asyncTaskResponse) return asyncTaskResponse
 
   throw new ApiError('INVALID_PARAMS')

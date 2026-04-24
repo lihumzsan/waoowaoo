@@ -35,6 +35,33 @@ export interface CustomModel {
   price: number
 }
 
+const COMFYUI_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
+  {
+    modelId: 'baseimage/图片编辑/qwen双图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/qwen双图编辑',
+    name: 'ComfyUI · Qwen 双图编辑',
+    type: 'image',
+    provider: 'comfyui',
+    price: 0,
+  },
+  {
+    modelId: 'baseimage/图片编辑/qwen三图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/qwen三图编辑',
+    name: 'ComfyUI · Qwen 三图编辑',
+    type: 'image',
+    provider: 'comfyui',
+    price: 0,
+  },
+  {
+    modelId: 'baseimage/图片编辑/Flux2多图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/Flux2多图编辑',
+    name: 'ComfyUI · Flux2 多图编辑',
+    type: 'image',
+    provider: 'comfyui',
+    price: 0,
+  },
+]
+
 export type ModelMediaType = 'llm' | 'image' | 'video' | 'audio' | 'lipsync'
 
 export interface ModelSelection {
@@ -315,6 +342,19 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
   }
 }
 
+function injectComfyUiHelperModels(models: CustomModel[], providers: CustomProvider[]): CustomModel[] {
+  const hasConnectedComfyUi = providers.some(
+    (provider) => getProviderKey(provider.id) === 'comfyui' && hasProviderConnection(provider),
+  )
+  if (!hasConnectedComfyUi) return models
+
+  const seenModelKeys = new Set(models.map((model) => model.modelKey))
+  const helperModels = COMFYUI_AUTO_ENABLED_HELPER_MODELS.filter((model) => !seenModelKeys.has(model.modelKey))
+  if (helperModels.length === 0) return models
+
+  return [...models, ...helperModels]
+}
+
 function findModelByKey(models: CustomModel[], modelKey: string): CustomModel | null {
   const parsed = assertModelKey(modelKey, 'model')
   return models.find((model) => model.modelId === parsed.modelId && model.provider === parsed.provider) || null
@@ -449,8 +489,8 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
  * 获取用户自定义模型列表
  */
 export async function getUserModels(userId: string): Promise<CustomModel[]> {
-  const { models } = await readUserConfig(userId)
-  return models
+  const { models, providers } = await readUserConfig(userId)
+  return injectComfyUiHelperModels(models, providers)
 }
 
 /**

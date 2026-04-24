@@ -33,6 +33,7 @@ interface PanelCardProps {
   storyboardWorkflowOptions?: UserModelOption[]
   selectedImageWorkflow?: string
   defaultImageWorkflow?: string
+  multiCharacterCoordinationEnabled?: boolean
   previousImageUrl?: string | null  // 支持撤回
   onUpdate: (updates: Partial<PanelEditData>) => void
   onDelete: () => void
@@ -73,6 +74,7 @@ export default function PanelCard({
   storyboardWorkflowOptions = [],
   selectedImageWorkflow = '',
   defaultImageWorkflow = '',
+  multiCharacterCoordinationEnabled = false,
   previousImageUrl,
   onUpdate,
   onDelete,
@@ -157,6 +159,11 @@ export default function PanelCard({
             <div className="mb-2 text-xs font-medium text-[var(--glass-text-secondary)]">
               生图工作流
             </div>
+            {panelData.characters.length > 2 && multiCharacterCoordinationEnabled && (
+              <div className="mb-2 rounded-lg bg-[var(--glass-tone-info-bg)] px-2 py-1 text-[11px] text-[var(--glass-tone-info-fg)]">
+                多人协同生成已启用：先出底图，再自动调用编辑工作流补人物并做最终精修。
+              </div>
+            )}
             <ModelCapabilityDropdown
               models={storyboardWorkflowOptions}
               value={selectedImageWorkflow || defaultImageWorkflow || undefined}

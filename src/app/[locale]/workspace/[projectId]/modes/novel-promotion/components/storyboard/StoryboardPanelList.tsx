@@ -9,6 +9,11 @@ import PanelCard from './PanelCard'
 import type { PanelSaveState } from './hooks/usePanelCrudActions'
 import type { UserModelOption } from '@/lib/query/hooks/useUserModels'
 
+const MULTI_CHARACTER_COORDINATION_MODEL_KEYS = new Set([
+  'comfyui::baseimage/图片编辑/qwen三图编辑',
+  'comfyui::baseimage/图片编辑/Flux2多图编辑',
+])
+
 interface StoryboardPanelListProps {
   storyboardId: string
   textPanels: StoryboardPanel[]
@@ -84,6 +89,10 @@ export default function StoryboardPanelList({
 }: StoryboardPanelListProps) {
   const displayImages = useMemo(() => textPanels.map((panel) => panel.imageUrl || null), [textPanels])
   const isVertical = ASPECT_RATIO_CONFIGS[videoRatio]?.isVertical ?? false
+  const multiCharacterCoordinationEnabled = useMemo(
+    () => storyboardWorkflowOptions.some((option) => MULTI_CHARACTER_COORDINATION_MODEL_KEYS.has(option.value)),
+    [storyboardWorkflowOptions],
+  )
 
   return (
     <div className={`grid gap-4 ${isVertical ? 'grid-cols-5' : 'grid-cols-3'} ${isSubmittingStoryboardTextTask ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -132,6 +141,7 @@ export default function StoryboardPanelList({
               storyboardWorkflowOptions={storyboardWorkflowOptions}
               selectedImageWorkflow={resolvedImageWorkflow}
               defaultImageWorkflow={defaultStoryboardWorkflow}
+              multiCharacterCoordinationEnabled={multiCharacterCoordinationEnabled}
               onUpdate={(updates) => onPanelUpdate(panel.id, panel, updates)}
               onDelete={() => onPanelDelete(panel.id)}
               onOpenCharacterPicker={() => onOpenCharacterPicker(panel.id)}

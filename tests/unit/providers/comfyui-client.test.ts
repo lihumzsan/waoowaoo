@@ -148,4 +148,74 @@ describe('comfyui client media refs', () => {
     expect(result.dataBase64).toBe(Buffer.from([1, 2, 3]).toString('base64'))
     expect(fetchMock).toHaveBeenCalled()
   })
+
+  it('prefers the decoded final image over preview concat outputs', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-2' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-2')) {
+        return new Response(JSON.stringify({
+          'prompt-2': {
+            outputs: {
+              '10': {
+                images: [{
+                  filename: 'final-image.png',
+                  subfolder: 'ComfyUI',
+                  type: 'output',
+                }],
+              },
+              '27': {
+                images: [{
+                  filename: 'reference-collage.png',
+                  subfolder: 'ComfyUI',
+                  type: 'output',
+                }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=final-image.png')) {
+        return new Response(new Uint8Array([4, 5, 6]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const result = await runComfyUiWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflow: {
+        '10': { class_type: 'SaveImage', inputs: { images: ['34', 0] } },
+        '27': { class_type: 'SaveImage', inputs: { images: ['35', 0] } },
+        '34': { class_type: 'VAEDecode', inputs: {} },
+        '35': { class_type: 'ImageConcatMulti', inputs: {} },
+      },
+      expect: 'image',
+    })
+
+    expect(result.mimeType).toBe('image/png')
+    expect(result.dataBase64).toBe(Buffer.from([4, 5, 6]).toString('base64'))
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/view?filename=final-image.png'),
+      expect.any(Object),
+    )
+  })
 })

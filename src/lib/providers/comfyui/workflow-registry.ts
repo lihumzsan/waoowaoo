@@ -735,6 +735,22 @@ function clampDimension(value: number | undefined): number | null {
   return Math.max(64, Math.min(4096, Math.round(value)))
 }
 
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left)
+  let b = Math.abs(right)
+  while (b > 0) {
+    const next = a % b
+    a = b
+    b = next
+  }
+  return a || 1
+}
+
+function formatAspectRatio(width: number, height: number): string {
+  const divisor = greatestCommonDivisor(width, height)
+  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
+}
+
 function clampPositiveInteger(value: number | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   return Math.max(1, Math.round(value))
@@ -753,6 +769,10 @@ function applyDimensionHeuristics(
   const nextWidth = clampDimension(width)
   const nextHeight = clampDimension(height)
   if (nextWidth === null && nextHeight === null) return
+  const longestSide = Math.max(nextWidth ?? 0, nextHeight ?? 0)
+  const aspectRatio = nextWidth !== null && nextHeight !== null
+    ? formatAspectRatio(nextWidth, nextHeight)
+    : null
 
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -762,6 +782,18 @@ function applyDimensionHeuristics(
     }
     if (nextHeight !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'height') && !isConnectionValue(node.inputs.height)) {
       node.inputs.height = nextHeight
+    }
+    if (aspectRatio && Object.prototype.hasOwnProperty.call(node.inputs, 'aspect_ratio') && !isConnectionValue(node.inputs.aspect_ratio)) {
+      node.inputs.aspect_ratio = aspectRatio
+    }
+    if (longestSide > 0 && Object.prototype.hasOwnProperty.call(node.inputs, 'scale_to_length')) {
+      const currentValue = node.inputs.scale_to_length
+      if (isConnectionValue(currentValue)) {
+        const sourceNodeId = normalizeNodeId(currentValue[0])
+        if (sourceNodeId) setNumericValueOnNode(graph[sourceNodeId], longestSide)
+      } else {
+        node.inputs.scale_to_length = longestSide
+      }
     }
   }
 }

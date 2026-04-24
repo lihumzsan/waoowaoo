@@ -198,6 +198,10 @@ export function parsePanelCharacterReferences(value: string | null | undefined):
   }
 }
 
+function normalizeCharacterLookupToken(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, '').trim()
+}
+
 /**
  * 按角色名查找角色（支持别名匹配）
  * 优先级：1. 精确全名匹配  2. 按 '/' 拆分后别名精确匹配
@@ -222,6 +226,34 @@ export function findCharacterByName<T extends { name: string }>(characters: T[],
   return undefined
 }
 
+export function findCharacterByNameLoose<T extends { name: string }>(characters: T[], referenceName: string): T | undefined {
+  const exact = findCharacterByName(characters, referenceName)
+  if (exact) return exact
+
+  const normalizedReference = normalizeCharacterLookupToken(referenceName)
+  if (!normalizedReference) return undefined
+
+  const normalizedExact = characters.find((character) => normalizeCharacterLookupToken(character.name) === normalizedReference)
+  if (normalizedExact) return normalizedExact
+
+  const normalizedAliases = normalizedReference
+    .split('/')
+    .map((alias) => alias.trim())
+    .filter(Boolean)
+
+  for (const character of characters) {
+    const characterAliases = character.name
+      .split('/')
+      .map((alias) => normalizeCharacterLookupToken(alias))
+      .filter(Boolean)
+    if (normalizedAliases.some((alias) => characterAliases.includes(alias))) {
+      return character
+    }
+  }
+
+  return undefined
+}
+
 export async function collectPanelReferenceImages(projectData: NovelProjectData, panel: PanelLike) {
   const refs: string[] = []
 
@@ -230,7 +262,7 @@ export async function collectPanelReferenceImages(projectData: NovelProjectData,
 
   const panelCharacters = parsePanelCharacterReferences(panel.characters)
   for (const item of panelCharacters) {
-    const character = findCharacterByName(projectData.characters || [], item.name)
+    const character = findCharacterByNameLoose(projectData.characters || [], item.name)
     if (!character) continue
 
     const appearances = character.appearances || []

@@ -54,6 +54,30 @@ interface UserModelsPayload {
   lipsync: UserModelOption[]
 }
 
+const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
+  {
+    modelId: 'baseimage/图片编辑/qwen双图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/qwen双图编辑',
+    name: 'ComfyUI · Qwen 双图编辑',
+    type: 'image',
+    provider: 'comfyui',
+  },
+  {
+    modelId: 'baseimage/图片编辑/qwen三图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/qwen三图编辑',
+    name: 'ComfyUI · Qwen 三图编辑',
+    type: 'image',
+    provider: 'comfyui',
+  },
+  {
+    modelId: 'baseimage/图片编辑/Flux2多图编辑',
+    modelKey: 'comfyui::baseimage/图片编辑/Flux2多图编辑',
+    name: 'ComfyUI · Flux2 多图编辑',
+    type: 'image',
+    provider: 'comfyui',
+  },
+]
+
 const AUDIO_MODEL_EXCLUDED_IDS = new Set([
   'baseaudio/\u97f3\u8272/s2-se',
 ])
@@ -176,6 +200,19 @@ function isUserSelectableModel(model: StoredModel): boolean {
   return !AUDIO_MODEL_EXCLUDED_IDS.has(modelId)
 }
 
+function injectComfyUiHelperModels(models: StoredModel[], providers: StoredProvider[]): StoredModel[] {
+  const hasConnectedComfyUi = providers.some(
+    (provider) => getProviderKey(provider.id) === 'comfyui' && hasStoredProviderConnection(provider),
+  )
+  if (!hasConnectedComfyUi) return models
+
+  const seenModelKeys = new Set(models.map((model) => toModelKey(model)))
+  const helperModels = COMFYUI_AUTO_ENABLED_HELPER_MODELS.filter((model) => !seenModelKeys.has(toModelKey(model)))
+  if (helperModels.length === 0) return models
+
+  return [...models, ...helperModels]
+}
+
 export const GET = apiHandler(async () => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
@@ -187,8 +224,11 @@ export const GET = apiHandler(async () => {
     select: { customModels: true, customProviders: true },
   })
 
-  const modelsRaw: StoredModel[] = parseStoredModels(pref?.customModels)
   const providers: StoredProvider[] = parseStoredProviders(pref?.customProviders)
+  const modelsRaw: StoredModel[] = injectComfyUiHelperModels(
+    parseStoredModels(pref?.customModels),
+    providers,
+  )
 
   const providerNameMap = new Map<string, string>()
   const providerIdsWithConnection = new Set<string>()

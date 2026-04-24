@@ -145,6 +145,12 @@ const COMFYUI_PRESET_DEFAULT_MODEL_IDS = {
     voiceDesignModel: 'baseaudio/\u97f3\u8272/s2-se',
 } as const
 
+const COMFYUI_REQUIRED_IMAGE_HELPER_MODEL_IDS = [
+    'baseimage/图片编辑/qwen双图编辑',
+    'baseimage/图片编辑/qwen三图编辑',
+    'baseimage/图片编辑/Flux2多图编辑',
+] as const
+
 function hasComfyUiPresetDefaultField(field: string): field is keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS {
     return Object.prototype.hasOwnProperty.call(COMFYUI_PRESET_DEFAULT_MODEL_IDS, field)
 }
@@ -185,6 +191,22 @@ export function applyComfyUiPresetDefaults(params: {
             }
             changed = true
         }
+    }
+
+    for (const helperModelId of COMFYUI_REQUIRED_IMAGE_HELPER_MODEL_IDS) {
+        const modelIndex = nextModels.findIndex((model) =>
+            model.provider === 'comfyui' && model.modelId === helperModelId,
+        )
+        if (modelIndex < 0) continue
+
+        const targetModel = nextModels[modelIndex]
+        if (!targetModel || targetModel.enabled) continue
+
+        nextModels[modelIndex] = {
+            ...targetModel,
+            enabled: true,
+        }
+        changed = true
     }
 
     return {

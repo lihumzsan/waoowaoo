@@ -26,6 +26,13 @@ type SplitResponse = {
   episodes?: EpisodeSplit[]
 }
 
+type ExistingEpisodeForContext = {
+  episodeNumber: number
+  name: string
+  description: string | null
+  novelText: string | null
+}
+
 const MAX_EPISODE_SPLIT_ATTEMPTS = 2
 const EPISODE_SPLIT_BOUNDARY_SUFFIX = `
 
@@ -33,6 +40,31 @@ const EPISODE_SPLIT_BOUNDARY_SUFFIX = `
 1. Each episode MUST include both startMarker and endMarker from the original text.
 2. Markers must be locatable in the original text; allow punctuation/whitespace differences only.
 3. If boundaries cannot be located reliably, return an empty episodes array.`
+
+function compactText(value: string | null | undefined, maxLength: number) {
+  const normalized = (value || '').replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength)}...`
+}
+
+function buildExistingEpisodeContext(episodes: ExistingEpisodeForContext[]) {
+  if (episodes.length === 0) return ''
+
+  const recentEpisodes = episodes.slice(-8)
+  const lines = recentEpisodes.map((episode) => {
+    const title = compactText(episode.name, 40)
+    const summary = compactText(episode.description || episode.novelText, 120)
+    return `- #${episode.episodeNumber} ${title}${summary ? `: ${summary}` : ''}`
+  })
+
+  return `
+
+[Existing Episode Context]
+The project already has ${episodes.length} episode(s). The text you are splitting is a new/additional chunk, not a replacement for existing episodes.
+Do not rewrite, merge, remove, or renumber existing episodes. Split only the provided input text.
+Keep title style, summary style, pacing, and episode granularity consistent with these existing episodes:
+${lines.join('\n')}`
+}
 
 function parseSplitResponse(aiResponse: string): SplitResponse {
   const parsed = safeParseJsonObject(aiResponse) as SplitResponse
@@ -81,6 +113,17 @@ export async function handleEpisodeSplitTask(job: Job<TaskJobData>) {
     throw new Error('Novel promotion data not found')
   }
 
+  const existingEpisodes = await prisma.novelPromotionEpisode.findMany({
+    where: { novelPromotionProjectId: novelProject.id },
+    orderBy: { episodeNumber: 'asc' },
+    select: {
+      episodeNumber: true,
+      name: true,
+      description: true,
+      novelText: true,
+    },
+  })
+
   const userConfig = await getUserModelConfig(job.data.userId)
   const analysisModel = userConfig.analysisModel
   if (!analysisModel) {
@@ -94,7 +137,7 @@ export async function handleEpisodeSplitTask(job: Job<TaskJobData>) {
       CONTENT: content,
     },
   })
-  const prompt = `${promptBase}${EPISODE_SPLIT_BOUNDARY_SUFFIX}`
+  const prompt = `${promptBase}${buildExistingEpisodeContext(existingEpisodes)}${EPISODE_SPLIT_BOUNDARY_SUFFIX}`
 
   await reportTaskProgress(job, 20, {
     stage: 'episode_split_prepare',

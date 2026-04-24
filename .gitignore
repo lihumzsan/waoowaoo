@@ -74,6 +74,8 @@ certificates
 
 # local temporary snapshots for old-version verification
 .tmp-old-snapshot-*/
+.tmp_inspect/
+backups/*.sql
 
 # temporary files
 tmp/
@@ -81,6 +83,7 @@ tmp/
 tmp-*
 tmp-inspect/
 .tmp_check_task.ts
+.tmp_*.jpg
 debug-request.json
 .codex-dev*.log
 tmp-codex-dev-*.log

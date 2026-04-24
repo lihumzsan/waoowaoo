@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { logInfo as _ulogInfo, logWarn as _ulogWarn, logError as _ulogError } from '@/lib/logging/core'
+import { logError as _ulogError, logInfo as _ulogInfo } from '@/lib/logging/core'
 import { detectEpisodeMarkers, type EpisodeMarkerResult } from '@/lib/episode-marker-detector'
 import { countWords } from '@/lib/word-count'
 import {
@@ -20,18 +20,27 @@ interface UseWizardStateParams {
   importStatus?: string | null
   onImportComplete: (episodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => void
   t: Translate
-  /** 预填文本：传入后自动设置并触发分析 */
   initialRawContent?: string
 }
 
-export function useWizardState({ projectId, importStatus, onImportComplete, t, initialRawContent }: UseWizardStateParams) {
+export function useWizardState({
+  projectId,
+  importStatus,
+  onImportComplete,
+  t,
+  initialRawContent,
+}: UseWizardStateParams) {
   const initialStage: WizardStage = importStatus === 'pending' ? 'preview' : 'select'
   const [stage, setStage] = useState<WizardStage>(initialStage)
   const [rawContent, setRawContent] = useState(initialRawContent || '')
   const [episodes, setEpisodes] = useState<SplitEpisode[]>([])
   const [selectedEpisode, setSelectedEpisode] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({ show: false, index: -1, title: '' })
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({
+    show: false,
+    index: -1,
+    title: '',
+  })
   const [markerResult, setMarkerResult] = useState<EpisodeMarkerResult | null>(null)
   const [showMarkerConfirm, setShowMarkerConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -45,18 +54,28 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
     try {
       const data = await listProjectEpisodesMutation.mutateAsync()
       if (data.episodes && data.episodes.length > 0) {
-        const loadedEpisodes: SplitEpisode[] = data.episodes.map((ep: { episodeNumber?: number; name?: string; description?: string; novelText?: string }, idx: number) => ({
-          number: ep.episodeNumber || idx + 1,
-          title: ep.name || t('episode', { num: idx + 1 }),
-          summary: ep.description || '',
-          content: ep.novelText || '',
-          wordCount: countWords(ep.novelText || ''),
-        }))
+        const loadedEpisodes: SplitEpisode[] = data.episodes.map(
+          (
+            ep: {
+              episodeNumber?: number
+              name?: string
+              description?: string
+              novelText?: string
+            },
+            idx: number,
+          ) => ({
+            number: ep.episodeNumber || idx + 1,
+            title: ep.name || t('episode', { num: idx + 1 }),
+            summary: ep.description || '',
+            content: ep.novelText || '',
+            wordCount: countWords(ep.novelText || ''),
+          }),
+        )
         setEpisodes(loadedEpisodes)
         setStage('preview')
       }
     } catch (err) {
-      _ulogError('[SmartImport] 加载已保存剧集失败:', err)
+      _ulogError('[SmartImport] failed to load saved episodes', err)
     }
   }, [listProjectEpisodesMutation, t])
 
@@ -66,48 +85,28 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
     }
   }, [episodes.length, importStatus, loadSavedEpisodes])
 
-
   const performAISplit = useCallback(async () => {
     setShowMarkerConfirm(false)
     setStage('analyzing')
     setError(null)
 
     try {
-      _ulogInfo('[SmartImport] 开始调用 split API...')
+      _ulogInfo('[SmartImport] starting AI episode split')
       const data = await splitProjectEpisodesMutation.mutateAsync({ content: rawContent, async: true })
       const splitEpisodes = data.episodes || []
       setEpisodes(splitEpisodes)
-
-      let saveSucceeded = true
-      try {
-        await saveProjectEpisodesBatchMutation.mutateAsync({
-          episodes: splitEpisodes.map((ep: SplitEpisode) => ({
-            name: ep.title,
-            description: ep.summary,
-            novelText: ep.content,
-          })),
-          clearExisting: true,
-          importStatus: 'pending',
-        })
-      } catch {
-        saveSucceeded = false
-        _ulogWarn('[SmartImport] 自动保存失败，继续显示预览')
-      }
-      if (saveSucceeded) {
-        _ulogInfo('[SmartImport] 剧集已自动保存到数据库，状态：pending')
-      }
-
+      _ulogInfo('[SmartImport] AI split ready for preview; database will update only after confirmation')
       setStage('preview')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('errors.analyzeFailed')
       setError(message || t('errors.analyzeFailed'))
       setStage('select')
     }
-  }, [rawContent, saveProjectEpisodesBatchMutation, splitProjectEpisodesMutation, t])
+  }, [rawContent, splitProjectEpisodesMutation, t])
 
   const handleAnalyze = useCallback(async () => {
-    _ulogInfo('[SmartImport] handleAnalyze 被调用')
-    _ulogInfo('[SmartImport] rawContent 长度:', rawContent.length)
+    _ulogInfo('[SmartImport] handleAnalyze called')
+    _ulogInfo('[SmartImport] rawContent length:', rawContent.length)
     _ulogInfo('[SmartImport] projectId:', projectId)
 
     if (!rawContent.trim()) {
@@ -116,7 +115,7 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
     }
 
     const detection = detectEpisodeMarkers(rawContent)
-    _ulogInfo('[SmartImport] 标记检测结果:', {
+    _ulogInfo('[SmartImport] marker detection result', {
       hasMarkers: detection.hasMarkers,
       markerType: detection.markerType,
       confidence: detection.confidence,
@@ -130,19 +129,17 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
       return
     }
 
-    _ulogInfo('[SmartImport] 未检测到标记，将使用 AI 分析')
+    _ulogInfo('[SmartImport] no markers detected, using AI split')
     await performAISplit()
   }, [performAISplit, projectId, rawContent, t])
 
-  // 当预填文本存在时，自动触发分析（跳过选择页面）
   const autoAnalyzeTriggered = useRef(false)
   useEffect(() => {
     if (initialRawContent && !autoAnalyzeTriggered.current && stage === 'select') {
       autoAnalyzeTriggered.current = true
       void handleAnalyze()
     }
-  }) // eslint-disable-line react-hooks/exhaustive-deps
-
+  })
 
   const handleMarkerSplit = useCallback(async () => {
     if (!markerResult) return
@@ -155,33 +152,14 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
       const data = await splitProjectEpisodesByMarkersMutation.mutateAsync({ content: rawContent })
       const splitEpisodes = data.episodes || []
       setEpisodes(splitEpisodes)
-
-      let saveSucceeded = true
-      try {
-        await saveProjectEpisodesBatchMutation.mutateAsync({
-          episodes: splitEpisodes.map((ep: SplitEpisode) => ({
-            name: ep.title,
-            description: ep.summary,
-            novelText: ep.content,
-          })),
-          clearExisting: true,
-          importStatus: 'pending',
-        })
-      } catch {
-        saveSucceeded = false
-        _ulogWarn('[SmartImport] 标记分割保存失败，继续显示预览')
-      }
-      if (saveSucceeded) {
-        _ulogInfo('[SmartImport] 标记分割剧集已保存')
-      }
-
+      _ulogInfo('[SmartImport] marker split ready for preview; database will update only after confirmation')
       setStage('preview')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('errors.analyzeFailed')
       setError(message || t('errors.analyzeFailed'))
       setStage('select')
     }
-  }, [markerResult, rawContent, saveProjectEpisodesBatchMutation, splitProjectEpisodesByMarkersMutation, t])
+  }, [markerResult, rawContent, splitProjectEpisodesByMarkersMutation, t])
 
   const updateEpisodeTitle = useCallback((index: number, title: string) => {
     setEpisodes((prev) => prev.map((ep, i) => (i === index ? { ...ep, title } : ep)))
@@ -196,7 +174,9 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
   }, [])
 
   const updateEpisodeContent = useCallback((index: number, content: string) => {
-    setEpisodes((prev) => prev.map((ep, i) => (i === index ? { ...ep, content, wordCount: countWords(content) } : ep)))
+    setEpisodes((prev) =>
+      prev.map((ep, i) => (i === index ? { ...ep, content, wordCount: countWords(content) } : ep)),
+    )
   }, [])
 
   const deleteEpisode = useCallback((index: number) => {
@@ -238,32 +218,35 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
     closeDeleteConfirm()
   }, [closeDeleteConfirm, deleteConfirm.index, deleteEpisode])
 
-  const handleConfirm = useCallback(async (triggerGlobalAnalysis = false) => {
-    setSaving(true)
-    setError(null)
+  const handleConfirm = useCallback(
+    async (triggerGlobalAnalysis = false) => {
+      setSaving(true)
+      setError(null)
 
-    try {
-      await saveProjectEpisodesBatchMutation.mutateAsync({
-        episodes: episodes.map((ep) => ({
-          name: ep.title,
-          description: ep.summary,
-          novelText: ep.content,
-        })),
-        clearExisting: true,
-        importStatus: 'completed',
-        triggerGlobalAnalysis,
-      })
+      try {
+        await saveProjectEpisodesBatchMutation.mutateAsync({
+          episodes: episodes.map((ep) => ({
+            name: ep.title,
+            description: ep.summary,
+            novelText: ep.content,
+          })),
+          mode: 'append',
+          importStatus: 'completed',
+          triggerGlobalAnalysis,
+        })
 
-      _ulogInfo('[SmartImport] 剧集已保存到数据库，状态：completed, 触发全局分析:', triggerGlobalAnalysis)
-      onImportComplete(episodes, triggerGlobalAnalysis)
-    } catch (err: unknown) {
-      _ulogError('[SmartImport] 保存失败:', err)
-      const message = err instanceof Error ? err.message : t('errors.saveFailed')
-      setError(message || t('errors.saveFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }, [episodes, onImportComplete, saveProjectEpisodesBatchMutation, t])
+        _ulogInfo('[SmartImport] episodes saved after confirmation', { triggerGlobalAnalysis })
+        onImportComplete(episodes, triggerGlobalAnalysis)
+      } catch (err: unknown) {
+        _ulogError('[SmartImport] failed to save episodes', err)
+        const message = err instanceof Error ? err.message : t('errors.saveFailed')
+        setError(message || t('errors.saveFailed'))
+      } finally {
+        setSaving(false)
+      }
+    },
+    [episodes, onImportComplete, saveProjectEpisodesBatchMutation, t],
+  )
 
   return {
     stage,

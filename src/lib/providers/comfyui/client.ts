@@ -26,6 +26,27 @@ type MediaRef = {
   type: string
 }
 
+type MediaRefOutputGroup = {
+  nodeId: string
+  refs: MediaRef[]
+}
+
+const LOW_PRIORITY_OUTPUT_SOURCE_TYPES = [
+  'concat',
+  'comparer',
+  'compare',
+  'preview',
+  'show',
+  'display',
+]
+
+const HIGH_PRIORITY_OUTPUT_SOURCE_TYPES = [
+  'decode',
+  'saveanimated',
+  'savevideo',
+  'vhs_videocombine',
+]
+
 type ComfyPromptQueuePhase = 'pending' | 'running' | 'absent' | 'unknown'
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|bmp)$/i
@@ -131,14 +152,24 @@ function collectMediaRefs(value: unknown, refs: MediaRef[]): void {
 }
 
 export function collectMediaRefsFromOutputs(outputs: Record<string, Record<string, unknown>> | undefined): MediaRef[] {
-  const refs: MediaRef[] = []
-  if (!outputs) return refs
+  return collectMediaRefOutputGroups(outputs).flatMap((group) => group.refs)
+}
 
-  for (const block of Object.values(outputs)) {
+function collectMediaRefOutputGroups(
+  outputs: Record<string, Record<string, unknown>> | undefined,
+): MediaRefOutputGroup[] {
+  if (!outputs) return []
+
+  const groups: MediaRefOutputGroup[] = []
+  for (const [nodeId, block] of Object.entries(outputs)) {
+    const refs: MediaRef[] = []
     collectMediaRefs(block, refs)
+    if (refs.length > 0) {
+      groups.push({ nodeId, refs })
+    }
   }
 
-  return refs
+  return groups
 }
 
 function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video' | 'audio'): MediaRef | null {
@@ -150,6 +181,81 @@ function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video' | 'audio'): Me
     return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
   }
   return refs.find((ref) => AUDIO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+}
+
+function compareOutputNodeIdsDescending(left: string, right: string): number {
+  const leftNumber = Number(left)
+  const rightNumber = Number(right)
+  const leftIsNumber = Number.isFinite(leftNumber)
+  const rightIsNumber = Number.isFinite(rightNumber)
+
+  if (leftIsNumber && rightIsNumber) {
+    return rightNumber - leftNumber
+  }
+  if (leftIsNumber) return -1
+  if (rightIsNumber) return 1
+  return right.localeCompare(left)
+}
+
+function normalizeWorkflowClassType(value: string | undefined): string {
+  return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function resolveConnectedNodeId(inputValue: unknown): string | null {
+  if (!Array.isArray(inputValue) || inputValue.length < 1) return null
+  const nodeId = inputValue[0]
+  return typeof nodeId === 'string'
+    ? nodeId.trim() || null
+    : typeof nodeId === 'number' && Number.isFinite(nodeId)
+      ? String(Math.trunc(nodeId))
+      : null
+}
+
+function scoreWorkflowOutputNode(nodeId: string, workflow: ComfyUiWorkflowGraph): number {
+  const outputNode = workflow[nodeId]
+  if (!outputNode) return 0
+
+  const connectedNodeIds = Object.values(outputNode.inputs)
+    .map((value) => resolveConnectedNodeId(value))
+    .filter((value): value is string => !!value)
+
+  if (connectedNodeIds.length === 0) return 0
+
+  const directSources = connectedNodeIds
+    .map((connectedNodeId) => normalizeWorkflowClassType(workflow[connectedNodeId]?.class_type))
+    .filter(Boolean)
+
+  if (directSources.some((classType) => LOW_PRIORITY_OUTPUT_SOURCE_TYPES.some((token) => classType.includes(token)))) {
+    return 100
+  }
+
+  if (directSources.some((classType) => HIGH_PRIORITY_OUTPUT_SOURCE_TYPES.some((token) => classType.includes(token)))) {
+    return 0
+  }
+
+  return 10
+}
+
+function pickPreferredMediaRefFromOutputs(
+  outputs: Record<string, Record<string, unknown>> | undefined,
+  expect: 'image' | 'video' | 'audio',
+  workflow?: ComfyUiWorkflowGraph,
+): MediaRef | null {
+  const groups = collectMediaRefOutputGroups(outputs)
+  if (groups.length === 0) return null
+
+  const rankedGroups = [...groups].sort((left, right) => {
+    const leftScore = workflow ? scoreWorkflowOutputNode(left.nodeId, workflow) : 0
+    const rightScore = workflow ? scoreWorkflowOutputNode(right.nodeId, workflow) : 0
+    if (leftScore !== rightScore) return leftScore - rightScore
+    return compareOutputNodeIdsDescending(left.nodeId, right.nodeId)
+  })
+  for (const group of rankedGroups) {
+    const ref = pickMediaRef(group.refs, expect)
+    if (ref) return ref
+  }
+
+  return null
 }
 
 function readTimeoutOverride(value: string | undefined, fallbackMs: number): number {
@@ -471,8 +577,7 @@ export async function runComfyUiWorkflow(params: {
       const history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
       const entry = history[promptId]
       if (entry) {
-        const refs = collectMediaRefsFromOutputs(entry.outputs)
-        mediaRef = pickMediaRef(refs, params.expect)
+        mediaRef = pickPreferredMediaRefFromOutputs(entry.outputs, params.expect, params.workflow)
         if (mediaRef) break
 
         if (executionStartedAt === null) {

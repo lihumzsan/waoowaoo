@@ -98,6 +98,10 @@ export function useSaveProjectEpisodesBatch(projectId: string) {
         description?: string
         novelText?: string
       }>
+      mode?: 'append' | 'update_current' | 'replace_all'
+      episodeId?: string
+      confirmReplace?: boolean
+      /** @deprecated Use mode='replace_all' with confirmReplace=true instead. */
       clearExisting?: boolean
       importStatus?: 'pending' | 'completed'
       triggerGlobalAnalysis?: boolean
