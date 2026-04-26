@@ -78,26 +78,25 @@ export function useStoryboardTaskAwareStoryboards({
     () => buildPanelImageTargets(initialStoryboards),
     [initialStoryboards],
   )
-
-  const storyboardTextStates = useStoryboardTaskPresentation(
-    projectId,
-    storyboardTextTargets,
-    !!projectId && storyboardTextTargets.length > 0,
+  const taskTargets = useMemo(
+    () => [...storyboardTextTargets, ...panelImageTargets],
+    [panelImageTargets, storyboardTextTargets],
   )
-  const panelImageStates = useStoryboardTaskPresentation(
+
+  const taskStates = useStoryboardTaskPresentation(
     projectId,
-    panelImageTargets,
-    !!projectId && panelImageTargets.length > 0,
+    taskTargets,
+    !!projectId && taskTargets.length > 0,
   )
 
   const taskAwareStoryboards = useMemo(() => {
     return initialStoryboards.map((storyboard) => ({
       ...storyboard,
       storyboardTaskRunning:
-        isRunningPhase(storyboardTextStates.getTaskState(`storyboard:${storyboard.id}`)?.phase) ||
-        isRunningPhase(storyboardTextStates.getTaskState(`episode:${storyboard.episodeId}`)?.phase),
+        isRunningPhase(taskStates.getTaskState(`storyboard:${storyboard.id}`)?.phase) ||
+        isRunningPhase(taskStates.getTaskState(`episode:${storyboard.episodeId}`)?.phase),
       panels: (storyboard.panels || []).map((panel) => {
-        const panelImageTaskState = panelImageStates.getTaskState(`panel-image:${panel.id}`)
+        const panelImageTaskState = taskStates.getTaskState(`panel-image:${panel.id}`)
         const panelImageRunning = isRunningPhase(panelImageTaskState?.phase)
         return {
           ...panel,
@@ -109,8 +108,7 @@ export function useStoryboardTaskAwareStoryboards({
   }, [
     initialStoryboards,
     isRunningPhase,
-    panelImageStates,
-    storyboardTextStates,
+    taskStates,
   ])
 
   return {

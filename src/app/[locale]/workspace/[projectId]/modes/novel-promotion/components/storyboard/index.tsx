@@ -1,15 +1,18 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { NovelPromotionStoryboard, NovelPromotionClip } from '@/types/project'
-import { CharacterPickerModal, LocationPickerModal } from '../PanelEditForm'
-import ImageEditModal from './ImageEditModal'
-import AIDataModal from './AIDataModal'
-import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import StoryboardStageShell from './StoryboardStageShell'
 import StoryboardToolbar from './StoryboardToolbar'
 import StoryboardCanvas from './StoryboardCanvas'
 import { useStoryboardStageController } from './hooks/useStoryboardStageController'
 import { useStoryboardModalRuntime } from './hooks/useStoryboardModalRuntime'
+
+const CharacterPickerModal = dynamic(() => import('../PanelEditForm').then((mod) => mod.CharacterPickerModal))
+const LocationPickerModal = dynamic(() => import('../PanelEditForm').then((mod) => mod.LocationPickerModal))
+const ImageEditModal = dynamic(() => import('./ImageEditModal'))
+const AIDataModal = dynamic(() => import('./AIDataModal'))
+const ImagePreviewModal = dynamic(() => import('@/components/ui/ImagePreviewModal'))
 
 interface StoryboardStageProps {
   projectId: string

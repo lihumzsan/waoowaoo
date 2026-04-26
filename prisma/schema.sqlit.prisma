@@ -391,6 +391,8 @@ model UsageCost {
   @@index([apiType])
   @@index([createdAt])
   @@index([projectId])
+  @@index([projectId, targetType, targetId, type, status, updatedAt])
+  @@index([projectId, type, status, targetType, targetId, finishedAt])
   @@index([userId])
   @@map("usage_costs")
 }
