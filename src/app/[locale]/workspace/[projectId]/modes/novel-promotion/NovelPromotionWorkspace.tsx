@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { AnimatedBackground } from '@/components/ui/SharedComponents'
@@ -7,12 +8,13 @@ import { useTranslations } from 'next-intl'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceRunStreamConsoles from './components/WorkspaceRunStreamConsoles'
 import WorkspaceStageContent from './components/WorkspaceStageContent'
-import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceHeaderShell from './components/WorkspaceHeaderShell'
 import { WorkspaceStageRuntimeProvider } from './WorkspaceStageRuntimeContext'
 import { useNovelPromotionWorkspaceController } from './hooks/useNovelPromotionWorkspaceController'
 import type { NovelPromotionWorkspaceProps } from './types'
 import '@/styles/animations.css'
+
+const WorkspaceAssetLibraryModal = dynamic(() => import('./components/WorkspaceAssetLibraryModal'))
 
 function NovelPromotionWorkspaceContent(props: NovelPromotionWorkspaceProps) {
   const vm = useNovelPromotionWorkspaceController(props)
