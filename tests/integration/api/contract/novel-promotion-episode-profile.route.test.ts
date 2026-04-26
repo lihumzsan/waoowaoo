@@ -8,6 +8,8 @@ type RouteContext = {
 const authState = vi.hoisted(() => ({ authenticated: true }))
 const findUniqueMock = vi.hoisted(() => vi.fn())
 const updateProjectMock = vi.hoisted(() => vi.fn())
+const findManyTaskMock = vi.hoisted(() => vi.fn())
+const findManyMediaObjectMock = vi.hoisted(() => vi.fn())
 const attachMediaFieldsToProjectMock = vi.hoisted(() => vi.fn(async (value) => value))
 
 vi.mock('@/lib/api-auth', () => {
@@ -33,6 +35,12 @@ vi.mock('@/lib/prisma', () => ({
     novelPromotionProject: {
       update: updateProjectMock,
     },
+    task: {
+      findMany: findManyTaskMock,
+    },
+    mediaObject: {
+      findMany: findManyMediaObjectMock,
+    },
   },
 }))
 
@@ -50,6 +58,8 @@ describe('api contract - novel promotion episode profiles', () => {
     vi.resetModules()
     authState.authenticated = true
     updateProjectMock.mockResolvedValue({ projectId: 'project-1', lastEpisodeId: 'episode-1' })
+    findManyTaskMock.mockResolvedValue([])
+    findManyMediaObjectMock.mockResolvedValue([])
   })
 
   it('keeps the default full profile compatible and adds artifactReadiness', async () => {
@@ -146,7 +156,7 @@ describe('api contract - novel promotion episode profiles', () => {
     expect(attachMediaFieldsToProjectMock).not.toHaveBeenCalled()
   })
 
-  it('returns the workspace-visual profile without voiceLines, shots, or novelText', async () => {
+  it('returns the storyboard profile without voiceLines, shots, novelText, or video history', async () => {
     findUniqueMock.mockResolvedValue({
       id: 'episode-1',
       episodeNumber: 1,
@@ -164,14 +174,14 @@ describe('api contract - novel promotion episode profiles', () => {
           episodeId: 'episode-1',
           clipId: 'clip-1',
           clip: { id: 'clip-1', content: 'c' },
-          panels: [{ id: 'panel-1', panelIndex: 0, videoUrl: '' }],
+          panels: [{ id: 'panel-1', panelIndex: 0, imageUrl: '/m/image', videoUrl: '' }],
         },
       ],
     })
 
     const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
     const req = buildMockRequest({
-      path: '/api/novel-promotion/project-1/episodes/episode-1?profile=workspace-visual',
+      path: '/api/novel-promotion/project-1/episodes/episode-1?profile=storyboard',
       method: 'GET',
     })
 
@@ -186,6 +196,7 @@ describe('api contract - novel promotion episode profiles', () => {
     expect(body.episode.novelText).toBeUndefined()
     expect(body.episode.voiceLines).toBeUndefined()
     expect(body.episode.shots).toBeUndefined()
+    expect(body.episode.storyboards[0].panels[0].hasPreviousVideoVersion).toBeUndefined()
     expect(body.episode.artifactReadiness).toEqual({
       hasStory: true,
       hasScript: true,
@@ -199,5 +210,111 @@ describe('api contract - novel promotion episode profiles', () => {
         storyboards: expect.any(Object),
       }),
     }))
+    expect(findManyTaskMock).not.toHaveBeenCalled()
+    expect(attachMediaFieldsToProjectMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps workspace-visual as a storyboard-compatible alias', async () => {
+    findUniqueMock.mockResolvedValue({
+      id: 'episode-1',
+      episodeNumber: 1,
+      name: 'Episode 1',
+      description: null,
+      novelText: 'long story text',
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      clips: [],
+      storyboards: [],
+    })
+
+    const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/episodes/episode-1?profile=workspace-visual',
+      method: 'GET',
+    })
+
+    const res = await route.GET(req, {
+      params: Promise.resolve({ projectId: 'project-1', episodeId: 'episode-1' }),
+    } as RouteContext)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.episode.novelText).toBeUndefined()
+  })
+
+  it('returns videos profile with previous video availability checks', async () => {
+    findUniqueMock.mockResolvedValue({
+      id: 'episode-1',
+      episodeNumber: 1,
+      name: 'Episode 1',
+      description: null,
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      clips: [],
+      storyboards: [
+        {
+          id: 'sb-1',
+          panels: [{ id: 'panel-1', panelIndex: 0, videoUrl: '/m/video' }],
+        },
+      ],
+    })
+    findManyTaskMock.mockResolvedValue([])
+
+    const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/episodes/episode-1?profile=videos',
+      method: 'GET',
+    })
+
+    const res = await route.GET(req, {
+      params: Promise.resolve({ projectId: 'project-1', episodeId: 'episode-1' }),
+    } as RouteContext)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.episode.storyboards[0].panels[0].hasPreviousVideoVersion).toBe(false)
+    expect(findManyTaskMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns voice profile with only bindable panel data and readiness', async () => {
+    findUniqueMock.mockResolvedValue({
+      id: 'episode-1',
+      episodeNumber: 1,
+      name: 'Episode 1',
+      description: null,
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      clips: [{ id: 'clip-1', summary: 'summary', content: 'content', screenplay: '{"scenes":[]}' }],
+      storyboards: [
+        {
+          id: 'sb-1',
+          episodeId: 'episode-1',
+          clipId: 'clip-1',
+          panels: [{ id: 'panel-1', panelIndex: 0, description: 'desc', srtSegment: 'line' }],
+        },
+      ],
+      voiceLines: [{ id: 'voice-1' }],
+    })
+
+    const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/episodes/episode-1?profile=voice',
+      method: 'GET',
+    })
+
+    const res = await route.GET(req, {
+      params: Promise.resolve({ projectId: 'project-1', episodeId: 'episode-1' }),
+    } as RouteContext)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.episode.storyboards[0].panels[0]).toEqual(expect.objectContaining({
+      id: 'panel-1',
+      panelIndex: 0,
+      description: 'desc',
+      srtSegment: 'line',
+    }))
+    expect(body.episode.shots).toBeUndefined()
+    expect(body.episode.artifactReadiness.hasVoice).toBe(true)
   })
 })

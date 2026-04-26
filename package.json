@@ -23,6 +23,7 @@
     "start:watchdog": "tsx --env-file=.env scripts/watchdog.ts",
     "start:board": "tsx --env-file=.env scripts/bull-board.ts",
     "stats:errors": "tsx scripts/task-error-stats.ts",
+    "audit:workspace-speed": "tsx --env-file=.env scripts/workspace-speed-audit.ts",
     "logs": "tsx scripts/logs.ts list",
     "logs:app": "tsx scripts/logs.ts tail app 120",
     "logs:latest": "tsx scripts/logs.ts tail latest 120",
