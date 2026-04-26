@@ -80,6 +80,7 @@ backups/*.sql
 # temporary files
 tmp/
 .tmp/
+.tmp_*/
 tmp-*
 tmp-inspect/
 .tmp_check_task.ts

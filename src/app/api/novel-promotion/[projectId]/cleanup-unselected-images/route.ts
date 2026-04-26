@@ -12,7 +12,7 @@ import { apiHandler } from '@/lib/api-errors'
  * 在用户确认资产进入下一步时调用
  */
 export const POST = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   const { projectId } = await context.params

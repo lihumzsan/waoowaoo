@@ -4,6 +4,9 @@ export const EPISODE_DATA_PROFILES = [
   EPISODE_DATA_PROFILE_DEFAULT,
   'config',
   'workspace-visual',
+  'storyboard',
+  'videos',
+  'voice',
 ] as const
 
 export type EpisodeDataProfile = (typeof EPISODE_DATA_PROFILES)[number]

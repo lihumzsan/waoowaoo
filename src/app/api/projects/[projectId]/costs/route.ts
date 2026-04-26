@@ -10,7 +10,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
  * 获取项目费用详情
  */
 export const GET = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   // 🔐 统一权限验证

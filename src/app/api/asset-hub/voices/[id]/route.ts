@@ -5,7 +5,7 @@ import { ApiError, apiHandler } from '@/lib/api-errors'
 
 // 删除音色
 export const DELETE = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) => {
     // 🔐 统一权限验证

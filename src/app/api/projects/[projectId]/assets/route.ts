@@ -13,7 +13,7 @@ function readAssetKind(value: Record<string, unknown>): string {
  * 用于资产管理页面，避免首次加载时的性能开销
  */
 export const GET = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ projectId: string }> }
 ) => {
     const { projectId } = await context.params

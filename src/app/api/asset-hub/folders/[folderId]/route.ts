@@ -41,7 +41,7 @@ export const PATCH = apiHandler(async (
 
 // 删除文件夹
 export const DELETE = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ folderId: string }> }
 ) => {
     const { folderId } = await context.params

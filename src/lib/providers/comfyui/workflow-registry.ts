@@ -777,14 +777,32 @@ function applyDimensionHeuristics(
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
 
-    if (nextWidth !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'width') && !isConnectionValue(node.inputs.width)) {
-      node.inputs.width = nextWidth
+    if (nextWidth !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'width')) {
+      const currentValue = node.inputs.width
+      if (isConnectionValue(currentValue)) {
+        const sourceNodeId = normalizeNodeId(currentValue[0])
+        if (sourceNodeId) setNumericValueOnNode(graph[sourceNodeId], nextWidth)
+      } else {
+        node.inputs.width = nextWidth
+      }
     }
-    if (nextHeight !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'height') && !isConnectionValue(node.inputs.height)) {
-      node.inputs.height = nextHeight
+    if (nextHeight !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'height')) {
+      const currentValue = node.inputs.height
+      if (isConnectionValue(currentValue)) {
+        const sourceNodeId = normalizeNodeId(currentValue[0])
+        if (sourceNodeId) setNumericValueOnNode(graph[sourceNodeId], nextHeight)
+      } else {
+        node.inputs.height = nextHeight
+      }
     }
-    if (aspectRatio && Object.prototype.hasOwnProperty.call(node.inputs, 'aspect_ratio') && !isConnectionValue(node.inputs.aspect_ratio)) {
-      node.inputs.aspect_ratio = aspectRatio
+    if (aspectRatio && Object.prototype.hasOwnProperty.call(node.inputs, 'aspect_ratio')) {
+      const currentValue = node.inputs.aspect_ratio
+      if (isConnectionValue(currentValue)) {
+        const sourceNodeId = normalizeNodeId(currentValue[0])
+        if (sourceNodeId) setStringValueOnNode(graph[sourceNodeId], aspectRatio)
+      } else {
+        node.inputs.aspect_ratio = aspectRatio
+      }
     }
     if (longestSide > 0 && Object.prototype.hasOwnProperty.call(node.inputs, 'scale_to_length')) {
       const currentValue = node.inputs.scale_to_length
@@ -799,32 +817,49 @@ function applyDimensionHeuristics(
 }
 
 function applyImageInjection(graph: ComfyUiWorkflowGraph, imageFilenames?: string[]): void {
-  if (!Array.isArray(imageFilenames) || imageFilenames.length === 0) return
-
   const loadNodes = Object.entries(graph)
     .filter(([, node]) => node.class_type.toLowerCase().includes('loadimage'))
     .sort(([a], [b]) => compareNodeIds(a, b))
 
+  if (loadNodes.length === 0) return
+
+  const filenames = Array.isArray(imageFilenames)
+    ? imageFilenames.filter((filename): filename is string => typeof filename === 'string' && filename.trim().length > 0)
+    : []
+  const fallbackFilename = filenames[filenames.length - 1] || null
+
   loadNodes.forEach(([, node], index) => {
-    const filename = imageFilenames[index]
-    if (!filename) return
-    node.inputs.image = filename
+    const filename = filenames[index] || fallbackFilename
+    if (filename) {
+      node.inputs.image = filename
+    } else {
+      delete node.inputs.image
+    }
     delete node.inputs.upload
     delete node.inputs.imageUI
+    delete node.inputs.imageui
   })
 }
 
 function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: string[]): void {
-  if (!Array.isArray(audioFilenames) || audioFilenames.length === 0) return
-
   const loadNodes = Object.entries(graph)
     .filter(([, node]) => node.class_type.toLowerCase().includes('loadaudio'))
     .sort(([a], [b]) => compareNodeIds(a, b))
 
+  if (loadNodes.length === 0) return
+
+  const filenames = Array.isArray(audioFilenames)
+    ? audioFilenames.filter((filename): filename is string => typeof filename === 'string' && filename.trim().length > 0)
+    : []
+  const fallbackFilename = filenames[filenames.length - 1] || null
+
   loadNodes.forEach(([, node], index) => {
-    const filename = audioFilenames[index]
-    if (!filename) return
-    node.inputs.audio = filename
+    const filename = filenames[index] || fallbackFilename
+    if (filename) {
+      node.inputs.audio = filename
+    } else {
+      delete node.inputs.audio
+    }
     delete node.inputs.audioUI
     delete node.inputs.audioui
     delete node.inputs.upload
@@ -851,6 +886,19 @@ function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value
   if (!node || !isRecord(node.inputs)) return false
 
   for (const field of ['value', 'a', 'number']) {
+    if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
+    if (isConnectionValue(node.inputs[field])) continue
+    node.inputs[field] = value
+    return true
+  }
+
+  return false
+}
+
+function setStringValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: string): boolean {
+  if (!node || !isRecord(node.inputs)) return false
+
+  for (const field of ['value', 'text', 'string', 'input_string']) {
     if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
     if (isConnectionValue(node.inputs[field])) continue
     node.inputs[field] = value
@@ -976,6 +1024,15 @@ export function loadComfyUiWorkflowJsonFile(workflowKey: string): ComfyUiWorkflo
   return readWorkflowGraphFromFile(filePath)
 }
 
+export function getComfyUiWorkflowImageInputCount(workflowKey: string): number {
+  const filePath = resolveWorkflowFilePath(workflowKey)
+  if (!filePath) return 0
+
+  return Object.values(readWorkflowGraphFromFile(filePath))
+    .filter((node) => node.class_type.toLowerCase().includes('loadimage'))
+    .length
+}
+
 function walkWorkflowFiles(baseDir: string, currentDir: string, output: string[]): void {
   const entries = readdirSync(currentDir, { withFileTypes: true })
   for (const entry of entries) {
@@ -1010,7 +1067,7 @@ export function listComfyUiWorkflowKeys(): string[] {
     .filter((key) => {
       if (seen.has(key)) return false
       seen.add(key)
-      return true
+      return !!resolveWorkflowFilePath(key)
     })
     .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
 }

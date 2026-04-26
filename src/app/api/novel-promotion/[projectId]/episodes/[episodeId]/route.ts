@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
+import type { MediaRef } from '@/lib/media/types'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
 import {
   normalizeEpisodeDataProfile,
@@ -37,6 +38,102 @@ type EpisodeWithStoryboardPanels = {
       hasPreviousVideoVersion?: boolean
     }>
   }>
+}
+
+type MediaObjectRow = {
+  id: string
+  publicId: string
+  storageKey: string
+  sha256: string | null
+  mimeType: string | null
+  sizeBytes: bigint | number | null
+  width: number | null
+  height: number | null
+  durationMs: number | null
+  updatedAt: Date
+}
+
+type EpisodeWithPanelMediaFields = {
+  storyboards?: Array<{
+    panels?: Array<Record<string, unknown>>
+  }>
+}
+
+function mediaUrl(publicId: string): string {
+  return `/m/${encodeURIComponent(publicId)}`
+}
+
+function mapMediaObjectToRef(row: MediaObjectRow): MediaRef {
+  return {
+    id: row.id,
+    publicId: row.publicId,
+    url: mediaUrl(row.publicId),
+    sha256: row.sha256,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes == null ? null : Number(row.sizeBytes),
+    width: row.width,
+    height: row.height,
+    durationMs: row.durationMs,
+    updatedAt: row.updatedAt.toISOString(),
+    storageKey: row.storageKey,
+  }
+}
+
+function collectPanelMediaIds(episode: EpisodeWithPanelMediaFields): string[] {
+  const ids = new Set<string>()
+  const fields = [
+    'imageMediaId',
+    'videoMediaId',
+    'lipSyncVideoMediaId',
+    'sketchImageMediaId',
+    'previousImageMediaId',
+  ]
+
+  for (const storyboard of episode.storyboards || []) {
+    for (const panel of storyboard.panels || []) {
+      for (const field of fields) {
+        const value = panel[field]
+        if (typeof value === 'string' && value.trim()) {
+          ids.add(value)
+        }
+      }
+    }
+  }
+
+  return Array.from(ids)
+}
+
+function applyPanelMediaRef(panel: Record<string, unknown>, map: Map<string, MediaRef>, idField: string, refField: string, urlField: string) {
+  const id = typeof panel[idField] === 'string' ? panel[idField] : ''
+  const media = id ? map.get(id) || null : null
+  panel[refField] = media
+  if (media?.url) {
+    panel[urlField] = media.url
+  } else {
+    panel[urlField] = panel[urlField] || null
+  }
+}
+
+async function attachSelectedPanelMediaFields<T extends EpisodeWithPanelMediaFields>(episode: T): Promise<T> {
+  const ids = collectPanelMediaIds(episode)
+  if (ids.length === 0) return episode
+
+  const rows = await prisma.mediaObject.findMany({
+    where: { id: { in: ids } },
+  }) as MediaObjectRow[]
+  const mediaById = new Map(rows.map((row) => [row.id, mapMediaObjectToRef(row)]))
+
+  for (const storyboard of episode.storyboards || []) {
+    for (const panel of storyboard.panels || []) {
+      applyPanelMediaRef(panel, mediaById, 'imageMediaId', 'media', 'imageUrl')
+      applyPanelMediaRef(panel, mediaById, 'videoMediaId', 'videoMedia', 'videoUrl')
+      applyPanelMediaRef(panel, mediaById, 'lipSyncVideoMediaId', 'lipSyncVideoMedia', 'lipSyncVideoUrl')
+      applyPanelMediaRef(panel, mediaById, 'sketchImageMediaId', 'sketchImageMedia', 'sketchImageUrl')
+      applyPanelMediaRef(panel, mediaById, 'previousImageMediaId', 'previousImageMedia', 'previousImageUrl')
+    }
+  }
+
+  return episode
 }
 
 async function attachPreviousVideoVersionFlags<T extends EpisodeWithStoryboardPanels>(
@@ -158,6 +255,7 @@ async function loadConfigEpisode(episodeId: string) {
 }
 
 async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) {
+  void projectId
   const episode = await prisma.novelPromotionEpisode.findUnique({
     where: { id: episodeId },
     select: {
@@ -168,6 +266,74 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
       createdAt: true,
       updatedAt: true,
       novelText: true,
+      clips: {
+        orderBy: { createdAt: 'asc' },
+      },
+      storyboards: {
+        include: {
+          clip: true,
+          panels: {
+            orderBy: { panelIndex: 'asc' },
+            select: {
+              id: true,
+              storyboardId: true,
+              panelIndex: true,
+              panelNumber: true,
+              shotType: true,
+              cameraMove: true,
+              description: true,
+              location: true,
+              characters: true,
+              props: true,
+              srtSegment: true,
+              srtStart: true,
+              srtEnd: true,
+              duration: true,
+              imagePrompt: true,
+              imageModel: true,
+              imageUrl: true,
+              imageMediaId: true,
+              candidateImages: true,
+              imageHistory: true,
+              sketchImageUrl: true,
+              sketchImageMediaId: true,
+              previousImageUrl: true,
+              previousImageMediaId: true,
+              photographyRules: true,
+              actingNotes: true,
+              videoPrompt: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  })
+
+  if (!episode) {
+    throw new ApiError('NOT_FOUND')
+  }
+
+  const readiness = resolveEpisodeStageArtifacts(episode)
+  const episodeWithSignedUrls = await attachSelectedPanelMediaFields(episode)
+  const { novelText, ...visualEpisode } = episodeWithSignedUrls
+  void novelText
+  return {
+    ...visualEpisode,
+    artifactReadiness: readiness,
+  }
+}
+
+async function loadVideosEpisode(projectId: string, episodeId: string) {
+  const episode = await prisma.novelPromotionEpisode.findUnique({
+    where: { id: episodeId },
+    select: {
+      id: true,
+      episodeNumber: true,
+      name: true,
+      description: true,
+      createdAt: true,
+      updatedAt: true,
       clips: {
         orderBy: { createdAt: 'asc' },
       },
@@ -187,12 +353,75 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
 
   const readiness = resolveEpisodeStageArtifacts(episode)
   const episodeWithHistoryFlags = await attachPreviousVideoVersionFlags(projectId, episode)
-  const episodeWithSignedUrls = await attachMediaFieldsToProject(episodeWithHistoryFlags)
-  const { novelText, ...visualEpisode } = episodeWithSignedUrls
-  void novelText
+  const episodeWithSignedUrls = await attachSelectedPanelMediaFields(episodeWithHistoryFlags)
   return {
-    ...visualEpisode,
+    ...episodeWithSignedUrls,
     artifactReadiness: readiness,
+  }
+}
+
+async function loadVoiceEpisode(episodeId: string) {
+  const episode = await prisma.novelPromotionEpisode.findUnique({
+    where: { id: episodeId },
+    select: {
+      id: true,
+      episodeNumber: true,
+      name: true,
+      description: true,
+      createdAt: true,
+      updatedAt: true,
+      clips: {
+        select: {
+          id: true,
+          start: true,
+          end: true,
+          duration: true,
+          startText: true,
+          endText: true,
+          shotCount: true,
+          summary: true,
+          location: true,
+          characters: true,
+          props: true,
+          content: true,
+          screenplay: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+      storyboards: {
+        select: {
+          id: true,
+          episodeId: true,
+          clipId: true,
+          panelCount: true,
+          panels: {
+            select: {
+              id: true,
+              storyboardId: true,
+              panelIndex: true,
+              panelNumber: true,
+              description: true,
+              srtSegment: true,
+            },
+            orderBy: { panelIndex: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+      voiceLines: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  })
+
+  if (!episode) {
+    throw new ApiError('NOT_FOUND')
+  }
+
+  return {
+    ...episode,
+    artifactReadiness: resolveEpisodeStageArtifacts(episode),
   }
 }
 
@@ -235,8 +464,14 @@ async function loadEpisodeByProfile(projectId: string, episodeId: string, profil
   if (profile === 'config') {
     return await loadConfigEpisode(episodeId)
   }
-  if (profile === 'workspace-visual') {
+  if (profile === 'workspace-visual' || profile === 'storyboard') {
     return await loadWorkspaceVisualEpisode(projectId, episodeId)
+  }
+  if (profile === 'videos') {
+    return await loadVideosEpisode(projectId, episodeId)
+  }
+  if (profile === 'voice') {
+    return await loadVoiceEpisode(episodeId)
   }
   return await loadFullEpisode(projectId, episodeId)
 }
@@ -302,7 +537,7 @@ export const PATCH = apiHandler(async (
  * DELETE - 删除剧集
  */
 export const DELETE = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string; episodeId: string }> }
 ) => {
   const { projectId, episodeId } = await context.params

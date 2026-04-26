@@ -8,7 +8,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
  * GET - 获取项目的所有剧集
  */
 export const GET = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   const { projectId } = await context.params

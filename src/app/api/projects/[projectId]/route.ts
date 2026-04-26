@@ -9,7 +9,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 
 // GET - 获取项目详情
 export const GET = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   const { projectId } = await context.params
@@ -183,7 +183,7 @@ async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
 
 // DELETE - 删除项目（同时清理COS文件�?
 export const DELETE = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
 ) => {
   const { projectId } = await context.params

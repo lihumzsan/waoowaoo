@@ -116,7 +116,7 @@ function parseJsonArray<T extends JsonRecord>(responseText: string, label: strin
   return rows as T[]
 }
 
-function shouldRetryStepError(error: unknown, message: string, retryable: boolean) {
+function shouldRetryStepError(message: string, retryable: boolean) {
   if (retryable) return true
   const lowerMessage = message.toLowerCase()
   return lowerMessage.includes('json') || lowerMessage.includes('parse')
@@ -299,7 +299,7 @@ async function runStepWithRetry<T>(params: {
       lastError = error instanceof Error ? error : new Error(String(error))
       const normalized = normalizeAnyError(error, { context: 'worker' })
       const shouldRetry = attempt < MAX_STEP_ATTEMPTS
-        && shouldRetryStepError(error, normalized.message, normalized.retryable)
+        && shouldRetryStepError(normalized.message, normalized.retryable)
       if (!shouldRetry) break
       const retryDelayMs = computeRetryDelayMs(attempt)
       await wait(retryDelayMs)

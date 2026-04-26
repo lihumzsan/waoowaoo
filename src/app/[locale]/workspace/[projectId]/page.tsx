@@ -112,7 +112,11 @@ export default function ProjectDetailPage() {
   // 如果 URL 没有 stage 参数，默认使用 'config'
   // 🚧 剪辑阶段 (editor) 暂时禁用，自动重定向到成片阶段 (videos)
   const effectiveStage = currentUrlStage === 'editor' ? 'videos' : (currentUrlStage || 'config')
-  const episodeProfile = effectiveStage === 'config' ? 'config' : 'workspace-visual'
+  const episodeProfile =
+    effectiveStage === 'config' ? 'config'
+      : effectiveStage === 'videos' ? 'videos'
+        : effectiveStage === 'voice' ? 'voice'
+          : 'storyboard'
 
   // 获取剧集列表
   const novelPromotionData = project?.novelPromotionData as NovelPromotionData | undefined
@@ -227,7 +231,7 @@ export default function ProjectDetailPage() {
   }
 
   // 智能导入 - 完成后刷新数据（数据已由 SmartImportWizard 保存）
-  const handleSmartImportComplete = async (splitEpisodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => {
+  const handleSmartImportComplete = async (_splitEpisodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => {
     _ulogInfo('[Page] handleSmartImportComplete 被调用，triggerGlobalAnalysis:', triggerGlobalAnalysis)
 
     try {

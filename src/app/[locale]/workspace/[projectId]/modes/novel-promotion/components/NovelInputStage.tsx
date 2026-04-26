@@ -58,7 +58,7 @@ export default function NovelInputStage({
   isSwitchingStage = false,
   enableNarration = false,
   onEnableNarrationChange,
-  videoRatio = '9:16',
+  videoRatio = '16:9',
   artStyle = 'american-comic',
   onVideoRatioChange,
   onArtStyleChange
@@ -186,7 +186,7 @@ export default function NovelInputStage({
           onVideoRatioChange={(value) => onVideoRatioChange?.(value)}
           ratioOptions={VIDEO_RATIOS.map((option) => ({
             ...option,
-            recommended: option.value === '9:16'
+            recommended: option.value === '16:9'
           }))}
           getRatioUsage={getRatioUsageTag}
           artStyle={artStyle}

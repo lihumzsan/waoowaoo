@@ -37,7 +37,7 @@ export function useProjectData(projectId: string | null) {
       return data.project
     },
     enabled: !!projectId,
-    staleTime: 5000,
+    staleTime: 30_000,
   })
 }
 
@@ -114,7 +114,7 @@ export function useEpisodeData(
       return data.episode as Episode
     },
     enabled: (options.enabled ?? true) && !!projectId && !!episodeId,
-    staleTime: 5000,
+    staleTime: 30_000,
   })
 }
 

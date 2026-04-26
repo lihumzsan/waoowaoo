@@ -5,7 +5,7 @@ import { ApiError, apiHandler } from '@/lib/api-errors'
 
 // 获取单个角色
 export const GET = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ characterId: string }> }
 ) => {
     const { characterId } = await context.params
@@ -82,7 +82,7 @@ export const PATCH = apiHandler(async (
 
 // 删除角色
 export const DELETE = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ characterId: string }> }
 ) => {
     const { characterId } = await context.params

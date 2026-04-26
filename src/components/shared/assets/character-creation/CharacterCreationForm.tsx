@@ -84,7 +84,6 @@ export default function CharacterCreationForm({
   handleClearReference,
   handleExtractDescription,
   handleAiDesign,
-  isSubmitting,
   isAiDesigning,
   isExtracting,
 }: CharacterCreationFormProps) {

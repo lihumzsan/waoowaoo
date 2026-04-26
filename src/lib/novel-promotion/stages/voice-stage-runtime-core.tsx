@@ -60,7 +60,7 @@ export function useVoiceStageRuntime({
   }
   const { data: assets } = useProjectAssets(projectId)
   const { data: project } = useProjectData(projectId)
-  const { data: episodeData } = useEpisodeData(projectId, episodeId)
+  const { data: episodeData } = useEpisodeData(projectId, episodeId, { profile: 'voice' })
   const userModelsQuery = useUserModels()
   const analyzeVoiceMutation = useAnalyzeProjectVoice(projectId)
   const generateVoiceMutation = useGenerateProjectVoice(projectId)

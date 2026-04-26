@@ -146,7 +146,7 @@ export const POST = apiHandler(async (
 
 // 删除形象
 export const DELETE = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ characterId: string; appearanceIndex: string }> }
 ) => {
     const { characterId, appearanceIndex } = await context.params

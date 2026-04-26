@@ -13,7 +13,7 @@ function readAssetKind(value: Record<string, unknown>): string {
  * 🔥 V6.5: 为 useProjectAssets hook 提供统一的资产数据接口
  */
 export const GET = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ projectId: string }> }
 ) => {
     const { projectId } = await context.params

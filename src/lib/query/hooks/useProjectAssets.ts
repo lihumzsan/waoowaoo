@@ -110,11 +110,14 @@ export function mapAssetGroupsToProjectAssetsData(groups: AssetGroupMap): Projec
 /**
  * 获取项目资产（角色 + 场景）
  */
-export function useProjectAssets(projectId: string | null) {
+export function useProjectAssets(
+    projectId: string | null,
+    options: { enabled?: boolean } = {},
+) {
     const assetsQuery = useAssets({
         scope: 'project',
         projectId,
-    })
+    }, options)
     const groups = groupAssetsByKind(assetsQuery.data)
     const data = mapAssetGroupsToProjectAssetsData(groups)
 

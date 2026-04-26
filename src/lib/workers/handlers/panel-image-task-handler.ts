@@ -30,13 +30,13 @@ import {
 import { COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
 
 const MULTI_CHARACTER_COORDINATION_THRESHOLD = 3
+const ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION = process.env.ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION === '1'
 const COMFYUI_QWEN_STORYBOARD_MODEL = 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作'
 const COMFYUI_FLUX_TEXT_TO_IMAGE_MODEL = `comfyui::${COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID}`
 const COMFYUI_QWEN_SINGLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen单图编辑'
 const COMFYUI_QWEN_DOUBLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen双图编辑'
 const COMFYUI_QWEN_TRIPLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen三图编辑'
 const COMFYUI_FLUX_MULTI_EDIT_MODEL = 'comfyui::baseimage/图片编辑/Flux2多图编辑'
-
 function parseJsonUnknown(raw: string | null | undefined): unknown | null {
   if (!raw) return null
   try {
@@ -139,7 +139,7 @@ function buildPanelPromptContext(params: {
       video_prompt: params.panel.videoPrompt || '',
       location: params.panel.location || '',
       characters: panelCharacters,
-      source_text: params.panel.srtSegment || '',
+      source_text: params.panel.description || params.panel.srtSegment || '',
       photography_rules: parseJsonUnknown(params.panel.photographyRules),
       acting_notes: parseJsonUnknown(params.panel.actingNotes),
     },
@@ -169,6 +169,22 @@ function buildPanelPrompt(params: {
   })
 }
 
+function buildPanelDefinitionAuthorityPrompt(prompt: string, panelCharacters: ReturnType<typeof parsePanelCharacterReferences>): string {
+  const characterNames = panelCharacters.map((item) => item.name).filter(Boolean)
+  const characterRule = characterNames.length > 0
+    ? `本镜头只允许出现 ${characterNames.length} 个明确角色：${characterNames.join('、')}。不得新增未列入 panel.characters 的人物。`
+    : '本镜头 panel.characters 为空数组，画面中不得出现任何人物、医生、护士、病人或路人。'
+
+  return [
+    prompt,
+    '',
+    '执行优先级修正：当前分镜结构化字段高于原文片段。',
+    '必须优先服从 panel.description、panel.image_prompt、panel.characters、panel.location、panel.shot_type、panel.camera_move。',
+    characterRule,
+    '原文片段只作为剧情背景参考，不得引入未列入当前分镜字段的人物、动作或构图。',
+  ].join('\n')
+}
+
 type PanelReferenceBundle = {
   sketchRef: string | null
   locationRef: string | null
@@ -181,6 +197,25 @@ type PanelReferenceBundle = {
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)))
+}
+
+function parseAspectRatioParts(aspectRatio: string | null | undefined): { width: number; height: number } | null {
+  const match = /^(\d+)\s*:\s*(\d+)$/.exec((aspectRatio || '').trim())
+  if (!match) return null
+
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null
+  }
+
+  return { width, height }
+}
+
+function supportsDefinitionAwareQwenEditRouting(aspectRatio: string | null | undefined): boolean {
+  const parsed = parseAspectRatioParts(aspectRatio)
+  if (!parsed) return true
+  return parsed.width === parsed.height
 }
 
 function inferImageReferenceSlotCount(modelKey: string | null | undefined): number {
@@ -361,43 +396,14 @@ function isQwenStoryboardReferenceWorkflow(modelKey: string | null | undefined):
   return (modelKey || '').trim() === COMFYUI_QWEN_STORYBOARD_MODEL
 }
 
-async function resolvePreviousPanelImageRef(params: {
-  storyboardId: string
-  panelIndex: number
-}): Promise<string | null> {
-  if (!params.storyboardId || params.panelIndex <= 0) return null
-
-  const previousPanel = await prisma.novelPromotionPanel.findFirst({
-    where: {
-      storyboardId: params.storyboardId,
-      panelIndex: { lt: params.panelIndex },
-      imageUrl: { not: null },
-    },
-    orderBy: { panelIndex: 'desc' },
-    select: { imageUrl: true, linkedToNextPanel: true },
-  })
-
-  if (!previousPanel?.linkedToNextPanel) return null
-  return toSignedUrlIfCos(previousPanel?.imageUrl, 3600)
-}
-
 async function buildQwenStoryboardSceneReferenceImages(params: {
-  panel: {
-    storyboardId: string
-    panelIndex: number
-  }
   referenceBundle: PanelReferenceBundle
 }): Promise<string[]> {
-  const previousPanelRef = await resolvePreviousPanelImageRef({
-    storyboardId: params.panel.storyboardId,
-    panelIndex: params.panel.panelIndex,
-  })
+  if (params.referenceBundle.sketchRef) {
+    return [params.referenceBundle.sketchRef]
+  }
 
-  return uniqueStrings([
-    params.referenceBundle.sketchRef,
-    params.referenceBundle.locationRef,
-    previousPanelRef,
-  ])
+  return []
 }
 
 async function buildSinglePanelReferenceImages(params: {
@@ -414,10 +420,6 @@ async function buildSinglePanelReferenceImages(params: {
 }): Promise<string[]> {
   if (isQwenStoryboardReferenceWorkflow(params.modelKey)) {
     const sceneRefs = await buildQwenStoryboardSceneReferenceImages({
-      panel: {
-        storyboardId: params.panel.storyboardId,
-        panelIndex: params.panel.panelIndex,
-      },
       referenceBundle: params.referenceBundle,
     })
 
@@ -430,9 +432,26 @@ async function buildSinglePanelReferenceImages(params: {
 function buildDefinitionAwareQwenStoryboardPlan(params: {
   requestedModelKey: string
   referenceBundle: PanelReferenceBundle
+  aspectRatio: string | null | undefined
 }): { modelKey: string; referenceImages: string[] | null; reason: string | null } {
   if (!isQwenStoryboardReferenceWorkflow(params.requestedModelKey)) {
     return { modelKey: params.requestedModelKey, referenceImages: null, reason: null }
+  }
+
+  if (!params.referenceBundle.sketchRef) {
+    return {
+      modelKey: COMFYUI_FLUX_TEXT_TO_IMAGE_MODEL,
+      referenceImages: [],
+      reason: 'qwen_storyboard_no_sketch_text_to_image',
+    }
+  }
+
+  if (!supportsDefinitionAwareQwenEditRouting(params.aspectRatio)) {
+    return {
+      modelKey: params.requestedModelKey,
+      referenceImages: null,
+      reason: 'qwen_storyboard_preserve_project_aspect',
+    }
   }
 
   const sceneRef = params.referenceBundle.sketchRef || params.referenceBundle.locationRef
@@ -608,6 +627,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const definitionAwarePlan = buildDefinitionAwareQwenStoryboardPlan({
     requestedModelKey,
     referenceBundle,
+    aspectRatio: projectData.videoRatio,
   })
   const modelKey = definitionAwarePlan.modelKey
   const refs = definitionAwarePlan.referenceImages ?? await buildSinglePanelReferenceImages({
@@ -623,18 +643,22 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     referenceBundle,
   })
   const normalizedRefs = await normalizeReferenceImagesForGeneration(refs)
-  const enabledImageModels = await getEnabledUserModels(job.data.userId)
-  const enabledImageModelKeys = new Set(
-    enabledImageModels
-      .filter((model) => model.type === 'image')
-      .map((model) => model.modelKey),
-  )
-  const coordinatedEditModelKey = selectCoordinatedEditModel({
-    enabledImageModelKeys,
-    defaultEditModel: modelConfig.editModel,
-    requiredSlots: 1 + Math.max(0, referenceBundle.characterRefs.length - 1),
-  })
-  const coordinatedMultiCharacterMode = referenceBundle.characterRefs.length >= MULTI_CHARACTER_COORDINATION_THRESHOLD
+  const enabledImageModelKeys = ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION
+    ? new Set(
+        (await getEnabledUserModels(job.data.userId))
+          .filter((model) => model.type === 'image')
+          .map((model) => model.modelKey),
+      )
+    : new Set<string>()
+  const coordinatedEditModelKey = ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION
+    ? selectCoordinatedEditModel({
+        enabledImageModelKeys,
+        defaultEditModel: modelConfig.editModel,
+        requiredSlots: 1 + Math.max(0, referenceBundle.characterRefs.length - 1),
+      })
+    : null
+  const coordinatedMultiCharacterMode = ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION
+    && referenceBundle.characterRefs.length >= MULTI_CHARACTER_COORDINATION_THRESHOLD
     && typeof modelConfig.editModel === 'string'
     && modelConfig.editModel.trim().length > 0
     && typeof coordinatedEditModelKey === 'string'
@@ -690,13 +714,15 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     projectData,
   })
   const contextJson = JSON.stringify(promptContext, null, 2)
-  const prompt = buildPanelPrompt({
+  const panelCharacters = parsePanelCharacterReferences(panel.characters)
+  const basePrompt = buildPanelPrompt({
     locale: job.data.locale,
     aspectRatio,
     styleText: artStyle || '与参考图风格一致',
-    sourceText: panel.srtSegment || panel.description || '',
+    sourceText: panel.description || panel.imagePrompt || panel.srtSegment || '',
     contextJson,
   })
+  const prompt = buildPanelDefinitionAuthorityPrompt(basePrompt, panelCharacters)
   logger.info({
     message: 'panel image prompt resolved',
     details: {

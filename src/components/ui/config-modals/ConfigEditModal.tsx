@@ -135,7 +135,7 @@ export function SettingsModal({
     editModel,
     videoModel,
     audioModel,
-    videoRatio = '9:16',
+    videoRatio = '16:9',
     capabilityOverrides,
     ttsRate,
     onArtStyleChange,

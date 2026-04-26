@@ -63,7 +63,6 @@ export const DELETE = apiHandler(async (
   // 🔐 统一权限验证
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
-  const { session } = authResult
 
   const { searchParams } = new URL(request.url)
   const characterId = searchParams.get('id')

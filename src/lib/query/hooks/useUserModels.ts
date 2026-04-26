@@ -45,5 +45,6 @@ export function useUserModels(options: UseUserModelsOptions = {}) {
             } as UserModelsPayload
         },
         enabled: options.enabled ?? true,
+        staleTime: 60_000,
     })
 }

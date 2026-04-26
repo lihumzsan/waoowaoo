@@ -72,7 +72,7 @@ export async function GET(
 }
 
 export async function HEAD(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ publicId: string }> },
 ) {
   const { publicId } = await context.params

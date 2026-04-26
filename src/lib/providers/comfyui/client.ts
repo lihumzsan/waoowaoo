@@ -2,9 +2,11 @@ import { basename, extname } from 'path'
 import {
   COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
   COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
+  getComfyUiWorkflowImageInputCount,
   resolveComfyUiWorkflow,
   type ComfyUiWorkflowGraph,
 } from './workflow-registry'
+import { COMFYUI_NEUTRAL_REFERENCE_IMAGE } from './neutral-reference'
 
 function normalizeComfyBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, '')
@@ -669,9 +671,15 @@ export async function runComfyUiImageWorkflow(params: {
   referenceImages?: string[]
 }): Promise<{ imageBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
-  const imageFilenames = await uploadComfyUiImages(base, params.referenceImages || [])
+  const workflowKey = params.workflowKey?.trim() || COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID
+  const referenceImages = params.referenceImages || []
+  const imageInputCount = getComfyUiWorkflowImageInputCount(workflowKey)
+  const imageSources = referenceImages.length === 0 && imageInputCount > 0
+    ? [COMFYUI_NEUTRAL_REFERENCE_IMAGE]
+    : referenceImages
+  const imageFilenames = await uploadComfyUiImages(base, imageSources)
   const workflow = resolveComfyUiWorkflow(
-    params.workflowKey?.trim() || COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
+    workflowKey,
     {
       prompt: params.prompt,
       negativePrompt: params.negativePrompt,
@@ -695,6 +703,8 @@ export async function runComfyUiVideoWorkflow(params: {
   prompt?: string
   firstFrameImageUrl: string
   lastFrameImageUrl?: string
+  width?: number
+  height?: number
   durationSeconds?: number
   fps?: number
 }): Promise<{ videoBase64: string; mimeType: string }> {
@@ -717,6 +727,8 @@ export async function runComfyUiVideoWorkflow(params: {
     {
       prompt: params.prompt,
       imageFilenames,
+      width: params.width,
+      height: params.height,
       fps,
       durationSeconds,
       targetFrameCount,

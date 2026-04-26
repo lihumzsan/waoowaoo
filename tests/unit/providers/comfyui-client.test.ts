@@ -1,14 +1,31 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { dirname, join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   collectMediaRefsFromOutputs,
   resolveComfyUiPromptQueuePhase,
+  runComfyUiImageWorkflow,
   runComfyUiWorkflow,
 } from '@/lib/providers/comfyui/client'
 
+function writeWorkflow(root: string, workflowKey: string, workflow: unknown) {
+  const filePath = join(root, `${workflowKey}.json`.replace(/\//g, '\\'))
+  mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
+}
+
 describe('comfyui client media refs', () => {
+  let workflowRoot: string | null = null
+
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    delete process.env.COMFYUI_WORKFLOW_ROOT
+    if (workflowRoot) {
+      rmSync(workflowRoot, { recursive: true, force: true })
+      workflowRoot = null
+    }
   })
 
   it('collects classic filename-array outputs', () => {
@@ -217,5 +234,105 @@ describe('comfyui client media refs', () => {
       expect.stringContaining('/view?filename=final-image.png'),
       expect.any(Object),
     )
+  })
+
+  it('uploads a neutral reference for image workflows that require LoadImage but receive no refs', async () => {
+    vi.useFakeTimers()
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'baseimage/client/neutral-reference', {
+      nodes: [
+        {
+          id: 1,
+          type: 'LoadImage',
+          inputs: [
+            { name: 'image', type: 'COMBO', widget: { name: 'image' }, link: null },
+            { name: 'upload', type: 'IMAGEUPLOAD', widget: { name: 'upload' }, link: null },
+          ],
+          widgets_values: ['bundled-demo.png', 'image'],
+        },
+        {
+          id: 2,
+          type: 'SaveImage',
+          inputs: [
+            { name: 'images', type: 'IMAGE', link: 10 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, 'IMAGE'],
+      ],
+    })
+
+    let uploadedImages = 0
+    let submittedWorkflow: unknown = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/upload/image')) {
+        uploadedImages += 1
+        return new Response(JSON.stringify({ name: 'neutral-upload.png' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-neutral' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-neutral')) {
+        return new Response(JSON.stringify({
+          'prompt-neutral': {
+            outputs: {
+              '2': {
+                images: [{
+                  filename: 'neutral-result.png',
+                  subfolder: '',
+                  type: 'output',
+                }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=neutral-result.png')) {
+        return new Response(new Uint8Array([7, 8, 9]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiImageWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'baseimage/client/neutral-reference',
+      prompt: 'fresh prompt',
+      width: 1280,
+      height: 720,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(uploadedImages).toBe(1)
+    expect(result.mimeType).toBe('image/png')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('neutral-upload.png')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).not.toBe('bundled-demo.png')
   })
 })

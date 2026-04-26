@@ -35,7 +35,7 @@ function getMimeType(filePath: string): string {
 }
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ path: string[] }> }
 ) {
     try {

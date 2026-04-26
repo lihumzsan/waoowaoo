@@ -731,6 +731,70 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['43']?.inputs?.length).toEqual(['27', 0])
   })
 
+  it('injects connected image dimensions into constant nodes', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'baseimage/prompt/test-connected-image-dimensions', {
+      nodes: [
+        {
+          id: 24,
+          type: 'Int',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [101, 103] }],
+          widgets_values: [768],
+        },
+        {
+          id: 34,
+          type: 'Int',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [102, 104] }],
+          widgets_values: [1360],
+        },
+        {
+          id: 52,
+          type: 'EmptyFlux2LatentImage',
+          inputs: [
+            { name: 'width', type: 'INT', link: 101 },
+            { name: 'height', type: 'INT', link: 102 },
+          ],
+          widgets_values: [],
+        },
+        {
+          id: 57,
+          type: 'Flux2Scheduler',
+          inputs: [
+            { name: 'width', type: 'INT', link: 103 },
+            { name: 'height', type: 'INT', link: 104 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [101, 24, 0, 52, 0, 'INT'],
+        [102, 34, 0, 52, 1, 'INT'],
+        [103, 24, 0, 57, 0, 'INT'],
+        [104, 34, 0, 57, 1, 'INT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('baseimage/prompt/test-connected-image-dimensions', {
+      width: 1280,
+      height: 720,
+    })
+
+    expect(graph['24']?.inputs?.value).toBe(1280)
+    expect(graph['34']?.inputs?.value).toBe(720)
+    expect(graph['52']?.inputs?.width).toEqual(['24', 0])
+    expect(graph['52']?.inputs?.height).toEqual(['34', 0])
+    expect(graph['57']?.inputs?.width).toEqual(['24', 0])
+    expect(graph['57']?.inputs?.height).toEqual(['34', 0])
+  })
+
   it('reads widget values stored as keyed objects for VHS video workflows', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot

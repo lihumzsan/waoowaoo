@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   NovelPromotionStoryboard,
   NovelPromotionClip,
@@ -42,9 +42,26 @@ export function useStoryboardStageController({
     return phase === 'queued' || phase === 'processing'
   }, [])
 
-  const { data: assets } = useProjectAssets(projectId)
+  const {
+    assetPickerPanel,
+    setAssetPickerPanel,
+    aiDataPanel,
+    setAIDataPanel,
+    isEpisodeBatchSubmitting,
+    setIsEpisodeBatchSubmitting,
+  } = useStoryboardStageUiState()
+  const [shouldLoadStoryboardModels, setShouldLoadStoryboardModels] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShouldLoadStoryboardModels(true), 1500)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const { data: assets } = useProjectAssets(projectId, {
+    enabled: !!assetPickerPanel,
+  })
   const { data: project } = useProjectData(projectId)
-  const userModelsQuery = useUserModels()
+  const userModelsQuery = useUserModels({ enabled: shouldLoadStoryboardModels })
   const characters: Character[] = useMemo(() => assets?.characters ?? [], [assets?.characters])
   const locations: Location[] = useMemo(() => assets?.locations ?? [], [assets?.locations])
   const storyboardWorkflowOptions = useMemo(() => userModelsQuery.data?.image ?? [], [userModelsQuery.data?.image])
@@ -147,15 +164,6 @@ export function useStoryboardStageController({
 
   const updatePhotographyPlanMutation = useUpdateProjectPhotographyPlan(projectId)
   const updatePanelActingNotesMutation = useUpdateProjectPanelActingNotes(projectId)
-
-  const {
-    assetPickerPanel,
-    setAssetPickerPanel,
-    aiDataPanel,
-    setAIDataPanel,
-    isEpisodeBatchSubmitting,
-    setIsEpisodeBatchSubmitting,
-  } = useStoryboardStageUiState()
 
   const {
     getDefaultAssetsForClip,

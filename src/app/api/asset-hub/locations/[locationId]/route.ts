@@ -5,7 +5,7 @@ import { ApiError, apiHandler } from '@/lib/api-errors'
 
 // 获取单个场景
 export const GET = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ locationId: string }> }
 ) => {
     const { locationId } = await context.params
@@ -76,7 +76,7 @@ export const PATCH = apiHandler(async (
 
 // 删除场景
 export const DELETE = apiHandler(async (
-    request: NextRequest,
+    _request: NextRequest,
     context: { params: Promise<{ locationId: string }> }
 ) => {
     const { locationId } = await context.params

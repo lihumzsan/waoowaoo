@@ -136,8 +136,12 @@ function buildQueryPath(input: AssetQueryInput): string {
   return `/api/assets?${searchParams.toString()}`
 }
 
-export function useAssets(input: AssetQueryInput) {
+export function useAssets(
+  input: AssetQueryInput,
+  options: { enabled?: boolean } = {},
+) {
   const queryClient = useQueryClient()
+  const enabled = (options.enabled ?? true) && (input.scope === 'global' || !!input.projectId)
   const assetsQuery = useQuery({
     queryKey: queryKeys.assets.list(input),
     queryFn: async () => {
@@ -148,8 +152,8 @@ export function useAssets(input: AssetQueryInput) {
       const data = await response.json() as ReadAssetsResponse
       return data.assets
     },
-    enabled: input.scope === 'global' || !!input.projectId,
-    staleTime: 5_000,
+    enabled,
+    staleTime: 30_000,
   })
 
   const taskProjectId = input.scope === 'global' ? 'global-asset-hub' : input.projectId ?? ''
@@ -160,7 +164,7 @@ export function useAssets(input: AssetQueryInput) {
     types: ref.types,
   })), [taskRefs])
   const taskStatesQuery = useTaskTargetStateMap(taskProjectId, taskTargets, {
-    enabled: taskProjectId.length > 0 && taskTargets.length > 0,
+    enabled: enabled && taskProjectId.length > 0 && taskTargets.length > 0,
   })
 
   const lastTerminalRefreshSignatureRef = useRef('')
