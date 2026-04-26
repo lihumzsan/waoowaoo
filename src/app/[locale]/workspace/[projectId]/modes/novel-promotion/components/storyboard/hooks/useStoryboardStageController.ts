@@ -57,13 +57,8 @@ export function useStoryboardStageController({
     return () => window.clearTimeout(timer)
   }, [])
 
-  const { data: assets } = useProjectAssets(projectId, {
-    enabled: !!assetPickerPanel,
-  })
   const { data: project } = useProjectData(projectId)
   const userModelsQuery = useUserModels({ enabled: shouldLoadStoryboardModels })
-  const characters: Character[] = useMemo(() => assets?.characters ?? [], [assets?.characters])
-  const locations: Location[] = useMemo(() => assets?.locations ?? [], [assets?.locations])
   const storyboardWorkflowOptions = useMemo(() => userModelsQuery.data?.image ?? [], [userModelsQuery.data?.image])
   const defaultStoryboardWorkflow = project?.novelPromotionData?.storyboardModel ?? ''
 
@@ -161,6 +156,12 @@ export function useStoryboardStageController({
     downloadAllImages,
     clearStoryboardError,
   } = imageOps
+
+  const { data: assets } = useProjectAssets(projectId, {
+    enabled: !!assetPickerPanel || !!editingPanel,
+  })
+  const characters: Character[] = useMemo(() => assets?.characters ?? [], [assets?.characters])
+  const locations: Location[] = useMemo(() => assets?.locations ?? [], [assets?.locations])
 
   const updatePhotographyPlanMutation = useUpdateProjectPhotographyPlan(projectId)
   const updatePanelActingNotesMutation = useUpdateProjectPanelActingNotes(projectId)
