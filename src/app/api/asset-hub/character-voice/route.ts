@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 interface VoiceDesignPayload {
     voiceId?: string
     audioBase64?: string
@@ -72,8 +73,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
         }
 
         const audioBuffer = Buffer.from(audioBase64, 'base64')
-        const key = generateUniqueKey(`global-voice/${session.user.id}/${characterId}`, 'wav')
-        const cosUrl = await uploadObject(audioBuffer, key)
+        const audioExt = resolveMediaExt('audio', audioBuffer, null)
+        const key = generateUniqueKey(`global-voice/${session.user.id}/${characterId}`, audioExt)
+        const cosUrl = await uploadObject(audioBuffer, key, undefined, resolveMediaContentType(audioExt))
 
         await db.globalCharacter.update({
             where: { id: characterId },
@@ -110,16 +112,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
 
     // 验证文件类型
-    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a']
-    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/x-flac', 'audio/aac']
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|m4a|flac|aac)$/i)) {
         throw new ApiError('INVALID_PARAMS')
     }
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'mp3'
+    const ext = resolveMediaExt('audio', buffer, file.type || null)
     const key = generateUniqueKey(`global-voice/${session.user.id}/${characterId}`, ext)
-    const audioUrl = await uploadObject(buffer, key)
+    const audioUrl = await uploadObject(buffer, key, undefined, resolveMediaContentType(ext))
 
     await db.globalCharacter.update({
         where: { id: characterId },

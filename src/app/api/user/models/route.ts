@@ -76,6 +76,27 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
     type: 'image',
     provider: 'comfyui',
   },
+  {
+    modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+    modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+    name: 'ComfyUI · LTX 2.3 多镜头 VBVR',
+    type: 'video',
+    provider: 'comfyui',
+  },
+  {
+    modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）',
+    modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）',
+    name: 'ComfyUI · LTX 2.3 多镜头 自动拆分 VBVR',
+    type: 'video',
+    provider: 'comfyui',
+  },
+  {
+    modelId: 'basevideo/多镜头/Ltx2.3多镜头精准时间控制PromptRelay（KJ版）',
+    modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头精准时间控制PromptRelay（KJ版）',
+    name: 'ComfyUI · LTX 2.3 多镜头 精准时间',
+    type: 'video',
+    provider: 'comfyui',
+  },
 ]
 
 const AUDIO_MODEL_EXCLUDED_IDS = new Set([

@@ -103,33 +103,60 @@ function collectPanelMediaIds(episode: EpisodeWithPanelMediaFields): string[] {
   return Array.from(ids)
 }
 
-function applyPanelMediaRef(panel: Record<string, unknown>, map: Map<string, MediaRef>, idField: string, refField: string, urlField: string) {
+function parseStringArray(value: unknown): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  if (typeof value !== 'string') return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+  } catch {
+    return []
+  }
+}
+
+async function resolveLegacyMediaUrl(value: unknown): Promise<unknown> {
+  if (typeof value !== 'string' || value.length === 0 || value.startsWith('PENDING:')) return value
+  const media = await resolveMediaRefFromLegacyValue(value)
+  return media?.url || value
+}
+
+async function applyPanelMediaRef(panel: Record<string, unknown>, map: Map<string, MediaRef>, idField: string, refField: string, urlField: string) {
   const id = typeof panel[idField] === 'string' ? panel[idField] : ''
   const media = id ? map.get(id) || null : null
   panel[refField] = media
   if (media?.url) {
     panel[urlField] = media.url
   } else {
-    panel[urlField] = panel[urlField] || null
+    panel[urlField] = await resolveLegacyMediaUrl(panel[urlField]) || null
   }
+}
+
+async function attachPanelCandidateUrls(panel: Record<string, unknown>) {
+  const candidates = parseStringArray(panel.candidateImages)
+  if (candidates.length === 0) return
+  const resolvedCandidates = await Promise.all(candidates.map(resolveLegacyMediaUrl))
+  panel.candidateImages = JSON.stringify(resolvedCandidates)
 }
 
 async function attachSelectedPanelMediaFields<T extends EpisodeWithPanelMediaFields>(episode: T): Promise<T> {
   const ids = collectPanelMediaIds(episode)
-  if (ids.length === 0) return episode
 
-  const rows = await prisma.mediaObject.findMany({
-    where: { id: { in: ids } },
-  }) as MediaObjectRow[]
+  const rows = ids.length > 0
+    ? await prisma.mediaObject.findMany({
+      where: { id: { in: ids } },
+    }) as MediaObjectRow[]
+    : []
   const mediaById = new Map(rows.map((row) => [row.id, mapMediaObjectToRef(row)]))
 
   for (const storyboard of episode.storyboards || []) {
     for (const panel of storyboard.panels || []) {
-      applyPanelMediaRef(panel, mediaById, 'imageMediaId', 'media', 'imageUrl')
-      applyPanelMediaRef(panel, mediaById, 'videoMediaId', 'videoMedia', 'videoUrl')
-      applyPanelMediaRef(panel, mediaById, 'lipSyncVideoMediaId', 'lipSyncVideoMedia', 'lipSyncVideoUrl')
-      applyPanelMediaRef(panel, mediaById, 'sketchImageMediaId', 'sketchImageMedia', 'sketchImageUrl')
-      applyPanelMediaRef(panel, mediaById, 'previousImageMediaId', 'previousImageMedia', 'previousImageUrl')
+      await applyPanelMediaRef(panel, mediaById, 'imageMediaId', 'media', 'imageUrl')
+      await applyPanelMediaRef(panel, mediaById, 'videoMediaId', 'videoMedia', 'videoUrl')
+      await applyPanelMediaRef(panel, mediaById, 'lipSyncVideoMediaId', 'lipSyncVideoMedia', 'lipSyncVideoUrl')
+      await applyPanelMediaRef(panel, mediaById, 'sketchImageMediaId', 'sketchImageMedia', 'sketchImageUrl')
+      await applyPanelMediaRef(panel, mediaById, 'previousImageMediaId', 'previousImageMedia', 'previousImageUrl')
+      await attachPanelCandidateUrls(panel)
     }
   }
 

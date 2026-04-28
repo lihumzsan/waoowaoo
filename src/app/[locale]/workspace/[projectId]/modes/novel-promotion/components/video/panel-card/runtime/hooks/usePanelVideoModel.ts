@@ -8,6 +8,14 @@ import {
 } from '@/lib/model-capabilities/video-effective'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
 
+const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
+const LEGACY_DEFAULT_VIDEO_MODELS = new Set([
+  'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+  'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+  'basevideo/图生视频/LTX2.3图生视频快速版',
+  'basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+])
+
 interface UsePanelVideoModelParams {
   defaultVideoModel: string
   capabilityOverrides?: CapabilitySelections
@@ -63,14 +71,21 @@ function readSelectionForModel(
   return selection
 }
 
+function normalizeDefaultVideoModel(modelKey: string): string {
+  const value = modelKey.trim()
+  if (!value) return DEFAULT_VIDEO_MODEL
+  return LEGACY_DEFAULT_VIDEO_MODELS.has(value) ? DEFAULT_VIDEO_MODEL : value
+}
+
 export function usePanelVideoModel({
   defaultVideoModel,
   capabilityOverrides,
   userVideoModels,
 }: UsePanelVideoModelParams) {
-  const [selectedModel, setSelectedModel] = useState(defaultVideoModel || '')
+  const normalizedDefaultVideoModel = normalizeDefaultVideoModel(defaultVideoModel || '')
+  const [selectedModel, setSelectedModel] = useState(normalizedDefaultVideoModel)
   const [generationOptions, setGenerationOptions] = useState<VideoGenerationOptions>(() =>
-    readSelectionForModel(capabilityOverrides, defaultVideoModel || ''),
+    readSelectionForModel(capabilityOverrides, normalizedDefaultVideoModel),
   )
   const videoModelOptions = userVideoModels ?? []
   const selectedOption = videoModelOptions.find((option) => option.value === selectedModel)
@@ -85,19 +100,24 @@ export function usePanelVideoModel({
   )
 
   useEffect(() => {
-    setSelectedModel(defaultVideoModel || '')
-  }, [defaultVideoModel])
+    setSelectedModel(normalizedDefaultVideoModel)
+  }, [normalizedDefaultVideoModel])
 
   useEffect(() => {
+    if (videoModelOptions.length === 0) return
     if (!selectedModel) {
-      if (videoModelOptions.length > 0) {
-        setSelectedModel(videoModelOptions[0].value)
-      }
+      const nextDefault = videoModelOptions.some((option) => option.value === normalizedDefaultVideoModel)
+        ? normalizedDefaultVideoModel
+        : videoModelOptions[0].value
+      setSelectedModel(nextDefault)
       return
     }
     if (videoModelOptions.some((option) => option.value === selectedModel)) return
-    setSelectedModel(videoModelOptions[0]?.value || '')
-  }, [selectedModel, videoModelOptions])
+    const nextDefault = videoModelOptions.some((option) => option.value === normalizedDefaultVideoModel)
+      ? normalizedDefaultVideoModel
+      : videoModelOptions[0].value
+    setSelectedModel(nextDefault)
+  }, [normalizedDefaultVideoModel, selectedModel, videoModelOptions])
 
   const capabilityDefinitions = useMemo(
     () => resolveEffectiveVideoCapabilityDefinitions({

@@ -4,6 +4,14 @@ import { useMemo } from 'react'
 import type { NovelPromotionWorkspaceProps } from '../types'
 import type { CapabilitySelections } from '@/lib/model-config-contract'
 
+const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
+const LEGACY_DEFAULT_VIDEO_MODELS = new Set([
+  'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+  'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+  'basevideo/图生视频/LTX2.3图生视频快速版',
+  'basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+])
+
 function parseCapabilitySelections(raw: unknown): CapabilitySelections {
   if (!raw) return {}
   if (typeof raw === 'object' && !Array.isArray(raw)) {
@@ -17,6 +25,12 @@ function parseCapabilitySelections(raw: unknown): CapabilitySelections {
   } catch {
     return {}
   }
+}
+
+function normalizeDefaultVideoModel(model: string | null | undefined): string | undefined {
+  const value = typeof model === 'string' ? model.trim() : ''
+  if (!value) return DEFAULT_VIDEO_MODEL
+  return LEGACY_DEFAULT_VIDEO_MODELS.has(value) ? DEFAULT_VIDEO_MODEL : value
 }
 
 export function useWorkspaceProjectSnapshot({
@@ -38,7 +52,7 @@ export function useWorkspaceProjectSnapshot({
       locationModel: projectData?.locationModel,
       storyboardModel: projectData?.storyboardModel,
       editModel: projectData?.editModel,
-      videoModel: projectData?.videoModel,
+      videoModel: normalizeDefaultVideoModel(projectData?.videoModel),
       audioModel: projectData?.audioModel,
       videoRatio: projectData?.videoRatio,
       capabilityOverrides,

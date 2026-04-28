@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 function readDesignedVoiceType(_voiceId: string) {
   return 'designed'
 }
@@ -79,8 +80,9 @@ export const POST = apiHandler(async (
     const audioBuffer = Buffer.from(audioBase64, 'base64')
 
     // 上传到COS
-    const key = generateUniqueKey(`voice/custom/${projectId}/${characterId}`, 'wav')
-    const cosUrl = await uploadObject(audioBuffer, key)
+    const audioExt = resolveMediaExt('audio', audioBuffer, null)
+    const key = generateUniqueKey(`voice/custom/${projectId}/${characterId}`, audioExt)
+    const cosUrl = await uploadObject(audioBuffer, key, undefined, resolveMediaContentType(audioExt))
 
     // 更新角色音色设置
     const character = await prisma.novelPromotionCharacter.update({
@@ -117,8 +119,8 @@ export const POST = apiHandler(async (
   }
 
   // 验证文件类型
-  const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a']
-  if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+  const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/x-flac', 'audio/aac']
+  if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|m4a|flac|aac)$/i)) {
     throw new ApiError('INVALID_PARAMS')
   }
 
@@ -127,11 +129,11 @@ export const POST = apiHandler(async (
   const buffer = Buffer.from(arrayBuffer)
 
   // 获取文件扩展名
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'mp3'
+  const ext = resolveMediaExt('audio', buffer, file.type || null)
 
   // 上传到COS
   const key = generateUniqueKey(`voice/custom/${projectId}/${characterId}`, ext)
-  const audioUrl = await uploadObject(buffer, key)
+  const audioUrl = await uploadObject(buffer, key, undefined, resolveMediaContentType(ext))
 
   // 更新角色音色设置为自定义
   const character = await prisma.novelPromotionCharacter.update({

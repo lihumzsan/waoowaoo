@@ -8,6 +8,7 @@ import { extractStorageKey, getSignedUrl, toFetchableUrl, uploadObject } from '@
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { synthesizeWithBailianTTS } from '@/lib/providers/bailian'
 import { runComfyUiAudioWorkflow } from '@/lib/providers/comfyui/client'
+import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 import {
   parseSpeakerVoiceMap,
   resolveVoiceBindingForProvider,
@@ -394,8 +395,9 @@ export async function generateVoiceLine(params: {
     throw new Error(`AUDIO_PROVIDER_UNSUPPORTED: ${audioSelection.provider}`)
   }
 
-  const audioKey = `voice/${params.projectId}/${episodeId}/${line.id}.wav`
-  const cosKey = await uploadObject(generated.audioData, audioKey)
+  const audioExt = resolveMediaExt('audio', generated.audioData, null)
+  const audioKey = `voice/${params.projectId}/${episodeId}/${line.id}.${audioExt}`
+  const cosKey = await uploadObject(generated.audioData, audioKey, undefined, resolveMediaContentType(audioExt))
 
   await checkCancelled?.()
 

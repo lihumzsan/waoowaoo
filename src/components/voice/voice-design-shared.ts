@@ -13,6 +13,7 @@ export type VoiceDesignMutationPayload = {
 export type VoiceDesignMutationResult = {
   voiceId?: string
   audioBase64?: string
+  responseFormat?: string
   detail?: string
   finalPrompt?: string
   normalizedVoicePrompt?: string
@@ -32,6 +33,27 @@ export function normalizeVoiceSchemeCount(input: string | number | undefined): n
 
 export function createVoiceDesignPreferredName(index: number, now: () => number = Date.now): string {
   return `voice_${now().toString(36)}_${index + 1}`.slice(0, 16)
+}
+
+function inferAudioMimeType(audioBase64: string, mimeHint?: string): string {
+  const normalizedHint = mimeHint?.split(';')[0]?.trim().toLowerCase()
+  if (normalizedHint?.startsWith('audio/')) return normalizedHint
+
+  try {
+    const compact = audioBase64.replace(/^data:[^,]+,/, '').replace(/\s/g, '')
+    const binary = atob(compact.slice(0, 48))
+    const bytes = Array.from(binary, (char) => char.charCodeAt(0))
+    const ascii = String.fromCharCode(...bytes.slice(0, 12))
+
+    if (ascii.startsWith('fLaC')) return 'audio/flac'
+    if (ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WAVE') return 'audio/wav'
+    if (ascii.startsWith('OggS')) return 'audio/ogg'
+    if (ascii.startsWith('ID3') || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return 'audio/mpeg'
+  } catch {
+    // Fall through to the legacy default if the preview payload cannot be sniffed.
+  }
+
+  return 'audio/wav'
 }
 
 interface GenerateVoiceDesignOptionsParams {
@@ -78,7 +100,7 @@ export async function generateVoiceDesignOptions({
     const voice = {
       voiceId: result.voiceId,
       audioBase64: result.audioBase64,
-      audioUrl: `data:audio/wav;base64,${result.audioBase64}`,
+      audioUrl: `data:${inferAudioMimeType(result.audioBase64, result.responseFormat)};base64,${result.audioBase64}`,
     }
     voices.push(voice)
     onVoiceGenerated?.(voice, {

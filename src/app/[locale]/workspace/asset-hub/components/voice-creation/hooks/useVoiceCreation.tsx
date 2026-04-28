@@ -164,8 +164,8 @@ export function useVoiceCreation({ isOpen, folderId, onClose, onSuccess, initial
     // 处理文件选择
     const handleFileSelect = useCallback((file: File) => {
         // 验证文件类型（仅音频）
-        const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/aac']
-        const isValid = audioTypes.includes(file.type) || file.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i)
+        const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/x-flac', 'audio/aac']
+        const isValid = audioTypes.includes(file.type) || file.name.match(/\.(mp3|wav|ogg|m4a|flac|aac)$/i)
 
         if (!isValid) {
             setError(tvCreate('invalidFileType'))

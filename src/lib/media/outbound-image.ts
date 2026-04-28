@@ -81,6 +81,8 @@ const MIME_BY_EXT: Record<string, string> = {
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
 }
 
 let storageHelpersPromise: Promise<StorageHelpers> | null = null
@@ -227,6 +229,15 @@ function detectMimeFromBuffer(buffer: Uint8Array): string | null {
   }
 
   if (buffer.length >= 4) {
+    const isFlac =
+      buffer[0] === 0x66
+      && buffer[1] === 0x4c
+      && buffer[2] === 0x61
+      && buffer[3] === 0x43
+    if (isFlac) return 'audio/flac'
+  }
+
+  if (buffer.length >= 4) {
     const isOgg =
       buffer[0] === 0x4f
       && buffer[1] === 0x67
@@ -268,10 +279,10 @@ function detectMimeFromBuffer(buffer: Uint8Array): string | null {
 }
 
 function guessContentType(input: string, contentTypeHeader: string | null, buffer: Uint8Array): string {
-  const headerType = contentTypeHeader?.split(';')[0]?.trim()
-  if (headerType && headerType !== DEFAULT_CONTENT_TYPE) return headerType
   const sniffedType = detectMimeFromBuffer(buffer)
   if (sniffedType) return sniffedType
+  const headerType = contentTypeHeader?.split(';')[0]?.trim()
+  if (headerType && headerType !== DEFAULT_CONTENT_TYPE) return headerType
   const parsed = toUrlMaybe(input)
   const pathname = parsed?.pathname ?? input
   const ext = path.extname(pathname).toLowerCase()

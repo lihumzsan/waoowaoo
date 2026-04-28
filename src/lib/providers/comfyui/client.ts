@@ -177,12 +177,12 @@ function collectMediaRefOutputGroups(
 function pickMediaRef(refs: MediaRef[], expect: 'image' | 'video' | 'audio'): MediaRef | null {
   if (refs.length === 0) return null
   if (expect === 'image') {
-    return refs.find((ref) => IMAGE_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+    return refs.find((ref) => IMAGE_EXTENSIONS.test(ref.filename)) ?? null
   }
   if (expect === 'video') {
-    return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+    return refs.find((ref) => VIDEO_EXTENSIONS.test(ref.filename)) ?? null
   }
-  return refs.find((ref) => AUDIO_EXTENSIONS.test(ref.filename)) ?? refs[0] ?? null
+  return refs.find((ref) => AUDIO_EXTENSIONS.test(ref.filename)) ?? null
 }
 
 function compareOutputNodeIdsDescending(left: string, right: string): number {

@@ -25,6 +25,8 @@ const MIME_TYPES: Record<string, string> = {
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
     '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.aac': 'audio/aac',
     '.json': 'application/json',
     '.txt': 'text/plain',
 }

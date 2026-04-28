@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 
 /**
  * POST /api/asset-hub/voices/upload
@@ -29,8 +30,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
 
     // 支持的音频类型
-    const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/aac']
-    const isAudioFile = audioTypes.includes(file.type) || file.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i)
+    const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/x-flac', 'audio/aac']
+    const isAudioFile = audioTypes.includes(file.type) || file.name.match(/\.(mp3|wav|ogg|m4a|flac|aac)$/i)
 
     if (!isAudioFile) {
         throw new ApiError('INVALID_PARAMS')
@@ -48,11 +49,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const audioExt = file.name.split('.').pop()?.toLowerCase() || 'mp3'
+    const audioExt = resolveMediaExt('audio', buffer, file.type || null)
 
     // 上传到 COS
     const key = generateUniqueKey(`voices/${session.user.id}/${Date.now()}`, audioExt)
-    const cosUrl = await uploadObject(buffer, key)
+    const cosUrl = await uploadObject(buffer, key, undefined, resolveMediaContentType(audioExt))
 
     // 创建音色记录
     const voice = await prisma.globalVoice.create({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 
 /**
  * POST /api/asset-hub/upload-temp
@@ -15,7 +16,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const { session } = authResult
 
     const body = await request.json()
-    const { imageBase64, base64, extension } = body
+    const { imageBase64, base64, extension, type } = body
 
     // 支持两种调用方式：
     // 1. 图片模式：{ imageBase64: "data:image/..." }
@@ -30,19 +31,29 @@ export const POST = apiHandler(async (request: NextRequest) => {
         if (!matches) {
             throw new ApiError('INVALID_PARAMS')
         }
-        ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
         buffer = Buffer.from(matches[2], 'base64')
+        ext = resolveMediaExt('image', buffer, `image/${matches[1]}`)
     } else if (base64 && extension) {
         // 通用模式（音频等）
         buffer = Buffer.from(base64, 'base64')
-        ext = extension
+        const mimeHint = typeof type === 'string' ? type : null
+        const requestedExt = typeof extension === 'string' ? extension.replace(/^\./, '').toLowerCase() : ''
+        if (mimeHint?.startsWith('audio/') || /^(mp3|wav|ogg|m4a|flac|aac)$/.test(requestedExt)) {
+            ext = resolveMediaExt('audio', buffer, mimeHint)
+        } else if (mimeHint?.startsWith('video/') || /^(mp4|webm)$/.test(requestedExt)) {
+            ext = resolveMediaExt('video', buffer, mimeHint)
+        } else if (mimeHint?.startsWith('image/') || /^(jpg|jpeg|png|webp|gif)$/.test(requestedExt)) {
+            ext = resolveMediaExt('image', buffer, mimeHint)
+        } else {
+            ext = requestedExt || 'bin'
+        }
     } else {
         throw new ApiError('INVALID_PARAMS')
     }
 
     // 上传到 COS
     const key = generateUniqueKey(`temp-${session.user.id}-${Date.now()}`, ext)
-    await uploadObject(buffer, key)
+    await uploadObject(buffer, key, undefined, resolveMediaContentType(ext))
 
     // 返回签名 URL（有效期 1 小时）
     const signedUrl = getSignedUrl(key, 3600)

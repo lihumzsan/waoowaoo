@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 
 export const COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID = 'baseimage/图片生成/Flux2Klein文生图'
-export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = 'basevideo/图生视频/LTX2.3图生视频快速版'
+export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
 
 const LEGACY_BUNDLED_ROOT = join(process.cwd(), 'src', 'lib', 'providers', 'comfyui', 'workflows')
 const EXTERNAL_WORKFLOW_TOOL_DIR = 'tool'
@@ -21,6 +21,14 @@ const UI_DECORATION_NODE_TYPES = new Set([
 const DISPLAY_ONLY_OUTPUT_NODE_TYPES = new Set([
   'easyshowanything',
   'shellagentpluginoutputtext',
+])
+const VIDEO_OUTPUT_NODE_TYPES = new Set([
+  'vhsvideocombine',
+  'saveanimatedwebp',
+  'savevideo',
+])
+const PREVIEW_OUTPUT_NODE_TYPES = new Set([
+  'previewimage',
 ])
 
 export type ComfyUiWorkflowGraphNode = {
@@ -574,6 +582,8 @@ function isPromptInputField(inputName: string): boolean {
     || inputName === 'text'
     || inputName === 'positive'
     || inputName === 'positive_prompt'
+    || inputName === 'global_prompt'
+    || inputName === 'local_prompts'
 }
 
 function isNegativePromptField(inputName: string): boolean {
@@ -584,6 +594,40 @@ type ConditioningRole = 'positive' | 'negative'
 
 function isTextEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
   return node.class_type.toLowerCase().includes('textencode')
+}
+
+function isPromptRelayEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return node.class_type.trim().toLowerCase() === 'promptrelayencode'
+}
+
+function extractPromptRelaySection(text: string, section: 'GLOBAL' | 'LOCAL'): string {
+  const nextSectionPattern = section === 'GLOBAL'
+    ? String.raw`\s*(?:LOCAL|LENGTHS)\s*[:：]`
+    : String.raw`\s*LENGTHS\s*[:：]`
+  const pattern = new RegExp(String.raw`(?:^|\n)\s*${section}\s*[:：]\s*([\s\S]*?)(?:\n+${nextSectionPattern}|$)`, 'i')
+  return pattern.exec(text)?.[1]?.trim() || ''
+}
+
+function derivePromptRelayInput(prompt: string, field: 'global_prompt' | 'local_prompts'): string {
+  const explicitGlobal = extractPromptRelaySection(prompt, 'GLOBAL')
+  const explicitLocal = extractPromptRelaySection(prompt, 'LOCAL')
+  if (field === 'global_prompt') {
+    return explicitGlobal || prompt
+  }
+  return explicitLocal || prompt
+}
+
+function assignStringInputValue(
+  graph: ComfyUiWorkflowGraph,
+  node: ComfyUiWorkflowGraphNode,
+  inputName: string,
+  value: string,
+): void {
+  const currentValue = node.inputs[inputName]
+  if (tryAssignPromptToConnectedValueNode(graph, currentValue, value)) return
+  if (!isConnectionValue(currentValue)) {
+    node.inputs[inputName] = value
+  }
 }
 
 function collectConditioningRolesBySource(graph: ComfyUiWorkflowGraph): Map<string, Set<ConditioningRole>> {
@@ -721,10 +765,22 @@ function applyPromptHeuristics(
       }
 
       if (positiveValue && isPromptInputField(field) && !isLikelyNegativeNode(node)) {
-        if (tryAssignPromptToConnectedValueNode(graph, currentValue, positiveValue)) continue
-        if (!isConnectionValue(currentValue)) {
-          node.inputs[inputName] = positiveValue
-        }
+        const nextValue = isPromptRelayEncodeNode(node) && (field === 'global_prompt' || field === 'local_prompts')
+          ? derivePromptRelayInput(positiveValue, field)
+          : positiveValue
+        assignStringInputValue(graph, node, inputName, nextValue)
+      }
+    }
+  }
+
+  if (positiveValue) {
+    for (const node of Object.values(graph)) {
+      if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node)) continue
+      if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
+        assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(positiveValue, 'global_prompt'))
+      }
+      if (Object.prototype.hasOwnProperty.call(node.inputs, 'local_prompts')) {
+        assignStringInputValue(graph, node, 'local_prompts', derivePromptRelayInput(positiveValue, 'local_prompts'))
       }
     }
   }
@@ -747,6 +803,21 @@ function greatestCommonDivisor(left: number, right: number): number {
 }
 
 function formatAspectRatio(width: number, height: number): string {
+  const ratio = width / height
+  const supportedRatios: Array<[string, number]> = [
+    ['1:1', 1],
+    ['3:2', 3 / 2],
+    ['4:3', 4 / 3],
+    ['16:9', 16 / 9],
+    ['2:3', 2 / 3],
+    ['3:4', 3 / 4],
+    ['9:16', 9 / 16],
+  ]
+  const nearest = supportedRatios
+    .map(([label, value]) => ({ label, distance: Math.abs(ratio - value) / value }))
+    .sort((left, right) => left.distance - right.distance)[0]
+  if (nearest && nearest.distance <= 0.05) return nearest.label
+
   const divisor = greatestCommonDivisor(width, height)
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
 }
@@ -985,6 +1056,19 @@ function applySaveOutputHeuristics(graph: ComfyUiWorkflowGraph): void {
   }
 }
 
+function removePreviewImageOutputsFromVideoGraphs(graph: ComfyUiWorkflowGraph): void {
+  const hasVideoOutputNode = Object.values(graph).some((node) =>
+    VIDEO_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))
+  )
+  if (!hasVideoOutputNode) return
+
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (PREVIEW_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))) {
+      delete graph[nodeId]
+    }
+  }
+}
+
 function assignRandomSeedValues(graph: ComfyUiWorkflowGraph): void {
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -1014,6 +1098,7 @@ export function resolveComfyUiWorkflow(
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount)
   applySaveOutputHeuristics(graph)
+  removePreviewImageOutputsFromVideoGraphs(graph)
   assignRandomSeedValues(graph)
   return graph
 }
