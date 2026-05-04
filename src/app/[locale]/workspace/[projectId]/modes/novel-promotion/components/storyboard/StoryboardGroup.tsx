@@ -15,6 +15,10 @@ import StoryboardGroupFailedAlert from './StoryboardGroupFailedAlert'
 import StoryboardGroupDialogs from './StoryboardGroupDialogs'
 import type { StoryboardGroupProps } from './StoryboardGroup.types'
 import { AppIcon } from '@/components/ui/icons'
+import {
+  DIALOGUE_BEAT_BUDGET_SECONDS,
+  estimateDialogueDurationSeconds,
+} from '@/lib/novel-promotion/dialogue-beats'
 
 export default function StoryboardGroup({
   storyboard,
@@ -119,6 +123,46 @@ export default function StoryboardGroup({
   const currentRunningCount = textPanels.filter(isPanelTaskRunning).length
   const pendingCount = textPanels.filter((panel) => !panel.imageUrl && !isPanelTaskRunning(panel)).length
 
+  const dialogueCompliance = useMemo(() => {
+    const dialoguePanels = textPanels.filter((panel) => !!panel.dialogueBeatId)
+    if (dialoguePanels.length === 0) {
+      return {
+        label: t('group.dialogueComplianceNone'),
+        title: t('group.dialogueComplianceNoneTitle'),
+        tone: 'neutral' as const,
+      }
+    }
+
+    const secondsByPanel = dialoguePanels.map((panel) => {
+      if (typeof panel.estimatedDialogueSeconds === 'number' && Number.isFinite(panel.estimatedDialogueSeconds)) {
+        return panel.estimatedDialogueSeconds
+      }
+      if (typeof panel.duration === 'number' && Number.isFinite(panel.duration)) {
+        return panel.duration
+      }
+      return panel.source_text ? estimateDialogueDurationSeconds(panel.source_text) : null
+    })
+    if (secondsByPanel.some((seconds) => seconds === null)) {
+      return {
+        label: t('group.dialogueComplianceReview'),
+        title: t('group.dialogueComplianceReviewTitle'),
+        tone: 'warning' as const,
+      }
+    }
+    if (secondsByPanel.some((seconds) => (seconds ?? 0) > DIALOGUE_BEAT_BUDGET_SECONDS)) {
+      return {
+        label: t('group.dialogueComplianceResplit'),
+        title: t('group.dialogueComplianceResplitTitle', { seconds: DIALOGUE_BEAT_BUDGET_SECONDS }),
+        tone: 'warning' as const,
+      }
+    }
+    return {
+      label: t('group.dialogueCompliancePassed'),
+      title: t('group.dialogueCompliancePassedTitle', { count: dialoguePanels.length }),
+      tone: 'pass' as const,
+    }
+  }, [t, textPanels])
+
   const groupOverlayState = useMemo(() => {
     if (!isSubmittingStoryboardTask && !isSelectingCandidate) return null
     return resolveTaskPresentationState({
@@ -162,6 +206,7 @@ export default function StoryboardGroup({
           totalStoryboards={totalStoryboards}
           movingClipId={movingClipId}
           storyboardClipId={storyboard.clipId}
+          dialogueCompliance={dialogueCompliance}
           formatClipTitle={formatClipTitle}
           onMoveUp={onMoveUp}
           onMoveDown={onMoveDown}

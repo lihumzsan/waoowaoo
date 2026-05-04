@@ -39,6 +39,7 @@ import { withStreamChunkTimeout } from './stream-timeout'
 import { shouldUseOpenAIReasoningProviderOptions } from './reasoning-capability'
 import { completeBailianLlm } from '@/lib/providers/bailian'
 import { completeSiliconFlowLlm } from '@/lib/providers/siliconflow'
+import { runCodexTextCompletion } from '@/lib/providers/codex/client'
 
 const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
 
@@ -106,6 +107,40 @@ export async function chatCompletionStream(
   })
 
   try {
+    if (providerKey === 'codex') {
+      emitStreamStage(callbacks, streamStep, 'streaming', providerKey)
+      const codexResult = await runCodexTextCompletion({
+        codexPath: providerConfig.baseUrl,
+        model: resolvedModelId,
+        messages,
+        cwd: process.cwd(),
+      })
+      const completion = buildOpenAIChatCompletion(resolvedModelId, codexResult.text)
+      if (codexResult.text) {
+        emitStreamChunk(callbacks, streamStep, {
+          kind: 'text',
+          delta: codexResult.text,
+          seq: 1,
+          lane: 'main',
+        })
+      }
+      logLlmRawOutput({
+        userId,
+        projectId,
+        provider: providerKey,
+        modelId: resolvedModelId,
+        modelKey: selection.modelKey,
+        stream: true,
+        action: options.action,
+        text: codexResult.text,
+        reasoning: '',
+        usage: completionUsageSummary(completion),
+      })
+      emitStreamStage(callbacks, streamStep, 'completed', providerKey)
+      callbacks?.onComplete?.(codexResult.text, streamStep)
+      return completion
+    }
+
     if (gatewayRoute === 'openai-compat') {
       // openai-compatible protocol probing only applies to openai-compatible + llm.
       // gemini-compatible is explicitly excluded and must not enter this branch.

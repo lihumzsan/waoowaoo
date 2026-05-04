@@ -6,7 +6,7 @@ describe('comfyui video capabilities catalog', () => {
     const capabilities = findBuiltinCapabilities('video', 'comfyui', 'basevideo/首尾帧/ltx2.3首尾帧')
 
     expect(capabilities?.video?.generationModeOptions).toEqual(['firstlastframe'])
-    expect(capabilities?.video?.durationOptions).toEqual([4, 5, 6])
+    expect(capabilities?.video?.durationOptions).toEqual([4, 5, 6, 8, 10, 12])
     expect(capabilities?.video?.resolutionOptions).toEqual(['720p'])
     expect(capabilities?.video?.firstlastframe).toBe(true)
   })

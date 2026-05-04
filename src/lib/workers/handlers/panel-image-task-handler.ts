@@ -28,6 +28,7 @@ import {
   parseLocationAvailableSlots,
 } from '@/lib/location-available-slots'
 import { COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
+import { buildPanelContinuityPacket } from '@/lib/novel-promotion/panel-continuity'
 
 const MULTI_CHARACTER_COORDINATION_THRESHOLD = 3
 const ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION = process.env.ENABLE_COORDINATED_MULTI_CHARACTER_GENERATION === '1'
@@ -139,13 +140,14 @@ function buildPanelPromptContext(params: {
       video_prompt: params.panel.videoPrompt || '',
       location: params.panel.location || '',
       characters: panelCharacters,
-      source_text: params.panel.description || params.panel.srtSegment || '',
+      source_text: params.panel.srtSegment || params.panel.description || params.panel.imagePrompt || '',
       photography_rules: parseJsonUnknown(params.panel.photographyRules),
       acting_notes: parseJsonUnknown(params.panel.actingNotes),
     },
     context: {
       character_appearances: characterContexts,
       location_reference: locationContext,
+      continuity: buildPanelContinuityPacket({ panel: params.panel }),
     },
   }
 }
@@ -174,6 +176,15 @@ function buildPanelDefinitionAuthorityPrompt(prompt: string, panelCharacters: Re
   const characterRule = characterNames.length > 0
     ? `本镜头只允许出现 ${characterNames.length} 个明确角色：${characterNames.join('、')}。不得新增未列入 panel.characters 的人物。`
     : '本镜头 panel.characters 为空数组，画面中不得出现任何人物、医生、护士、病人或路人。'
+  const visibleCharacterLock = characterNames.length > 0
+    ? [
+        `Visible character count lock: exactly ${characterNames.length} named character(s) may appear: ${characterNames.join(', ')}.`,
+        characterNames.length === 1
+          ? `This is a one-person shot. Show only ${characterNames[0]}; do not create a second copy, twin, reflection clone, assistant, patient, passerby, or stand-in.`
+          : 'Do not add extra people, duplicate any listed character, merge faces, or replace one listed character with another person.',
+        'If reference images, prior panels, or source text imply additional people outside panel.characters, ignore them for this image.',
+      ].join('\n')
+    : 'Visible character count lock: exactly 0 people may appear. Do not add doctors, nurses, patients, passersby, silhouettes, or background humans.'
 
   return [
     prompt,
@@ -181,6 +192,7 @@ function buildPanelDefinitionAuthorityPrompt(prompt: string, panelCharacters: Re
     '执行优先级修正：当前分镜结构化字段高于原文片段。',
     '必须优先服从 panel.description、panel.image_prompt、panel.characters、panel.location、panel.shot_type、panel.camera_move。',
     characterRule,
+    visibleCharacterLock,
     '原文片段只作为剧情背景参考，不得引入未列入当前分镜字段的人物、动作或构图。',
   ].join('\n')
 }
@@ -719,7 +731,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     locale: job.data.locale,
     aspectRatio,
     styleText: artStyle || '与参考图风格一致',
-    sourceText: panel.description || panel.imagePrompt || panel.srtSegment || '',
+    sourceText: panel.srtSegment || panel.imagePrompt || panel.description || '',
     contextJson,
   })
   const prompt = buildPanelDefinitionAuthorityPrompt(basePrompt, panelCharacters)

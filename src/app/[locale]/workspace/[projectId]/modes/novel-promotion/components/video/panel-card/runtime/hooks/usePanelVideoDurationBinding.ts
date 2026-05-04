@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { MatchedVoiceLine, VideoDurationBinding } from '../../../types'
 import {
+  buildAudioDrivenDurationOptions,
   normalizeVideoDurationBinding,
   resolveAudioDrivenVideoTiming,
 } from '@/lib/video-duration/audio-binding'
@@ -9,12 +10,23 @@ interface UsePanelVideoDurationBindingParams {
   binding?: VideoDurationBinding | null
   matchedVoiceLines: MatchedVoiceLine[]
   selectedModel?: string
+  durationOptions?: readonly number[] | null
+  context?: {
+    shotType?: string | null
+    cameraMove?: string | null
+    description?: string | null
+    sceneType?: string | null
+    clipContent?: string | null
+    srtSegment?: string | null
+  } | null
 }
 
 export function usePanelVideoDurationBinding({
   binding,
   matchedVoiceLines,
   selectedModel,
+  durationOptions,
+  context,
 }: UsePanelVideoDurationBindingParams) {
   const normalizedBinding = useMemo(
     () => normalizeVideoDurationBinding(binding),
@@ -44,8 +56,15 @@ export function usePanelVideoDurationBinding({
         audioDuration: voiceLine.audioDuration,
       })),
       modelKey: selectedModel,
+      durationOptions,
+      context,
     }),
-    [availableVoiceLines, localBinding, selectedModel],
+    [availableVoiceLines, context, durationOptions, localBinding, selectedModel],
+  )
+
+  const targetDurationOptions = useMemo(
+    () => buildAudioDrivenDurationOptions(timing),
+    [timing],
   )
 
   const selectedCount = useMemo(() => {
@@ -87,8 +106,9 @@ export function usePanelVideoDurationBinding({
     selectedVoiceLineIds,
     selectedCount,
     timing,
+    targetDurationOptions,
     hasAvailableVoiceLines: availableVoiceLines.length > 0,
     isAudioDriven: normalizeVideoDurationBinding(localBinding).mode === 'match_audio',
-    hasValidAudioSelection: !!timing,
+    hasValidAudioSelection: !!timing && timing.canGenerate,
   }
 }

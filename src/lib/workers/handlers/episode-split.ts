@@ -129,7 +129,6 @@ export async function handleEpisodeSplitTask(job: Job<TaskJobData>) {
   if (!analysisModel) {
     throw new Error('请先在设置页面配置分析模型')
   }
-
   const promptBase = buildPrompt({
     promptId: PROMPT_IDS.NP_EPISODE_SPLIT,
     locale: job.data.locale,

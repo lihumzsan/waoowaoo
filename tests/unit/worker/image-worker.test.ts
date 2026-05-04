@@ -39,7 +39,7 @@ const gateMock = vi.hoisted(() => ({
 
 vi.mock('bullmq', () => ({
   Queue: class {
-    constructor(_name: string) {}
+    constructor() {}
 
     async add() {
       return { id: 'job-1' }
@@ -50,7 +50,8 @@ vi.mock('bullmq', () => ({
     }
   },
   Worker: class {
-    constructor(_name: string, processor: WorkerProcessor) {
+    constructor(name: string, processor: WorkerProcessor) {
+      void name
       workerState.processor = processor
     }
   },

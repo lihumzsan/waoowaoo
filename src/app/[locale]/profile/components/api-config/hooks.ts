@@ -25,6 +25,10 @@ import {
 } from '@/lib/workflow-concurrency'
 import { isBailianCodingPlanApiKey } from '@/lib/providers/bailian/base-url'
 import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
+import {
+    CODEX_DEFAULT_MODEL_KEY,
+    CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 interface DefaultModels {
     analysisModel?: string
@@ -76,6 +80,7 @@ function hasProviderConnection(provider: Provider | undefined): boolean {
     if (provider.hasApiKey === true) return true
     const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
     if (apiKey.length > 0) return true
+    if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) return true
     return getProviderKey(provider.id) === 'comfyui'
         && typeof provider.baseUrl === 'string'
         && provider.baseUrl.trim().length > 0
@@ -100,9 +105,11 @@ export function mergeProvidersForDisplay(
             const providerBaseUrl = providerKey === 'minimax'
                 ? matchedPreset.baseUrl
                 : (savedProvider.baseUrl || matchedPreset.baseUrl)
-            const hasApiKeyResolved = providerKey === 'comfyui'
-                ? apiKey.length > 0 || Boolean(providerBaseUrl?.trim())
-                : apiKey.length > 0
+            const hasApiKeyResolved = providerKey === CODEX_PROVIDER_KEY
+                ? true
+                : providerKey === 'comfyui'
+                    ? apiKey.length > 0 || Boolean(providerBaseUrl?.trim())
+                    : apiKey.length > 0
             merged.push({
                 ...matchedPreset,
                 apiKey,
@@ -127,7 +134,7 @@ export function mergeProvidersForDisplay(
         merged.push({
             ...presetProvider,
             apiKey: '',
-            hasApiKey: false,
+            hasApiKey: getProviderKey(presetProvider.id) === CODEX_PROVIDER_KEY,
             hidden: false,
         })
     }
@@ -202,6 +209,54 @@ export function applyComfyUiPresetDefaults(params: {
         const targetModel = nextModels[modelIndex]
         if (!targetModel || targetModel.enabled) continue
 
+        nextModels[modelIndex] = {
+            ...targetModel,
+            enabled: true,
+        }
+        changed = true
+    }
+
+    return {
+        models: nextModels,
+        defaultModels: nextDefaultModels,
+        changed,
+    }
+}
+
+export function applyCodexTextPresetDefault(params: {
+    models: CustomModel[]
+    defaultModels: DefaultModels
+    shouldAutoSelect: boolean
+}): { models: CustomModel[]; defaultModels: DefaultModels; changed: boolean } {
+    if (!params.shouldAutoSelect) {
+        return {
+            models: params.models,
+            defaultModels: params.defaultModels,
+            changed: false,
+        }
+    }
+
+    const modelIndex = params.models.findIndex((model) =>
+        model.modelKey === CODEX_DEFAULT_MODEL_KEY
+        && getProviderKey(model.provider) === CODEX_PROVIDER_KEY
+        && model.type === 'llm',
+    )
+    if (modelIndex < 0) {
+        return {
+            models: params.models,
+            defaultModels: params.defaultModels,
+            changed: false,
+        }
+    }
+
+    const nextModels = [...params.models]
+    const nextDefaultModels: DefaultModels = {
+        ...params.defaultModels,
+        analysisModel: CODEX_DEFAULT_MODEL_KEY,
+    }
+    let changed = params.defaultModels.analysisModel !== CODEX_DEFAULT_MODEL_KEY
+    const targetModel = nextModels[modelIndex]
+    if (targetModel && !targetModel.enabled) {
         nextModels[modelIndex] = {
             ...targetModel,
             enabled: true,
@@ -358,7 +413,11 @@ export function useProviders(): UseProvidersReturn {
         name: resolvePresetProviderName(provider.id, provider.name, locale),
     }))
     const [providers, setProviders] = useState<Provider[]>(
-        presetProviders.map((provider) => ({ ...provider, apiKey: '', hasApiKey: false })),
+        presetProviders.map((provider) => ({
+            ...provider,
+            apiKey: '',
+            hasApiKey: getProviderKey(provider.id) === CODEX_PROVIDER_KEY,
+        })),
     )
     const [models, setModels] = useState<CustomModel[]>(
         PRESET_MODELS.map((model) => {
@@ -465,6 +524,11 @@ export function useProviders(): UseProvidersReturn {
             const normalizedDefaultModels = isRecord(data.defaultModels)
                 ? (data.defaultModels as DefaultModels)
                 : {}
+            const hasSavedCodexConfig =
+                savedProviders.some((provider) => getProviderKey(provider.id) === CODEX_PROVIDER_KEY)
+                || savedModels.some((model: CustomModel) => getProviderKey(model.provider) === CODEX_PROVIDER_KEY)
+                || (typeof normalizedDefaultModels.analysisModel === 'string'
+                    && normalizedDefaultModels.analysisModel.startsWith(`${CODEX_PROVIDER_KEY}::`))
             const shouldApplyComfyUiDefaults =
                 savedProviders.some((provider) => getProviderKey(provider.id) === 'comfyui')
                 || savedModels.some((model: CustomModel) => getProviderKey(model.provider) === 'comfyui')
@@ -479,12 +543,18 @@ export function useProviders(): UseProvidersReturn {
                     changed: false,
                 }
 
-            setModels(comfyUiResolved.models)
-            latestModelsRef.current = comfyUiResolved.models
+            const codexResolved = applyCodexTextPresetDefault({
+                models: comfyUiResolved.models,
+                defaultModels: comfyUiResolved.defaultModels,
+                shouldAutoSelect: !hasSavedCodexConfig,
+            })
+
+            setModels(codexResolved.models)
+            latestModelsRef.current = codexResolved.models
 
             // 加载默认模型配置
-            setDefaultModels(comfyUiResolved.defaultModels)
-            latestDefaultModelsRef.current = comfyUiResolved.defaultModels
+            setDefaultModels(codexResolved.defaultModels)
+            latestDefaultModelsRef.current = codexResolved.defaultModels
             const nextWorkflowConcurrency = parseWorkflowConcurrency((data as { workflowConcurrency?: unknown }).workflowConcurrency)
             setWorkflowConcurrency(nextWorkflowConcurrency)
             latestWorkflowConcurrencyRef.current = nextWorkflowConcurrency
@@ -493,8 +563,8 @@ export function useProviders(): UseProvidersReturn {
                 setCapabilityDefaults(nextCapabilityDefaults)
                 latestCapabilityDefaultsRef.current = nextCapabilityDefaults
             }
-            if (comfyUiResolved.changed) {
-                void performSave({ defaultModels: comfyUiResolved.defaultModels }, true, true)
+            if (comfyUiResolved.changed || codexResolved.changed) {
+                void performSave({ defaultModels: codexResolved.defaultModels }, true, true)
             }
             loadedSuccessfully = true
         } catch (error) {
@@ -691,8 +761,9 @@ export function useProviders(): UseProvidersReturn {
                 if (p.id !== providerId) return p
                 const key = getProviderKey(providerId)
                 const hasKey = !!apiKey
+                const codexReady = key === CODEX_PROVIDER_KEY
                 const comfyReady = key === 'comfyui' && Boolean(p.baseUrl?.trim())
-                return { ...p, apiKey, hasApiKey: hasKey || comfyReady }
+                return { ...p, apiKey, hasApiKey: codexReady || hasKey || comfyReady }
             })
             latestProvidersRef.current = next
             void performSave(undefined, true)
@@ -803,8 +874,12 @@ export function useProviders(): UseProvidersReturn {
             const next = prev.map((p) => {
                 if (p.id !== providerId) return p
                 const key = getProviderKey(providerId)
+                const codexReady = key === CODEX_PROVIDER_KEY
                 const comfyReady = key === 'comfyui' && Boolean(baseUrl.trim())
                 const nextP = { ...p, baseUrl }
+                if (codexReady) {
+                    return { ...nextP, hasApiKey: true }
+                }
                 if (key === 'comfyui') {
                     return { ...nextP, hasApiKey: comfyReady || !!p.apiKey }
                 }

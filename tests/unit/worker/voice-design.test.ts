@@ -309,6 +309,23 @@ describe('worker voice-design behavior', () => {
     }))
   })
 
+  it('prefers the configured non-bailian analysis model for Fish Audio S2 prompt text', async () => {
+    configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: 'openrouter::x-ai/grok-4.1-fast' })
+
+    const job = buildJob(TASK_TYPE.VOICE_DESIGN, {
+      voicePrompt: 'calm elderly male voice',
+      previewText: 'hello there, please answer steadily',
+      preferredName: 'doctor_voice',
+    })
+
+    await handleVoiceDesignTask(job)
+
+    expect(fishAudioMock.generateFishAudioS2Prompt).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'openrouter::x-ai/grok-4.1-fast',
+    }))
+    expect(apiConfigMock.getModelsByType).not.toHaveBeenCalledWith('user-1', 'llm')
+  })
+
   it('injects normalized voice constraints into the final comfyui render text', async () => {
     fishAudioMock.generateFishAudioS2Prompt.mockResolvedValue({
       voicePrompt: '成熟稳重的青年男性，冷静克制',

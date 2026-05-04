@@ -118,6 +118,10 @@ async function resolveVoiceDesignTextModel(job: Job<TaskJobData>): Promise<strin
     : null
   const configuredAnalysisModel = projectConfig?.analysisModel ?? (await getUserModelConfig(job.data.userId)).analysisModel
 
+  if (configuredAnalysisModel && getProviderKey(configuredAnalysisModel) !== 'bailian') {
+    return configuredAnalysisModel
+  }
+
   if (configuredAnalysisModel && getProviderKey(configuredAnalysisModel) === 'bailian') {
     return configuredAnalysisModel
   }

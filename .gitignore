@@ -83,6 +83,7 @@ tmp/
 .tmp_*/
 tmp-*
 tmp-inspect/
+.tmp-*
 .tmp_check_task.ts
 .tmp_*.jpg
 debug-request.json

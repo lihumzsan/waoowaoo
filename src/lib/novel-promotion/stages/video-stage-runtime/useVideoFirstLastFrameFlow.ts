@@ -82,8 +82,8 @@ export function useVideoFirstLastFrameFlow({
       for (const panel of allPanels) {
         const panelKey = `${panel.storyboardId}-${panel.panelIndex}`
         existingPanelKeys.add(panelKey)
-        if (!next.has(panelKey)) {
-          next.set(panelKey, panel.firstLastFramePrompt || '')
+        if (!next.has(panelKey) && panel.firstLastFramePrompt) {
+          next.set(panelKey, panel.firstLastFramePrompt)
         }
       }
 
@@ -205,6 +205,15 @@ export function useVideoFirstLastFrameFlow({
     })
   }, [])
 
+  const getDefaultFlPrompt = useCallback((firstPrompt?: string, lastPrompt?: string): string => {
+    const first = firstPrompt || ''
+    const last = lastPrompt || ''
+    if (last) {
+      return `${first} ${t('firstLastFrame.thenTransitionTo')}: ${last}`
+    }
+    return first
+  }, [t])
+
   const handleGenerateFirstLastFrame = useCallback(async (
     firstStoryboardId: string,
     firstPanelIndex: number,
@@ -219,23 +228,27 @@ export function useVideoFirstLastFrameFlow({
         panel.storyboardId === firstStoryboardId
         && panel.panelIndex === firstPanelIndex,
     )?.firstLastFramePrompt
-    const customPrompt = flCustomPrompts.get(panelKey) ?? persistedCustomPrompt
+    const firstPanel = allPanels.find(
+      (panel) =>
+        panel.storyboardId === firstStoryboardId
+        && panel.panelIndex === firstPanelIndex,
+    )
+    const lastPanel = allPanels.find(
+      (panel) =>
+        panel.storyboardId === lastStoryboardId
+        && panel.panelIndex === lastPanelIndex,
+    )
+    const customPrompt = (flCustomPrompts.get(panelKey) || persistedCustomPrompt || getDefaultFlPrompt(
+      firstPanel?.textPanel?.video_prompt || firstPanel?.textPanel?.description,
+      lastPanel?.textPanel?.video_prompt || lastPanel?.textPanel?.description,
+    )).trim()
     await onGenerateVideo(firstStoryboardId, firstPanelIndex, flModel, {
       lastFrameStoryboardId: lastStoryboardId,
       lastFramePanelIndex: lastPanelIndex,
       flModel,
       customPrompt,
-    }, generationOptions ?? flGenerationOptions, firstPanelId)
-  }, [allPanels, flCustomPrompts, flGenerationOptions, flModel, onGenerateVideo])
-
-  const getDefaultFlPrompt = useCallback((firstPrompt?: string, lastPrompt?: string): string => {
-    const first = firstPrompt || ''
-    const last = lastPrompt || ''
-    if (last) {
-      return `${first} ${t('firstLastFrame.thenTransitionTo')}: ${last}`
-    }
-    return first
-  }, [t])
+    }, generationOptions ?? flGenerationOptions, firstPanelId, firstPanel?.videoDurationBinding)
+  }, [allPanels, flCustomPrompts, flGenerationOptions, flModel, getDefaultFlPrompt, onGenerateVideo])
 
   const getNextPanel = useCallback((currentIndex: number): VideoPanel | null => {
     if (currentIndex >= allPanels.length - 1) return null

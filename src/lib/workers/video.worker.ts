@@ -21,17 +21,36 @@ import { getProviderConfig } from '@/lib/api-config'
 import {
   parseVideoDurationBinding,
   resolveAudioDrivenVideoTiming,
+  type ResolvedAudioDrivenVideoTiming,
   type VideoDurationBinding,
 } from '@/lib/video-duration/audio-binding'
 import {
   enhanceLtx23VideoPrompt,
+  isLtx23VideoModel,
   type Ltx23PromptEnhancementVoiceLine,
 } from '@/lib/video-duration/ltx23-prompt-enhance'
+import {
+  buildDefaultFirstLastFramePrompt,
+  buildPanelContinuityPacket,
+  isStructuredMultiShotPrompt,
+  pickPanelContinuityBasePrompt,
+  renderPanelContinuityPrompt,
+  type PanelContinuityPacket,
+} from '@/lib/novel-promotion/panel-continuity'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
 type VideoOptionMap = Record<string, VideoOptionValue>
 type VideoGenerationMode = 'normal' | 'firstlastframe'
+
+const DEFAULT_LTX23_SINGLE_SHOT_DURATION_SECONDS = 2
+const DEFAULT_LTX23_SINGLE_SHOT_FPS = 24
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
 
 async function fetchPanelById(panelId: string) {
   return await prisma.novelPromotionPanel.findUnique({
@@ -74,6 +93,27 @@ function extractGenerationOptions(payload: AnyObj): VideoOptionMap {
   return next
 }
 
+function withStableLtx23SingleShotTiming(
+  options: VideoOptionMap,
+  params: {
+    modelId: string
+    generationMode: VideoGenerationMode
+  },
+): VideoOptionMap {
+  if (params.generationMode !== 'normal' || !isLtx23VideoModel(params.modelId)) {
+    return options
+  }
+
+  const next: VideoOptionMap = { ...options }
+  if (typeof next.duration !== 'number' || !Number.isFinite(next.duration) || next.duration <= 0) {
+    next.duration = DEFAULT_LTX23_SINGLE_SHOT_DURATION_SECONDS
+  }
+  if (typeof next.fps !== 'number' || !Number.isFinite(next.fps) || next.fps <= 0) {
+    next.fps = DEFAULT_LTX23_SINGLE_SHOT_FPS
+  }
+  return next
+}
+
 async function fetchPanelByStoryboardIndex(storyboardId: string, panelIndex: number) {
   return await prisma.novelPromotionPanel.findFirst({
     where: {
@@ -91,6 +131,33 @@ async function fetchPanelByStoryboardIndex(storyboardId: string, panelIndex: num
           },
         },
       },
+    },
+  })
+}
+
+async function fetchContinuityNeighborPanel(storyboardId: string, panelIndex: number) {
+  return await prisma.novelPromotionPanel.findFirst({
+    where: {
+      storyboardId,
+      panelIndex,
+    },
+    select: {
+      id: true,
+      panelIndex: true,
+      description: true,
+      imagePrompt: true,
+      videoPrompt: true,
+      videoPromptEditedByUser: true,
+      firstLastFramePrompt: true,
+      firstLastFramePromptEditedByUser: true,
+      location: true,
+      characters: true,
+      props: true,
+      srtSegment: true,
+      shotType: true,
+      cameraMove: true,
+      sceneType: true,
+      imageUrl: true,
     },
   })
 }
@@ -123,11 +190,46 @@ function readVideoDurationBindingFromPayload(payload: AnyObj): VideoDurationBind
   return parseVideoDurationBinding(raw)
 }
 
-async function loadAudioDrivenVoiceLines(
+async function resolveEffectiveVideoDurationBinding(
   panel: PanelRecord,
   payload: AnyObj,
+): Promise<VideoDurationBinding> {
+  const payloadBinding = readVideoDurationBindingFromPayload(payload)
+  if (payloadBinding?.mode === 'match_audio' && (payloadBinding.voiceLineIds || []).length > 0) {
+    return payloadBinding
+  }
+
+  const savedBinding = parseVideoDurationBinding(panel.videoDurationBinding)
+  if (savedBinding.mode === 'match_audio' && (savedBinding.voiceLineIds || []).length > 0) {
+    return savedBinding
+  }
+
+  const autoMatchedVoiceLines = await prisma.novelPromotionVoiceLine.findMany({
+    where: {
+      episodeId: panel.storyboard.episodeId,
+      OR: [
+        { matchedPanelId: panel.id },
+        {
+          matchedPanelId: null,
+          matchedStoryboardId: panel.storyboardId,
+          matchedPanelIndex: panel.panelIndex,
+        },
+      ],
+      audioDuration: { not: null },
+    },
+    orderBy: { lineIndex: 'asc' },
+    select: { id: true },
+  })
+  const voiceLineIds = autoMatchedVoiceLines.map((line) => line.id)
+  return voiceLineIds.length > 0
+    ? { mode: 'match_audio', voiceLineIds }
+    : savedBinding
+}
+
+async function loadAudioDrivenVoiceLines(
+  panel: PanelRecord,
+  binding: VideoDurationBinding,
 ): Promise<Ltx23PromptEnhancementVoiceLine[]> {
-  const binding = readVideoDurationBindingFromPayload(payload) ?? parseVideoDurationBinding(panel.videoDurationBinding)
   if (binding.mode !== 'match_audio') return []
 
   const selectedVoiceLineIds = Array.isArray(binding.voiceLineIds) ? binding.voiceLineIds : []
@@ -152,11 +254,10 @@ async function loadAudioDrivenVoiceLines(
 
 async function resolveAudioDrivenDurationOverride(
   panel: PanelRecord,
-  payload: AnyObj,
+  binding: VideoDurationBinding,
   modelId: string,
   voiceLines?: Ltx23PromptEnhancementVoiceLine[],
-): Promise<{ duration: number; fps: number } | null> {
-  const binding = readVideoDurationBindingFromPayload(payload) ?? parseVideoDurationBinding(panel.videoDurationBinding)
+): Promise<ResolvedAudioDrivenVideoTiming | null> {
   if (binding.mode !== 'match_audio') return null
 
   const selectedVoiceLineIds = Array.isArray(binding.voiceLineIds) ? binding.voiceLineIds : []
@@ -164,20 +265,53 @@ async function resolveAudioDrivenDurationOverride(
 
   const candidates = Array.isArray(voiceLines) && voiceLines.length > 0
     ? voiceLines
-    : await loadAudioDrivenVoiceLines(panel, payload)
+    : await loadAudioDrivenVoiceLines(panel, binding)
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelId)
 
   const timing = resolveAudioDrivenVideoTiming({
     binding,
     candidates,
     modelKey: modelId,
+    durationOptions: capabilities?.video?.durationOptions,
+    context: {
+      shotType: panel.shotType,
+      cameraMove: panel.cameraMove,
+      description: panel.description,
+      sceneType: panel.sceneType,
+      clipContent: panel.storyboard.clip?.content ?? null,
+      srtSegment: panel.srtSegment,
+    },
   })
 
   if (!timing) return null
-
-  return {
-    duration: timing.targetDurationSeconds,
-    fps: timing.fps,
+  if (!timing.canGenerate) {
+    const maxText = timing.maxDurationSeconds === null ? 'unknown' : `${timing.maxDurationSeconds.toFixed(1)}s`
+    if (timing.blockedReason === 'audio_exceeds_max_duration') {
+      throw new Error(`VIDEO_AUDIO_DURATION_EXCEEDS_WORKFLOW_MAX: audio ${timing.audioDurationSeconds.toFixed(1)}s exceeds workflow max ${maxText}`)
+    }
+    throw new Error(`VIDEO_TARGET_DURATION_EXCEEDS_WORKFLOW_MAX: target ${timing.targetDurationSeconds.toFixed(1)}s exceeds workflow max ${maxText}`)
   }
+  return timing
+}
+
+async function assembleVideoContinuityPacket(params: {
+  panel: PanelRecord
+  nextPanel?: Awaited<ReturnType<typeof fetchContinuityNeighborPanel>> | null
+  linkedVoiceLines: Ltx23PromptEnhancementVoiceLine[]
+  durationSeconds?: number | null
+}): Promise<PanelContinuityPacket> {
+  const previousPanel = await fetchContinuityNeighborPanel(params.panel.storyboardId, params.panel.panelIndex - 1)
+  const nextPanel = params.nextPanel !== undefined
+    ? params.nextPanel
+    : await fetchContinuityNeighborPanel(params.panel.storyboardId, params.panel.panelIndex + 1)
+
+  return buildPanelContinuityPacket({
+    panel: params.panel,
+    previousPanel,
+    nextPanel,
+    dialogueLines: params.linkedVoiceLines,
+    targetDurationSeconds: params.durationSeconds,
+  })
 }
 
 async function generateVideoForPanel(
@@ -188,7 +322,12 @@ async function generateVideoForPanel(
   projectVideoRatio: string | null | undefined,
   projectArtStyle: string | null | undefined,
   generationOptions: VideoOptionMap,
-): Promise<{ cosKey: string; generationMode: VideoGenerationMode; actualVideoTokens?: number }> {
+): Promise<{
+  cosKey: string
+  generationMode: VideoGenerationMode
+  actualVideoTokens?: number
+  firstLastFramePromptToPersist?: string
+}> {
   if (!panel.imageUrl) {
     throw new Error(`Panel ${panel.id} has no imageUrl`)
   }
@@ -197,18 +336,12 @@ async function generateVideoForPanel(
     typeof payload.firstLastFrame === 'object' && payload.firstLastFrame !== null
       ? (payload.firstLastFrame as AnyObj)
       : null
-  const firstLastCustomPrompt = typeof firstLastFramePayload?.customPrompt === 'string' ? firstLastFramePayload.customPrompt : null
-  const persistedFirstLastPrompt = firstLastFramePayload ? panel.firstLastFramePrompt : null
-  const customPrompt = typeof payload.customPrompt === 'string' ? payload.customPrompt : null
-  const prompt = firstLastCustomPrompt || persistedFirstLastPrompt || customPrompt || panel.videoPrompt || panel.description
-  const promptEditedByUser = Boolean(
-    firstLastCustomPrompt
-    || customPrompt
-    || (firstLastFramePayload ? panel.firstLastFramePromptEditedByUser : panel.videoPromptEditedByUser)
-  )
-  if (!prompt) {
-    throw new Error(`Panel ${panel.id} has no video prompt`)
-  }
+  const firstLastCustomPrompt = readNonEmptyString(firstLastFramePayload?.customPrompt)
+  const persistedFirstLastPrompt = firstLastFramePayload
+    && !isStructuredMultiShotPrompt(panel.firstLastFramePrompt)
+    ? readNonEmptyString(panel.firstLastFramePrompt)
+    : null
+  const customPrompt = readNonEmptyString(payload.customPrompt)
 
   const sourceImageUrl = toSignedUrlIfCos(panel.imageUrl, 3600)
   if (!sourceImageUrl) {
@@ -217,6 +350,7 @@ async function generateVideoForPanel(
   const sourceImageBase64 = await normalizeToBase64ForGeneration(sourceImageUrl)
 
   let lastFrameImageBase64: string | undefined
+  let lastPanel: Awaited<ReturnType<typeof fetchContinuityNeighborPanel>> | null = null
   const generationMode: VideoGenerationMode = firstLastFramePayload ? 'firstlastframe' : 'normal'
   const requestedGenerateAudio = typeof generationOptions.generateAudio === 'boolean'
     ? generationOptions.generateAudio
@@ -241,31 +375,80 @@ async function generateVideoForPanel(
         firstLastFramePayload.lastFrameStoryboardId,
         Number(firstLastFramePayload.lastFramePanelIndex),
       )
-      if (lastPanel?.imageUrl) {
+      if (lastPanel) {
         const lastFrameUrl = toSignedUrlIfCos(lastPanel.imageUrl, 3600)
         if (lastFrameUrl) {
           lastFrameImageBase64 = await normalizeToBase64ForGeneration(lastFrameUrl)
         }
       }
     }
+    if (!lastFrameImageBase64) {
+      throw new Error(`VIDEO_FIRSTLASTFRAME_LAST_FRAME_REQUIRED: panel ${panel.id} needs a valid last-frame panel image`)
+    }
   }
 
-  const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, payload)
-  const audioDrivenDuration = await resolveAudioDrivenDurationOverride(panel, payload, model, linkedVoiceLines)
-  const effectiveGenerationOptions: VideoOptionMap = {
+  if (firstLastFramePayload) {
+    const lastStoryboardId = readNonEmptyString(firstLastFramePayload.lastFrameStoryboardId)
+    const lastPanelIndex = firstLastFramePayload.lastFramePanelIndex
+    if (lastStoryboardId && lastPanelIndex !== undefined && lastPanelIndex !== null) {
+      lastPanel = await fetchContinuityNeighborPanel(lastStoryboardId, Number(lastPanelIndex))
+    }
+  }
+
+  const defaultFirstLastPrompt = firstLastFramePayload && lastPanel
+    ? buildDefaultFirstLastFramePrompt({ firstPanel: panel, lastPanel })
+    : null
+  const savedPanelPrompt = pickPanelContinuityBasePrompt(panel)
+  const basePrompt = firstLastCustomPrompt
+    || persistedFirstLastPrompt
+    || customPrompt
+    || defaultFirstLastPrompt
+    || savedPanelPrompt
+  const promptEditedByUser = Boolean(
+    firstLastCustomPrompt
+    || customPrompt
+    || (firstLastFramePayload
+      ? (persistedFirstLastPrompt && panel.firstLastFramePromptEditedByUser)
+      : (savedPanelPrompt === readNonEmptyString(panel.videoPrompt) && panel.videoPromptEditedByUser))
+  )
+  if (!basePrompt) {
+    throw new Error(`Panel ${panel.id} has no video prompt`)
+  }
+
+  const durationBinding = await resolveEffectiveVideoDurationBinding(panel, payload)
+  const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
+  const audioDrivenDuration = await resolveAudioDrivenDurationOverride(panel, durationBinding, model, linkedVoiceLines)
+  const effectiveGenerationOptions = withStableLtx23SingleShotTiming({
     ...generationOptions,
     ...(audioDrivenDuration ? {
-      duration: audioDrivenDuration.duration,
+      duration: audioDrivenDuration.targetDurationSeconds,
       fps: audioDrivenDuration.fps,
     } : {}),
-  }
+  }, {
+    modelId: model,
+    generationMode,
+  })
+  const continuityPacket = await assembleVideoContinuityPacket({
+    panel,
+    nextPanel: lastPanel,
+    linkedVoiceLines,
+    durationSeconds: typeof effectiveGenerationOptions.duration === 'number'
+      ? effectiveGenerationOptions.duration
+      : null,
+  })
+  const continuityPrompt = renderPanelContinuityPrompt({
+    packet: continuityPacket,
+    basePrompt,
+    generationMode,
+    userEdited: promptEditedByUser,
+  })
   const effectivePrompt = (
     await enhanceLtx23VideoPrompt({
       userId: job.data.userId,
       locale: job.data.locale,
       projectId: job.data.projectId,
       modelKey: model,
-      originalPrompt: prompt,
+      originalPrompt: continuityPrompt,
       panel: {
         panelIndex: panel.panelIndex,
         shotType: panel.shotType,
@@ -281,9 +464,11 @@ async function generateVideoForPanel(
       linkedVoiceLines,
       durationSeconds: typeof effectiveGenerationOptions.duration === 'number' ? effectiveGenerationOptions.duration : null,
       fps: typeof effectiveGenerationOptions.fps === 'number' ? effectiveGenerationOptions.fps : null,
+      audioTiming: audioDrivenDuration,
       generationMode,
       artStyle: projectArtStyle,
       userEdited: promptEditedByUser,
+      continuity: continuityPacket,
     })
   ).prompt
 
@@ -320,6 +505,9 @@ async function generateVideoForPanel(
   return {
     cosKey,
     generationMode,
+    ...(firstLastFramePayload && (firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt)
+      ? { firstLastFramePromptToPersist: firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt || undefined }
+      : {}),
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
       : {}),
@@ -342,7 +530,7 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     panelId: panel.id,
   })
 
-  const { cosKey, generationMode, actualVideoTokens } = await generateVideoForPanel(
+  const { cosKey, generationMode, actualVideoTokens, firstLastFramePromptToPersist } = await generateVideoForPanel(
     job,
     panel,
     payload,
@@ -358,6 +546,7 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     data: {
       videoUrl: cosKey,
       videoGenerationMode: generationMode,
+      ...(firstLastFramePromptToPersist ? { firstLastFramePrompt: firstLastFramePromptToPersist } : {}),
     },
   })
 

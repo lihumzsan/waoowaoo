@@ -28,6 +28,9 @@ export interface StoryboardPanel {
   image_model?: string | null
   video_prompt?: string
   source_text?: string
+  dialogueBeatId?: string
+  dialogueSpeaker?: string
+  estimatedDialogueSeconds?: number
   candidateImages?: string
   imageUrl?: string | null
   photographyRules?: string | null  // 单镜头摄影规则JSON
@@ -113,6 +116,17 @@ export function useStoryboardState({
     )
     return sortedPanels.map((p) => {
       const parsedChars = p.characters ? JSON.parse(p.characters) : []
+      const actingMetadata = (() => {
+        if (!p.actingNotes) return null
+        try {
+          const parsed = JSON.parse(p.actingNotes)
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed as Record<string, unknown>
+            : null
+        } catch {
+          return null
+        }
+      })()
       const characters = Array.isArray(parsedChars)
         ? parsedChars.flatMap((item): Array<{ name: string; appearance: string; slot?: string }> => {
           if (
@@ -145,6 +159,11 @@ export function useStoryboardState({
         image_model: p.imageModel ?? undefined,
         video_prompt: p.videoPrompt || undefined,
         source_text: p.srtSegment || undefined,
+        dialogueBeatId: typeof actingMetadata?.dialogueBeatId === 'string' ? actingMetadata.dialogueBeatId : undefined,
+        dialogueSpeaker: typeof actingMetadata?.dialogueSpeaker === 'string' ? actingMetadata.dialogueSpeaker : undefined,
+        estimatedDialogueSeconds: typeof actingMetadata?.estimatedDialogueSeconds === 'number'
+          ? actingMetadata.estimatedDialogueSeconds
+          : undefined,
         candidateImages: p.candidateImages || undefined,
         imageUrl: p.imageUrl,
         photographyRules: p.photographyRules,

@@ -6,6 +6,30 @@ import {
 import { shouldShowProviderModelInCard } from '@/app/[locale]/profile/components/api-config/provider-card/hooks/useProviderCardState'
 
 describe('provider card model type filters', () => {
+  it('limits codex cards to text models', () => {
+    expect(getAddableModelTypesForProvider('codex')).toEqual(['llm'])
+    expect(getVisibleModelTypesForProvider('codex', {
+      llm: [{
+        modelId: 'gpt-5.4',
+        modelKey: 'codex::gpt-5.4',
+        name: 'Codex GPT-5.4',
+        type: 'llm',
+        provider: 'codex',
+        price: 0,
+        enabled: true,
+      }],
+      image: [{
+        modelId: 'not-supported',
+        modelKey: 'codex::not-supported',
+        name: 'Not supported',
+        type: 'image',
+        provider: 'codex',
+        price: 0,
+        enabled: true,
+      }],
+    })).toEqual(['llm'])
+  })
+
   it('limits bailian coding plan cards to text models', () => {
     expect(getAddableModelTypesForProvider('bailian', {
       isBailianCodingPlan: true,

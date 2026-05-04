@@ -10,6 +10,11 @@ interface StoryboardGroupHeaderProps {
   totalStoryboards: number
   movingClipId: string | null
   storyboardClipId: string
+  dialogueCompliance: {
+    label: string
+    title: string
+    tone: 'pass' | 'warning' | 'neutral'
+  }
   formatClipTitle: (clip: NovelPromotionClip | undefined) => string
   onMoveUp: () => void
   onMoveDown: () => void
@@ -21,11 +26,18 @@ export default function StoryboardGroupHeader({
   totalStoryboards,
   movingClipId,
   storyboardClipId,
+  dialogueCompliance,
   formatClipTitle,
   onMoveUp,
   onMoveDown,
 }: StoryboardGroupHeaderProps) {
   const t = useTranslations('storyboard')
+  const dialogueComplianceClass =
+    dialogueCompliance.tone === 'pass'
+      ? 'border-[var(--glass-stroke-success)] bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]'
+      : dialogueCompliance.tone === 'warning'
+        ? 'border-[var(--glass-stroke-warning)] bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'
+        : 'border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] text-[var(--glass-text-tertiary)]'
 
   return (
     <div className="flex items-center gap-4">
@@ -60,7 +72,15 @@ export default function StoryboardGroupHeader({
         <h3 className="text-sm font-medium text-[var(--glass-text-secondary)]">
           {t('group.segment')}【{formatClipTitle(clip)}】
         </h3>
-        <p className="mt-0.5 line-clamp-1 text-xs text-[var(--glass-text-tertiary)]">{clip?.summary}</p>
+        <div className="mt-1 flex min-w-0 items-center gap-2">
+          <p className="line-clamp-1 min-w-0 text-xs text-[var(--glass-text-tertiary)]">{clip?.summary}</p>
+          <span
+            className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] leading-4 ${dialogueComplianceClass}`}
+            title={dialogueCompliance.title}
+          >
+            {dialogueCompliance.label}
+          </span>
+        </div>
       </div>
     </div>
   )

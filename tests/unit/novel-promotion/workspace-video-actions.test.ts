@@ -45,6 +45,16 @@ vi.mock('@/lib/query/hooks', () => ({
   }),
 }))
 
+vi.mock('@/contexts/ToastContext', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+  }),
+}))
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) => key,
+}))
+
 import { useWorkspaceVideoActions } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/hooks/useWorkspaceVideoActions'
 
 describe('useWorkspaceVideoActions', () => {

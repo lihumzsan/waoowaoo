@@ -15,6 +15,10 @@ import {
 } from '@/lib/model-capabilities/lookup'
 import { resolveBuiltinPricing } from '@/lib/model-pricing/lookup'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
+import {
+  resolvePanelVideoReadinessIssue,
+  summarizeVideoReadinessIssues,
+} from '@/lib/novel-promotion/video-readiness'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -204,6 +208,10 @@ export const POST = apiHandler(async (
   })
 
   if (isBatch) {
+    const batchModelKey = resolveVideoModelKeyFromPayload(body)
+    const batchCapabilities = batchModelKey
+      ? resolveBuiltinCapabilitiesByModelKey('video', batchModelKey)
+      : undefined
     const episodeId = body?.episodeId
     if (!episodeId) {
       throw new ApiError('INVALID_PARAMS')
@@ -212,21 +220,64 @@ export const POST = apiHandler(async (
     const panels = await prisma.novelPromotionPanel.findMany({
       where: {
         storyboard: { episodeId },
-        imageUrl: { not: null },
         OR: [
           { videoUrl: null },
           { videoUrl: '' },
         ],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        imageUrl: true,
+        videoPrompt: true,
+        videoPromptEditedByUser: true,
+        description: true,
+        srtSegment: true,
+        videoDurationBinding: true,
+        shotType: true,
+        cameraMove: true,
+        sceneType: true,
+        storyboard: {
+          select: {
+            clip: {
+              select: {
+                content: true,
+              },
+            },
+          },
+        },
+        matchedVoiceLines: {
+          select: {
+            id: true,
+            content: true,
+            audioDuration: true,
+          },
+        },
+      },
     })
+    const readiness = panels.map((panel) => ({
+      panel,
+      issue: resolvePanelVideoReadinessIssue(panel, {
+        payload: body,
+        modelKey: batchModelKey,
+        durationOptions: batchCapabilities?.video?.durationOptions,
+      }),
+    }))
+    const readyPanels = readiness
+      .filter((item) => item.issue === null)
+      .map((item) => item.panel)
+    const skippedReasons = summarizeVideoReadinessIssues(readiness.map((item) => item.issue))
 
-    if (panels.length === 0) {
-      return NextResponse.json({ tasks: [], total: 0 })
+    if (readyPanels.length === 0) {
+      return NextResponse.json({
+        tasks: [],
+        total: 0,
+        skipped: panels.length,
+        skippedReasons,
+      })
     }
 
     const results = await Promise.all(
-      panels.map(async (panel) =>
+      readyPanels.map(async (panel) =>
         submitTask({
           userId: session.user.id,
           locale,
@@ -245,7 +296,12 @@ export const POST = apiHandler(async (
       ),
     )
 
-    return NextResponse.json({ tasks: results, total: panels.length })
+    return NextResponse.json({
+      tasks: results,
+      total: readyPanels.length,
+      skipped: panels.length - readyPanels.length,
+      skippedReasons,
+    })
   }
 
   const storyboardId = body?.storyboardId

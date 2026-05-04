@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CustomModel, Provider } from '../types'
+import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 
 export interface ProviderCardDefaultModels {
   analysisModel?: string
@@ -58,5 +59,6 @@ export type ProviderCardTranslator = (
 export const VERIFIABLE_PROVIDER_KEYS = new Set([
   'ark', 'google', 'openrouter', 'minimax', 'fal', 'vidu',
   'bailian', 'siliconflow',
+  CODEX_PROVIDER_KEY,
   'openai-compatible', 'gemini-compatible',
 ])

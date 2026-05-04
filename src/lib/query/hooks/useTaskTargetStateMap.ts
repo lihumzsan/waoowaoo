@@ -118,6 +118,27 @@ function shouldTraceMergeTarget(targetType: string) {
   return targetType === 'NovelPromotionPanel'
 }
 
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function isTerminalPhase(phase: string | null | undefined) {
+  return phase === 'completed' || phase === 'failed'
+}
+
+function isServerTerminalNewerOrSame(
+  current: TaskTargetState | undefined,
+  runtime: { updatedAt: string | null },
+) {
+  if (!current || !isTerminalPhase(current.phase)) return false
+  const currentUpdatedAt = parseTimestampMs(current.updatedAt)
+  const runtimeUpdatedAt = parseTimestampMs(runtime.updatedAt)
+  if (currentUpdatedAt === null || runtimeUpdatedAt === null) return false
+  return currentUpdatedAt >= runtimeUpdatedAt
+}
+
 function logMergeDecision(params: {
   projectId: string | null | undefined
   key: string
@@ -127,6 +148,7 @@ function logMergeDecision(params: {
   | 'overlay_phase_ignored'
   | 'overlay_task_type_mismatch'
   | 'server_processing_authoritative'
+  | 'server_terminal_authoritative'
   runtimePhase: string | null
   runtimeTaskId: string | null
   runtimeTaskType: string | null
@@ -290,11 +312,7 @@ export function useTaskTargetStateMap(
     queryKey: queryKeys.tasks.targetStates(projectId || '', serializedTargets),
     enabled,
     staleTime: options.staleTime ?? 15000,
-    refetchInterval: (state) => {
-      const data = state.state.data as TaskTargetState[] | undefined
-      if (!data) return false
-      return data.some((item) => item.phase === 'queued' || item.phase === 'processing') ? 2000 : false
-    },
+    refetchInterval: false,
     refetchOnMount: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -371,6 +389,23 @@ export function useTaskTargetStateMap(
 
       const current = map.get(key)
       if (current) {
+        // A completed/failed server state newer than the optimistic overlay must win.
+        // Otherwise a missed SSE completion can leave asset cards stuck in "processing".
+        if (isServerTerminalNewerOrSame(current, runtime)) {
+          if (shouldTraceMergeTarget(target.targetType)) {
+            logMergeDecision({
+              projectId,
+              key,
+              decision: 'server_terminal_authoritative',
+              runtimePhase: runtime.phase,
+              runtimeTaskId: runtime.runningTaskId,
+              runtimeTaskType: runtime.runningTaskType,
+              currentPhase: current.phase,
+              whitelist: target.types || [],
+            })
+          }
+          continue
+        }
         // Server-side processing state is authoritative.
         if (current.phase === 'processing') {
           if (shouldTraceMergeTarget(target.targetType)) {
@@ -410,7 +445,7 @@ export function useTaskTargetStateMap(
       }
     }
     return map
-  }, [normalizedTargets, overlayQuery.data, query.data])
+  }, [normalizedTargets, overlayQuery.data, projectId, query.data])
 
   const mergedData = useMemo(() => {
     return normalizedTargets.map((target) =>

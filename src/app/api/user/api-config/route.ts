@@ -41,6 +41,10 @@ import type {
   OpenAICompatMediaTemplateSource,
 } from '@/lib/openai-compat-media-template'
 import { validateOpenAICompatMediaTemplate } from '@/lib/user-api/model-template/validator'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 type ApiModeType = 'gemini-sdk' | 'openai-official'
 type GatewayRouteType = 'official' | 'openai-compat'
@@ -189,6 +193,7 @@ const OPTIONAL_PRICING_PROVIDER_KEYS = new Set([
   'bailian',
   'siliconflow',
   'comfyui',
+  CODEX_PROVIDER_KEY,
 ])
 const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
 const RETIRED_PROVIDER_KEYS = new Set(['qwen'])
@@ -208,7 +213,11 @@ function normalizeMinimaxProviderBaseUrl(input: {
   strict: boolean
   field: string
 }): string | undefined {
-  if (getProviderKey(input.providerId) !== 'minimax') return input.baseUrl
+  const providerKey = getProviderKey(input.providerId)
+  if (providerKey === CODEX_PROVIDER_KEY) {
+    return input.baseUrl || CODEX_DEFAULT_EXECUTABLE_PATH
+  }
+  if (providerKey !== 'minimax') return input.baseUrl
   if (!input.baseUrl) return MINIMAX_OFFICIAL_BASE_URL
   if (input.baseUrl === MINIMAX_OFFICIAL_BASE_URL) return MINIMAX_OFFICIAL_BASE_URL
   if (input.strict) {
@@ -527,6 +536,9 @@ function resolveProviderByIdOrKey(providers: StoredProvider[], providerId: strin
 
 function hasStoredProviderConnection(provider: StoredProvider | null | undefined): boolean {
   if (!provider) return false
+  if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) {
+    return true
+  }
   if (typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0) {
     return true
   }
@@ -552,6 +564,40 @@ function resolveConnectedDefaultModelKey(
   if (!hasStoredProviderConnection(matchedProvider)) return ''
 
   return parsed.modelKey
+}
+
+function validateDefaultModelsEnabled(
+  defaultModels: DefaultModelsPayload,
+  models: StoredModel[],
+  providers: StoredProvider[],
+) {
+  for (const field of DEFAULT_MODEL_FIELDS) {
+    const modelKey = defaultModels[field]
+    if (!modelKey) continue
+
+    const resolvedModelKey = resolveConnectedDefaultModelKey(
+      modelKey,
+      field === 'analysisModel'
+        ? 'llm'
+        : field === 'videoModel'
+          ? 'video'
+          : field === 'audioModel' || field === 'voiceDesignModel'
+            ? 'audio'
+            : field === 'lipSyncModel'
+              ? 'lipsync'
+              : 'image',
+      models,
+      providers,
+    )
+
+    if (resolvedModelKey !== modelKey) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'DEFAULT_MODEL_NOT_ENABLED',
+        field: `defaultModels.${field}`,
+        modelKey,
+      })
+    }
+  }
 }
 
 function withBuiltinCapabilities(model: StoredModel): StoredModel {
@@ -985,6 +1031,12 @@ function validateModelProviderTypeSupport(models: StoredModel[], providers: Stor
     if (!matchedProvider) continue
 
     const providerKey = getProviderKey(matchedProvider.id)
+    if (providerKey === CODEX_PROVIDER_KEY && model.type !== 'llm') {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'MODEL_PROVIDER_TYPE_UNSUPPORTED',
+        field: `models[${index}].provider`,
+      })
+    }
     if (model.type === 'lipsync' && providerKey !== 'fal' && providerKey !== 'vidu' && providerKey !== 'bailian') {
       throw new ApiError('INVALID_PARAMS', {
         code: 'MODEL_PROVIDER_TYPE_UNSUPPORTED',
@@ -1872,6 +1924,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   }
 
   if (normalizedDefaults !== undefined) {
+    validateDefaultModelsEnabled(
+      normalizedDefaults,
+      normalizedModels ?? existingModels,
+      providerSourceForValidation,
+    )
     if (billingMode !== 'OFF') {
       validateDefaultModelPricing(normalizedDefaults)
     }

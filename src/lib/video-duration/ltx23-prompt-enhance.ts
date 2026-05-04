@@ -1,18 +1,13 @@
 import type { Locale } from '@/i18n/routing'
 import { executeAiTextStep } from '@/lib/ai-runtime'
-import { getModelsByType, getProviderKey } from '@/lib/api-config'
-import { composeModelKey, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
+import { getProviderKey } from '@/lib/api-config'
+import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { prisma } from '@/lib/prisma'
+import type { PanelContinuityPacket } from '@/lib/novel-promotion/panel-continuity'
+import type { ResolvedAudioDrivenVideoTiming } from '@/lib/video-duration/audio-binding'
 import { parseProfileData } from '@/types/character-profile'
-
-const PREFERRED_BAILIAN_TEXT_MODEL_IDS = [
-  'qwen3.5-plus',
-  'qwen3.5-flash',
-  'qwen-plus',
-  'qwen-turbo',
-] as const
 
 export interface Ltx23PromptEnhancementVoiceLine {
   id: string
@@ -44,9 +39,11 @@ export interface EnhanceLtx23VideoPromptInput {
   linkedVoiceLines?: Ltx23PromptEnhancementVoiceLine[] | null
   durationSeconds?: number | null
   fps?: number | null
+  audioTiming?: ResolvedAudioDrivenVideoTiming | null
   generationMode?: 'normal' | 'firstlastframe'
   artStyle?: string | null
   userEdited?: boolean
+  continuity?: PanelContinuityPacket | null
 }
 
 export interface Ltx23PromptEnhancementResult {
@@ -86,7 +83,11 @@ function parseNameList(raw: string | null | undefined): string[] {
     if (Array.isArray(parsed)) {
       const seen = new Set<string>()
       return parsed
-        .map((item) => readTrimmedString(item))
+        .map((item) => {
+          if (typeof item === 'string') return readTrimmedString(item)
+          if (!item || typeof item !== 'object') return ''
+          return readTrimmedString((item as Record<string, unknown>).name)
+        })
         .filter((item) => {
           if (!item || seen.has(item)) return false
           seen.add(item)
@@ -118,30 +119,16 @@ export function isLtx23VideoModel(modelKey: string | null | undefined): boolean 
 
 async function resolveLtx23PromptTextModel(userId: string, projectId: string): Promise<string | null> {
   const projectConfig = await getProjectModelConfig(projectId, userId)
-  if (projectConfig.analysisModel && getProviderKey(projectConfig.analysisModel) === 'bailian') {
+  if (projectConfig.analysisModel && getProviderKey(projectConfig.analysisModel) !== 'bailian') {
     return projectConfig.analysisModel
   }
 
   const userConfig = await getUserModelConfig(userId)
-  if (userConfig.analysisModel && getProviderKey(userConfig.analysisModel) === 'bailian') {
+  if (userConfig.analysisModel && getProviderKey(userConfig.analysisModel) !== 'bailian') {
     return userConfig.analysisModel
   }
 
-  const llmModels = await getModelsByType(userId, 'llm')
-  const bailianModels = llmModels.filter((model) => getProviderKey(model.provider) === 'bailian')
-
-  for (const modelId of PREFERRED_BAILIAN_TEXT_MODEL_IDS) {
-    const matched = bailianModels.find((model) => model.modelId === modelId)
-    if (matched) {
-      return composeModelKey(matched.provider, matched.modelId)
-    }
-  }
-
-  if (bailianModels[0]) {
-    return composeModelKey(bailianModels[0].provider, bailianModels[0].modelId)
-  }
-
-  return projectConfig.analysisModel || userConfig.analysisModel || null
+  return null
 }
 
 async function loadCharacterContextRows(
@@ -229,11 +216,44 @@ function buildPanelContextText(input: EnhanceLtx23VideoPromptInput): string {
     truncateText(panel.cameraMove, 80) && `Camera move: ${truncateText(panel.cameraMove, 80)}`,
     truncateText(panel.sceneType, 80) && `Scene type: ${truncateText(panel.sceneType, 80)}`,
     truncateText(panel.srtSegment, 120) && `Subtitle/dialogue in panel: ${truncateText(panel.srtSegment, 120)}`,
-    truncateText(panel.clipContent, 220) && `Clip context: ${truncateText(panel.clipContent, 220)}`,
+    truncateText(panel.clipContent, 160) && `Low-priority story background only; do not import off-screen people/events: ${truncateText(panel.clipContent, 160)}`,
     truncateText(input.artStyle, 80) && `Project visual style: ${truncateText(input.artStyle, 80)}`,
+    buildContinuityContextText(input.continuity),
   ].filter(Boolean)
 
   return lines.length > 0 ? lines.join('\n') : 'No extra panel metadata was provided.'
+}
+
+function buildContinuityContextText(packet: PanelContinuityPacket | null | undefined): string {
+  if (!packet) return ''
+
+  const characters = packet.characters.length > 0
+    ? packet.characters.map((character) => {
+        const details = [
+          character.appearance ? `appearance=${character.appearance}` : '',
+          character.slot ? `slot=${character.slot}` : '',
+        ].filter(Boolean)
+        return details.length > 0 ? `${character.name} (${details.join('; ')})` : character.name
+      }).join(', ')
+    : 'only subjects visible in the source frame'
+
+  const previous = packet.previous
+    ? `${packet.previous.description || packet.previous.action}`
+    : 'none'
+  const next = packet.next
+    ? `${packet.next.description || packet.next.action}`
+    : 'none'
+
+  return [
+    'Continuity packet:',
+    `Source text: ${truncateText(packet.sourceText, 180) || 'none'}`,
+    `Current shot action: ${truncateText(packet.currentAction, 180) || 'none'}`,
+    `Allowed characters: ${characters}`,
+    `Location lock: ${packet.location || 'same as source frame'}`,
+    `Previous shot context only: ${truncateText(previous, 140)}`,
+    `Next shot context only: ${truncateText(next, 140)}`,
+    `Forbidden additions: ${packet.forbiddenAdditions.join(', ')}`,
+  ].join('\n')
 }
 
 function normalizeDialogueText(value: unknown): string {
@@ -292,6 +312,7 @@ function buildAudioContextText(
   locale: Locale,
   voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
   durationSeconds?: number | null,
+  audioTiming?: ResolvedAudioDrivenVideoTiming | null,
 ): string {
   const safeDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
@@ -317,8 +338,22 @@ function buildAudioContextText(
     })
     .join('\n')
 
-  const header = safeDuration
-    ? `Linked audio count: ${voiceLines.length}\nTarget video duration from linked audio: ${safeDuration.toFixed(2)} seconds.`
+  const timingPlan = audioTiming
+    ? [
+        `Audio duration: ${audioTiming.audioDurationSeconds.toFixed(2)} seconds.`,
+        `Context-aware target video duration: ${audioTiming.targetDurationSeconds.toFixed(2)} seconds.`,
+        `Timing plan: [0.00-${audioTiming.dialogueStartSeconds.toFixed(2)}] pre-roll emotional setup, [${audioTiming.dialogueStartSeconds.toFixed(2)}-${audioTiming.dialogueEndSeconds.toFixed(2)}] exact dialogue/lip motion, [${audioTiming.dialogueEndSeconds.toFixed(2)}-${audioTiming.targetDurationSeconds.toFixed(2)}] post-dialogue emotional hold.`,
+        `Pre-roll: ${audioTiming.preRollSeconds.toFixed(2)} seconds. Post-roll: ${audioTiming.postRollSeconds.toFixed(2)} seconds.`,
+        audioTiming.capped && audioTiming.maxDurationSeconds !== null
+          ? `The current workflow maximum is ${audioTiming.maxDurationSeconds.toFixed(2)} seconds; do not exceed it.`
+          : '',
+      ].filter(Boolean).join('\n')
+    : null
+
+  const header = timingPlan
+    ? `Linked audio count: ${voiceLines.length}\n${timingPlan}`
+    : safeDuration
+      ? `Linked audio count: ${voiceLines.length}\nContext-aware target video duration: ${safeDuration.toFixed(2)} seconds.`
     : `Linked audio count: ${voiceLines.length}`
 
   const strictDialogueContext = buildStrictDialogueContextText(locale, voiceLines)
@@ -328,8 +363,27 @@ function buildAudioContextText(
 }
 
 function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string {
+  const allowedSubjects = input.continuity?.characters?.length
+    ? input.continuity.characters.map((character) => character.name).filter(Boolean)
+    : parseNameList(input.panel.characters)
+  const allowedSubjectText = allowedSubjects.length > 0
+    ? `Allowed on-screen subjects from panel metadata: ${allowedSubjects.join(', ')}. Do not add any other person.`
+    : 'Allowed on-screen subjects: only the subjects visibly present in the source frame.'
+  const timingLines = input.audioTiming
+    ? [
+        `Dialogue should start around ${input.audioTiming.dialogueStartSeconds.toFixed(2)} seconds and end around ${input.audioTiming.dialogueEndSeconds.toFixed(2)} seconds.`,
+        `Keep ${input.audioTiming.preRollSeconds.toFixed(2)} seconds for visual/emotional setup before speech and ${input.audioTiming.postRollSeconds.toFixed(2)} seconds for aftertaste after speech.`,
+      ]
+    : []
+
   const lines = [
     'Target model: ComfyUI LTX2.3 image-to-video.',
+    'The source frame and current panel are authoritative. If story context, neighboring shots, or global plot conflict with the source frame, ignore them.',
+    allowedSubjectText,
+    'Do not introduce new people, extra bodies, crowds, props, locations, plot events, scene cuts, jump cuts, or camera angle changes not already implied by the source frame.',
+    'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
+    'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
+    'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
     'This is a short single-shot video. Avoid scene cuts, jump cuts, time skips, and multi-part action beats.',
     input.generationMode === 'firstlastframe'
       ? 'Generation mode: first-to-last-frame continuity. Motion should bridge naturally from the starting frame to the ending frame.'
@@ -340,9 +394,29 @@ function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string
     typeof input.fps === 'number' && Number.isFinite(input.fps) && input.fps > 0
       ? `Frame rate: ${Math.round(input.fps)} fps.`
       : '',
+    ...timingLines,
   ].filter(Boolean)
 
   return lines.join('\n')
+}
+
+function buildVisualContinuityConstraint(input: EnhanceLtx23VideoPromptInput): string {
+  const allowedSubjects = input.continuity?.characters?.length
+    ? input.continuity.characters.map((character) => character.name).filter(Boolean)
+    : parseNameList(input.panel.characters)
+  const subjectText = allowedSubjects.length > 0
+    ? `Allowed visible subjects: ${allowedSubjects.join(', ')}.`
+    : 'Allowed visible subjects: only the people already visible in the source frame.'
+
+  return [
+    'Source-frame continuity lock:',
+    subjectText,
+    'Do not add new people, extra bodies, crowds, new props, new locations, scene cuts, time jumps, or unrelated plot actions.',
+    'Use a locked-off static camera; do not orbit, pan, zoom, track, travel, or use parallax.',
+    'Animate only the visible subject posture, face, mouth, and hands from the current frame.',
+    'Do not turn reflections, background shapes, shadows, or blurred details into new characters.',
+    'Keep the final frame close to the source image with the same visible character count and same room layout.',
+  ].join(' ')
 }
 
 function readEnhancedPromptField(parsed: Record<string, unknown>): string {
@@ -394,6 +468,25 @@ function appendDialogueConstraint(basePrompt: string, constraint: string, locale
   return `${trimmedBase}${separator}${trimmedConstraint}`
 }
 
+function stabilizeNormalSingleShotPrompt(basePrompt: string, input: EnhanceLtx23VideoPromptInput): string {
+  if (input.generationMode === 'firstlastframe') return basePrompt
+
+  return basePrompt
+    .replace(/\b(?:tiny\s+within-frame\s+)?(?:parallax|camera\s+parallax)(?:\s+simulating\s+[^,.]+)?/gi, 'locked-off static camera')
+    .replace(/\b(?:slow(?:ly)?\s+)?(?:circling|circle|orbits?|orbiting|pans?|panning|tracks?|tracking|dolly|dolly(?:ing)?|zooms?|zooming|travels?|traveling|travelling)\b/gi, 'locked-off static camera')
+}
+
+function appendLtx23SafetyConstraints(
+  basePrompt: string,
+  dialogueConstraint: string,
+  input: EnhanceLtx23VideoPromptInput,
+): string {
+  const stabilizedPrompt = stabilizeNormalSingleShotPrompt(basePrompt, input)
+  const withDialogue = appendDialogueConstraint(stabilizedPrompt, dialogueConstraint, input.locale)
+  const visualConstraint = buildVisualContinuityConstraint(input)
+  return appendDialogueConstraint(withDialogue, visualConstraint, 'en')
+}
+
 export async function enhanceLtx23VideoPrompt(
   input: EnhanceLtx23VideoPromptInput,
 ): Promise<Ltx23PromptEnhancementResult> {
@@ -415,8 +508,9 @@ export async function enhanceLtx23VideoPrompt(
   }
 
   if (input.userEdited) {
+    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
-      prompt: originalPrompt,
+      prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
       enhanced: false,
       textModel: null,
     }
@@ -440,7 +534,7 @@ export async function enhanceLtx23VideoPrompt(
         original_prompt: originalPrompt,
         panel_context: buildPanelContextText(input),
         character_context: buildCharacterContextText(characters),
-        audio_context: buildAudioContextText(input.locale, input.linkedVoiceLines, input.durationSeconds),
+        audio_context: buildAudioContextText(input.locale, input.linkedVoiceLines, input.durationSeconds, input.audioTiming),
         generation_context: buildGenerationContextText(input),
       },
     })
@@ -465,13 +559,13 @@ export async function enhanceLtx23VideoPrompt(
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     if (!enhancedPrompt) {
       return {
-        prompt: appendDialogueConstraint(originalPrompt, dialogueConstraint, input.locale),
+        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel,
       }
     }
 
-    const finalPrompt = appendDialogueConstraint(enhancedPrompt, dialogueConstraint, input.locale)
+    const finalPrompt = appendLtx23SafetyConstraints(enhancedPrompt, dialogueConstraint, input)
 
     return {
       prompt: finalPrompt,
@@ -481,7 +575,7 @@ export async function enhanceLtx23VideoPrompt(
   } catch {
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
-      prompt: appendDialogueConstraint(originalPrompt, dialogueConstraint, input.locale),
+      prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
       enhanced: false,
       textModel,
     }

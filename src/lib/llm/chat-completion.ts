@@ -36,6 +36,7 @@ import {
 } from './runtime-shared'
 import { completeBailianLlm } from '@/lib/providers/bailian'
 import { completeSiliconFlowLlm } from '@/lib/providers/siliconflow'
+import { runCodexTextCompletion } from '@/lib/providers/codex/client'
 
 const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
 
@@ -113,6 +114,41 @@ export async function chatCompletion(
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     const attemptStartedAt = Date.now()
     try {
+      if (providerKey === 'codex') {
+        const codexResult = await runCodexTextCompletion({
+          codexPath: providerConfig.baseUrl,
+          model: resolvedModelId,
+          messages,
+          cwd: process.cwd(),
+        })
+        const completion = buildOpenAIChatCompletion(resolvedModelId, codexResult.text)
+        logLlmRawOutput({
+          userId,
+          projectId,
+          provider: providerKey,
+          modelId: resolvedModelId,
+          modelKey: selection.modelKey,
+          stream: false,
+          action: options.action,
+          text: codexResult.text,
+          reasoning: '',
+          usage: completionUsageSummary(completion),
+        })
+        llmLogger.info({
+          action: 'llm.call.success',
+          message: 'llm call succeeded',
+          provider: providerKey,
+          durationMs: Date.now() - attemptStartedAt,
+          details: {
+            model: resolvedModelId,
+            attempt,
+            maxRetries,
+            engine: 'codex_exec',
+          },
+        })
+        return completion
+      }
+
       if (gatewayRoute === 'openai-compat') {
         // openai-compatible protocol probing only applies to openai-compatible + llm.
         // gemini-compatible is explicitly excluded and must not enter this branch.

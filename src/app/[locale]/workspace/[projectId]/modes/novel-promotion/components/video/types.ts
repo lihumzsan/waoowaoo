@@ -19,6 +19,7 @@ export type VideoDurationMode = 'manual' | 'match_audio'
 export interface VideoDurationBinding {
   mode?: VideoDurationMode
   voiceLineIds?: string[]
+  targetDurationSeconds?: number | null
 }
 
 export interface TextPanel {

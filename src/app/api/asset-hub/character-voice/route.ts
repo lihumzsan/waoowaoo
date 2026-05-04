@@ -18,7 +18,7 @@ interface CharacterVoiceJsonBody {
     audioBase64?: string | null
 }
 
-function readDesignedVoiceType(_voiceId: string) {
+function readDesignedVoiceType() {
     return 'designed'
 }
 
@@ -80,7 +80,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         await db.globalCharacter.update({
             where: { id: characterId },
             data: {
-                voiceType: readDesignedVoiceType(voiceId),
+                voiceType: readDesignedVoiceType(),
                 voiceId: voiceId,
                 customVoiceUrl: cosUrl
             }

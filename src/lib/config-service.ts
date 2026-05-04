@@ -7,6 +7,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { getModelsByType, getProviderKey } from '@/lib/api-config'
 import {
   type CapabilitySelections,
   type CapabilityValue,
@@ -56,6 +57,36 @@ export function extractModelKey(key: string | null | undefined): string | null {
   const parsed = parseModelKey(key)
   if (!parsed?.provider || !parsed?.modelId) return null
   return composeModelKey(parsed.provider, parsed.modelId)
+}
+
+async function resolveEnabledAnalysisModel(
+  userId: string,
+  ...candidates: Array<string | null | undefined>
+): Promise<string | null> {
+  const enabledModels = await getModelsByType(userId, 'llm')
+  const enabledModelKeys = new Set(enabledModels.map((model) => model.modelKey))
+  const providerFallbacks = new Map<string, string>()
+  for (const model of enabledModels) {
+    const providerKey = getProviderKey(model.provider)
+    if (!providerFallbacks.has(providerKey)) {
+      providerFallbacks.set(providerKey, model.modelKey)
+    }
+  }
+
+  for (const candidate of candidates) {
+    const modelKey = extractModelKey(candidate)
+    if (!modelKey) continue
+    if (enabledModelKeys.has(modelKey)) return modelKey
+
+    const providerFallback = providerFallbacks.get(getProviderKey(modelKey))
+    if (providerFallback) return providerFallback
+  }
+
+  if (enabledModels.length === 1) {
+    return enabledModels[0].modelKey
+  }
+
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -155,7 +186,7 @@ export async function getProjectModelConfig(
   ])
 
   return {
-    analysisModel: extractModelKey(projectData?.analysisModel) || extractModelKey(userPref?.analysisModel) || null,
+    analysisModel: await resolveEnabledAnalysisModel(userId, projectData?.analysisModel, userPref?.analysisModel),
     characterModel: extractModelKey(projectData?.characterModel) || null,
     locationModel: extractModelKey(projectData?.locationModel) || null,
     storyboardModel: extractModelKey(projectData?.storyboardModel) || null,
@@ -178,7 +209,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   })
 
   return {
-    analysisModel: extractModelKey(userPref?.analysisModel) || null,
+    analysisModel: await resolveEnabledAnalysisModel(userId, userPref?.analysisModel),
     characterModel: extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(userPref?.locationModel) || null,
     storyboardModel: extractModelKey(userPref?.storyboardModel) || null,

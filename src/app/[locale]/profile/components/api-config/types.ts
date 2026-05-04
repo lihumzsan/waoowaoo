@@ -11,6 +11,11 @@ import type {
     OpenAICompatMediaTemplate,
     OpenAICompatMediaTemplateSource,
 } from '@/lib/openai-compat-media-template'
+import {
+    CODEX_DEFAULT_EXECUTABLE_PATH,
+    CODEX_DEFAULT_MODEL_ID,
+    CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 // 统一提供商接口
 export interface Provider {
@@ -91,6 +96,11 @@ type PresetModel = Omit<CustomModel, 'enabled' | 'modelKey' | 'price'>
 // 预设模型
 export const PRESET_MODELS: PresetModel[] = [
     // 文本模型
+    { modelId: CODEX_DEFAULT_MODEL_ID, name: 'Codex GPT-5.4', type: 'llm', provider: CODEX_PROVIDER_KEY },
+    { modelId: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', type: 'llm', provider: 'openrouter' },
+    { modelId: '~openai/gpt-latest', name: 'OpenAI GPT Latest', type: 'llm', provider: 'openrouter' },
+    { modelId: 'openai/gpt-5.5-pro', name: 'GPT-5.5 Pro', type: 'llm', provider: 'openrouter' },
+    { modelId: 'openai/gpt-5.5', name: 'GPT-5.5', type: 'llm', provider: 'openrouter' },
     { modelId: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', type: 'llm', provider: 'openrouter' },
     { modelId: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', type: 'llm', provider: 'openrouter' },
     { modelId: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', type: 'llm', provider: 'openrouter' },
@@ -228,6 +238,7 @@ export const PRESET_PROVIDERS: Omit<Provider, 'apiKey' | 'hasApiKey'>[] = [
     { id: 'minimax', name: 'MiniMax Hailuo', baseUrl: 'https://api.minimaxi.com/v1' },
     { id: 'vidu', name: 'Vidu' },
     { id: 'fal', name: 'FAL' },
+    { id: CODEX_PROVIDER_KEY, name: 'Codex (Local)', baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH },
     { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
 ]
 
@@ -238,6 +249,8 @@ const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
     bailian: '阿里云百炼',
     siliconflow: '硅基流动',
 }
+
+ZH_PROVIDER_NAME_MAP.codex = 'Codex 本地'
 
 function isZhLocale(locale?: string): boolean {
     return typeof locale === 'string' && locale.toLowerCase().startsWith('zh')

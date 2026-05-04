@@ -36,6 +36,7 @@ import {
   parseStoryboardRetryTarget,
   runScriptToStoryboardAtomicRetry,
 } from './script-to-storyboard-atomic-retry'
+import { buildVoiceLineRowsFromDialogueBeats } from '@/lib/novel-promotion/dialogue-beats'
 
 type AnyObj = Record<string, unknown>
 const MAX_VOICE_ANALYZE_ATTEMPTS = 2
@@ -305,6 +306,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
                 })
                 return {
                   clipPanels: atomicResult.clipPanels,
+                  dialogueBeatsByClipId: atomicResult.dialogueBeatsByClipId,
                   phase1PanelsByClipId: atomicResult.phase1PanelsByClipId,
                   phase2CinematographyByClipId: atomicResult.phase2CinematographyByClipId,
                   phase2ActingByClipId: atomicResult.phase2ActingByClipId,
@@ -454,7 +456,20 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
         }
       }
 
-      if (!episode.novelText || !episode.novelText.trim()) {
+      const dialogueBeatsByClipId = orchestratorResult.dialogueBeatsByClipId || {}
+      const hasDialogueBeats = Object.values(dialogueBeatsByClipId)
+        .some((beats) => Array.isArray(beats) && beats.length > 0)
+      const beatVoiceLineRows = hasDialogueBeats
+        ? buildVoiceLineRowsFromDialogueBeats({
+          clipPanels: orchestratorResult.clipPanels,
+          dialogueBeatsByClipId,
+        })
+        : null
+      if (hasDialogueBeats && (!beatVoiceLineRows || beatVoiceLineRows.length === 0)) {
+        throw new Error('dialogue_beats_voice_binding_empty')
+      }
+
+      if (!beatVoiceLineRows && (!episode.novelText || !episode.novelText.trim())) {
         throw new Error('No novel text to analyze')
       }
 
@@ -462,7 +477,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
         promptId: PROMPT_IDS.NP_VOICE_ANALYSIS,
         locale: job.data.locale,
         variables: {
-          input: episode.novelText,
+          input: episode.novelText || '',
           characters_lib_name: (novelData.characters || []).length > 0
             ? (novelData.characters || []).map((item) => item.name).join('、')
             : '无',
@@ -471,7 +486,8 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
         },
       })
 
-      let voiceLineRows: JsonRecord[] | null = null
+      let voiceLineRows: JsonRecord[] | null = beatVoiceLineRows
+      if (!voiceLineRows) {
       let voiceLastError: Error | null = null
       const voiceStepMeta: ScriptToStoryboardStepMeta = {
         stepId: 'voice_analyze',
@@ -519,6 +535,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
       if (!voiceLineRows) {
         throw voiceLastError!
       }
+      }
 
       await createArtifact({
         runId,
@@ -527,6 +544,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
         refId: episodeId,
         payload: {
           lines: voiceLineRows,
+          source: hasDialogueBeats ? 'dialogue_beats' : 'voice_analyze',
         },
       })
 

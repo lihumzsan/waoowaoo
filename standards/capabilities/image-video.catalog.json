@@ -27,6 +27,10 @@
           true,
           false
         ],
+        "containsVideoInputOptions": [
+          false,
+          true
+        ],
         "durationOptions": [
           4,
           5,
@@ -63,6 +67,10 @@
         "generateAudioOptions": [
           true,
           false
+        ],
+        "containsVideoInputOptions": [
+          false,
+          true
         ],
         "durationOptions": [
           4,
@@ -1149,7 +1157,10 @@
         "durationOptions": [
           4,
           5,
-          6
+          6,
+          8,
+          10,
+          12
         ],
         "resolutionOptions": [
           "720p"

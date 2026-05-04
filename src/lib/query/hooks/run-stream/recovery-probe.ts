@@ -64,7 +64,10 @@ export function startRecoveryProbe(args: StartRecoveryProbeArgs): () => void {
 
     if (cancelled || args.hasRunState()) return
 
-    if (!activeRunId) return
+    if (!activeRunId) {
+      scheduleRetry(PROBE_RETRY_INTERVAL_MS)
+      return
+    }
 
     successfulProbeScopes.set(args.storageKey, Date.now())
     args.onRecovered(activeRunId)

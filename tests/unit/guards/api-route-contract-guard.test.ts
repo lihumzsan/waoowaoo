@@ -1,20 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import {
-  API_HANDLER_ALLOWLIST,
-  PUBLIC_ROUTE_ALLOWLIST,
-  inspectRouteContract,
-} from '../../../scripts/guards/api-route-contract-guard.mjs'
+import { execFileSync } from 'node:child_process'
+
+function runGuard<T>(code: string): T {
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  })
+  return JSON.parse(output) as T
+}
 
 describe('api route contract guard', () => {
   it('allows explicit public and framework-managed exceptions', () => {
-    expect(API_HANDLER_ALLOWLIST.has('src/app/api/auth/[...nextauth]/route.ts')).toBe(true)
-    expect(PUBLIC_ROUTE_ALLOWLIST.has('src/app/api/system/boot-id/route.ts')).toBe(true)
-    expect(
-      inspectRouteContract(
-        'src/app/api/system/boot-id/route.ts',
-        'export async function GET() { return Response.json({ bootId: "x" }) }',
-      ),
-    ).toEqual([])
+    const result = runGuard<{
+      hasApiAllowlist: boolean
+      hasPublicAllowlist: boolean
+      violations: string[]
+    }>(`
+      import { API_HANDLER_ALLOWLIST, PUBLIC_ROUTE_ALLOWLIST, inspectRouteContract } from './scripts/guards/api-route-contract-guard.mjs'
+      console.log(JSON.stringify({
+        hasApiAllowlist: API_HANDLER_ALLOWLIST.has('src/app/api/auth/[...nextauth]/route.ts'),
+        hasPublicAllowlist: PUBLIC_ROUTE_ALLOWLIST.has('src/app/api/system/boot-id/route.ts'),
+        violations: inspectRouteContract(
+          'src/app/api/system/boot-id/route.ts',
+          'export async function GET() { return Response.json({ bootId: "x" }) }',
+        ),
+      }))
+    `)
+
+    expect(result.hasApiAllowlist).toBe(true)
+    expect(result.hasPublicAllowlist).toBe(true)
+    expect(result.violations).toEqual([])
   })
 
   it('passes protected routes that use apiHandler and explicit auth', () => {
@@ -27,7 +42,12 @@ describe('api route contract guard', () => {
       })
     `
 
-    expect(inspectRouteContract('src/app/api/user/secure/route.ts', content)).toEqual([])
+    const result = runGuard<string[]>(`
+      import { inspectRouteContract } from './scripts/guards/api-route-contract-guard.mjs'
+      console.log(JSON.stringify(inspectRouteContract('src/app/api/user/secure/route.ts', ${JSON.stringify(content)})))
+    `)
+
+    expect(result).toEqual([])
   })
 
   it('flags protected routes that skip apiHandler or auth', () => {
@@ -43,10 +63,19 @@ describe('api route contract guard', () => {
       export const GET = apiHandler(async () => Response.json({ ok: true }))
     `
 
-    expect(inspectRouteContract('src/app/api/user/secure/route.ts', missingApiHandler)).toEqual([
+    const missingApiHandlerResult = runGuard<string[]>(`
+      import { inspectRouteContract } from './scripts/guards/api-route-contract-guard.mjs'
+      console.log(JSON.stringify(inspectRouteContract('src/app/api/user/secure/route.ts', ${JSON.stringify(missingApiHandler)})))
+    `)
+    const missingAuthResult = runGuard<string[]>(`
+      import { inspectRouteContract } from './scripts/guards/api-route-contract-guard.mjs'
+      console.log(JSON.stringify(inspectRouteContract('src/app/api/user/secure/route.ts', ${JSON.stringify(missingAuth)})))
+    `)
+
+    expect(missingApiHandlerResult).toEqual([
       'src/app/api/user/secure/route.ts missing apiHandler wrapper',
     ])
-    expect(inspectRouteContract('src/app/api/user/secure/route.ts', missingAuth)).toEqual([
+    expect(missingAuthResult).toEqual([
       'src/app/api/user/secure/route.ts missing requireUserAuth/requireProjectAuth/requireProjectAuthLight',
     ])
   })

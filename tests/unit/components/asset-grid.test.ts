@@ -7,7 +7,10 @@ import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
 import { AssetGrid } from '@/app/[locale]/workspace/asset-hub/components/AssetGrid'
 
-const characterCardMock = vi.hoisted(() => vi.fn((_props: unknown) => null))
+const characterCardMock = vi.hoisted(() => vi.fn((props: unknown) => {
+  void props
+  return null
+}))
 const forcedFilterState = vi.hoisted(() => ({ value: 'location' as 'all' | 'location' }))
 
 vi.mock('react', async (importOriginal) => {

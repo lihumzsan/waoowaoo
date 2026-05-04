@@ -6,21 +6,53 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
+const apiConfigMock = vi.hoisted(() => ({
+  getModelsByType: vi.fn(),
+  getProviderKey: vi.fn((providerId?: string) => {
+    if (!providerId) return ''
+    const colonIndex = providerId.indexOf(':')
+    return colonIndex === -1 ? providerId : providerId.slice(0, colonIndex)
+  }),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
+
+vi.mock('@/lib/api-config', () => apiConfigMock)
 
 import { resolveAnalysisModel } from '@/lib/workers/handlers/resolve-analysis-model'
 
 describe('resolveAnalysisModel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    apiConfigMock.getModelsByType.mockResolvedValue([
+      {
+        modelKey: 'openai-compatible:project::gpt-4.1',
+        provider: 'openai-compatible:project',
+      },
+      {
+        modelKey: 'openai-compatible:pref::gpt-4.1-mini',
+        provider: 'openai-compatible:pref',
+      },
+    ])
     prismaMock.userPreference.findUnique.mockResolvedValue({
       analysisModel: 'openai-compatible:pref::gpt-4.1-mini',
     })
   })
 
-  it('uses inputModel override when provided', async () => {
+  it('uses inputModel override when it is enabled', async () => {
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([
+      {
+        modelKey: 'openai-compatible:input::gpt-4.1',
+        provider: 'openai-compatible:input',
+      },
+      {
+        modelKey: 'openai-compatible:project::gpt-4.1',
+        provider: 'openai-compatible:project',
+      },
+    ])
+
     const result = await resolveAnalysisModel({
       userId: 'user-1',
       inputModel: 'openai-compatible:input::gpt-4.1',
@@ -28,6 +60,28 @@ describe('resolveAnalysisModel', () => {
     })
 
     expect(result).toBe('openai-compatible:input::gpt-4.1')
+    expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('falls back when inputModel is no longer enabled but same provider still has another model', async () => {
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([
+      {
+        modelKey: 'openrouter::~openai/gpt-latest',
+        provider: 'openrouter',
+      },
+      {
+        modelKey: 'bailian::qwen3.5-plus',
+        provider: 'bailian',
+      },
+    ])
+
+    const result = await resolveAnalysisModel({
+      userId: 'user-1',
+      inputModel: 'openrouter::openai/gpt-5.4',
+      projectAnalysisModel: 'bailian::qwen3.5-plus',
+    })
+
+    expect(result).toBe('openrouter::~openai/gpt-latest')
     expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
   })
 
@@ -65,7 +119,31 @@ describe('resolveAnalysisModel', () => {
     expect(prismaMock.userPreference.findUnique).toHaveBeenCalledTimes(1)
   })
 
+  it('falls back to another enabled model from the same provider when project model is no longer enabled', async () => {
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([
+      {
+        modelKey: 'openrouter::~openai/gpt-latest',
+        provider: 'openrouter',
+      },
+      {
+        modelKey: 'bailian::qwen3.5-plus',
+        provider: 'bailian',
+      },
+    ])
+    prismaMock.userPreference.findUnique.mockResolvedValueOnce({
+      analysisModel: 'openrouter::openai/gpt-5.4',
+    })
+
+    const result = await resolveAnalysisModel({
+      userId: 'user-1',
+      projectAnalysisModel: 'openrouter::openai/gpt-5.4',
+    })
+
+    expect(result).toBe('openrouter::~openai/gpt-latest')
+  })
+
   it('throws explicit error when all levels are missing', async () => {
+    apiConfigMock.getModelsByType.mockResolvedValueOnce([])
     prismaMock.userPreference.findUnique.mockResolvedValueOnce({ analysisModel: null })
 
     await expect(resolveAnalysisModel({

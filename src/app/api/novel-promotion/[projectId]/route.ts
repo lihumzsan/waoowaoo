@@ -5,6 +5,7 @@ import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isArtStyleValue } from '@/lib/constants'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
+import { resolveModelSelection } from '@/lib/api-config'
 import {
   parseModelKeyStrict,
   type CapabilitySelections,
@@ -110,6 +111,24 @@ function validateModelKeyField(field: typeof MODEL_FIELDS[number], value: unknow
     throw new ApiError('INVALID_PARAMS', {
       code: 'MODEL_KEY_INVALID',
       field})
+  }
+}
+
+async function validateEnabledProjectModelField(input: {
+  userId: string
+  field: typeof MODEL_FIELDS[number]
+  value: unknown
+}) {
+  if (typeof input.value !== 'string' || !input.value.trim()) return
+
+  try {
+    await resolveModelSelection(input.userId, input.value.trim(), MODEL_FIELD_TO_TYPE[input.field])
+  } catch (error) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MODEL_NOT_ENABLED',
+      field: input.field,
+      message: error instanceof Error ? error.message : 'Selected model is not enabled',
+    })
   }
 }
 
@@ -303,6 +322,11 @@ export const PATCH = apiHandler(async (
 
     if ((MODEL_FIELDS as readonly string[]).includes(field)) {
       validateModelKeyField(field as typeof MODEL_FIELDS[number], body[field])
+      await validateEnabledProjectModelField({
+        userId: session.user.id,
+        field: field as typeof MODEL_FIELDS[number],
+        value: body[field],
+      })
     }
 
     if (field === 'artStyle') {

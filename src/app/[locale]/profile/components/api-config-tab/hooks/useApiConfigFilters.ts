@@ -7,6 +7,7 @@ import {
   isBailianCodingPlanApiKey,
 } from '@/lib/providers/bailian/base-url'
 import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
+import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 
 interface UseApiConfigFiltersParams {
   providers: Provider[]
@@ -33,6 +34,7 @@ const MODEL_PROVIDER_KEYS = [
   'minimax',
   'vidu',
   'fal',
+  CODEX_PROVIDER_KEY,
   'gemini-compatible',
   'openai-compatible',
 ]
@@ -55,6 +57,7 @@ function hasProviderApiKey(provider: Provider | undefined): boolean {
   if (provider.hasApiKey === true) return true
   const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
   if (apiKey.length > 0) return true
+  if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) return true
   return getProviderKey(provider.id) === 'comfyui'
     && typeof provider.baseUrl === 'string'
     && provider.baseUrl.trim().length > 0

@@ -4,6 +4,7 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
 import { AppIcon } from '@/components/ui/icons'
 import type { VideoPanelRuntime } from './hooks/useVideoPanelActions'
+import type { VideoDurationBinding } from '../types'
 import { normalizeVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 interface VideoPanelCardBodyProps {
@@ -54,7 +55,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
   const showsFirstLastFrameActions = layout.isLinked && !!layout.nextPanel
   const blocksVideoGenerationForMissingAudioTiming = durationBinding.isAudioDriven && !durationBinding.hasValidAudioSelection
 
-  const persistDurationBinding = (nextBinding: { mode?: 'manual' | 'match_audio'; voiceLineIds?: string[] }) => {
+  const persistDurationBinding = (nextBinding: VideoDurationBinding) => {
     durationBinding.setLocalBinding(nextBinding)
     void actions.onUpdatePanelVideoDurationBinding(
       panel.storyboardId,
@@ -201,6 +202,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         if ((nextBinding.voiceLineIds?.length ?? 0) === 0 && durationBinding.availableVoiceLines[0]?.id) {
                           nextBinding.voiceLineIds = [durationBinding.availableVoiceLines[0].id]
                         }
+                        delete nextBinding.targetDurationSeconds
                         persistDurationBinding(nextBinding)
                       }}
                       className={`rounded-full px-3 py-1 text-[11px] transition-colors disabled:opacity-50 ${
@@ -238,6 +240,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                                     if (nextIds.has(voiceLine.id)) nextIds.delete(voiceLine.id)
                                     else nextIds.add(voiceLine.id)
                                     nextBinding.voiceLineIds = Array.from(nextIds)
+                                    delete nextBinding.targetDurationSeconds
                                     persistDurationBinding(nextBinding)
                                   }}
                                   className="mt-0.5 h-3.5 w-3.5"
@@ -260,8 +263,39 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                       )}
 
                       {durationBinding.timing ? (
-                        <div className="rounded-lg bg-[var(--glass-tone-info-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-info-fg)]">
-                          音频总时长 {(durationBinding.timing.sourceDurationMs / 1000).toFixed(1)}s，本次按 {durationBinding.timing.targetDurationSeconds.toFixed(1)}s / {durationBinding.timing.targetFrameCount} 帧生成{durationBinding.timing.capped ? '（已按当前工作流上限截断）' : ''}
+                        <div className="space-y-1.5">
+                          {durationBinding.timing.canGenerate ? (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <label className="shrink-0 text-[11px] font-medium text-[var(--glass-text-tertiary)]">视频时长</label>
+                                <select
+                                  value={durationBinding.timing.targetDurationSeconds.toFixed(2)}
+                                  onChange={(event) => {
+                                    const nextValue = Number(event.target.value)
+                                    if (!Number.isFinite(nextValue) || nextValue <= 0) return
+                                    const nextBinding = normalizeVideoDurationBinding(durationBinding.localBinding)
+                                    nextBinding.mode = 'match_audio'
+                                    nextBinding.targetDurationSeconds = nextValue
+                                    persistDurationBinding(nextBinding)
+                                  }}
+                                  className="min-w-0 flex-1 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-2 py-1 text-[11px] text-[var(--glass-text-primary)] outline-none"
+                                >
+                                  {durationBinding.targetDurationOptions.map((option) => (
+                                    <option key={option.toFixed(2)} value={option.toFixed(2)}>
+                                      {option.toFixed(1)}s {Math.abs(option - durationBinding.timing!.audioDurationSeconds) < 0.01 ? '配音时长' : '含前奏/余韵'}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="rounded-lg bg-[var(--glass-tone-info-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-info-fg)]">
+                                配音 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，视频 {durationBinding.timing.targetDurationSeconds.toFixed(1)}s / {durationBinding.timing.targetFrameCount} 帧，前奏 {durationBinding.timing.preRollSeconds.toFixed(1)}s，余韵 {durationBinding.timing.postRollSeconds.toFixed(1)}s
+                              </div>
+                            </>
+                          ) : (
+                            <div className="rounded-lg bg-[var(--glass-tone-warning-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-warning-fg)]">
+                              当前音频 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，当前工作流上限 {durationBinding.timing.maxDurationSeconds?.toFixed(1) ?? '未知'}s，请拆分音频或镜头后生成。
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="rounded-lg bg-[var(--glass-tone-warning-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-warning-fg)]">

@@ -6,9 +6,12 @@ import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 
 vi.mock('@/components/selectors/RatioStyleSelectors', () => ({
   RatioSelector: ({
-    getUsage: _getUsage,
+    getUsage,
     ...props
-  }: Record<string, unknown> & { getUsage?: unknown }) => createElement('div', props, 'RatioSelector'),
+  }: Record<string, unknown> & { getUsage?: unknown }) => {
+    void getUsage
+    return createElement('div', props, 'RatioSelector')
+  },
   StyleSelector: (props: Record<string, unknown>) => createElement('div', props, 'StyleSelector'),
   StylePresetSelector: (props: Record<string, unknown>) => createElement('div', props, 'StylePresetSelector'),
 }))

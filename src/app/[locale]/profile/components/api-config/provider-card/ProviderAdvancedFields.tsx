@@ -10,6 +10,7 @@ import type {
   ProviderCardProps,
   ProviderCardTranslator,
 } from './types'
+import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 
 interface ProviderAdvancedFieldsProps {
   provider: ProviderCardProps['provider']
@@ -22,6 +23,7 @@ interface ProviderAdvancedFieldsProps {
 
 function providerHasCredentials(provider: ProviderCardProps['provider']): boolean {
   const key = getProviderKey(provider.id)
+  if (key === CODEX_PROVIDER_KEY) return true
   if (key === 'comfyui') return !!(provider.hasApiKey || provider.baseUrl?.trim())
   return !!provider.hasApiKey
 }
@@ -130,6 +132,7 @@ function getAllowedModelTypesForProvider(
   options?: { isBailianCodingPlan?: boolean },
 ): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
+  if (providerKey === CODEX_PROVIDER_KEY) return ['llm']
   if (providerKey === 'bailian' && options?.isBailianCodingPlan) return ['llm']
   if (providerKey === 'openai-compatible') return ['llm', 'image', 'video']
   return ['llm', 'image', 'video', 'audio']
@@ -239,7 +242,10 @@ export function ProviderAdvancedFields({
   }, [activeType, activeTypeSignature, visibleTypes])
 
   const currentType = activeType ?? visibleTypes[0] ?? null
-  const currentModels = currentType ? (state.groupedModels[currentType] ?? []) : []
+  const currentModels = useMemo(
+    () => (currentType ? (state.groupedModels[currentType] ?? []) : []),
+    [currentType, state.groupedModels],
+  )
   const providerReadyForToggle = providerHasCredentials(provider)
   const shouldShowAddButton =
     !!currentType

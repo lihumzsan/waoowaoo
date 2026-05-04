@@ -29,6 +29,9 @@ const workerMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/workers/handlers/resolve-analysis-model', () => ({
+  resolveAnalysisModel: vi.fn(async () => 'llm::analysis-1'),
+}))
 vi.mock('@/lib/llm-client', () => llmMock)
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
   withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),

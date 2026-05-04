@@ -1,5 +1,20 @@
+import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { inspectTaskSubmitCompensation } from '../../../scripts/guards/task-submit-compensation-guard.mjs'
+
+function inspectTaskSubmitCompensation(file: string, content: string): string[] {
+  const output = execFileSync(process.execPath, [
+    '--input-type=module',
+    '-e',
+    `
+      import { inspectTaskSubmitCompensation } from './scripts/guards/task-submit-compensation-guard.mjs'
+      console.log(JSON.stringify(inspectTaskSubmitCompensation(${JSON.stringify(file)}, ${JSON.stringify(content)})))
+    `,
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  })
+  return JSON.parse(output) as string[]
+}
 
 describe('task submit compensation guard', () => {
   it('passes routes that create data before submitTask and define rollback handling', () => {

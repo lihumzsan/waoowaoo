@@ -54,6 +54,7 @@ export async function generateImage(
     prompt: string,
     options?: {
         referenceImages?: string[]
+        [key: string]: unknown
         aspectRatio?: string
         resolution?: string
         outputFormat?: string

@@ -10,6 +10,11 @@ vi.mock('react', async () => {
 
 import { useApiConfigFilters } from '@/app/[locale]/profile/components/api-config-tab/hooks/useApiConfigFilters'
 import type { CustomModel, Provider } from '@/app/[locale]/profile/components/api-config/types'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_MODEL_KEY,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 describe('api config filters', () => {
   beforeEach(() => {
@@ -115,6 +120,28 @@ describe('api config filters', () => {
       'google',
       'openai-compatible:oa-2',
       'ark',
+    ])
+  })
+
+  it('includes codex text models without requiring an api key', () => {
+    const providers: Provider[] = [
+      { id: CODEX_PROVIDER_KEY, name: 'Codex (Local)', hasApiKey: false, baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH },
+    ]
+    const models: CustomModel[] = [{
+      modelId: 'gpt-5.4',
+      modelKey: CODEX_DEFAULT_MODEL_KEY,
+      name: 'Codex GPT-5.4',
+      type: 'llm',
+      provider: CODEX_PROVIDER_KEY,
+      price: 0,
+      enabled: true,
+    }]
+
+    const result = useApiConfigFilters({ providers, models })
+
+    expect(result.modelProviders.map((provider) => provider.id)).toEqual([CODEX_PROVIDER_KEY])
+    expect(result.getEnabledModelsByType('llm').map((model) => model.modelKey)).toEqual([
+      CODEX_DEFAULT_MODEL_KEY,
     ])
   })
 

@@ -5,7 +5,7 @@ import { uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
-function readDesignedVoiceType(_voiceId: string) {
+function readDesignedVoiceType() {
   return 'designed'
 }
 
@@ -88,7 +88,7 @@ export const POST = apiHandler(async (
     const character = await prisma.novelPromotionCharacter.update({
       where: { id: characterId },
       data: {
-        voiceType: readDesignedVoiceType(voiceId),
+        voiceType: readDesignedVoiceType(),
         voiceId: voiceId,  // 保存 AI 生成的 voice ID
         customVoiceUrl: cosUrl
       }

@@ -229,6 +229,7 @@ export async function resolveImageSourceFromGeneration(
     modelKey: params.modelId,
     runtimeSelections,
   })
+  const projectModelConfig = await getProjectModelConfig(job.data.projectId, params.userId)
 
   logger.info({
     message: 'image source generation calling generateImage',
@@ -245,6 +246,7 @@ export async function resolveImageSourceFromGeneration(
     () => generateImage(params.userId, params.modelId, params.prompt, {
       ...params.options,
       ...capabilityOptions,
+      ...(projectModelConfig?.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}),
     }),
   )
   if (!result.success) {
@@ -354,12 +356,14 @@ export async function resolveImageSourcesFromGeneration(
     modelKey: params.modelId,
     runtimeSelections,
   })
+  const projectModelConfig = await getProjectModelConfig(job.data.projectId, params.userId)
 
   const result = await withLogContext(
     { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
     () => generateImage(params.userId, params.modelId, params.prompt, {
       ...params.options,
       ...capabilityOptions,
+      ...(projectModelConfig?.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}),
     }),
   )
   if (!result.success) {
@@ -493,6 +497,7 @@ export async function resolveVideoSourceFromGeneration(
     modelKey: params.modelId,
     runtimeSelections,
   })
+  const projectModelConfig = await getProjectModelConfig(job.data.projectId, params.userId)
 
   const providerCapabilityOptions: Record<string, string | number | boolean> = { ...capabilityOptions }
   delete providerCapabilityOptions.generationMode
@@ -507,6 +512,7 @@ export async function resolveVideoSourceFromGeneration(
     () => generateVideo(params.userId, params.modelId, params.imageUrl, {
       ...providerRequestOptions,
       ...providerCapabilityOptions,
+      ...(projectModelConfig?.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}),
     }),
   )
   if (!result.success) {

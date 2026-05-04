@@ -16,13 +16,14 @@ describe('video audio duration binding', () => {
   })
 
   it('parses serialized binding payloads', () => {
-    expect(parseVideoDurationBinding('{"mode":"match_audio","voiceLineIds":["a","b","a"]}')).toEqual({
+    expect(parseVideoDurationBinding('{"mode":"match_audio","voiceLineIds":["a","b","a"],"targetDurationSeconds":6}')).toEqual({
       mode: 'match_audio',
       voiceLineIds: ['a', 'b'],
+      targetDurationSeconds: 6,
     })
   })
 
-  it('sums selected audio durations for regular models', () => {
+  it('defaults linked audio duration to the exact audio duration', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',
@@ -32,34 +33,115 @@ describe('video audio duration binding', () => {
         { id: 'line-1', audioDuration: 1200 },
         { id: 'line-2', audioDuration: 2800 },
       ],
-      modelKey: 'comfyui::basevideo/图生视频/Wan2.2Remix图生视频',
+      modelKey: 'comfyui::basevideo/demo/Wan2.2Remix',
+      context: {
+        shotType: 'close-up',
+        cameraMove: 'slow push-in',
+        description: 'doctor pauses, then speaks with a serious expression',
+      },
     })
 
     expect(timing).not.toBeNull()
     expect(timing?.sourceDurationMs).toBe(4000)
+    expect(timing?.audioDurationSeconds).toBe(4)
     expect(timing?.targetDurationSeconds).toBe(4)
     expect(timing?.targetFrameCount).toBe(100)
+    expect(timing?.preRollSeconds).toBe(0)
+    expect(timing?.postRollSeconds).toBe(0)
+    expect(timing?.dialogueStartSeconds).toBe(timing?.preRollSeconds)
+    expect(timing?.dialogueEndSeconds).toBeCloseTo((timing?.preRollSeconds ?? 0) + 4, 2)
+    expect(timing?.timingStrategy).toBe('context_aware_audio')
     expect(timing?.capped).toBe(false)
+    expect(timing?.canGenerate).toBe(true)
   })
 
-  it('caps ltx2.3 timing to the safe max duration', () => {
+  it('uses an explicit longer target duration for pre-roll and post-roll', () => {
+    const timing = resolveAudioDrivenVideoTiming({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['line-1'],
+        targetDurationSeconds: 6,
+      },
+      candidates: [
+        { id: 'line-1', audioDuration: 4000 },
+      ],
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      context: {
+        shotType: 'close-up',
+        cameraMove: 'slow push-in',
+        description: 'doctor pauses, then speaks with a serious expression',
+      },
+    })
+
+    expect(timing).not.toBeNull()
+    expect(timing?.audioDurationSeconds).toBe(4)
+    expect(timing?.targetDurationSeconds).toBe(6)
+    expect(timing?.targetFrameCount).toBe(150)
+    expect(timing?.preRollSeconds).toBeGreaterThan(0)
+    expect(timing?.postRollSeconds).toBeGreaterThan(0)
+    expect(timing?.canGenerate).toBe(true)
+  })
+
+  it('blocks ltx2.3 timing when linked audio exceeds the 10 second product max duration', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',
         voiceLineIds: ['line-1', 'line-2'],
       },
       candidates: [
-        { id: 'line-1', audioDuration: 4200 },
-        { id: 'line-2', audioDuration: 3900 },
+        { id: 'line-1', audioDuration: 9000 },
+        { id: 'line-2', audioDuration: 3500 },
       ],
-      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
     })
 
     expect(timing).not.toBeNull()
     expect(timing?.fps).toBe(COMFYUI_LTX23_DEFAULT_FPS)
-    expect(timing?.maxDurationSeconds).toBe(COMFYUI_LTX23_MAX_DURATION_SECONDS)
-    expect(timing?.targetDurationSeconds).toBe(COMFYUI_LTX23_MAX_DURATION_SECONDS)
+    expect(timing?.maxDurationSeconds).toBe(10)
+    expect(timing?.targetDurationSeconds).toBe(10)
     expect(timing?.targetFrameCount).toBe(COMFYUI_LTX23_DEFAULT_FPS * COMFYUI_LTX23_MAX_DURATION_SECONDS)
     expect(timing?.capped).toBe(true)
+    expect(timing?.canGenerate).toBe(false)
+    expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
+  })
+
+  it('uses model duration options before the ltx2.3 fallback max duration', () => {
+    const timing = resolveAudioDrivenVideoTiming({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['line-1'],
+      },
+      candidates: [
+        { id: 'line-1', audioDuration: 11_000 },
+      ],
+      modelKey: 'comfyui::basevideo/firstlast/ltx2.3-firstlast',
+      durationOptions: [4, 5, 6],
+    })
+
+    expect(timing?.maxDurationSeconds).toBe(6)
+    expect(timing?.targetDurationSeconds).toBe(6)
+    expect(timing?.targetFrameCount).toBe(COMFYUI_LTX23_DEFAULT_FPS * 6)
+    expect(timing?.capped).toBe(true)
+    expect(timing?.canGenerate).toBe(false)
+    expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
+  })
+
+  it('clamps configured 12 second duration options to the 10 second product max', () => {
+    const timing = resolveAudioDrivenVideoTiming({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['line-1'],
+      },
+      candidates: [
+        { id: 'line-1', audioDuration: 11_000 },
+      ],
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      durationOptions: [2, 4, 6, 8, 12],
+    })
+
+    expect(timing?.maxDurationSeconds).toBe(10)
+    expect(timing?.targetDurationSeconds).toBe(10)
+    expect(timing?.canGenerate).toBe(false)
+    expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
   })
 })

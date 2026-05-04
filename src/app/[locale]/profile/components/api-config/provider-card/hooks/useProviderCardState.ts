@@ -24,6 +24,7 @@ import {
   isBailianCodingPlanApiKey,
 } from '@/lib/providers/bailian/base-url'
 import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
+import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 import {
   useAssistantChat,
   type AssistantDraftModel,
@@ -114,6 +115,10 @@ export function getProviderCardAllowedModelTypes(params: {
   providerKey: string
   apiKey?: string
 }): ProviderCardModelType[] {
+  if (params.providerKey === CODEX_PROVIDER_KEY) {
+    return ['llm']
+  }
+
   if (params.providerKey === 'bailian' && isBailianCodingPlanApiKey(params.apiKey)) {
     return ['llm']
   }
@@ -230,6 +235,15 @@ export function buildProviderConnectionPayload(params: {
       apiType: params.providerKey,
       apiKey,
       baseUrl: compatibleBaseUrl,
+      ...(llmModel ? { llmModel } : {}),
+    }
+  }
+
+  if (params.providerKey === CODEX_PROVIDER_KEY) {
+    return {
+      apiType: params.providerKey,
+      apiKey,
+      ...(compatibleBaseUrl ? { baseUrl: compatibleBaseUrl } : {}),
       ...(llmModel ? { llmModel } : {}),
     }
   }
@@ -437,7 +451,7 @@ export function useProviderCardState({
     (presetProvider) => presetProvider.id === provider.id,
   )
   const showBaseUrlEdit =
-    ['gemini-compatible', 'openai-compatible'].includes(providerKey) &&
+    ['gemini-compatible', 'openai-compatible', CODEX_PROVIDER_KEY].includes(providerKey) &&
     Boolean(onUpdateBaseUrl)
   const tutorial = getProviderTutorial(provider.id)
 

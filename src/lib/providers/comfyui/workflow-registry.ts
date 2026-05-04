@@ -22,6 +22,10 @@ const DISPLAY_ONLY_OUTPUT_NODE_TYPES = new Set([
   'easyshowanything',
   'shellagentpluginoutputtext',
 ])
+const PASSTHROUGH_OUTPUT_NODE_TYPES = new Set([
+  ...DISPLAY_ONLY_OUTPUT_NODE_TYPES,
+  'layerutilitypurgevramv2',
+])
 const VIDEO_OUTPUT_NODE_TYPES = new Set([
   'vhsvideocombine',
   'saveanimatedwebp',
@@ -48,9 +52,16 @@ export type ComfyUiWorkflowInject = {
   height?: number
   imageFilenames?: string[]
   audioFilenames?: string[]
+  llmApi?: ComfyUiWorkflowLlmApiInject
   fps?: number
   durationSeconds?: number
   targetFrameCount?: number
+}
+
+export type ComfyUiWorkflowLlmApiInject = {
+  baseUrl: string
+  apiKey: string
+  model: string
 }
 
 type UiWorkflowInput = {
@@ -398,14 +409,84 @@ function isUiDecorationNode(node: ComfyUiWorkflowGraphNode): boolean {
   return normalizedClassType.endsWith('note') && Object.keys(node.inputs).length === 0
 }
 
-function isDisplayOnlyOutputNode(node: ComfyUiWorkflowGraphNode): boolean {
-  return DISPLAY_ONLY_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))
+function isPassthroughOutputNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return PASSTHROUGH_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))
 }
 
 function removeUiOnlyNodes(graph: ComfyUiWorkflowGraph): void {
   for (const [nodeId, node] of Object.entries(graph)) {
-    if (isUiDecorationNode(node) || isDisplayOnlyOutputNode(node)) {
+    if (isUiDecorationNode(node)) {
       delete graph[nodeId]
+    }
+  }
+}
+
+function findFirstConnectedInput(node: ComfyUiWorkflowGraphNode): unknown | null {
+  if (!isRecord(node.inputs)) return null
+
+  for (const field of ['anything', '*', 'text', 'value', 'input_string']) {
+    const value = node.inputs[field]
+    if (isConnectionValue(value)) return value
+  }
+
+  for (const value of Object.values(node.inputs)) {
+    if (isConnectionValue(value)) return value
+  }
+
+  return null
+}
+
+function graphHasConsumers(graph: ComfyUiWorkflowGraph, sourceNodeId: string): boolean {
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs)) continue
+    for (const value of Object.values(node.inputs)) {
+      if (!isConnectionValue(value)) continue
+      if (normalizeNodeId(value[0]) === sourceNodeId) return true
+    }
+  }
+  return false
+}
+
+function replaceConsumers(
+  graph: ComfyUiWorkflowGraph,
+  sourceNodeId: string,
+  replacement: unknown,
+): void {
+  for (const candidate of Object.values(graph)) {
+    if (!isRecord(candidate.inputs)) continue
+    for (const [field, rawValue] of Object.entries(candidate.inputs)) {
+      if (!isConnectionValue(rawValue)) continue
+      if (normalizeNodeId(rawValue[0]) !== sourceNodeId) continue
+      candidate.inputs[field] = cloneConnectionValue(replacement)
+    }
+  }
+}
+
+function bypassPassthroughOutputNodes(graph: ComfyUiWorkflowGraph): void {
+  let changed = true
+  while (changed) {
+    changed = false
+    const removableNodeIds = Object.entries(graph)
+      .filter(([, node]) => isPassthroughOutputNode(node))
+      .map(([nodeId]) => nodeId)
+      .sort(compareNodeIds)
+
+    for (const nodeId of removableNodeIds) {
+      const node = graph[nodeId]
+      if (!node) continue
+
+      const upstream = findFirstConnectedInput(node)
+      if (upstream) {
+        replaceConsumers(graph, nodeId, upstream)
+        delete graph[nodeId]
+        changed = true
+        continue
+      }
+
+      if (!graphHasConsumers(graph, nodeId)) {
+        delete graph[nodeId]
+        changed = true
+      }
     }
   }
 }
@@ -510,6 +591,7 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
 
   applyAnythingEverywhereBroadcast(nodes, graph, anythingEverywhereSources)
   resolveSetGetNodes(nodes, graph)
+  bypassPassthroughOutputNodes(graph)
   removeUiOnlyNodes(graph)
   return graph
 }
@@ -536,6 +618,43 @@ function compareNodeIds(a: string, b: string): number {
 
 function cloneWorkflow(graph: ComfyUiWorkflowGraph): ComfyUiWorkflowGraph {
   return JSON.parse(JSON.stringify(graph)) as ComfyUiWorkflowGraph
+}
+
+function isRhLlmApiNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return node.class_type.trim().toLowerCase() === 'rh_llmapi_node'
+}
+
+export function comfyUiWorkflowGraphRequiresLlmApi(graph: ComfyUiWorkflowGraph): boolean {
+  return Object.values(graph).some((node) => isRhLlmApiNode(node))
+}
+
+export function comfyUiWorkflowRequiresLlmApi(workflowKey: string): boolean {
+  const filePath = resolveWorkflowFilePath(workflowKey)
+  if (!filePath) {
+    throw new Error(`COMFYUI_WORKFLOW_NOT_FOUND: ${workflowKey}`)
+  }
+  return comfyUiWorkflowGraphRequiresLlmApi(readWorkflowGraphFromFile(filePath))
+}
+
+function applyRhLlmApiInjection(
+  graph: ComfyUiWorkflowGraph,
+  llmApi?: ComfyUiWorkflowLlmApiInject,
+): void {
+  const llmNodes = Object.values(graph).filter((node) => isRhLlmApiNode(node))
+  if (llmNodes.length === 0) return
+
+  const baseUrl = readTrimmedString(llmApi?.baseUrl).replace(/\/+$/, '')
+  const apiKey = readTrimmedString(llmApi?.apiKey)
+  const model = readTrimmedString(llmApi?.model)
+  if (!baseUrl || !apiKey || !model) {
+    throw new Error('COMFYUI_LLM_MODEL_NOT_CONFIGURED: configure analysisModel with an OpenRouter/OpenAI-compatible LLM')
+  }
+
+  for (const node of llmNodes) {
+    node.inputs.api_baseurl = baseUrl
+    node.inputs.api_key = apiKey
+    node.inputs.model = model
+  }
 }
 
 function isConnectionValue(value: unknown): value is [unknown, unknown, ...unknown[]] {
@@ -827,6 +946,11 @@ function clampPositiveInteger(value: number | undefined): number | null {
   return Math.max(1, Math.round(value))
 }
 
+function ceilPositiveInteger(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.max(1, Math.ceil(value))
+}
+
 function clampPositiveFloat(value: number | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   return Math.max(0.1, Number(value.toFixed(3)))
@@ -983,16 +1107,37 @@ function applyTemporalHeuristics(
   graph: ComfyUiWorkflowGraph,
   fps?: number,
   targetFrameCount?: number,
+  durationSeconds?: number,
 ): void {
   const nextFps = clampPositiveFloat(fps)
   const nextFrames = clampPositiveInteger(targetFrameCount)
-  if (nextFps === null && nextFrames === null) return
+  const nextDurationSteps = ceilPositiveInteger(durationSeconds)
+  if (nextFps === null && nextFrames === null && nextDurationSteps === null) return
 
   const fpsFields = new Set(['frame_rate', 'fps'])
   const frameCountFields = new Set(['frames_number', 'frame_count', 'frames', 'length'])
 
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
+    const nodeTitle = readTrimmedString(node._meta?.title).toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+    if (
+      nextDurationSteps !== null
+      && nodeTitle.includes('configframecount')
+      && !isConnectionValue(node.inputs.value)
+      && Object.prototype.hasOwnProperty.call(node.inputs, 'value')
+    ) {
+      node.inputs.value = nextDurationSteps
+    }
+
+    if (
+      nextFps !== null
+      && nodeTitle.includes('configframerate')
+      && !isConnectionValue(node.inputs.value)
+      && Object.prototype.hasOwnProperty.call(node.inputs, 'value')
+    ) {
+      node.inputs.value = nextFps
+    }
 
     for (const [field, rawValue] of Object.entries(node.inputs)) {
       const normalizedField = field.trim().toLowerCase()
@@ -1095,8 +1240,9 @@ export function resolveComfyUiWorkflow(
   applyDimensionHeuristics(graph, inject.width, inject.height)
   applyImageInjection(graph, inject.imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
+  applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
-  applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount)
+  applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
   applySaveOutputHeuristics(graph)
   removePreviewImageOutputsFromVideoGraphs(graph)
   assignRandomSeedValues(graph)

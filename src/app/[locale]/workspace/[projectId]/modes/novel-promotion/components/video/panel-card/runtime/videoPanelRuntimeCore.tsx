@@ -138,6 +138,13 @@ export function useVideoPanelActions({
     binding: panel.videoDurationBinding,
     matchedVoiceLines,
     selectedModel: videoModel.selectedModel,
+    durationOptions: videoModel.selectedVideoCapabilities?.durationOptions,
+    context: {
+      shotType: panel.textPanel?.shot_type ?? null,
+      cameraMove: panel.textPanel?.camera_move ?? null,
+      description: panel.textPanel?.description ?? null,
+      srtSegment: panel.textPanel?.text_segment ?? null,
+    },
   })
 
   const handleDownloadVideo = useCallback(async () => {

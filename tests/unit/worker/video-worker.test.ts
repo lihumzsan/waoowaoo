@@ -6,6 +6,7 @@ type WorkerProcessor = (job: Job<TaskJobData>) => Promise<unknown>
 
 type PanelRow = {
   id: string
+  storyboardId: string
   panelIndex: number
   videoUrl: string | null
   imageUrl: string | null
@@ -72,6 +73,7 @@ const ltxPromptEnhanceMock = vi.hoisted(() => ({
     enhanced: false,
     textModel: null,
   })),
+  isLtx23VideoModel: vi.fn((modelKey: string | null | undefined) => String(modelKey || '').toLowerCase().includes('ltx2.3')),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -134,6 +136,7 @@ vi.mock('@/lib/video-duration/ltx23-prompt-enhance', () => ltxPromptEnhanceMock)
 function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
   return {
     id: 'panel-1',
+    storyboardId: 'storyboard-1',
     panelIndex: 0,
     videoUrl: 'cos/base-video.mp4',
     imageUrl: 'cos/panel-image.png',
@@ -299,7 +302,7 @@ describe('worker video processor behavior', () => {
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
-      originalPrompt: 'panel prompt',
+      originalPrompt: expect.stringContaining('Creator prompt intent: panel prompt'),
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
@@ -309,6 +312,76 @@ describe('worker video processor behavior', () => {
         }),
       }),
     )
+  })
+
+  it('VIDEO_PANEL: defaults normal LTX2.3 panels to short stable timing', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      durationSeconds: 2,
+      fps: 24,
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          duration: 2,
+          fps: 24,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: ignores stale structured multi-shot prompts when saved prompt was not user edited', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const staleMultiShotPrompt = [
+      'GLOBAL:',
+      'Office night, two doctors talking, cinematic fixed camera.',
+      '',
+      'LOCAL:',
+      '[0.0-2.5] The middle-aged doctor listens carefully | [2.5-5.0] The young doctor raises his hand and pushes glasses',
+    ].join('\n')
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: staleMultiShotPrompt,
+      videoPromptEditedByUser: false,
+      description: 'The middle-aged doctor raises his right hand and pushes his glasses.',
+      srtSegment: 'The middle-aged doctor pushes his glasses.',
+    }))
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/鍥剧敓瑙嗛/LTX2.3鍥剧敓瑙嗛蹇€熺増',
+      },
+    })
+
+    await processor!(job)
+
+    const enhancementInput = ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mock.calls[0]?.[0] as {
+      originalPrompt: string
+    }
+    expect(enhancementInput.originalPrompt).toContain(
+      'Current shot action: The middle-aged doctor raises his right hand and pushes his glasses.',
+    )
+    expect(enhancementInput.originalPrompt).toContain(
+      'Creator prompt intent: The middle-aged doctor raises his right hand and pushes his glasses.',
+    )
+    expect(enhancementInput.originalPrompt).not.toContain('GLOBAL:')
+    expect(enhancementInput.originalPrompt).not.toContain('[0.0-2.5]')
   })
 
   it('VIDEO_PANEL: skips LTX enhancement when the saved prompt is user edited', async () => {
@@ -330,17 +403,79 @@ describe('worker video processor behavior', () => {
     await processor!(job)
 
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      originalPrompt: '涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?',
+      originalPrompt: expect.stringContaining('涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?'),
       userEdited: true,
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          prompt: '涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?',
+          prompt: expect.stringContaining('涓や汉鐩稿鑰屽潗锛屼笉瑕佸嚭鐜颁换浣曠壒鏁?'),
         }),
       }),
     )
+  })
+
+  it('VIDEO_PANEL: ignores empty first-last custom prompt and persists a default bridge prompt', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const firstPanel = buildPanel({
+      videoPrompt: 'wide office shot with the doctor and Chen Ji sitting across the desk',
+      firstLastFramePrompt: null,
+    })
+    const lastPanel = buildPanel({
+      id: 'panel-2',
+      panelIndex: 1,
+      imageUrl: 'cos/last-frame.png',
+      videoPrompt: 'doctor raises one hand and pushes his glasses',
+      description: 'doctor pushes his glasses',
+    })
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(firstPanel)
+    prismaMock.novelPromotionPanel.findFirst.mockImplementation(async (args: { where?: { panelIndex?: number } }) => {
+      if (args.where?.panelIndex === 1) return lastPanel
+      return null
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+        firstLastFrame: {
+          flModel: 'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt: '',
+        },
+        generationOptions: {
+          duration: 4,
+          generationMode: 'firstlastframe',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      originalPrompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
+      generationMode: 'firstlastframe',
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          generationMode: 'firstlastframe',
+          lastFrameImageUrl: 'https://signed.example/cos/last-frame.png',
+        }),
+      }),
+    )
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        firstLastFramePrompt: expect.stringContaining('Bridge naturally into the last frame'),
+        videoGenerationMode: 'firstlastframe',
+      }),
+    })
   })
 
   it('LIP_SYNC: fails explicitly when panel is missing', async () => {

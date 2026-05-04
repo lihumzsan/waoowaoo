@@ -6,6 +6,14 @@ import {
   hasComfyUiWorkflowKey,
   listComfyUiWorkflowKeys,
 } from '@/lib/providers/comfyui/workflow-registry'
+import {
+  CODEX_DEFAULT_MODEL_ID,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
+import {
+  CodexExecError,
+  runCodexSelfCheck,
+} from '@/lib/providers/codex/client'
 
 export type TestStepName = 'models' | 'textGen' | 'imageGen' | 'credits' | 'audioGen'
 export type TestStepStatus = 'pass' | 'fail' | 'skip'
@@ -27,12 +35,13 @@ type PresetProviderType = 'ark' | 'google' | 'openrouter' | 'minimax' | 'fal' | 
   | 'bailian'
   | 'siliconflow'
   | 'comfyui'
+  | 'codex'
 type CompatibleProviderType = 'openai-compatible' | 'gemini-compatible'
 
 type TestProviderPayload = {
   apiType: CompatibleProviderType | PresetProviderType
   baseUrl?: string
-  apiKey: string
+  apiKey?: string
   llmModel?: string
 }
 
@@ -897,13 +906,82 @@ async function testComfyUiProvider(baseUrl: string): Promise<TestProviderResult>
 }
 
 // ---------------------------------------------------------------------------
+// Codex (local CLI self-check)
+// ---------------------------------------------------------------------------
+
+function codexProbeUserMessage(error: unknown): string {
+  if (error instanceof CodexExecError) {
+    switch (error.code) {
+      case 'CODEX_EXECUTABLE_NOT_FOUND':
+        return 'Codex executable not found. Check the configured Codex path.'
+      case 'CODEX_EXEC_TIMEOUT':
+        return 'Codex CLI timed out. The local Codex process may be busy or stuck.'
+      case 'CODEX_EXEC_FAILED':
+        return 'Codex CLI execution failed. Check local Codex login state and CLI warnings.'
+      case 'CODEX_EMPTY_OUTPUT':
+        return 'Codex CLI completed without a final text output.'
+      default:
+        return error.message
+    }
+  }
+  return toErrorMessage(error)
+}
+
+function codexProbeDetail(error: unknown): string | undefined {
+  if (!(error instanceof CodexExecError)) {
+    return toErrorMessage(error).slice(0, 500)
+  }
+
+  const parts = [
+    `code=${error.code}`,
+    error.exitCode !== undefined ? `exitCode=${error.exitCode}` : '',
+    error.signal ? `signal=${error.signal}` : '',
+    error.stdout ? `stdout=${error.stdout}` : '',
+    error.stderr ? `stderr=${error.stderr}` : '',
+  ].filter(Boolean)
+  return parts.join(' | ').slice(0, 500) || undefined
+}
+
+async function testCodexProvider(baseUrl?: string, llmModel?: string): Promise<TestProviderResult> {
+  const model = llmModel?.trim() || CODEX_DEFAULT_MODEL_ID
+  try {
+    const result = await runCodexSelfCheck({
+      codexPath: baseUrl,
+      model,
+    })
+    return {
+      success: true,
+      steps: [{
+        name: 'textGen',
+        status: 'pass',
+        model,
+        message: `Codex CLI OK (${Math.round(result.durationMs / 1000)}s): ${result.text.trim().slice(0, 80)}`,
+        detail: 'Local Codex CLI self-check; no API key or routekey used.',
+      }],
+    }
+  } catch (error) {
+    return {
+      success: false,
+      steps: [{
+        name: 'textGen',
+        status: 'fail',
+        model,
+        message: codexProbeUserMessage(error),
+        detail: codexProbeDetail(error),
+      }],
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export async function testProviderConnection(payload: TestProviderPayload): Promise<TestProviderResult> {
-  const { apiType, baseUrl, apiKey, llmModel } = payload
+  const { apiType, baseUrl, llmModel } = payload
+  const apiKey = payload.apiKey || ''
 
-  if (!apiKey && apiType !== 'comfyui') {
+  if (!apiKey && apiType !== 'comfyui' && apiType !== CODEX_PROVIDER_KEY) {
     return {
       success: false,
       steps: [{ name: 'models', status: 'fail', message: 'Missing apiKey' }],
@@ -925,6 +1003,8 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
   }
 
   switch (apiType) {
+    case 'codex':
+      return testCodexProvider(baseUrl, llmModel)
     case 'openai-compatible':
       return testCompatibleProvider(baseUrl!, apiKey, llmModel)
     case 'gemini-compatible':

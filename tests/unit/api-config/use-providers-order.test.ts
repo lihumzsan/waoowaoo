@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { applyComfyUiPresetDefaults, mergeProvidersForDisplay } from '@/app/[locale]/profile/components/api-config/hooks'
+import {
+  applyCodexTextPresetDefault,
+  applyComfyUiPresetDefaults,
+  mergeProvidersForDisplay,
+} from '@/app/[locale]/profile/components/api-config/hooks'
 import type { Provider } from '@/app/[locale]/profile/components/api-config/types'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_MODEL_KEY,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 describe('useProviders provider order merge', () => {
   it('preserves saved providers order and appends missing presets at the end', () => {
@@ -84,6 +93,52 @@ describe('useProviders provider order merge', () => {
     })
   })
 
+  it('treats codex as ready without an api key', () => {
+    const presetProviders: Provider[] = [
+      { id: CODEX_PROVIDER_KEY, name: 'Codex (Local)', baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH },
+    ]
+    const savedProviders: Provider[] = [
+      { id: CODEX_PROVIDER_KEY, name: 'Codex (Local)', baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH, apiKey: '' },
+    ]
+
+    const merged = mergeProvidersForDisplay(savedProviders, presetProviders)
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: CODEX_PROVIDER_KEY,
+      baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH,
+      hasApiKey: true,
+    })
+  })
+
+  it('auto-selects codex for analysis only on the migration pass', () => {
+    const result = applyCodexTextPresetDefault({
+      models: [{
+        modelId: 'gpt-5.4',
+        modelKey: CODEX_DEFAULT_MODEL_KEY,
+        name: 'Codex GPT-5.4',
+        type: 'llm',
+        provider: CODEX_PROVIDER_KEY,
+        price: 0,
+        enabled: false,
+      }],
+      defaultModels: { analysisModel: 'openrouter::openai/gpt-5.4' },
+      shouldAutoSelect: true,
+    })
+
+    expect(result.changed).toBe(true)
+    expect(result.defaultModels.analysisModel).toBe(CODEX_DEFAULT_MODEL_KEY)
+    expect(result.models[0]?.enabled).toBe(true)
+
+    const skipped = applyCodexTextPresetDefault({
+      models: result.models,
+      defaultModels: { analysisModel: 'openrouter::openai/gpt-5.4' },
+      shouldAutoSelect: false,
+    })
+    expect(skipped.changed).toBe(false)
+    expect(skipped.defaultModels.analysisModel).toBe('openrouter::openai/gpt-5.4')
+  })
+
   it('applies comfyui fallback defaults and enables the default workflows', () => {
     const result = applyComfyUiPresetDefaults({
       models: [
@@ -115,18 +170,18 @@ describe('useProviders provider order merge', () => {
           enabled: false,
         },
         {
-          modelId: 'basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
-          modelKey: 'comfyui::basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
-          name: 'ComfyUI · LTX 2.3 video',
+          modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+          modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+          name: 'ComfyUI · LTX 2.3 multi-shot video',
           type: 'video',
           provider: 'comfyui',
           price: 0,
           enabled: false,
         },
         {
-          modelId: 'baseaudio/\u591a\u4eba/LongCat-two',
-          modelKey: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
-          name: 'ComfyUI · LongCat multi',
+          modelId: 'baseaudio/单人/LongCat-one',
+          modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+          name: 'ComfyUI · LongCat single',
           type: 'audio',
           provider: 'comfyui',
           price: 0,
@@ -151,8 +206,8 @@ describe('useProviders provider order merge', () => {
       locationModel: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
       storyboardModel: 'comfyui::baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
       editModel: 'comfyui::baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
-      videoModel: 'comfyui::basevideo/\u56fe\u751f\u89c6\u9891/LTX2.3\u56fe\u751f\u89c6\u9891\u5feb\u901f\u7248',
-      audioModel: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
+      videoModel: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       voiceDesignModel: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
     })
     expect(result.models.every((model) => model.enabled)).toBe(true)
@@ -202,9 +257,9 @@ describe('useProviders provider order merge', () => {
           enabled: true,
         },
         {
-          modelId: 'baseaudio/\u591a\u4eba/LongCat-two',
-          modelKey: 'comfyui::baseaudio/\u591a\u4eba/LongCat-two',
-          name: 'ComfyUI · LongCat multi',
+          modelId: 'baseaudio/单人/LongCat-one',
+          modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+          name: 'ComfyUI · LongCat single',
           type: 'audio',
           provider: 'comfyui',
           price: 0,

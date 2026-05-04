@@ -24,6 +24,13 @@ import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   normalizeWorkflowConcurrencyValue,
 } from '@/lib/workflow-concurrency'
+import {
+  alignStoryboardPanelsToDialogueBeats,
+  assertStoryboardDialogueBudget,
+  buildDialogueBeatPromptBlock,
+  buildDialogueBeatsFromScreenplay,
+  type DialogueBeat,
+} from '@/lib/novel-promotion/dialogue-beats'
 
 type JsonRecord = Record<string, unknown>
 const orchestratorLogger = createScopedLogger({ module: 'worker.orchestrator.script_to_storyboard' })
@@ -88,6 +95,7 @@ export type ScriptToStoryboardOrchestratorInput = {
 
 export type ScriptToStoryboardOrchestratorResult = {
   clipPanels: ClipStoryboardPanels[]
+  dialogueBeatsByClipId: Record<string, DialogueBeat[]>
   phase1PanelsByClipId: Record<string, StoryboardPanel[]>
   phase2CinematographyByClipId: Record<string, PhotographyRule[]>
   phase2ActingByClipId: Record<string, ActingDirection[]>
@@ -303,6 +311,7 @@ export async function runScriptToStoryboardOrchestrator(
   const phase2CinematographyByClipId = new Map<string, PhotographyRule[]>()
   const phase2ActingByClipId = new Map<string, ActingDirection[]>()
   const phase3PanelsByClipId = new Map<string, StoryboardPanel[]>()
+  const dialogueBeatsByClipId = new Map<string, DialogueBeat[]>()
 
   const clipPanels = await mapWithConcurrency(
     clips,
@@ -331,6 +340,13 @@ export async function runScriptToStoryboardOrchestrator(
         clipLocation: null,
         clipProps,
       })).propsDescriptionText
+      const screenplay = parseScreenplay(clip.screenplay)
+      const dialogueBeats = buildDialogueBeatsFromScreenplay({
+        clipId: clip.id,
+        screenplay,
+      })
+      dialogueBeatsByClipId.set(clip.id, dialogueBeats)
+      const dialogueBeatPromptBlock = buildDialogueBeatPromptBlock(dialogueBeats)
       const clipJson = JSON.stringify(
         {
           id: clip.id,
@@ -338,6 +354,7 @@ export async function runScriptToStoryboardOrchestrator(
           characters: clipCharacters,
           location: clip.location || null,
           props: clipProps,
+          dialogueBeats,
         },
         null,
         2,
@@ -352,12 +369,19 @@ export async function runScriptToStoryboardOrchestrator(
         .replace('{props_description}', filteredPropsDescription)
         .replace('{clip_json}', clipJson)
 
-      const screenplay = parseScreenplay(clip.screenplay)
       if (screenplay) {
         phase1Prompt = phase1Prompt.replace('{clip_content}', `【剧本格式】\n${JSON.stringify(screenplay, null, 2)}`)
       } else {
         phase1Prompt = phase1Prompt.replace('{clip_content}', clipContent)
       }
+      phase1Prompt = `${phase1Prompt}
+
+${dialogueBeatPromptBlock}
+
+Storyboard dialogue hard rules:
+- A speaking panel must set dialogueBeatId to exactly one dialogue beat id.
+- source_text for that speaking panel must equal that beat exactText.
+- Do not merge multiple dialogue beats into one panel.`
 
       const phase1Meta = withStepMeta(
         `clip_${clip.id}_phase1`,
@@ -434,11 +458,19 @@ export async function runScriptToStoryboardOrchestrator(
         .replace(/\{panel_count\}/g, String(planPanels.length))
         .replace('{characters_info}', filteredFullDescription)
 
-      const phase3Prompt = promptTemplates.phase3DetailTemplate
+      const phase3Prompt = `${promptTemplates.phase3DetailTemplate
         .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
         .replace('{characters_age_gender}', filteredFullDescription)
         .replace('{locations_description}', filteredLocationsDescription)
-        .replace('{props_description}', filteredPropsDescription)
+        .replace('{props_description}', filteredPropsDescription)}
+
+${dialogueBeatPromptBlock}
+
+Storyboard dialogue hard rules:
+- Keep every existing panel field.
+- A speaking panel must set dialogueBeatId to exactly one dialogue beat id.
+- source_text for that speaking panel must equal that beat exactText.
+- Never merge multiple dialogue beats into one panel.`
 
       const [
         { parsed: photographyRules },
@@ -471,14 +503,25 @@ export async function runScriptToStoryboardOrchestrator(
       phase2ActingByClipId.set(clip.id, actingDirections)
       phase3PanelsByClipId.set(clip.id, filteredPhase3Panels)
 
+      const finalPanels = mergePanelsWithRules({
+        finalPanels: filteredPhase3Panels,
+        photographyRules,
+        actingDirections,
+      })
+      const dialogueAlignedPanels = alignStoryboardPanelsToDialogueBeats({
+        panels: finalPanels,
+        dialogueBeats,
+      }) as StoryboardPanel[]
+      assertStoryboardDialogueBudget({
+        clipId: clip.id,
+        panels: dialogueAlignedPanels,
+        dialogueBeats,
+      })
+
       return {
         clipId: clip.id,
         clipIndex,
-        finalPanels: mergePanelsWithRules({
-          finalPanels: filteredPhase3Panels,
-          photographyRules,
-          actingDirections,
-        }),
+        finalPanels: dialogueAlignedPanels,
       }
     },
   )
@@ -495,6 +538,7 @@ export async function runScriptToStoryboardOrchestrator(
 
   return {
     clipPanels,
+    dialogueBeatsByClipId: mapToRecord(dialogueBeatsByClipId),
     phase1PanelsByClipId: mapToRecord(phase1PanelsByClipId),
     phase2CinematographyByClipId: mapToRecord(phase2CinematographyByClipId),
     phase2ActingByClipId: mapToRecord(phase2ActingByClipId),

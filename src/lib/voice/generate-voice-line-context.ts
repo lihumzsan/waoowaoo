@@ -170,12 +170,12 @@ function buildSceneContext(
 
 async function resolveVoiceLineTextModel(userId: string, projectId: string): Promise<string | null> {
   const projectConfig = await getProjectModelConfig(projectId, userId)
-  if (projectConfig.analysisModel && getProviderKey(projectConfig.analysisModel) === 'bailian') {
+  if (projectConfig.analysisModel) {
     return projectConfig.analysisModel
   }
 
   const userConfig = await getUserModelConfig(userId)
-  if (userConfig.analysisModel && getProviderKey(userConfig.analysisModel) === 'bailian') {
+  if (userConfig.analysisModel) {
     return userConfig.analysisModel
   }
 

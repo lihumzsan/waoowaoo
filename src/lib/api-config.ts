@@ -19,6 +19,12 @@ import type {
   OpenAICompatMediaTemplateSource,
 } from './openai-compat-media-template'
 import { validateOpenAICompatMediaTemplate } from './user-api/model-template/validator'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_MODEL_ID,
+  CODEX_DEFAULT_MODEL_KEY,
+  CODEX_PROVIDER_KEY,
+} from './providers/codex/constants'
 
 export interface CustomModel {
   modelId: string
@@ -86,6 +92,17 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
   },
 ]
 
+const CODEX_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
+  {
+    modelId: CODEX_DEFAULT_MODEL_ID,
+    modelKey: CODEX_DEFAULT_MODEL_KEY,
+    name: 'Codex GPT-5.4',
+    type: 'llm',
+    provider: CODEX_PROVIDER_KEY,
+    price: 0,
+  },
+]
+
 export type ModelMediaType = 'llm' | 'image' | 'video' | 'audio' | 'lipsync'
 
 export interface ModelSelection {
@@ -112,6 +129,9 @@ type LlmProtocolType = 'responses' | 'chat-completions'
 
 function hasProviderConnection(provider: CustomProvider | undefined): boolean {
   if (!provider) return false
+  if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) {
+    return true
+  }
   if (getProviderKey(provider.id) === 'comfyui') {
     return !!normalizeProviderBaseUrl(provider.id, provider.baseUrl)
   }
@@ -126,6 +146,10 @@ function normalizeProviderBaseUrl(providerId: string, rawBaseUrl?: string): stri
   if (providerKey === 'comfyui') {
     const baseUrl = readTrimmedString(rawBaseUrl)
     return baseUrl || 'http://127.0.0.1:8188'
+  }
+  if (providerKey === CODEX_PROVIDER_KEY) {
+    const baseUrl = readTrimmedString(rawBaseUrl)
+    return baseUrl || CODEX_DEFAULT_EXECUTABLE_PATH
   }
 
   const baseUrl = readTrimmedString(rawBaseUrl)
@@ -379,6 +403,19 @@ function injectComfyUiHelperModels(models: CustomModel[], providers: CustomProvi
   return [...models, ...helperModels]
 }
 
+function injectCodexHelperModels(models: CustomModel[], providers: CustomProvider[]): CustomModel[] {
+  const hasConnectedCodex = providers.some(
+    (provider) => getProviderKey(provider.id) === CODEX_PROVIDER_KEY && hasProviderConnection(provider),
+  )
+  if (!hasConnectedCodex) return models
+
+  const seenModelKeys = new Set(models.map((model) => model.modelKey))
+  const helperModels = CODEX_AUTO_ENABLED_HELPER_MODELS.filter((model) => !seenModelKeys.has(model.modelKey))
+  if (helperModels.length === 0) return models
+
+  return [...models, ...helperModels]
+}
+
 function findModelByKey(models: CustomModel[], modelKey: string): CustomModel | null {
   const parsed = assertModelKey(modelKey, 'model')
   return models.find((model) => model.modelId === parsed.modelId && model.provider === parsed.provider) || null
@@ -495,7 +532,8 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   const { providers } = await readUserConfig(userId)
   const provider = pickProviderStrict(providers, providerId)
 
-  if (!provider.apiKey && getProviderKey(provider.id) !== 'comfyui') {
+  const providerKey = getProviderKey(provider.id)
+  if (!provider.apiKey && providerKey !== 'comfyui' && providerKey !== CODEX_PROVIDER_KEY) {
     throw new Error(`PROVIDER_API_KEY_MISSING: ${provider.id}`)
   }
 
@@ -514,7 +552,7 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
  */
 export async function getUserModels(userId: string): Promise<CustomModel[]> {
   const { models, providers } = await readUserConfig(userId)
-  return injectComfyUiHelperModels(models, providers)
+  return injectCodexHelperModels(injectComfyUiHelperModels(models, providers), providers)
 }
 
 /**
@@ -536,8 +574,9 @@ export async function getModelsByType(userId: string, type: ModelMediaType): Pro
 
 export async function getConnectedModelsByType(userId: string, type: ModelMediaType): Promise<CustomModel[]> {
   const { models, providers } = await readUserConfig(userId)
+  const modelsWithHelpers = injectCodexHelperModels(injectComfyUiHelperModels(models, providers), providers)
   const providersById = new Map(providers.map((provider) => [provider.id, provider] as const))
-  return models.filter((model) => {
+  return modelsWithHelpers.filter((model) => {
     if (model.type !== type) return false
     return hasProviderConnection(providersById.get(model.provider))
   })
@@ -591,6 +630,7 @@ export async function hasApiConfig(userId: string): Promise<boolean> {
   const providers = parseCustomProviders(pref?.customProviders)
   return providers.some((provider) => {
     if (provider.apiKey) return true
+    if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) return true
     return getProviderKey(provider.id) === 'comfyui' && !!readTrimmedString(provider.baseUrl)
   })
 }

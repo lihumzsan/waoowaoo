@@ -1,10 +1,14 @@
 import { getProviderConfig } from '@/lib/api-config'
-import { runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
+import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
+import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
 import { COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
 const COMFYUI_MULTI_SHOT_VBVR_WORKFLOW_ID = 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
 const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX = 'basevideo/多镜头/'
+
+const COMFYUI_SINGLE_SHOT_LTX23_WORKFLOW_ID = 'basevideo/\u56fe\u751f\u89c6\u9891/ltx2.3-\u56fe\u751f\u89c6\u9891-\u6ca1\u5b57\u5e55\u7248'
+const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE = 'basevideo/\u591a\u955c\u5934/'
 
 const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
   '1:1': { w: 1024, h: 1024 },
@@ -41,14 +45,47 @@ function hasStructuredPromptRelayPrompt(prompt: string): boolean {
   return hasGlobalLocalSections || hasTimedSegments
 }
 
-function selectComfyUiVideoWorkflowKey(workflowKey: string, prompt: string): string {
+function isMultiShotWorkflowKey(workflowKey: string): boolean {
+  return workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX)
+    || workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE)
+}
+
+function normalizeComfyUiProviderError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (
+    message.startsWith('COMFYUI_LLM_MODEL_NOT_CONFIGURED')
+    || message.startsWith('COMFYUI_LLM_MODEL_NOT_OPENROUTER')
+    || message.startsWith('COMFYUI_WORKFLOW_NOT_FOUND')
+  ) {
+    return `MODEL_NOT_CONFIGURED: ${message}`
+  }
+  return message
+}
+
+export function selectComfyUiVideoWorkflowKey(
+  workflowKey: string,
+  prompt: string,
+  options?: {
+    generationMode?: unknown
+    multiShotRange?: unknown
+  },
+): string {
   const normalizedWorkflowKey = workflowKey.trim()
-  if (!normalizedWorkflowKey || normalizedWorkflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX)) {
+  if (!normalizedWorkflowKey) {
+    return normalizedWorkflowKey
+  }
+  const generationMode = options?.generationMode === 'firstlastframe' ? 'firstlastframe' : 'normal'
+  const allowMultiShot = options?.multiShotRange === true
+  if (generationMode === 'normal' && !allowMultiShot && isMultiShotWorkflowKey(normalizedWorkflowKey)) {
+    return COMFYUI_SINGLE_SHOT_LTX23_WORKFLOW_ID
+  }
+  if (isMultiShotWorkflowKey(normalizedWorkflowKey)) {
     return normalizedWorkflowKey
   }
   if (
     normalizedWorkflowKey === COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
     && hasStructuredPromptRelayPrompt(prompt)
+    && allowMultiShot
   ) {
     return COMFYUI_MULTI_SHOT_VBVR_WORKFLOW_ID
   }
@@ -84,7 +121,10 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
     const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
       ? options.modelId.trim()
       : COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
-    const selectedWorkflowKey = selectComfyUiVideoWorkflowKey(workflowKey, prompt || '')
+    const selectedWorkflowKey = selectComfyUiVideoWorkflowKey(workflowKey, prompt || '', {
+      generationMode: options.generationMode,
+      multiShotRange: options.multiShotRange,
+    })
     const directSize = parseWxH(typeof options.size === 'string' ? options.size : undefined)
     const aspectSize = typeof options.aspectRatio === 'string'
       ? ASPECT_TO_SIZE[options.aspectRatio.trim()]
@@ -92,6 +132,12 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
     const targetSize = normalizeComfyUiVideoSize(directSize || aspectSize || null)
 
     try {
+      const llmApi = isComfyUiWorkflowLlmApiRequired(selectedWorkflowKey)
+        ? await resolveComfyUiLlmApiConfig({
+            userId,
+            analysisModel: typeof options.analysisModel === 'string' ? options.analysisModel : null,
+          })
+        : undefined
       const { videoBase64, mimeType } = await runComfyUiVideoWorkflow({
         baseUrl,
         workflowKey: selectedWorkflowKey,
@@ -102,6 +148,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         height: targetSize?.h,
         durationSeconds: typeof options.duration === 'number' ? options.duration : undefined,
         fps: typeof options.fps === 'number' ? options.fps : undefined,
+        llmApi,
       })
 
       return {
@@ -111,7 +158,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+        error: normalizeComfyUiProviderError(error).slice(0, 500),
       }
     }
   }

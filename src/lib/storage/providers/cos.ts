@@ -8,35 +8,43 @@ export class CosStorageProvider implements StorageProvider {
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  async uploadObject(_params: UploadObjectParams): Promise<UploadObjectResult> {
+  async uploadObject(params: UploadObjectParams): Promise<UploadObjectResult> {
+    void params
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  async deleteObject(_key: string): Promise<void> {
+  async deleteObject(key: string): Promise<void> {
+    void key
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  async deleteObjects(_keys: string[]): Promise<DeleteObjectsResult> {
+  async deleteObjects(keys: string[]): Promise<DeleteObjectsResult> {
+    void keys
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  async getSignedObjectUrl(_params: SignedUrlParams): Promise<string> {
+  async getSignedObjectUrl(params: SignedUrlParams): Promise<string> {
+    void params
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  async getObjectBuffer(_key: string): Promise<Buffer> {
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    void key
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  extractStorageKey(_input: string | null | undefined): string | null {
+  extractStorageKey(input: string | null | undefined): string | null {
+    void input
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  toFetchableUrl(_inputUrl: string): string {
+  toFetchableUrl(inputUrl: string): string {
+    void inputUrl
     throw new StorageProviderNotImplementedError('cos')
   }
 
-  generateUniqueKey(_params: { prefix: string; ext: string }): string {
+  generateUniqueKey(params: { prefix: string; ext: string }): string {
+    void params
     throw new StorageProviderNotImplementedError('cos')
   }
 }

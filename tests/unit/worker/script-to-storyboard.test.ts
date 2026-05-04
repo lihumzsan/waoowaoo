@@ -38,10 +38,17 @@ const runScriptToStoryboardOrchestratorMock = vi.hoisted(() =>
             video_prompt: 'panel prompt',
             location: 'room',
             characters: ['Narrator'],
+            dialogueBeatId: undefined as string | undefined,
+            source_text: undefined as string | undefined,
           },
         ],
       },
     ],
+    dialogueBeatsByClipId: {} as Record<string, unknown[]>,
+    phase1PanelsByClipId: {} as Record<string, unknown[]>,
+    phase2CinematographyByClipId: {} as Record<string, unknown[]>,
+    phase2ActingByClipId: {} as Record<string, unknown[]>,
+    phase3PanelsByClipId: {} as Record<string, unknown[]>,
     summary: {
       totalPanelCount: 1,
       totalStepCount: 4,
@@ -79,6 +86,9 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/workers/handlers/resolve-analysis-model', () => ({
+  resolveAnalysisModel: vi.fn(async () => 'llm::analysis-model'),
+}))
 
 vi.mock('@/lib/llm-client', () => ({
   chatCompletion: chatCompletionMock,
@@ -329,6 +339,68 @@ describe('worker script-to-storyboard behavior', () => {
         notIn: [1],
       },
     })
+  })
+
+  it('dialogue beats 存在时直接生成 voice line，不再重新做全文台词分析', async () => {
+    runScriptToStoryboardOrchestratorMock.mockResolvedValueOnce({
+      clipPanels: [
+        {
+          clipId: 'clip-1',
+          clipIndex: 0,
+          finalPanels: [
+            {
+              panel_number: 1,
+              shot_type: 'close-up',
+              camera_move: 'static',
+              description: 'Doctor speaks.',
+              video_prompt: 'Doctor speaks.',
+              location: 'room',
+              characters: ['Doctor'],
+              dialogueBeatId: 'clip-1:dialogue:1',
+              source_text: '你是否记仇？',
+            },
+          ],
+        },
+      ],
+      dialogueBeatsByClipId: {
+        'clip-1': [
+          {
+            beatId: 'clip-1:dialogue:1',
+            speaker: 'Doctor',
+            exactText: '你是否记仇？',
+            sourceText: '你是否记仇？',
+            estimatedSeconds: 2.1,
+            scene: 'room',
+            emotion: null,
+            isVoiceover: false,
+          },
+        ],
+      },
+      phase1PanelsByClipId: {},
+      phase2CinematographyByClipId: {},
+      phase2ActingByClipId: {},
+      phase3PanelsByClipId: {},
+      summary: {
+        totalPanelCount: 1,
+        totalStepCount: 4,
+      },
+    })
+
+    const job = buildJob({ episodeId: 'episode-1' })
+    const result = await handleScriptToStoryboardTask(job)
+
+    expect(result).toEqual(expect.objectContaining({
+      episodeId: 'episode-1',
+      voiceLineCount: 1,
+    }))
+    expect(parseVoiceLinesJsonMock).not.toHaveBeenCalled()
+    expect(chatCompletionMock).not.toHaveBeenCalled()
+    expect(txState.createdRows[0]).toEqual(expect.objectContaining({
+      lineIndex: 1,
+      speaker: 'Doctor',
+      content: '你是否记仇？',
+      matchedPanelIndex: 0,
+    }))
   })
 
   it('voice 解析失败后会重试一次再成功', async () => {

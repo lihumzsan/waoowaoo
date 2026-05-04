@@ -9,6 +9,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   video: new Set([
     'generationModeOptions',
     'generateAudioOptions',
+    'containsVideoInputOptions',
     'durationOptions',
     'fpsOptions',
     'resolutionOptions',
@@ -25,6 +26,7 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   video: {
     generationMode: 'generationModeOptions',
     generateAudio: 'generateAudioOptions',
+    containsVideoInput: 'containsVideoInputOptions',
     duration: 'durationOptions',
     fps: 'fpsOptions',
     resolution: 'resolutionOptions',
@@ -210,6 +212,9 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
       }
       if (video.generateAudioOptions !== undefined && !isBooleanArray(video.generateAudioOptions)) {
         pushIssue(issues, file, index, 'capabilities.video.generateAudioOptions', 'must be boolean array')
+      }
+      if (video.containsVideoInputOptions !== undefined && !isBooleanArray(video.containsVideoInputOptions)) {
+        pushIssue(issues, file, index, 'capabilities.video.containsVideoInputOptions', 'must be boolean array')
       }
       if (video.durationOptions !== undefined && !isNumberArray(video.durationOptions)) {
         pushIssue(issues, file, index, 'capabilities.video.durationOptions', 'must be number array')

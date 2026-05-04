@@ -25,6 +25,13 @@ import {
   buildPromptAssetContext,
   compileAssetPromptFragments,
 } from '@/lib/assets/services/asset-prompt-context'
+import {
+  alignStoryboardPanelsToDialogueBeats,
+  assertStoryboardDialogueBudget,
+  buildDialogueBeatPromptBlock,
+  buildDialogueBeatsFromScreenplay,
+  type DialogueBeat,
+} from '@/lib/novel-promotion/dialogue-beats'
 
 type StoryboardClipInput = {
   id: string
@@ -45,6 +52,7 @@ export type StoryboardRetryTarget = {
 
 export type ScriptToStoryboardAtomicRetryResult = {
   clipPanels: ClipPanelsResult[]
+  dialogueBeatsByClipId: Record<string, DialogueBeat[]>
   phase1PanelsByClipId: Record<string, StoryboardPanel[]>
   phase2CinematographyByClipId: Record<string, PhotographyRule[]>
   phase2ActingByClipId: Record<string, ActingDirection[]>
@@ -392,6 +400,12 @@ export async function runScriptToStoryboardAtomicRetry(params: {
     clipLocation: null,
     clipProps,
   })).propsDescriptionText
+  const screenplay = parseScreenplay(params.clip.screenplay)
+  const dialogueBeats = buildDialogueBeatsFromScreenplay({
+    clipId: params.clip.id,
+    screenplay,
+  })
+  const dialogueBeatPromptBlock = buildDialogueBeatPromptBlock(dialogueBeats)
   const baseMeta = buildStepMeta({
     target: params.retryTarget,
     clipIndex: params.clipIndex,
@@ -445,6 +459,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         characters: clipCharacters,
         location: clipLocation,
         props: clipProps,
+        dialogueBeats,
       },
       null,
       2,
@@ -457,12 +472,19 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       .replace('{characters_full_description}', filteredFullDescription)
       .replace('{props_description}', filteredPropsDescription)
       .replace('{clip_json}', clipJson)
-    const screenplay = parseScreenplay(params.clip.screenplay)
     if (screenplay) {
       phase1Prompt = phase1Prompt.replace('{clip_content}', `【剧本格式】\n${JSON.stringify(screenplay, null, 2)}`)
     } else {
       phase1Prompt = phase1Prompt.replace('{clip_content}', clipContent)
     }
+    phase1Prompt = `${phase1Prompt}
+
+${dialogueBeatPromptBlock}
+
+Storyboard dialogue hard rules:
+- A speaking panel must set dialogueBeatId to exactly one dialogue beat id.
+- source_text for that speaking panel must equal that beat exactText.
+- Do not merge multiple dialogue beats into one panel.`
     phase1Panels = await runStepWithRetry({
       runStep: params.runStep,
       baseMeta,
@@ -515,11 +537,19 @@ export async function runScriptToStoryboardAtomicRetry(params: {
     phase2ActingByClipId[params.clip.id] = phase2Acting
   } else {
     const planPanels = requireRows(phase1Panels, 'storyboard.clip.phase1')
-    const phase3Prompt = params.promptTemplates.phase3DetailTemplate
+    const phase3Prompt = `${params.promptTemplates.phase3DetailTemplate
       .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
       .replace('{characters_age_gender}', filteredFullDescription)
       .replace('{locations_description}', filteredLocationsDescription)
-      .replace('{props_description}', filteredPropsDescription)
+      .replace('{props_description}', filteredPropsDescription)}
+
+${dialogueBeatPromptBlock}
+
+Storyboard dialogue hard rules:
+- Keep every existing panel field.
+- A speaking panel must set dialogueBeatId to exactly one dialogue beat id.
+- source_text for that speaking panel must equal that beat exactText.
+- Never merge multiple dialogue beats into one panel.`
     phase3Panels = await runStepWithRetry({
       runStep: params.runStep,
       baseMeta,
@@ -547,16 +577,26 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       photographyRules: requireRows(phase2Cinematography, 'storyboard.clip.phase2.cine'),
       actingDirections: requireRows(phase2Acting, 'storyboard.clip.phase2.acting'),
     })
+    const dialogueAlignedPanels = alignStoryboardPanelsToDialogueBeats({
+      panels: finalPanels,
+      dialogueBeats,
+    }) as StoryboardPanel[]
+    assertStoryboardDialogueBudget({
+      clipId: params.clip.id,
+      panels: dialogueAlignedPanels,
+      dialogueBeats,
+    })
     clipPanels.push({
       clipId: params.clip.id,
       clipIndex: params.clipIndex + 1,
-      finalPanels,
+      finalPanels: dialogueAlignedPanels,
     })
   }
 
   const totalPanelCount = clipPanels.reduce((sum, item) => sum + item.finalPanels.length, 0)
   return {
     clipPanels,
+    dialogueBeatsByClipId: dialogueBeats.length > 0 ? { [params.clip.id]: dialogueBeats } : {},
     phase1PanelsByClipId,
     phase2CinematographyByClipId,
     phase2ActingByClipId,

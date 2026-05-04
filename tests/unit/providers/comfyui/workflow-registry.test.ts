@@ -18,6 +18,12 @@ function writeWorkflow(root: string, workflowKey: string, workflow: unknown) {
   writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
 }
 
+const TEST_LLM_API = {
+  baseUrl: 'https://openrouter.ai/api/v1',
+  apiKey: 'sk-test-openrouter',
+  model: 'openrouter/test-model',
+}
+
 describe('comfyui workflow registry prompt injection', () => {
   let workflowRoot: string | null = null
 
@@ -399,6 +405,7 @@ describe('comfyui workflow registry prompt injection', () => {
     const graph = resolveComfyUiWorkflow('baseimage/prompt/test-qwen-storyboard-direct-prompt', {
       prompt: 'fresh panel image prompt',
       negativePrompt: 'bad anatomy',
+      llmApi: TEST_LLM_API,
     })
 
     expect(graph['68']?.inputs?.prompt).toBe('fresh panel image prompt')
@@ -538,6 +545,7 @@ describe('comfyui workflow registry prompt injection', () => {
 
     const graph = resolveComfyUiWorkflow('baseimage/prompt/test-connected-text-source', {
       prompt: 'fresh storyboard prompt',
+      llmApi: TEST_LLM_API,
     })
 
     expect(graph['103']?.inputs?.text).toBe('fresh storyboard prompt')
@@ -663,6 +671,99 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(Object.prototype.hasOwnProperty.call(graph['6']?.inputs ?? {}, 'upload')).toBe(false)
   })
 
+  it('bypasses non-media output passthrough nodes in audio workflows so SaveAudio remains the only terminal', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'baseaudio/prompt/test-audio-output-bypass', {
+      nodes: [
+        {
+          id: 30,
+          type: 'FishS2VoiceCloneTTS',
+          inputs: [
+            { name: 'text', type: 'STRING', widget: { name: 'text' }, link: null },
+            { name: 'reference_text', type: 'STRING', link: 60 },
+          ],
+          outputs: [{ name: 'audio', type: 'AUDIO', links: [61] }],
+          widgets_values: ['old line', ''],
+        },
+        {
+          id: 35,
+          type: 'SaveAudio',
+          inputs: [
+            { name: 'audio', type: 'AUDIO', link: 62 },
+            { name: 'filename_prefix', type: 'STRING', widget: { name: 'filename_prefix' }, link: null },
+          ],
+          widgets_values: ['%date:yyyy-MM-dd%/voice_'],
+        },
+        {
+          id: 37,
+          type: 'Apply Whisper',
+          outputs: [{ name: 'text', type: 'STRING', links: [57] }],
+          widgets_values: [],
+        },
+        {
+          id: 38,
+          type: 'easy showAnything',
+          inputs: [{ name: 'anything', type: '*', link: 58 }],
+          outputs: [{ name: 'output', type: '*', links: [60] }],
+          widgets_values: ['old reference text'],
+        },
+        {
+          id: 43,
+          type: 'LayerUtility: PurgeVRAM V2',
+          inputs: [
+            { name: 'anything', type: '*', link: 61 },
+            { name: 'purge_cache', type: 'BOOLEAN', widget: { name: 'purge_cache' } },
+            { name: 'purge_models', type: 'BOOLEAN', widget: { name: 'purge_models' } },
+          ],
+          outputs: [{ name: 'any', type: '*', links: [62] }],
+          widgets_values: [true, true],
+        },
+        {
+          id: 44,
+          type: 'LayerUtility: PurgeVRAM V2',
+          inputs: [
+            { name: 'anything', type: '*', link: 57 },
+            { name: 'purge_cache', type: 'BOOLEAN', widget: { name: 'purge_cache' } },
+            { name: 'purge_models', type: 'BOOLEAN', widget: { name: 'purge_models' } },
+          ],
+          outputs: [{ name: 'any', type: '*', links: [58] }],
+          widgets_values: [true, true],
+        },
+      ],
+      links: [
+        [57, 37, 0, 44, 0, 'STRING'],
+        [58, 44, 0, 38, 0, '*'],
+        [60, 38, 0, 30, 1, 'STRING'],
+        [61, 30, 0, 43, 0, 'AUDIO'],
+        [62, 43, 0, 35, 0, 'AUDIO'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('baseaudio/prompt/test-audio-output-bypass', {
+      prompt: 'fresh voice line',
+    })
+    const referencedNodeIds = new Set<string>()
+    for (const node of Object.values(graph)) {
+      for (const value of Object.values(node.inputs)) {
+        if (Array.isArray(value) && value.length >= 2) {
+          referencedNodeIds.add(String(value[0]))
+        }
+      }
+    }
+    const terminalNodes = Object.entries(graph)
+      .filter(([nodeId]) => !referencedNodeIds.has(nodeId))
+      .map(([nodeId, node]) => ({ nodeId, classType: node.class_type }))
+
+    expect(graph['38']).toBeUndefined()
+    expect(graph['43']).toBeUndefined()
+    expect(graph['44']).toBeUndefined()
+    expect(graph['30']?.inputs?.reference_text).toEqual(['37', 0])
+    expect(graph['35']?.inputs?.audio).toEqual(['30', 0])
+    expect(terminalNodes).toEqual([{ nodeId: '35', classType: 'SaveAudio' }])
+  })
+
   it('injects fps and frame count into connected temporal constant nodes', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
@@ -729,6 +830,57 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['27']?.inputs?.value).toBe(144)
     expect(graph['22']?.inputs?.frame_rate).toEqual(['23', 0])
     expect(graph['43']?.inputs?.length).toEqual(['27', 0])
+  })
+
+  it('injects duration into CONFIG FrameCount primitive nodes', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-config-framecount-injection', {
+      nodes: [
+        {
+          id: 1,
+          type: 'PrimitiveInt',
+          title: 'CONFIG FrameCount',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          widgets_values: [7],
+        },
+        {
+          id: 31,
+          type: 'PrimitiveInt',
+          title: 'CONFIG FrameRate',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          widgets_values: [24],
+        },
+        {
+          id: 4,
+          type: 'MathExpression|pysssss',
+          inputs: [
+            { name: 'a', type: 'INT', link: 101 },
+            { name: 'b', type: 'INT', link: 102 },
+            { name: 'expression', type: 'STRING', link: null },
+          ],
+          widgets_values: ['a*b+1'],
+        },
+      ],
+      links: [
+        [101, 1, 0, 4, 0, 'INT'],
+        [102, 31, 0, 4, 1, 'INT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-config-framecount-injection', {
+      durationSeconds: 2.2,
+      fps: 25,
+      targetFrameCount: 55,
+    })
+
+    expect(graph['1']?.inputs?.value).toBe(3)
+    expect(graph['31']?.inputs?.value).toBe(25)
   })
 
   it('injects connected image dimensions into constant nodes', () => {

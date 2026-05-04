@@ -2,9 +2,11 @@ import { basename, extname } from 'path'
 import {
   COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
   COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
+  comfyUiWorkflowRequiresLlmApi,
   getComfyUiWorkflowImageInputCount,
   resolveComfyUiWorkflow,
   type ComfyUiWorkflowGraph,
+  type ComfyUiWorkflowLlmApiInject,
 } from './workflow-registry'
 import { COMFYUI_NEUTRAL_REFERENCE_IMAGE } from './neutral-reference'
 
@@ -669,6 +671,7 @@ export async function runComfyUiImageWorkflow(params: {
   width: number
   height: number
   referenceImages?: string[]
+  llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ imageBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const workflowKey = params.workflowKey?.trim() || COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID
@@ -686,6 +689,7 @@ export async function runComfyUiImageWorkflow(params: {
       width: params.width,
       height: params.height,
       imageFilenames,
+      llmApi: params.llmApi,
     },
   )
 
@@ -707,6 +711,7 @@ export async function runComfyUiVideoWorkflow(params: {
   height?: number
   durationSeconds?: number
   fps?: number
+  llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const imageFilenames = await uploadComfyUiImages(
@@ -732,6 +737,7 @@ export async function runComfyUiVideoWorkflow(params: {
       fps,
       durationSeconds,
       targetFrameCount,
+      llmApi: params.llmApi,
     },
   )
 
@@ -748,6 +754,7 @@ export async function runComfyUiAudioWorkflow(params: {
   workflowKey: string
   prompt: string
   referenceAudioUrls?: string[]
+  llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ audioBase64: string; mimeType: string }> {
   const runWorkflow = async () => {
     const base = normalizeComfyBaseUrl(params.baseUrl)
@@ -755,6 +762,7 @@ export async function runComfyUiAudioWorkflow(params: {
     const workflow = resolveComfyUiWorkflow(params.workflowKey.trim(), {
       prompt: params.prompt,
       audioFilenames,
+      llmApi: params.llmApi,
     })
 
     const { dataBase64, mimeType } = await runComfyUiWorkflow({
@@ -774,6 +782,10 @@ export async function runComfyUiAudioWorkflow(params: {
   }
 
   return await runWorkflow()
+}
+
+export function isComfyUiWorkflowLlmApiRequired(workflowKey: string): boolean {
+  return comfyUiWorkflowRequiresLlmApi(workflowKey)
 }
 
 export async function probeComfyUiServer(baseUrl: string): Promise<{ ok: boolean; message: string }> {

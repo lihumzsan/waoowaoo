@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSignedUrl, toFetchableUrl } from '@/lib/storage'
+import { getSignedObjectUrl, getSignedUrl, getStorageType, toFetchableUrl } from '@/lib/storage'
 import { getMediaObjectByPublicId } from '@/lib/media/service'
 
 export const runtime = 'nodejs'
@@ -7,6 +7,14 @@ export const runtime = 'nodejs'
 function buildEtag(media: { sha256?: string | null; id: string; updatedAt?: string | null }) {
   if (media.sha256) return `"${media.sha256}"`
   return `W/"media-${media.id}-${media.updatedAt || '0'}"`
+}
+
+async function resolveUpstreamUrl(storageKey: string): Promise<string> {
+  if (getStorageType() === 'local') {
+    return toFetchableUrl(getSignedUrl(storageKey))
+  }
+
+  return await getSignedObjectUrl(storageKey)
 }
 
 export async function GET(
@@ -40,7 +48,7 @@ export async function GET(
     })
   }
 
-  const fetchUrl = toFetchableUrl(getSignedUrl(media.storageKey))
+  const fetchUrl = await resolveUpstreamUrl(media.storageKey)
   const range = request.headers.get('range')
 
   const upstream = await fetch(fetchUrl, {

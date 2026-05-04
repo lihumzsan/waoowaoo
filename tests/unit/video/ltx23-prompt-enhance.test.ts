@@ -33,7 +33,7 @@ import { enhanceLtx23VideoPrompt } from '@/lib/video-duration/ltx23-prompt-enhan
 describe('ltx23 video prompt enhance', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: 'bailian::qwen3.5-plus' })
+    configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: 'openrouter::x-ai/grok-4.1-fast' })
     configServiceMock.getUserModelConfig.mockResolvedValue({ analysisModel: null })
     apiConfigMock.getModelsByType.mockResolvedValue([
       {
@@ -103,11 +103,12 @@ describe('ltx23 video prompt enhance', () => {
       },
     })
 
-    expect(result).toEqual({
-      prompt: 'two characters sit across a desk, no special effects',
-      enhanced: false,
-      textModel: null,
-    })
+    expect(result.enhanced).toBe(false)
+    expect(result.textModel).toBeNull()
+    expect(result.prompt).toContain('two characters sit across a desk, no special effects')
+    expect(result.prompt).toContain('Source-frame continuity lock')
+    expect(result.prompt).toContain('Do not add new people')
+    expect(result.prompt).toContain('Keep the final frame close to the source image')
     expect(aiRuntimeMock.executeAiTextStep).not.toHaveBeenCalled()
   })
 
@@ -136,18 +137,65 @@ describe('ltx23 video prompt enhance', () => {
           audioDuration: 3030,
         },
       ],
-      durationSeconds: 3.03,
+      durationSeconds: 4.7,
       fps: 25,
+      audioTiming: {
+        mode: 'match_audio',
+        selectedVoiceLineIds: ['line-1'],
+        matchedVoiceLineIds: ['line-1'],
+        sourceDurationMs: 3030,
+        audioDurationSeconds: 3.03,
+        targetDurationSeconds: 4.7,
+        targetFrameCount: 118,
+        fps: 25,
+        maxDurationSeconds: 10,
+        preRollSeconds: 0.7,
+        postRollSeconds: 0.97,
+        dialogueStartSeconds: 0.7,
+        dialogueEndSeconds: 3.73,
+        timingStrategy: 'context_aware_audio',
+        reason: 'context-aware audio timing',
+        capped: false,
+        canGenerate: true,
+      },
       generationMode: 'normal',
       artStyle: 'cinematic realism',
     })
 
     const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
     expect(promptText).toContain('Linked audio count: 1')
-    expect(promptText).toContain('Target video duration from linked audio: 3.03 seconds.')
+    expect(promptText).toContain('Audio duration: 3.03 seconds.')
+    expect(promptText).toContain('Context-aware target video duration: 4.70 seconds.')
+    expect(promptText).toContain('[0.00-0.70] pre-roll emotional setup')
     expect(promptText).toContain('Strict dialogue preservation rules:')
     expect(promptText).toContain('must say exactly')
     expect(promptText).toContain('Hello Chen Ji, I need to ask you some questions.')
+    expect(promptText).toContain('The source frame and current panel are authoritative.')
+    expect(promptText).toContain('Do not introduce new people')
+    expect(promptText).toContain('Keep the source-frame composition locked.')
+  })
+
+  it('resolves character profiles from JSON object panel characters', async () => {
+    await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      originalPrompt: 'doctor pushes his glasses',
+      panel: {
+        description: 'doctor pushes his glasses',
+        characters: JSON.stringify([{ name: 'Doctor', appearance: 'default', slot: 'behind the desk' }]),
+      },
+    })
+
+    expect(prismaMock.prisma.novelPromotionCharacter.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        name: { in: ['Doctor'] },
+      }),
+    }))
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('Name: Doctor')
+    expect(promptText).not.toContain('No structured character profile was found')
   })
 
   it('appends the exact linked line to the final enhanced prompt', async () => {
@@ -175,11 +223,36 @@ describe('ltx23 video prompt enhance', () => {
       generationMode: 'normal',
     })
 
-    expect(result).toEqual({
-      prompt: 'Medium close-up of the doctor speaking steadily, with restrained body movement and stable mouth motion. The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions.". Match mouth movement, pauses, and timing to this exact line. Do not paraphrase, translate, or replace it.',
-      enhanced: true,
-      textModel: 'bailian::qwen3.5-plus',
+    expect(result.enhanced).toBe(true)
+    expect(result.textModel).toBe('openrouter::x-ai/grok-4.1-fast')
+    expect(result.prompt).toContain('Medium close-up of the doctor speaking steadily')
+    expect(result.prompt).toContain('The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions."')
+    expect(result.prompt).toContain('Source-frame continuity lock')
+    expect(result.prompt).toContain('Do not add new people')
+  })
+
+  it('removes unsafe camera-travel wording from normal single-shot prompts', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'The doctor sits while the camera slowly orbiting the office with tiny within-frame parallax simulating a pan.',
+      }),
     })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      originalPrompt: 'doctor sits at the desk',
+      panel: {
+        description: 'doctor sits at the desk',
+        characters: 'Doctor',
+      },
+      generationMode: 'normal',
+    })
+
+    expect(result.prompt).toContain('locked-off static camera')
+    expect(result.prompt.split('Source-frame continuity lock:')[0]).not.toMatch(/\b(orbiting|parallax)\b/i)
   })
 
   it('falls back to the original prompt and still preserves the exact linked line when model output is invalid', async () => {
@@ -207,10 +280,10 @@ describe('ltx23 video prompt enhance', () => {
       durationSeconds: 3.03,
     })
 
-    expect(result).toEqual({
-      prompt: 'doctor faces forward and speaks. The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions.". Match mouth movement, pauses, and timing to this exact line. Do not paraphrase, translate, or replace it.',
-      enhanced: false,
-      textModel: 'bailian::qwen3.5-plus',
-    })
+    expect(result.enhanced).toBe(false)
+    expect(result.textModel).toBe('openrouter::x-ai/grok-4.1-fast')
+    expect(result.prompt).toContain('doctor faces forward and speaks')
+    expect(result.prompt).toContain('The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions."')
+    expect(result.prompt).toContain('Source-frame continuity lock')
   })
 })

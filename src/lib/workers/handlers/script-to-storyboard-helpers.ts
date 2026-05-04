@@ -77,6 +77,38 @@ export function asJsonRecord(value: unknown): JsonRecord | null {
   return typeof value === 'object' && value !== null ? (value as JsonRecord) : null
 }
 
+function serializePanelActingNotes(panel: StoryboardPanel): string | null {
+  const rawActingNotes = panel.actingNotes
+  let actingNotes: JsonRecord | null = asJsonRecord(rawActingNotes)
+
+  if (!actingNotes && typeof rawActingNotes === 'string' && rawActingNotes.trim()) {
+    const parsed = safeParseJson(rawActingNotes)
+    actingNotes = asJsonRecord(parsed)
+  }
+
+  const dialogueBeatId = typeof panel.dialogueBeatId === 'string' && panel.dialogueBeatId.trim()
+    ? panel.dialogueBeatId.trim()
+    : null
+  const dialogueSpeaker = typeof panel.dialogueSpeaker === 'string' && panel.dialogueSpeaker.trim()
+    ? panel.dialogueSpeaker.trim()
+    : null
+  const estimatedDialogueSeconds =
+    typeof panel.estimatedDialogueSeconds === 'number' && Number.isFinite(panel.estimatedDialogueSeconds)
+      ? panel.estimatedDialogueSeconds
+      : null
+
+  if (!dialogueBeatId && !dialogueSpeaker && estimatedDialogueSeconds === null) {
+    return rawActingNotes ? JSON.stringify(rawActingNotes) : null
+  }
+
+  return JSON.stringify({
+    ...(actingNotes || {}),
+    ...(dialogueBeatId ? { dialogueBeatId } : {}),
+    ...(dialogueSpeaker ? { dialogueSpeaker } : {}),
+    ...(estimatedDialogueSeconds !== null ? { estimatedDialogueSeconds } : {}),
+  })
+}
+
 export function buildStoryboardJson(storyboards: PersistedStoryboard[]) {
   const rows: Array<{
     storyboardId: string
@@ -197,7 +229,7 @@ export async function persistStoryboardsAndPanels(params: {
             props: panel.props ? JSON.stringify(panel.props) : null,
             srtSegment: panel.source_text || null,
             photographyRules: panel.photographyPlan ? JSON.stringify(panel.photographyPlan) : null,
-            actingNotes: panel.actingNotes ? JSON.stringify(panel.actingNotes) : null,
+            actingNotes: serializePanelActingNotes(panel),
             duration: panel.duration || null,
           },
           select: {
@@ -291,7 +323,7 @@ export async function persistStoryboardOutputs(params: {
             props: panel.props ? JSON.stringify(panel.props) : null,
             srtSegment: panel.source_text || null,
             photographyRules: panel.photographyPlan ? JSON.stringify(panel.photographyPlan) : null,
-            actingNotes: panel.actingNotes ? JSON.stringify(panel.actingNotes) : null,
+            actingNotes: serializePanelActingNotes(panel),
             duration: panel.duration || null,
           },
           select: {
@@ -353,6 +385,9 @@ export async function persistStoryboardOutputs(params: {
         throw new Error(`voice line ${i + 1} is missing valid emotionStrength`)
       }
       const emotionStrength = Math.min(1, Math.max(0.1, row.emotionStrength))
+      const emotionPrompt = typeof row.emotionPrompt === 'string' && row.emotionPrompt.trim()
+        ? row.emotionPrompt.trim()
+        : null
 
       if (typeof row.lineIndex !== 'number' || !Number.isFinite(row.lineIndex)) {
         throw new Error(`voice line ${i + 1} is missing valid lineIndex`)
@@ -380,6 +415,7 @@ export async function persistStoryboardOutputs(params: {
           lineIndex,
           speaker: row.speaker.trim(),
           content: row.content,
+          emotionPrompt,
           emotionStrength,
           matchedPanelId,
           matchedStoryboardId,
@@ -388,6 +424,7 @@ export async function persistStoryboardOutputs(params: {
         update: {
           speaker: row.speaker.trim(),
           content: row.content,
+          emotionPrompt,
           emotionStrength,
           matchedPanelId,
           matchedStoryboardId,

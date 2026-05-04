@@ -180,6 +180,18 @@ describe('worker panel-image-task-handler behavior', () => {
         }),
       }),
     )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.stringContaining('Visible character count lock: exactly 1 named character(s) may appear: Hero.'),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.stringContaining('This is a one-person shot. Show only Hero; do not create a second copy'),
+      }),
+    )
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
         storyboard_text_json_input: expect.stringContaining('"slot": "left-side empty area"'),
@@ -188,6 +200,12 @@ describe('worker panel-image-task-handler behavior', () => {
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
         storyboard_text_json_input: expect.stringContaining('"available_slots"'),
+      }),
+    }))
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({
+        source_text: 'dialogue segment',
+        storyboard_text_json_input: expect.stringContaining('"continuity"'),
       }),
     }))
 
@@ -526,7 +544,7 @@ describe('worker panel-image-task-handler behavior', () => {
 
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
-        source_text: 'empty hallway',
+        source_text: 'hero is escorted by two nurses',
       }),
     }))
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(

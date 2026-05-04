@@ -1,5 +1,6 @@
 import { getProviderConfig } from '@/lib/api-config'
-import { runComfyUiImageWorkflow } from '@/lib/providers/comfyui/client'
+import { isComfyUiWorkflowLlmApiRequired, runComfyUiImageWorkflow } from '@/lib/providers/comfyui/client'
+import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
 import { COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
 import { BaseImageGenerator, type GenerateResult, type ImageGenerateParams } from './base'
 
@@ -58,6 +59,12 @@ export class ComfyUIImageGenerator extends BaseImageGenerator {
     }
 
     try {
+      const llmApi = isComfyUiWorkflowLlmApiRequired(workflowKey)
+        ? await resolveComfyUiLlmApiConfig({
+            userId,
+            analysisModel: typeof options.analysisModel === 'string' ? options.analysisModel : null,
+          })
+        : undefined
       const { imageBase64, mimeType } = await runComfyUiImageWorkflow({
         baseUrl,
         workflowKey,
@@ -66,6 +73,7 @@ export class ComfyUIImageGenerator extends BaseImageGenerator {
         width,
         height,
         referenceImages,
+        llmApi,
       })
 
       return {

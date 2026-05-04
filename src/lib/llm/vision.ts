@@ -23,6 +23,10 @@ import {
 } from './runtime-shared'
 import { completeBailianLlm } from '@/lib/providers/bailian'
 import { completeSiliconFlowLlm } from '@/lib/providers/siliconflow'
+import {
+  prepareCodexImageInputs,
+  runCodexTextCompletion,
+} from '@/lib/providers/codex/client'
 
 type GoogleVisionPart = { inlineData: { mimeType: string; data: string } } | { text: string }
 type ArkVisionContentItem = { type: 'input_image'; image_url: string } | { type: 'input_text'; text: string }
@@ -83,6 +87,39 @@ export async function chatCompletionWithVision(
     const attemptStartedAt = Date.now()
     try {
       const providerConfig = await getProviderConfig(userId, provider)
+      if (providerKey === 'codex') {
+        const { normalizeToBase64ForGeneration } = await import('@/lib/media/outbound-image')
+        const preparedImages = await prepareCodexImageInputs(imageUrls, normalizeToBase64ForGeneration)
+        try {
+          const codexResult = await runCodexTextCompletion({
+            codexPath: providerConfig.baseUrl,
+            model: resolvedModelId,
+            messages: [{
+              role: 'user',
+              content: textPrompt || 'Analyze the attached image content.',
+            }],
+            imagePaths: preparedImages.imagePaths,
+            cwd: process.cwd(),
+          })
+          llmLogger.info({
+            action: 'llm.vision.success',
+            message: 'llm vision call succeeded',
+            provider: providerKey,
+            durationMs: Date.now() - attemptStartedAt,
+            details: {
+              model: resolvedModelId,
+              attempt,
+              maxRetries,
+              imageCount: imageUrls.length,
+              engine: 'codex_exec',
+            },
+          })
+          return buildOpenAIChatCompletion(resolvedModelId, codexResult.text)
+        } finally {
+          await preparedImages.cleanup()
+        }
+      }
+
       if (providerKey === 'google' || providerKey === 'gemini-compatible') {
         const ai = new GoogleGenAI({ apiKey: providerConfig.apiKey })
         const { normalizeToBase64ForGeneration } = await import('@/lib/media/outbound-image')
