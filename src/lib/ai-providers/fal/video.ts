@@ -142,7 +142,7 @@ function buildHappyHorsePayload(input: {
     : []
   const uniqueReferences = Array.from(new Set([input.imageUrl, ...referenceImages]))
 
-  if (uniqueReferences.length > 1) {
+  if (input.options.aspectRatio || uniqueReferences.length > 1) {
     return {
       endpoint: 'alibaba/happy-horse/reference-to-video',
       payload: {

@@ -29,10 +29,10 @@ describe('provider contract - fal video', () => {
     server = null
   })
 
-  it('submits Happy Horse image-to-video payload to the documented fal endpoint', async () => {
+  it('does not drop Happy Horse aspect ratio for single-reference video requests', async () => {
     server!.defineScenario({
       method: 'POST',
-      path: '/fal/alibaba/happy-horse/image-to-video',
+      path: '/fal/alibaba/happy-horse/reference-to-video',
       mode: 'success',
       submitResponse: {
         status: 200,
@@ -61,16 +61,17 @@ describe('provider contract - fal video', () => {
       success: true,
       async: true,
       requestId: 'req_happy_horse_1',
-      endpoint: 'alibaba/happy-horse/image-to-video',
-      externalId: 'FAL:VIDEO:alibaba/happy-horse/image-to-video:req_happy_horse_1',
+      endpoint: 'alibaba/happy-horse/reference-to-video',
+      externalId: 'FAL:VIDEO:alibaba/happy-horse/reference-to-video:req_happy_horse_1',
     })
 
-    const requests = server!.getRequests('POST', '/fal/alibaba/happy-horse/image-to-video')
+    const requests = server!.getRequests('POST', '/fal/alibaba/happy-horse/reference-to-video')
     expect(requests).toHaveLength(1)
     expect(requests[0]?.headers.authorization).toBe('Key fal-key')
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
-      image_url: 'https://example.com/frame.png',
       prompt: 'Bring the scene to life with natural motion and sound.',
+      image_urls: ['https://example.com/frame.png'],
+      aspect_ratio: '16:9',
       resolution: '1080p',
       duration: 5,
     })
