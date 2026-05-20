@@ -248,6 +248,9 @@
         "regenerateImage": "重新生成",
         "generateVideo": "生成视频",
         "mergeVideoBlocks": "融合片段",
+        "selectVideoBlockToMerge": "选择融合片段",
+        "mergeWithSelectedVideoBlock": "与已选片段融合",
+        "cancelVideoBlockMerge": "取消选择",
         "generateAllVideos": "批量生成",
         "generateBgmScore": "生成 BGM",
         "generatingBgm": "BGM 生成中",
@@ -292,7 +295,10 @@
         "videoPlanSingleInvalid": "单镜头片段只能包含 1 个镜头",
         "videoPlanGroupCountInvalid": "连续片段必须包含 2-9 个镜头",
         "videoPlanGroupDurationInvalid": "连续片段时长必须在 2-15 秒之间",
-        "sequenceVideoModelMissing": "请先在项目设置中选择视频片段生成模型"
+        "sequenceVideoModelMissing": "请先在项目设置中选择视频片段生成模型",
+        "videoBlockMergeAdjacentRequired": "只能融合相邻的视频片段，请选择已选片段前后相邻的片段。",
+        "videoBlockMergeDurationExceeded": "融合后的片段时长为 {duration} 秒，超过 {max} 秒上限。",
+        "videoBlockMergeUnavailable": "当前剪辑表已变化，请重新选择要融合的视频片段。"
       },
       "nodeFields": {
         "openDetails": "详情",

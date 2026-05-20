@@ -103,6 +103,10 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'select_video_block_for_merge') {
+      throw new Error('select_video_block_for_merge must be handled by the canvas selection bridge')
+    }
+
     if (action.type === 'update_edit_asset_requirement_description') {
       await runtime.onUpdateEditAssetRequirementDescription(action.editScriptId, action.requirementId, action.description)
       return

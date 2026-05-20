@@ -248,6 +248,9 @@
         "regenerateImage": "Regenerate",
         "generateVideo": "Generate Video",
         "mergeVideoBlocks": "Merge Segments",
+        "selectVideoBlockToMerge": "Select Segment",
+        "mergeWithSelectedVideoBlock": "Merge With Selected",
+        "cancelVideoBlockMerge": "Cancel Selection",
         "generateAllVideos": "Batch Generate",
         "generateBgmScore": "Generate BGM",
         "generatingBgm": "Generating BGM",
@@ -292,7 +295,10 @@
         "videoPlanSingleInvalid": "A single-shot segment must contain exactly 1 shot",
         "videoPlanGroupCountInvalid": "A continuous segment must contain 2-9 shots",
         "videoPlanGroupDurationInvalid": "A continuous segment must be 2-15 seconds",
-        "sequenceVideoModelMissing": "Choose a video segment generation model in project settings first"
+        "sequenceVideoModelMissing": "Choose a video segment generation model in project settings first",
+        "videoBlockMergeAdjacentRequired": "Only adjacent video segments can be merged. Select a segment next to the selected one.",
+        "videoBlockMergeDurationExceeded": "The merged segment would be {duration} seconds, above the {max}-second limit.",
+        "videoBlockMergeUnavailable": "The edit table changed. Select the video segments again."
       },
       "nodeFields": {
         "openDetails": "Details",

@@ -94,6 +94,11 @@ export type WorkspaceCanvasNodeAction =
       readonly rightBlockIndex: number
     }
   | {
+      readonly type: 'select_video_block_for_merge'
+      readonly editScriptId: string
+      readonly blockIndex: number
+    }
+  | {
       readonly type: 'update_edit_asset_requirement_description'
       readonly editScriptId: string
       readonly requirementId: string
@@ -323,6 +328,11 @@ export interface WorkspaceCanvasVideoPlanDetails {
   readonly validationMessage?: string | null
 }
 
+export interface WorkspaceCanvasVideoBlockMergeSelection {
+  readonly editScriptId: string
+  readonly blockIndex: number
+}
+
 export interface WorkspaceCanvasEditAssetDetails {
   readonly editScriptId: string
   readonly requirementId: string
@@ -423,6 +433,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly secondaryActionLabel?: string
   readonly secondaryAction?: WorkspaceCanvasNodeAction
   readonly actionDisabled?: boolean
+  readonly visualState?: 'videoBlockMergeSelected' | 'videoBlockMergeCandidate'
   readonly onAction?: WorkspaceCanvasNodeActionHandler
   readonly expanded?: boolean
   readonly expandedLayout?: 'stack' | 'wide'

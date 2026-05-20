@@ -29,6 +29,7 @@ import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTarg
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
+import type { ProjectEditScript } from '@/types/project'
 import { useWorkspaceEpisodeStageData } from '../hooks/useWorkspaceEpisodeStageData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
@@ -50,7 +51,12 @@ import {
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
-import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode, WorkspaceCanvasNodeAction } from './node-canvas-types'
+import type {
+  WorkspaceCanvasFlowEdge,
+  WorkspaceCanvasFlowNode,
+  WorkspaceCanvasNodeAction,
+  WorkspaceCanvasVideoBlockMergeSelection,
+} from './node-canvas-types'
 import {
   getWorkspaceCanvasNodePresentationProfile,
   resolveWorkspaceCanvasMeasuredNodeHeight,
@@ -102,6 +108,19 @@ interface CanvasViewportControlsProps {
 
 function numericStyleDimension(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function editScriptVideoBlockDurationSec(editScript: ProjectEditScript, blockIndex: number): number | null {
+  const block = editScript.videoBlocks[blockIndex]
+  if (!block) return null
+  const durationByShotNumber = new Map(editScript.shots.map((shot) => [shot.shotNumber, shot.durationSec]))
+  let totalDurationSec = 0
+  for (const shotNumber of block.shotNumbers) {
+    const shotDurationSec = durationByShotNumber.get(shotNumber)
+    if (typeof shotDurationSec !== 'number') return null
+    totalDurationSec += shotDurationSec
+  }
+  return totalDurationSec
 }
 
 function CanvasViewportControls({
@@ -170,6 +189,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [videoBlockMergeSelection, setVideoBlockMergeSelection] = useState<WorkspaceCanvasVideoBlockMergeSelection | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -239,6 +259,13 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
         }
       : editScript
   ), [editScript, editScriptGenerationActive])
+  useEffect(() => {
+    setVideoBlockMergeSelection((current) => {
+      if (!current) return current
+      if (!projectedEditScript || current.editScriptId !== projectedEditScript.id) return null
+      return projectedEditScript.videoBlocks[current.blockIndex] ? current : null
+    })
+  }, [projectedEditScript])
   const effectiveEditScriptPending = editScriptPending || (editScriptGenerationActive && !editScript)
   const nodeRunningStatusLabel = useCallback((node: WorkspaceCanvasFlowNode): string => (
     node.data.kind === 'finalTimeline'
@@ -288,6 +315,74 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       : node))
   }, [clearOptimisticRunningNode, nodeRunningStatusLabel])
   const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
+    if (action.type === 'select_video_block_for_merge') {
+      const currentSelection = videoBlockMergeSelection
+      if (!currentSelection || currentSelection.editScriptId !== action.editScriptId) {
+        setVideoBlockMergeSelection({ editScriptId: action.editScriptId, blockIndex: action.blockIndex })
+        return
+      }
+
+      if (currentSelection.blockIndex === action.blockIndex) {
+        setVideoBlockMergeSelection(null)
+        return
+      }
+
+      if (!projectedEditScript || projectedEditScript.id !== action.editScriptId) {
+        setVideoBlockMergeSelection(null)
+        alert(t('errors.videoBlockMergeUnavailable'))
+        return
+      }
+
+      if (Math.abs(currentSelection.blockIndex - action.blockIndex) !== 1) {
+        alert(t('errors.videoBlockMergeAdjacentRequired'))
+        return
+      }
+
+      const selectedDurationSec = editScriptVideoBlockDurationSec(projectedEditScript, currentSelection.blockIndex)
+      const targetDurationSec = editScriptVideoBlockDurationSec(projectedEditScript, action.blockIndex)
+      if (selectedDurationSec === null || targetDurationSec === null) {
+        alert(t('errors.videoBlockMergeUnavailable'))
+        return
+      }
+
+      const totalDurationSec = selectedDurationSec + targetDurationSec
+      if (totalDurationSec > 15) {
+        alert(t('errors.videoBlockMergeDurationExceeded', { duration: Number(totalDurationSec.toFixed(1)), max: 15 }))
+        return
+      }
+
+      const leftBlockIndex = Math.min(currentSelection.blockIndex, action.blockIndex)
+      const rightBlockIndex = Math.max(currentSelection.blockIndex, action.blockIndex)
+      const mergeAction: WorkspaceCanvasNodeAction = {
+        type: 'merge_video_blocks',
+        editScriptId: action.editScriptId,
+        leftBlockIndex,
+        rightBlockIndex,
+      }
+      setVideoBlockMergeSelection(null)
+      if (nodeId) markNodeOptimisticallyRunning(nodeId)
+      try {
+        await runNodeAction(mergeAction)
+      } catch (error: unknown) {
+        if (nodeId) {
+          clearOptimisticRunningNode(nodeId)
+          setSourceNodes((currentNodes) => currentNodes.map((node) => node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  isRunning: false,
+                },
+              }
+            : node))
+        }
+        _ulogWarn('[ProjectWorkspaceCanvas] node action failed', error)
+        throw error
+      }
+      return
+    }
+
+    setVideoBlockMergeSelection(null)
     if (nodeId) markNodeOptimisticallyRunning(nodeId)
     try {
       await runNodeAction(action)
@@ -307,7 +402,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       _ulogWarn('[ProjectWorkspaceCanvas] node action failed', error)
       throw error
     }
-  }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, runNodeAction])
+  }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, projectedEditScript, runNodeAction, t, videoBlockMergeSelection])
   const toggleNodeExpanded = useCallback((nodeId: string) => {
     const anchorNode = reactFlow.getNode(nodeId)
     if (anchorNode) {
@@ -529,6 +624,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     bgmScorePhase: bgmScoreTaskState?.phase,
     bgmScoreErrorMessage: bgmScoreTaskState?.lastError?.message ?? null,
     savedLayouts: savedNodeLayouts,
+    videoBlockMergeSelection,
     translate: t,
     onAction: onNodeAction,
   })
@@ -830,6 +926,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       bgmScorePhase: bgmScoreTaskState?.phase,
       bgmScoreErrorMessage: bgmScoreTaskState?.lastError?.message ?? null,
       savedLayouts: EMPTY_SAVED_NODE_LAYOUTS,
+      videoBlockMergeSelection,
       translate: t,
       onAction: onNodeAction,
     })
@@ -837,7 +934,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [attachNodeUiState, bgmScoreTaskState?.lastError?.message, bgmScoreTaskState?.phase, clips, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalRenderTaskState?.lastError?.message, finalRenderTaskState?.phase, finalVideo, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
+  }, [attachNodeUiState, bgmScoreTaskState?.lastError?.message, bgmScoreTaskState?.phase, clips, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalRenderTaskState?.lastError?.message, finalRenderTaskState?.phase, finalVideo, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoBlockMergeSelection, videoGroups])
 
   const fitView = useCallback(() => {
     void reactFlow.fitView({ padding: 0.14, duration: 180 })

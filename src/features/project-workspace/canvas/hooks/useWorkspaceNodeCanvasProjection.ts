@@ -19,6 +19,7 @@ import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasEditPipelineStepItem,
+  WorkspaceCanvasVideoBlockMergeSelection,
   WorkspaceCanvasImageDetails,
   WorkspaceCanvasNodeAction,
   WorkspaceCanvasNodeActionHandler,
@@ -136,6 +137,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly bgmScorePhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
   readonly bgmScoreErrorMessage?: string | null
   readonly savedLayouts: readonly CanvasNodeLayout[]
+  readonly videoBlockMergeSelection?: WorkspaceCanvasVideoBlockMergeSelection | null
   readonly translate: Translate
   readonly onAction?: WorkspaceCanvasNodeActionHandler
 }
@@ -1062,6 +1064,7 @@ export function buildWorkspaceNodeCanvasProjection({
   bgmScorePhase,
   bgmScoreErrorMessage,
   savedLayouts,
+  videoBlockMergeSelection = null,
   translate,
   onAction,
 }: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
@@ -1723,14 +1726,24 @@ export function buildWorkspaceNodeCanvasProjection({
                 videoModel: sequenceVideoModel || undefined,
               }
             : undefined
-      const nextBlock = editScript.videoBlocks[index + 1] ?? null
-      const mergeAction: WorkspaceCanvasNodeAction | undefined = nextBlock && !isRunning
+      const mergeSelection = videoBlockMergeSelection?.editScriptId === editScript.id
+        ? videoBlockMergeSelection
+        : null
+      const isMergeSelected = mergeSelection?.blockIndex === index
+      const isMergeCandidate = Boolean(mergeSelection && Math.abs(mergeSelection.blockIndex - index) === 1)
+      const mergeSelectionAction: WorkspaceCanvasNodeAction | undefined = editScript.videoBlocks.length > 1 && !isRunning
         ? {
-            type: 'merge_video_blocks',
+            type: 'select_video_block_for_merge',
             editScriptId: editScript.id,
-            leftBlockIndex: index,
-            rightBlockIndex: index + 1,
+            blockIndex: index,
           }
+        : undefined
+      const mergeSelectionActionLabel = mergeSelectionAction
+        ? isMergeSelected
+          ? translate('actions.cancelVideoBlockMerge')
+          : isMergeCandidate
+            ? translate('actions.mergeWithSelectedVideoBlock')
+            : translate('actions.selectVideoBlockToMerge')
         : undefined
       const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
       const nodeId = `video-plan:${editScript.id}:${index + 1}`
@@ -1813,8 +1826,13 @@ export function buildWorkspaceNodeCanvasProjection({
           },
           actionLabel: action ? translate('actions.generateVideo') : undefined,
           action,
-          secondaryActionLabel: mergeAction ? translate('actions.mergeVideoBlocks') : undefined,
-          secondaryAction: mergeAction,
+          secondaryActionLabel: mergeSelectionActionLabel,
+          secondaryAction: mergeSelectionAction,
+          visualState: isMergeSelected
+            ? 'videoBlockMergeSelected'
+            : isMergeCandidate
+              ? 'videoBlockMergeCandidate'
+              : undefined,
           onAction,
         },
       }))
@@ -2013,6 +2031,7 @@ export function useWorkspaceNodeCanvasProjection({
   finalRenderPhase,
   finalRenderErrorMessage,
   savedLayouts,
+  videoBlockMergeSelection,
   translate,
   onAction,
 }: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
@@ -2034,6 +2053,7 @@ export function useWorkspaceNodeCanvasProjection({
       finalRenderPhase,
       finalRenderErrorMessage,
       savedLayouts,
+      videoBlockMergeSelection,
       translate,
       onAction,
     }),
@@ -2048,6 +2068,7 @@ export function useWorkspaceNodeCanvasProjection({
       finalRenderErrorMessage,
       finalVideo,
       videoGroups,
+      videoBlockMergeSelection,
       savedLayouts,
       shots,
       editScreenplay,
