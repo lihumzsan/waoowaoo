@@ -122,6 +122,7 @@ function logMergeDecision(params: {
   | 'overlay_expired'
   | 'overlay_phase_ignored'
   | 'overlay_task_type_mismatch'
+  | 'server_terminal_authoritative'
   | 'server_processing_authoritative'
   runtimePhase: string | null
   runtimeTaskId: string | null
@@ -164,6 +165,12 @@ function logMergeDecision(params: {
     currentPhase: params.currentPhase,
     whitelist: params.whitelist,
   })
+}
+
+function dateMillis(value: string | null | undefined): number | null {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : null
 }
 
 /** 将数组分成固定大小的块 */
@@ -385,6 +392,25 @@ export function useTaskTargetStateMap(
             })
           }
           continue
+        }
+        if (current.phase === 'completed' || current.phase === 'failed') {
+          const runtimeUpdatedAt = dateMillis(runtime.updatedAt)
+          const currentUpdatedAt = dateMillis(current.updatedAt)
+          if (runtimeUpdatedAt !== null && currentUpdatedAt !== null && runtimeUpdatedAt <= currentUpdatedAt) {
+            if (shouldTraceMergeTarget(target.targetType)) {
+              logMergeDecision({
+                projectId,
+                key,
+                decision: 'server_terminal_authoritative',
+                runtimePhase: runtime.phase,
+                runtimeTaskId: runtime.runningTaskId,
+                runtimeTaskType: runtime.runningTaskType,
+                currentPhase: current.phase,
+                whitelist: target.types || [],
+              })
+            }
+            continue
+          }
         }
       }
       map.set(queryKey, {

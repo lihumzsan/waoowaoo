@@ -1485,6 +1485,9 @@ export function buildWorkspaceNodeCanvasProjection({
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
     const previewImageUrl = primarySpaceConsistencyImageUrl(storyboard)
     const hasFailedArtifact = details.artifacts.some((artifact) => artifact.status === 'failed' || artifact.errorMessage)
+    const canGeneratePanelsFromCoordinates = editScript?.status === 'ready'
+      && !hasStoryboardPanels
+      && storyboardCoordinateAnalysisReady(storyboard)
     nodes.push(createNode({
       id: nodeId,
       fallbackX: spaceConsistencyBaseX,
@@ -1521,6 +1524,10 @@ export function buildWorkspaceNodeCanvasProjection({
         actionLabel: editScript?.status === 'ready' ? translate('actions.regenerateSpaceCoordinates') : undefined,
         action: editScript?.status === 'ready'
           ? { type: 'generate_edit_storyboard_coordinates', editScriptId: editScript.id }
+          : undefined,
+        secondaryActionLabel: canGeneratePanelsFromCoordinates ? translate('actions.generateStoryboard') : undefined,
+        secondaryAction: canGeneratePanelsFromCoordinates && editScript
+          ? { type: 'generate_edit_storyboard', editScriptId: editScript.id }
           : undefined,
         onAction,
       },

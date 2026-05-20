@@ -190,7 +190,7 @@ describe('task target state map behavior', () => {
     expect(state?.runningTaskType).toBe('VIDEO_PANEL')
   })
 
-  it('allows active overlay to override completed state even with timestamp skew', async () => {
+  it('keeps server terminal state authoritative when overlay is older than completion', async () => {
     runtime.apiStates = [
       {
         targetType: 'ProjectPanel',
@@ -232,9 +232,9 @@ describe('task target state map behavior', () => {
     ])
 
     const state = result.getState('ProjectPanel', 'panel-3')
-    expect(state?.phase).toBe('queued')
-    expect(state?.runningTaskId).toBe('task-overlay-old')
-    expect(state?.runningTaskType).toBe('VIDEO_PANEL')
+    expect(state?.phase).toBe('completed')
+    expect(state?.runningTaskId).toBe(null)
+    expect(state?.runningTaskType).toBe(null)
   })
 
   it('matches task type whitelist case-insensitively', async () => {

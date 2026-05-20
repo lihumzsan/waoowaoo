@@ -2001,4 +2001,48 @@ describe('workspace node canvas projection', () => {
     expect(spaceNode?.data.isRunning).toBe(false)
     expect(spaceNode?.data.statusLabel).toBe('status.ready')
   })
+
+  it('offers storyboard generation from a ready coordinate node before panels exist', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-grid-ready',
+          clipId: 'clip-grid',
+          panels: [],
+          photographyPlan: JSON.stringify({
+            consistencyMode: 'grid_coordinates',
+            currentStage: 'grid_analyze_ready',
+            sourceSnapshot: {
+              sourceEditScriptId: 'edit-grid-ready',
+            },
+            strategyOutput: {
+              blocks: [],
+            },
+          }),
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+      editScript: createSingleVideoEditScript({
+        id: 'edit-grid-ready',
+        status: 'ready',
+        requirements: [],
+      }),
+    })
+
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-grid-ready')
+    expect(spaceNode?.data.actionLabel).toBe('actions.regenerateSpaceCoordinates')
+    expect(spaceNode?.data.action).toEqual({
+      type: 'generate_edit_storyboard_coordinates',
+      editScriptId: 'edit-grid-ready',
+    })
+    expect(spaceNode?.data.secondaryActionLabel).toBe('actions.generateStoryboard')
+    expect(spaceNode?.data.secondaryAction).toEqual({
+      type: 'generate_edit_storyboard',
+      editScriptId: 'edit-grid-ready',
+    })
+  })
 })
