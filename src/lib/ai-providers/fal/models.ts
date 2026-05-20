@@ -18,6 +18,10 @@ export const FAL_GPT_IMAGE_2_MODEL_ID = OPENAI_IMAGE_2_MODEL_ID
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/fast'
+export const FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o3/standard/image-to-video'
+export const FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o3/pro/image-to-video'
+export const FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/standard/image-to-video'
+export const FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video'
 export const FAL_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const
 
 export const FAL_VIDEO_MODEL_IDS = new Set([
@@ -27,8 +31,10 @@ export const FAL_VIDEO_MODEL_IDS = new Set([
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
   'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
-  'fal-ai/kling-video/v3/standard/image-to-video',
-  'fal-ai/kling-video/v3/pro/image-to-video',
+  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
 ])
 
 export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
@@ -97,7 +103,35 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {
     modelType: 'video',
     provider: 'fal',
-    modelId: 'fal-ai/kling-video/v3/standard/image-to-video',
+    modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+    capabilities: {
+      video: {
+        generationModeOptions: ['normal', 'firstlastframe'],
+        generateAudioOptions: [true, false],
+        durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        firstlastframe: true,
+        supportGenerateAudio: true,
+      },
+    },
+  },
+  {
+    modelType: 'video',
+    provider: 'fal',
+    modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+    capabilities: {
+      video: {
+        generationModeOptions: ['normal', 'firstlastframe'],
+        generateAudioOptions: [true, false],
+        durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        firstlastframe: true,
+        supportGenerateAudio: true,
+      },
+    },
+  },
+  {
+    modelType: 'video',
+    provider: 'fal',
+    modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
         generationModeOptions: ['normal'],
@@ -110,7 +144,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {
     modelType: 'video',
     provider: 'fal',
-    modelId: 'fal-ai/kling-video/v3/pro/image-to-video',
+    modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
         generationModeOptions: ['normal'],
@@ -136,8 +170,10 @@ export const FAL_API_CONFIG_CATALOG_MODELS = [
   { modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video', provider: 'fal' },
   { modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video', provider: 'fal' },
   { modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', name: 'Kling 2.5 Turbo Pro', type: 'video', provider: 'fal' },
-  { modelId: 'fal-ai/kling-video/v3/standard/image-to-video', name: 'Kling 3 Standard', type: 'video', provider: 'fal' },
-  { modelId: 'fal-ai/kling-video/v3/pro/image-to-video', name: 'Kling 3 Pro', type: 'video', provider: 'fal' },
+  { modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling O3 Standard', type: 'video', provider: 'fal' },
+  { modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling O3 Pro', type: 'video', provider: 'fal' },
+  { modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling 3 Standard', type: 'video', provider: 'fal' },
+  { modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling 3 Pro', type: 'video', provider: 'fal' },
   { modelId: 'fal-ai/index-tts-2/text-to-speech', name: 'IndexTTS 2', type: 'audio', provider: 'fal' },
   { modelId: 'fal-ai/kling-video/lipsync/audio-to-video', name: 'Kling Lip Sync', type: 'lipsync', provider: 'fal' },
 ] as const
@@ -152,6 +188,12 @@ function falDurationPricing(tiers: ReadonlyArray<readonly [duration: number, amo
     tiers: tiers.map(([duration, amount]) => ({ when: { duration }, amount })),
   }
 }
+
+function falDurationRatePricing(input: { durations: readonly number[]; amountPerSecond: number }) {
+  return falDurationPricing(input.durations.map((duration) => [duration, Number((duration * input.amountPerSecond).toFixed(4))] as const))
+}
+
+const FAL_KLING_EXTENDED_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 
 export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'image', provider: 'fal', modelId: 'banana', pricing: falFlatPricing(0.9648) },
@@ -212,13 +254,25 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
   {
     apiType: 'video',
     provider: 'fal',
-    modelId: 'fal-ai/kling-video/v3/standard/image-to-video',
+    modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+    pricing: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.224 }),
+  },
+  {
+    apiType: 'video',
+    provider: 'fal',
+    modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+    pricing: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.35 }),
+  },
+  {
+    apiType: 'video',
+    provider: 'fal',
+    modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
     pricing: falDurationPricing([[3, 0.504], [4, 0.672], [5, 0.84], [6, 1.008], [7, 1.176], [8, 1.344], [9, 1.512], [10, 1.68], [11, 1.848], [12, 2.016], [13, 2.184], [14, 2.352], [15, 2.52]]),
   },
   {
     apiType: 'video',
     provider: 'fal',
-    modelId: 'fal-ai/kling-video/v3/pro/image-to-video',
+    modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
     pricing: falDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
   },
   { apiType: 'voice', provider: 'fal', modelId: 'fal-ai/index-tts-2/text-to-speech', pricing: falFlatPricing(0.0144) },
@@ -292,6 +346,30 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
         validators: {
           duration: integerRangeValidator({ min: 1 }),
           aspectRatio: nonEmptyStringValidator(),
+          resolution: nonEmptyStringValidator(),
+        },
+        objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
+      })
+    }
+    if (modelId === FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID || modelId === FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID) {
+      return buildMediaOptionSchema('video', {
+        ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
+        allowedKeys: ['generationMode', 'referenceImages'],
+        validators: {
+          duration: integerRangeValidator({ min: 3, max: 15 }),
+          aspectRatio: enumValidator(['16:9', '9:16', '1:1']),
+          resolution: nonEmptyStringValidator(),
+        },
+        objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
+      })
+    }
+    if (modelId === FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID || modelId === FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID) {
+      return buildMediaOptionSchema('video', {
+        ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
+        allowedKeys: ['referenceImages'],
+        validators: {
+          duration: integerRangeValidator({ min: 3, max: 15 }),
+          aspectRatio: enumValidator(['16:9', '9:16', '1:1']),
           resolution: nonEmptyStringValidator(),
         },
         objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],

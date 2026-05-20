@@ -517,6 +517,90 @@ describe('worker video processor behavior', () => {
     }))
   })
 
+  it('VIDEO_GROUP asset_reference: allows Fal Kling v3 multi-reference assets', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-kling-v3.mp4')
+
+    const result = await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-kling-v3-1',
+      payload: {
+        sourceMode: 'asset_reference',
+        videoModel: 'fal::fal-ai/kling-video/v3/pro/image-to-video',
+        shotNumbers: [1, 2],
+        prompt: 'kling v3 asset reference block prompt',
+        referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
+        generationOptions: {},
+      },
+    }))
+
+    expect(result).toEqual(expect.objectContaining({
+      groupId: 'group-kling-v3-1',
+      videoUrl: '/m/video-public-1',
+      videoMediaId: 'video-media-1',
+      durationSec: 5,
+      shotNumbers: [1, 2],
+      sourceMode: 'asset_reference',
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      modelId: 'fal::fal-ai/kling-video/v3/pro/image-to-video',
+      referenceImages: [
+        { url: 'https://example.com/hero.png', role: 'reference', order: 1, source: 'asset' },
+        { url: 'https://example.com/location.png', role: 'reference', order: 2, source: 'asset' },
+      ],
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('kling v3 asset reference block prompt'),
+        duration: 5,
+        aspectRatio: '9:16',
+      }),
+    }))
+  })
+
+  it('VIDEO_GROUP asset_reference: allows Fal Kling O3 two-frame reference assets', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-kling-o3.mp4')
+
+    const result = await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-kling-o3-1',
+      payload: {
+        sourceMode: 'asset_reference',
+        videoModel: 'fal::fal-ai/kling-video/o3/standard/image-to-video',
+        shotNumbers: [1, 2],
+        prompt: 'kling o3 two-frame block prompt',
+        referenceImageUrls: ['https://example.com/start.png', 'https://example.com/end.png'],
+        generationOptions: {},
+      },
+    }))
+
+    expect(result).toEqual(expect.objectContaining({
+      groupId: 'group-kling-o3-1',
+      videoUrl: '/m/video-public-1',
+      videoMediaId: 'video-media-1',
+      durationSec: 5,
+      shotNumbers: [1, 2],
+      sourceMode: 'asset_reference',
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      modelId: 'fal::fal-ai/kling-video/o3/standard/image-to-video',
+      referenceImages: [
+        { url: 'https://example.com/start.png', role: 'reference', order: 1, source: 'asset' },
+        { url: 'https://example.com/end.png', role: 'reference', order: 2, source: 'asset' },
+      ],
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('kling o3 two-frame block prompt'),
+        duration: 5,
+        aspectRatio: '9:16',
+      }),
+    }))
+  })
+
   it('VIDEO_GROUP: fails explicitly when the edit-first video block has no stored prompt', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()

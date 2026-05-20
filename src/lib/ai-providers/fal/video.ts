@@ -5,6 +5,10 @@ import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
   FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
 } from '@/lib/ai-providers/fal/models'
@@ -49,7 +53,23 @@ type FalKlingV3VideoPayload = {
   prompt: string
   aspect_ratio?: string
   duration?: string
+  end_image_url?: string
   generate_audio: false
+  elements?: FalKlingV3ImageElement[]
+}
+
+type FalKlingV3ImageElement = {
+  frontal_image_url: string
+  reference_image_urls?: string[]
+}
+
+type FalKlingO3VideoPayload = {
+  image_url: string
+  prompt: string
+  aspect_ratio?: string
+  duration?: string
+  end_image_url?: string
+  generate_audio?: boolean
 }
 
 type FalHappyHorseVideoPayload = {
@@ -100,6 +120,7 @@ type FalVideoPayload =
   | FalVeo31ReferenceVideoPayload
   | FalKlingV25VideoPayload
   | FalKlingV3VideoPayload
+  | FalKlingO3VideoPayload
   | FalHappyHorseVideoPayload
   | FalHappyHorseReferenceVideoPayload
   | FalSeedance2ImageVideoPayload
@@ -113,8 +134,10 @@ const FAL_VIDEO_ENDPOINTS: Record<string, string> = {
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 'bytedance/seedance-2.0/image-to-video',
   [FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID]: 'bytedance/seedance-2.0/fast/image-to-video',
   'fal-ai/kling-video/v2.5-turbo/pro/image-to-video': 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
-  'fal-ai/kling-video/v3/standard/image-to-video': 'fal-ai/kling-video/v3/standard/image-to-video',
-  'fal-ai/kling-video/v3/pro/image-to-video': 'fal-ai/kling-video/v3/pro/image-to-video',
+  [FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID]: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  [FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID]: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  [FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID]: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  [FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID]: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
 }
 
 const FAL_HAPPY_HORSE_RESOLUTIONS = new Set(['720p', '1080p'])
@@ -291,6 +314,54 @@ function assertAllowedFalVideoOptions(options: FalVideoOptions) {
   }
 }
 
+function collectUniqueReferenceImageUrls(input: { imageUrl: string; options: FalVideoOptions }): string[] {
+  const referenceImages = Array.isArray(input.options.referenceImages)
+    ? input.options.referenceImages.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+    : []
+  const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
+  return Array.from(new Set([
+    ...(inputImageUrl ? [inputImageUrl] : []),
+    ...referenceImages,
+  ]))
+}
+
+function buildKlingV3Elements(input: { imageUrl: string; options: FalVideoOptions }): FalKlingV3ImageElement[] | undefined {
+  const uniqueReferences = collectUniqueReferenceImageUrls(input)
+  const elementReferences = uniqueReferences.slice(1)
+  if (elementReferences.length === 0) return undefined
+  return elementReferences.map((frontalImageUrl) => ({
+    frontal_image_url: frontalImageUrl,
+  }))
+}
+
+function buildKlingO3Payload(input: {
+  imageUrl: string
+  options: FalVideoOptions
+  aspectRatio?: string
+  duration?: number
+}): FalKlingO3VideoPayload {
+  const uniqueReferences = collectUniqueReferenceImageUrls(input)
+  if (uniqueReferences.length > 2) {
+    throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: referenceImages>2')
+  }
+  const startImageUrl = uniqueReferences[0] ?? input.imageUrl
+  if (!startImageUrl) {
+    throw new Error('FAL_VIDEO_REFERENCE_IMAGE_REQUIRED')
+  }
+  if (uniqueReferences.length > 1 && input.options.lastFrameImageUrl) {
+    throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: referenceImages_with_lastFrameImageUrl')
+  }
+  const endImageUrl = input.options.lastFrameImageUrl ?? uniqueReferences[1]
+  return {
+    image_url: startImageUrl,
+    prompt: input.options.prompt || '',
+    ...(input.aspectRatio ? { aspect_ratio: input.aspectRatio } : {}),
+    ...(typeof input.duration === 'number' ? { duration: String(input.duration) } : {}),
+    ...(endImageUrl ? { end_image_url: endImageUrl } : {}),
+    ...(typeof input.options.generateAudio === 'boolean' ? { generate_audio: input.options.generateAudio } : {}),
+  }
+}
+
 export async function executeFalVideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
 
@@ -390,14 +461,28 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
         cfg_scale: 0.5,
       }
       break
-    case 'fal-ai/kling-video/v3/standard/image-to-video':
-    case 'fal-ai/kling-video/v3/pro/image-to-video':
-      payload = {
-        start_image_url: input.imageUrl,
-        prompt: input.options?.prompt || '',
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-        ...(typeof duration === 'number' ? { duration: String(duration) } : {}),
-        generate_audio: false,
+    case FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID:
+    case FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID:
+      payload = buildKlingO3Payload({
+        imageUrl: input.imageUrl,
+        options,
+        aspectRatio,
+        duration,
+      })
+      break
+    case FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID:
+    case FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID:
+      {
+        const elements = buildKlingV3Elements({ imageUrl: input.imageUrl, options })
+        payload = {
+          start_image_url: input.imageUrl,
+          prompt: input.options?.prompt || '',
+          ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+          ...(typeof duration === 'number' ? { duration: String(duration) } : {}),
+          ...(options.lastFrameImageUrl ? { end_image_url: options.lastFrameImageUrl } : {}),
+          ...(elements ? { elements } : {}),
+          generate_audio: false,
+        }
       }
       break
     default:

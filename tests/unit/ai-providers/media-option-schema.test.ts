@@ -381,6 +381,67 @@ describe('media adapter video option schema', () => {
     })).not.toThrow()
   })
 
+  it('allows Fal Kling v3 reference images before provider elements mapping', () => {
+    const descriptor = falAdapter.video?.describe(mediaSelection({
+      provider: 'fal',
+      modelId: 'fal-ai/kling-video/v3/pro/image-to-video',
+      modelKey: 'fal::fal-ai/kling-video/v3/pro/image-to-video',
+    }))
+    expect(descriptor).toBeDefined()
+
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: {
+        prompt: 'use @Element1 and @Element2 as visual references',
+        duration: 6,
+        aspectRatio: '16:9',
+        referenceImages: ['https://example.com/hero.png', 'https://example.com/location.png'],
+      },
+      context: 'fal-kling-v3',
+    })).not.toThrow()
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: { duration: 2, aspectRatio: '16:9' },
+      context: 'fal-kling-v3',
+    })).toThrow('AI_OPTION_INVALID:fal-kling-v3:duration:min=3')
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: { duration: 6, aspectRatio: '4:3' },
+      context: 'fal-kling-v3',
+    })).toThrow('AI_OPTION_INVALID:fal-kling-v3:aspectRatio:unsupported_value=4:3')
+  })
+
+  it('validates Fal Kling O3 first-last-frame and two-frame reference options', () => {
+    const descriptor = falAdapter.video?.describe(mediaSelection({
+      provider: 'fal',
+      modelId: 'fal-ai/kling-video/o3/standard/image-to-video',
+      modelKey: 'fal::fal-ai/kling-video/o3/standard/image-to-video',
+    }))
+    expect(descriptor).toBeDefined()
+
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: {
+        prompt: 'animate the transition',
+        duration: 10,
+        aspectRatio: '16:9',
+        generateAudio: true,
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'https://example.com/end.png',
+      },
+      context: 'fal-kling-o3',
+    })).not.toThrow()
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: {
+        duration: 5,
+        aspectRatio: '16:9',
+        referenceImages: ['https://example.com/start.png', 'https://example.com/end.png'],
+      },
+      context: 'fal-kling-o3',
+    })).not.toThrow()
+  })
+
   it('rejects Vidu invalid duration/resolution combinations from descriptor schema', () => {
     const descriptor = viduAdapter.video?.describe(mediaSelection({
       provider: 'vidu',
