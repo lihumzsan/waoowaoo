@@ -41,7 +41,7 @@ describe('final render audio mix', () => {
     expect(filterComplexIndex).toBeGreaterThanOrEqual(0)
     const filterGraph = args[filterComplexIndex + 1]
     expect(filterGraph).toContain('[main_norm]asplit=2[main_mix][main_sidechain]')
-    expect(filterGraph).toContain('[bgm_norm][main_sidechain]sidechaincompress=threshold=0.025')
+    expect(filterGraph).toContain('[bgm_norm][main_sidechain]sidechaincompress=threshold=0.06:ratio=4:attack=80:release=450')
     expect(filterGraph).toContain('[main_mix][ducked_bgm]amix=inputs=2')
     expect(filterGraph).not.toContain('[bgm][main]sidechaincompress')
     expect(filterGraph).not.toContain('[main][ducked_bgm]amix')

@@ -229,7 +229,7 @@ describe('final video render worker', () => {
 
     await expect(handleFinalVideoRenderTask(buildJob({
       episodeId: 'episode-1',
-    }))).rejects.toThrow('FINAL_VIDEO_RENDER_MISSING_VIDEO:panel-1')
+    }))).rejects.toThrow('AI 剪辑缺少可用视频：单镜头视频（镜头 1）。请先生成这些视频后再剪辑。')
 
     expect(generateMusicMock).not.toHaveBeenCalled()
     expect(prismaMock.videoEditorProject.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -243,6 +243,42 @@ describe('final video render worker', () => {
     expect(reportTaskProgressMock).toHaveBeenCalledWith(expect.anything(), 10, {
       stage: 'final_render_prepare',
     })
+  })
+
+  it('uses a stored group video even when a later generation attempt left the group failed', async () => {
+    prismaMock.projectVideoGroup.findMany.mockResolvedValue([
+      {
+        id: 'group-1',
+        gridMode: '2x2',
+        shotNumbers: [1],
+        durationSec: 3,
+        status: 'failed',
+        prompt: 'group video prompt',
+        videoUrl: '/m/group-video',
+        videoMedia: {
+          storageKey: 'video/group-source.mp4',
+          url: '/m/group-video',
+        },
+      },
+    ])
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    const result = await handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))
+
+    expect(result).toMatchObject({
+      videoMediaId: 'media-final',
+      outputUrl: '/m/final-video',
+      storageKey: 'final-video/asset.mp4',
+    })
+    expect(mediaServiceMock.resolveStorageKeyFromMediaValue).toHaveBeenCalledWith(expect.objectContaining({
+      storageKey: 'video/group-source.mp4',
+    }))
+    expect(prismaMock.videoEditorProject.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { episodeId: 'episode-1' },
+      update: expect.objectContaining({ renderStatus: 'completed', renderTaskId: 'task-1' }),
+    }))
   })
 
   it('fails explicitly when completed BGM is missing before final render work starts', async () => {
@@ -298,7 +334,7 @@ describe('final video render worker', () => {
     expect(ffmpegCalls.some((args) => args.includes('aformat=sample_fmts=fltp:channel_layouts=stereo'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('concat=n=1:v=0:a=1'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-16.000'))).toBe(true)
-    expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-12.000'))).toBe(true)
+    expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-8.000'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-24.000'))).toBe(false)
     expect(ffmpegCalls.some((args) => args.includes('volume=1.000'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('sidechaincompress='))).toBe(true)
@@ -320,7 +356,7 @@ describe('final video render worker', () => {
       hasSourceAudio: true,
       targets: {
         mainIntegratedLufs: -16,
-        bgmIntegratedLufs: -12,
+        bgmIntegratedLufs: -8,
       },
     })
   })

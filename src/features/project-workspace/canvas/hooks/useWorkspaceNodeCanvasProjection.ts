@@ -1681,12 +1681,13 @@ export function buildWorkspaceNodeCanvasProjection({
         : singlePanel ? panelVideoAspectRatio(singlePanel) : null
       const isGroupRunning = matchingGroup?.status === 'queued' || matchingGroup?.status === 'processing'
       const isRunning = isGroupRunning || (block.kind === 'single' && singlePanel?.videoTaskRunning === true)
+      const groupFailedWithoutOutput = matchingGroup?.status === 'failed' && !outputUrl
       const sequenceVideoModel = typeof defaultSequenceVideoModel === 'string' ? defaultSequenceVideoModel.trim() : ''
       const assetReferenceVideoModel = sequenceVideoModel
       const sequenceModelMissing = !sequenceVideoModel
       const runtimeErrorMessage = sequenceModelMissing
         ? translate('errors.sequenceVideoModelMissing')
-        : matchingGroup?.status === 'failed'
+        : groupFailedWithoutOutput
           ? matchingGroup.errorMessage || translate('status.failed')
           : block.kind === 'single'
             ? singlePanel?.videoErrorMessage ?? null

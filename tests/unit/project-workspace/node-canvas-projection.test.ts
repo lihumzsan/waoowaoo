@@ -1321,10 +1321,10 @@ describe('workspace node canvas projection', () => {
           shotNumbers: [1, 2],
           durationSec: 9,
           prompt: 'Combined continuous prompt.',
-          status: 'completed',
+          status: 'failed',
           taskId: null,
-          errorCode: null,
-          errorMessage: null,
+          errorCode: 'SENSITIVE_CONTENT',
+          errorMessage: 'previous generation attempt failed',
           referenceImageUrl: null,
           referenceImageMedia: null,
           videoUrl: 'https://example.com/group.mp4',
@@ -1337,6 +1337,7 @@ describe('workspace node canvas projection', () => {
     expect(videoPlanNode?.data.kind).toBe('videoPlan')
     expect(videoPlanNode?.data.width).toBe(420)
     expect(videoPlanNode?.data.height).toBeGreaterThan(560)
+    expect(videoPlanNode?.data.statusLabel).toBe('status.ready')
     expect(videoPlanNode?.data.action).toEqual({
       type: 'generate_video_group',
       videoModel: 'ark::sequence-project-model',
@@ -1350,6 +1351,7 @@ describe('workspace node canvas projection', () => {
       prompt: 'Edit-first combined prompt.',
       outputUrl: 'https://example.com/group.mp4',
       validationMessage: null,
+      errorMessage: null,
       sourceImages: [
         { shotNumber: 1, imageUrl: 'https://example.com/shot-1.png', aspectRatio: 1920 / 1080 },
         { shotNumber: 2, imageUrl: 'https://example.com/shot-2.png', aspectRatio: 1920 / 1080 },

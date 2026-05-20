@@ -152,7 +152,6 @@ function resolvePanelVideoSource(panel: FinalRenderPanelInput): string | FinalRe
 }
 
 function resolveVideoGroupSource(group: FinalRenderVideoGroupInput): string | FinalRenderMediaRefInput | null {
-  if (group.status !== 'completed') return null
   if (isFinalRenderMediaRef(group.videoMedia)) return group.videoMedia
   if (normalizeString(group.videoUrl)) return normalizeString(group.videoUrl)
   return null

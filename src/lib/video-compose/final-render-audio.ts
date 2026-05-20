@@ -35,10 +35,15 @@ export const MAIN_AUDIO_TARGET: AudioLoudnessTarget = {
 }
 
 export const BGM_AUDIO_TARGET: AudioLoudnessTarget = {
-  integratedLufs: -12,
+  integratedLufs: -8,
   truePeakDb: -1.5,
   loudnessRange: 11,
 }
+
+const BGM_DUCKING_THRESHOLD = 0.06
+const BGM_DUCKING_RATIO = 4
+const BGM_DUCKING_ATTACK_MS = 80
+const BGM_DUCKING_RELEASE_MS = 450
 
 async function hasAudioStream(runCommand: FinalRenderAudioCommandRunner, filePath: string): Promise<boolean> {
   const result = await runCommand('ffprobe', [
@@ -273,7 +278,7 @@ export async function muxFinalRenderAudio(input: {
       `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[main_norm]`,
       `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
       '[main_norm]asplit=2[main_mix][main_sidechain]',
-      '[bgm_norm][main_sidechain]sidechaincompress=threshold=0.025:ratio=8:attack=80:release=600[ducked_bgm]',
+      `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
       '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
     ].join(';'),
     '-map',

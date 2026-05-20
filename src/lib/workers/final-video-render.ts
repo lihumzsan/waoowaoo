@@ -20,6 +20,10 @@ import {
   type FinalRenderEditScriptInput,
 } from '@/lib/video-compose/final-render-plan'
 import {
+  assertFinalRenderClipsHaveSources,
+  normalizeFinalRenderErrorLocale,
+} from '@/lib/video-compose/final-render-errors'
+import {
   BGM_AUDIO_TARGET,
   MAIN_AUDIO_TARGET,
   concatFinalRenderAudioClips,
@@ -282,13 +286,10 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
 
     const clips = buildFinalRenderClips({ panels, videoGroups, editScript })
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
-    const missingClip = clips.find((clip) =>
-      typeof clip.source === 'string'
-        ? !clip.source.trim()
-        : !readString(clip.source.url) && !readString(clip.source.storageKey))
-    if (missingClip) {
-      throw new Error(`FINAL_VIDEO_RENDER_MISSING_VIDEO:${missingClip.groupId ?? missingClip.panelId}`)
-    }
+    assertFinalRenderClipsHaveSources({
+      clips,
+      locale: normalizeFinalRenderErrorLocale(job.data.locale),
+    })
 
     const dimensions = resolveFinalRenderDimensions(project.videoRatio)
     const normalizedPaths: string[] = []
