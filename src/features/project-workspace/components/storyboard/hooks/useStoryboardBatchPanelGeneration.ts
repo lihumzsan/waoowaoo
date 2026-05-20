@@ -22,6 +22,23 @@ interface UseStoryboardBatchPanelGenerationProps {
   setIsEpisodeBatchSubmitting: (value: boolean) => void
 }
 
+export const STORYBOARD_PANEL_BATCH_SUBMIT_LIMIT = 20
+
+export function createStoryboardPanelGenerationBatches(
+  panelIds: readonly string[],
+  batchSize: number = STORYBOARD_PANEL_BATCH_SUBMIT_LIMIT,
+): string[][] {
+  if (!Number.isInteger(batchSize) || batchSize <= 0) {
+    throw new Error(`STORYBOARD_PANEL_BATCH_SIZE_INVALID:${batchSize}`)
+  }
+
+  const batches: string[][] = []
+  for (let index = 0; index < panelIds.length; index += batchSize) {
+    batches.push(panelIds.slice(index, index + batchSize))
+  }
+  return batches
+}
+
 export function useStoryboardBatchPanelGeneration({
   sortedStoryboards,
   submittingPanelImageIds,
@@ -72,12 +89,13 @@ export function useStoryboardBatchPanelGeneration({
 
       _ulogInfo(`[批量生成] 开始生成 ${panelsToGenerate.length} 个分镜图片`)
 
-      const concurrencyLimit = 10
       const results: Array<PromiseSettledResult<unknown>> = []
-      for (let index = 0; index < panelsToGenerate.length; index += concurrencyLimit) {
-        const batch = panelsToGenerate.slice(index, index + concurrencyLimit)
-        const currentBatch = Math.floor(index / concurrencyLimit) + 1
-        const totalBatches = Math.ceil(panelsToGenerate.length / concurrencyLimit)
+      const batches = createStoryboardPanelGenerationBatches(panelsToGenerate)
+      let submittedCount = 0
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batch = batches[batchIndex]
+        const currentBatch = batchIndex + 1
+        const totalBatches = batches.length
         _ulogInfo(`[批量生成] 处理第 ${currentBatch}/${totalBatches} 批 (${batch.length} 个)`)
 
         const batchResults = await Promise.allSettled(
@@ -85,7 +103,8 @@ export function useStoryboardBatchPanelGeneration({
         )
         results.push(...batchResults)
 
-        const completed = Math.min(index + concurrencyLimit, panelsToGenerate.length)
+        submittedCount += batch.length
+        const completed = Math.min(submittedCount, panelsToGenerate.length)
         _ulogInfo(`[批量生成] 已完成 ${completed}/${panelsToGenerate.length}`)
       }
 
