@@ -98,6 +98,11 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'merge_video_blocks') {
+      await runtime.onMergeVideoBlocks(action.editScriptId, action.leftBlockIndex, action.rightBlockIndex)
+      return
+    }
+
     if (action.type === 'update_edit_asset_requirement_description') {
       await runtime.onUpdateEditAssetRequirementDescription(action.editScriptId, action.requirementId, action.description)
       return

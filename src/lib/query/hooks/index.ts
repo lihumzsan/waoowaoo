@@ -229,6 +229,7 @@ export {
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
     useGenerateProjectEditScriptStoryboardCoordinates,
+    useMergeProjectEditScriptVideoBlocks,
     useUpdateProjectEditScriptAssetRequirementDescription,
     useUpdateProjectEditScriptVideoBlockPrompt,
 } from './useProjectEditScript'

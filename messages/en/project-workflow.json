@@ -247,6 +247,7 @@
         "generateImage": "Generate Image",
         "regenerateImage": "Regenerate",
         "generateVideo": "Generate Video",
+        "mergeVideoBlocks": "Merge Segments",
         "generateAllVideos": "Batch Generate",
         "generateBgmScore": "Generate BGM",
         "generatingBgm": "Generating BGM",

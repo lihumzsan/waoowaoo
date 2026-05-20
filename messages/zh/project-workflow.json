@@ -247,6 +247,7 @@
         "generateImage": "生成图片",
         "regenerateImage": "重新生成",
         "generateVideo": "生成视频",
+        "mergeVideoBlocks": "融合片段",
         "generateAllVideos": "批量生成",
         "generateBgmScore": "生成 BGM",
         "generatingBgm": "BGM 生成中",

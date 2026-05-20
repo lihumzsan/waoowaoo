@@ -1723,6 +1723,15 @@ export function buildWorkspaceNodeCanvasProjection({
                 videoModel: sequenceVideoModel || undefined,
               }
             : undefined
+      const nextBlock = editScript.videoBlocks[index + 1] ?? null
+      const mergeAction: WorkspaceCanvasNodeAction | undefined = nextBlock && !isRunning
+        ? {
+            type: 'merge_video_blocks',
+            editScriptId: editScript.id,
+            leftBlockIndex: index,
+            rightBlockIndex: index + 1,
+          }
+        : undefined
       const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
       const nodeId = `video-plan:${editScript.id}:${index + 1}`
       const validationMessage = validationKey ? translate(`errors.${validationKey}`) : null
@@ -1804,6 +1813,8 @@ export function buildWorkspaceNodeCanvasProjection({
           },
           actionLabel: action ? translate('actions.generateVideo') : undefined,
           action,
+          secondaryActionLabel: mergeAction ? translate('actions.mergeVideoBlocks') : undefined,
+          secondaryAction: mergeAction,
           onAction,
         },
       }))

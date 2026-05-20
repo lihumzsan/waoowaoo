@@ -261,6 +261,20 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'style_context',
     ],
   },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_MERGE]: {
+    pathStem: 'edit-script/video-block-merge',
+    variableKeys: [
+      'user_request',
+      'screenplay_text',
+      'merged_video_block_json',
+      'source_video_blocks_json',
+      'merged_block_shots_json',
+      'asset_context_json',
+      'adjacent_blocks_json',
+      'aspect_ratio',
+      'style_context',
+    ],
+  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL]: {
     pathStem: 'edit-script/storyboard-panel',
     variableKeys: [

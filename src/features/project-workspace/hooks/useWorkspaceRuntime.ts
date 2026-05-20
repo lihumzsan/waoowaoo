@@ -65,6 +65,7 @@ interface UseWorkspaceRuntimeParams {
     field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
   handleUpdateVideoPlanPrompt: (editScriptId: string, blockIndex: number, prompt: string) => Promise<void>
+  handleMergeVideoBlocks: (editScriptId: string, leftBlockIndex: number, rightBlockIndex: number) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
 }
@@ -104,6 +105,7 @@ export function useWorkspaceRuntime({
   handleGenerateEditStoryboardCoordinates,
   handleUpdateVideoPrompt,
   handleUpdateVideoPlanPrompt,
+  handleMergeVideoBlocks,
   handleUpdateEditAssetRequirementDescription,
   handleUpdatePanelVideoModel,
 }: UseWorkspaceRuntimeParams) {
@@ -156,6 +158,7 @@ export function useWorkspaceRuntime({
     onGenerateEditStoryboardCoordinates: handleGenerateEditStoryboardCoordinates,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateVideoPlanPrompt: handleUpdateVideoPlanPrompt,
+    onMergeVideoBlocks: handleMergeVideoBlocks,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
@@ -180,6 +183,7 @@ export function useWorkspaceRuntime({
     handleUpdateClip,
     handleUpdateConfig,
     handleUpdateEpisode,
+    handleMergeVideoBlocks,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,
     handleUpdateVideoPlanPrompt,

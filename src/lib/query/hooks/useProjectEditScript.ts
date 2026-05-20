@@ -54,6 +54,13 @@ interface UpdateEditScriptVideoBlockPromptInput {
   prompt: string
 }
 
+interface MergeEditScriptVideoBlocksInput {
+  episodeId: string
+  editScriptId: string
+  leftBlockIndex: number
+  rightBlockIndex: number
+}
+
 interface UpdateEditAssetRequirementDescriptionInput {
   episodeId: string
   editScriptId: string
@@ -253,6 +260,36 @@ export function useUpdateProjectEditScriptVideoBlockPrompt(projectId: string | n
       })
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to update video arrangement prompt')
+      }
+      const data = await response.json() as EditScriptResponse
+      if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')
+      return data.editScript
+    },
+    onSuccess: async (editScript) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editScript.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editScript.episodeId) }),
+      ])
+    },
+  })
+}
+
+export function useMergeProjectEditScriptVideoBlocks(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: MergeEditScriptVideoBlocksInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'mergeVideoBlocks',
+          ...input,
+        }),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to merge video segments')
       }
       const data = await response.json() as EditScriptResponse
       if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')

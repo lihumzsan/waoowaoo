@@ -8,9 +8,11 @@ import {
   updateProjectEditScriptAssetRequirementDescription,
   updateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/edit-script/service'
+import { mergeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-merge'
 import {
   createEditScriptRequestSchema,
   getEditScriptRequestSchema,
+  mergeEditScriptVideoBlocksRequestSchema,
   updateEditScriptAssetRequirementDescriptionRequestSchema,
   updateEditScriptVideoBlockPromptRequestSchema,
 } from '@/lib/edit-script/types'
@@ -77,9 +79,24 @@ export const PATCH = apiHandler(async (
   const body = await request.json().catch(() => ({})) as unknown
   const parsed = updateEditScriptVideoBlockPromptRequestSchema
     .or(updateEditScriptAssetRequirementDescriptionRequestSchema)
+    .or(mergeEditScriptVideoBlocksRequestSchema)
     .safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
+  }
+
+  if ('operation' in parsed.data) {
+    const editScript = await mergeProjectEditScriptVideoBlocks({
+      projectId,
+      episodeId: parsed.data.episodeId,
+      editScriptId: parsed.data.editScriptId,
+      leftBlockIndex: parsed.data.leftBlockIndex,
+      rightBlockIndex: parsed.data.rightBlockIndex,
+      userId: authResult.session.user.id,
+      locale: resolveRequiredTaskLocale(request, body),
+    })
+
+    return NextResponse.json({ editScript })
   }
 
   if ('requirementId' in parsed.data) {

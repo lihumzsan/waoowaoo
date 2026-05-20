@@ -88,6 +88,12 @@ export type WorkspaceCanvasNodeAction =
       readonly prompt: string
     }
   | {
+      readonly type: 'merge_video_blocks'
+      readonly editScriptId: string
+      readonly leftBlockIndex: number
+      readonly rightBlockIndex: number
+    }
+  | {
       readonly type: 'update_edit_asset_requirement_description'
       readonly editScriptId: string
       readonly requirementId: string

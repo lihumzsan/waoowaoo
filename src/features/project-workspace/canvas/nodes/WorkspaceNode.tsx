@@ -1605,6 +1605,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const canToggleDetails = nodeCanToggleDetails(data.kind)
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
+  const secondaryActionIcon: AppIconName = secondaryAction?.type === 'merge_video_blocks' ? 'link' : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
   const showHeaderAction = Boolean(action && data.actionLabel && (data.kind === 'spaceConsistency' || data.kind === 'editRequiredAsset'))
@@ -1731,7 +1732,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                         if (!isRunning) data.onAction?.(secondaryAction, data.nodeId)
                       }}
                     >
-                      <AppIcon name="externalLink" className="h-3.5 w-3.5" />
+                      <AppIcon name={secondaryActionIcon} className="h-3.5 w-3.5" />
                       {data.secondaryActionLabel}
                     </button>
                   ) : null}
