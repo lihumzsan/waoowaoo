@@ -21,7 +21,6 @@ import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { supportsAssetReferenceMultiReferenceVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { handleFinalVideoRenderTask } from './final-video-render'
-import { composeAndStoreGridReferenceImage } from '@/lib/video-groups/grid-image'
 import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import type { VideoGridMode, VideoGroupShot } from '@/lib/video-groups/types'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
@@ -586,20 +585,11 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     }
     return panel
   })
-
-  const referenceMedia = await composeAndStoreGridReferenceImage({
-    gridMode,
-    targetId: groupId,
-    cells: orderedPanels.map((panel) => ({
-      imageUrl: panel.imageUrl,
-      storageKey: panel.imageMedia?.storageKey ?? null,
-    })),
-  })
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
     data: {
-      referenceImageUrl: referenceMedia.url,
-      referenceImageMediaId: referenceMedia.id,
+      referenceImageUrl: null,
+      referenceImageMediaId: null,
       durationSec: totalVideoGroupDuration(shots),
     },
   })
@@ -615,14 +605,24 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   })
 
   await reportTaskProgress(job, 38, { stage: 'video_group_generate', groupId })
-  const sourceImageBase64 = await normalizeToBase64ForGeneration(referenceMedia.storageKey ?? referenceMedia.url)
+  const referenceImages = await Promise.all(orderedPanels.map(async (panel, index) => {
+    const sourceImage = panel.imageMedia?.storageKey
+      ?? (panel.imageUrl ? toSignedUrlIfCos(panel.imageUrl, 3600) : null)
+    if (!sourceImage) throw new Error(`VIDEO_GROUP_PANEL_IMAGE_INVALID:${panel.panelNumber ?? index + 1}`)
+    return {
+      url: await normalizeToBase64ForGeneration(sourceImage),
+      role: 'reference' as const,
+      order: index + 1,
+      source: 'storyboard' as const,
+    }
+  }))
   const requestedGenerateAudio = typeof generationOptions.generateAudio === 'boolean'
     ? generationOptions.generateAudio
     : undefined
   const generatedVideo = await resolveVideoSourceFromGeneration(job, {
     userId: job.data.userId,
     modelId,
-    referenceImages: [{ url: sourceImageBase64, role: 'reference', order: 1, source: 'generated' }],
+    referenceImages,
     options: {
       prompt,
       ...(project.videoRatio ? { aspectRatio: project.videoRatio } : {}),
@@ -671,8 +671,6 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     groupId,
     videoUrl: videoMedia.url,
     videoMediaId: videoMedia.id,
-    referenceImageUrl: referenceMedia.url,
-    referenceImageMediaId: referenceMedia.id,
     durationSec: totalVideoGroupDuration(shots),
     shotNumbers,
     ...(typeof generatedVideo.actualVideoTokens === 'number'

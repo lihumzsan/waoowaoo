@@ -275,7 +275,7 @@ describe('worker video processor behavior', () => {
     mod.createVideoWorker()
   })
 
-  it('VIDEO_GROUP: generates a continuous grid clip and writes ProjectVideoGroup output', async () => {
+  it('VIDEO_GROUP: passes storyboard images individually in shot order and writes ProjectVideoGroup output', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -306,13 +306,16 @@ describe('worker video processor behavior', () => {
       durationSec: 14,
       shotNumbers: [1, 2, 3, 4],
     }))
-    expect(videoGroupMocks.composeAndStoreGridReferenceImage).toHaveBeenCalledWith(expect.objectContaining({
-      gridMode: '2x2',
-      targetId: 'group-1',
-    }))
+    expect(videoGroupMocks.composeAndStoreGridReferenceImage).not.toHaveBeenCalled()
     expect(videoGroupMocks.executeAiTextStep).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       modelId: 'google::veo',
+      referenceImages: [
+        { url: 'images/panel-1.png', role: 'reference', order: 1, source: 'storyboard' },
+        { url: 'images/panel-2.png', role: 'reference', order: 2, source: 'storyboard' },
+        { url: 'images/panel-3.png', role: 'reference', order: 3, source: 'storyboard' },
+        { url: 'images/panel-4.png', role: 'reference', order: 4, source: 'storyboard' },
+      ],
       options: expect.objectContaining({
         prompt: 'stored continuous group prompt',
         duration: 14,
@@ -325,6 +328,13 @@ describe('worker video processor behavior', () => {
         status: 'completed',
         videoUrl: '/m/video-public-1',
         videoMediaId: 'video-media-1',
+      }),
+    }))
+    expect(prismaMock.projectVideoGroup.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'group-1' },
+      data: expect.objectContaining({
+        referenceImageUrl: null,
+        referenceImageMediaId: null,
       }),
     }))
   })
