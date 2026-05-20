@@ -35,13 +35,13 @@ export const MAIN_AUDIO_TARGET: AudioLoudnessTarget = {
 }
 
 export const BGM_AUDIO_TARGET: AudioLoudnessTarget = {
-  integratedLufs: -8,
+  integratedLufs: -6,
   truePeakDb: -1.5,
   loudnessRange: 11,
 }
 
-const BGM_DUCKING_THRESHOLD = 0.06
-const BGM_DUCKING_RATIO = 4
+const BGM_DUCKING_THRESHOLD = 0.08
+const BGM_DUCKING_RATIO = 3
 const BGM_DUCKING_ATTACK_MS = 80
 const BGM_DUCKING_RELEASE_MS = 450
 
