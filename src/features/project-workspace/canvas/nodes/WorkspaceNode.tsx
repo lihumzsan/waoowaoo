@@ -51,6 +51,13 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+export function videoElementAspectRatio(video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>): number | null {
+  const { videoWidth, videoHeight } = video
+  if (!Number.isFinite(videoWidth) || !Number.isFinite(videoHeight)) return null
+  if (videoWidth <= 0 || videoHeight <= 0) return null
+  return videoWidth / videoHeight
+}
+
 const SELECTABLE_TEXT_CLASS = 'select-none'
 
 function renderSection(title: string, children: ReactNode) {
@@ -1153,17 +1160,22 @@ function VideoPlanContent({
   const displayOutputUrl = toDisplayImageUrl(details?.outputUrl) ?? details?.outputUrl ?? null
   const [previewMode, setPreviewMode] = useState<'reference' | 'video'>(displayOutputUrl ? 'video' : 'reference')
   const [generationMode, setGenerationMode] = useState<'storyboard' | 'asset-reference'>('storyboard')
+  const [intrinsicOutputAspectRatio, setIntrinsicOutputAspectRatio] = useState<number | null>(null)
   useEffect(() => {
     setPreviewMode(displayOutputUrl ? 'video' : 'reference')
+  }, [displayOutputUrl])
+  useEffect(() => {
+    setIntrinsicOutputAspectRatio(null)
   }, [displayOutputUrl])
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const running = data.__running === true
   const referenceAspectRatio = details.sourceImages.find((cell) => (
     typeof cell?.aspectRatio === 'number' && Number.isFinite(cell.aspectRatio) && cell.aspectRatio > 0
   ))?.aspectRatio ?? 16 / 9
-  const outputAspectRatio = typeof details.outputAspectRatio === 'number' && Number.isFinite(details.outputAspectRatio) && details.outputAspectRatio > 0
+  const storedOutputAspectRatio = typeof details.outputAspectRatio === 'number' && Number.isFinite(details.outputAspectRatio) && details.outputAspectRatio > 0
     ? details.outputAspectRatio
     : referenceAspectRatio
+  const outputAspectRatio = intrinsicOutputAspectRatio ?? storedOutputAspectRatio
   const outputStyle = { aspectRatio: String(outputAspectRatio) }
   const shouldShowVideo = Boolean(displayOutputUrl && previewMode === 'video')
   const assetReferences = details.assetReferences ?? []
@@ -1196,6 +1208,15 @@ function VideoPlanContent({
   const generateLabel = generationMode === 'storyboard'
     ? labels('generateStoryboardReferenceVideo')
     : labels('generateAssetReferenceVideo')
+  const handleOutputVideoLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const nextAspectRatio = videoElementAspectRatio(event.currentTarget)
+    if (nextAspectRatio === null) return
+    setIntrinsicOutputAspectRatio((currentAspectRatio) => (
+      currentAspectRatio !== null && Math.abs(currentAspectRatio - nextAspectRatio) < 0.001
+        ? currentAspectRatio
+        : nextAspectRatio
+    ))
+  }
   const handleGenerateSelectedMode = () => {
     if (!canGenerateSelectedMode) return
     if (generationMode === 'asset-reference') {
@@ -1259,6 +1280,7 @@ function VideoPlanContent({
             src={displayOutputUrl}
             aria-label={data.title}
             controls
+            onLoadedMetadata={handleOutputVideoLoadedMetadata}
             className="h-full w-full object-contain"
           />
         </div>

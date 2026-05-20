@@ -2,7 +2,10 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
-import WorkspaceNode, { nodeNeedsActualHeightMeasurement } from '@/features/project-workspace/canvas/nodes/WorkspaceNode'
+import WorkspaceNode, {
+  nodeNeedsActualHeightMeasurement,
+  videoElementAspectRatio,
+} from '@/features/project-workspace/canvas/nodes/WorkspaceNode'
 import type { WorkspaceCanvasFlowNode, WorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/node-canvas-types'
 
 vi.mock('@xyflow/react', () => ({
@@ -48,6 +51,12 @@ describe('workspace node rendering', () => {
   it('measures video plan nodes so their canvas shell can match actual content height', () => {
     expect(nodeNeedsActualHeightMeasurement('videoPlan')).toBe(true)
     expect(nodeNeedsActualHeightMeasurement('shot')).toBe(false)
+  })
+
+  it('uses intrinsic video dimensions to avoid letterboxing video plan output previews', () => {
+    expect(videoElementAspectRatio({ videoWidth: 1920, videoHeight: 1080 })).toBeCloseTo(16 / 9)
+    expect(videoElementAspectRatio({ videoWidth: 1080, videoHeight: 1920 })).toBeCloseTo(9 / 16)
+    expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
   })
 
   it('hides space consistency shot coordinate rows while generation is running', () => {
