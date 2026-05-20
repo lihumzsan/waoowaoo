@@ -26,7 +26,6 @@ import {
   TASK_RUNTIME_TARGETS,
 } from '@/lib/task/runtime-targets'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
-import type { UpsertCanvasLayoutInput } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -39,6 +38,7 @@ import {
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
+import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
 import {
   buildWorkspaceCanvasEdgeSignature,
   buildWorkspaceCanvasNodeSignature,
@@ -652,34 +652,16 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     })
   }, [projection.nodes, projectionNodeSignature])
 
-  useEffect(() => {
-    if (!layout) return
-    void reactFlow.setViewport(layout.viewport)
-  }, [layout, reactFlow])
-
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return
 
-    const input: UpsertCanvasLayoutInput = {
+    const input = buildWorkspaceCanvasLayoutInput({
       episodeId,
-      viewport: reactFlow.getViewport(),
-      nodeLayouts: nextNodes.map((node, index) => ({
-        nodeKey: node.id,
-        nodeType: node.data.layoutNodeType,
-        targetType: node.data.targetType,
-        targetId: node.data.targetId,
-        x: node.position.x,
-        y: node.position.y,
-        width: node.data.width,
-        height: node.data.height,
-        zIndex: typeof node.zIndex === 'number' ? node.zIndex : index,
-        locked: false,
-        collapsed: false,
-      })),
-    }
+      nodes: nextNodes,
+    })
 
     await saveLayout(input)
-  }, [episodeId, reactFlow, saveLayout])
+  }, [episodeId, saveLayout])
 
   const persistCurrentLayoutSafely = useCallback((nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     void persistCurrentLayout(nextNodes).catch((error: unknown) => {
@@ -812,7 +794,6 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
           onNodeClick={handleNodeClick}
           onPaneClick={() => setSelectedNodeId(null)}
           onNodeDragStop={handleNodeDragStop}
-          onMoveEnd={() => persistCurrentLayoutSafely(sourceNodes)}
           nodesDraggable
           nodesConnectable={false}
           elementsSelectable
