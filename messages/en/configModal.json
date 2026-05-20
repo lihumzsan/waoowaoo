@@ -26,6 +26,7 @@
     "hint": "Hint",
     "pleaseSelect": "Please select...",
     "selectModel": "Select Model",
+    "otherProvider": "Other Providers",
     "paramConfig": "Parameters",
     "fixed": "Fixed",
     "noParams": "No configurable parameters",

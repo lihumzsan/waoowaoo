@@ -10,12 +10,16 @@
  *  - 系统级设置中心 (ApiConfigTabContainer)
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { AppIcon, RatioPreviewIcon } from '@/components/ui/icons'
 import { GlassNumberStepper, GlassSelect } from '@/components/ui/primitives'
+import {
+    groupModelCapabilityOptions,
+    resolveSelectedModelProviderLabel,
+} from './model-capability-groups'
 
 // ─── Types ────────────────────────────────────────────
 
@@ -137,6 +141,7 @@ export function ModelCapabilityDropdown({
     const [isOpen, setIsOpen] = useState(false)
     const triggerRef = useRef<HTMLDivElement>(null)
     const panelRef = useRef<HTMLDivElement>(null)
+    const selectedProviderGroupRef = useRef<HTMLDivElement | null>(null)
     const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
 
     const updateDropdownPlacement = useCallback(() => {
@@ -213,6 +218,20 @@ export function ModelCapabilityDropdown({
 
     const selectedModel = models.find((m) => m.value === value)
     const visibleCapabilityFields = capabilityFields.filter((field) => field.field !== 'generationMode')
+    const fallbackProviderLabel = t('otherProvider')
+    const providerGroups = useMemo(
+        () => groupModelCapabilityOptions(models, fallbackProviderLabel),
+        [models, fallbackProviderLabel],
+    )
+    const selectedProviderLabel = useMemo(
+        () => resolveSelectedModelProviderLabel(models, value, fallbackProviderLabel),
+        [models, value, fallbackProviderLabel],
+    )
+
+    useLayoutEffect(() => {
+        if (!isOpen) return
+        selectedProviderGroupRef.current?.scrollIntoView({ block: 'start' })
+    }, [isOpen, selectedProviderLabel])
 
     const resolveCapabilityLabel = useCallback((field: CapabilityFieldDefinition): string => {
         try {
@@ -299,50 +318,45 @@ export function ModelCapabilityDropdown({
                 >
                     {/* Model list */}
                     <div className="px-2 pb-2 min-h-0 flex-1 overflow-y-auto app-scrollbar">
-                        {(() => {
-                            // Group models by provider
-                            const grouped = new Map<string, ModelCapabilityOption[]>()
-                            for (const m of models) {
-                                const key = m.providerName || m.provider || 'Other'
-                                if (!grouped.has(key)) grouped.set(key, [])
-                                grouped.get(key)!.push(m)
-                            }
-                            return Array.from(grouped.entries()).map(([providerLabel, groupModels]) => (
-                                <div key={providerLabel} className="mb-1">
-                                    <div className="sticky top-0 z-10 px-2 pt-2 pb-1 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md">
-                                        <span className="text-[11px] font-bold text-[var(--glass-text-tertiary)] tracking-wide">
-                                            {providerLabel}
-                                        </span>
-                                    </div>
-                                    <div className="space-y-0.5">
-                                        {groupModels.map((m) => (
-                                            <button
-                                                key={m.value}
-                                                type="button"
-                                                onClick={() => {
-                                                    if (m.disabled) return
-                                                    onModelChange(m.value)
-                                                }}
-                                                disabled={m.disabled}
-                                                className={`w-full text-left px-4 py-2 transition-all border-l-[3px] ${value === m.value
-                                                    ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-bg-surface-strong)] font-bold'
-                                                    : m.disabled
-                                                        ? 'border-transparent text-[var(--glass-text-tertiary)] opacity-60 cursor-not-allowed'
-                                                        : 'border-transparent hover:bg-[var(--glass-bg-hover)]'
-                                                    }`}
-                                            >
-                                                <span className={value === m.value
-                                                    ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)]`
-                                                    : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)]`
-                                                }>
-                                                    {m.label}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
+                        {providerGroups.map(([providerLabel, groupModels]) => (
+                            <div
+                                key={providerLabel}
+                                ref={providerLabel === selectedProviderLabel ? selectedProviderGroupRef : undefined}
+                                className="mb-1"
+                            >
+                                <div className="sticky top-0 z-10 px-2 pt-2 pb-1 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md">
+                                    <span className="text-[11px] font-bold text-[var(--glass-text-tertiary)] tracking-wide">
+                                        {providerLabel}
+                                    </span>
                                 </div>
-                            ))
-                        })()}
+                                <div className="space-y-0.5">
+                                    {groupModels.map((m) => (
+                                        <button
+                                            key={m.value}
+                                            type="button"
+                                            onClick={() => {
+                                                if (m.disabled) return
+                                                onModelChange(m.value)
+                                            }}
+                                            disabled={m.disabled}
+                                            className={`w-full text-left px-4 py-2 transition-all border-l-[3px] ${value === m.value
+                                                ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-bg-surface-strong)] font-bold'
+                                                : m.disabled
+                                                    ? 'border-transparent text-[var(--glass-text-tertiary)] opacity-60 cursor-not-allowed'
+                                                    : 'border-transparent hover:bg-[var(--glass-bg-hover)]'
+                                                }`}
+                                        >
+                                            <span className={value === m.value
+                                                ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)]`
+                                                : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)]`
+                                            }>
+                                                {m.label}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
 
                     {/* Capability params: fixed at panel bottom */}

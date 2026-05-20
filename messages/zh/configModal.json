@@ -26,6 +26,7 @@
     "hint": "提示",
     "pleaseSelect": "请选择...",
     "selectModel": "选择模型",
+    "otherProvider": "其他厂商",
     "paramConfig": "参数配置",
     "fixed": "固定",
     "noParams": "该模型无可配置参数",

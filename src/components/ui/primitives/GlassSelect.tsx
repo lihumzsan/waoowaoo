@@ -87,6 +87,7 @@ export default function GlassSelect({
   const id = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const selectedOptionRef = useRef<HTMLButtonElement | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -163,6 +164,11 @@ export default function GlassSelect({
     inputRef.current?.focus()
     inputRef.current?.select()
   }, [allowCustomValue, isOpen])
+
+  useLayoutEffect(() => {
+    if (!isOpen || query.trim()) return
+    selectedOptionRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [isOpen, query, value])
 
   const commitValue = (nextValue: string) => {
     onValueChange(nextValue)
@@ -270,6 +276,7 @@ export default function GlassSelect({
               return (
                 <button
                   key={option.value}
+                  ref={selected ? selectedOptionRef : undefined}
                   type="button"
                   role="option"
                   aria-selected={selected}
