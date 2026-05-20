@@ -31,6 +31,7 @@ import type {
 } from '../node-canvas-types'
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
+  WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS,
   WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y,
@@ -43,7 +44,7 @@ import {
   WORKSPACE_CANVAS_FINAL_NODE_SIZE,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
-import { repairWorkspaceNodeOverlaps } from '../layout/workspace-node-auto-layout'
+import { alignFinalTimelineNodesToBgmScore, repairWorkspaceNodeOverlaps } from '../layout/workspace-node-auto-layout'
 
 const DEFAULT_NODE_WIDTH = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width
 const DEFAULT_NODE_HEIGHT = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height
@@ -1816,7 +1817,6 @@ export function buildWorkspaceNodeCanvasProjection({
   }
 
   const bgmScoreBaseY = videoPlanBaseY + (canShowVideoPlanLayer ? videoPlanLayerHeight + 130 : 0)
-  const finalGridBaseY = bgmScoreBaseY + BGM_SCORE_NODE_HEIGHT + 130
   const videoOutputNodeIds = nodes
     .filter((node) => node.data.kind === 'videoPlan')
     .map((node) => node.id)
@@ -1853,10 +1853,12 @@ export function buildWorkspaceNodeCanvasProjection({
     )
     const isBgmPromptDesignMissing = hasBgmScore && !hasBgmPromptDesign
     const hasFinalOutput = Boolean(finalVideo?.outputUrl && finalVideo.renderStatus === 'completed')
+    const bgmScoreFallbackX = storyboardFlowBaseX
+    const bgmScoreFallbackY = bgmScoreBaseY + 180
     nodes.push(createNode({
       id: bgmScoreNodeId,
-      fallbackX: storyboardFlowBaseX,
-      fallbackY: bgmScoreBaseY + 180,
+      fallbackX: bgmScoreFallbackX,
+      fallbackY: bgmScoreFallbackY,
       zIndex: zIndex++,
       savedLayoutByKey,
       ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
@@ -1931,8 +1933,8 @@ export function buildWorkspaceNodeCanvasProjection({
     }))
     nodes.push(createNode({
       id: finalNodeId,
-      fallbackX: storyboardFlowBaseX,
-      fallbackY: finalGridBaseY + 180,
+      fallbackX: bgmScoreFallbackX + BGM_SCORE_NODE_WIDTH + WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
+      fallbackY: bgmScoreFallbackY,
       zIndex: zIndex++,
       savedLayoutByKey,
       ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
@@ -1980,7 +1982,7 @@ export function buildWorkspaceNodeCanvasProjection({
     edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmScoreNodeId, finalNodeId))
   }
 
-  return { nodes: repairWorkspaceNodeOverlaps(nodes), edges }
+  return { nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodes)), edges }
 }
 
 export function useWorkspaceNodeCanvasProjection({

@@ -263,7 +263,7 @@ function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boo
 }
 
 export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'editScreenplay' || kind === 'editScript' || kind === 'videoPlan'
+  return kind === 'editScreenplay' || kind === 'editScript' || kind === 'videoPlan' || kind === 'bgmScore'
 }
 
 async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
@@ -1638,7 +1638,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [data.kind, data.expanded, data.editScreenplayDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.bgmScoreDetails, data.editScreenplayDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
 
   return (
     <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>

@@ -1,4 +1,5 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
+import { WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X } from '../node-presentation-profiles'
 
 const DEFAULT_NODE_GAP = 72
 const DRAG_NODE_GAP = 24
@@ -292,6 +293,57 @@ export function avoidExpandedSpaceConsistencyLaneOverlaps(
   })
 }
 
+export function alignFinalTimelineNodesToBgmScore(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  options?: {
+    readonly gap?: number
+    readonly preservedNodeIds?: ReadonlySet<string>
+  },
+): WorkspaceCanvasFlowNode[] {
+  const bgmScoreNodes = nodes.filter((node) => node.data.kind === 'bgmScore')
+  const finalTimelineNodes = nodes.filter((node) => node.data.kind === 'finalTimeline')
+
+  if (bgmScoreNodes.length === 0 || finalTimelineNodes.length === 0) return [...nodes]
+
+  const gap = options?.gap ?? WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X
+  const bgmRects = bgmScoreNodes.map((node, index) => nodeRect(node, index))
+  const finalPositionById = new Map<string, NodePosition>()
+
+  finalTimelineNodes.forEach((finalNode) => {
+    if (options?.preservedNodeIds?.has(finalNode.id)) return
+
+    const finalRect = nodeRect(finalNode, 0)
+    const nearestBgmRect = bgmRects
+      .map((bgmRect) => ({
+        rect: bgmRect,
+        distance: Math.abs((finalRect.y + finalRect.height / 2) - (bgmRect.y + bgmRect.height / 2)),
+      }))
+      .sort((left, right) => left.distance - right.distance)[0]?.rect
+
+    if (!nearestBgmRect) return
+
+    const requiredX = nearestBgmRect.x + nearestBgmRect.width + gap
+    const overlapsBgmVertically = (
+      finalRect.y < nearestBgmRect.y + nearestBgmRect.height &&
+      finalRect.y + finalRect.height > nearestBgmRect.y
+    )
+    const shouldMoveX = finalRect.x < requiredX - POSITION_EPSILON
+    if (!shouldMoveX && !overlapsBgmVertically) return
+
+    finalPositionById.set(finalNode.id, {
+      x: shouldMoveX ? requiredX : finalRect.x,
+      y: shouldMoveX || overlapsBgmVertically ? nearestBgmRect.y : finalRect.y,
+    })
+  })
+
+  if (finalPositionById.size === 0) return [...nodes]
+
+  return nodes.map((node) => {
+    const position = finalPositionById.get(node.id)
+    return position ? { ...node, position } : node
+  })
+}
+
 export function repairWorkspaceNodeOverlapsNearMovedNodes(
   nodes: readonly WorkspaceCanvasFlowNode[],
   movedNodeIds: ReadonlySet<string>,
@@ -353,7 +405,12 @@ export function applyWorkspaceNodeDynamicLayout(
   nodes: readonly WorkspaceCanvasFlowNode[],
   options?: WorkspaceNodeDynamicLayoutOptions,
 ): WorkspaceCanvasFlowNode[] {
-  return repairWorkspaceNodeOverlaps(avoidExpandedSpaceConsistencyLaneOverlaps(nodes), {
-    preservedNodeIds: preservedNodeIds(options?.preservedNodePositions),
+  const fixedNodeIds = preservedNodeIds(options?.preservedNodePositions)
+  const laneAdjustedNodes = avoidExpandedSpaceConsistencyLaneOverlaps(nodes)
+  const finalTimelineAdjustedNodes = alignFinalTimelineNodesToBgmScore(laneAdjustedNodes, {
+    preservedNodeIds: fixedNodeIds,
+  })
+  return repairWorkspaceNodeOverlaps(finalTimelineAdjustedNodes, {
+    preservedNodeIds: fixedNodeIds,
   })
 }

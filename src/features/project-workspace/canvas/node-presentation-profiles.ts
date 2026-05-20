@@ -34,6 +34,8 @@ export const WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE: WorkspaceCanvasNodeSize = {
   height: 320,
 }
 
+export const WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X = 88
+
 export const WORKSPACE_CANVAS_FINAL_NODE_SIZE: WorkspaceCanvasNodeSize = {
   width: 340,
   height: 280,

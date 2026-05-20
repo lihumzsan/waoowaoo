@@ -3,6 +3,7 @@ import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canva
 import {
   applyWorkspaceNodeDynamicLayout,
   alignSpaceConsistencyNodesToMeasuredEditScript,
+  alignFinalTimelineNodesToBgmScore,
   avoidExpandedSpaceConsistencyLaneOverlaps,
   preserveWorkspaceNodePositions,
   repairWorkspaceNodeOverlaps,
@@ -380,5 +381,31 @@ describe('workspace node auto layout', () => {
     const repairedVideoPlan = repaired.find((node) => node.id === videoPlan.id)
 
     expect(repairedVideoPlan?.position).toEqual({ x: 620, y: 120 })
+  })
+
+  it('keeps the final timeline to the right of the expanded BGM score using the current BGM size', () => {
+    const bgmScore = createNode({
+      id: 'bgm-score:episode',
+      kind: 'bgmScore',
+      x: 620,
+      y: 720,
+      width: 1040,
+      height: 940,
+      expanded: true,
+    })
+    const finalTimeline = createNode({
+      id: 'final:episode',
+      kind: 'finalTimeline',
+      x: 620,
+      y: 1040,
+      width: 340,
+      height: 280,
+    })
+
+    const repaired = alignFinalTimelineNodesToBgmScore([bgmScore, finalTimeline])
+    const repairedFinal = repaired.find((node) => node.id === finalTimeline.id)
+
+    expect(repairedFinal?.position).toEqual({ x: 1748, y: 720 })
+    expect(repairedFinal && workspaceCanvasNodesOverlap(bgmScore, repairedFinal)).toBe(false)
   })
 })

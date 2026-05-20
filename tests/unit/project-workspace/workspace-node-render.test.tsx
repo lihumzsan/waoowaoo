@@ -48,8 +48,9 @@ function renderNode(data: WorkspaceCanvasNodeData): string {
 }
 
 describe('workspace node rendering', () => {
-  it('measures video plan nodes so their canvas shell can match actual content height', () => {
+  it('measures dynamic content nodes so their canvas shell can match actual content height', () => {
     expect(nodeNeedsActualHeightMeasurement('videoPlan')).toBe(true)
+    expect(nodeNeedsActualHeightMeasurement('bgmScore')).toBe(true)
     expect(nodeNeedsActualHeightMeasurement('shot')).toBe(false)
   })
 

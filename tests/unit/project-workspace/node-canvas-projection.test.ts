@@ -3,7 +3,10 @@ import type { ProjectClip, ProjectEditScreenplay, ProjectEditScript, ProjectPane
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
-import { WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y } from '@/features/project-workspace/canvas/node-presentation-profiles'
+import {
+  WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
+  WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
+} from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 function t(key: string, values?: Record<string, string | number>): string {
   if (!values) return key
@@ -565,6 +568,10 @@ describe('workspace node canvas projection', () => {
     expect(bgmNode?.data.height).toBe(320)
     expect(bgmNode?.style).toMatchObject({ width: 420, height: 320 })
     expect(bgmNode?.data.action).toEqual({ type: 'generate_bgm_score' })
+    expect(finalNode?.position).toEqual({
+      x: (bgmNode?.position.x ?? 0) + (bgmNode?.data.width ?? 0) + WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
+      y: bgmNode?.position.y,
+    })
     expect(finalNode?.data.actionDisabled).toBe(true)
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('bgm-score:episode-1->final:episode-1')
   })
