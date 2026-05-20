@@ -1,6 +1,6 @@
 export const DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY = 5
 export const DEFAULT_IMAGE_WORKFLOW_CONCURRENCY = 5
-export const DEFAULT_VIDEO_WORKFLOW_CONCURRENCY = 5
+export const DEFAULT_VIDEO_WORKFLOW_CONCURRENCY = 10
 
 export interface WorkflowConcurrencyConfig {
   analysis: number
