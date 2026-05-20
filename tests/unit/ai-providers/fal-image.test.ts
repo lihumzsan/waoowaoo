@@ -63,7 +63,7 @@ describe('fal image generation', () => {
       prompt: 'draw a poster',
       num_images: 1,
       output_format: 'webp',
-      image_size: { width: 608, height: 1088 },
+      image_size: { width: 608, height: 1080 },
       quality: 'medium',
     })
     expect(result).toMatchObject({
@@ -100,7 +100,7 @@ describe('fal image generation', () => {
       prompt: 'change the jacket color',
       num_images: 1,
       output_format: 'png',
-      image_size: { width: 3840, height: 2160 },
+      image_size: { width: 2560, height: 1440 },
       image_urls: ['data:image/png;base64,normalized-aHR0cHM6Ly9leGFtcGxlLmNvbS9pbnB1dC5wbmc='],
     })
   })
@@ -124,7 +124,7 @@ describe('fal image generation', () => {
       prompt: 'draw a character sheet',
       num_images: 1,
       output_format: 'png',
-      image_size: { width: 1024, height: 688 },
+      image_size: { width: 1080, height: 720 },
     })
   })
 

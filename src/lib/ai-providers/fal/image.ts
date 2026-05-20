@@ -41,12 +41,12 @@ const FAL_GPT_IMAGE_2_RESOLUTIONS = new Set<string>(FAL_IMAGE_RESOLUTIONS)
 const FAL_IMAGE_OUTPUT_FORMATS = new Set<string>(OPENAI_IMAGE_OUTPUT_FORMATS)
 const FAL_GPT_IMAGE_2_QUALITIES = new Set<string>(OPENAI_OFFICIAL_IMAGE_QUALITIES)
 const FAL_GPT_IMAGE_2_MIN_PIXELS = 655_360
-const FAL_GPT_IMAGE_2_MAX_PIXELS = 8_294_400
-const FAL_GPT_IMAGE_2_MAX_EDGE = 3840
+const FAL_GPT_IMAGE_2_MAX_PIXELS = 3_686_400
+const FAL_GPT_IMAGE_2_MAX_EDGE = 2560
 const FAL_GPT_IMAGE_2_LONG_EDGE_BY_RESOLUTION: Record<FalGptImage2Resolution, number> = {
-  '1K': 1024,
-  '2K': 2048,
-  '4K': 3840,
+  '1K': 1080,
+  '2K': 1440,
+  '4K': 2560,
 }
 
 function assertAllowedFalImageOptions(options: FalImageOptions) {
