@@ -27,7 +27,6 @@ const generateEditScreenplayInputSchema = z.object({
   ...confirmedInputFields,
   prompt: z.string().trim().min(1),
   videoRatio: editScriptVideoRatioSchema.optional(),
-  artStyle: z.string().trim().min(1).optional(),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -35,7 +34,6 @@ const generateEditScriptInputSchema = z.object({
   prompt: z.never().optional(),
   screenplayId: z.string().trim().min(1).optional(),
   videoRatio: editScriptVideoRatioSchema.optional(),
-  artStyle: z.string().trim().min(1).optional(),
 }).passthrough()
 
 const generateEditScriptAssetsInputSchema = z.object({
@@ -153,7 +151,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
   return {
     generate_edit_screenplay: defineOperation({
       id: 'generate_edit_screenplay',
-      summary: 'Generate the editable screenplay artifact for edit-first production from the current project request and style context.',
+      summary: 'Generate the editable screenplay artifact for edit-first production from the current project request and configured project style context.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -171,12 +169,11 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         locale: resolveLocale(ctx.context.locale),
         prompt: input.prompt,
         ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-        ...(input.artStyle ? { artStyle: input.artStyle } : {}),
       }),
     }),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
-      summary: 'Generate the edit-first core table from an existing ready screenplay and its original user request. Fails if no ready screenplay exists.',
+      summary: 'Generate the edit-first core table from an existing ready screenplay and the configured project style context. Fails if no ready screenplay exists.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -192,7 +189,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
           ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-          ...(input.artStyle ? { artStyle: input.artStyle } : {}),
         }
         const result = await submitOperationTask({
           request: ctx.request,

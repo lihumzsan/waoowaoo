@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import { createEditScriptOperations } from '@/lib/operations/domains/media/edit-script-ops'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -93,6 +93,10 @@ function buildContext() {
 }
 
 describe('edit-script operations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('exposes edit-first artifacts as independent operations', () => {
     const operations = createEditScriptOperations()
 
@@ -121,6 +125,24 @@ describe('edit-script operations', () => {
       episodeId: 'episode-1',
       locale: 'zh',
       prompt: 'make a short film',
+    }))
+  })
+
+  it('does not forward free-form artStyle from agent screenplay generation into project style config', async () => {
+    const operations = createEditScriptOperations()
+    await operations.generate_edit_screenplay.execute(buildContext(), {
+      prompt: 'make a cyberpunk short film',
+      confirmed: true,
+      artStyle: 'cyberpunk',
+    })
+
+    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      prompt: 'make a cyberpunk short film',
+    }))
+    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
+      artStyle: expect.anything(),
     }))
   })
 
@@ -155,6 +177,27 @@ describe('edit-script operations', () => {
     expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.not.objectContaining({
         prompt: expect.anything(),
+      }),
+    }))
+  })
+
+  it('does not forward free-form artStyle from agent edit script generation into task payload', async () => {
+    const operations = createEditScriptOperations()
+    await operations.generate_edit_script.execute(buildContext(), {
+      screenplayId: 'screenplay-1',
+      confirmed: true,
+      artStyle: 'cyberpunk',
+    })
+
+    expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+      }),
+    }))
+    expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.not.objectContaining({
+        artStyle: expect.anything(),
       }),
     }))
   })
