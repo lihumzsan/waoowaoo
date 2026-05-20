@@ -4,6 +4,7 @@ import { resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities
 const imageCapabilities = {
   image: {
     resolutionOptions: ['1K', '2K', '4K'],
+    qualityOptions: ['high', 'medium', 'low'],
   },
 }
 
@@ -17,10 +18,10 @@ describe('ai-registry/capabilities-catalog', () => {
     })
 
     expect(resolved.issues).toEqual([])
-    expect(resolved.options).toEqual({ resolution: '1K' })
+    expect(resolved.options).toEqual({ resolution: '1K', quality: 'high' })
   })
 
-  it('keeps explicit image resolution selections', () => {
+  it('keeps explicit image resolution and quality selections', () => {
     const resolved = resolveGenerationOptionsForModel({
       modelType: 'image',
       modelKey: 'gemini-compatible:provider::gemini-3-pro-image-preview',
@@ -28,13 +29,14 @@ describe('ai-registry/capabilities-catalog', () => {
       capabilityOverrides: {
         'gemini-compatible:provider::gemini-3-pro-image-preview': {
           resolution: '4K',
+          quality: 'medium',
         },
       },
       requireAllFields: true,
     })
 
     expect(resolved.issues).toEqual([])
-    expect(resolved.options).toEqual({ resolution: '4K' })
+    expect(resolved.options).toEqual({ resolution: '4K', quality: 'medium' })
   })
 
   it('rejects image resolution selections unsupported by the model', () => {
@@ -55,6 +57,28 @@ describe('ai-registry/capabilities-catalog', () => {
       expect.objectContaining({
         code: 'CAPABILITY_VALUE_NOT_ALLOWED',
         field: 'capabilities.gemini-compatible:provider::gemini-3-pro-image-preview.resolution',
+      }),
+    ])
+  })
+
+  it('rejects image quality selections unsupported by the model', () => {
+    const resolved = resolveGenerationOptionsForModel({
+      modelType: 'image',
+      modelKey: 'fal::gpt-image-2',
+      capabilities: imageCapabilities,
+      capabilityOverrides: {
+        'fal::gpt-image-2': {
+          quality: 'standard',
+        },
+      },
+      requireAllFields: true,
+    })
+
+    expect(resolved.options).toEqual({})
+    expect(resolved.issues).toEqual([
+      expect.objectContaining({
+        code: 'CAPABILITY_VALUE_NOT_ALLOWED',
+        field: 'capabilities.fal::gpt-image-2.quality',
       }),
     ])
   })

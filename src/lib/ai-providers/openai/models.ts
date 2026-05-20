@@ -14,13 +14,14 @@ import {
 } from '@/lib/ai-providers/shared/openai-image'
 
 export const OPENAI_IMAGE_2_MODEL_ID = 'gpt-image-2'
+export const OPENAI_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low', 'auto'] as const
 
 export const OPENAI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {
     modelType: 'image',
     provider: 'openai',
     modelId: OPENAI_IMAGE_2_MODEL_ID,
-    capabilities: { image: { resolutionOptions: [...OPENAI_OFFICIAL_IMAGE_SIZES] } },
+    capabilities: { image: { resolutionOptions: [...OPENAI_OFFICIAL_IMAGE_SIZES], qualityOptions: [...OPENAI_IMAGE_2_QUALITY_OPTIONS] } },
   },
 ] as const
 

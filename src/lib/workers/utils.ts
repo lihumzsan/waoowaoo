@@ -31,6 +31,7 @@ function summarizeImageGenerationOptions(options: Record<string, unknown> | unde
     provider: typeof (value as { provider?: unknown }).provider === 'string' ? (value as { provider: string }).provider : undefined,
     aspectRatio: typeof (value as { aspectRatio?: unknown }).aspectRatio === 'string' ? (value as { aspectRatio: string }).aspectRatio : undefined,
     resolution: typeof (value as { resolution?: unknown }).resolution === 'string' ? (value as { resolution: string }).resolution : undefined,
+    quality: typeof (value as { quality?: unknown }).quality === 'string' ? (value as { quality: string }).quality : undefined,
     size: typeof (value as { size?: unknown }).size === 'string' ? (value as { size: string }).size : undefined,
     referenceImageCount,
     optionKeys: Object.keys(value),
@@ -198,6 +199,7 @@ export async function resolveImageSourceFromGeneration(
       referenceImages?: string[]
       aspectRatio?: string
       resolution?: string
+      quality?: string
       size?: string
       provider?: string
     }
@@ -236,6 +238,9 @@ export async function resolveImageSourceFromGeneration(
   const runtimeSelections: Record<string, string | number | boolean> = {}
   if (typeof params.options?.resolution === 'string') {
     runtimeSelections.resolution = params.options.resolution
+  }
+  if (typeof params.options?.quality === 'string') {
+    runtimeSelections.quality = params.options.quality
   }
 
   const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
@@ -356,6 +361,7 @@ export async function resolveImageSourcesFromGeneration(
       referenceImages?: string[]
       aspectRatio?: string
       resolution?: string
+      quality?: string
       size?: string
       provider?: string
     }
@@ -392,6 +398,9 @@ export async function resolveImageSourcesFromGeneration(
   const runtimeSelections: Record<string, string | number | boolean> = {}
   if (typeof params.options?.resolution === 'string') {
     runtimeSelections.resolution = params.options.resolution
+  }
+  if (typeof params.options?.quality === 'string') {
+    runtimeSelections.quality = params.options.quality
   }
 
   const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({

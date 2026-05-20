@@ -202,6 +202,7 @@
     "duration": "Duration",
     "fps": "Frame rate",
     "resolution": "Resolution",
+    "quality": "Image quality",
     "aspectRatio": "Aspect ratio",
     "reasoningEffort": "Reasoning effort",
     "voice": "Voice",

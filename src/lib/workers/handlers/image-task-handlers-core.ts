@@ -59,11 +59,14 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
   const editModel = projectModels.editModel
   if (!editModel) throw new Error('Edit model not configured')
 
-  // 从 payload.generationOptions 读取 resolution（由 route 层 buildImageBillingPayload 注入）
+  // 从 payload.generationOptions 读取图片能力参数（由 route 层 buildImageBillingPayload 注入）
   // 与老版本 getModelResolution 等价，但数据来源改为 capabilityDefaults/capabilityOverrides 体系
   const generationOptions = payload.generationOptions as Record<string, unknown> | undefined
   const resolution = typeof generationOptions?.resolution === 'string'
     ? generationOptions.resolution
+    : undefined
+  const quality = typeof generationOptions?.quality === 'string'
+    ? generationOptions.quality
     : undefined
   const modifyInstruction = typeof modifyPrompt === 'string' ? modifyPrompt.trim() : ''
 
@@ -109,6 +112,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         referenceImages,
         aspectRatio: '3:2',
         ...(resolution ? { resolution } : {}),
+        ...(quality ? { quality } : {}),
       },
     })
 
@@ -215,6 +219,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         referenceImages,
         aspectRatio,
         ...(resolution ? { resolution } : {}),
+        ...(quality ? { quality } : {}),
       },
     })
 
@@ -341,6 +346,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         referenceImages: uniqueReferences,
         aspectRatio,
         ...(resolution ? { resolution } : {}),
+        ...(quality ? { quality } : {}),
       },
     })
 

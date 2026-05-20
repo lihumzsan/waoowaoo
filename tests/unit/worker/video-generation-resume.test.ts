@@ -23,6 +23,12 @@ const generatorApiMock = vi.hoisted(() => ({
   generateVideo: vi.fn(),
 }))
 
+const configMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(),
+  getUserModelConfig: vi.fn(),
+  resolveProjectModelCapabilityGenerationOptions: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/service', () => taskServiceMock)
 vi.mock('@/lib/ai-exec/async-poll', () => asyncPollMock)
@@ -33,9 +39,9 @@ vi.mock('@/lib/storage', () => ({
 }))
 vi.mock('@/lib/media-process', () => ({ processMediaResult: vi.fn() }))
 vi.mock('@/lib/config-service', () => ({
-  getProjectModelConfig: vi.fn(),
-  getUserModelConfig: vi.fn(),
-  resolveProjectModelCapabilityGenerationOptions: vi.fn(),
+  getProjectModelConfig: configMock.getProjectModelConfig,
+  getUserModelConfig: configMock.getUserModelConfig,
+  resolveProjectModelCapabilityGenerationOptions: configMock.resolveProjectModelCapabilityGenerationOptions,
 }))
 
 import { resolveImageSourceFromGeneration, resolveVideoSourceFromGeneration } from '@/lib/workers/utils'
@@ -59,6 +65,7 @@ function buildJob(): Job<TaskJobData> {
 describe('worker utils video generation resume', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValue({})
   })
 
   it('continues polling from existing externalId without re-submitting generation', async () => {
@@ -112,5 +119,48 @@ describe('worker utils video generation resume', () => {
     expect(prismaMock.task.findUnique).not.toHaveBeenCalled()
     expect(asyncPollMock.pollAsyncTask).not.toHaveBeenCalled()
     expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes image quality runtime selection through capability resolution and generation options', async () => {
+    configMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValueOnce({
+      resolution: '4K',
+      quality: 'medium',
+    })
+    generatorApiMock.generateImage.mockResolvedValueOnce({
+      success: true,
+      imageUrl: 'https://fal.test/quality-image.png',
+    })
+
+    const result = await resolveImageSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'fal::gpt-image-2',
+      prompt: 'enhance this image',
+      options: {
+        aspectRatio: '16:9',
+        quality: 'medium',
+      },
+      allowTaskExternalIdResume: false,
+    })
+
+    expect(result).toBe('https://fal.test/quality-image.png')
+    expect(configMock.resolveProjectModelCapabilityGenerationOptions).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      modelType: 'image',
+      modelKey: 'fal::gpt-image-2',
+      runtimeSelections: {
+        quality: 'medium',
+      },
+    })
+    expect(generatorApiMock.generateImage).toHaveBeenCalledWith(
+      'user-1',
+      'fal::gpt-image-2',
+      'enhance this image',
+      expect.objectContaining({
+        aspectRatio: '16:9',
+        resolution: '4K',
+        quality: 'medium',
+      }),
+    )
   })
 })

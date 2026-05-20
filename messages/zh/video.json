@@ -202,6 +202,7 @@
     "duration": "时长",
     "fps": "帧率",
     "resolution": "分辨率",
+    "quality": "图片质量",
     "aspectRatio": "画幅比例",
     "reasoningEffort": "推理强度",
     "voice": "音色",

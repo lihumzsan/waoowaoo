@@ -100,7 +100,7 @@ describe('worker image-task-handlers-core', () => {
       locationImageId: 'location-image-1',
       modifyPrompt: 'add heavy rain',
       extraImageUrls: [' https://example.com/location-ref.png '],
-      generationOptions: { resolution: '1536x1024' },
+      generationOptions: { resolution: '1536x1024', quality: 'medium' },
     })
 
     const result = await handleModifyAssetImageTask(job)
@@ -116,6 +116,7 @@ describe('worker image-task-handlers-core', () => {
         options: expect.objectContaining({
           aspectRatio: LOCATION_IMAGE_RATIO,
           resolution: '1536x1024',
+          quality: 'medium',
           referenceImages: ['https://signed/current-image.png', 'normalized-reference-image'],
         }),
       }),

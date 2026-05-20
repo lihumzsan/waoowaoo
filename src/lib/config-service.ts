@@ -292,8 +292,8 @@ export function getMissingConfigError(missingFields: string[]): string {
  * 为图片类任务统一构建 billingPayload（项目级，async）
  *
  * 生图和修图统一使用严格模式：用户必须已在项目设置中配置好 resolution。
- * resolution 会同时注入到 billingPayload.generationOptions（计费用）
- * 和 task payload（worker 读取后传给 API 的 imageSize 参数）。
+ * 图片能力参数会同时注入到 billingPayload.generationOptions（计费用）
+ * 和 task payload（worker 读取后传给 API 的 imageSize / quality 参数）。
  */
 export async function buildImageBillingPayload(input: {
   projectId: string

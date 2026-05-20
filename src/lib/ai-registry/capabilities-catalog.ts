@@ -350,7 +350,7 @@ export function validateCapabilitySelectionForModel(input: {
 
   if (input.requireAllFields) {
     for (const field of Object.keys(optionFields)) {
-      if (input.modelType === 'image' && field === 'resolution') continue
+      if (input.modelType === 'image' && (field === 'resolution' || field === 'quality')) continue
       if (selection[field] === undefined) {
         issues.push({
           code: 'CAPABILITY_REQUIRED',
@@ -489,6 +489,11 @@ export function resolveGenerationOptionsForModel(input: {
       options[field] = value
     } else if (input.modelType === 'image' && field === 'resolution') {
       const defaultValue = optionFields[field]?.includes('1K') ? '1K' : optionFields[field]?.[0]
+      if (defaultValue !== undefined) {
+        options[field] = defaultValue
+      }
+    } else if (input.modelType === 'image' && field === 'quality') {
+      const defaultValue = optionFields[field]?.[0]
       if (defaultValue !== undefined) {
         options[field] = defaultValue
       }

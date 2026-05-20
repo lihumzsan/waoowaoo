@@ -2,10 +2,10 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
  const CATALOG_DIR = path.resolve(process.cwd(), 'standards/capabilities')
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'audio', 'lipsync'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
-  image: new Set(['resolutionOptions', 'fieldI18n']),
+  image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
   video: new Set([
     'generationModeOptions',
     'generateAudioOptions',
@@ -17,11 +17,12 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'fieldI18n',
   ]),
   audio: new Set(['voiceOptions', 'rateOptions', 'fieldI18n']),
+  music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
   lipsync: new Set(['modeOptions', 'fieldI18n']),
 }
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   llm: { reasoningEffort: 'reasoningEffortOptions' },
-  image: { resolution: 'resolutionOptions' },
+  image: { resolution: 'resolutionOptions', quality: 'qualityOptions' },
   video: {
     generationMode: 'generationModeOptions',
     generateAudio: 'generateAudioOptions',
@@ -30,9 +31,15 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     resolution: 'resolutionOptions',
   },
   audio: { voice: 'voiceOptions', rate: 'rateOptions' },
+  music: {
+    durationSeconds: 'durationSecondsOptions',
+    vocalMode: 'vocalModeOptions',
+    outputFormat: 'outputFormatOptions',
+    bpm: 'bpmOptions',
+  },
   lipsync: { mode: 'modeOptions' },
 }
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'audio', 'lipsync'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
 
 function isRecord(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -195,6 +202,9 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
       if (image.resolutionOptions !== undefined && !isStringArray(image.resolutionOptions)) {
         pushIssue(issues, file, index, 'capabilities.image.resolutionOptions', 'must be string array')
       }
+      if (image.qualityOptions !== undefined && !isStringArray(image.qualityOptions)) {
+        pushIssue(issues, file, index, 'capabilities.image.qualityOptions', 'must be string array')
+      }
       validateFieldI18nMap(issues, file, index, 'image', image)
     }
   }
@@ -243,6 +253,28 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
         pushIssue(issues, file, index, 'capabilities.audio.rateOptions', 'must be string array')
       }
       validateFieldI18nMap(issues, file, index, 'audio', audio)
+    }
+  }
+
+  const music = capabilities.music
+  if (music !== undefined) {
+    if (!isRecord(music)) {
+      pushIssue(issues, file, index, 'capabilities.music', 'music capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, file, index, 'music', music)
+      if (music.durationSecondsOptions !== undefined && !isNumberArray(music.durationSecondsOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.durationSecondsOptions', 'must be number array')
+      }
+      if (music.vocalModeOptions !== undefined && !isStringArray(music.vocalModeOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.vocalModeOptions', 'must be string array')
+      }
+      if (music.outputFormatOptions !== undefined && !isStringArray(music.outputFormatOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.outputFormatOptions', 'must be string array')
+      }
+      if (music.bpmOptions !== undefined && !isNumberArray(music.bpmOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.bpmOptions', 'must be number array')
+      }
+      validateFieldI18nMap(issues, file, index, 'music', music)
     }
   }
 

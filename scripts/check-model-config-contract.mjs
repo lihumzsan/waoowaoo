@@ -10,11 +10,11 @@ const MODEL_FIELDS = [
   'videoModel',
 ]
 const MAX_SAMPLES = 200
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'audio', 'lipsync'])
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'audio', 'lipsync'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
-  image: new Set(['resolutionOptions', 'fieldI18n']),
+  image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
   video: new Set([
     'durationOptions',
     'fpsOptions',
@@ -24,6 +24,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'fieldI18n',
   ]),
   audio: new Set(['voiceOptions', 'rateOptions', 'fieldI18n']),
+  music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
   lipsync: new Set(['modeOptions', 'fieldI18n']),
 }
 
@@ -33,6 +34,7 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   },
   image: {
     resolution: 'resolutionOptions',
+    quality: 'qualityOptions',
   },
   video: {
     duration: 'durationOptions',
@@ -42,6 +44,12 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   audio: {
     voice: 'voiceOptions',
     rate: 'rateOptions',
+  },
+  music: {
+    durationSeconds: 'durationSecondsOptions',
+    vocalMode: 'vocalModeOptions',
+    outputFormat: 'outputFormatOptions',
+    bpm: 'bpmOptions',
   },
   lipsync: {
     mode: 'modeOptions',
@@ -226,6 +234,9 @@ function validateCapabilities(modelType, capabilities) {
       if (image.resolutionOptions !== undefined && !isStringArray(image.resolutionOptions)) {
         pushIssue(issues, 'capabilities.image.resolutionOptions', 'must be string array')
       }
+      if (image.qualityOptions !== undefined && !isStringArray(image.qualityOptions)) {
+        pushIssue(issues, 'capabilities.image.qualityOptions', 'must be string array')
+      }
       validateFieldI18nMap(issues, 'image', image)
     }
   }
@@ -268,6 +279,28 @@ function validateCapabilities(modelType, capabilities) {
         pushIssue(issues, 'capabilities.audio.rateOptions', 'must be string array')
       }
       validateFieldI18nMap(issues, 'audio', audio)
+    }
+  }
+
+  const music = capabilities.music
+  if (music !== undefined) {
+    if (!isRecord(music)) {
+      pushIssue(issues, 'capabilities.music', 'music capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, 'music', music)
+      if (music.durationSecondsOptions !== undefined && !isNumberArray(music.durationSecondsOptions)) {
+        pushIssue(issues, 'capabilities.music.durationSecondsOptions', 'must be number array')
+      }
+      if (music.vocalModeOptions !== undefined && !isStringArray(music.vocalModeOptions)) {
+        pushIssue(issues, 'capabilities.music.vocalModeOptions', 'must be string array')
+      }
+      if (music.outputFormatOptions !== undefined && !isStringArray(music.outputFormatOptions)) {
+        pushIssue(issues, 'capabilities.music.outputFormatOptions', 'must be string array')
+      }
+      if (music.bpmOptions !== undefined && !isNumberArray(music.bpmOptions)) {
+        pushIssue(issues, 'capabilities.music.bpmOptions', 'must be number array')
+      }
+      validateFieldI18nMap(issues, 'music', music)
     }
   }
 

@@ -23,6 +23,11 @@
           "1K",
           "2K",
           "4K"
+        ],
+        "qualityOptions": [
+          "high",
+          "medium",
+          "low"
         ]
       }
     }

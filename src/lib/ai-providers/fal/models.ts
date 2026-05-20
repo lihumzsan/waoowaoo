@@ -23,6 +23,7 @@ export const FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o3/p
 export const FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/standard/image-to-video'
 export const FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video'
 export const FAL_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const
+export const FAL_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as const
 
 export const FAL_VIDEO_MODEL_IDS = new Set([
   'fal-wan25',
@@ -48,7 +49,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'fal',
     modelId: FAL_GPT_IMAGE_2_MODEL_ID,
-    capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS] } },
+    capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS], qualityOptions: [...FAL_GPT_IMAGE_2_QUALITY_OPTIONS] } },
   },
   {
     modelType: 'video',
