@@ -360,6 +360,27 @@ describe('media adapter video option schema', () => {
     })).toThrow('AI_OPTION_INVALID:fal-seedance-2-fast:resolution:unsupported_value=1080p')
   })
 
+  it('allows Fal Veo 3.1 reference images before adaptive endpoint selection', () => {
+    const descriptor = falAdapter.video?.describe(mediaSelection({
+      provider: 'fal',
+      modelId: 'fal-veo31',
+      modelKey: 'fal::fal-veo31',
+    }))
+    expect(descriptor).toBeDefined()
+
+    expect(() => validateDescriptorOptions({
+      schema: descriptor!.optionSchema,
+      options: {
+        prompt: 'keep the hero consistent in a new location',
+        duration: 8,
+        resolution: '720p',
+        aspectRatio: '16:9',
+        referenceImages: ['https://example.com/hero.png', 'https://example.com/location.png'],
+      },
+      context: 'fal-veo31',
+    })).not.toThrow()
+  })
+
   it('rejects Vidu invalid duration/resolution combinations from descriptor schema', () => {
     const descriptor = viduAdapter.video?.describe(mediaSelection({
       provider: 'vidu',

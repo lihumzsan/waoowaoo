@@ -18,12 +18,22 @@ type FalWanVideoPayload = {
   duration?: string
 }
 
-type FalVeo31VideoPayload = {
+type FalVeo31ImageVideoPayload = {
   image_url: string
   prompt: string
   aspect_ratio?: string
   duration?: string
+  resolution?: string
   generate_audio: false
+}
+
+type FalVeo31ReferenceVideoPayload = {
+  image_urls: string[]
+  prompt: string
+  aspect_ratio?: string
+  duration?: string
+  resolution?: string
+  generate_audio: boolean
 }
 
 type FalKlingV25VideoPayload = {
@@ -86,7 +96,8 @@ type FalSeedance2TextVideoPayload = {
 
 type FalVideoPayload =
   | FalWanVideoPayload
-  | FalVeo31VideoPayload
+  | FalVeo31ImageVideoPayload
+  | FalVeo31ReferenceVideoPayload
   | FalKlingV25VideoPayload
   | FalKlingV3VideoPayload
   | FalHappyHorseVideoPayload
@@ -307,12 +318,37 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
       }
       break
     case 'fal-veo31':
-      payload = {
-        image_url: input.imageUrl,
-        prompt: input.options?.prompt || '',
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-        ...(typeof duration === 'number' ? { duration: `${duration}s` } : {}),
-        generate_audio: false,
+      {
+        const referenceImages = Array.isArray(options.referenceImages)
+          ? options.referenceImages.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+          : []
+        const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
+        const uniqueReferences = Array.from(new Set([
+          ...(inputImageUrl ? [inputImageUrl] : []),
+          ...referenceImages,
+        ]))
+
+        if (uniqueReferences.length > 1) {
+          endpoint = 'fal-ai/veo3.1/fast/reference-to-video'
+          payload = {
+            image_urls: uniqueReferences,
+            prompt: input.options?.prompt || '',
+            ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+            ...(typeof duration === 'number' ? { duration: `${duration}s` } : {}),
+            ...(resolution ? { resolution } : {}),
+            generate_audio: typeof options.generateAudio === 'boolean' ? options.generateAudio : false,
+          }
+          break
+        }
+
+        payload = {
+          image_url: input.imageUrl,
+          prompt: input.options?.prompt || '',
+          ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+          ...(typeof duration === 'number' ? { duration: `${duration}s` } : {}),
+          ...(resolution ? { resolution } : {}),
+          generate_audio: false,
+        }
       }
       break
     case FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID:

@@ -30,6 +30,17 @@ describe('video generation reference images', () => {
     })
   })
 
+  it('uses a single normal reference as provider imageUrl without referenceImages option', () => {
+    expect(resolveProviderVideoReferencePayload({
+      referenceImages: [
+        { url: 'https://example.com/hero.png', role: 'reference', order: 1 },
+      ],
+    })).toEqual({
+      imageUrl: 'https://example.com/hero.png',
+      options: {},
+    })
+  })
+
   it('resolves first-last provider payload from unified references', () => {
     expect(resolveProviderVideoReferencePayload({
       referenceImages: [

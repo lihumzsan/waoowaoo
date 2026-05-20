@@ -285,6 +285,18 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
         objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
       })
     }
+    if (modelId === 'fal-veo31') {
+      return buildMediaOptionSchema('video', {
+        ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
+        allowedKeys: ['referenceImages'],
+        validators: {
+          duration: integerRangeValidator({ min: 1 }),
+          aspectRatio: nonEmptyStringValidator(),
+          resolution: nonEmptyStringValidator(),
+        },
+        objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
+      })
+    }
     return buildMediaOptionSchema('video', {
       ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
       validators: {

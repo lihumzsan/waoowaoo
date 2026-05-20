@@ -94,6 +94,12 @@ export function resolveProviderVideoReferencePayload(input: {
   const normalReferences = references.filter((image) => image.role === 'reference')
   const primaryReference = normalReferences[0]
   if (!primaryReference) throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
+  if (normalReferences.length === 1) {
+    return {
+      imageUrl: primaryReference.url,
+      options: {},
+    }
+  }
   return {
     imageUrl: primaryReference.url,
     options: { referenceImages: normalReferences.map((image) => image.url) },
