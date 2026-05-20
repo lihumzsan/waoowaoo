@@ -110,6 +110,21 @@ function matchesTaskTypeWhitelist(
   return whitelist.some((type) => type.toLowerCase() === normalized)
 }
 
+function hasRunningOverlayForTargets(
+  overlay: TaskTargetOverlayMap | undefined,
+  targets: readonly TaskTargetStateQuery[],
+): boolean {
+  if (!overlay) return false
+  const now = Date.now()
+  return targets.some((target) => {
+    const runtime = overlay[taskTargetPairKey(target.targetType, target.targetId)]
+    if (!runtime) return false
+    if (runtime.expiresAt && runtime.expiresAt <= now) return false
+    if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
+    return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
+  })
+}
+
 function shouldTraceMergeTarget(targetType: string) {
   return targetType === 'ProjectPanel'
 }
@@ -288,6 +303,12 @@ export function useTaskTargetStateMap(
     [normalizedTargets],
   )
   const enabled = (options.enabled ?? true) && !!projectId && normalizedTargets.length > 0
+  const overlayQuery = useQuery<TaskTargetOverlayMap>({
+    queryKey: queryKeys.tasks.targetStateOverlay(projectId || ''),
+    enabled: false,
+    initialData: {},
+    queryFn: async () => ({}),
+  })
 
   const query = useQuery({
     queryKey: queryKeys.tasks.targetStates(projectId || '', serializedTargets),
@@ -295,8 +316,9 @@ export function useTaskTargetStateMap(
     staleTime: options.staleTime ?? 15000,
     refetchInterval: (state) => {
       const data = state.state.data as TaskTargetState[] | undefined
-      if (!data) return false
-      return data.some((item) => item.phase === 'queued' || item.phase === 'processing') ? 2000 : false
+      const hasRunningServerState = data?.some((item) => item.phase === 'queued' || item.phase === 'processing') === true
+      const hasRunningOverlayState = hasRunningOverlayForTargets(overlayQuery.data, normalizedTargets)
+      return hasRunningServerState || hasRunningOverlayState ? 2000 : false
     },
     refetchOnMount: false,
     refetchOnWindowFocus: true,
@@ -304,13 +326,6 @@ export function useTaskTargetStateMap(
     queryFn: async () => {
       return fetchTaskTargetStatesBatched(projectId || '', normalizedTargets)
     },
-  })
-
-  const overlayQuery = useQuery<TaskTargetOverlayMap>({
-    queryKey: queryKeys.tasks.targetStateOverlay(projectId || ''),
-    enabled: false,
-    initialData: {},
-    queryFn: async () => ({}),
   })
 
   const mergedByKey = useMemo(() => {

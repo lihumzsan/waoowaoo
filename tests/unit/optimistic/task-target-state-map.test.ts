@@ -23,6 +23,13 @@ const runtime = vi.hoisted(() => ({
 
 const overlayNow = new Date().toISOString()
 
+function findTargetStatesQueryCall() {
+  return runtime.useQueryCalls.find((call) => {
+    const queryKey = call.queryKey as unknown[] | undefined
+    return queryKey?.[0] === 'task-target-states'
+  })
+}
+
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react')
   return {
@@ -125,7 +132,7 @@ describe('task target state map behavior', () => {
       { targetType: 'ProjectPanel', targetId: 'panel-1', types: ['IMAGE_PANEL'] },
     ])
 
-    const firstCall = runtime.useQueryCalls[0]
+    const firstCall = findTargetStatesQueryCall()
     expect(typeof firstCall?.refetchInterval).toBe('function')
     const interval = (firstCall?.refetchInterval as ((state: { state: { data?: TaskTargetState[] } }) => number | false))({
       state: { data: runtime.apiStates },
@@ -141,6 +148,57 @@ describe('task target state map behavior', () => {
     expect(panel?.phase).toBe('processing')
     expect(panel?.runningTaskType).toBe('IMAGE_PANEL')
     expect(panel?.runningTaskId).toBe('task-api-panel')
+  })
+
+  it('keeps polling while an overlay is running even when server state is still idle', async () => {
+    runtime.apiStates = [
+      {
+        targetType: 'ProjectVideoGroup',
+        targetId: 'group-1',
+        phase: 'idle',
+        runningTaskId: null,
+        runningTaskType: null,
+        intent: 'process',
+        hasOutputAtStart: null,
+        progress: null,
+        stage: null,
+        stageLabel: null,
+        lastError: null,
+        updatedAt: null,
+      },
+    ]
+    runtime.overlayStates = {
+      'ProjectVideoGroup:group-1': {
+        targetType: 'ProjectVideoGroup',
+        targetId: 'group-1',
+        phase: 'processing',
+        runningTaskId: 'task-overlay-video-group',
+        runningTaskType: 'video_group',
+        intent: 'generate',
+        hasOutputAtStart: true,
+        progress: 47,
+        stage: 'polling_external',
+        stageLabel: 'Polling external task',
+        updatedAt: overlayNow,
+        lastError: null,
+        expiresAt: Date.now() + 30_000,
+      },
+    }
+
+    const { useTaskTargetStateMap } = await import('@/lib/query/hooks/useTaskTargetStateMap')
+
+    const result = useTaskTargetStateMap('project-1', [
+      { targetType: 'ProjectVideoGroup', targetId: 'group-1', types: ['video_group'] },
+    ])
+
+    const firstCall = findTargetStatesQueryCall()
+    const interval = (firstCall?.refetchInterval as ((state: { state: { data?: TaskTargetState[] } }) => number | false))({
+      state: { data: runtime.apiStates },
+    })
+    expect(interval).toBe(2000)
+    const state = result.getState('ProjectVideoGroup', 'group-1')
+    expect(state?.phase).toBe('processing')
+    expect(state?.runningTaskId).toBe('task-overlay-video-group')
   })
 
   it('allows newer overlay to override completed state for immediate rerun feedback', async () => {
