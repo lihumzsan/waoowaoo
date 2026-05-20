@@ -13,24 +13,13 @@ import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { validateProjectDraft } from '@/lib/projects/validation'
+import {
+  mergeWorkspaceProjectListItemUpdate,
+  type WorkspaceProjectListItem,
+  type WorkspaceProjectUpdatePayload,
+} from '@/lib/projects/workspace-list-item'
 
-interface ProjectStats {
-  episodes: number
-  images: number
-  videos: number
-  panels: number
-  firstEpisodePreview: string | null
-}
-
-interface Project {
-  id: string
-  name: string
-  description: string | null
-  createdAt: string
-  updatedAt: string
-  totalCost?: number  // 项目总费用（CNY）
-  stats?: ProjectStats
-}
+type Project = WorkspaceProjectListItem
 
 interface Pagination {
   page: number
@@ -255,8 +244,12 @@ export default function WorkspacePage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setProjects(projects.map(p => p.id === editingProject.id ? data.project : p))
+        const data = await response.json() as { project: WorkspaceProjectUpdatePayload }
+        setProjects((currentProjects) => currentProjects.map((project) => (
+          project.id === editingProject.id
+            ? mergeWorkspaceProjectListItemUpdate(project, data.project)
+            : project
+        )))
         setShowEditModal(false)
         setEditingProject(null)
         setEditFormData({ name: '', description: '' })
