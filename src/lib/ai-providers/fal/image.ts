@@ -41,12 +41,12 @@ const FAL_GPT_IMAGE_2_RESOLUTIONS = new Set<string>(FAL_IMAGE_RESOLUTIONS)
 const FAL_IMAGE_OUTPUT_FORMATS = new Set<string>(OPENAI_IMAGE_OUTPUT_FORMATS)
 const FAL_GPT_IMAGE_2_QUALITIES = new Set<string>(OPENAI_OFFICIAL_IMAGE_QUALITIES)
 const FAL_GPT_IMAGE_2_MIN_PIXELS = 655_360
-const FAL_GPT_IMAGE_2_MAX_PIXELS = 3_686_400
-const FAL_GPT_IMAGE_2_MAX_EDGE = 2560
-const FAL_GPT_IMAGE_2_LONG_EDGE_BY_RESOLUTION: Record<FalGptImage2Resolution, number> = {
+const FAL_GPT_IMAGE_2_MAX_PIXELS = 8_294_400
+const FAL_GPT_IMAGE_2_MAX_EDGE = 3840
+const FAL_GPT_IMAGE_2_SHORT_EDGE_BY_RESOLUTION: Record<FalGptImage2Resolution, number> = {
   '1K': 1080,
   '2K': 1440,
-  '4K': 2560,
+  '4K': 2160,
 }
 
 function assertAllowedFalImageOptions(options: FalImageOptions) {
@@ -103,10 +103,6 @@ function resolveFalGptImage2RawResolution(options: FalImageOptions): FalGptImage
     throw new Error(`FAL_IMAGE_OPTION_VALUE_UNSUPPORTED: resolution=${selected}`)
   }
   return selected as FalGptImage2Resolution
-}
-
-function roundToMultipleOf16(value: number): number {
-  return Math.max(16, Math.round(value / 16) * 16)
 }
 
 function ceilToMultipleOf16(value: number): number {
@@ -171,10 +167,10 @@ function imageSizeFromAspectRatio(input: {
   resolution: FalGptImage2Resolution
 }): FalGptImage2ImageSize {
   const ratio = readAspectRatioValue(input.aspectRatio)
-  const longEdge = FAL_GPT_IMAGE_2_LONG_EDGE_BY_RESOLUTION[input.resolution]
+  const shortEdge = FAL_GPT_IMAGE_2_SHORT_EDGE_BY_RESOLUTION[input.resolution]
   const rawSize = ratio >= 1
-    ? { width: longEdge, height: roundToMultipleOf16(longEdge / ratio) }
-    : { width: roundToMultipleOf16(longEdge * ratio), height: longEdge }
+    ? { width: Math.round(shortEdge * ratio), height: shortEdge }
+    : { width: shortEdge, height: Math.round(shortEdge / ratio) }
 
   return constrainFalGptImage2ImageSize(rawSize)
 }
