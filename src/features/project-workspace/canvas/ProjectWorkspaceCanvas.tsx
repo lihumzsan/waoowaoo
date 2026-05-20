@@ -175,6 +175,8 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
   const panelImageTaskStateByKeyRef = useRef<ReadonlyMap<string, TaskTargetState>>(new Map())
+  const panelVideoTaskStateByKeyRef = useRef<ReadonlyMap<string, TaskTargetState>>(new Map())
+  const videoGroupTaskStateByKeyRef = useRef<ReadonlyMap<string, TaskTargetState>>(new Map())
   const storyboardConsistencyTaskStateByKeyRef = useRef<ReadonlyMap<string, TaskTargetState>>(new Map())
   const editScriptConsistencyTaskStateByKeyRef = useRef<ReadonlyMap<string, TaskTargetState>>(new Map())
   const expansionAnchorNodePositionsRef = useRef<ReadonlyMap<string, { readonly x: number; readonly y: number }>>(new Map())
@@ -404,8 +406,22 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       const editScriptConsistencyTaskState = node.data.kind === 'spaceConsistency' && editScriptId
         ? editScriptConsistencyTaskStateByKeyRef.current.get(taskTargetPairKey('ProjectEditScript', editScriptId)) ?? null
         : null
+      const videoPlanDetails = node.data.kind === 'videoPlan' ? node.data.videoPlanDetails : null
+      const videoPlanPanelId = videoPlanDetails?.kind === 'single'
+        ? videoPlanDetails.sourceImages[0]?.panelId ?? null
+        : null
+      const videoPlanGroupId = videoPlanDetails?.kind === 'group'
+        ? videoPlanDetails.videoGroupId ?? null
+        : null
+      const videoPlanTaskState = videoPlanPanelId
+        ? panelVideoTaskStateByKeyRef.current.get(taskTargetPairKey('ProjectPanel', videoPlanPanelId)) ?? null
+        : videoPlanGroupId
+          ? videoGroupTaskStateByKeyRef.current.get(taskTargetPairKey('ProjectVideoGroup', videoPlanGroupId)) ?? null
+          : null
       const panelImageTaskRunning = isTaskRuntimeRunningPhase(panelImageTaskState?.phase)
       const panelImageTaskFailed = panelImageTaskState?.phase === 'failed'
+      const videoPlanTaskRunning = isTaskRuntimeRunningPhase(videoPlanTaskState?.phase)
+      const videoPlanTaskFailed = videoPlanTaskState?.phase === 'failed'
       const isPanelShotNode = node.data.kind === 'shot' && node.data.targetType === 'panel'
       const storyboardConsistencyTaskRunning = isTaskRuntimeRunningPhase(storyboardConsistencyTaskState?.phase)
       const editScriptConsistencyTaskRunning = isTaskRuntimeRunningPhase(editScriptConsistencyTaskState?.phase)
@@ -413,6 +429,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       const isSpaceConsistencyNode = node.data.kind === 'spaceConsistency'
       const isOptimisticallyRunning = optimisticRunningNodeIdsRef.current.has(node.id) && node.data.isRunning !== true
       const shouldShowRunning = panelImageTaskRunning || isOptimisticallyRunning || node.data.isRunning === true
+      const shouldShowVideoPlanRunning = videoPlanTaskRunning || isOptimisticallyRunning || (node.data.kind === 'videoPlan' && node.data.isRunning === true && !videoPlanTaskFailed)
       const shouldShowSpaceConsistencyRunning = storyboardConsistencyTaskRunning || editScriptConsistencyTaskRunning || isOptimisticallyRunning
       const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
       const defaultExpanded = node.data.defaultExpanded ?? profile.defaultExpanded
@@ -452,6 +469,21 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
                     : consistencyTaskFailed
                       ? t('status.failed')
                       : node.data.statusLabel,
+                }
+            : videoPlanDetails
+              ? {
+                  isRunning: shouldShowVideoPlanRunning,
+                  statusLabel: shouldShowVideoPlanRunning
+                    ? nodeRunningStatusLabel(node)
+                    : videoPlanTaskFailed
+                      ? t('status.failed')
+                      : node.data.statusLabel,
+                  videoPlanDetails: {
+                    ...videoPlanDetails,
+                    errorMessage: videoPlanTaskFailed
+                      ? videoPlanTaskState?.lastError?.message ?? videoPlanDetails.errorMessage ?? null
+                      : videoPlanDetails.errorMessage,
+                  },
                 }
             : isOptimisticallyRunning
             ? {
@@ -508,8 +540,35 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
         : []
     ))
   ), [projection.nodes])
+  const panelVideoTargets = useMemo(() => (
+    projection.nodes.flatMap((node) => {
+      if (node.data.kind !== 'videoPlan') return []
+      const details = node.data.videoPlanDetails
+      if (!details) return []
+      if (details.kind !== 'single') return []
+      const panelId = details.sourceImages[0]?.panelId ?? null
+      return [TASK_RUNTIME_TARGETS.projectPanelVideo(panelId)].filter((target) => target !== null)
+    })
+  ), [projection.nodes])
+  const videoGroupTargets = useMemo(() => (
+    projection.nodes.flatMap((node) => {
+      if (node.data.kind !== 'videoPlan') return []
+      const details = node.data.videoPlanDetails
+      if (!details) return []
+      if (details.kind !== 'group') return []
+      return [TASK_RUNTIME_TARGETS.projectVideoGroup(details.videoGroupId ?? null)].filter((target) => target !== null)
+    })
+  ), [projection.nodes])
   const panelImageTaskStateMap = useTaskTargetStateMap(projectId, panelImageTargets, {
     enabled: Boolean(projectId && panelImageTargets.length > 0),
+    staleTime: 1000,
+  })
+  const panelVideoTaskStateMap = useTaskTargetStateMap(projectId, panelVideoTargets, {
+    enabled: Boolean(projectId && panelVideoTargets.length > 0),
+    staleTime: 1000,
+  })
+  const videoGroupTaskStateMap = useTaskTargetStateMap(projectId, videoGroupTargets, {
+    enabled: Boolean(projectId && videoGroupTargets.length > 0),
     staleTime: 1000,
   })
   useTaskTargetTerminalInvalidation({
@@ -517,6 +576,18 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     episodeId,
     states: panelImageTaskStateMap.data,
     enabled: panelImageTargets.length > 0,
+  })
+  useTaskTargetTerminalInvalidation({
+    projectId,
+    episodeId,
+    states: panelVideoTaskStateMap.data,
+    enabled: panelVideoTargets.length > 0,
+  })
+  useTaskTargetTerminalInvalidation({
+    projectId,
+    episodeId,
+    states: videoGroupTaskStateMap.data,
+    enabled: videoGroupTargets.length > 0,
   })
   const storyboardConsistencyTargets = useMemo(() => (
     projection.nodes.flatMap((node) => (
@@ -545,6 +616,14 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     () => taskRuntimeStateMapSignature(panelImageTaskStateMap.byKey),
     [panelImageTaskStateMap.byKey],
   )
+  const panelVideoTaskStateSignature = useMemo(
+    () => taskRuntimeStateMapSignature(panelVideoTaskStateMap.byKey),
+    [panelVideoTaskStateMap.byKey],
+  )
+  const videoGroupTaskStateSignature = useMemo(
+    () => taskRuntimeStateMapSignature(videoGroupTaskStateMap.byKey),
+    [videoGroupTaskStateMap.byKey],
+  )
   const storyboardConsistencyTaskStateSignature = useMemo(
     () => taskRuntimeStateMapSignature(storyboardConsistencyTaskStateMap.byKey),
     [storyboardConsistencyTaskStateMap.byKey],
@@ -554,6 +633,8 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     [editScriptConsistencyTaskStateMap.byKey],
   )
   panelImageTaskStateByKeyRef.current = panelImageTaskStateMap.byKey
+  panelVideoTaskStateByKeyRef.current = panelVideoTaskStateMap.byKey
+  videoGroupTaskStateByKeyRef.current = videoGroupTaskStateMap.byKey
   storyboardConsistencyTaskStateByKeyRef.current = storyboardConsistencyTaskStateMap.byKey
   editScriptConsistencyTaskStateByKeyRef.current = editScriptConsistencyTaskStateMap.byKey
 
@@ -585,7 +666,13 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
       preservedNodePositions: readExpansionAnchorNodePositions(),
     }))
-  }, [attachNodeUiState, panelImageTaskStateSignature, readExpansionAnchorNodePositions])
+  }, [
+    attachNodeUiState,
+    panelImageTaskStateSignature,
+    panelVideoTaskStateSignature,
+    readExpansionAnchorNodePositions,
+    videoGroupTaskStateSignature,
+  ])
 
   useEffect(() => {
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {

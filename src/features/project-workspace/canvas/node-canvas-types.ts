@@ -289,6 +289,7 @@ export interface WorkspaceCanvasVideoPlanDetails {
   readonly editScriptId: string
   readonly blockIndex: number
   readonly kind: 'single' | 'group'
+  readonly videoGroupId?: string | null
   readonly shotNumbers: readonly number[]
   readonly durationSec: number
   readonly gridMode?: '2x2' | '3x3'

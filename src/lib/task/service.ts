@@ -4,6 +4,7 @@ import { withPrismaRetry } from '@/lib/prisma-retry'
 import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
+import { syncTaskTargetFailure } from './target-failure-sync'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const taskModel = prisma.task
@@ -101,6 +102,9 @@ function resolveCompensationFailure(
 
 async function failTaskWithMissingLocale(task: {
   id: string
+  type: string
+  targetType: string
+  targetId: string
   billingInfo: unknown
 }) {
   const rollbackResult = await rollbackTaskBillingForTask({
@@ -123,6 +127,13 @@ async function failTaskWithMissingLocale(task: {
       heartbeatAt: null,
       dedupeKey: null,
     },
+  })
+  await syncTaskTargetFailure({
+    type: task.type,
+    targetType: task.targetType,
+    targetId: task.targetId,
+    errorCode: failure.errorCode,
+    errorMessage: failure.errorMessage,
   })
 }
 
@@ -205,6 +216,13 @@ export async function createTask(input: CreateTaskInput) {
               dedupeKey: null,
             },
           })
+          await syncTaskTargetFailure({
+            type: existing.type,
+            targetType: existing.targetType,
+            targetId: existing.targetId,
+            errorCode: failure.errorCode,
+            errorMessage: failure.errorMessage,
+          })
         }
       } else {
         // dedupeKey is unique in DB. Release terminal-task key so a new task can be created.
@@ -279,6 +297,13 @@ export async function createTask(input: CreateTaskInput) {
                 heartbeatAt: null,
                 dedupeKey: null,
               },
+            })
+            await syncTaskTargetFailure({
+              type: collided.type,
+              targetType: collided.targetType,
+              targetId: collided.targetId,
+              errorCode: failure.errorCode,
+              errorMessage: failure.errorMessage,
             })
           }
         } else {
@@ -613,6 +638,13 @@ export async function sweepStaleTasks(params: {
       },
     })
     if (updated.count > 0) {
+      await syncTaskTargetFailure({
+        type: task.type,
+        targetType: task.targetType,
+        targetId: task.targetId,
+        errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage,
+      })
       timedOut.push({
         ...task,
         errorCode: failure.errorCode,

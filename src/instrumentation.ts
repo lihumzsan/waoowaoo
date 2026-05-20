@@ -40,6 +40,7 @@ export async function register() {
       const { addTaskJob } = await import('@/lib/task/queues')
       const { locales } = await import('@/i18n/routing')
       const { TASK_STATUS, TASK_TYPE } = await import('@/lib/task/types')
+      const { syncTaskTargetFailure } = await import('@/lib/task/target-failure-sync')
       type TaskBillingInfo = import('@/lib/task/types').TaskBillingInfo
       type TaskJobData = import('@/lib/task/types').TaskJobData
       type TaskType = import('@/lib/task/types').TaskType
@@ -151,14 +152,23 @@ export async function register() {
 
             const locale = resolveTaskLocaleFromPayload(task.payload)
             if (!locale) {
+              const errorCode = 'TASK_LOCALE_REQUIRED'
+              const errorMessage = 'task locale is missing'
               await prisma.task.update({
                 where: { id: task.id },
                 data: {
                   status: TASK_STATUS.FAILED,
-                  errorCode: 'TASK_LOCALE_REQUIRED',
-                  errorMessage: 'task locale is missing',
+                  errorCode,
+                  errorMessage,
                   finishedAt: new Date(),
                 },
+              })
+              await syncTaskTargetFailure({
+                type: taskType,
+                targetType: task.targetType,
+                targetId: task.targetId,
+                errorCode,
+                errorMessage,
               })
               failed++
               continue

@@ -96,6 +96,9 @@ export const TASK_RUNTIME_TARGETS = {
   projectPanelVideo(panelId: string | null | undefined) {
     return target('ProjectPanel', panelId, [TASK_TYPE.VIDEO_PANEL])
   },
+  projectVideoGroup(groupId: string | null | undefined) {
+    return target('ProjectVideoGroup', groupId, [TASK_TYPE.VIDEO_GROUP])
+  },
   projectPanelLipSync(panelId: string | null | undefined) {
     return target('ProjectPanel', panelId, [TASK_TYPE.LIP_SYNC])
   },

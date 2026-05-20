@@ -1776,6 +1776,7 @@ export function buildWorkspaceNodeCanvasProjection({
             editScriptId: editScript.id,
             blockIndex: index,
             kind: block.kind,
+            videoGroupId: matchingGroup?.id ?? null,
             shotNumbers: block.shotNumbers,
             durationSec,
             gridMode: block.gridMode,

@@ -73,6 +73,13 @@ function withFlowFields(jobData: TaskJobData, payload?: Record<string, unknown> 
       base[key] = value
     }
   }
+  const meta = toObject(base.meta)
+  if (meta.locale === undefined || meta.locale === null || meta.locale === '') {
+    base.meta = {
+      ...meta,
+      locale: jobData.locale,
+    }
+  }
   return base
 }
 
