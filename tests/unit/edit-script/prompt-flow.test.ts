@@ -123,8 +123,10 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(assetExtractPrompt).toContain('角色资产必须同时生成 voiceTimbreText')
-    expect(assetExtractPrompt).toContain('character 必须输出 voiceTimbreText；location 禁止输出 voiceTimbreText')
+    expect(assetExtractPrompt).toContain('角色资产必须同时生成非空 voiceTimbreText')
+    expect(assetExtractPrompt).toContain('即使角色在当前剪辑表中没有对白、旁白或画外音，也必须')
+    expect(assetExtractPrompt).toContain('character 必须输出非空 voiceTimbreText；location 禁止输出 voiceTimbreText')
+    expect(assetExtractPrompt).toContain('禁止因为当前角色无台词而省略、置空、写 null')
 
     const videoPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT,
