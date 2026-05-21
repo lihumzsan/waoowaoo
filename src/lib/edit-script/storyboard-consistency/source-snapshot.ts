@@ -254,6 +254,13 @@ export async function buildStoryboardConsistencySource(input: {
     })
   }
   if (!editScript.id) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
+  const styleBible = editScript.styleBible
+  if (!styleBible) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_STYLE_BIBLE_REQUIRED',
+      message: 'Style Bible is required before storyboard generation',
+    })
+  }
   const modelConfigSnapshot = requireModelConfig(config)
   const assets = await buildAssetSnapshots(editScript.requirements)
   const videoBlocks: StoryboardConsistencySourceVideoBlock[] = editScript.videoBlocks.map((block, blockIndex) => ({
@@ -280,7 +287,7 @@ export async function buildStoryboardConsistencySource(input: {
         userPrompt: editScript.userPrompt,
         screenplayText: editScript.screenplayText,
       },
-      styleBible: editScript.styleBible,
+      styleBible,
       shots: editScript.shots,
       videoBlocks,
       assets,

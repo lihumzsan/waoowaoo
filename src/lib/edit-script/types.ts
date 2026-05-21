@@ -14,7 +14,7 @@ export interface EditScreenplayPayload {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
-  readonly styleBible: EditScriptStyleBible
+  readonly styleBible: EditScriptStyleBible | null
   readonly screenplayText: string
   readonly status: string
 }
@@ -55,7 +55,7 @@ export interface EditScriptPayload {
   readonly projectId?: string
   readonly episodeId?: string
   readonly userPrompt?: string
-  readonly styleBible: EditScriptStyleBible
+  readonly styleBible: EditScriptStyleBible | null
   readonly screenplayText?: string | null
   readonly title: string
   readonly logline?: string | null

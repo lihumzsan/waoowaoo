@@ -72,7 +72,12 @@ vi.mock('@/lib/edit-script/asset-design', () => ({
 }))
 vi.mock('@/lib/assets/services/asset-actions', () => ({ submitAssetGenerateTask: vi.fn() }))
 
-import { generateProjectEditScreenplay, generateProjectEditScript } from '@/lib/edit-script/service'
+import {
+  generateProjectEditScreenplay,
+  generateProjectEditScript,
+  readProjectEditScreenplay,
+  readProjectEditScript,
+} from '@/lib/edit-script/service'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
 
 function createRequest(): NextRequest {
@@ -298,6 +303,89 @@ describe('edit script generation status persistence', () => {
       }),
     }))
     expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
+  })
+
+  it('reads legacy screenplay without Style Bible as nullable styleBible', async () => {
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+      id: 'legacy-screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '旧剧本',
+      styleBibleJson: null,
+      screenplayText: '旧剧本文本',
+      status: 'ready',
+    })
+
+    const screenplay = await readProjectEditScreenplay({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(screenplay).toEqual({
+      id: 'legacy-screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '旧剧本',
+      styleBible: null,
+      screenplayText: '旧剧本文本',
+      status: 'ready',
+    })
+  })
+
+  it('reads legacy edit script without Style Bible as nullable styleBible', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      id: 'legacy-edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '旧分镜',
+      styleBibleJson: null,
+      screenplayText: '旧剧本文本',
+      title: '旧分镜',
+      logline: null,
+      durationSec: 4,
+      shotCount: 1,
+      status: 'ready',
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 4,
+          visualAction: '旧镜头动作',
+          charactersAndScene: '旧场景',
+          camera: '静态',
+          videoPrompt: '旧视频提示词',
+          sound: '环境声',
+        },
+      ],
+      videoBlocksJson: [
+        {
+          kind: 'single',
+          shotNumbers: [1],
+          reason: '单镜头',
+          prompt: '旧视频块提示词',
+        },
+      ],
+      requirements: [],
+    })
+
+    const editScript = await readProjectEditScript({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(editScript).toEqual(expect.objectContaining({
+      id: 'legacy-edit-1',
+      styleBible: null,
+      title: '旧分镜',
+      shotCount: 1,
+      requirements: [],
+    }))
+    expect(editScript?.shots[0]).toEqual(expect.objectContaining({
+      shotNumber: 1,
+      videoPrompt: '旧视频提示词',
+    }))
+    expect(editScript?.videoBlocks[0]).toEqual(expect.objectContaining({
+      prompt: '旧视频块提示词',
+    }))
   })
 
   it('persists a generating edit script before running the AI chain', async () => {

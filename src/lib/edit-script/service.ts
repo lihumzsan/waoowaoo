@@ -184,12 +184,19 @@ function buildProjectStyleInput(input: {
   }
 }
 
-function parseStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible {
+function parseOptionalStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible | null {
+  if (value === null) return null
   const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
   if (!parsed.success) {
-    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
+    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_INVALID')
   }
   return parsed.data.styleBible
+}
+
+function parseRequiredStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible {
+  const styleBible = parseOptionalStyleBibleJson(value)
+  if (!styleBible) throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
+  return styleBible
 }
 
 function styleBibleToJsonValue(styleBible: EditScriptStyleBible): Prisma.InputJsonValue {
@@ -609,7 +616,7 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     projectId: script.projectId,
     episodeId: script.episodeId,
     userPrompt: script.userPrompt,
-    styleBible: parseStyleBibleJson(script.styleBibleJson),
+    styleBible: parseOptionalStyleBibleJson(script.styleBibleJson),
     screenplayText: script.screenplayText,
     title: script.title,
     logline: script.logline,
@@ -628,7 +635,7 @@ function mapPersistedEditScreenplay(screenplay: PersistedEditScreenplay): EditSc
     projectId: screenplay.projectId,
     episodeId: screenplay.episodeId,
     userPrompt: screenplay.userPrompt,
-    styleBible: parseStyleBibleJson(screenplay.styleBibleJson),
+    styleBible: parseOptionalStyleBibleJson(screenplay.styleBibleJson),
     screenplayText: screenplay.screenplayText,
     status: screenplay.status,
   }
@@ -1005,7 +1012,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
     screenplayId: input.screenplayId,
   })
   const userPrompt = screenplay.userPrompt
-  const styleBible = parseStyleBibleJson(screenplay.styleBibleJson)
+  const styleBible = parseRequiredStyleBibleJson(screenplay.styleBibleJson)
   const defaults = resolveEditScriptDefaults(userPrompt)
   const screenplayText = screenplay.screenplayText
   await markEditScriptGenerating({
