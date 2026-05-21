@@ -18,6 +18,7 @@ import type {
   EditScriptVideoBlock,
 } from './types'
 import { editScriptVideoBlockMergeSchema } from './types'
+import { assertNoRunningVideoGroupOverlap } from './video-group-running-guard'
 
 interface MergeEditScriptVideoBlocksInput {
   readonly projectId: string
@@ -113,11 +114,6 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
   return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
-function intersectsShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  const rightSet = new Set(right)
-  return left.some((shotNumber) => rightSet.has(shotNumber))
-}
-
 function blockShots(structure: Omit<EditScriptPayload, 'requirements'>, block: EditScriptVideoBlock): readonly EditScriptShot[] {
   return block.shotNumbers.map((shotNumber) => {
     const shot = structure.shots.find((item) => item.shotNumber === shotNumber)
@@ -142,13 +138,6 @@ function buildStructureFromPersistedScript(script: PersistedEditScript): Omit<Ed
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),
   }
-}
-
-function parseVideoGroupShotNumbers(value: Prisma.JsonValue): number[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item) && item > 0)
 }
 
 function assertConsecutiveBlockIndexes(leftBlockIndex: number, rightBlockIndex: number): void {
@@ -290,33 +279,6 @@ function mapPersistedEditScript(script: PersistedEditScript): EditScriptPayload 
   }
 }
 
-async function assertNoRunningVideoGroupOverlap(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly shotNumbers: readonly number[]
-}): Promise<void> {
-  const runningGroups = await prisma.projectVideoGroup.findMany({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      status: { in: ['queued', 'processing'] },
-    },
-    select: {
-      id: true,
-      shotNumbers: true,
-    },
-  })
-  const hasOverlap = runningGroups.some((group) => intersectsShotNumbers(
-    parseVideoGroupShotNumbers(group.shotNumbers),
-    input.shotNumbers,
-  ))
-  if (hasOverlap) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_VIDEO_BLOCK_MERGE_RUNNING_VIDEO_GROUP',
-    })
-  }
-}
-
 async function runMergePromptStep(input: {
   readonly userId: string
   readonly projectId: string
@@ -402,6 +364,7 @@ export async function mergeProjectEditScriptVideoBlocks(
   await assertNoRunningVideoGroupOverlap({
     projectId: input.projectId,
     episodeId: input.episodeId,
+    errorCode: 'EDIT_SCRIPT_VIDEO_BLOCK_MERGE_RUNNING_VIDEO_GROUP',
     shotNumbers: mergedShotNumbers,
   })
 

@@ -18,6 +18,7 @@ import type {
   EditScriptVideoBlock,
 } from './types'
 import { editScriptVideoBlockArrangementSchema } from './types'
+import { assertNoRunningVideoGroupOverlap } from './video-group-running-guard'
 
 interface ArrangeEditScriptVideoBlocksInput {
   readonly projectId: string
@@ -176,13 +177,6 @@ function buildStructureFromPersistedScript(script: PersistedEditScript): Omit<Ed
   }
 }
 
-function parseVideoGroupShotNumbers(value: Prisma.JsonValue): number[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item) && item > 0)
-}
-
 function blockShots(shots: readonly EditScriptShot[], block: EditScriptVideoBlock): readonly EditScriptShot[] {
   return block.shotNumbers.map((shotNumber) => {
     const shot = shots.find((item) => item.shotNumber === shotNumber)
@@ -328,33 +322,6 @@ function affectedShotNumbers(input: {
     block.shotNumbers.forEach((shotNumber) => affected.add(shotNumber))
   })
   return [...affected]
-}
-
-async function assertNoRunningVideoGroupOverlap(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly shotNumbers: readonly number[]
-}): Promise<void> {
-  const runningGroups = await prisma.projectVideoGroup.findMany({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      status: { in: ['queued', 'processing'] },
-    },
-    select: {
-      id: true,
-      shotNumbers: true,
-    },
-  })
-  const inputSet = new Set(input.shotNumbers)
-  const hasOverlap = runningGroups.some((group) => (
-    parseVideoGroupShotNumbers(group.shotNumbers).some((shotNumber) => inputSet.has(shotNumber))
-  ))
-  if (hasOverlap) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP',
-    })
-  }
 }
 
 function buildStyleContext(input: {
@@ -510,6 +477,7 @@ export async function arrangeProjectEditScriptVideoBlocks(
   await assertNoRunningVideoGroupOverlap({
     projectId: input.projectId,
     episodeId: input.episodeId,
+    errorCode: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP',
     shotNumbers: affectedShotNumbers({
       previousBlocks: structure.videoBlocks,
       changedBlocks,

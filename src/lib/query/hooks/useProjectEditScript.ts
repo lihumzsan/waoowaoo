@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import { resolveTaskErrorMessage } from '@/lib/task/error-message'
+import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ArtStyleValue } from '@/lib/constants'
 import type { ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
@@ -77,8 +77,7 @@ interface UpdateEditAssetRequirementDescriptionInput {
 }
 
 async function readJsonError(response: Response, fallback: string): Promise<Error> {
-  const payload = await response.json().catch(() => null)
-  return new Error(resolveTaskErrorMessage(payload, fallback))
+  return await readProjectEditScriptJsonError(response, fallback)
 }
 
 export function useProjectEditScript(projectId: string | null, episodeId: string | null) {

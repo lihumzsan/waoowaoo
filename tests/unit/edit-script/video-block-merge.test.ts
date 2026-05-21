@@ -12,6 +12,10 @@ interface AiTextStepCall {
   }[]
 }
 
+interface PromptBuildInput {
+  readonly variables?: Record<string, string>
+}
+
 const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findFirst: vi.fn(),
@@ -19,6 +23,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectVideoGroup: {
     findMany: vi.fn(),
+    updateMany: vi.fn(),
   },
   project: {
     findFirst: vi.fn(),
@@ -31,6 +36,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   task: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
 }))
 
@@ -48,16 +54,62 @@ const billingMock = vi.hoisted(() => ({
   ) => await runCompletion()),
 }))
 
+const aiPromptsMock = vi.hoisted(() => ({
+  AI_PROMPT_IDS: {
+    EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'edit-script-video-block-merge',
+  },
+  buildAiPrompt: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({ analysisModel: 'analysis-model-1' })),
 }))
 vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
 vi.mock('@/lib/billing', () => billingMock)
+vi.mock('@/lib/ai-prompts', () => aiPromptsMock)
 vi.mock('@/lib/assets/services/asset-actions', () => ({ submitAssetGenerateTask: vi.fn() }))
 
 import { mergeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-merge'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
+
+function buildStyleBibleJson() {
+  return {
+    strategy: 'style_bible',
+    rawUserStyle: null,
+    styleSummary: 'Cinematic realism.',
+    stylePolicy: {
+      rawUserStyle: null,
+      styleSummary: 'Cinematic realism.',
+      visual: {
+        positivePrompt: 'Cinematic realism with clear subject detail.',
+        negativePrompt: 'No distortion or unreadable frames.',
+        imageFilterPrompt: 'Clean cinematic image.',
+        lightingPrompt: 'Soft contrast lighting.',
+        colorPrompt: 'Cool neutral palette.',
+        texturePrompt: 'Fine film grain.',
+        compositionPrompt: 'Balanced composition.',
+      },
+      camera: {
+        rhythmPrompt: 'Steady visual rhythm.',
+        movementPrompt: 'Smooth camera movement.',
+        lensAndDepthPrompt: '35mm lens with moderate depth.',
+        editingPacingPrompt: 'Clear continuity pacing.',
+      },
+      motion: {
+        subjectMotionPrompt: 'Natural subject movement.',
+        actingPrompt: 'Grounded physical acting.',
+      },
+      sound: {
+        positivePrompt: 'Clear production sound.',
+        negativePrompt: 'No noisy artifacts.',
+        soundFilterPrompt: 'Clean room tone.',
+        soundStylePrompt: 'Realistic sound design.',
+      },
+      hardBans: ['No subtitles.'],
+    },
+  }
+}
 
 function buildScript(durationOverrides: readonly number[] = [4, 4, 3, 3]) {
   const shotsJson = durationOverrides.map((durationSec, index) => {
@@ -84,6 +136,7 @@ function buildScript(durationOverrides: readonly number[] = [4, 4, 3, 3]) {
     shotCount: durationOverrides.length,
     status: 'ready',
     shotsJson,
+    styleBibleJson: buildStyleBibleJson(),
     videoBlocksJson: [
       {
         kind: 'group',
@@ -114,6 +167,7 @@ describe('edit script video block merge', () => {
       videoBlocksJson: args.data?.videoBlocksJson,
     }))
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
+    prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 0 })
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
       artStyle: 'cinematic',
@@ -123,6 +177,7 @@ describe('edit script video block merge', () => {
     prismaMock.projectCharacter.findFirst.mockResolvedValue(null)
     prismaMock.projectLocation.findFirst.mockResolvedValue(null)
     prismaMock.task.findFirst.mockResolvedValue(null)
+    prismaMock.task.findMany.mockResolvedValue([])
     aiExecMock.executeAiTextStep.mockResolvedValue({
       text: JSON.stringify({
         shotNumbers: [1, 2, 3, 4],

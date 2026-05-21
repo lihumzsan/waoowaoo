@@ -13,6 +13,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { TASK_STATUS, TASK_EVENT_TYPE } from './types'
 import { publishTaskEvent } from './publisher'
 import { rollbackTaskBillingForTask } from './service'
+import { syncTaskTargetFailure } from './target-failure-sync'
 import {
     getAllQueues,
 } from './queues'
@@ -118,6 +119,13 @@ async function failOrphanedTask(
     })
 
     if (result.count > 0) {
+        await syncTaskTargetFailure({
+            type: task.type,
+            targetType: task.targetType,
+            targetId: task.targetId,
+            errorCode,
+            errorMessage,
+        })
         // 发送 FAILED 事件，触发前端 SSE 更新 + 数据刷新
         await publishTaskEvent({
             taskId: task.id,

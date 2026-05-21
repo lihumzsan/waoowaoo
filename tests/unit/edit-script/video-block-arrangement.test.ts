@@ -6,6 +6,10 @@ interface ProjectEditScriptUpdateArgs {
   }
 }
 
+interface PromptBuildInput {
+  readonly variables?: Record<string, string>
+}
+
 const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findFirst: vi.fn(),
@@ -13,9 +17,13 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectVideoGroup: {
     findMany: vi.fn(),
+    updateMany: vi.fn(),
   },
   project: {
     findFirst: vi.fn(),
+  },
+  task: {
+    findMany: vi.fn(),
   },
 }))
 
@@ -33,15 +41,61 @@ const billingMock = vi.hoisted(() => ({
   ) => await runCompletion()),
 }))
 
+const aiPromptsMock = vi.hoisted(() => ({
+  AI_PROMPT_IDS: {
+    EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT: 'edit-script-video-block-arrangement',
+  },
+  buildAiPrompt: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({ analysisModel: 'analysis-model-1' })),
 }))
 vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
 vi.mock('@/lib/billing', () => billingMock)
+vi.mock('@/lib/ai-prompts', () => aiPromptsMock)
 
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
 import { arrangeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-arrangement'
+
+function buildStyleBibleJson() {
+  return {
+    strategy: 'style_bible',
+    rawUserStyle: null,
+    styleSummary: 'Cinematic realism.',
+    stylePolicy: {
+      rawUserStyle: null,
+      styleSummary: 'Cinematic realism.',
+      visual: {
+        positivePrompt: 'Cinematic realism with clear subject detail.',
+        negativePrompt: 'No distortion or unreadable frames.',
+        imageFilterPrompt: 'Clean cinematic image.',
+        lightingPrompt: 'Soft contrast lighting.',
+        colorPrompt: 'Cool neutral palette.',
+        texturePrompt: 'Fine film grain.',
+        compositionPrompt: 'Balanced composition.',
+      },
+      camera: {
+        rhythmPrompt: 'Steady visual rhythm.',
+        movementPrompt: 'Smooth camera movement.',
+        lensAndDepthPrompt: '35mm lens with moderate depth.',
+        editingPacingPrompt: 'Clear continuity pacing.',
+      },
+      motion: {
+        subjectMotionPrompt: 'Natural subject movement.',
+        actingPrompt: 'Grounded physical acting.',
+      },
+      sound: {
+        positivePrompt: 'Clear production sound.',
+        negativePrompt: 'No noisy artifacts.',
+        soundFilterPrompt: 'Clean room tone.',
+        soundStylePrompt: 'Realistic sound design.',
+      },
+      hardBans: ['No subtitles.'],
+    },
+  }
+}
 
 function buildScript(durationOverrides: readonly number[] = [4, 4, 3, 3]) {
   const shotsJson = durationOverrides.map((durationSec, index) => {
@@ -68,6 +122,7 @@ function buildScript(durationOverrides: readonly number[] = [4, 4, 3, 3]) {
     shotCount: durationOverrides.length,
     status: 'ready',
     shotsJson,
+    styleBibleJson: buildStyleBibleJson(),
     videoBlocksJson: [
       {
         kind: 'group',
@@ -98,6 +153,8 @@ describe('edit script video block arrangement', () => {
       videoBlocksJson: args.data?.videoBlocksJson,
     }))
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
+    prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 0 })
+    prismaMock.task.findMany.mockResolvedValue([])
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
       artStyle: 'cinematic',
@@ -194,6 +251,143 @@ describe('edit script video block arrangement', () => {
         shotNumber: 3,
         expectedShotNumber: 2,
         position: 1,
+      }),
+    })
+
+    expect(aiExecMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.update).not.toHaveBeenCalled()
+  })
+
+  it('repairs stale processing video groups whose linked task already failed before arranging', async () => {
+    prismaMock.projectVideoGroup.findMany.mockResolvedValue([
+      {
+        id: 'group-1',
+        status: 'processing',
+        taskId: 'task-1',
+        shotNumbers: [3, 4],
+        videoUrl: '/m/old-video',
+        videoMediaId: 'media-1',
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date('2026-05-20T11:02:12.040Z'),
+      },
+    ])
+    prismaMock.task.findMany.mockResolvedValue([
+      {
+        id: 'task-1',
+        status: 'failed',
+        errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job already terminated but DB was not updated',
+      },
+    ])
+    prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await arrangeProjectEditScriptVideoBlocks({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      blocks: [
+        { shotNumbers: [1, 2, 3] },
+        { shotNumbers: [4] },
+      ],
+      userId: 'user-1',
+      locale: 'en',
+    })
+
+    expect(result.videoBlocks[0]?.shotNumbers).toEqual([1, 2, 3])
+    expect(prismaMock.projectVideoGroup.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'group-1',
+        status: { in: ['queued', 'processing'] },
+      },
+      data: {
+        status: 'failed',
+        taskId: null,
+        errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job already terminated but DB was not updated',
+      },
+    })
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT,
+    }))
+  })
+
+  it('still rejects recently queued video groups before the task link is visible', async () => {
+    prismaMock.projectVideoGroup.findMany.mockResolvedValue([
+      {
+        id: 'group-1',
+        status: 'queued',
+        taskId: null,
+        shotNumbers: [3, 4],
+        videoUrl: '/m/previous-video',
+        videoMediaId: 'previous-media-1',
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date(),
+      },
+    ])
+    prismaMock.task.findMany.mockResolvedValue([])
+
+    await expect(arrangeProjectEditScriptVideoBlocks({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      blocks: [
+        { shotNumbers: [1, 2, 3] },
+        { shotNumbers: [4] },
+      ],
+      userId: 'user-1',
+      locale: 'en',
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP',
+        groupIds: ['group-1'],
+      }),
+    })
+
+    expect(prismaMock.projectVideoGroup.updateMany).not.toHaveBeenCalled()
+    expect(aiExecMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.update).not.toHaveBeenCalled()
+  })
+
+  it('still rejects when overlapping video group task is actually running', async () => {
+    prismaMock.projectVideoGroup.findMany.mockResolvedValue([
+      {
+        id: 'group-1',
+        status: 'processing',
+        taskId: 'task-1',
+        shotNumbers: [3, 4],
+        videoUrl: null,
+        videoMediaId: null,
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date(),
+      },
+    ])
+    prismaMock.task.findMany.mockResolvedValue([
+      {
+        id: 'task-1',
+        status: 'processing',
+        errorCode: null,
+        errorMessage: null,
+      },
+    ])
+
+    await expect(arrangeProjectEditScriptVideoBlocks({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      blocks: [
+        { shotNumbers: [1, 2, 3] },
+        { shotNumbers: [4] },
+      ],
+      userId: 'user-1',
+      locale: 'en',
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP',
+        groupIds: ['group-1'],
+        shotNumbers: [3, 4],
       }),
     })
 

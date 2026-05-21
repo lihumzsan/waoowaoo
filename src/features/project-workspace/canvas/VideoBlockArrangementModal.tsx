@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
+import { readProjectEditScriptRequestErrorCode } from '@/lib/query/project-edit-script-error'
 import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
 
 const MAX_BLOCK_DURATION_SEC = 15
@@ -138,6 +139,26 @@ function clampBlockIndex(index: number, blockCount: number): number {
   return Math.min(Math.max(index, 0), blockCount - 1)
 }
 
+function arrangementSubmitErrorMessage(
+  error: unknown,
+  translate: ReturnType<typeof useTranslations>,
+): string {
+  const code = readProjectEditScriptRequestErrorCode(error)
+  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP') {
+    return translate('runningVideoGroup')
+  }
+  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_ORDER_INVALID') {
+    return translate('orderInvalid')
+  }
+  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_DURATION_EXCEEDED') {
+    return translate('durationExceeded')
+  }
+  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_BLOCK_SIZE_INVALID') {
+    return translate('blockSizeInvalid')
+  }
+  return error instanceof Error ? error.message : translate('submitFailed')
+}
+
 export default function VideoBlockArrangementModal({
   editScript,
   storyboards,
@@ -245,8 +266,7 @@ export default function VideoBlockArrangementModal({
     try {
       await onSubmit(draftBlocks.map((block) => ({ shotNumbers: block.shotNumbers })))
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : t('submitFailed')
-      setErrorMessage(message)
+      setErrorMessage(arrangementSubmitErrorMessage(error, t))
     } finally {
       setIsSubmitting(false)
     }
