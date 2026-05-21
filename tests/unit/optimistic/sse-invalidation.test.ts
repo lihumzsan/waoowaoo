@@ -10,6 +10,7 @@ const runtime = vi.hoisted(() => ({
   queryClient: {
     invalidateQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
     setQueryData: vi.fn(),
+    getQueriesData: vi.fn(() => []),
   },
   effectCleanup: null as EffectCleanup,
   scheduledTimers: [] as Array<() => void>,

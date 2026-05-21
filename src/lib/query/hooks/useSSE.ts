@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import { applyTaskLifecycleToOverlay } from '../task-target-overlay'
+import { applyTaskTargetTerminalStateToCache } from '../task-target-state-cache'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
 import { invalidateByTarget } from '../invalidation/invalidate-by-target'
 import {
@@ -184,6 +185,16 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
           typeof payloadUi?.hasOutputAtStart === 'boolean'
             ? payloadUi.hasOutputAtStart
             : null
+        const payloadErrorCode =
+          typeof eventPayload?.errorCode === 'string' && eventPayload.errorCode.trim()
+            ? eventPayload.errorCode.trim()
+            : null
+        const payloadErrorMessage =
+          typeof eventPayload?.errorMessage === 'string' && eventPayload.errorMessage.trim()
+            ? eventPayload.errorMessage.trim()
+            : typeof eventPayload?.message === 'string' && eventPayload.message.trim()
+              ? eventPayload.message.trim()
+              : null
 
         applyTaskLifecycleToOverlay(queryClient, {
           projectId,
@@ -199,6 +210,28 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
           stageLabel: typeof eventPayload?.stageLabel === 'string' ? eventPayload.stageLabel : null,
           eventTs: typeof payload.ts === 'string' ? payload.ts : null,
         })
+
+        if (
+          normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
+          normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
+        ) {
+          applyTaskTargetTerminalStateToCache(queryClient, {
+            projectId,
+            targetType,
+            targetId,
+            phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
+            taskId: typeof payload.taskId === 'string' ? payload.taskId : null,
+            taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
+            intent: payloadIntent,
+            hasOutputAtStart,
+            progress: typeof eventPayload?.progress === 'number' ? Math.floor(eventPayload.progress) : null,
+            stage: typeof eventPayload?.stage === 'string' ? eventPayload.stage : null,
+            stageLabel: typeof eventPayload?.stageLabel === 'string' ? eventPayload.stageLabel : null,
+            errorCode: payloadErrorCode,
+            errorMessage: payloadErrorMessage,
+            eventTs: typeof payload.ts === 'string' ? payload.ts : null,
+          })
+        }
 
         if (
           normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING &&
