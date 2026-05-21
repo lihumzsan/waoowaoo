@@ -9,8 +9,12 @@ const nextConfig: NextConfig = {
   logging: false,
   devIndicators: false,
   outputFileTracingExcludes: {
-    '/api/admin/download-logs': [
+    '/*': [
       './logs/**/*',
+      './docker-logs/**/*',
+      './*.log',
+    ],
+    '/api/admin/download-logs': [
       './public/demo-assets/**/*',
     ],
   },
