@@ -46,6 +46,8 @@ export interface EditAssetRequirement {
   readonly shotNumbers: readonly number[]
   readonly status?: EditAssetStatus
   readonly targetId?: string | null
+  readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
+  readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
   readonly previewImageUrl?: string | null
 }

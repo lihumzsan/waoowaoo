@@ -279,6 +279,8 @@ export interface ProjectEditAssetRequirement {
   shotNumbers: number[]
   status: ProjectEditAssetStatus
   targetId: string | null
+  taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
+  taskTargetId?: string | null
   errorMessage: string | null
   previewImageUrl?: string | null
 }

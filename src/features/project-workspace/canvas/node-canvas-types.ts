@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
+import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 
 export type WorkspaceCanvasNodeKind =
   | 'storyInput'
@@ -370,6 +371,8 @@ export interface WorkspaceCanvasEditAssetDetails {
   readonly description: string
   readonly shotNumbers: readonly number[]
   readonly targetId?: string | null
+  readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
+  readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
 }
 
@@ -452,6 +455,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly meta: string
   readonly statusLabel: string
   readonly isRunning?: boolean
+  readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
   readonly height: number
   readonly layoutBasePosition?: {

@@ -604,6 +604,8 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
       shotNumbers: readShotNumbers(requirement.shotIndexes),
       status,
       targetId: requirement.targetId,
+      taskTargetType: resolvedAsset?.taskTargetType ?? null,
+      taskTargetId: resolvedAsset?.taskTargetId ?? null,
       errorMessage: status === 'failed' ? taskFailure || requirement.errorMessage : null,
       voiceTimbreText: null,
       previewImageUrl: resolvedAsset?.previewImageUrl ?? null,

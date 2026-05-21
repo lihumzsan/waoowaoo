@@ -7,6 +7,11 @@ import {
   WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
 } from '@/features/project-workspace/canvas/node-presentation-profiles'
+import { resolveWorkspaceNodeRuntimePatch } from '@/features/project-workspace/canvas/workspace-node-runtime'
+import {
+  TASK_RUNTIME_TARGETS,
+  taskRuntimeTargetQueryKey,
+} from '@/lib/task/runtime-targets'
 
 function t(key: string, values?: Record<string, string | number>): string {
   if (!values) return key
@@ -470,7 +475,7 @@ describe('workspace node canvas projection', () => {
     expect(screenplayNode && timelineNode ? nodesOverlap(screenplayNode, timelineNode) : true).toBe(false)
   })
 
-  it('marks final timeline as AI editing while final render task is running', () => {
+  it('binds final timeline running state to the final render task target', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
@@ -491,15 +496,33 @@ describe('workspace node canvas projection', () => {
       ],
       editScript: createSingleVideoEditScript(),
       savedLayouts: [],
-      finalRenderPhase: 'processing',
       translate: t,
     })
 
     const finalNode = projection.nodes.find((node) => node.id === 'final:episode-1')
-    expect(finalNode?.data.statusLabel).toBe('status.aiEditing')
-    expect(finalNode?.data.isRunning).toBe(true)
-    expect(finalNode?.data.actionLabel).toBe('actions.aiEditing')
-    expect(finalNode?.data.actionDisabled).toBe(true)
+    const target = TASK_RUNTIME_TARGETS.projectEpisodeFinalRender('episode-1')
+    expect(target).not.toBeNull()
+    expect(finalNode?.data.runtimeTargets).toEqual(target ? [target] : [])
+    if (!finalNode || !target) throw new Error('FINAL_NODE_TARGET_MISSING')
+    const patch = resolveWorkspaceNodeRuntimePatch({
+      node: finalNode,
+      statesByQueryKey: new Map([[
+        taskRuntimeTargetQueryKey(target),
+        {
+          phase: 'processing',
+          runningTaskId: 'task-final',
+          runningTaskType: 'final_video_render',
+          lastError: null,
+        },
+      ]]),
+      isOptimisticallyRunning: false,
+      labels: {
+        running: 'status.aiEditing',
+        failed: 'status.failed',
+      },
+    })
+    expect(patch.statusLabel).toBe('status.aiEditing')
+    expect(patch.isRunning).toBe(true)
   })
 
   it('shows a running edit table placeholder while the assistant is generating it', () => {
@@ -645,16 +668,35 @@ describe('workspace node canvas projection', () => {
       ],
       editScript: createSingleVideoEditScript(),
       savedLayouts: [],
-      finalRenderPhase: 'failed',
-      finalRenderErrorMessage: 'Google music network failed',
       translate: t,
     })
 
     const finalNode = projection.nodes.find((node) => node.id === 'final:episode-1')
-    expect(finalNode?.data.statusLabel).toBe('status.failed')
-    expect(finalNode?.data.meta).toBe('Google music network failed')
-    expect(finalNode?.data.actionLabel).toBe('actions.renderFinalVideo')
-    expect(finalNode?.data.actionDisabled).toBe(true)
+    const target = TASK_RUNTIME_TARGETS.projectEpisodeFinalRender('episode-1')
+    if (!finalNode || !target) throw new Error('FINAL_NODE_TARGET_MISSING')
+    const patch = resolveWorkspaceNodeRuntimePatch({
+      node: finalNode,
+      statesByQueryKey: new Map([[
+        taskRuntimeTargetQueryKey(target),
+        {
+          phase: 'failed',
+          runningTaskId: null,
+          runningTaskType: 'final_video_render',
+          lastError: {
+            code: 'PROVIDER_FAILED',
+            message: 'Google music network failed',
+          },
+        },
+      ]]),
+      isOptimisticallyRunning: false,
+      labels: {
+        running: 'status.aiEditing',
+        failed: 'status.failed',
+      },
+    })
+    expect(patch.statusLabel).toBe('status.failed')
+    expect(patch.isRunning).toBe(false)
+    expect(patch.meta).toBe('Google music network failed')
   })
 
   it('adds a BGM score node and keeps final render disabled until BGM is completed', () => {
@@ -1278,6 +1320,8 @@ describe('workspace node canvas projection', () => {
             shotNumbers: [1],
             status: 'completed',
             targetId: 'location-1',
+            taskTargetType: 'LocationImage',
+            taskTargetId: 'location-1',
             errorMessage: null,
             previewImageUrl: 'https://example.com/location.png',
           },
@@ -1347,7 +1391,38 @@ describe('workspace node canvas projection', () => {
     expect(assetNode?.data.editAssetDetails).toMatchObject({
       kind: 'location',
       targetId: 'location-1',
+      taskTargetType: 'LocationImage',
+      taskTargetId: 'location-1',
       shotNumbers: [1],
+    })
+    expect(assetNode?.data.runtimeTargets).toEqual([
+      {
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+        types: ['image_location', 'modify_asset_image'],
+      },
+    ])
+    if (!assetNode?.data.runtimeTargets?.[0]) throw new Error('EDIT_ASSET_RUNTIME_TARGET_MISSING')
+    const runningPatch = resolveWorkspaceNodeRuntimePatch({
+      node: assetNode,
+      statesByQueryKey: new Map([[
+        taskRuntimeTargetQueryKey(assetNode.data.runtimeTargets[0]),
+        {
+          phase: 'processing',
+          runningTaskId: 'task-location',
+          runningTaskType: 'image_location',
+          lastError: null,
+        },
+      ]]),
+      isOptimisticallyRunning: false,
+      labels: {
+        running: 'status.processing',
+        failed: 'status.failed',
+      },
+    })
+    expect(runningPatch).toMatchObject({
+      isRunning: true,
+      statusLabel: 'status.processing',
     })
   })
 

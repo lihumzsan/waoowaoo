@@ -124,7 +124,7 @@ describe('task target state map behavior', () => {
     }
   })
 
-  it('enables polling while queued/processing and merges overlay only when rules match', async () => {
+  it('keeps polling disabled and merges overlay only when rules match', async () => {
     const { useTaskTargetStateMap } = await import('@/lib/query/hooks/useTaskTargetStateMap')
 
     const result = useTaskTargetStateMap('project-1', [
@@ -133,11 +133,7 @@ describe('task target state map behavior', () => {
     ])
 
     const firstCall = findTargetStatesQueryCall()
-    expect(typeof firstCall?.refetchInterval).toBe('function')
-    const interval = (firstCall?.refetchInterval as ((state: { state: { data?: TaskTargetState[] } }) => number | false))({
-      state: { data: runtime.apiStates },
-    })
-    expect(interval).toBe(2000)
+    expect(firstCall?.refetchInterval).toBe(false)
 
     const appearance = result.getState('CharacterAppearance', 'appearance-1')
     expect(appearance?.phase).toBe('processing')
@@ -150,7 +146,7 @@ describe('task target state map behavior', () => {
     expect(panel?.runningTaskId).toBe('task-api-panel')
   })
 
-  it('keeps polling while an overlay is running even when server state is still idle', async () => {
+  it('keeps overlay running state authoritative without polling when server state is still idle', async () => {
     runtime.apiStates = [
       {
         targetType: 'ProjectVideoGroup',
@@ -192,10 +188,7 @@ describe('task target state map behavior', () => {
     ])
 
     const firstCall = findTargetStatesQueryCall()
-    const interval = (firstCall?.refetchInterval as ((state: { state: { data?: TaskTargetState[] } }) => number | false))({
-      state: { data: runtime.apiStates },
-    })
-    expect(interval).toBe(2000)
+    expect(firstCall?.refetchInterval).toBe(false)
     const state = result.getState('ProjectVideoGroup', 'group-1')
     expect(state?.phase).toBe('processing')
     expect(state?.runningTaskId).toBe('task-overlay-video-group')

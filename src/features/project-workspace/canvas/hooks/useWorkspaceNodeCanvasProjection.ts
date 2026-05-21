@@ -3,6 +3,10 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
+import {
+  TASK_RUNTIME_TARGETS,
+  type TaskRuntimeTarget,
+} from '@/lib/task/runtime-targets'
 import type {
   ProjectClip,
   ProjectEditAssetRequirement,
@@ -136,10 +140,6 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly videoGroups?: readonly ProjectVideoGroup[]
   readonly defaultVideoModel?: string | null
   readonly defaultSequenceVideoModel?: string | null
-  readonly finalRenderPhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
-  readonly finalRenderErrorMessage?: string | null
-  readonly bgmScorePhase?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
-  readonly bgmScoreErrorMessage?: string | null
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
   readonly onAction?: WorkspaceCanvasNodeActionHandler
@@ -157,6 +157,12 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function runtimeTargets(
+  ...targets: Array<TaskRuntimeTarget | null>
+): readonly TaskRuntimeTarget[] {
+  return targets.filter((target): target is TaskRuntimeTarget => target !== null)
 }
 
 function parseJson(value: string | null | undefined): unknown | null {
@@ -1122,10 +1128,6 @@ export function buildWorkspaceNodeCanvasProjection({
   finalVideo,
   videoGroups = [],
   defaultSequenceVideoModel,
-  finalRenderPhase,
-  finalRenderErrorMessage,
-  bgmScorePhase,
-  bgmScoreErrorMessage,
   savedLayouts,
   translate,
   onAction,
@@ -1193,6 +1195,7 @@ export function buildWorkspaceNodeCanvasProjection({
         meta: translate('nodes.editScreenplay.meta'),
         statusLabel: editScreenplay.status === 'ready' ? translate('status.ready') : translate('status.processing'),
         isRunning: editScreenplay.status !== 'ready',
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         width: EDIT_SCREENPLAY_NODE_WIDTH,
         height: editScreenplayHeight,
         indexLabel: 'S',
@@ -1396,6 +1399,7 @@ export function buildWorkspaceNodeCanvasProjection({
             ? translate('status.failed')
             : translate('status.ready'),
         isRunning: editScriptIsGenerating,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         width: EDIT_SCRIPT_TABLE_NODE_WIDTH,
         height: editScriptHeight,
         indexLabel: 'E',
@@ -1470,6 +1474,9 @@ export function buildWorkspaceNodeCanvasProjection({
           meta: translate('nodes.editAsset.meta', { shots: asset.shotNumbers.join(', ') }),
           statusLabel: assetStatusLabel(asset.status, translate),
           isRunning: asset.status === 'generating',
+          runtimeTargets: runtimeTargets(
+            TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType, asset.taskTargetId),
+          ),
           width: EDIT_ASSET_NODE_WIDTH,
           height: nodeHeight,
           indexLabel: asset.kind === 'character' ? 'C' : 'L',
@@ -1481,6 +1488,8 @@ export function buildWorkspaceNodeCanvasProjection({
             description: asset.description,
             shotNumbers: asset.shotNumbers,
             targetId: asset.targetId,
+            taskTargetType: asset.taskTargetType ?? null,
+            taskTargetId: asset.taskTargetId ?? null,
             errorMessage: asset.errorMessage,
           },
           actionLabel: assetAction
@@ -1513,6 +1522,7 @@ export function buildWorkspaceNodeCanvasProjection({
         meta: translate('nodes.editScript.pendingMeta'),
         statusLabel: translate('status.processing'),
         isRunning: true,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         width: EDIT_SCRIPT_TABLE_NODE_WIDTH,
         height: 520,
         indexLabel: 'E',
@@ -1646,6 +1656,10 @@ export function buildWorkspaceNodeCanvasProjection({
           ? translate('status.failed')
           : translate('status.ready'),
         isRunning: false,
+        runtimeTargets: runtimeTargets(
+          TASK_RUNTIME_TARGETS.projectStoryboardConsistency(storyboard.id),
+          TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript?.id),
+        ),
         width: SPACE_CONSISTENCY_NODE_WIDTH,
         height: SPACE_CONSISTENCY_NODE_HEIGHT,
         indexLabel: 'G',
@@ -1711,6 +1725,9 @@ export function buildWorkspaceNodeCanvasProjection({
         }),
         statusLabel: translate('status.pending'),
         isRunning: false,
+        runtimeTargets: runtimeTargets(
+          TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript.id),
+        ),
         width: SPACE_CONSISTENCY_NODE_WIDTH,
         height: SPACE_CONSISTENCY_NODE_HEIGHT,
         indexLabel: 'G',
@@ -1757,6 +1774,7 @@ export function buildWorkspaceNodeCanvasProjection({
         }),
         statusLabel: panel.imageTaskRunning ? translate('status.processing') : translate('status.ready'),
         isRunning: panel.imageTaskRunning,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id)),
         width: DEFAULT_NODE_WIDTH,
         height: preview?.nodeHeight ?? SHOT_NODE_HEIGHT,
         indexLabel: panelDisplayNumber(panel),
@@ -1906,6 +1924,11 @@ export function buildWorkspaceNodeCanvasProjection({
           }),
           statusLabel,
           isRunning,
+          runtimeTargets: runtimeTargets(
+            block.kind === 'single'
+              ? TASK_RUNTIME_TARGETS.projectPanelVideo(singlePanel?.id)
+              : TASK_RUNTIME_TARGETS.projectVideoGroup(matchingGroup?.id),
+          ),
           width: VIDEO_PLAN_NODE_WIDTH,
           height: videoPlanHeight,
           indexLabel: `B${index + 1}`,
@@ -1973,11 +1996,11 @@ export function buildWorkspaceNodeCanvasProjection({
           return panel ? hasGeneratedVideo(panel) : false
         }).length
       : 0
-    const isFinalRenderRunning = finalRenderPhase === 'queued' || finalRenderPhase === 'processing'
-    const isFinalRenderFailed = finalRenderPhase === 'failed'
+    const isFinalRenderRunning = finalVideo?.renderStatus === 'queued' || finalVideo?.renderStatus === 'processing'
+    const isFinalRenderFailed = finalVideo?.renderStatus === 'failed'
     const bgmScore = finalVideo?.bgmScore ?? null
-    const isBgmScoreRunning = bgmScorePhase === 'queued' || bgmScorePhase === 'processing'
-    const isBgmScoreFailed = bgmScorePhase === 'failed' || bgmScore?.status === 'failed'
+    const isBgmScoreRunning = bgmScore?.status === 'generating'
+    const isBgmScoreFailed = bgmScore?.status === 'failed'
     const hasBgmScore = bgmScore?.status === 'completed' && Boolean(bgmScore.mix?.url)
     const bgmScorePlan = bgmScore?.plan ?? null
     const bgmDesignSections = bgmScorePlan?.scoreDesign?.sections ?? []
@@ -2010,7 +2033,7 @@ export function buildWorkspaceNodeCanvasProjection({
         eyebrow: translate('nodes.bgmScore.eyebrow'),
         body: translate('nodes.bgmScore.body', { videos: videoOutputNodeIds.length }),
         meta: isBgmScoreFailed
-          ? bgmScoreErrorMessage ?? bgmScore?.errorMessage ?? translate('nodes.bgmScore.failed')
+          ? bgmScore?.errorMessage ?? translate('nodes.bgmScore.failed')
           : hasBgmScore
             ? isBgmPromptDesignMissing
               ? translate('nodes.bgmScore.readyMissingPromptDesign')
@@ -2024,6 +2047,7 @@ export function buildWorkspaceNodeCanvasProjection({
               ? translate('status.ready')
               : translate('status.pending'),
         isRunning: isBgmScoreRunning,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
         defaultExpanded: hasBgmScore || isBgmScoreFailed,
         width: BGM_SCORE_NODE_WIDTH,
         height: BGM_SCORE_NODE_HEIGHT,
@@ -2038,7 +2062,7 @@ export function buildWorkspaceNodeCanvasProjection({
           promptSectionCount: bgmPromptSections.length,
           virtualLayerCount: bgmVirtualLayers.length,
           mixUrl: bgmScore?.mix?.url ?? null,
-          errorMessage: bgmScoreErrorMessage ?? bgmScore?.errorMessage ?? null,
+          errorMessage: bgmScore?.errorMessage ?? null,
           scoreOverview: bgmScorePlan?.scoreDesign.overview ?? null,
           designSections: bgmDesignSections.map((section) => ({
             category: section.category ?? null,
@@ -2085,8 +2109,8 @@ export function buildWorkspaceNodeCanvasProjection({
         title: translate('nodes.final.title'),
         eyebrow: translate('nodes.final.eyebrow'),
         body: translate('nodes.final.body', { videos: videoOutputNodeIds.length }),
-        meta: isFinalRenderFailed && finalRenderErrorMessage
-          ? finalRenderErrorMessage
+        meta: isFinalRenderFailed
+          ? translate('status.failed')
           : hasFinalOutput
             ? translate('nodes.final.outputReady')
             : translate('nodes.final.meta'),
@@ -2098,6 +2122,7 @@ export function buildWorkspaceNodeCanvasProjection({
               ? translate('status.finalReady')
               : translate('status.ready'),
         isRunning: isFinalRenderRunning,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
         width: FINAL_NODE_WIDTH,
         height: 280,
         finalDetails: {
@@ -2138,8 +2163,6 @@ export function useWorkspaceNodeCanvasProjection({
   finalVideo,
   videoGroups,
   defaultSequenceVideoModel,
-  finalRenderPhase,
-  finalRenderErrorMessage,
   savedLayouts,
   translate,
   onAction,
@@ -2159,8 +2182,6 @@ export function useWorkspaceNodeCanvasProjection({
       finalVideo,
       videoGroups,
       defaultSequenceVideoModel,
-      finalRenderPhase,
-      finalRenderErrorMessage,
       savedLayouts,
       translate,
       onAction,
@@ -2172,8 +2193,6 @@ export function useWorkspaceNodeCanvasProjection({
       onAction,
       projectId,
       defaultSequenceVideoModel,
-      finalRenderPhase,
-      finalRenderErrorMessage,
       finalVideo,
       videoGroups,
       savedLayouts,

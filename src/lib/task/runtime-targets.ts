@@ -93,6 +93,24 @@ export const TASK_RUNTIME_TARGETS = {
       TASK_TYPE.MODIFY_ASSET_IMAGE,
     ])
   },
+  projectEditAssetImage(
+    targetType: 'CharacterAppearance' | 'LocationImage' | null | undefined,
+    targetId: string | null | undefined,
+  ) {
+    if (targetType === 'CharacterAppearance') {
+      return target('CharacterAppearance', targetId, [
+        TASK_TYPE.IMAGE_CHARACTER,
+        TASK_TYPE.MODIFY_ASSET_IMAGE,
+      ])
+    }
+    if (targetType === 'LocationImage') {
+      return target('LocationImage', targetId, [
+        TASK_TYPE.IMAGE_LOCATION,
+        TASK_TYPE.MODIFY_ASSET_IMAGE,
+      ])
+    }
+    return null
+  },
   projectPanelVideo(panelId: string | null | undefined) {
     return target('ProjectPanel', panelId, [TASK_TYPE.VIDEO_PANEL])
   },

@@ -110,21 +110,6 @@ function matchesTaskTypeWhitelist(
   return whitelist.some((type) => type.toLowerCase() === normalized)
 }
 
-function hasRunningOverlayForTargets(
-  overlay: TaskTargetOverlayMap | undefined,
-  targets: readonly TaskTargetStateQuery[],
-): boolean {
-  if (!overlay) return false
-  const now = Date.now()
-  return targets.some((target) => {
-    const runtime = overlay[taskTargetPairKey(target.targetType, target.targetId)]
-    if (!runtime) return false
-    if (runtime.expiresAt && runtime.expiresAt <= now) return false
-    if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
-    return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
-  })
-}
-
 function shouldTraceMergeTarget(targetType: string) {
   return targetType === 'ProjectPanel'
 }
@@ -314,12 +299,7 @@ export function useTaskTargetStateMap(
     queryKey: queryKeys.tasks.targetStates(projectId || '', serializedTargets),
     enabled,
     staleTime: options.staleTime ?? 15000,
-    refetchInterval: (state) => {
-      const data = state.state.data as TaskTargetState[] | undefined
-      const hasRunningServerState = data?.some((item) => item.phase === 'queued' || item.phase === 'processing') === true
-      const hasRunningOverlayState = hasRunningOverlayForTargets(overlayQuery.data, normalizedTargets)
-      return hasRunningServerState || hasRunningOverlayState ? 2000 : false
-    },
+    refetchInterval: false,
     refetchOnMount: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
