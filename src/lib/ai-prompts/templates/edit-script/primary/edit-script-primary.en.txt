@@ -56,15 +56,33 @@ Structural hard requirements:
 - durationSec must be an integer from 1 to 5. A single shot must never exceed 5 seconds.
 - Top-level durationSec must equal the sum of all shot durationSec values and be close to the requested duration.
 - videoBlocks must cover every shot exactly once in original shotNumber order. Do not skip, duplicate, or reorder shots.
-- single must contain exactly 1 shot.
+- single must contain exactly 1 shot, and that one shot's durationSec must be at least 4 seconds because single-shot video generation cannot produce videos shorter than 4 seconds.
+- The 4-second lower bound applies only when a videoBlock contains exactly 1 shot. Do not misread it as a minimum duration for every shot. Shots inside a group may still be 1-5 seconds, and fast continuous sequences may use one-second shots.
 - A group must satisfy both conditions: it contains 2-9 adjacent shots; the summed durationSec of those shots is 2-15 seconds.
 - The 15-second limit is the highest-priority hard ceiling. It overrides same scene, same season, same subject, and default preference for groups. Any group above 15 seconds is invalid output.
 - When building each group, add shot durations in order. If adding the next shot would make the current group exceed 15 seconds, end the current group before that shot and start a new block from the next shot.
 - Do not group shots above 15 seconds just because they share the same season, courtyard, character, or story section.
 - For example, five 4-second shots must not become one 20-second group; split them into legal blocks such as 12 seconds + 8 seconds. Five 5-second shots must not become one 25-second group; split them into legal blocks such as 15 seconds + 10 seconds.
-- Prefer group by default only when the group stays within 15 seconds. Use single only for severe space/time jumps, static display shots, isolated emotional close-ups, strong subject switches, or cases where continuous generation would contaminate the image.
-- Before outputting JSON, self-check every videoBlocks item: sum(shots.durationSec for shotNumbers) <= 15. If any group exceeds 15 seconds, split it before output.
+- group is the default preferred structure: whenever adjacent shots belong to the same continuous action, same space, same subject movement, same emotional progression, or same sound field, and the cumulative duration stays within 15 seconds, merge them into the same group.
+- The goal of a group is not the smallest safe fragment, but a complete continuous video segment. Within 15 seconds, cover a complete action unit or emotional unit whenever possible.
+- For continuous action, fighting, chasing, walking, observing, operating, emotional progression, and dialogue-reaction chains, prefer 3-5 shot groups. Do not mechanically split them into multiple 2-shot groups.
+- Prefer longer groups by default: under the 15-second ceiling, continuous passages should be merged into one group as much as possible instead of split into short groups. Use single only for isolated shots that cannot form a continuous video segment with neighboring shots, such as real space/time breaks, standalone static displays, strong subject switches, or shots that would clearly contaminate image generation.
+- End the current group early only when adding the next shot would cause a clear space jump, time jump, subject break, narrative section change, or obvious image-generation contamination.
+- If a group contains only 2 shots, reason must explain why the next shot cannot be included. Do not use vague reasons such as only "same space" or "continuous action".
+- Before outputting JSON, self-check every videoBlocks item: for single, the only shot durationSec must be >= 4; for group, sum(shots.durationSec for shotNumbers) must be <= 15. If any item violates this, adjust block segmentation or shot duration before output.
+- Before outputting JSON, check the videoBlocks length distribution. If multiple 2-shot groups appear consecutively, reassess whether they can be merged into a more complete 3-5 shot continuous segment.
+- Do not default to cutting every 2 shots into one group for "stability". Stability judgment must serve complete continuous segments, not mechanically shortened fragments.
+- For action scenes, do not split "setup/conflict/evasion/result" into multiple 2-shot groups. As long as the total duration stays within 15 seconds, combine them into one complete action group.
 - reason must explain generation stability and continuity. Do not write vague reasons.
+
+Correct example:
+If shots 3-6 are "agents burst in", "the protagonist charges toward gunfire", "the protagonist runs sideways along a pillar", and "bullets shatter the pillar", and each shot is 3 seconds for a total of 12 seconds, output:
+{
+  "type": "group",
+  "shotNumbers": [3, 4, 5, 6],
+  "reason": "Same hall and same pursuit action chain. Bursting in, gunfire, evasion, and bullets shattering the pillar form one complete continuous action unit, totaling 12 seconds and staying under 15 seconds; merging preserves movement direction, spatial anchors, particle debris, and gunshot reverb continuity."
+}
+Wrong example: do not output two groups [3,4] and [5,6], because that cuts one action chain into pieces and makes the video segments stiff and rhythmically broken.
 
 Shot field responsibilities:
 - visualAction: only the visual event, action continuity, visible emotion, and key physical change for that shot.

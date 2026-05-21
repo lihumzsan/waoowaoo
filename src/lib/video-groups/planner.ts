@@ -75,6 +75,13 @@ export function normalizeVideoBlockPlanResponse(params: {
 
     if (kind === 'single') {
       if (shotNumbers.length !== 1) throw new Error('VIDEO_BLOCK_PLAN_SINGLE_SHOT_COUNT_INVALID')
+      if (durationByShot.size > 0) {
+        const durationSec = durationByShot.get(shotNumbers[0])
+        if (!durationSec) throw new Error(`VIDEO_BLOCK_PLAN_SHOT_DURATION_MISSING:${shotNumbers[0]}`)
+        if (durationSec < 4) {
+          throw new Error(`VIDEO_BLOCK_PLAN_SINGLE_DURATION_UNSUPPORTED:${durationSec}`)
+        }
+      }
       return { kind, shotNumbers, reason, prompt }
     }
 

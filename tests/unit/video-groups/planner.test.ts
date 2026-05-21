@@ -58,4 +58,35 @@ describe('video block plan validator', () => {
     })).toThrow('VIDEO_BLOCK_PLAN_GRID_MODE_MISMATCH')
   })
 
+  it('rejects single-shot video blocks below four seconds but allows short shots inside groups', () => {
+    expect(() => normalizeVideoBlockPlanResponse({
+      allShotNumbers: [1],
+      shots: [{ shotNumber: 1, durationSec: 3 }],
+      response: {
+        items: [{ type: 'single', shotNumbers: [1], reason: 'isolated beat is too short for video generation', prompt: 'single prompt' }],
+      },
+    })).toThrow('VIDEO_BLOCK_PLAN_SINGLE_DURATION_UNSUPPORTED:3')
+
+    const plan = normalizeVideoBlockPlanResponse({
+      allShotNumbers: [1, 2, 3, 4],
+      shots: [
+        { shotNumber: 1, durationSec: 1 },
+        { shotNumber: 2, durationSec: 1 },
+        { shotNumber: 3, durationSec: 1 },
+        { shotNumber: 4, durationSec: 1 },
+      ],
+      response: {
+        items: [{ type: 'group', shotNumbers: [1, 2, 3, 4], reason: 'fast continuous action beats', prompt: 'group prompt' }],
+      },
+    })
+
+    expect(plan.items[0]).toEqual({
+      kind: 'group',
+      shotNumbers: [1, 2, 3, 4],
+      gridMode: '2x2',
+      reason: 'fast continuous action beats',
+      prompt: 'group prompt',
+    })
+  })
+
 })

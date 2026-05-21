@@ -309,7 +309,7 @@ describe('edit script normalization', () => {
       shots: [
         {
           shotNumber: 1,
-          durationSec: 3,
+          durationSec: 4,
           visualAction: 'Pilot waits.',
           charactersAndScene: 'Pilot / Dock',
           camera: 'wide',
