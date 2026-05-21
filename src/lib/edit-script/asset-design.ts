@@ -9,12 +9,14 @@ interface DesignEditAssetRequirementsInput {
   readonly locale: Locale
   readonly analysisModel: string
   readonly userPrompt: string
+  readonly styleContext: string
   readonly shots: readonly EditScriptShot[]
   readonly requirements: readonly EditAssetRequirement[]
 }
 
 interface BuildEditAssetDesignInstructionInput {
   readonly userPrompt: string
+  readonly styleContext: string
   readonly requirement: EditAssetRequirement
   readonly shots: readonly EditScriptShot[]
 }
@@ -28,6 +30,7 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
   return JSON.stringify({
     task: 'design_edit_first_required_asset_for_image_generation',
     userRequest: input.userPrompt,
+    styleContext: input.styleContext,
     asset: {
       kind: input.requirement.kind,
       name: input.requirement.name,
@@ -47,6 +50,8 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
     constraints: [
       'Create one stable reusable asset description for the asset library.',
       'Use only visual facts implied by the edit table and user request.',
+      'Use styleContext and explicit user visual style as the asset-level visual policy.',
+      'The asset description must include stable lighting, color palette, material texture, and image-filter traits that can directly guide image generation.',
       'Do not describe transient shot action, facial expression, camera movement, dialogue, sound, or plot function inside the asset appearance.',
       'For character assets, preserve fixedVoiceTimbreText exactly as a stable voice identity field. It is not part of the image prompt.',
       'For character assets, describe the character itself without background or pose.',
@@ -65,6 +70,7 @@ export async function designEditAssetRequirements(
       analysisModel: input.analysisModel,
       userInstruction: buildEditAssetDesignInstruction({
         userPrompt: input.userPrompt,
+        styleContext: input.styleContext,
         requirement,
         shots: input.shots,
       }),

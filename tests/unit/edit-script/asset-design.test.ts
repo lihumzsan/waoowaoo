@@ -53,19 +53,25 @@ describe('edit script asset design', () => {
 
   it('builds a structured asset design instruction from edit table shots', () => {
     const instruction = buildEditAssetDesignInstruction({
-      userPrompt: '一分钟科幻短片',
+      userPrompt: '一分钟冷峻科幻短片',
+      styleContext: '冷峻科幻风格，低饱和银灰色，硬质冷光，干净宽频，克制高光。',
       requirement: requirements[0],
       shots,
     })
 
     const parsed = JSON.parse(instruction) as {
       readonly task: string
+      readonly styleContext: string
       readonly asset: { readonly kind: string; readonly name: string; readonly fixedVoiceTimbreText: string | null }
       readonly linkedShots: ReadonlyArray<{ readonly shotNumber: number; readonly visualAction: string }>
+      readonly constraints: readonly string[]
     }
     expect(parsed.task).toBe('design_edit_first_required_asset_for_image_generation')
+    expect(parsed.styleContext).toBe('冷峻科幻风格，低饱和银灰色，硬质冷光，干净宽频，克制高光。')
     expect(parsed.asset).toMatchObject({ kind: 'character', name: '冷静研究员' })
     expect(parsed.asset.fixedVoiceTimbreText).toBe('成年女性声线，冷静清亮，中音区，口腔共鸣干净，鼻音弱，颗粒感少。')
+    expect(parsed.constraints).toContain('Use styleContext and explicit user visual style as the asset-level visual policy.')
+    expect(parsed.constraints).toContain('The asset description must include stable lighting, color palette, material texture, and image-filter traits that can directly guide image generation.')
     expect(parsed.linkedShots).toEqual([
       expect.objectContaining({
         shotNumber: 1,
@@ -91,7 +97,8 @@ describe('edit script asset design', () => {
       projectId: 'project-1',
       locale: 'zh',
       analysisModel: 'analysis-model',
-      userPrompt: '一分钟科幻短片',
+      userPrompt: '一分钟冷峻科幻短片',
+      styleContext: '冷峻科幻风格，低饱和银灰色，硬质冷光，干净宽频，克制高光。',
       shots,
       requirements,
     })
@@ -123,7 +130,8 @@ describe('edit script asset design', () => {
       projectId: 'project-1',
       locale: 'zh',
       analysisModel: 'analysis-model',
-      userPrompt: '一分钟科幻短片',
+      userPrompt: '一分钟冷峻科幻短片',
+      styleContext: '冷峻科幻风格，低饱和银灰色，硬质冷光，干净宽频，克制高光。',
       shots,
       requirements: [requirements[0]],
     })).rejects.toThrow('EDIT_SCRIPT_ASSET_DESIGN_FAILED:character:冷静研究员:AI返回格式错误')

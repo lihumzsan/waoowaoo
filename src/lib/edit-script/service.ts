@@ -1034,6 +1034,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       locale,
       analysisModel: model,
       userPrompt,
+      styleContext,
       shots: structure.shots,
       requirements: normalizeEditAssetRequirements(assetRaw, structure.shots),
     })
