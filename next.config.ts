@@ -3,20 +3,24 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
+const globalFunctionTraceExcludes = [
+  './.git/**/*',
+  './.next/cache/**/*',
+  './docker-logs/**/*',
+  './logs/**/*',
+  './*.log',
+  './public/demo-assets/**/*',
+]
+
 const nextConfig: NextConfig = {
   // 已删除 ignoreBuildErrors / ignoreDuringBuilds，构建保持严格门禁
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental
   logging: false,
   devIndicators: false,
   outputFileTracingExcludes: {
-    '/*': [
-      './logs/**/*',
-      './docker-logs/**/*',
-      './*.log',
-    ],
-    '/api/admin/download-logs': [
-      './public/demo-assets/**/*',
-    ],
+    '/*': globalFunctionTraceExcludes,
+    '/api/*': globalFunctionTraceExcludes,
+    '/api/**/*': globalFunctionTraceExcludes,
   },
   allowedDevOrigins: [
     'http://192.168.31.218:3000',
