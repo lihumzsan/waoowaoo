@@ -153,8 +153,9 @@ export function useProjectWorkspaceController({
     await onRefresh({ mode: 'full' })
   }
   const handleRegenerateProjectAssetImage = async (assetId: string, kind: 'character' | 'location') => {
+    if (!episodeId) throw new Error('Episode ID is required')
     const actions = kind === 'character' ? characterAssetActions : locationAssetActions
-    await actions.generate({ id: assetId })
+    await actions.generate({ id: assetId, episodeId })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditStoryboard = async (editScriptId: string) => {

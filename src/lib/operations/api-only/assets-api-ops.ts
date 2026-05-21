@@ -62,6 +62,12 @@ function requireProjectId(scope: AssetScope, projectId: unknown): string {
   throw new ApiError('INVALID_PARAMS', { details: 'projectId is required for project scope' })
 }
 
+function readOptionalEpisodeId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 function omitBodyKeys(input: unknown, keys: ReadonlyArray<string>): Record<string, unknown> {
   const record = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {}
   const body: Record<string, unknown> = { ...record }
@@ -190,12 +196,14 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const projectId = requireProjectId(input.scope, input.projectId)
+        const episodeId = readOptionalEpisodeId(input.episodeId)
         const body = omitBodyKeys(input, ['assetId'])
         return await submitAssetGenerateTask({
           request: ctx.request,
           kind: input.kind,
           assetId: input.assetId,
           body,
+          episodeId,
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },

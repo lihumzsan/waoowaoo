@@ -40,6 +40,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectLocation: {
     findMany: vi.fn(),
+    findFirst: vi.fn(),
   },
   task: {
     findFirst: vi.fn(),
@@ -190,6 +191,7 @@ describe('edit script generation status persistence', () => {
     })
     prismaMock.projectCharacter.findMany.mockResolvedValue([])
     prismaMock.projectLocation.findMany.mockResolvedValue([])
+    prismaMock.projectLocation.findFirst.mockResolvedValue(null)
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue({
       id: 'screenplay-1',
       projectId: 'project-1',
@@ -385,6 +387,80 @@ describe('edit script generation status persistence', () => {
     }))
     expect(editScript?.videoBlocks[0]).toEqual(expect.objectContaining({
       prompt: '旧视频块提示词',
+    }))
+  })
+
+  it('surfaces a failed asset regeneration even when an old preview image exists', async () => {
+    prismaMock.projectLocation.findFirst.mockResolvedValueOnce({
+      id: 'location-1',
+      images: [
+        {
+          imageUrl: 'https://cdn.example.com/old-location.png',
+          imageMediaId: null,
+        },
+      ],
+    })
+    prismaMock.task.findFirst.mockResolvedValueOnce({
+      status: 'failed',
+      errorMessage: 'IMAGE_PROVIDER_FAILED',
+      errorCode: 'EXTERNAL_ERROR',
+    })
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStyleBible,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      title: 'Sci-Fi Short',
+      logline: 'A quiet signal wakes a station.',
+      durationSec: 4,
+      shotCount: 1,
+      status: 'ready',
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 4,
+          visualAction: 'A station corridor flickers awake.',
+          charactersAndScene: 'Station corridor',
+          camera: 'slow push in',
+          videoPrompt: 'A cinematic station corridor flickers awake.',
+          sound: 'low electrical hum',
+        },
+      ],
+      videoBlocksJson: [],
+      requirements: [
+        {
+          id: 'requirement-1',
+          kind: 'location',
+          name: 'Station Corridor',
+          description: 'A cold sci-fi corridor.',
+          shotIndexes: [1],
+          status: 'generating',
+          targetId: 'location-1',
+          errorMessage: null,
+        },
+      ],
+    })
+
+    const editScript = await readProjectEditScript({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(editScript?.requirements[0]).toEqual(expect.objectContaining({
+      id: 'requirement-1',
+      status: 'failed',
+      errorMessage: 'IMAGE_PROVIDER_FAILED',
+      previewImageUrl: 'https://cdn.example.com/old-location.png',
+    }))
+    expect(prismaMock.task.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        projectId: 'project-1',
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+      }),
+      orderBy: { updatedAt: 'desc' },
     }))
   })
 

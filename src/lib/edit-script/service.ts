@@ -588,14 +588,14 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
   const requirements = await Promise.all(script.requirements.map(async (requirement): Promise<EditAssetRequirement> => {
     const resolvedAsset = await resolveRequirementAsset(script.projectId, requirement)
     const storedStatus = normalizeStoredStatus(requirement.status)
-    const taskFailure = !resolvedAsset?.hasOutput && resolvedAsset
+    const taskFailure = resolvedAsset
       ? await resolveAssetTaskFailure({
         projectId: script.projectId,
         taskTargetType: resolvedAsset.taskTargetType,
         taskTargetId: resolvedAsset.taskTargetId,
       })
       : null
-    const status = resolvedAsset?.hasOutput ? 'completed' : taskFailure ? 'failed' : storedStatus
+    const status = taskFailure ? 'failed' : resolvedAsset?.hasOutput ? 'completed' : storedStatus
     return {
       id: requirement.id,
       kind: isEditAssetKind(requirement.kind) ? requirement.kind : 'character',

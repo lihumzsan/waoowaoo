@@ -82,7 +82,19 @@ describe('useAssetActions.generate optimistic overlay', () => {
       projectId: 'project-1',
       kind: 'prop',
     })
-    await actions.generate({ id: 'prop-2' })
+    await actions.generate({ id: 'prop-2', episodeId: 'episode-1' })
+
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/assets/prop-2/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project',
+        kind: 'prop',
+        projectId: 'project-1',
+        id: 'prop-2',
+        episodeId: 'episode-1',
+      }),
+    })
 
     const overlay = getOverlay(queryClient, 'project-1', 'LocationImage:prop-2')
     expect(overlay?.phase).toBe('queued')
