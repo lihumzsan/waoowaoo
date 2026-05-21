@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 const prismaMock = vi.hoisted(() => ({
   project: {
@@ -12,6 +13,12 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectStoryboardBlockingArtifact: {
     findMany: vi.fn(),
+  },
+  projectEditScript: {
+    findFirst: vi.fn(),
+  },
+  projectEditScreenplay: {
+    findFirst: vi.fn(),
   },
 }))
 
@@ -160,6 +167,8 @@ describe('worker panel-image-task-handler behavior', () => {
       imageUrl: null,
     })
     prismaMock.projectStoryboardBlockingArtifact.findMany.mockResolvedValue([])
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
 
     utilsMock.resolveImageSourceFromGeneration
       .mockResolvedValueOnce('generated-source-1')
@@ -235,6 +244,39 @@ describe('worker panel-image-task-handler behavior', () => {
         candidateImages: JSON.stringify(['cos/panel-candidate-1.png', 'cos/panel-candidate-2.png']),
       },
     })
+  })
+
+  it('appends Style Bible block to final storyboard image prompt', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+
+    await handlePanelImageTask(buildJob({ candidateCount: 1 }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.stringContaining('系统 Style Bible 视觉要求（固定追加，必须遵守）：'),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.stringContaining('用途：分镜图生成'),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.stringContaining('镜头节奏：缓慢呼吸式节奏，镜头停留足够久。'),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.not.stringContaining('声音正向风格：'),
+      }),
+    )
   })
 
   it('includes selected previous panel images as generation references', async () => {

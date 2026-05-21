@@ -16,6 +16,10 @@ import {
 } from './image-task-handler-shared'
 import { buildLocationImagePromptCore } from '@/lib/location-image-prompt'
 import { buildPropImagePromptCore } from '@/lib/prop-image-prompt'
+import {
+  appendStyleBiblePromptBlock,
+  resolveEditScriptStyleBibleForTask,
+} from '@/lib/edit-script/style-bible-prompt'
 
 interface LocationImageRecord {
   id: string
@@ -64,6 +68,10 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
     artStyleOverride: payload.artStyle,
     invalidOverrideMessage: 'Invalid artStyle in IMAGE_LOCATION payload',
   })).prompt
+  const styleBible = await resolveEditScriptStyleBibleForTask({
+    projectId,
+    episodeId: job.data.episodeId,
+  })
   const assetType = payload.type === 'prop' ? 'prop' : 'location'
 
   // targetId may be locationId (group) or locationImageId (single)
@@ -126,7 +134,13 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
     const promptWithSuffix = assetType === 'prop'
       ? addPropPromptSuffix(promptCore)
       : addLocationPromptSuffix(promptCore)
-    const prompt = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+    const promptBase = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+    const prompt = appendStyleBiblePromptBlock({
+      prompt: promptBase,
+      styleBible,
+      usage: 'assetImage',
+      locale: job.data.locale,
+    })
     const aspectRatio = assetType === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     await reportTaskProgress(job, 20 + Math.floor((i / Math.max(locationImages.length, 1)) * 55), {
       stage: 'generate_location_image',

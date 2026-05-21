@@ -2,6 +2,7 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHARACTER_ASSET_IMAGE_RATIO, CHARACTER_PROMPT_SUFFIX, getArtStylePrompt } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
@@ -24,6 +25,12 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectCharacter: {
     findUnique: vi.fn(),
+  },
+  projectEditScript: {
+    findFirst: vi.fn(),
+  },
+  projectEditScreenplay: {
+    findFirst: vi.fn(),
   },
 }))
 
@@ -50,14 +57,18 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
 
 import { handleCharacterImageTask } from '@/lib/workers/handlers/character-image-task-handler'
 
-function buildJob(payload: Record<string, unknown>, targetId = 'appearance-2'): Job<TaskJobData> {
+function buildJob(
+  payload: Record<string, unknown>,
+  targetId = 'appearance-2',
+  episodeId: string | null = null,
+): Job<TaskJobData> {
   return {
     data: {
       taskId: 'task-character-image-1',
       type: TASK_TYPE.IMAGE_CHARACTER,
       locale: 'zh',
       projectId: 'project-1',
-      episodeId: null,
+      episodeId,
       targetType: 'CharacterAppearance',
       targetId,
       payload,
@@ -94,6 +105,8 @@ describe('worker character-image-task-handler behavior', () => {
       imageUrls: JSON.stringify(['cos/primary-fallback.png', 'cos/primary-selected.png']),
       selectedIndex: 1,
     })
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
   })
 
   it('characterModel not configured -> explicit error', async () => {
@@ -172,6 +185,23 @@ describe('worker character-image-task-handler behavior', () => {
     }
     expect(generationInput.prompt).toContain(getArtStylePrompt('japanese-anime', 'zh'))
     expect(generationInput.prompt).not.toContain(getArtStylePrompt('realistic', 'zh'))
+  })
+
+  it('appends Style Bible block to final character asset image prompt', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+
+    await handleCharacterImageTask(buildJob({ imageIndex: 0 }, 'appearance-2', 'episode-1'))
+
+    const generationInput = sharedMock.generateCleanImageToStorage.mock.calls[0]?.[0] as {
+      prompt: string
+    }
+    expect(generationInput.prompt).toContain('角色描述A')
+    expect(generationInput.prompt).toContain('系统 Style Bible 视觉要求（固定追加，必须遵守）：')
+    expect(generationInput.prompt).toContain('用途：资产图生成')
+    expect(generationInput.prompt).toContain('画面滤镜：轻微柔焦，35mm镜头，克制高光。')
+    expect(generationInput.prompt).toContain('负向约束：避免商业广告感，避免高反差大片感，避免炫技运镜。')
   })
 
   it('invalid payload artStyle -> explicit error', async () => {

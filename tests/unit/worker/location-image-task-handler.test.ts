@@ -2,6 +2,7 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, getArtStylePrompt } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
@@ -18,6 +19,12 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectLocation: {
     findUnique: vi.fn(),
+  },
+  projectEditScript: {
+    findFirst: vi.fn(),
+  },
+  projectEditScreenplay: {
+    findFirst: vi.fn(),
   },
 }))
 
@@ -40,14 +47,18 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
 
 import { handleLocationImageTask } from '@/lib/workers/handlers/location-image-task-handler'
 
-function buildJob(payload: Record<string, unknown>, targetId = 'location-image-1'): Job<TaskJobData> {
+function buildJob(
+  payload: Record<string, unknown>,
+  targetId = 'location-image-1',
+  episodeId: string | null = null,
+): Job<TaskJobData> {
   return {
     data: {
       taskId: 'task-location-image-1',
       type: TASK_TYPE.IMAGE_LOCATION,
       locale: 'zh',
       projectId: 'project-1',
-      episodeId: null,
+      episodeId,
       targetType: 'LocationImage',
       targetId,
       payload,
@@ -92,6 +103,8 @@ describe('worker location-image-task-handler behavior', () => {
         },
       ],
     })
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
   })
 
   it('locationModel missing -> explicit error', async () => {
@@ -149,6 +162,30 @@ describe('worker location-image-task-handler behavior', () => {
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining(getArtStylePrompt('realistic', 'zh')),
+      }),
+    )
+  })
+
+  it('appends Style Bible block to final location asset image prompt', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+
+    await handleLocationImageTask(buildJob({ imageIndex: 0 }, 'location-image-1', 'episode-1'))
+
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('系统 Style Bible 视觉要求（固定追加，必须遵守）：'),
+      }),
+    )
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('用途：资产图生成'),
+      }),
+    )
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('色彩：低饱和，自然灰绿、木色、石灰色。'),
       }),
     )
   })

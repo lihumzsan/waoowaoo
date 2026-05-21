@@ -32,6 +32,10 @@ import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image
 import {
   parseLocationAvailableSlots,
 } from '@/lib/location-available-slots'
+import {
+  appendStyleBiblePromptBlock,
+  resolveEditScriptStyleBibleForStoryboardTask,
+} from '@/lib/edit-script/style-bible-prompt'
 
 const EMPTY_PANEL_REFERENCE_COLLECTION = {
   items: [],
@@ -382,12 +386,23 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     referenceImagesMap,
   })
   const contextJson = JSON.stringify(promptContext, null, 2)
-  const prompt = buildPanelPrompt({
+  const promptBase = buildPanelPrompt({
     locale: job.data.locale,
     aspectRatio,
     styleText: artStyle || '与参考图风格一致',
     sourceText: panel.srtSegment || panel.description || '',
     contextJson,
+  })
+  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
+    projectId: job.data.projectId,
+    episodeId: job.data.episodeId,
+    storyboardId: panel.storyboardId,
+  })
+  const prompt = appendStyleBiblePromptBlock({
+    prompt: promptBase,
+    styleBible,
+    usage: 'storyboardImage',
+    locale: job.data.locale,
   })
   logger.info({
     message: 'panel image prompt resolved',

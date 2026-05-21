@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 type WorkerProcessor = (job: Job<TaskJobData>) => Promise<unknown>
 
@@ -86,6 +87,9 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   projectEditScript: {
+    findFirst: vi.fn(),
+  },
+  projectEditScreenplay: {
     findFirst: vi.fn(),
   },
 }))
@@ -269,6 +273,7 @@ describe('worker video processor behavior', () => {
         },
       ],
     })
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
 
     const mod = await import('@/lib/workers/video.worker')
     mod.createVideoWorker()
@@ -338,6 +343,76 @@ describe('worker video processor behavior', () => {
     }))
   })
 
+  it('VIDEO_GROUP: appends Style Bible block to final generation prompt', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 2,
+          visualAction: 'Shot one',
+          charactersAndScene: 'A',
+          camera: 'wide',
+          videoPrompt: 'shot one prompt',
+          sound: 'tone',
+        },
+        {
+          shotNumber: 2,
+          durationSec: 3,
+          visualAction: 'Shot two',
+          charactersAndScene: 'B',
+          camera: 'medium',
+          videoPrompt: 'shot two prompt',
+          sound: 'pulse',
+        },
+      ],
+      videoBlocksJson: [
+        {
+          kind: 'group',
+          shotNumbers: [1, 2],
+          gridMode: '2x2',
+          reason: 'continuous group',
+          prompt: 'stored continuous group prompt',
+        },
+      ],
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+    prismaMock.projectPanel.findMany.mockResolvedValueOnce([
+      { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
+      { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
+    ])
+    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('group-video/group-1.mp4')
+
+    await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-1',
+      payload: {
+        videoModel: 'google::veo',
+        gridMode: '2x2',
+        shotNumbers: [1, 2],
+      },
+    }))
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('stored continuous group prompt'),
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('用途：最终视频生成'),
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('声音正向风格：安静环境声，远处风声与木质细响。'),
+      }),
+    }))
+  })
+
   it('VIDEO_GROUP asset_reference: uses reference assets and skips storyboard grid composition', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
@@ -386,6 +461,66 @@ describe('worker video processor behavior', () => {
         status: 'processing',
         referenceImageUrl: 'https://example.com/hero.png',
         referenceImageMediaId: null,
+      }),
+    }))
+  })
+
+  it('VIDEO_GROUP asset_reference: appends Style Bible block inside asset-reference prompt', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 2,
+          visualAction: 'Shot one',
+          charactersAndScene: 'A',
+          camera: 'wide',
+          videoPrompt: 'shot one prompt',
+          sound: 'tone',
+        },
+        {
+          shotNumber: 2,
+          durationSec: 3,
+          visualAction: 'Shot two',
+          charactersAndScene: 'B',
+          camera: 'medium',
+          videoPrompt: 'shot two prompt',
+          sound: 'pulse',
+        },
+      ],
+      videoBlocksJson: [],
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-asset.mp4')
+
+    await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-asset-1',
+      payload: {
+        sourceMode: 'asset_reference',
+        videoModel: 'ark::seedance',
+        shotNumbers: [1, 2],
+        prompt: 'asset reference block prompt',
+        referenceImageUrls: ['https://example.com/hero.png'],
+      },
+    }))
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('Use the provided reference asset image(s) as fixed visual references'),
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('asset reference block prompt'),
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: expect.stringContaining('用途：最终视频生成'),
       }),
     }))
   })
@@ -697,6 +832,53 @@ describe('worker video processor behavior', () => {
       {
         Authorization: 'Bearer oa-key',
       },
+    )
+  })
+
+  it('VIDEO_PANEL: appends Style Bible block to final panel video prompt', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'ark::doubao-seedance-2-0-260128',
+        generationOptions: {
+          duration: 5,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          prompt: expect.stringContaining('panel prompt'),
+        }),
+      }),
+    )
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          prompt: expect.stringContaining('用途：最终视频生成'),
+        }),
+      }),
+    )
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({
+          prompt: expect.stringContaining('主体运动：动作轻微、缓慢、像呼吸一样连续。'),
+        }),
+      }),
     )
   })
 

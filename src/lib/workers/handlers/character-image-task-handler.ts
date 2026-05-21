@@ -13,6 +13,10 @@ import {
 } from '../utils'
 import { normalizeOptionalReferenceImagesForGeneration } from '@/lib/media/outbound-image'
 import {
+  appendStyleBiblePromptBlock,
+  resolveEditScriptStyleBibleForTask,
+} from '@/lib/edit-script/style-bible-prompt'
+import {
   AnyObj,
   generateCleanImageToStorage,
   parseImageUrls,
@@ -101,6 +105,10 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
     artStyleOverride: payload.artStyle,
     invalidOverrideMessage: 'Invalid artStyle in IMAGE_CHARACTER payload',
   })).prompt
+  const styleBible = await resolveEditScriptStyleBibleForTask({
+    projectId,
+    episodeId: job.data.episodeId,
+  })
   const descriptions = parseJsonStringArray(appearance.descriptions)
   const baseDescriptions = descriptions.length > 0 ? descriptions : [appearance.description || '']
 
@@ -140,7 +148,13 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   for (let i = 0; i < indexes.length; i++) {
     const index = indexes[i]
     const raw = baseDescriptions[index] || baseDescriptions[0]
-    const prompt = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
+    const promptBase = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
+    const prompt = appendStyleBiblePromptBlock({
+      prompt: promptBase,
+      styleBible,
+      usage: 'assetImage',
+      locale: job.data.locale,
+    })
 
     await reportTaskProgress(job, 15 + Math.floor((i / Math.max(indexes.length, 1)) * 55), {
       stage: 'generate_character_image',

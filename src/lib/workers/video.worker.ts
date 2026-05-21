@@ -24,6 +24,11 @@ import { handleFinalVideoRenderTask } from './final-video-render'
 import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import type { VideoGridMode, VideoGroupShot } from '@/lib/video-groups/types'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import {
+  appendStyleBiblePromptBlock,
+  parseNullableEditScriptStyleBible,
+  resolveEditScriptStyleBibleForStoryboardTask,
+} from '@/lib/edit-script/style-bible-prompt'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
@@ -131,6 +136,17 @@ async function generateVideoForPanel(
   if (!prompt) {
     throw new Error(`Panel ${panel.id} has no video prompt`)
   }
+  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
+    projectId: job.data.projectId,
+    episodeId: job.data.episodeId,
+    storyboardId: panel.storyboardId,
+  })
+  const generationPrompt = appendStyleBiblePromptBlock({
+    prompt,
+    styleBible,
+    usage: 'video',
+    locale: job.data.locale,
+  })
 
   const sourceImageUrl = toSignedUrlIfCos(panel.imageUrl, 3600)
   if (!sourceImageUrl) {
@@ -181,7 +197,7 @@ async function generateVideoForPanel(
       ...(lastFrameImageBase64 ? [{ url: lastFrameImageBase64, role: 'last_frame' as const, order: 2, source: 'storyboard' as const }] : []),
     ],
     options: {
-      prompt,
+      prompt: generationPrompt,
       ...(projectVideoRatio ? { aspectRatio: projectVideoRatio } : {}),
       ...generationOptions,
       duration: durationSec,
@@ -390,6 +406,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
       select: {
         shotsJson: true,
         videoBlocksJson: true,
+        styleBibleJson: true,
       },
     }),
   ])
@@ -410,6 +427,13 @@ async function handleAssetReferenceVideoGroupTask(params: {
   const prompt = payloadPrompt || resolveStoredVideoGroupPrompt({
     videoBlocksJson: editScript.videoBlocksJson,
     shotNumbers,
+  })
+  const styleBible = parseNullableEditScriptStyleBible(editScript.styleBibleJson)
+  const generationPrompt = appendStyleBiblePromptBlock({
+    prompt,
+    styleBible,
+    usage: 'video',
+    locale: job.data.locale,
   })
 
   await prisma.projectVideoGroup.update({
@@ -442,7 +466,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
     })),
     options: {
       prompt: buildAssetReferencePrompt({
-        prompt,
+        prompt: generationPrompt,
         referenceImageCount: normalizedReferenceImages.length,
       }),
       ...(project.videoRatio ? { aspectRatio: project.videoRatio } : {}),
@@ -546,6 +570,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
       select: {
         shotsJson: true,
         videoBlocksJson: true,
+        styleBibleJson: true,
       },
     }),
     prisma.projectPanel.findMany({
@@ -593,6 +618,13 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     videoBlocksJson: editScript.videoBlocksJson,
     shotNumbers,
   })
+  const styleBible = parseNullableEditScriptStyleBible(editScript.styleBibleJson)
+  const generationPrompt = appendStyleBiblePromptBlock({
+    prompt,
+    styleBible,
+    usage: 'video',
+    locale: job.data.locale,
+  })
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
     data: { prompt },
@@ -618,7 +650,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     modelId,
     referenceImages,
     options: {
-      prompt,
+      prompt: generationPrompt,
       ...(project.videoRatio ? { aspectRatio: project.videoRatio } : {}),
       ...generationOptions,
       duration: totalVideoGroupDuration(shots),
