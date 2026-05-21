@@ -53,6 +53,10 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+function nodeContentInteractionClass(data: WorkspaceCanvasFlowNode['data'], className: string): string {
+  return data.readOnly === true ? className : `nodrag nowheel ${className}`
+}
+
 export function videoElementAspectRatio(video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>): number | null {
   const { videoWidth, videoHeight } = video
   if (!Number.isFinite(videoWidth) || !Number.isFinite(videoHeight)) return null
@@ -585,6 +589,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
   const isShotPreview = data.kind === 'shot'
   const candidateUrls = validCandidateImages(data)
   const panelId = data.kind === 'shot' && data.targetType === 'panel' ? data.targetId : null
+  const canUseCandidateActions = Boolean(data.onAction) && data.readOnly !== true
   const aspectRatio = typeof data.previewAspectRatio === 'number' && Number.isFinite(data.previewAspectRatio) && data.previewAspectRatio > 0
     ? data.previewAspectRatio
     : null
@@ -608,7 +613,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
             className="block h-auto w-full object-contain"
           />
         </div>
-        {!running && panelId && candidateUrls.length > 0 ? (
+        {!running && panelId && candidateUrls.length > 0 && canUseCandidateActions ? (
           <div className="nodrag nowheel rounded-[16px] border border-sky-100 bg-sky-50/80 p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-sky-700`}>
@@ -673,7 +678,8 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
   const mediaClassName = aspectRatio
     ? 'h-full max-w-full rounded-[16px] object-contain'
     : 'h-full w-full object-contain'
-  const frameClassName = `relative flex items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100 ${running ? 'workspace-node-loading-surface' : ''}`
+  const mediaInteractionClass = displayVideoUrl ? 'nodrag nowheel ' : ''
+  const frameClassName = `${mediaInteractionClass}relative flex items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100 ${running ? 'workspace-node-loading-surface' : ''}`
   return (
     <div
       className={frameClassName}
@@ -684,6 +690,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
           src={displayVideoUrl}
           aria-label={data.title}
           controls
+          preload="metadata"
           style={mediaStyle}
           className={`${aspectRatio ? mediaClassName : 'h-full w-full object-contain'} bg-black`}
         />
@@ -824,11 +831,12 @@ function FinalContent({
   return (
     <div className={`space-y-2 rounded-[18px] ${running ? 'workspace-node-loading-surface' : ''}`}>
       {displayOutputUrl ? (
-        <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100">
+        <div className="nodrag nowheel overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100">
           <video
             src={displayOutputUrl}
             aria-label={data.title}
             controls
+            preload="metadata"
             className="h-[156px] w-full bg-black object-contain"
           />
         </div>
@@ -891,11 +899,11 @@ function BgmScoreContent({
   ) : null
 
   const mixSection = displayMixUrl ? (
-    <div className="space-y-1.5 rounded-[14px] border border-slate-200 bg-white p-2">
+    <div className="nodrag nowheel space-y-1.5 rounded-[14px] border border-slate-200 bg-white p-2">
       <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
         {labels('finalBgmMix')}
       </p>
-      <audio src={displayMixUrl} controls className="w-full" />
+      <audio src={displayMixUrl} controls preload="metadata" className="w-full" />
     </div>
   ) : null
   const statsSection = renderSection(labels('bgmScoreStats'), (
@@ -1054,7 +1062,7 @@ function EditScriptContent({
   }
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   return (
-    <div className="nodrag nowheel space-y-3">
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       <div className="grid grid-cols-2 gap-2">
         {renderSection(labels('editScriptMeta'), (
           <div className="space-y-1">
@@ -1209,7 +1217,7 @@ function EditAssetContent({
   const details = data.editAssetDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   return (
-    <div className="nodrag nowheel space-y-2">
+    <div className={nodeContentInteractionClass(data, 'space-y-2')}>
       <MediaPreview data={data} />
       <EditablePromptSection
         title={labels('imagePrompt')}
@@ -1246,6 +1254,7 @@ function VideoPlanContent({
   }, [displayOutputUrl])
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const running = data.__running === true
+  const canUseNodeActions = Boolean(data.onAction) && data.readOnly !== true
   const referenceAspectRatio = details.sourceImages.find((cell) => (
     typeof cell?.aspectRatio === 'number' && Number.isFinite(cell.aspectRatio) && cell.aspectRatio > 0
   ))?.aspectRatio ?? 16 / 9
@@ -1269,6 +1278,7 @@ function VideoPlanContent({
     && storyboardReferenceImageUrls.length === storyboardReferences.length
     && storyboardReferenceImageUrls.length > 0
     && !running
+    && canUseNodeActions
     && (
       details.kind === 'group'
       || (
@@ -1277,7 +1287,7 @@ function VideoPlanContent({
         && typeof firstStoryboardReference?.panelIndex === 'number'
       )
     )
-  const canGenerateAssetReference = assetReferenceImageUrls.length > 0 && assetReferenceVideoModel.length > 0 && !running
+  const canGenerateAssetReference = assetReferenceImageUrls.length > 0 && assetReferenceVideoModel.length > 0 && !running && canUseNodeActions
   const canGenerateSelectedMode = generationMode === 'storyboard' ? canGenerateStoryboard : canGenerateAssetReference
   const shouldShowVideoModelHint = (storyboardReferenceImageUrls.length > 0 || assetReferenceImageUrls.length > 0) && assetReferenceVideoModel.length === 0
   const shouldShowAssetReferences = previewMode === 'reference' && generationMode === 'asset-reference'
@@ -1332,9 +1342,9 @@ function VideoPlanContent({
     }
   }
   return (
-    <div className="nodrag nowheel space-y-3">
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       {displayOutputUrl ? (
-        <div className="inline-flex w-full rounded-full bg-slate-100 p-1 ring-1 ring-slate-200">
+        <div className="nodrag nowheel inline-flex w-full rounded-full bg-slate-100 p-1 ring-1 ring-slate-200">
           <button
             type="button"
             className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${previewMode === 'reference' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -1352,11 +1362,12 @@ function VideoPlanContent({
         </div>
       ) : null}
       {shouldShowVideo && displayOutputUrl ? (
-        <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[16px] bg-black" style={outputStyle}>
+        <div className="nodrag nowheel relative flex w-full items-center justify-center overflow-hidden rounded-[16px] bg-black" style={outputStyle}>
           <video
             src={displayOutputUrl}
             aria-label={data.title}
             controls
+            preload="metadata"
             onLoadedMetadata={handleOutputVideoLoadedMetadata}
             className="h-full w-full object-contain"
           />
@@ -1396,7 +1407,7 @@ function VideoPlanContent({
           )}
         </div>
       )}
-      {renderSection(labels('generationMode'), (
+      {canUseNodeActions ? renderSection(labels('generationMode'), (
         <div className="space-y-2">
           <div className="inline-flex w-full rounded-full bg-slate-100 p-1 ring-1 ring-slate-200">
             <button
@@ -1432,7 +1443,7 @@ function VideoPlanContent({
             <p className="text-xs leading-5 text-[var(--glass-tone-danger-fg)]">{labels('videoPlanModelMissing')}</p>
           ) : null}
         </div>
-      ))}
+      )) : null}
       {renderSection(labels('videoPlanMeta'), (
         <div className="space-y-1">
           {renderValue(labels('generationMode'), details.kind === 'group' ? labels('videoPlanGroup') : labels('videoPlanSingle'))}
@@ -1478,7 +1489,7 @@ function SpaceConsistencyContent({
     ? expanded ? details.blocks : details.blocks.slice(0, 2)
     : []
   return (
-    <div className="nodrag nowheel space-y-3">
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       <MediaPreview data={data} />
       {renderSection(labels('spaceConsistencyStats'), (
         <div className="space-y-1">
@@ -1689,10 +1700,11 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
+  const showDetailsToggle = canToggleDetails && Boolean(data.onToggleExpanded)
   const showHeaderAction = Boolean(action && data.actionLabel && (data.kind === 'spaceConsistency' || data.kind === 'editRequiredAsset'))
   const showLargeTitle = data.kind !== 'shot'
   const shouldShowFooter = !isRunning && (
-    canToggleDetails ||
+    showDetailsToggle ||
     Boolean(action && data.actionLabel && !showHeaderAction) ||
     Boolean(secondaryAction && data.secondaryActionLabel) ||
     nodeShowsMetaFooter(data.kind)
@@ -1778,7 +1790,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                   {data.kind === 'editRequiredAsset' ? '' : data.meta}
                 </p>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {canToggleDetails ? (
+                  {showDetailsToggle ? (
                     <button
                       type="button"
                       className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
