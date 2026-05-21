@@ -14,6 +14,17 @@
 - soundFilterPrompt 只能写声音质感、频响、动态范围、空间感、清晰度、年代感和混音倾向；禁止写依赖画面元素的具体声源或音效，例如脚步、衣料、门轴、雨声、机械声、动物声、物体碰撞。
 - 优秀 soundFilterPrompt 示例：老电影窄频声音，轻微低通，闷厚中低频，弱高频，轻微磁带底噪；现代冷峻声音，干净宽频，低频稳定，空间混响克制；手持纪录片声音，现场感强，动态自然，环境底噪不过度修饰；童话动画声音，清澈明亮，瞬态圆润，短促音色轻巧不刺耳。
 
+视觉提示策略 visualPromptPolicy：
+- 必须输出 visualPromptPolicy，作为后续资产图、分镜图和视频提示词可复用的统一视觉策略。
+- positivePrompt 是总正向视觉提示词：把视觉气质、光线、色彩、质感、构图和画面滤镜合成一段可直接拼入图像/视频模型的中文自然语言。
+- negativePrompt 是总负向视觉提示词：明确压制不想要的画风、光线、色彩、质感、构图、文字、水印、logo、低质感和与用户风格冲突的倾向。
+- imageFilterPrompt 是凝练画面滤镜，必须与 styleReferenceInterpretation.imageFilterPrompt 语义一致。
+- lightingPrompt 只控制光源、光比、方向、自然光/人工光和曝光倾向。
+- colorPrompt 只控制色盘、饱和度、冷暖、主色关系和禁用色彩倾向。
+- texturePrompt 只控制材质、颗粒、皮肤/布料/墙面/空气/胶片质地，不写剧情动作。
+- compositionPrompt 只控制构图、留白、主体位置、前中后景、空间层次和镜头距离。
+- visualPromptPolicy 的所有字段必须使用中文；除专有名词、模型字段名和原文台词外，不要输出英文句子。
+
 Bible 的作用：
 - 统一所有并行 videoBlock 的视频风格、画面滤镜、角色身份、场景连续性、声音规则和视频模型禁令。
 - 不生成具体 shot prompt。
@@ -26,6 +37,7 @@ Bible 的作用：
 - userDirectedStyle：用户明确指定的风格或要求；没有则为 null。
 - inferredSystemStyle：用户未指定时，从项目风格、导演风格、剧情自动推导的风格。
 - styleReferenceInterpretation：标准化风格转换层。
+- visualPromptPolicy：正向/负向视觉提示词与光线、色彩、质感、构图拆分策略。
 - characterContinuityRules：角色身份、外观、称谓、声音固定规则。
 - locationContinuityRules：场景空间、关键锚点和时空连续规则。
 - soundRules：对白、旁白、音效、禁 BGM、禁字幕的规则。
@@ -49,6 +61,17 @@ Bible 的作用：
   "hardBans": ["不要快切", "不要商业广告感", "不要炫技运镜", "不要字幕", "不要水印"]
 }
 
+对应的 visualPromptPolicy 应该写成：
+{
+  "positivePrompt": "安静的东方作者电影视觉，静观、克制、冥想感，自然空间与人物关系优先，柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光，低饱和自然灰绿、木色、石灰色，动作缓慢连续，画面留白充足",
+  "negativePrompt": "不要商业广告感，不要高反差大片感，不要炫技运镜，不要高饱和动漫色，不要塑料皮肤，不要过度锐化，不要强烈棚拍光，不要字幕、水印、logo",
+  "imageFilterPrompt": "柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光",
+  "lightingPrompt": "自然光为主，光比柔和，避免明显商业布光，保留季节性光线和空气透亮感",
+  "colorPrompt": "低饱和自然灰绿、木色、石灰色，整体淡雅克制",
+  "texturePrompt": "细微胶片颗粒，旧布料、木头、石墙和空气湿度有真实质感",
+  "compositionPrompt": "留白构图，稳定中心锚点，人物置于自然或寺院建筑空间中，前中后景清楚"
+}
+
 优秀 styleReferenceInterpretation 示例，仅学习字段写法，不要复制剧情：
 1. 复古悬疑短片：
 {
@@ -63,6 +86,16 @@ Bible 的作用：
   "editingPacing": "慢节奏，保留空镜和反应间隔，用环境声延续剪辑",
   "soundStyle": "只强化当前画面已有声源，空间底噪和短促低频重音服务转折，不额外添加具体音源"
 }
+对应的 visualPromptPolicy：
+{
+  "positivePrompt": "复古悬疑电影视觉，压抑克制，低照度钨丝灯，门框、窗影、走廊纵深和前景遮挡形成压迫构图，老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
+  "negativePrompt": "不要现代锐利高清感，不要鲜艳幻想色，不要鬼屋套路，不要血腥妆容，不要商业写真光，不要画面暗到不可读",
+  "imageFilterPrompt": "老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
+  "lightingPrompt": "低照度实景光，局部阴影，门缝光、窗光或钨丝灯，主体仍清楚可读",
+  "colorPrompt": "低饱和黄褐、暗绿、灰黑，少量暖光对比",
+  "texturePrompt": "旧墙面、磨损木料、潮湿地面、轻微灰尘和胶片颗粒",
+  "compositionPrompt": "偏心主体，框中框，前景遮挡，背景保留暗部纵深"
+}
 2. 现代冷峻科幻：
 {
   "visualTone": "冷静、精密、孤独，技术空间压过人物情绪",
@@ -76,6 +109,16 @@ Bible 的作用：
   "editingPacing": "中慢节奏，靠机械声和灯光变化推动紧张感",
   "soundStyle": "以画面内已有装置和空间声为准，短促提示音必须来自剧情或可见动作，禁止连续配乐"
 }
+对应的 visualPromptPolicy：
+{
+  "positivePrompt": "现代冷峻科幻视觉，冷静、精密、孤独，低饱和蓝灰色，干净硬光，屏幕反光，轻微镜头眩光，高清细节，对称构图和硬边线条，人物被大面积技术空间包围",
+  "negativePrompt": "不要赛博霓虹泛滥，不要彩色光污染，不要廉价塑料科幻感，不要过度发光，不要杂乱 UI 堆满画面",
+  "imageFilterPrompt": "冷峻科幻质感，低饱和蓝灰色，干净硬光，轻微镜头眩光，高清细节",
+  "lightingPrompt": "冷色硬光、屏幕反光、边缘轮廓光，阴影干净",
+  "colorPrompt": "低饱和蓝灰、银白，少量警示红或青色点缀",
+  "texturePrompt": "金属、玻璃、屏幕、磨砂塑料材质清晰但不廉价",
+  "compositionPrompt": "对称构图，硬边线条，人物被空间包围，留出冷静压迫感"
+}
 3. 明亮童话动画：
 {
   "visualTone": "轻盈、温暖、童话感，情绪外化但不过度夸张",
@@ -88,6 +131,16 @@ Bible 的作用：
   "motionStyle": "动作流畅、有弹性，小幅夸张但保持角色身份稳定",
   "editingPacing": "轻快但不碎，动作完成后保留短暂停顿",
   "soundStyle": "只根据画面已有动作生成轻巧声音标点，不凭空添加具体声源"
+}
+对应的 visualPromptPolicy：
+{
+  "positivePrompt": "明亮童话动画视觉，轻盈、温暖、柔和，色彩清澈但不过饱和，柔和漫射光，边缘圆润，高光干净，主体清晰居中，前景形成层次",
+  "negativePrompt": "不要脏暗恐怖感，不要写实压抑感，不要过度复杂纹理，不要高饱和廉价儿童贴纸感，不要尖锐刺眼高光",
+  "imageFilterPrompt": "明亮童话动画质感，柔和漫射光，色彩清澈，边缘圆润，高光干净",
+  "lightingPrompt": "柔和漫射光，暖边缘光，高光明亮但不过曝",
+  "colorPrompt": "暖色、草绿、天空蓝、奶油白，明亮但不过饱和",
+  "texturePrompt": "柔软、干净、轻盈，材质边缘圆润，细节适中",
+  "compositionPrompt": "主体清晰，构图稳定，前景中景背景有童话层次"
 }
 
 user_request:
@@ -128,6 +181,15 @@ style_context:
       "editingPacing": "string",
       "soundStyle": "string",
       "hardBans": ["string"]
+    },
+    "visualPromptPolicy": {
+      "positivePrompt": "string",
+      "negativePrompt": "string",
+      "imageFilterPrompt": "string",
+      "lightingPrompt": "string",
+      "colorPrompt": "string",
+      "texturePrompt": "string",
+      "compositionPrompt": "string"
     },
     "characterContinuityRules": ["string"],
     "locationContinuityRules": ["string"],

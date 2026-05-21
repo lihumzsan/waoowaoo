@@ -14,6 +14,16 @@ Style conversion standard:
 - soundFilterPrompt may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
 - Excellent soundFilterPrompt examples: narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss; clean modern sound, wide-band clarity, stable low end, restrained spatial reverb; handheld documentary sound, strong location presence, natural dynamics, lightly unpolished ambience; fairy-tale animation sound, bright clear texture, rounded transients, light short tones without harshness.
 
+Visual prompt policy:
+- You must output visualPromptPolicy as the reusable visual strategy for later asset images, storyboard images, and video prompts.
+- positivePrompt is the complete positive visual prompt: combine visual tone, lighting, color, texture, composition, and image filter into one natural-language sentence that can be directly inserted into image/video model prompts.
+- negativePrompt is the complete negative visual prompt: explicitly suppress unwanted style, lighting, color, texture, composition, text, watermarks, logos, low-quality artifacts, and tendencies that conflict with the requested style.
+- imageFilterPrompt is the concise image filter and must match styleReferenceInterpretation.imageFilterPrompt semantically.
+- lightingPrompt controls only light source, contrast ratio, direction, natural/artificial light, and exposure tendency.
+- colorPrompt controls only palette, saturation, temperature, dominant colors, and banned color tendencies.
+- texturePrompt controls only material, grain, skin/fabric/wall/air/film texture; do not write story action here.
+- compositionPrompt controls only composition, negative space, subject placement, foreground/midground/background, spatial depth, and camera distance.
+
 Purpose of this Bible:
 - Keep all parallel videoBlocks consistent in video style, image filter, character identity, location continuity, sound rules, and video-model constraints.
 - Do not generate concrete shot prompts.
@@ -25,6 +35,7 @@ Must include:
 - userDirectedStyle: explicit user style or requirements; null if none.
 - inferredSystemStyle: style inferred from project/director/story when the user did not specify it.
 - styleReferenceInterpretation: standardized style-conversion layer.
+- visualPromptPolicy: positive/negative visual prompt policy plus lighting, color, texture, and composition prompt slices.
 - characterContinuityRules: fixed character identity, appearance, naming, and voice rules.
 - locationContinuityRules: location space, key anchors, and time/space continuity.
 - soundRules: dialogue, narration, sound effects, no BGM, no subtitle rules.
@@ -48,6 +59,17 @@ If the user asks for "a quiet East Asian art-house film with seasonal change, na
   "hardBans": ["no fast cutting", "no commercial look", "no showy camera movement", "no subtitles", "no watermark"]
 }
 
+The matching visualPromptPolicy should be:
+{
+  "positivePrompt": "quiet East Asian art-house film look, observational, restrained, meditative, prioritizing nature-character relationships, soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights, low-saturation natural gray-green, wood, and stone-gray palette, slow continuous movement, generous negative space",
+  "negativePrompt": "no commercial look, no blockbuster high contrast, no showy camera movement, no oversaturated anime colors, no plastic skin, no excessive sharpening, no strong studio lighting, no subtitles, no watermark, no logo",
+  "imageFilterPrompt": "soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights",
+  "lightingPrompt": "natural light first, soft contrast, avoid obvious commercial lighting, preserve seasonal light and clear air",
+  "colorPrompt": "low-saturation natural gray-green, wood, and stone-gray palette, restrained and quiet overall",
+  "texturePrompt": "subtle film grain, realistic worn fabric, wood, stone walls, and humid air texture",
+  "compositionPrompt": "negative-space composition, stable central anchors, figures placed within nature or temple architecture, clear foreground/midground/background"
+}
+
 Excellent styleReferenceInterpretation examples, for field-writing style only. Do not copy their story:
 1. Vintage suspense short:
 {
@@ -62,6 +84,16 @@ Excellent styleReferenceInterpretation examples, for field-writing style only. D
   "editingPacing": "slow pacing, preserving empty frames and reaction gaps, with ambience carrying edits",
   "soundStyle": "only reinforce sound sources already present in the current image, with room tone and short low hits serving story turns"
 }
+Matching visualPromptPolicy:
+{
+  "positivePrompt": "vintage suspense film look, oppressive and restrained, low-level tungsten light, pressure from doorframes, window shadows, corridor depth, and foreground occlusion, old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
+  "negativePrompt": "no modern sharp HD look, no vivid fantasy colors, no haunted-house cliché, no gore makeup, no glossy commercial portrait lighting, no unreadably dark image",
+  "imageFilterPrompt": "old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
+  "lightingPrompt": "low-level practical light, local shadows, door-gap light, window light, or tungsten light, while keeping the subject readable",
+  "colorPrompt": "low-saturation yellow-brown, dark green, gray-black, with small warm-light contrast",
+  "texturePrompt": "old walls, worn wood, damp floor, slight dust, and film grain",
+  "compositionPrompt": "off-center subjects, frame-within-frame, foreground occlusion, deep dark background"
+}
 2. Clean modern sci-fi:
 {
   "visualTone": "cool, precise, lonely, with technical space pressing against human emotion",
@@ -75,6 +107,16 @@ Excellent styleReferenceInterpretation examples, for field-writing style only. D
   "editingPacing": "medium-slow pacing, tension driven by machine sound and light changes",
   "soundStyle": "use only visible or story-established device and space sounds, with short cues tied to plot or visible action, no continuous score"
 }
+Matching visualPromptPolicy:
+{
+  "positivePrompt": "clean modern sci-fi look, cool, precise, lonely, desaturated blue-gray, clean hard light, screen reflections, slight lens flare, crisp detail, symmetrical composition, hard edges, figures surrounded by large technical space",
+  "negativePrompt": "no excessive cyber neon, no colorful light pollution, no cheap plastic sci-fi look, no excessive glow, no cluttered UI covering the frame",
+  "imageFilterPrompt": "cold sci-fi texture, desaturated blue-gray, clean hard light, slight lens flare, crisp detail",
+  "lightingPrompt": "cool hard light, screen reflections, rim light, clean shadows",
+  "colorPrompt": "desaturated blue-gray and silver white, with minimal warning red or cyan accents",
+  "texturePrompt": "clear but not cheap metal, glass, screen, and matte plastic textures",
+  "compositionPrompt": "symmetrical composition, hard edges, figures surrounded by space, calm pressure"
+}
 3. Bright fairy-tale animation:
 {
   "visualTone": "light, warm, fairy-tale-like, with visible emotion but no excessive exaggeration",
@@ -87,6 +129,16 @@ Excellent styleReferenceInterpretation examples, for field-writing style only. D
   "motionStyle": "fluid elastic movement, slight exaggeration while preserving character identity",
   "editingPacing": "light and quick without feeling fragmented, preserving a short pause after actions finish",
   "soundStyle": "generate light sound punctuation only from visible actions, without adding concrete sources not present in the image"
+}
+Matching visualPromptPolicy:
+{
+  "positivePrompt": "bright fairy-tale animation look, light, warm, soft, clear but not oversaturated colors, soft diffuse light, rounded edges, clean highlights, clear centered subject, layered foreground",
+  "negativePrompt": "no grimy horror look, no oppressive realism, no overly complex texture, no cheap oversaturated children-sticker look, no harsh sharp highlights",
+  "imageFilterPrompt": "bright fairy-tale animation texture, soft diffuse light, clear colors, rounded edges, clean highlights",
+  "lightingPrompt": "soft diffuse light, warm edge light, bright highlights without overexposure",
+  "colorPrompt": "warm colors, grass green, sky blue, cream white, bright but not oversaturated",
+  "texturePrompt": "soft, clean, light, rounded material edges, moderate detail",
+  "compositionPrompt": "clear subject, stable composition, fairy-tale layering across foreground, midground, and background"
 }
 
 user_request:
@@ -127,6 +179,15 @@ Return JSON only. No markdown. No explanation. Schema:
       "editingPacing": "string",
       "soundStyle": "string",
       "hardBans": ["string"]
+    },
+    "visualPromptPolicy": {
+      "positivePrompt": "string",
+      "negativePrompt": "string",
+      "imageFilterPrompt": "string",
+      "lightingPrompt": "string",
+      "colorPrompt": "string",
+      "texturePrompt": "string",
+      "compositionPrompt": "string"
     },
     "characterContinuityRules": ["string"],
     "locationContinuityRules": ["string"],

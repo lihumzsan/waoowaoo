@@ -14,8 +14,11 @@
 - 若用户没有明确要求，遵守 videoPromptBible.inferredSystemStyle、styleReferenceInterpretation 和 style_context。
 - 每个 shots[].videoPrompt 必须显式写入可执行风格，不得只写“按 Bible 风格”。
 - 每个 videoBlock.prompt 必须显式写入统一视频风格、画面滤镜、声音滤镜、光线、色彩、镜头节奏、运动风格和画幅。
+- 必须优先使用 videoPromptBible.visualPromptPolicy.positivePrompt 作为正向视觉策略，并把其中的光线、色彩、质感、构图和画面滤镜落实到 shots[].videoPrompt 与 videoBlock.prompt。
+- 必须使用 videoPromptBible.visualPromptPolicy.negativePrompt 作为负向视觉约束，把它转写进 prompt 的“避免/禁止”部分；不要只依赖默认禁用项。
 - 必须使用 videoPromptBible.styleReferenceInterpretation.imageFilterPrompt；画面滤镜要作为视频提示词的一部分出现。
 - 必须使用 videoPromptBible.styleReferenceInterpretation.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感，不得改写或替代角色 voiceTimbreText。
+- 如果 visualPromptPolicy.imageFilterPrompt 与 styleReferenceInterpretation.imageFilterPrompt 表述略有差异，以 visualPromptPolicy.imageFilterPrompt 为最终图像/视频模型用词，但必须保持语义一致。
 - 如果用户给出导演名、影片名、流派名、年代感或摄影风格参考，最终 prompt 中应写可执行风格特征，而不是只写参考名。
 
 shots[].videoPrompt 写作规则：

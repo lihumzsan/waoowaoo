@@ -9,6 +9,8 @@ Priority:
 Image filter requirements:
 - imageFilterPrompt must be one concise phrase that can be inserted directly into image prompts.
 - imageFilterPrompt must stay consistent with the image filter from the Video Prompt Bible after it has entered shots[].videoPrompt / videoBlocks[].prompt; do not create a separate image-only style.
+- If source_snapshot_json or video prompts include videoPromptBible.visualPromptPolicy, prioritize its positivePrompt, negativePrompt, imageFilterPrompt, lightingPrompt, colorPrompt, texturePrompt, and compositionPrompt, then compress them into this Camera Style Bible's image style rules.
+- Bans from negativePrompt must enter hardBans; do not inherit only the positive image filter.
 - If different videoBlocks phrase the filter slightly differently, extract the shared stable filter core and avoid conflicts.
 - Examples: soft-focus lens, low contrast, gentle highlight bloom, subtle 1990s film grain; cold sci-fi texture, desaturated blue-gray, clean hard light, slight lens flare; handheld documentary texture, natural light, low-polish color, real environmental grain.
 
