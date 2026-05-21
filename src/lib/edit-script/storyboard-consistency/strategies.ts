@@ -205,3 +205,26 @@ export function resolveGridDensity(videoRatio: string): GridDensity {
     shortSideUnits: 9,
   }
 }
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left)
+  let b = Math.abs(right)
+  while (b > 0) {
+    const next = a % b
+    a = b
+    b = next
+  }
+  return a || 1
+}
+
+export function resolveAspectRatioFromDimensions(width: number, height: number): string {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error(`EDIT_SCRIPT_STORYBOARD_IMAGE_DIMENSIONS_INVALID:${width}x${height}`)
+  }
+  const divisor = greatestCommonDivisor(width, height)
+  return `${width / divisor}:${height / divisor}`
+}
+
+export function resolveGridDensityFromDimensions(width: number, height: number): GridDensity {
+  return resolveGridDensity(resolveAspectRatioFromDimensions(width, height))
+}

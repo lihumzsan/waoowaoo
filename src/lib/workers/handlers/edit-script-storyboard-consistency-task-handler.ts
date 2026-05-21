@@ -22,6 +22,10 @@ import {
   generateGridFloorPlan,
 } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import {
+  resolveAspectRatioFromDimensions,
+  resolveGridDensityFromDimensions,
+} from '@/lib/edit-script/storyboard-consistency/strategies'
+import {
   storyboardConsistencySourceSnapshotSchema,
   type StoryboardConsistencyAssetSnapshot,
   type StoryboardConsistencyModelConfigSnapshot,
@@ -248,18 +252,32 @@ async function referenceImagesForArtifact(
   return normalized.referenceImages
 }
 
-function readGridMetadata(artifact: BlockingArtifactRecord): {
-  readonly columns: number
-  readonly rows: number
-} {
-  const metadata = readRecord(artifact.metadataJson)
-  const grid = readRecord(metadata.grid)
-  const columns = Number(grid.columns)
-  const rows = Number(grid.rows)
-  if (!Number.isInteger(columns) || columns < 1 || !Number.isInteger(rows) || rows < 1) {
-    throw new Error(`EDIT_SCRIPT_STORYBOARD_GRID_METADATA_INVALID:${artifact.id}`)
+function bufferFromDataUrl(source: string): Buffer {
+  const marker = ';base64,'
+  const markerIndex = source.indexOf(marker)
+  if (!source.startsWith('data:') || markerIndex === -1) {
+    throw new Error('EDIT_SCRIPT_STORYBOARD_REFERENCE_IMAGE_DATA_URL_REQUIRED')
   }
-  return { columns, rows }
+  return Buffer.from(source.slice(markerIndex + marker.length), 'base64')
+}
+
+async function readImageAspectRatio(source: string): Promise<string> {
+  const metadata = await sharp(bufferFromDataUrl(source)).metadata()
+  const width = metadata.width
+  const height = metadata.height
+  if (!width || !height) throw new Error('EDIT_SCRIPT_STORYBOARD_REFERENCE_IMAGE_DIMENSIONS_REQUIRED')
+  return resolveAspectRatioFromDimensions(width, height)
+}
+
+function buildFloorPlanImagePrompt(params: {
+  readonly prompt: string
+  readonly aspectRatio: string
+  readonly locale: TaskJobData['locale']
+}): string {
+  const ratioInstruction = params.locale === 'en'
+    ? `The output canvas must keep the same aspect ratio as the scene reference image: ${params.aspectRatio}. This reference-image ratio is authoritative; ignore any conflicting aspect ratio, grid density, or canvas size in the earlier prompt. Do not pad, crop, letterbox, pillarbox, or convert it to the project video ratio.`
+    : `输出画布必须保持场景参考图的原始比例：${params.aspectRatio}。这个参考图比例是唯一权威；如果前面的提示词里有冲突的画幅比例、网格密度或画布尺寸，一律忽略。不要补边、裁切、加黑边/白边，也不要改成项目视频比例。`
+  return `${params.prompt.trim()}\n\n${ratioInstruction}`
 }
 
 async function persistArtifactImage(params: {
@@ -294,7 +312,13 @@ async function createGridOverlayArtifact(params: {
   const width = metadata.width
   const height = metadata.height
   if (!width || !height) throw new Error('EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_DIMENSIONS_REQUIRED')
-  const grid = readGridMetadata(params.floorPlan)
+  const grid = resolveGridDensityFromDimensions(width, height)
+  const gridJson = {
+    columns: grid.columns,
+    rows: grid.rows,
+    ratio: grid.ratio,
+    shortSideUnits: grid.shortSideUnits,
+  }
   const overlay = await sharp(buffer)
     .composite([{
       input: buildCoordinateGridOverlaySvgBuffer({
@@ -317,6 +341,15 @@ async function createGridOverlayArtifact(params: {
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: 'image/png',
   })
+  await prisma.projectStoryboardBlockingArtifact.update({
+    where: { id: params.floorPlan.id },
+    data: {
+      metadataJson: {
+        ...readRecord(params.floorPlan.metadataJson),
+        grid: gridJson,
+      } as Prisma.InputJsonValue,
+    },
+  })
   await prisma.projectStoryboardBlockingArtifact.upsert({
     where: { id: `${params.floorPlan.id}:overlay` },
     update: {
@@ -328,7 +361,7 @@ async function createGridOverlayArtifact(params: {
         sourceFloorPlanArtifactId: params.floorPlan.id,
         sourceFloorPlanImageUrl: params.fullImageUrl,
         sourceFloorPlanImageMediaId: params.fullMediaId,
-        grid,
+        grid: gridJson,
       } as Prisma.InputJsonValue,
       status: 'ready',
       errorMessage: null,
@@ -347,7 +380,7 @@ async function createGridOverlayArtifact(params: {
         sourceFloorPlanArtifactId: params.floorPlan.id,
         sourceFloorPlanImageUrl: params.fullImageUrl,
         sourceFloorPlanImageMediaId: params.fullMediaId,
-        grid,
+        grid: gridJson,
       } as Prisma.InputJsonValue,
       status: 'ready',
       errorMessage: null,
@@ -512,13 +545,20 @@ export async function handleEditScriptStoryboardFloorPlanImageTask(job: Job<Task
         data: { status: 'generating', errorMessage: null },
       })
       const referenceImages = await referenceImagesForArtifact(snapshot, artifact, job.data.locale)
+      const primaryReferenceImage = referenceImages[0]
+      if (!primaryReferenceImage) throw new Error(`EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_REFERENCE_IMAGE_REQUIRED:${artifact.id}`)
+      const sourceAspectRatio = await readImageAspectRatio(primaryReferenceImage)
       const source = await resolveImageSourceFromGeneration(job, {
         userId: job.data.userId,
         modelId: modelConfig.storyboardModel,
-        prompt: artifact.prompt,
+        prompt: buildFloorPlanImagePrompt({
+          prompt: artifact.prompt,
+          aspectRatio: sourceAspectRatio,
+          locale: job.data.locale,
+        }),
         options: {
           referenceImages,
-          aspectRatio: snapshot.project.videoRatio,
+          aspectRatio: sourceAspectRatio,
         },
         allowTaskExternalIdResume: false,
         pollProgress: { start: 20, end: 78 },

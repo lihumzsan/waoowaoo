@@ -9,7 +9,9 @@ import {
 import {
   buildFloorPlanSceneGroups,
   classifyStoryboardConsistencyBlocks,
+  resolveAspectRatioFromDimensions,
   resolveGridDensity,
+  resolveGridDensityFromDimensions,
 } from '@/lib/edit-script/storyboard-consistency/strategies'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
@@ -193,6 +195,13 @@ describe('edit-script storyboard coordinate consistency', () => {
     expect(resolveGridDensity('9:16')).toEqual({ columns: 9, rows: 16, ratio: '9:16', shortSideUnits: 9 })
     expect(resolveGridDensity('21:9')).toEqual({ columns: 21, rows: 9, ratio: '21:9', shortSideUnits: 9 })
     expect(resolveGridDensity('1:1')).toEqual({ columns: 9, rows: 9, ratio: '1:1', shortSideUnits: 9 })
+  })
+
+  it('derives floor-plan grid density from actual image dimensions without forcing project ratio', () => {
+    expect(resolveAspectRatioFromDimensions(1024, 1024)).toBe('1:1')
+    expect(resolveGridDensityFromDimensions(1024, 1024)).toEqual({ columns: 9, rows: 9, ratio: '1:1', shortSideUnits: 9 })
+    expect(resolveAspectRatioFromDimensions(1536, 864)).toBe('16:9')
+    expect(resolveGridDensityFromDimensions(1536, 864)).toEqual({ columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 })
   })
 
   it('classifies repeated two-person locations as fixed-space and skips chase or montage language', () => {
