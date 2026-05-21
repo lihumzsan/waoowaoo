@@ -242,7 +242,8 @@
         "zoomOut": "Zoom Out"
       },
       "actions": {
-        "generateScript": "Ask AI to Create",
+        "generateScript": "Generate Screenplay",
+        "generateEditScript": "Generate Edit Table",
         "generateStoryboard": "Generate Storyboard",
         "generateImage": "Generate Image",
         "regenerateImage": "Regenerate",

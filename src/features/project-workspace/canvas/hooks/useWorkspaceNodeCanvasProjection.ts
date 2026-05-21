@@ -1200,6 +1200,12 @@ export function buildWorkspaceNodeCanvasProjection({
           screenplayText: editScreenplay.screenplayText,
           userPrompt: editScreenplay.userPrompt,
         },
+        actionLabel: editScreenplay.status === 'ready' && !editScript && !editScriptPending
+          ? translate('actions.generateEditScript')
+          : undefined,
+        action: editScreenplay.status === 'ready' && !editScript && !editScriptPending
+          ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
+          : undefined,
         onAction,
       },
     }))
@@ -1522,6 +1528,7 @@ export function buildWorkspaceNodeCanvasProjection({
   const clipNodeIds = new Map<string, string>()
   clips.forEach((clip, index) => {
     const nodeId = `clip:${clip.id}`
+    const storyboardForClip = storyboards.find((storyboard) => storyboard.clipId === clip.id) ?? null
     clipNodeIds.set(clip.id, nodeId)
     nodes.push(createNode({
       id: nodeId,
@@ -1543,8 +1550,8 @@ export function buildWorkspaceNodeCanvasProjection({
         height: 360,
         indexLabel: `C${index + 1}`,
         scriptDetails: createScriptDetails(clip),
-        actionLabel: translate('actions.generateStoryboard'),
-        action: { type: 'generate_storyboard' },
+        actionLabel: storyboardForClip ? translate('actions.generateStoryboard') : undefined,
+        action: storyboardForClip ? { type: 'regenerate_storyboard_text', storyboardId: storyboardForClip.id } : undefined,
         onAction,
       },
     }))

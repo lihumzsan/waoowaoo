@@ -23,13 +23,18 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_script') {
-      await runtime.onRequestAssistantPlan()
+    if (action.type === 'generate_edit_screenplay') {
+      await runtime.onGenerateEditScreenplay(action.prompt)
       return
     }
 
-    if (action.type === 'generate_storyboard') {
-      await runtime.onRequestAssistantPlan()
+    if (action.type === 'generate_edit_script') {
+      await runtime.onGenerateEditScript(action.screenplayId)
+      return
+    }
+
+    if (action.type === 'regenerate_storyboard_text') {
+      await runtime.onRegenerateStoryboardText(action.storyboardId)
       return
     }
 

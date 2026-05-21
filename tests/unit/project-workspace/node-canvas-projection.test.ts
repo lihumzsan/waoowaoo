@@ -284,6 +284,12 @@ describe('workspace node canvas projection', () => {
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('analysis:episode-1->clip:clip-1')
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('clip:clip-1->shot:panel-1')
 
+    const clipNode = projection.nodes.find((node) => node.id === 'clip:clip-1')
+    expect(clipNode?.data.action).toEqual({
+      type: 'regenerate_storyboard_text',
+      storyboardId: 'storyboard-1',
+    })
+
     const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-1')
     expect(shotNode?.data.action).toEqual({ type: 'generate_image', panelId: 'panel-1' })
     expect(shotNode?.data.previewImageUrl).toBe('https://example.com/panel-1.png')
@@ -338,6 +344,7 @@ describe('workspace node canvas projection', () => {
       screenplayText: editScreenplay.screenplayText,
       userPrompt: editScreenplay.userPrompt,
     })
+    expect(screenplayNode?.data.action).toBeUndefined()
 
     const editScriptNode = projection.nodes.find((node) => node.id === 'edit-script:edit-video')
     expect(editScriptNode?.position.y).toBeGreaterThan(screenplayNode?.position.y ?? 0)
@@ -351,6 +358,27 @@ describe('workspace node canvas projection', () => {
         fields: [{ label: 'nodeFields.duration', value: '2s' }],
       },
     ])
+  })
+
+  it('adds a direct edit table action when a ready screenplay has no edit script yet', () => {
+    const editScreenplay = createEditScreenplay()
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editScript: null,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
+    expect(screenplayNode?.data.actionLabel).toBe('actions.generateEditScript')
+    expect(screenplayNode?.data.action).toEqual({
+      type: 'generate_edit_script',
+      screenplayId: 'screenplay-1',
+    })
   })
 
   it('projects the style bible as the style source between screenplay and edit generation', () => {

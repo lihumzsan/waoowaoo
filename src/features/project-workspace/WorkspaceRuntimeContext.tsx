@@ -38,6 +38,9 @@ export interface WorkspaceRuntimeValue {
   onArtStyleChange: (value: string) => Promise<void>
   onVisualStylePresetChange: (value: { presetSource: 'system' | 'user'; presetId: string }) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
+  onGenerateEditScreenplay: (prompt: string) => Promise<void>
+  onGenerateEditScript: (screenplayId?: string) => Promise<void>
+  onRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   onClipUpdate: (clipId: string, data: unknown) => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>

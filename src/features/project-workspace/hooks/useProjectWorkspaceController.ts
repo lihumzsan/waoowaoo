@@ -20,10 +20,13 @@ import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
 import {
   useAssetActions,
+  useCreateProjectEditScreenplay,
+  useCreateProjectEditScript,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
   useGenerateProjectEditScriptStoryboardCoordinates,
   useArrangeProjectEditScriptVideoBlocks,
+  useRegenerateProjectStoryboardText,
   useUpdateProjectEditScriptAssetRequirementDescription,
   useUpdateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/query/hooks'
@@ -116,6 +119,9 @@ export function useProjectWorkspaceController({
     projectId,
     episodeId,
   })
+  const createEditScreenplay = useCreateProjectEditScreenplay(projectId)
+  const createEditScript = useCreateProjectEditScript(projectId)
+  const regenerateStoryboardText = useRegenerateProjectStoryboardText(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
   const generateEditStoryboardCoordinates = useGenerateProjectEditScriptStoryboardCoordinates(projectId)
@@ -124,6 +130,23 @@ export function useProjectWorkspaceController({
   const updateVideoPlanPrompt = useUpdateProjectEditScriptVideoBlockPrompt(projectId)
   const arrangeVideoBlocks = useArrangeProjectEditScriptVideoBlocks(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
+  const handleGenerateEditScreenplay = async (prompt: string) => {
+    if (!episodeId) throw new Error('Episode ID is required')
+    await createEditScreenplay.mutateAsync({ episodeId, prompt })
+    await onRefresh({ mode: 'full' })
+  }
+  const handleGenerateEditScript = async (screenplayId?: string) => {
+    if (!episodeId) throw new Error('Episode ID is required')
+    await createEditScript.mutateAsync({
+      episodeId,
+      ...(screenplayId ? { screenplayId } : {}),
+    })
+    await onRefresh({ mode: 'full' })
+  }
+  const handleRegenerateStoryboardText = async (storyboardId: string) => {
+    await regenerateStoryboardText.mutateAsync({ storyboardId })
+    await onRefresh({ mode: 'full' })
+  }
   const handleGenerateEditAssets = async (editScriptId: string, requirementId?: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await generateEditAssets.mutateAsync({ episodeId, editScriptId, requirementId })
@@ -165,7 +188,7 @@ export function useProjectWorkspaceController({
     isSubmittingTTS: execution.isSubmittingTTS,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isStartingPlan: false,
+    isStartingPlan: createEditScreenplay.isPending || createEditScript.isPending,
     videoRatio: projectSnapshot.videoRatio,
     artStyle: projectSnapshot.artStyle,
     visualStylePresetSource: projectSnapshot.visualStylePresetSource,
@@ -178,6 +201,9 @@ export function useProjectWorkspaceController({
     handleUpdateEpisode: configActions.handleUpdateEpisode,
     handleUpdateConfig: configActions.handleUpdateConfig,
     onRequestAssistantPlan: execution.requestAssistantPlan,
+    handleGenerateEditScreenplay,
+    handleGenerateEditScript,
+    handleRegenerateStoryboardText,
     handleUpdateClip: videoActions.handleUpdateClip,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,

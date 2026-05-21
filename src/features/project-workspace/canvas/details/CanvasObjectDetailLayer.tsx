@@ -87,6 +87,9 @@ export default function CanvasObjectDetailLayer({
   const clip = selectedNode?.data.kind === 'scriptClip'
     ? clips.find((item) => item.id === selectedNode.data.targetId) ?? null
     : null
+  const storyboardForClip = clip
+    ? storyboards.find((storyboard) => storyboard.clipId === clip.id) ?? null
+    : null
   const panelContext = selectedNode?.data.targetType === 'panel'
     ? findPanelContext(storyboards, selectedNode.data.targetId)
     : null
@@ -236,7 +239,9 @@ export default function CanvasObjectDetailLayer({
           projectId={projectId}
           allClips={clips}
           onSave={saveClip}
-          onGenerateStoryboard={async () => runtime.onRequestAssistantPlan()}
+          {...(storyboardForClip ? {
+            onGenerateStoryboard: async () => runtime.onRegenerateStoryboardText(storyboardForClip.id),
+          } : {})}
           onOpenAssetLibrary={(characterName) => runtime.onOpenAssetLibraryForCharacter(characterName ?? null)}
         />
       )

@@ -31,6 +31,7 @@ vi.mock('@/features/project-workspace/WorkspaceRuntimeContext', () => ({
     onUpdatePanelVideoModel: vi.fn(),
     onGenerateVideo: vi.fn(),
     onGenerateAllVideos: vi.fn(),
+    onRegenerateStoryboardText: vi.fn(),
   }),
 }))
 

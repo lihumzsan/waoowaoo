@@ -242,7 +242,8 @@
         "zoomOut": "缩小"
       },
       "actions": {
-        "generateScript": "交给 AI 创作",
+        "generateScript": "生成剧本",
+        "generateEditScript": "生成剪辑表",
         "generateStoryboard": "生成分镜",
         "generateImage": "生成图片",
         "regenerateImage": "重新生成",

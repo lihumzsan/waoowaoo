@@ -23,7 +23,7 @@ interface ScriptClipDetailProps {
   readonly projectId: string
   readonly allClips: readonly ProjectClip[]
   readonly onSave: (clipId: string, data: Record<string, unknown>) => Promise<void>
-  readonly onGenerateStoryboard: () => Promise<void>
+  readonly onGenerateStoryboard?: () => Promise<void>
   readonly onOpenAssetLibrary: (characterId?: string | null) => void
 }
 
@@ -187,7 +187,9 @@ export default function ScriptClipDetail(props: ScriptClipDetailProps) {
       <div className="flex flex-wrap justify-end gap-2">
         <ActionButton onClick={() => props.onOpenAssetLibrary(characters[0] ?? null)}>{t('actions.openAssetLibrary')}</ActionButton>
         <ActionButton onClick={save} disabled={saving} variant="primary">{saving ? t('actions.saving') : t('actions.saveClip')}</ActionButton>
-        <ActionButton onClick={props.onGenerateStoryboard}>{t('actions.generateStoryboard')}</ActionButton>
+        {props.onGenerateStoryboard ? (
+          <ActionButton onClick={props.onGenerateStoryboard}>{t('actions.generateStoryboard')}</ActionButton>
+        ) : null}
       </div>
     </div>
   )

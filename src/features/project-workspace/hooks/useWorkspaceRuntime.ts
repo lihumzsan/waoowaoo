@@ -31,6 +31,9 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateEpisode: (key: string, value: unknown) => Promise<void>
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
+  handleGenerateEditScreenplay: (prompt: string) => Promise<void>
+  handleGenerateEditScript: (screenplayId?: string) => Promise<void>
+  handleRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   handleUpdateClip: (clipId: string, updates: Record<string, unknown>) => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
@@ -86,6 +89,9 @@ export function useWorkspaceRuntime({
   handleUpdateEpisode,
   handleUpdateConfig,
   onRequestAssistantPlan,
+  handleGenerateEditScreenplay,
+  handleGenerateEditScript,
+  handleRegenerateStoryboardText,
   handleUpdateClip,
   openAssetLibrary,
   handleGeneratePanelImage,
@@ -130,6 +136,9 @@ export function useWorkspaceRuntime({
     onArtStyleChange: (value) => handleUpdateConfig('artStyle', value),
     onVisualStylePresetChange: (value) => handleUpdateConfig('visualStylePreset', value),
     onRequestAssistantPlan,
+    onGenerateEditScreenplay: handleGenerateEditScreenplay,
+    onGenerateEditScript: handleGenerateEditScript,
+    onRegenerateStoryboardText: handleRegenerateStoryboardText,
     onClipUpdate: (clipId, data) => {
       if (!data || typeof data !== 'object' || Array.isArray(data)) {
         throw new Error('onClipUpdate requires a plain object payload')
@@ -173,6 +182,9 @@ export function useWorkspaceRuntime({
     handleUpdateClip,
     handleUpdateConfig,
     handleUpdateEpisode,
+    handleGenerateEditScreenplay,
+    handleGenerateEditScript,
+    handleRegenerateStoryboardText,
     handleArrangeVideoBlocks,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,

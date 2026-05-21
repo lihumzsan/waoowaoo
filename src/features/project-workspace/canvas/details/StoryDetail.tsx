@@ -74,7 +74,7 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
       setLongTextPromptOpen(true)
       return
     }
-    await runtime.onRequestAssistantPlan()
+    await runtime.onGenerateEditScreenplay(draft.trim())
   }
 
   const runAiWrite = async (prompt: string) => {
@@ -208,7 +208,7 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
         }}
         onContinue={() => {
           setLongTextPromptOpen(false)
-          void runtime.onRequestAssistantPlan()
+          void runtime.onGenerateEditScreenplay(draft.trim())
         }}
         copy={{
           title: t('storyInput.longTextDetection.title'),
