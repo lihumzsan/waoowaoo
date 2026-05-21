@@ -6,6 +6,7 @@
 - source_video_blocks_json 只作为融合素材；不要机械拼接两个旧 prompt，必须重写成一个完整连续片段。
 - 不得改变剧本事实、主体身份、场景关系、shot 顺序和动作因果。
 - 必须结合 asset_context_json 保持角色身份、场景身份、服装/外貌、空间锚点和视觉连续性。
+- 必须使用 style_bible_json 作为唯一风格来源，把其中的 visual、camera、motion、sound 和 hardBans 按需写入新 prompt，不得从旧 prompt 或项目风格另起一套风格。
 - 中文流程中 reason 与 prompt 必须整体使用中文自然语言；除角色名、专有名词、模型字段名和原文台词外，不要输出英文句子。
 
 reason 写作规则：
@@ -46,8 +47,8 @@ adjacent_blocks_json:
 aspect_ratio:
 {aspect_ratio}
 
-style_context:
-{style_context}
+style_bible_json:
+{style_bible_json}
 
 只返回 JSON，不要 markdown，不要解释。Schema:
 {

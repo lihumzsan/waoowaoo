@@ -15,9 +15,10 @@ import type {
   EditAssetStatus,
   EditScriptPayload,
   EditScriptShot,
+  EditScriptStyleBible,
   EditScriptVideoBlock,
 } from './types'
-import { editScriptVideoBlockArrangementSchema } from './types'
+import { editScriptStyleBibleSchema, editScriptVideoBlockArrangementSchema } from './types'
 import { assertNoRunningVideoGroupOverlap } from './video-group-running-guard'
 
 interface ArrangeEditScriptVideoBlocksInput {
@@ -55,6 +56,7 @@ interface PersistedEditScript {
   readonly status: string
   readonly shotsJson: Prisma.JsonValue
   readonly videoBlocksJson: Prisma.JsonValue | null
+  readonly styleBibleJson: Prisma.JsonValue | null
   readonly requirements: readonly PersistedEditScriptRequirement[]
 }
 
@@ -66,6 +68,14 @@ interface DraftVideoBlock {
 
 function stringifyForPrompt(value: unknown): string {
   return JSON.stringify(value, null, 2)
+}
+
+function parseStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible {
+  const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
+  if (!parsed.success) {
+    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
+  }
+  return parsed.data.styleBible
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +163,7 @@ function mapPersistedEditScript(script: PersistedEditScript): EditScriptPayload 
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    styleBible: parseStyleBibleJson(script.styleBibleJson),
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),
     requirements: persistedRequirementsForPrompt(script),
@@ -172,6 +183,7 @@ function buildStructureFromPersistedScript(script: PersistedEditScript): Omit<Ed
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    styleBible: parseStyleBibleJson(script.styleBibleJson),
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),
   }
@@ -324,18 +336,6 @@ function affectedShotNumbers(input: {
   return [...affected]
 }
 
-function buildStyleContext(input: {
-  readonly artStyle: string | null
-  readonly directorStyleDoc: string | null
-  readonly videoRatio: string | null
-}): string {
-  return [
-    input.artStyle ? `artStyle: ${input.artStyle}` : null,
-    input.directorStyleDoc ? `directorStyle: ${input.directorStyleDoc}` : null,
-    input.videoRatio ? `aspectRatio: ${input.videoRatio}` : null,
-  ].filter((line): line is string => Boolean(line)).join('\n')
-}
-
 function resolveTextModel(config: Awaited<ReturnType<typeof getProjectModelConfig>>): string {
   if (!config.analysisModel) {
     throw new ApiError('INVALID_PARAMS', {
@@ -462,6 +462,7 @@ export async function arrangeProjectEditScriptVideoBlocks(
   if (!script) throw new ApiError('NOT_FOUND')
 
   const structure = buildStructureFromPersistedScript(script)
+  const styleBible = parseStyleBibleJson(script.styleBibleJson)
   const draftBlocks = buildDraftVideoBlocks({
     structure,
     requestedBlocks: input.blocks,
@@ -490,8 +491,6 @@ export async function arrangeProjectEditScriptVideoBlocks(
       where: { id: input.projectId, userId: input.userId },
       select: {
         id: true,
-        artStyle: true,
-        directorStyleDoc: true,
         videoRatio: true,
       },
     }),
@@ -527,11 +526,7 @@ export async function arrangeProjectEditScriptVideoBlocks(
       }))),
       asset_context_json: buildVideoPromptAssetContext(persistedRequirementsForPrompt(script)),
       aspect_ratio: project.videoRatio ?? '',
-      style_context: buildStyleContext({
-        artStyle: project.artStyle,
-        directorStyleDoc: project.directorStyleDoc,
-        videoRatio: project.videoRatio,
-      }),
+      style_bible_json: stringifyForPrompt(styleBible),
     },
   })
   const nextBlocks = normalizeArrangedVideoBlocks({

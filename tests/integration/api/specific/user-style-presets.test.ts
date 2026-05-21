@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildDirectorStyleDoc } from '@/lib/director-style/presets'
 import { buildMockRequest } from '../../../helpers/request'
 
 type MockUserStylePreset = {
@@ -72,7 +71,6 @@ const promptMock = vi.hoisted(() => ({
   buildAiPrompt: vi.fn(() => 'design prompt'),
   AI_PROMPT_IDS: {
     DESIGN_VISUAL_STYLE_PRESET: 'design-visual-style-preset',
-    DESIGN_DIRECTOR_STYLE_PRESET: 'design-director-style-preset',
   },
 }))
 
@@ -115,6 +113,27 @@ vi.mock('@/lib/ai-exec/engine', () => aiRuntimeMock)
 describe('api specific - user style presets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('lists only visual style presets by default', async () => {
+    const mod = await import('@/app/api/user/style-presets/route')
+    const req = buildMockRequest({
+      path: '/api/user/style-presets',
+      method: 'GET',
+    })
+
+    const res = await mod.GET(req, { params: Promise.resolve({}) })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.presets).toEqual([])
+    expect(prismaMock.userStylePreset.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        userId: 'user-1',
+        archivedAt: null,
+        kind: 'visual_style',
+      },
+    }))
   })
 
   it('creates a user-owned visual style preset with validated config', async () => {
@@ -260,59 +279,4 @@ describe('api specific - user style presets', () => {
     }))
   })
 
-  it('designs a director style preset through the director prompt and validates the config', async () => {
-    const directorConfig = buildDirectorStyleDoc('horror-suspense')
-    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
-      text: JSON.stringify({
-        name: 'AI Horror Director',
-        summary: 'Designed director style',
-        config: directorConfig,
-      }),
-    })
-    const mod = await import('@/app/api/user/style-presets/design/route')
-    const req = buildMockRequest({
-      path: '/api/user/style-presets/design',
-      method: 'POST',
-      body: {
-        kind: 'director_style',
-        instruction: 'Make suspense shots with oppressive interior lighting',
-        locale: 'en',
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({}) })
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(promptMock.buildAiPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      promptId: promptMock.AI_PROMPT_IDS.DESIGN_DIRECTOR_STYLE_PRESET,
-      variables: {
-        instruction: 'Make suspense shots with oppressive interior lighting',
-      },
-    }))
-    expect(billingMock.withTextBilling).toHaveBeenCalledWith(
-      'user-1',
-      'llm::analysis',
-      expect.any(Number),
-      expect.objectContaining({
-        projectId: 'user-style-presets',
-        action: 'design_director_style_preset',
-        metadata: { kind: 'director_style' },
-      }),
-      expect.any(Function),
-    )
-    expect(body).toEqual(expect.objectContaining({
-      kind: 'director_style',
-      name: 'AI Horror Director',
-      summary: 'Designed director style',
-      config: expect.objectContaining({
-        character: expect.objectContaining({
-          temperament: directorConfig.character.temperament,
-        }),
-        video: expect.objectContaining({
-          cameraMotion: directorConfig.video.cameraMotion,
-        }),
-      }),
-    }))
-  })
 })

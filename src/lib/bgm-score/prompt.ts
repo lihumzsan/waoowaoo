@@ -49,9 +49,6 @@ function buildProjectContextPayload(projectContext: FinalRenderProjectContextInp
     artStylePrompt: normalizeString(projectContext.artStylePrompt) || null,
     visualStylePresetSource: normalizeString(projectContext.visualStylePresetSource) || null,
     visualStylePresetId: normalizeString(projectContext.visualStylePresetId) || null,
-    directorStylePresetSource: normalizeString(projectContext.directorStylePresetSource) || null,
-    directorStylePresetId: normalizeString(projectContext.directorStylePresetId) || null,
-    directorStyleDoc: normalizeString(projectContext.directorStyleDoc) || null,
   }
 }
 

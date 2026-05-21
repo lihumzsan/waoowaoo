@@ -109,7 +109,7 @@ tests/
 - ✅ **Task 5.2**: `src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx` - 增加 selected node 状态、节点点击打开详情、点击画布关闭详情；`open_details` action 由 canvas shell 处理，其他动作继续走 runtime bridge。
 - ✅ **Task 5.3**: `src/features/project-workspace/canvas/node-canvas-types.ts` - 扩展节点命令类型，覆盖 clip 编辑、panel 保存/删除/复制/插入/变体、候选图选择/取消、图片编辑/下载、视频 prompt/model/options/生成、资产库打开、最终成片入口。
 - ✅ **Task 5.4**: `src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasActions.ts` - 将节点动作桥接到现有 workspace runtime；复杂写操作由详情层调用既有 mutation/runtime，禁止 UI 直接改 DB。
-- ✅ **Task 5.5**: `details/StoryDetail.tsx` - 故事详情恢复 `StoryInputComposer`、AI 帮写、长文本检测、智能分集、视频比例、视觉风格、导演风格、当前剧集提示、生成中禁用态；旁白开关不迁移。
+- ✅ **Task 5.5**: `details/StoryDetail.tsx` - 故事详情恢复 `StoryInputComposer`、AI 帮写、长文本检测、智能分集、视频比例、视觉风格、当前剧集提示、生成中禁用态；旁白开关不迁移。
 - ✅ **Task 5.6**: `details/ScriptClipDetail.tsx` - 剧本详情恢复完整 screenplay、原始片段、角色、场景、道具、按当前/全部 clips 的资产覆盖统计、保存 clip、打开资产库、生成分镜入口；保存走 `useUpdateProjectClip`。
 - ✅ **Task 5.7**: `details/ShotDetail.tsx` - 分镜详情恢复景别、运镜、描述、场景、角色、道具、SRT、时长、image prompt、video prompt、摄影规则、表演指导、自动保存、保存失败重试、删除、复制、插入、变体、生成图片、错误清理；角色/场景选择从真实资产库读取。
 - ✅ **Task 5.8**: `src/lib/operations/domains/storyboard/panel-mutations.ts` - 扩展 `update_storyboard_panel_fields` 支持 `srtSegment`，确保分镜详情里的 SRT 文本不是只在 UI 中编辑而无法保存。

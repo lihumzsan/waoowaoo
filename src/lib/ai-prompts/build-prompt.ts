@@ -1,7 +1,6 @@
 import { AI_PROMPT_CATALOG } from './registry'
 import { getAiPromptTemplate } from './template-store'
 import type { BuildAiPromptInput } from './types'
-import { resolveDirectorStyleRequirements } from '@/lib/director-style'
 
 const SINGLE_PLACEHOLDER_PATTERN = /\{([A-Za-z0-9_]+)\}/g
 const DOUBLE_PLACEHOLDER_PATTERN = /\{\{([A-Za-z0-9_]+)\}\}/g
@@ -36,10 +35,6 @@ export function buildAiPrompt(input: BuildAiPromptInput): string {
   const entry = AI_PROMPT_CATALOG[input.promptId]
   if (!entry) {
     throw new Error(`AI_PROMPT_ID_UNREGISTERED:${input.promptId}`)
-  }
-
-  if (entry.variableKeys.includes('style_requirements') && !Object.prototype.hasOwnProperty.call(variables, 'style_requirements')) {
-    variables.style_requirements = resolveDirectorStyleRequirements(input.promptId, input.directorStyleDoc)
   }
 
   const template = getAiPromptTemplate(input.promptId, input.locale)

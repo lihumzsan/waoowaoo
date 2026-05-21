@@ -24,8 +24,8 @@
 {{asset_context_json}}
 
 画幅：{{aspect_ratio}}
-风格上下文：
-{{style_context}}
+Style Bible（唯一风格来源）：
+{{style_bible_json}}
 
 输出格式：
 {

@@ -82,6 +82,42 @@ function createRequest(): NextRequest {
   }) as unknown as NextRequest
 }
 
+const mockStyleBible = {
+  strategy: 'style_bible',
+  rawUserStyle: '科幻短片',
+  styleSummary: 'quiet realistic sci-fi',
+  stylePolicy: {
+    rawUserStyle: '科幻短片',
+    styleSummary: 'quiet realistic sci-fi',
+    visual: {
+      positivePrompt: '冷峻科幻视觉，低对比度，干净未来质感，轻微光晕，35mm 镜头。',
+      negativePrompt: '不要字幕，不要水印，不要廉价塑料科幻感。',
+      imageFilterPrompt: 'low contrast, clean futuristic texture, subtle bloom, 35mm lens',
+      lightingPrompt: 'cold practical lights and restrained bloom',
+      colorPrompt: 'cool blue gray',
+      texturePrompt: 'clean metal and glass texture',
+      compositionPrompt: 'minimal corridor composition with negative space',
+    },
+    camera: {
+      rhythmPrompt: 'slow push-in',
+      movementPrompt: 'slow controlled camera movement',
+      lensAndDepthPrompt: '35mm lens with readable corridor depth',
+      editingPacingPrompt: 'restrained pacing',
+    },
+    motion: {
+      subjectMotionPrompt: 'slow continuous motion',
+      actingPrompt: 'restrained micro acting',
+    },
+    sound: {
+      positivePrompt: 'room tone and electrical hum',
+      negativePrompt: 'no BGM',
+      soundFilterPrompt: 'clean modern sci-fi sound, wide-band clarity, low mechanical hum, restrained spatial reverb',
+      soundStylePrompt: 'room tone and electrical hum',
+    },
+    hardBans: ['no subtitles'],
+  },
+}
+
 function mockSuccessfulAiSteps() {
   aiExecMock.executeAiTextStep
     .mockResolvedValueOnce({
@@ -122,51 +158,6 @@ function mockSuccessfulAiSteps() {
     })
     .mockResolvedValueOnce({
       text: JSON.stringify({
-        videoPromptBible: {
-          strategy: 'video_prompt_bible',
-          storyPremise: 'A quiet signal wakes a station.',
-          userDirectedStyle: '科幻短片',
-          inferredSystemStyle: 'realistic sci-fi',
-          stylePolicy: {
-            rawUserStyle: '科幻短片',
-            styleSummary: 'quiet realistic sci-fi',
-            visual: {
-              positivePrompt: '冷峻科幻视觉，低对比度，干净未来质感，轻微光晕，35mm 镜头。',
-              negativePrompt: '不要字幕，不要水印，不要廉价塑料科幻感。',
-              imageFilterPrompt: 'low contrast, clean futuristic texture, subtle bloom, 35mm lens',
-              lightingPrompt: 'cold practical lights and restrained bloom',
-              colorPrompt: 'cool blue gray',
-              texturePrompt: 'clean metal and glass texture',
-              compositionPrompt: 'minimal corridor composition with negative space',
-            },
-            camera: {
-              rhythmPrompt: 'slow push-in',
-              movementPrompt: 'slow controlled camera movement',
-              lensAndDepthPrompt: '35mm lens with readable corridor depth',
-              editingPacingPrompt: 'restrained pacing',
-            },
-            motion: {
-              subjectMotionPrompt: 'slow continuous motion',
-              actingPrompt: 'restrained micro acting',
-            },
-            sound: {
-              positivePrompt: 'room tone and electrical hum',
-              negativePrompt: 'no BGM',
-              soundFilterPrompt: 'clean modern sci-fi sound, wide-band clarity, low mechanical hum, restrained spatial reverb',
-              soundStylePrompt: 'room tone and electrical hum',
-            },
-            hardBans: ['no subtitles'],
-          },
-          characterContinuityRules: [],
-          locationContinuityRules: ['Keep the station corridor consistent.'],
-          soundRules: ['sound effects only, no BGM'],
-          videoModelRules: ['no subtitles'],
-          blockContinuityRules: ['preserve the slow wake-up rhythm'],
-        },
-      }),
-    })
-    .mockResolvedValueOnce({
-      text: JSON.stringify({
         sourceVideoBlockIndex: 0,
         shotNumbers: [1],
         shots: [
@@ -190,7 +181,6 @@ describe('edit script generation status persistence', () => {
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
       artStyle: 'realistic',
-      directorStyleDoc: null,
       videoRatio: '9:16',
     })
     prismaMock.projectCharacter.findMany.mockResolvedValue([])
@@ -200,6 +190,7 @@ describe('edit script generation status persistence', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
     })
@@ -208,6 +199,7 @@ describe('edit script generation status persistence', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
     })
@@ -226,6 +218,7 @@ describe('edit script generation status persistence', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       title: 'Sci-Fi Short',
       logline: 'A quiet signal wakes a station.',
@@ -256,9 +249,13 @@ describe('edit script generation status persistence', () => {
   })
 
   it('generates screenplay independently before edit script generation', async () => {
-    aiExecMock.executeAiTextStep.mockResolvedValueOnce({
-      text: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
-    })
+    aiExecMock.executeAiTextStep
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ styleBible: mockStyleBible }),
+      })
+      .mockResolvedValueOnce({
+        text: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      })
 
     const screenplay = await generateProjectEditScreenplay({
       request: createRequest(),
@@ -270,12 +267,32 @@ describe('edit script generation status persistence', () => {
     })
 
     expect(screenplay.id).toBe('screenplay-1')
+    expect(screenplay.styleBible).toEqual(mockStyleBible)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(2)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE,
+      meta: expect.objectContaining({
+        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE,
+        stepIndex: 1,
+        stepTotal: 2,
+      }),
+    }))
+    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+      meta: expect.objectContaining({
+        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+        stepIndex: 2,
+        stepTotal: 2,
+      }),
+    }))
     expect(prismaMock.projectEditScreenplay.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
+        styleBibleJson: mockStyleBible,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'ready',
       }),
       update: expect.objectContaining({
+        styleBibleJson: mockStyleBible,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'ready',
       }),
@@ -299,6 +316,7 @@ describe('edit script generation status persistence', () => {
       create: expect.objectContaining({
         status: 'generating',
         userPrompt: '做一个科幻短片',
+        styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
         shotCount: 0,
         shotsJson: [],
@@ -307,6 +325,7 @@ describe('edit script generation status persistence', () => {
       update: expect.objectContaining({
         status: 'generating',
         userPrompt: '做一个科幻短片',
+        styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
         shotCount: 0,
         shotsJson: [],
@@ -316,7 +335,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert.mock.invocationCallOrder[0]).toBeLessThan(
       aiExecMock.executeAiTextStep.mock.invocationCallOrder[0],
     )
-    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(4)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(3)
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
       meta: expect.objectContaining({
@@ -334,27 +353,21 @@ describe('edit script generation status persistence', () => {
       }),
     }))
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      action: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE,
-      meta: expect.objectContaining({
-        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE,
-        stepIndex: 3,
-        stepTotal: 4,
-      }),
-    }))
-    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(4, expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
       meta: expect.objectContaining({
         stepId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
-        stepIndex: 4,
-        stepTotal: 4,
+        stepIndex: 3,
+        stepTotal: 3,
       }),
     }))
     expect(txMock.projectEditScript.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
+        styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
       }),
       update: expect.objectContaining({
         status: 'ready',
+        styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
       }),
     }))
@@ -381,6 +394,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert).toHaveBeenCalledWith(expect.objectContaining({
       update: expect.objectContaining({
         status: 'generating',
+        styleBibleJson: mockStyleBible,
         shotsJson: [
           expect.objectContaining({
             shotNumber: 1,
@@ -409,6 +423,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
       update: expect.objectContaining({
         status: 'failed',
+        styleBibleJson: mockStyleBible,
         logline: 'LLM_DOWN',
       }),
     }))

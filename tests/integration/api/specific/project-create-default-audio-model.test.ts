@@ -50,7 +50,6 @@ describe('api specific - project create default audio model', () => {
       body: {
         name: 'Test Project',
         description: '',
-        directorStylePresetId: 'horror-suspense',
       },
     })
 
@@ -70,8 +69,6 @@ describe('api specific - project create default audio model', () => {
         audioModel: 'audio::tts',
         videoRatio: '9:16',
         artStyle: 'realistic',
-        directorStylePresetId: 'horror-suspense',
-        directorStyleDoc: expect.stringContaining('"storyboardPlan"'),
       }),
     })
   })

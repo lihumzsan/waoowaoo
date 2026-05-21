@@ -6,7 +6,6 @@ export const PROJECT_DESCRIPTION_MAX_LENGTH = 500
 export interface ProjectDraftInput {
   name: string
   description?: string | null
-  directorStylePresetId?: string | null
 }
 
 export interface NormalizedProjectDraft {

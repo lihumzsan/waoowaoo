@@ -1,5 +1,4 @@
 import type {
-  DirectorStyleConfig,
   StylePresetKind,
   StylePresetView,
   VisualStyleConfig,
@@ -12,105 +11,19 @@ export type DraftState = {
   name: string
   summary: string
   instruction: string
-  config: VisualStyleConfig | DirectorStyleConfig
+  config: VisualStyleConfig
 }
 
 const EMPTY_VISUAL_STYLE_CONFIG: VisualStyleConfig = buildPromptOnlyVisualStyleConfig('')
 
-function buildEmptyDirectorStyleConfig(): DirectorStyleConfig {
-  return {
-    character: {
-      temperament: '',
-      expression: '',
-      pose: '',
-      wardrobeTexture: '',
-      cameraDistance: '',
-      imagePrompt: '',
-      avoid: '',
-    },
-    location: {
-      spaceMood: '',
-      composition: '',
-      lightSource: '',
-      materials: '',
-      colorTemperature: '',
-      depth: '',
-      imagePrompt: '',
-      avoid: '',
-    },
-    prop: {
-      shapeLanguage: '',
-      materialAging: '',
-      placement: '',
-      scale: '',
-      lighting: '',
-      imagePrompt: '',
-      avoid: '',
-    },
-    storyboardPlan: {
-      shotSelection: '',
-      revealOrder: '',
-      subjectContinuity: '',
-      sceneCoverage: '',
-      avoid: '',
-    },
-    cinematography: {
-      shotSize: '',
-      lens: '',
-      angle: '',
-      cameraHeight: '',
-      depthOfField: '',
-      composition: '',
-      lighting: '',
-      avoid: '',
-    },
-    acting: {
-      expression: '',
-      gaze: '',
-      posture: '',
-      gesture: '',
-      motionState: '',
-      interactionDistance: '',
-      avoid: '',
-    },
-    storyboardDetail: {
-      frameComposition: '',
-      cameraMovement: '',
-      focalPoint: '',
-      foregroundBackground: '',
-      transitionCue: '',
-      imagePrompt: '',
-      avoid: '',
-    },
-    image: {
-      prompt: '',
-      negativePrompt: '',
-      lighting: '',
-      color: '',
-      composition: '',
-      texture: '',
-      atmosphere: '',
-    },
-    video: {
-      cameraMotion: '',
-      motionSpeed: '',
-      subjectMotion: '',
-      rhythm: '',
-      stability: '',
-      transition: '',
-      avoid: '',
-    },
-  }
-}
-
-export function buildDraft(kind: StylePresetKind): DraftState {
+export function buildDraft(kind: StylePresetKind = 'visual_style'): DraftState {
   return {
     id: null,
     kind,
     name: '',
     summary: '',
     instruction: '',
-    config: kind === 'visual_style' ? { ...EMPTY_VISUAL_STYLE_CONFIG } : buildEmptyDirectorStyleConfig(),
+    config: { ...EMPTY_VISUAL_STYLE_CONFIG },
   }
 }
 
@@ -122,7 +35,7 @@ export function readPresetList(value: unknown): StylePresetView[] {
     if (!preset || typeof preset !== 'object') return false
     const record = preset as { id?: unknown; kind?: unknown; name?: unknown; config?: unknown }
     return typeof record.id === 'string'
-      && (record.kind === 'visual_style' || record.kind === 'director_style')
+      && record.kind === 'visual_style'
       && typeof record.name === 'string'
       && Boolean(record.config)
   })
@@ -136,12 +49,12 @@ export function readDesignedPreset(value: unknown): Omit<DraftState, 'id' | 'ins
     summary?: unknown
     config?: unknown
   }
-  if (record.kind !== 'visual_style' && record.kind !== 'director_style') return null
+  if (record.kind !== 'visual_style') return null
   if (typeof record.name !== 'string') return null
   return {
     kind: record.kind,
     name: record.name,
     summary: typeof record.summary === 'string' ? record.summary : '',
-    config: record.config as VisualStyleConfig | DirectorStyleConfig,
+    config: record.config as VisualStyleConfig,
   }
 }

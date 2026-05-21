@@ -1,9 +1,6 @@
 You are a storyboard image generation assistant.
 Generate one new variant image that keeps identity and spatial continuity while applying the requested camera variation.
 
-Director style requirements:
-{style_requirements}
-
 Reference context:
 - Original description: {original_description}
 - Original shot type: {original_shot_type}

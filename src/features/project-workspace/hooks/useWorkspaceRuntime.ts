@@ -16,8 +16,6 @@ interface UseWorkspaceRuntimeParams {
   artStyle: string | undefined
   visualStylePresetSource: string | undefined
   visualStylePresetId: string | undefined
-  directorStylePresetSource: string | undefined
-  directorStylePresetId: string | undefined
   videoModel: string | undefined
   singleShotVideoModel: string | undefined
   sequenceVideoModel: string | undefined
@@ -80,8 +78,6 @@ export function useWorkspaceRuntime({
   artStyle,
   visualStylePresetSource,
   visualStylePresetId,
-  directorStylePresetSource,
-  directorStylePresetId,
   videoModel,
   singleShotVideoModel,
   sequenceVideoModel,
@@ -124,8 +120,6 @@ export function useWorkspaceRuntime({
     artStyle,
     visualStylePresetSource,
     visualStylePresetId,
-    directorStylePresetSource,
-    directorStylePresetId,
     videoModel,
     singleShotVideoModel,
     sequenceVideoModel,
@@ -135,8 +129,6 @@ export function useWorkspaceRuntime({
     onVideoRatioChange: (value) => handleUpdateConfig('videoRatio', value),
     onArtStyleChange: (value) => handleUpdateConfig('artStyle', value),
     onVisualStylePresetChange: (value) => handleUpdateConfig('visualStylePreset', value),
-    onDirectorStylePresetRefChange: (value) => handleUpdateConfig('directorStylePreset', value),
-    onDirectorStylePresetChange: (value) => handleUpdateConfig('directorStylePresetId', value),
     onRequestAssistantPlan,
     onClipUpdate: (clipId, data) => {
       if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -166,8 +158,6 @@ export function useWorkspaceRuntime({
     artStyle,
     visualStylePresetSource,
     visualStylePresetId,
-    directorStylePresetSource,
-    directorStylePresetId,
     assetsLoading,
     handleGenerateAllVideos,
     handleGenerateBgmScore,

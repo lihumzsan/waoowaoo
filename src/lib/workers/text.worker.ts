@@ -39,7 +39,6 @@ import {
   handleEditScriptStoryboardGridAnalyzeTask,
   handleEditScriptStoryboardPrepareTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
-import { resolveProjectDirectorStyleDoc } from '@/lib/style-preset'
 import { canonicalizeStoryboardPanels } from '@/lib/storyboard-character-bindings'
 
 function readAssetKind(value: Record<string, unknown>): string {
@@ -557,10 +556,6 @@ async function handleInsertPanelTask(job: Job<TaskJobData>) {
       locations_description: locationsDescription,
       props_description: propsDescription,
     },
-    directorStyleDoc: await resolveProjectDirectorStyleDoc({
-      projectId: job.data.projectId,
-      userId: job.data.userId,
-    }),
   })
 
   await reportTaskProgress(job, 40, { stage: 'insert_panel_generate_text' })

@@ -28,8 +28,6 @@ export interface WorkspaceRuntimeValue {
   artStyle: string | null | undefined
   visualStylePresetSource: string | null | undefined
   visualStylePresetId: string | null | undefined
-  directorStylePresetSource: string | null | undefined
-  directorStylePresetId: string | null | undefined
   videoModel: string | null | undefined
   singleShotVideoModel: string | null | undefined
   sequenceVideoModel: string | null | undefined
@@ -39,8 +37,6 @@ export interface WorkspaceRuntimeValue {
   onVideoRatioChange: (value: string) => Promise<void>
   onArtStyleChange: (value: string) => Promise<void>
   onVisualStylePresetChange: (value: { presetSource: 'system' | 'user'; presetId: string }) => Promise<void>
-  onDirectorStylePresetRefChange: (value: { presetSource: 'system' | 'user'; presetId: string } | null) => Promise<void>
-  onDirectorStylePresetChange: (value: string) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
   onClipUpdate: (clipId: string, data: unknown) => Promise<void>
   onOpenAssetLibrary: () => void

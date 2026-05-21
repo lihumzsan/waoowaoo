@@ -2,6 +2,44 @@ import { describe, expect, it } from 'vitest'
 import { assertRequiredLocationPreviews } from '@/lib/edit-script/storyboard-consistency/service'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
+function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
+  return {
+    strategy: 'style_bible',
+    rawUserStyle: 'temple lesson',
+    styleSummary: 'Restrained naturalistic temple visual style.',
+    stylePolicy: {
+      rawUserStyle: 'temple lesson',
+      styleSummary: 'Restrained naturalistic temple visual style.',
+      visual: {
+        positivePrompt: 'Soft natural light, low contrast, quiet temple textures.',
+        negativePrompt: 'No subtitles, no logos, no commercial gloss.',
+        imageFilterPrompt: 'soft natural light, low contrast, quiet temple textures',
+        lightingPrompt: 'Soft diffused daylight.',
+        colorPrompt: 'Muted stone, wood, and gray green.',
+        texturePrompt: 'Stone, wood, linen, and fine film grain.',
+        compositionPrompt: 'Stable balanced composition.',
+      },
+      camera: {
+        rhythmPrompt: 'Slow rhythm.',
+        movementPrompt: 'Locked camera and slow push-in.',
+        lensAndDepthPrompt: '35mm lens, natural depth.',
+        editingPacingPrompt: 'Restrained pacing.',
+      },
+      motion: {
+        subjectMotionPrompt: 'Small slow gestures.',
+        actingPrompt: 'Contained acting.',
+      },
+      sound: {
+        positivePrompt: 'Natural quiet room tone.',
+        negativePrompt: 'No continuous music.',
+        soundFilterPrompt: 'soft natural low dynamic sound',
+        soundStylePrompt: 'Quiet ambience.',
+      },
+      hardBans: ['No subtitles.', 'No watermark.', 'No logo.'],
+    },
+  }
+}
+
 function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnapshot> = {}): StoryboardConsistencySourceSnapshot {
   return {
     schemaVersion: 1,
@@ -10,8 +48,6 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
     sourceEditScriptId: 'edit-1',
     project: {
       videoRatio: '16:9',
-      artStyle: null,
-      directorStyleDoc: null,
     },
     editScript: {
       id: 'edit-1',
@@ -22,6 +58,7 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
       userPrompt: 'temple lesson',
       screenplayText: null,
     },
+    styleBible: buildStyleBible(),
     shots: [
       {
         shotNumber: 1,

@@ -21,7 +21,7 @@
 - 必须先理解完整剪辑核心表 JSON。videoBlocks 是 block-first 生成计划，决定音乐段落结构、连续性、single/group 区分和剪辑意图。
 - 必须读取 videoBlocks[].kind、shotNumbers、reason、prompt；group 要视为一个连续剧情/运动段落，single 要视为独立剪辑点。
 - 必须读取 shots[] 的 durationSec、visualAction、charactersAndScene、camera、videoPrompt、sound。不要只看 sound 字段。
-- 必须读取项目整体配置 JSON，包括 videoRatio、artStyle、artStylePrompt、visualStylePreset、directorStylePreset 和 directorStyleDoc，并把画幅、画面风格、导演风格转化为音乐气质、声场、节奏密度和配器取向。
+- 必须读取项目整体配置 JSON，包括 videoRatio、artStyle、artStylePrompt 和 visualStylePreset，并把画幅与画面风格转化为音乐气质、声场、节奏密度和配器取向。
 - 必须参考实际成片素材时间线 JSON，保证音乐段落长度贴合最终可渲染素材；如果实际素材时间线和剪辑核心表有差异，以实际素材时间线的时长为准，但音乐叙事仍以剪辑核心表为主。
 - 下方“逐段情绪与节奏表”只是便捷摘要，不得替代完整剪辑核心表。
 

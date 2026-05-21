@@ -3,7 +3,7 @@ name: Creative Direction
 description: Guide open-ended creative goals without forcing project-specific structure.
 ---
 
-Use this skill when the user asks for a creative direction, tone, format, or director-style idea.
+Use this skill when the user asks for a creative direction, tone, format, or visual direction idea.
 
 Rules:
 - Do not force characters, locations, episodes, or storyboard structure when the concept does not need them.

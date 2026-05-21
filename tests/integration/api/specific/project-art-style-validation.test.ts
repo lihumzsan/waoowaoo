@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildDirectorStyleDoc } from '@/lib/director-style'
 import { buildMockRequest } from '../../../helpers/request'
 
 type MockUserStylePreset = {
@@ -137,45 +136,6 @@ describe('api specific - project config art style validation', () => {
     expect(prismaMock.userPreference.upsert).not.toHaveBeenCalled()
   })
 
-  it('accepts valid directorStylePresetId and persists the generated style document', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/config/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/config',
-      method: 'PATCH',
-      body: {
-        directorStylePresetId: 'horror-suspense',
-      },
-    })
-
-    const res = await mod.PATCH(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    expect(prismaMock.project.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          directorStylePresetId: 'horror-suspense',
-          directorStyleDoc: expect.stringContaining('"storyboardPlan"'),
-        }),
-      }),
-    )
-  })
-
-  it('rejects invalid directorStylePresetId with invalid params', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/config/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/config',
-      method: 'PATCH',
-      body: {
-        directorStylePresetId: 'crime-noir',
-      },
-    })
-
-    const res = await mod.PATCH(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    const body = await res.json()
-    expect(res.status).toBe(400)
-    expect(body.error.code).toBe('INVALID_PARAMS')
-    expect(prismaMock.project.update).not.toHaveBeenCalled()
-  })
-
   it('accepts system visual style preset refs and mirrors artStyle', async () => {
     const mod = await import('@/app/api/projects/[projectId]/config/route')
     const req = buildMockRequest({
@@ -202,39 +162,4 @@ describe('api specific - project config art style validation', () => {
     )
   })
 
-  it('accepts user director style preset refs after ownership validation', async () => {
-    prismaMock.userStylePreset.findFirst.mockResolvedValueOnce({
-      id: 'preset-user-1',
-      userId: 'user-1',
-      kind: 'director_style',
-      name: 'Custom Director',
-      summary: null,
-      config: JSON.stringify(buildDirectorStyleDoc('horror-suspense')),
-      archivedAt: null,
-    })
-
-    const mod = await import('@/app/api/projects/[projectId]/config/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/config',
-      method: 'PATCH',
-      body: {
-        directorStylePreset: {
-          presetSource: 'user',
-          presetId: 'preset-user-1',
-        },
-      },
-    })
-
-    const res = await mod.PATCH(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    expect(prismaMock.project.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          directorStylePresetSource: 'user',
-          directorStylePresetId: 'preset-user-1',
-          directorStyleDoc: null,
-        }),
-      }),
-    )
-  })
 })

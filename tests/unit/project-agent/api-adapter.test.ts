@@ -221,7 +221,7 @@ describe('executeProjectAgentOperationFromApi', () => {
           throw {
             code: 'P2022',
             meta: {
-              column: 'directorStylePresetId',
+              column: 'visualStylePresetId',
             },
           }
         }),
@@ -242,8 +242,8 @@ describe('executeProjectAgentOperationFromApi', () => {
       code: 'EXTERNAL_ERROR',
       details: expect.objectContaining({
         code: 'DATABASE_SCHEMA_MISMATCH',
-        field: 'directorStylePresetId',
-        message: 'database schema mismatch: missing column directorStylePresetId; run the latest Prisma migration before starting the app',
+        field: 'visualStylePresetId',
+        message: 'database schema mismatch: missing column visualStylePresetId; run the latest Prisma migration before starting the app',
       }),
     })
   })

@@ -1,5 +1,4 @@
 export type {
-  DirectorStyleConfig,
   PresetSource,
   ResolvedVisualStylePreset,
   StylePresetKind,
@@ -13,7 +12,6 @@ export {
   STYLE_PRESET_KINDS,
 } from './types'
 export {
-  parseDirectorStyleConfig,
   parseStylePresetConfig,
   parseStylePresetRef,
   parseVisualStyleConfig,
@@ -22,7 +20,6 @@ export {
   visualStyleConfigSchema,
 } from './schema'
 export {
-  listSystemDirectorStylePresets,
   listSystemVisualStylePresets,
 } from './system'
 export {
@@ -34,8 +31,6 @@ export {
   normalizePromptOnlyVisualStyleConfig,
 } from './visual-config'
 export {
-  resolveDirectorStylePreset,
-  resolveProjectDirectorStyleDoc,
   resolveProjectVisualStylePreset,
   resolveVisualStylePreset,
 } from './resolver'

@@ -155,6 +155,7 @@ model ProjectEditScreenplay {
   projectId      String
   episodeId      String         @unique
   userPrompt     String         @db.LongText
+  styleBibleJson Json?
   screenplayText String         @db.LongText
   status         String         @default("ready")
   createdAt      DateTime       @default(now())
@@ -172,6 +173,7 @@ model ProjectEditScript {
   projectId      String
   episodeId      String                         @unique
   userPrompt     String                         @db.LongText
+  styleBibleJson Json?
   screenplayText String?                        @db.LongText
   title          String
   logline        String?                        @db.LongText
@@ -692,11 +694,8 @@ model Project {
   globalAssetText    String?                  @db.LongText
   artStyle           String                   @default("american-comic")
   artStylePrompt     String?                  @db.LongText
-  directorStylePresetId String?
-  directorStyleDoc    String?                  @db.LongText
   visualStylePresetSource String                 @default("system")
   visualStylePresetId String                     @default("american-comic")
-  directorStylePresetSource String?
   characterModel     String?
   locationModel      String?
   storyboardModel    String?

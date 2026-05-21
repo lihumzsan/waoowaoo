@@ -96,9 +96,6 @@ export interface FinalRenderProjectContextInput {
   readonly artStylePrompt?: string | null
   readonly visualStylePresetSource?: string | null
   readonly visualStylePresetId?: string | null
-  readonly directorStylePresetSource?: string | null
-  readonly directorStylePresetId?: string | null
-  readonly directorStyleDoc?: string | null
 }
 
 export interface FinalRenderMusicPromptInput {
@@ -460,9 +457,6 @@ function buildProjectContextJson(projectContext: FinalRenderProjectContextInput 
     artStylePrompt: normalizeString(projectContext.artStylePrompt) || null,
     visualStylePresetSource: normalizeString(projectContext.visualStylePresetSource) || null,
     visualStylePresetId: normalizeString(projectContext.visualStylePresetId) || null,
-    directorStylePresetSource: normalizeString(projectContext.directorStylePresetSource) || null,
-    directorStylePresetId: normalizeString(projectContext.directorStylePresetId) || null,
-    directorStyleDoc: normalizeString(projectContext.directorStyleDoc) || null,
   })
 }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { EditAssetRequirement, EditScriptPayload, EditScriptShot, EditScriptVideoBlock } from '@/lib/edit-script/types'
+import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import type { EditAssetRequirement, EditScriptPayload, EditScriptShot, EditScriptStyleBible, EditScriptVideoBlock } from '@/lib/edit-script/types'
 
 export const STORYBOARD_BLOCKING_ARTIFACT_KINDS = [
   'grid_floor_plan',
@@ -40,10 +41,9 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly sourceEditScriptId: string
   readonly project: {
     readonly videoRatio: string
-    readonly artStyle: string | null
-    readonly directorStyleDoc: string | null
   }
   readonly editScript: Pick<EditScriptPayload, 'id' | 'title' | 'logline' | 'durationSec' | 'shotCount' | 'userPrompt' | 'screenplayText'>
+  readonly styleBible: EditScriptStyleBible
   readonly shots: readonly EditScriptShot[]
   readonly videoBlocks: readonly StoryboardConsistencySourceVideoBlock[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
@@ -124,8 +124,6 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
   sourceEditScriptId: z.string().min(1),
   project: z.object({
     videoRatio: z.string().min(1),
-    artStyle: z.string().nullable(),
-    directorStyleDoc: z.string().nullable(),
   }),
   editScript: z.object({
     id: z.string().min(1),
@@ -136,6 +134,7 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
     userPrompt: z.string(),
     screenplayText: z.string().nullable().optional(),
   }),
+  styleBible: editScriptStyleBibleSchema.shape.styleBible,
   shots: z.array(sourceShotSchema).min(1),
   videoBlocks: z.array(sourceVideoBlockSchema).min(1),
   assets: z.array(sourceAssetSchema),

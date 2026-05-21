@@ -37,8 +37,6 @@ export interface CreateHomeProjectLaunchParams {
   videoRatio: string
   artStyle: string
   visualStylePreset?: StylePresetRef
-  directorStylePreset?: StylePresetRef | null
-  directorStylePresetId?: string
   episodeName: string
 }
 
@@ -131,8 +129,6 @@ export async function createHomeProjectLaunch({
   videoRatio,
   artStyle,
   visualStylePreset,
-  directorStylePreset,
-  directorStylePresetId,
   episodeName,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
   if (!storyText.trim()) {
@@ -144,8 +140,6 @@ export async function createHomeProjectLaunch({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: projectName,
-      ...(directorStylePreset ? { directorStylePreset } : {}),
-      ...(!directorStylePreset && directorStylePresetId ? { directorStylePresetId } : {}),
     }),
   })
 

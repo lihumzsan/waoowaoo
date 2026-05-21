@@ -106,13 +106,13 @@
     },
     "stylePresets": {
         "title": "我的风格",
-        "subtitle": "创建账号级私有画风与导演风格，保存后会在下一次生成中实时生效。",
+        "subtitle": "创建账号级私有画风，保存后会在下一次生成中实时生效。",
         "newPreset": "新建",
         "loading": "加载中",
         "empty": "暂无预设",
         "userEmpty": "还没有创建自己的风格",
         "sectionCount": "{count} 个",
-        "emptyDescription": "点击加号创建画风或导演风格。具体提示词只会在进入编辑后显示。",
+        "emptyDescription": "点击加号创建画风。具体提示词只会在进入编辑后显示。",
         "noSummary": "暂无简介",
         "createTitle": "新建风格",
         "createDescription": "按资产创建弹窗的方式填写必要信息。",
@@ -125,20 +125,16 @@
         "saveFailed": "保存失败",
         "deleteFailed": "删除失败",
         "deleteConfirm": "确定要删除这个风格吗？删除后将不再显示。",
-        "directorConfigDetails": "导演风格配置",
-        "directorDesignRequired": "请先使用 AI 设计生成导演风格后再保存。",
         "design": "AI 设计",
         "designing": "设计中",
         "save": "保存",
         "saving": "保存中",
         "delete": "删除",
         "kind": {
-            "visual_style": "画风",
-            "director_style": "导演风格"
+            "visual_style": "画风"
         },
         "kindDescription": {
-            "visual_style": "控制图片和视觉生成的画面语言",
-            "director_style": "控制角色、分镜、摄影和视频的导演要求"
+            "visual_style": "控制图片和视觉生成的画面语言"
         },
         "filters": {
             "all": "全部"

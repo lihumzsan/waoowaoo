@@ -12,7 +12,6 @@ import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
 import { ART_STYLES, VIDEO_RATIOS } from '@/lib/constants'
-import { DEFAULT_STYLE_PRESET_VALUE, STYLE_PRESETS } from '@/lib/style-presets'
 import { decodeStylePresetRef, encodeStylePresetRef } from '@/lib/style-preset/ref'
 import type { StylePresetRef, StylePresetView } from '@/lib/style-preset/types'
 import { Link, useRouter } from '@/i18n/navigation'
@@ -54,7 +53,7 @@ function readStylePresetList(value: unknown): StylePresetView[] {
     if (!preset || typeof preset !== 'object') return false
     const record = preset as { id?: unknown; kind?: unknown; name?: unknown }
     return typeof record.id === 'string'
-      && (record.kind === 'visual_style' || record.kind === 'director_style')
+      && record.kind === 'visual_style'
       && typeof record.name === 'string'
   })
 }
@@ -71,7 +70,6 @@ export default function HomePage() {
   const [videoRatio, setVideoRatio] = useState('9:16')
   const [artStyle, setArtStyle] = useState('american-comic')
   const [visualStyleValue, setVisualStyleValue] = useState(encodeStylePresetRef(DEFAULT_VISUAL_STYLE_REF))
-  const [stylePresetValue, setStylePresetValue] = useState<string>(DEFAULT_STYLE_PRESET_VALUE)
   const [userStylePresets, setUserStylePresets] = useState<StylePresetView[]>([])
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -141,7 +139,6 @@ export default function HomePage() {
         videoRatio,
         artStyle,
         visualStylePreset: decodeStylePresetRef(visualStyleValue),
-        directorStylePreset: stylePresetValue ? decodeStylePresetRef(stylePresetValue) : null,
         episodeName: `${tc('episode')} 1`,
       })
 
@@ -202,31 +199,6 @@ export default function HomePage() {
     ],
     [userStylePresets]
   )
-  const directorStyleOptions = useMemo(() => {
-    const disabledPreset = STYLE_PRESETS.find((preset) => preset.value === '')
-    if (!disabledPreset) throw new Error('director style disabled preset is missing')
-    return [
-      {
-        value: '',
-        label: disabledPreset.label,
-        description: disabledPreset.description,
-      },
-      ...STYLE_PRESETS
-        .filter((preset) => preset.value)
-        .map((preset) => ({
-          value: encodeStylePresetRef({ presetSource: 'system', presetId: preset.value }),
-          label: preset.label,
-          description: preset.description,
-        })),
-      ...userStylePresets
-        .filter((preset) => preset.kind === 'director_style')
-        .map((preset) => ({
-          value: encodeStylePresetRef({ presetSource: 'user', presetId: preset.id }),
-          label: preset.name,
-          description: preset.summary ?? '',
-        })),
-    ]
-  }, [userStylePresets])
   // 时间格式化
   const formatTimeAgo = (dateString: string): string => {
     const diffMs = Date.now() - new Date(dateString).getTime()
@@ -445,9 +417,6 @@ export default function HomePage() {
                 }
               }}
               styleOptions={styleOptions}
-              stylePresetValue={stylePresetValue}
-              onStylePresetChange={setStylePresetValue}
-              stylePresetOptions={directorStyleOptions}
               primaryAction={(
                 <button
                   onClick={() => void handleCreate()}

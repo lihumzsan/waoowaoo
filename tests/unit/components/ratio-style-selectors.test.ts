@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RatioSelector, StylePresetSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
+import { RatioSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
 
 const portalMocks = vi.hoisted(() => {
   return {
@@ -54,7 +54,7 @@ describe('RatioStyleSelectors', () => {
     Reflect.deleteProperty(globalThis, 'document')
   })
 
-  it('renders ratio, style, and style preset dropdown panels through a portal to document.body', () => {
+  it('renders ratio and style dropdown panels through a portal to document.body', () => {
     const fakeDocument = {
       body: { nodeName: 'BODY' },
     }
@@ -81,30 +81,15 @@ describe('RatioStyleSelectors', () => {
             { value: 'american-comic', label: '美漫风格' },
           ],
         }),
-        createElement(StylePresetSelector, {
-          value: 'horror-suspense',
-          onChange: () => undefined,
-          options: [
-            { value: '', label: '无', description: '不启用' },
-            { value: 'horror-suspense', label: '恐怖悬疑', description: '压迫氛围' },
-            { value: 'dark-noir', label: '暗黑黑色', description: '冷峻低照' },
-          ],
-        }),
       ),
     )
 
-    expect(portalMocks.createPortalMock).toHaveBeenCalledTimes(3)
+    expect(portalMocks.createPortalMock).toHaveBeenCalledTimes(2)
     expect(portalMocks.createPortalMock.mock.calls[0]?.[1]).toBe(fakeDocument.body)
     expect(portalMocks.createPortalMock.mock.calls[1]?.[1]).toBe(fakeDocument.body)
-    expect(portalMocks.createPortalMock.mock.calls[2]?.[1]).toBe(fakeDocument.body)
     expect(html).toContain('data-portal-target="body"')
     expect(html).toContain('data-icon="sparklesAlt"')
-    expect(html).toContain('data-icon="clapperboard"')
     expect(html).toContain('真人风格')
     expect(html).toContain('16:9')
-    expect(html).toContain('恐怖悬疑')
-    expect(html).toContain('无')
-    expect(html).toContain('压迫氛围')
-    expect(html).not.toContain('导演风格')
   })
 })

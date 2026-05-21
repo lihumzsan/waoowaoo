@@ -79,6 +79,7 @@ async function requireOwnedPreset(userId: string, presetId: string): Promise<Sty
     where: {
       id: presetId,
       userId,
+      kind: 'visual_style',
       archivedAt: null,
     },
   })
@@ -95,11 +96,12 @@ export async function listUserStylePresets(params: {
   userId: string
   kind?: StylePresetKind
 }): Promise<{ presets: StylePresetView[] }> {
+  const kind = params.kind ?? 'visual_style'
   const presets = await db.userStylePreset.findMany({
     where: {
       userId: params.userId,
       archivedAt: null,
-      ...(params.kind ? { kind: params.kind } : {}),
+      kind,
     },
     orderBy: { updatedAt: 'desc' },
   })
@@ -208,18 +210,14 @@ export async function designUserStylePreset(params: {
   const analysisModel = userConfig.analysisModel
 
   const prompt = buildAiPrompt({
-    promptId: parsed.data.kind === 'visual_style'
-      ? AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET
-      : AI_PROMPT_IDS.DESIGN_DIRECTOR_STYLE_PRESET,
+    promptId: AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET,
     locale: params.locale,
     variables: {
       instruction: parsed.data.instruction,
     },
   })
 
-  const action = parsed.data.kind === 'visual_style'
-    ? 'design_visual_style_preset'
-    : 'design_director_style_preset'
+  const action = 'design_visual_style_preset'
   const completion = await withTextBilling(
     params.userId,
     analysisModel,

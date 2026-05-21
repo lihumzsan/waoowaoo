@@ -10,7 +10,6 @@ vi.mock('@/components/selectors/RatioStyleSelectors', () => ({
     ...props
   }: Record<string, unknown> & { getUsage?: unknown }) => createElement('div', props, 'RatioSelector'),
   StyleSelector: (props: Record<string, unknown>) => createElement('div', props, 'StyleSelector'),
-  StylePresetSelector: (props: Record<string, unknown>) => createElement('div', props, 'StylePresetSelector'),
 }))
 
 describe('StoryInputComposer', () => {
@@ -29,9 +28,6 @@ describe('StoryInputComposer', () => {
         artStyle: 'realistic',
         onArtStyleChange: () => undefined,
         styleOptions: [{ value: 'realistic', label: '真人风格' }],
-        stylePresetValue: 'horror-suspense',
-        onStylePresetChange: () => undefined,
-        stylePresetOptions: [{ value: 'horror-suspense', label: '恐怖悬疑', description: '压迫氛围' }],
         topRight: createElement('span', null, '字数：4'),
         footer: createElement('p', null, '当前配置'),
         secondaryActions: createElement('button', { type: 'button' }, 'AI 帮我写'),
@@ -42,14 +38,13 @@ describe('StoryInputComposer', () => {
     expect(html).toContain('rows="8"')
     expect(html).toContain('RatioSelector')
     expect(html).toContain('StyleSelector')
-    expect(html).toContain('StylePresetSelector')
     expect(html).toContain('字数：4')
     expect(html).toContain('当前配置')
     expect(html).toContain('AI 帮我写')
     expect(html).toContain('开始创作')
   })
 
-  it('hides the style preset selector when no preset is enabled', () => {
+  it('renders without footer or secondary actions', () => {
     Reflect.set(globalThis, 'React', React)
 
     const html = renderToStaticMarkup(
@@ -64,15 +59,12 @@ describe('StoryInputComposer', () => {
         artStyle: 'realistic',
         onArtStyleChange: () => undefined,
         styleOptions: [{ value: 'realistic', label: '真人风格' }],
-        stylePresetValue: '',
-        onStylePresetChange: () => undefined,
-        stylePresetOptions: [],
         primaryAction: createElement('button', { type: 'button' }, '开始创作'),
       }),
     )
 
     expect(html).toContain('RatioSelector')
     expect(html).toContain('StyleSelector')
-    expect(html).not.toContain('StylePresetSelector')
+    expect(html).toContain('开始创作')
   })
 })

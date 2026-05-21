@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
+import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import type { EditAssetRequirement, EditScriptPayload, EditScriptShot } from '@/lib/edit-script/types'
 import type {
   StoryboardConsistencyAssetSnapshot,
@@ -28,6 +29,7 @@ interface PersistedEditScript {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBibleJson: Prisma.JsonValue | null
   readonly screenplayText: string | null
   readonly title: string
   readonly logline: string | null
@@ -86,6 +88,7 @@ function mapEditScript(script: PersistedEditScript): EditScriptPayload {
     projectId: script.projectId,
     episodeId: script.episodeId,
     userPrompt: script.userPrompt,
+    styleBible: editScriptStyleBibleSchema.parse({ styleBible: script.styleBibleJson }).styleBible,
     screenplayText: script.screenplayText,
     title: script.title,
     logline: script.logline,
@@ -223,8 +226,6 @@ export async function buildStoryboardConsistencySource(input: {
       select: {
         id: true,
         videoRatio: true,
-        artStyle: true,
-        directorStyleDoc: true,
       },
     }),
     prisma.projectEditScript.findFirst({
@@ -269,8 +270,6 @@ export async function buildStoryboardConsistencySource(input: {
       sourceEditScriptId: editScript.id,
       project: {
         videoRatio: project.videoRatio,
-        artStyle: project.artStyle,
-        directorStyleDoc: project.directorStyleDoc,
       },
       editScript: {
         id: editScript.id,
@@ -281,6 +280,7 @@ export async function buildStoryboardConsistencySource(input: {
         userPrompt: editScript.userPrompt,
         screenplayText: editScript.screenplayText,
       },
+      styleBible: editScript.styleBible,
       shots: editScript.shots,
       videoBlocks,
       assets,

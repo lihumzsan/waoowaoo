@@ -1,7 +1,7 @@
 import { aiDesign } from '@/lib/asset-utils/ai-design'
 import type { Locale } from '@/i18n/routing'
 import { formatLocationAvailableSlotsText } from '@/lib/location-available-slots'
-import type { EditAssetRequirement, EditScriptShot } from './types'
+import type { EditAssetRequirement, EditScriptShot, EditScriptStyleBible } from './types'
 
 interface DesignEditAssetRequirementsInput {
   readonly userId: string
@@ -9,14 +9,14 @@ interface DesignEditAssetRequirementsInput {
   readonly locale: Locale
   readonly analysisModel: string
   readonly userPrompt: string
-  readonly styleContext: string
+  readonly styleBible: EditScriptStyleBible
   readonly shots: readonly EditScriptShot[]
   readonly requirements: readonly EditAssetRequirement[]
 }
 
 interface BuildEditAssetDesignInstructionInput {
   readonly userPrompt: string
-  readonly styleContext: string
+  readonly styleBible: EditScriptStyleBible
   readonly requirement: EditAssetRequirement
   readonly shots: readonly EditScriptShot[]
 }
@@ -30,7 +30,7 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
   return JSON.stringify({
     task: 'design_edit_first_required_asset_for_image_generation',
     userRequest: input.userPrompt,
-    styleContext: input.styleContext,
+    styleBible: input.styleBible,
     asset: {
       kind: input.requirement.kind,
       name: input.requirement.name,
@@ -50,8 +50,8 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
     constraints: [
       'Create one stable reusable asset description for the asset library.',
       'Use only visual facts implied by the edit table and user request.',
-      'Use styleContext and explicit user visual style as the asset-level visual policy.',
-      'The asset description must include stable lighting, color palette, material texture, and image-filter traits that can directly guide image generation.',
+      'Use styleBible.stylePolicy.visual as the only asset-level visual policy.',
+      'The asset description must include stable lighting, color palette, material texture, composition, image-filter traits, and visual bans from the Style Bible that can directly guide image generation.',
       'Do not describe transient shot action, facial expression, camera movement, dialogue, sound, or plot function inside the asset appearance.',
       'For character assets, preserve fixedVoiceTimbreText exactly as a stable voice identity field. It is not part of the image prompt.',
       'For character assets, describe the character itself without background or pose.',
@@ -70,7 +70,7 @@ export async function designEditAssetRequirements(
       analysisModel: input.analysisModel,
       userInstruction: buildEditAssetDesignInstruction({
         userPrompt: input.userPrompt,
-        styleContext: input.styleContext,
+        styleBible: input.styleBible,
         requirement,
         shots: input.shots,
       }),

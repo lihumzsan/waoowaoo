@@ -7,8 +7,8 @@ Goals:
 - Do not output character coordinates and do not invent coordinates.
 - Describe only the spatial anchors that should appear in the top-down plan: entrances, tables, chairs, roads, rocks, courtyards, riverbanks, walls, and similar anchors.
 - The floor plan must be clean, top-down, grid-ready, and free of perspective shots, character close-ups, captions, numbers, or labels.
-- The floor-plan prompt must obey the existing visual style from source_snapshot_json, scene asset reference images, artStyle, and directorStyle: preserve architecture, materials, season, color palette, lighting mood, and recognizable spatial identity; only transform the view into a pure orthographic top-down view.
-- Do not default to blueprint, technical drawing, sketch, wireframe, or draft style. Use those style terms only when explicitly requested by the user or project style.
+- The floor-plan prompt must obey source_snapshot_json.styleBible and scene asset reference images; Style Bible is the only style source. Preserve architecture, materials, season, color palette, lighting mood, and recognizable spatial identity; only transform the view into a pure orthographic top-down view.
+- Do not default to blueprint, technical drawing, sketch, wireframe, or draft style. Use those style terms only when explicitly requested by the user or source_snapshot_json.styleBible.
 - Do not create a floor plan for content that is unsuitable for fixed-space continuity and does not belong to a fixed scene group.
 - If scene_floor_plan_groups_json is empty, return an empty floorPlans array.
 

@@ -10,7 +10,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { expandHomeStory } from '@/lib/home/ai-story-expand'
 import { ART_STYLES, VIDEO_RATIOS } from '@/lib/constants'
-import { listSystemDirectorStylePresets, listSystemVisualStylePresets } from '@/lib/style-preset/system'
+import { listSystemVisualStylePresets } from '@/lib/style-preset/system'
 import { useSaveProjectEpisodesBatch, useSplitProjectEpisodes } from '@/lib/query/hooks'
 import { useWorkspaceRuntime } from '../../WorkspaceRuntimeContext'
 import { DetailSection } from './detail-shared'
@@ -50,12 +50,6 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
     presetSource: runtime.visualStylePresetSource === 'user' ? 'user' : 'system',
     presetId: runtime.visualStylePresetId || runtime.artStyle || ART_STYLES[0]?.value || '',
   })
-  const directorStyleValue = runtime.directorStylePresetSource && runtime.directorStylePresetId
-    ? encodePresetValue({
-        presetSource: runtime.directorStylePresetSource === 'user' ? 'user' : 'system',
-        presetId: runtime.directorStylePresetId,
-      })
-    : ''
 
   const ratioOptions = useMemo(
     () => VIDEO_RATIOS.map((ratio) => ({ ...ratio, recommended: ratio.value === '9:16' })),
@@ -69,15 +63,6 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
     })),
     [locale, runtime.artStyle],
   )
-  const directorStyleOptions = useMemo(
-    () => listSystemDirectorStylePresets().map((preset) => ({
-      value: encodePresetValue(preset),
-      label: preset.label,
-      description: preset.description,
-    })),
-    [],
-  )
-
   const saveStory = async (value: string) => {
     setDraft(value)
     await runtime.onNovelTextChange(value)
@@ -152,12 +137,6 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
         void runtime.onVisualStylePresetChange(ref)
       }}
       styleOptions={visualStyleOptions}
-      stylePresetValue={directorStyleValue}
-      onStylePresetChange={(value) => {
-        const ref = decodePresetValue(value)
-        void runtime.onDirectorStylePresetRefChange(ref)
-      }}
-      stylePresetOptions={directorStyleOptions}
       secondaryActions={(
         <>
           <button

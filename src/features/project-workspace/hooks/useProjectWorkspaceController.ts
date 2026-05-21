@@ -170,8 +170,6 @@ export function useProjectWorkspaceController({
     artStyle: projectSnapshot.artStyle,
     visualStylePresetSource: projectSnapshot.visualStylePresetSource,
     visualStylePresetId: projectSnapshot.visualStylePresetId,
-    directorStylePresetSource: projectSnapshot.directorStylePresetSource,
-    directorStylePresetId: projectSnapshot.directorStylePresetId,
     videoModel: projectSnapshot.videoModel,
     singleShotVideoModel: projectSnapshot.singleShotVideoModel,
     sequenceVideoModel: projectSnapshot.sequenceVideoModel,

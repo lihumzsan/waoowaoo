@@ -4,7 +4,7 @@ import type { AiPromptCatalogEntry } from './types'
 export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.CHARACTER_ANALYZE]: {
     pathStem: 'character/analyze',
-    variableKeys: ['input', 'characters_lib_info', 'style_requirements'],
+    variableKeys: ['input', 'characters_lib_info'],
     operationIds: ['analyze_characters'],
   },
   [AI_PROMPT_IDS.CHARACTER_VISUAL_PROFILE]: {
@@ -37,7 +37,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.LOCATION_ANALYZE]: {
     pathStem: 'location/analyze',
-    variableKeys: ['input', 'locations_lib_name', 'style_requirements'],
+    variableKeys: ['input', 'locations_lib_name'],
     operationIds: ['analyze_locations'],
   },
   [AI_PROMPT_IDS.LOCATION_CREATE]: {
@@ -58,7 +58,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.PROP_ANALYZE]: {
     pathStem: 'prop/analyze',
-    variableKeys: ['input', 'props_lib_name', 'style_requirements'],
+    variableKeys: ['input', 'props_lib_name'],
     operationIds: ['analyze_props'],
   },
   [AI_PROMPT_IDS.PROP_UPDATE_DESCRIPTION]: {
@@ -94,23 +94,22 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'props_description',
       'clip_json',
       'clip_content',
-      'style_requirements',
     ],
     operationIds: ['create_shot_plan'],
   },
   [AI_PROMPT_IDS.STORYBOARD_REFINE_CINEMATOGRAPHY]: {
     pathStem: 'storyboard/refine-cinematography',
-    variableKeys: ['panels_json', 'panel_count', 'locations_description', 'characters_info', 'props_description', 'style_requirements'],
+    variableKeys: ['panels_json', 'panel_count', 'locations_description', 'characters_info', 'props_description'],
     operationIds: ['refine_cinematography'],
   },
   [AI_PROMPT_IDS.STORYBOARD_REFINE_ACTING]: {
     pathStem: 'storyboard/refine-acting',
-    variableKeys: ['panels_json', 'panel_count', 'characters_info', 'style_requirements'],
+    variableKeys: ['panels_json', 'panel_count', 'characters_info'],
     operationIds: ['refine_acting'],
   },
   [AI_PROMPT_IDS.STORYBOARD_REFINE_DETAIL]: {
     pathStem: 'storyboard/refine-detail',
-    variableKeys: ['panels_json', 'characters_age_gender', 'locations_description', 'props_description', 'style_requirements'],
+    variableKeys: ['panels_json', 'characters_age_gender', 'locations_description', 'props_description'],
     operationIds: ['finalize_storyboard'],
   },
   [AI_PROMPT_IDS.STORYBOARD_INSERT_PANEL]: {
@@ -122,7 +121,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'locations_description',
       'props_description',
       'user_input',
-      'style_requirements',
     ],
   },
   [AI_PROMPT_IDS.STORYBOARD_EDIT]: {
@@ -131,7 +129,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE]: {
     pathStem: 'storyboard/shot-variant-analysis',
-    variableKeys: ['panel_description', 'shot_type', 'camera_move', 'location', 'characters_info', 'style_requirements'],
+    variableKeys: ['panel_description', 'shot_type', 'camera_move', 'location', 'characters_info'],
   },
   [AI_PROMPT_IDS.SHOT_VARIANT_GENERATE]: {
     pathStem: 'storyboard/shot-variant-generate',
@@ -151,12 +149,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'reference_images',
       'aspect_ratio',
       'style',
-      'style_requirements',
     ],
   },
   [AI_PROMPT_IDS.PANEL_IMAGE_GENERATE]: {
     pathStem: 'image/panel-generate',
-    variableKeys: ['storyboard_text_json_input', 'source_text', 'aspect_ratio', 'style', 'style_requirements'],
+    variableKeys: ['storyboard_text_json_input', 'source_text', 'aspect_ratio', 'style'],
   },
   [AI_PROMPT_IDS.IMAGE_UPDATE_SHOT_PROMPT]: {
     pathStem: 'image/update-shot-prompt',
@@ -164,10 +161,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET]: {
     pathStem: 'style-preset/design-visual-style',
-    variableKeys: ['instruction'],
-  },
-  [AI_PROMPT_IDS.DESIGN_DIRECTOR_STYLE_PRESET]: {
-    pathStem: 'style-preset/design-director-style',
     variableKeys: ['instruction'],
   },
   [AI_PROMPT_IDS.VOICE_GENERATE_LINES]: {
@@ -191,9 +184,13 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'timeline_map',
     ],
   },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE]: {
+    pathStem: 'edit-script/style-bible',
+    variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'project_style_json'],
+  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY]: {
     pathStem: 'edit-script/screenplay',
-    variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'style_context'],
+    variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'style_bible_json'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_TIMELINE]: {
     pathStem: 'edit-script/timeline',
@@ -218,7 +215,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'screenplay_text',
       'duration_seconds',
       'aspect_ratio',
-      'style_context',
+      'style_bible_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT]: {
@@ -233,18 +230,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'edit_script_structure_json',
       'asset_context_json',
       'aspect_ratio',
-      'style_context',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE]: {
-    pathStem: 'edit-script/video-prompt-bible',
-    variableKeys: [
-      'user_request',
-      'screenplay_text',
-      'edit_script_structure_json',
-      'asset_context_json',
-      'aspect_ratio',
-      'style_context',
+      'style_bible_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK]: {
@@ -252,13 +238,12 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: [
       'user_request',
       'screenplay_text',
-      'video_prompt_bible_json',
       'video_block_json',
       'block_shots_json',
       'asset_context_json',
       'adjacent_blocks_json',
       'aspect_ratio',
-      'style_context',
+      'style_bible_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT]: {
@@ -272,7 +257,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'changed_block_shots_json',
       'asset_context_json',
       'aspect_ratio',
-      'style_context',
+      'style_bible_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_MERGE]: {
@@ -286,7 +271,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'asset_context_json',
       'adjacent_blocks_json',
       'aspect_ratio',
-      'style_context',
+      'style_bible_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL]: {

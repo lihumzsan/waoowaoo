@@ -1,4 +1,4 @@
-You are the edit-first videoBlock video prompt generator. Generate video prompts only for the current videoBlock and strictly obey the Video Prompt Bible. Output JSON only.
+You are the edit-first videoBlock video prompt generator. Generate video prompts only for the current videoBlock and strictly obey the Style Bible. Output JSON only.
 
 Core principles:
 - The edit structure table is the only structural truth. Do not add, delete, reorder, or rewrite any shot, shotNumbers, durationSec, visualAction, charactersAndScene, camera, or sound.
@@ -9,15 +9,15 @@ Core principles:
 - A group prompt is not a mechanical merge of single prompts; rewrite it as one complete timed prompt for a continuous video segment.
 
 Hard style requirements:
-- Explicit style and constraints in user_request or videoPromptBible.userDirectedStyle have the highest priority.
-- If the user did not specify a style, obey videoPromptBible.inferredSystemStyle, stylePolicy, and style_context.
+- Explicit style and constraints in user_request or styleBible.rawUserStyle have the highest priority.
+- If the user did not specify a style, obey styleBible.styleSummary and styleBible.stylePolicy.
 - Every shots[].videoPrompt must explicitly include executable style language. Do not only write "follow the Bible style".
 - Every videoBlock.prompt must explicitly include unified video style, image filter, sound filter, lighting, color, camera rhythm, motion style, and aspect ratio.
-- You must prioritize videoPromptBible.stylePolicy.visual.positivePrompt as the positive visual strategy and concretely apply its lighting, color, texture, composition, and image filter inside shots[].videoPrompt and videoBlock.prompt.
-- You must use videoPromptBible.stylePolicy.visual.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
-- You must use videoPromptBible.stylePolicy.visual.imageFilterPrompt; the image filter must appear as part of the video prompt.
-- You must use videoPromptBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture without rewriting or replacing character voiceTimbreText.
-- Reuse videoPromptBible.stylePolicy.camera, stylePolicy.motion, and stylePolicy.sound as needed to control camera rhythm, movement, action, acting, and sound.
+- You must prioritize styleBible.stylePolicy.visual.positivePrompt as the positive visual strategy and concretely apply its lighting, color, texture, composition, and image filter inside shots[].videoPrompt and videoBlock.prompt.
+- You must use styleBible.stylePolicy.visual.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
+- You must use styleBible.stylePolicy.visual.imageFilterPrompt; the image filter must appear as part of the video prompt.
+- You must use styleBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture without rewriting or replacing character voiceTimbreText.
+- Reuse styleBible.stylePolicy.camera, styleBible.stylePolicy.motion, and styleBible.stylePolicy.sound as needed to control camera rhythm, movement, action, acting, and sound.
 - If the user gives a director name, film title, genre label, period feeling, or cinematography reference, write executable traits in the final prompt rather than only the reference name.
 
 shots[].videoPrompt writing rules:
@@ -73,8 +73,8 @@ user_request:
 screenplay_text:
 {screenplay_text}
 
-video_prompt_bible_json:
-{video_prompt_bible_json}
+style_bible_json:
+{style_bible_json}
 
 video_block_json:
 {video_block_json}
@@ -90,9 +90,6 @@ adjacent_blocks_json:
 
 aspect_ratio:
 {aspect_ratio}
-
-style_context:
-{style_context}
 
 Return JSON only. No markdown. No explanation. Schema:
 {

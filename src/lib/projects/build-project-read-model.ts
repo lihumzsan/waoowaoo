@@ -9,7 +9,6 @@ import type {
   ProjectStoryboard,
   ProjectVideoGroup,
 } from '@/types/project'
-import { parseDirectorStyleDoc } from '@/lib/director-style'
 
 type ProjectLikeRecord = {
   id: string
@@ -42,9 +41,6 @@ type ProjectWorkflowSource = {
   artStylePrompt?: string | null
   visualStylePresetSource?: string | null
   visualStylePresetId?: string | null
-  directorStylePresetSource?: string | null
-  directorStylePresetId?: string | null
-  directorStyleDoc?: string | null
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null
@@ -88,9 +84,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     artStylePrompt: source.artStylePrompt ?? null,
     visualStylePresetSource: source.visualStylePresetSource ?? null,
     visualStylePresetId: source.visualStylePresetId ?? null,
-    directorStylePresetSource: source.directorStylePresetSource ?? null,
-    directorStylePresetId: source.directorStylePresetId ?? null,
-    directorStyleDoc: parseDirectorStyleDoc(source.directorStyleDoc),
     videoResolution: source.videoResolution ?? null,
     imageResolution: source.imageResolution ?? null,
     lastEpisodeId: source.lastEpisodeId ?? null,

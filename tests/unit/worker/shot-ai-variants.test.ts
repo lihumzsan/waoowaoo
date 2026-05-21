@@ -1,6 +1,5 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildDirectorStyleDoc } from '@/lib/director-style'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const prismaMock = vi.hoisted(() => ({
@@ -91,7 +90,6 @@ describe('worker shot-ai-variants behavior', () => {
     persistMock.resolveAnalysisModel.mockResolvedValue({
       id: 'np-1',
       analysisModel: 'llm::analysis-1',
-      directorStyleDoc: JSON.stringify(buildDirectorStyleDoc('horror-suspense')),
     })
     prismaMock.projectPanel.findUnique.mockResolvedValue({
       id: 'panel-1',
@@ -137,13 +135,6 @@ describe('worker shot-ai-variants behavior', () => {
       panelInfo: expect.objectContaining({
         panelNumber: 3,
         imageUrl: 'https://signed.example/panel-1.png',
-      }),
-    }))
-    expect(buildAiPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      directorStyleDoc: expect.objectContaining({
-        storyboardDetail: expect.objectContaining({
-          frameComposition: expect.stringContaining('主体'),
-        }),
       }),
     }))
     expect(llmStreamMock.flush).toHaveBeenCalled()

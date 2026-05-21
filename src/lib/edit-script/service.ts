@@ -24,11 +24,12 @@ import type {
   EditAssetStatus,
   EditScreenplayPayload,
   EditScriptPayload,
+  EditScriptStyleBible,
   EditScriptShot,
   EditScriptVideoBlock,
 } from './types'
 import {
-  editScriptVideoPromptBibleSchema,
+  editScriptStyleBibleSchema,
   editScriptVideoPromptBlockSchema,
 } from './types'
 import { designEditAssetRequirements } from './asset-design'
@@ -83,6 +84,7 @@ interface UpdateEditScriptAssetRequirementDescriptionInput {
 }
 
 type PromptStepId =
+  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_TIMELINE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VISUAL_ACTION
@@ -91,11 +93,11 @@ type PromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK
 
 type EditScriptGenerationStage =
   | 'edit_script_prepare'
+  | 'edit_script_style_bible'
   | 'edit_script_timeline'
   | 'edit_script_visual_action'
   | 'edit_script_camera'
@@ -133,6 +135,7 @@ interface PersistedEditScript {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBibleJson: Prisma.JsonValue | null
   readonly screenplayText: string | null
   readonly title: string
   readonly logline: string | null
@@ -149,6 +152,7 @@ interface PersistedEditScreenplay {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBibleJson: Prisma.JsonValue | null
   readonly screenplayText: string
   readonly status: string
 }
@@ -163,6 +167,33 @@ interface ExistingAssetRef {
 
 function stringifyForPrompt(value: unknown): string {
   return JSON.stringify(value, null, 2)
+}
+
+interface EditScriptProjectStyleInput {
+  readonly artStyle: string | null
+  readonly aspectRatio: string | null
+}
+
+function buildProjectStyleInput(input: {
+  readonly artStyle: string | null
+  readonly videoRatio: string | null
+}): EditScriptProjectStyleInput {
+  return {
+    artStyle: input.artStyle,
+    aspectRatio: input.videoRatio,
+  }
+}
+
+function parseStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible {
+  const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
+  if (!parsed.success) {
+    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
+  }
+  return parsed.data.styleBible
+}
+
+function styleBibleToJsonValue(styleBible: EditScriptStyleBible): Prisma.InputJsonValue {
+  return styleBible as unknown as Prisma.InputJsonValue
 }
 
 function buildVideoPromptAssetContext(requirements: readonly EditAssetRequirement[]): string {
@@ -199,7 +230,7 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
   return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
-function blockShots(structure: Omit<EditScriptPayload, 'requirements'>, block: EditScriptVideoBlock): readonly EditScriptShot[] {
+function blockShots(structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>, block: EditScriptVideoBlock): readonly EditScriptShot[] {
   return block.shotNumbers.map((shotNumber) => {
     const shot = structure.shots.find((item) => item.shotNumber === shotNumber)
     if (!shot) throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_SHOT_MISSING:${shotNumber}`)
@@ -207,7 +238,7 @@ function blockShots(structure: Omit<EditScriptPayload, 'requirements'>, block: E
   })
 }
 
-function adjacentVideoBlocks(structure: Omit<EditScriptPayload, 'requirements'>, blockIndex: number) {
+function adjacentVideoBlocks(structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>, blockIndex: number) {
   return {
     previous: blockIndex > 0 ? structure.videoBlocks[blockIndex - 1] ?? null : null,
     next: blockIndex < structure.videoBlocks.length - 1 ? structure.videoBlocks[blockIndex + 1] ?? null : null,
@@ -215,7 +246,7 @@ function adjacentVideoBlocks(structure: Omit<EditScriptPayload, 'requirements'>,
 }
 
 function videoPromptBlockContext(input: {
-  readonly structure: Omit<EditScriptPayload, 'requirements'>
+  readonly structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>
   readonly block: EditScriptVideoBlock
   readonly blockIndex: number
 }) {
@@ -233,31 +264,11 @@ async function generateEditScriptVideoPromptsByBlock(input: {
   readonly locale: Locale
   readonly userPrompt: string
   readonly screenplayText: string
-  readonly structure: Omit<EditScriptPayload, 'requirements'>
+  readonly structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>
   readonly requirements: readonly EditAssetRequirement[]
   readonly aspectRatio: string
-  readonly styleContext: string
-}): Promise<Omit<EditScriptPayload, 'requirements'>> {
-  const sharedVariables = {
-    user_request: input.userPrompt,
-    screenplay_text: input.screenplayText,
-    edit_script_structure_json: stringifyForPrompt(input.structure),
-    asset_context_json: buildVideoPromptAssetContext(input.requirements),
-    aspect_ratio: input.aspectRatio,
-    style_context: input.styleContext,
-  }
-  const bibleRaw = await runPromptStep({
-    userId: input.userId,
-    projectId: input.projectId,
-    model: input.model,
-    locale: input.locale,
-    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE,
-    variables: sharedVariables,
-    stepTitle: 'Edit video prompt bible',
-    stepIndex: 3,
-    stepTotal: 4,
-  })
-  const bible = editScriptVideoPromptBibleSchema.parse(bibleRaw)
+  readonly styleBible: EditScriptStyleBible
+}): Promise<Omit<EditScriptPayload, 'requirements' | 'styleBible'>> {
   const blockOutputs = await Promise.all(input.structure.videoBlocks.map(async (block, blockIndex) => {
     const shotNumbers = block.shotNumbers
     const blockRequirements = input.requirements.filter((requirement) => intersectsShotNumbers(requirement.shotNumbers, shotNumbers))
@@ -270,17 +281,16 @@ async function generateEditScriptVideoPromptsByBlock(input: {
       variables: {
         user_request: input.userPrompt,
         screenplay_text: input.screenplayText,
-        video_prompt_bible_json: stringifyForPrompt(bible.videoPromptBible),
+        style_bible_json: stringifyForPrompt(input.styleBible),
         video_block_json: stringifyForPrompt(videoPromptBlockContext({ structure: input.structure, block, blockIndex })),
         block_shots_json: stringifyForPrompt(blockShots(input.structure, block)),
         asset_context_json: buildVideoPromptAssetContext(blockRequirements),
         adjacent_blocks_json: stringifyForPrompt(adjacentVideoBlocks(input.structure, blockIndex)),
         aspect_ratio: input.aspectRatio,
-        style_context: input.styleContext,
       },
       stepTitle: `Edit video prompts for block ${blockIndex + 1}`,
-      stepIndex: 4,
-      stepTotal: 4,
+      stepIndex: 3,
+      stepTotal: 3,
     })
     const parsed = editScriptVideoPromptBlockSchema.parse(raw)
     if (parsed.sourceVideoBlockIndex !== blockIndex) {
@@ -309,18 +319,6 @@ function resolveTextModel(config: Awaited<ReturnType<typeof getProjectModelConfi
     })
   }
   return config.analysisModel
-}
-
-function buildStyleContext(input: {
-  readonly artStyle: string | null
-  readonly directorStyleDoc: string | null
-  readonly videoRatio: string | null
-}): string {
-  return [
-    input.artStyle ? `artStyle: ${input.artStyle}` : null,
-    input.directorStyleDoc ? `directorStyle: ${input.directorStyleDoc}` : null,
-    input.videoRatio ? `aspectRatio: ${input.videoRatio}` : null,
-  ].filter((line): line is string => Boolean(line)).join('\n') || 'No additional style context.'
 }
 
 async function runPromptStep(input: {
@@ -414,6 +412,35 @@ async function runPromptTextStep(input: {
     throw new Error(`EDIT_SCRIPT_PROMPT_EMPTY:${input.promptId}`)
   }
   return text
+}
+
+async function generateEditScriptStyleBible(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly model: string
+  readonly locale: Locale
+  readonly userPrompt: string
+  readonly durationSeconds: number
+  readonly aspectRatio: string
+  readonly projectStyle: EditScriptProjectStyleInput
+}): Promise<EditScriptStyleBible> {
+  const raw = await runPromptStep({
+    userId: input.userId,
+    projectId: input.projectId,
+    model: input.model,
+    locale: input.locale,
+    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE,
+    variables: {
+      user_request: input.userPrompt,
+      duration_seconds: String(input.durationSeconds),
+      aspect_ratio: input.aspectRatio,
+      project_style_json: stringifyForPrompt(input.projectStyle),
+    },
+    stepTitle: 'Edit style bible',
+    stepIndex: 1,
+    stepTotal: 2,
+  })
+  return editScriptStyleBibleSchema.parse(raw).styleBible
 }
 
 function readShotNumbers(value: Prisma.JsonValue): number[] {
@@ -582,6 +609,7 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     projectId: script.projectId,
     episodeId: script.episodeId,
     userPrompt: script.userPrompt,
+    styleBible: parseStyleBibleJson(script.styleBibleJson),
     screenplayText: script.screenplayText,
     title: script.title,
     logline: script.logline,
@@ -600,6 +628,7 @@ function mapPersistedEditScreenplay(screenplay: PersistedEditScreenplay): EditSc
     projectId: screenplay.projectId,
     episodeId: screenplay.episodeId,
     userPrompt: screenplay.userPrompt,
+    styleBible: parseStyleBibleJson(screenplay.styleBibleJson),
     screenplayText: screenplay.screenplayText,
     status: screenplay.status,
   }
@@ -650,6 +679,7 @@ async function markEditScriptGenerating(input: {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBible: EditScriptStyleBible
   readonly screenplayText: string
   readonly durationSeconds: number
 }): Promise<void> {
@@ -659,6 +689,7 @@ async function markEditScriptGenerating(input: {
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt: input.userPrompt,
+      styleBibleJson: styleBibleToJsonValue(input.styleBible),
       screenplayText: input.screenplayText,
       title: 'Generating edit table',
       logline: null,
@@ -670,6 +701,7 @@ async function markEditScriptGenerating(input: {
     },
     update: {
       userPrompt: input.userPrompt,
+      styleBibleJson: styleBibleToJsonValue(input.styleBible),
       screenplayText: input.screenplayText,
       title: 'Generating edit table',
       logline: null,
@@ -686,6 +718,7 @@ async function persistEditScriptGenerationStep(input: {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBible: EditScriptStyleBible
   readonly screenplayText: string
   readonly title: string
   readonly logline: string | null
@@ -699,6 +732,7 @@ async function persistEditScriptGenerationStep(input: {
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt: input.userPrompt,
+      styleBibleJson: styleBibleToJsonValue(input.styleBible),
       screenplayText: input.screenplayText,
       title: input.title,
       logline: input.logline,
@@ -710,6 +744,7 @@ async function persistEditScriptGenerationStep(input: {
     },
     update: {
       userPrompt: input.userPrompt,
+      styleBibleJson: styleBibleToJsonValue(input.styleBible),
       screenplayText: input.screenplayText,
       title: input.title,
       logline: input.logline,
@@ -734,6 +769,7 @@ async function markEditScriptFailed(input: {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBible?: EditScriptStyleBible
   readonly durationSeconds: number
   readonly message: string
 }): Promise<void> {
@@ -743,6 +779,7 @@ async function markEditScriptFailed(input: {
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt: input.userPrompt,
+      ...(input.styleBible ? { styleBibleJson: styleBibleToJsonValue(input.styleBible) } : {}),
       screenplayText: null,
       title: 'Edit table generation failed',
       logline: input.message,
@@ -754,6 +791,7 @@ async function markEditScriptFailed(input: {
     },
     update: {
       userPrompt: input.userPrompt,
+      ...(input.styleBible ? { styleBibleJson: styleBibleToJsonValue(input.styleBible) } : {}),
       title: 'Edit table generation failed',
       logline: input.message,
       status: 'failed',
@@ -847,7 +885,6 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       select: {
         id: true,
         artStyle: true,
-        directorStyleDoc: true,
         videoRatio: true,
       },
     }),
@@ -875,10 +912,19 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
 
   const model = resolveTextModel(config)
   const defaults = resolveEditScriptDefaults(input.prompt)
-  const styleContext = buildStyleContext({
+  const projectStyle = buildProjectStyleInput({
     artStyle: effectiveArtStyle,
-    directorStyleDoc: project.directorStyleDoc,
     videoRatio: effectiveVideoRatio,
+  })
+  const styleBible = await generateEditScriptStyleBible({
+    userId: input.userId,
+    projectId: input.projectId,
+    model,
+    locale,
+    userPrompt: input.prompt,
+    durationSeconds: defaults.durationSeconds,
+    aspectRatio: effectiveVideoRatio,
+    projectStyle,
   })
   const screenplayText = await runPromptTextStep({
     userId: input.userId,
@@ -890,11 +936,11 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       user_request: input.prompt,
       duration_seconds: String(defaults.durationSeconds),
       aspect_ratio: effectiveVideoRatio,
-      style_context: styleContext,
+      style_bible_json: stringifyForPrompt(styleBible),
     },
     stepTitle: 'Edit screenplay',
-    stepIndex: 1,
-    stepTotal: 1,
+    stepIndex: 2,
+    stepTotal: 2,
   })
   const saved = await prisma.projectEditScreenplay.upsert({
     where: { episodeId: input.episodeId },
@@ -902,11 +948,13 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt: input.prompt,
+      styleBibleJson: styleBibleToJsonValue(styleBible),
       screenplayText,
       status: 'ready',
     },
     update: {
       userPrompt: input.prompt,
+      styleBibleJson: styleBibleToJsonValue(styleBible),
       screenplayText,
       status: 'ready',
     },
@@ -926,7 +974,6 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       select: {
         id: true,
         artStyle: true,
-        directorStyleDoc: true,
         videoRatio: true,
       },
     }),
@@ -958,12 +1005,14 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
     screenplayId: input.screenplayId,
   })
   const userPrompt = screenplay.userPrompt
+  const styleBible = parseStyleBibleJson(screenplay.styleBibleJson)
   const defaults = resolveEditScriptDefaults(userPrompt)
   const screenplayText = screenplay.screenplayText
   await markEditScriptGenerating({
     projectId: input.projectId,
     episodeId: input.episodeId,
     userPrompt,
+    styleBible,
     screenplayText,
     durationSeconds: defaults.durationSeconds,
   })
@@ -974,11 +1023,6 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
   })
 
   try {
-    const styleContext = buildStyleContext({
-      artStyle: effectiveArtStyle,
-      directorStyleDoc: project.directorStyleDoc,
-      videoRatio: effectiveVideoRatio,
-    })
     const structureRaw = await runPromptStep({
       userId: input.userId,
       projectId: input.projectId,
@@ -990,7 +1034,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
         screenplay_text: screenplayText,
         duration_seconds: String(defaults.durationSeconds),
         aspect_ratio: effectiveVideoRatio,
-        style_context: styleContext,
+        style_bible_json: stringifyForPrompt(styleBible),
       },
       stepTitle: 'Edit core table',
       stepIndex: 1,
@@ -1001,6 +1045,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt,
+      styleBible,
       screenplayText,
       title: structure.title,
       logline: structure.logline ?? null,
@@ -1032,7 +1077,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       locale,
       analysisModel: model,
       userPrompt,
-      styleContext,
+      styleBible,
       shots: structure.shots,
       requirements: normalizeEditAssetRequirements(assetRaw, structure.shots),
     })
@@ -1053,7 +1098,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       structure,
       requirements,
       aspectRatio: effectiveVideoRatio,
-      styleContext,
+      styleBible,
     })
 
     const assetByRequirementKey = new Map<string, ExistingAssetRef>()
@@ -1064,6 +1109,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
           projectId: input.projectId,
           episodeId: input.episodeId,
           userPrompt,
+          styleBibleJson: styleBibleToJsonValue(styleBible),
           screenplayText,
           title: core.title,
           logline: core.logline,
@@ -1075,6 +1121,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
         },
         update: {
           userPrompt,
+          styleBibleJson: styleBibleToJsonValue(styleBible),
           screenplayText,
           title: core.title,
           logline: core.logline,
@@ -1148,6 +1195,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       projectId: input.projectId,
       episodeId: input.episodeId,
       userPrompt,
+      styleBible,
       durationSeconds: defaults.durationSeconds,
       message,
     })

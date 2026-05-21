@@ -3,10 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { toMoneyNumber, type MoneyValue } from '@/lib/billing/money'
 import { isArtStyleValue } from '@/lib/constants'
-import { resolveDirectorStyleFieldsFromPreset } from '@/lib/director-style'
 import {
   parseStylePresetRef,
-  resolveDirectorStylePreset,
   resolveVisualStylePreset,
   type StylePresetRef,
 } from '@/lib/style-preset'
@@ -30,7 +28,6 @@ function readProjectDraftBody(body: unknown): ProjectDraftInput {
   return {
     name: typeof payload.name === 'string' ? payload.name : '',
     description: typeof payload.description === 'string' ? payload.description : null,
-    directorStylePresetId: typeof payload.directorStylePresetId === 'string' ? payload.directorStylePresetId : null,
   }
 }
 
@@ -225,15 +222,10 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
-        directorStylePresetId: z.string().optional().nullable(),
         visualStylePreset: z.object({
           presetSource: z.enum(['system', 'user']),
           presetId: z.string(),
         }).optional(),
-        directorStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }).nullable().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -250,39 +242,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         }
 
         const normalized = normalizeProjectDraft(draft)
-        let directorStyleFields: {
-          directorStylePresetId: string | null
-          directorStyleDoc: string | null
-          directorStylePresetSource?: string | null
-        }
-        try {
-          const directorStylePresetRef = readStylePresetRefField(input, 'directorStylePreset')
-          if (directorStylePresetRef) {
-            const doc = await resolveDirectorStylePreset({
-              userId: ctx.userId,
-              presetSource: directorStylePresetRef.presetSource,
-              presetId: directorStylePresetRef.presetId,
-            })
-            directorStyleFields = {
-              directorStylePresetId: directorStylePresetRef.presetId,
-              directorStylePresetSource: directorStylePresetRef.presetSource,
-              directorStyleDoc: directorStylePresetRef.presetSource === 'system' ? JSON.stringify(doc) : null,
-            }
-          } else {
-            const legacyFields = resolveDirectorStyleFieldsFromPreset(draft.directorStylePresetId)
-            directorStyleFields = {
-              ...legacyFields,
-              directorStylePresetSource: legacyFields.directorStylePresetId ? 'system' : null,
-            }
-          }
-        } catch {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_DIRECTOR_STYLE_PRESET',
-            field: 'directorStylePresetId',
-            message: 'directorStylePresetId must be a supported value',
-          })
-        }
-
         let visualStyleFields: {
           visualStylePresetSource: string
           visualStylePresetId: string
@@ -347,7 +306,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               visualStylePresetSource: 'system',
               visualStylePresetId: userPreference.artStyle,
             } : {})),
-            ...directorStyleFields,
           },
         })
 

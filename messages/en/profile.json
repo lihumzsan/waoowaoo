@@ -106,13 +106,13 @@
     },
     "stylePresets": {
         "title": "My Styles",
-        "subtitle": "Create account-level private visual and director styles. Saved changes apply on the next generation.",
+        "subtitle": "Create account-level private visual styles. Saved changes apply on the next generation.",
     "newPreset": "New",
     "loading": "Loading",
     "empty": "No presets",
     "userEmpty": "No personal styles yet",
     "sectionCount": "{count}",
-    "emptyDescription": "Use the plus button to create a visual or director style. Prompt details are only shown after opening a style.",
+    "emptyDescription": "Use the plus button to create a visual style. Prompt details are only shown after opening a style.",
     "noSummary": "No summary",
     "createTitle": "New Style",
     "createDescription": "Fill only the required fields, consistent with asset creation dialogs.",
@@ -125,20 +125,16 @@
         "saveFailed": "Save failed",
     "deleteFailed": "Delete failed",
     "deleteConfirm": "Delete this style? It will no longer be shown.",
-    "directorConfigDetails": "Director style configuration",
-    "directorDesignRequired": "Use AI Design to generate the director style before saving.",
         "design": "AI Design",
         "designing": "Designing",
         "save": "Save",
         "saving": "Saving",
         "delete": "Delete",
     "kind": {
-      "visual_style": "Visual Style",
-      "director_style": "Director Style"
+      "visual_style": "Visual Style"
     },
     "kindDescription": {
-      "visual_style": "Controls the visual language used by image generation",
-      "director_style": "Controls director guidance for characters, storyboard, cinematography, and video"
+      "visual_style": "Controls the visual language used by image generation"
     },
     "filters": {
       "all": "All"

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { removeLocationPromptSuffix } from '@/lib/constants'
-import { resolveProjectDirectorStyleDoc, resolveProjectVisualStylePreset } from '@/lib/style-preset'
+import { resolveProjectVisualStylePreset } from '@/lib/style-preset'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
@@ -100,10 +100,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
     .filter((item) => readAssetKind(item as unknown as Record<string, unknown>) === 'prop')
     .map((item) => item.name)
     .join(', ')
-  const directorStyleDoc = await resolveProjectDirectorStyleDoc({
-    projectId,
-    userId: job.data.userId,
-  })
   const characterPromptTemplate = buildPrompt({
     promptId: PROMPT_IDS.CHARACTER_ANALYZE,
     locale: job.data.locale,
@@ -111,7 +107,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
       input: contentToAnalyze,
       characters_lib_info: charactersLibName || '无',
     },
-    directorStyleDoc,
   })
   const locationPromptTemplate = buildPrompt({
     promptId: PROMPT_IDS.LOCATION_ANALYZE,
@@ -120,7 +115,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
       input: contentToAnalyze,
       locations_lib_name: locationsLibName || '无',
     },
-    directorStyleDoc,
   })
   const propPromptTemplate = buildPrompt({
     promptId: PROMPT_IDS.PROP_ANALYZE,
@@ -129,7 +123,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
       input: contentToAnalyze,
       props_lib_name: propsLibName || '无',
     },
-    directorStyleDoc,
   })
 
   await reportTaskProgress(job, 20, {

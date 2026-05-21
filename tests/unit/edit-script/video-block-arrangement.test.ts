@@ -158,7 +158,6 @@ describe('edit script video block arrangement', () => {
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
       artStyle: 'cinematic',
-      directorStyleDoc: 'restrained handheld realism',
       videoRatio: '16:9',
     })
     aiExecMock.executeAiTextStep.mockResolvedValue({

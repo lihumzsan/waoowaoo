@@ -7,13 +7,14 @@ User original request:
 
 Target total duration: {{duration_seconds}} seconds
 Aspect ratio: {{aspect_ratio}}
-Style context:
-{{style_context}}
+Style Bible, the only style source:
+{{style_bible_json}}
 
 Responsibility boundary:
 - Only write story content here. Do not write camera language, shot size, composition, camera movement, editing rhythm, group/single structure, video prompts, sound effects, BGM, or post-production notes.
 - The downstream AI edit table will use this screenplay as the only plot truth, so the screenplay must clearly express characters, scenes, causal events, action progression, and the ending beat.
 - Preserve the subjects, setting, mood, constraints, and style from the user's original request. You may add necessary story connective tissue, but do not introduce unrelated characters, unrelated locations, or extra subplots.
+- Obey the Style Bible's styleSummary, visual, motion, and sound temperament, but convert it only into story, character, scene, and mood facts here. Do not write camera, filter, sound-effect, or post-production terms.
 
 Screenplay format:
 Title: "short title"

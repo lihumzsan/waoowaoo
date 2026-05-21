@@ -171,7 +171,6 @@ describe('edit script video block merge', () => {
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
       artStyle: 'cinematic',
-      directorStyleDoc: 'restrained handheld realism',
       videoRatio: '16:9',
     })
     prismaMock.projectCharacter.findFirst.mockResolvedValue(null)

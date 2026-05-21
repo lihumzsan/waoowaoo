@@ -84,9 +84,6 @@ function mockReadyProject(): void {
     artStylePrompt: null,
     visualStylePresetSource: null,
     visualStylePresetId: null,
-    directorStylePresetSource: null,
-    directorStylePresetId: null,
-    directorStyleDoc: null,
   })
   prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
   prismaMock.projectEditScript.findUnique.mockResolvedValue({

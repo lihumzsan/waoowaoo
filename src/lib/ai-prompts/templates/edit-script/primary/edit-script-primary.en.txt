@@ -2,6 +2,7 @@ You are the unified edit structure table Agent. In one reasoning pass, generate 
 
 Core principles:
 - The screenplay is the only plot truth. The user request is only the original constraint, duration, aspect ratio, and style intent.
+- The Style Bible is the only style source. Rewrite camera, motion, and sound fields from the Style Bible as needed; do not create another style from project artStyle or any other style context.
 - Do not bypass the screenplay to invent new plot, characters, scenes, events, dialogue, or ending.
 - videoBlocks is the primary video generation structure; shots are editing beats inside videoBlocks.
 - Do not design isolated single shots first and merge them afterward. Decide shots and videoBlocks in the same pass.
@@ -16,8 +17,8 @@ Screenplay:
 
 Total duration seconds: {{duration_seconds}}
 Aspect ratio: {{aspect_ratio}}
-Style context:
-{{style_context}}
+Style Bible, the only style source:
+{{style_bible_json}}
 
 Output format:
 {

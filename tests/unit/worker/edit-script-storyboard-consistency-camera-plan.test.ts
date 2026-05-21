@@ -101,7 +101,6 @@ function buildSourceSnapshot() {
     project: {
       videoRatio: '16:9',
       artStyle: null,
-      directorStyleDoc: null,
     },
     editScript: {
       id: 'edit-script-1',

@@ -48,7 +48,6 @@ interface VariantPromptParams {
   referenceImages: string
   aspectRatio: string
   style: string
-  directorStyleDoc?: Awaited<ReturnType<typeof resolveNovelData>>['directorStyleDoc']
 }
 
 function buildVariantPrompt(params: VariantPromptParams): string {
@@ -72,7 +71,6 @@ function buildVariantPrompt(params: VariantPromptParams): string {
       aspect_ratio: params.aspectRatio,
       style: params.style,
     },
-    directorStyleDoc: params.directorStyleDoc,
   })
 }
 
@@ -309,7 +307,6 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
     referenceImages: formatReferenceImagesMapForPrompt(referenceImagesMap, job.data.locale),
     aspectRatio,
     style: artStyle,
-    directorStyleDoc: projectData.directorStyleDoc,
   })
 
   _ulogInfo('[panel-variant] resolved variant prompt', prompt)

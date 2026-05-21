@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { buildProjectReadModel } from '@/lib/projects/build-project-read-model'
-import { buildDirectorStyleDoc } from '@/lib/director-style'
 
 describe('buildProjectReadModel', () => {
   it('flattens workflow data onto project and splits props from locations', () => {
@@ -17,8 +16,6 @@ describe('buildProjectReadModel', () => {
     const readModel = buildProjectReadModel(project, {
       analysisModel: 'llm::analysis',
       videoRatio: '9:16',
-      directorStylePresetId: 'horror-suspense',
-      directorStyleDoc: JSON.stringify(buildDirectorStyleDoc('horror-suspense')),
       importStatus: 'pending',
       episodes: [{
         id: 'episode-1',
@@ -58,8 +55,6 @@ describe('buildProjectReadModel', () => {
 
     expect(readModel.analysisModel).toBe('llm::analysis')
     expect(readModel.importStatus).toBe('pending')
-    expect(readModel.directorStylePresetId).toBe('horror-suspense')
-    expect(readModel.directorStyleDoc?.image.prompt).toContain('low-key lighting')
     expect(readModel.episodes?.map((episode) => episode.id)).toEqual(['episode-1'])
     expect(readModel.locations?.map((location) => location.id)).toEqual(['location-1'])
     expect(readModel.props?.map((prop) => prop.id)).toEqual(['prop-1'])

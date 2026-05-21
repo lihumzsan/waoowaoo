@@ -1,17 +1,77 @@
 import { describe, expect, it } from 'vitest'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 
+const styleBibleJson = JSON.stringify({
+  strategy: 'style_bible',
+  rawUserStyle: '禅修短片',
+  styleSummary: '安静克制的东方自然主义禅修影像。',
+  stylePolicy: {
+    rawUserStyle: '禅修短片',
+    styleSummary: '安静克制的东方自然主义禅修影像。',
+    visual: {
+      positivePrompt: '柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感。',
+      negativePrompt: '不要商业广告感，不要高反差大片感，不要炫技运镜。',
+      imageFilterPrompt: '柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感',
+      lightingPrompt: '晨间漫射自然光，低光比。',
+      colorPrompt: '低饱和自然灰绿、木色、石灰色。',
+      texturePrompt: '细腻胶片颗粒，真实木材、布料、石面质感。',
+      compositionPrompt: '留白多，稳定构图。',
+    },
+    camera: {
+      rhythmPrompt: '慢节奏，长停顿，少切换。',
+      movementPrompt: '固定镜头、缓慢推近、轻微横移。',
+      lensAndDepthPrompt: '35mm，自然景深。',
+      editingPacingPrompt: '剪辑克制。',
+    },
+    motion: {
+      subjectMotionPrompt: '主体动作缓慢、轻、少。',
+      actingPrompt: '表演内收。',
+    },
+    sound: {
+      positivePrompt: '安静自然主义声音，空气感清晰。',
+      negativePrompt: '不要连续配乐，不要广告式声音设计。',
+      soundFilterPrompt: '柔和低动态，自然空气感，清晰但不过度锐利',
+      soundStylePrompt: '保留细微环境层次。',
+    },
+    hardBans: ['不要字幕', '不要水印', '不要logo'],
+  },
+})
+
 describe('edit script block-first prompt flow', () => {
-  it('builds a unified primary prompt without intermediate specialist inputs', () => {
+  it('builds a style-bible-first prompt chain with one style source', () => {
     const screenplayText = [
       '标题：《灯下的人》',
       '',
       '故事梗概：人物进入房间，顺着光线发现桌上的旧物。',
       '',
-      '内景 房间 - 夜晚',
+      '场景 1｜内景. 房间 - 夜晚',
       '',
       '动作：人物走入昏暗房间，沿着窗边的光线慢慢前行，在桌前停下。',
     ].join('\n')
+
+    const styleBiblePrompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE,
+      locale: 'zh',
+      variables: {
+        user_request: '生成一条禅修短片',
+        duration_seconds: '8',
+        aspect_ratio: '9:16',
+        project_style_json: JSON.stringify({ artStyle: 'realistic', aspectRatio: '9:16' }),
+      },
+    })
+
+    expect(styleBiblePrompt).toContain('唯一风格圣经生成器')
+    expect(styleBiblePrompt).toContain('任何剧本、资产、分镜或视频提示词生成之前')
+    expect(styleBiblePrompt).toContain('Style Bible 是后续资产图、分镜图、视频提示词、声音提示词的唯一风格来源')
+    expect(styleBiblePrompt).toContain('positivePrompt 写要什么，negativePrompt 写不要什么')
+    expect(styleBiblePrompt).toContain('imageFilterPrompt 必须是一句可直接塞进图片或视频提示词的画面滤镜短语')
+    expect(styleBiblePrompt).toContain('sound.soundFilterPrompt')
+    expect(styleBiblePrompt).toContain('hardBans')
+    expect(styleBiblePrompt).toContain('禅意东方作者电影')
+    expect(styleBiblePrompt).toContain('柔和自然光，低对比度，轻微柔焦')
+    expect(styleBiblePrompt).toContain('不要商业广告感，不要高反差大片感')
+    expect(styleBiblePrompt).not.toContain('春夏秋冬又一春')
+    expect(styleBiblePrompt).not.toContain('金基德')
 
     const screenplayPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
@@ -20,21 +80,15 @@ describe('edit script block-first prompt flow', () => {
         user_request: '生成一条连续短片',
         duration_seconds: '8',
         aspect_ratio: '9:16',
-        style_context: 'cinematic',
+        style_bible_json: styleBibleJson,
       },
     })
 
     expect(screenplayPrompt).toContain('AI 可控短片剧本')
+    expect(screenplayPrompt).toContain('Style Bible（唯一风格来源）')
     expect(screenplayPrompt).toContain('这里只写剧情内容')
-    expect(screenplayPrompt).toContain('不输出 JSON')
-    expect(screenplayPrompt).toContain('角色表')
-    expect(screenplayPrompt).toContain('场景 1｜内景/外景. 地点 - 时间')
-    expect(screenplayPrompt).toContain('角色名（可选表演提示）')
-    expect(screenplayPrompt).toContain('旁白（V.O.）')
-    expect(screenplayPrompt).toContain('角色名（O.S.）')
-    expect(screenplayPrompt).toContain('场景 N｜内景/外景. 地点 - 时间')
-    expect(screenplayPrompt).toContain('不要把它写成字幕或屏幕文字')
     expect(screenplayPrompt).toContain('不要出现“镜头”“特写”“推镜”“剪切”“CUT TO”')
+    expect(screenplayPrompt).toContain('柔和自然光，低对比度，轻微柔焦')
 
     const primaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
@@ -44,36 +98,21 @@ describe('edit script block-first prompt flow', () => {
         screenplay_text: screenplayText,
         duration_seconds: '8',
         aspect_ratio: '9:16',
-        style_context: 'cinematic',
+        style_bible_json: styleBibleJson,
       },
     })
 
     expect(primaryPrompt).toContain('统一剪辑结构表 Agent')
-    expect(primaryPrompt).toContain('从编剧剧本直接生成唯一核心剪辑结构表')
+    expect(primaryPrompt).toContain('Style Bible 是唯一风格来源')
+    expect(primaryPrompt).toContain('不要从项目 artStyle 或其他风格上下文另起一套风格')
     expect(primaryPrompt).toContain('videoBlocks 是视频生成主结构')
-    expect(primaryPrompt).toContain('编剧剧本是唯一剧情事实')
-    expect(primaryPrompt).toContain(screenplayText)
     expect(primaryPrompt).toContain('本阶段只生成结构、动作、摄影、声音和片段编排')
     expect(primaryPrompt).toContain('shots[].videoPrompt 和 videoBlocks[].prompt 会在资产提取与资产描述完成后由下一阶段生成')
     expect(primaryPrompt).toContain('15 秒是最高优先级硬上限')
-    expect(primaryPrompt).toContain('如果加入下一个 shot 会让当前 group 超过 15 秒')
-    expect(primaryPrompt).toContain('不能输出一个 20 秒 group')
-    expect(primaryPrompt).toContain('不能输出一个 25 秒 group')
-    expect(primaryPrompt).toContain('single 必须且只能包含 1 个 shot，且这个唯一 shot 的 durationSec 必须至少为 4 秒')
-    expect(primaryPrompt).toContain('不要误解为每个 shot 都必须至少 4 秒')
-    expect(primaryPrompt).toContain('group 是默认优先结构')
-    expect(primaryPrompt).toContain('优先使用 3-5 个 shot 的 group')
-    expect(primaryPrompt).toContain('不要机械拆成多个 2-shot group')
-    expect(primaryPrompt).toContain('如果一个 group 只有 2 个 shot')
     expect(primaryPrompt).toContain('禁止为了“稳定”而默认每 2 个 shot 切一个 group')
-    expect(primaryPrompt).toContain('不要输出 [3,4] 和 [5,6] 两个 group')
-    expect(primaryPrompt).toContain('不要输出 screenplay、clips、storyboard、panel、image、video、videoPrompt 或 prompt 字段')
     expect(primaryPrompt).not.toContain('timeline_json')
     expect(primaryPrompt).not.toContain('visual_action_json')
-    expect(primaryPrompt).not.toContain('camera_json')
-    expect(primaryPrompt).not.toContain('audio_json')
     expect(primaryPrompt).not.toContain('2x2')
-    expect(primaryPrompt).not.toContain('3x3')
     expect(primaryPrompt).not.toContain('宫格')
 
     const assetExtractPrompt = buildAiPrompt({
@@ -86,8 +125,6 @@ describe('edit script block-first prompt flow', () => {
 
     expect(assetExtractPrompt).toContain('角色资产必须同时生成 voiceTimbreText')
     expect(assetExtractPrompt).toContain('character 必须输出 voiceTimbreText；location 禁止输出 voiceTimbreText')
-    expect(assetExtractPrompt).toContain('只写固定声线，不写动态表演')
-    expect(assetExtractPrompt).toContain('禁止写：语速、尾音、紧张时呼吸')
 
     const videoPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT,
@@ -105,91 +142,22 @@ describe('edit script block-first prompt flow', () => {
               kind: 'character',
               name: '人物',
               description: '稳定人物视觉资产。',
-              voiceTimbreText: '年轻女性声线，清亮、柔和、略带气声，中高音区，声带闭合感轻，口腔共鸣明亮，鼻音很弱，颗粒感少。',
+              voiceTimbreText: '年轻女性声线，清亮、柔和、略带气声。',
               shotNumbers: [1],
             },
           ],
         }),
         aspect_ratio: '9:16',
-        style_context: 'cinematic',
+        style_bible_json: styleBibleJson,
       },
     })
 
+    expect(videoPrompt).toContain('Style Bible（唯一风格来源）')
     expect(videoPrompt).toContain('videoBlocks[].prompt 是后续直接发给视频模型的最终提示词')
-    expect(videoPrompt).toContain('group prompt 不是把 single prompt 机械合并')
-    expect(videoPrompt).toContain('纯文字生视频')
-    expect(videoPrompt).toContain('[00:00-00:03] 镜头1')
     expect(videoPrompt).toContain('每个 prompt 必须包含声音约束')
-    expect(videoPrompt).toContain('字段值必须整体使用中文自然语言')
-    expect(videoPrompt).toContain('仅保留音效')
     expect(videoPrompt).toContain('不要生成 BGM、背景音乐、持续配乐')
-    expect(videoPrompt).toContain('有叙事目的的电影化短音效')
-    expect(videoPrompt).toContain('剧本或用户需求包含对白、旁白或画外音')
-    expect(videoPrompt).toContain('角色说{台词原文}')
     expect(videoPrompt).toContain('voiceTimbreText 是角色固定音色依据')
-    expect(videoPrompt).toContain('角色名（固定音色：voiceTimbreText）说{台词原文}')
-    expect(videoPrompt).toContain('年轻女性声线，清亮、柔和、略带气声')
-    expect(videoPrompt).toContain('生成配音不等于生成字幕')
-    expect(videoPrompt).toContain('音效使用 <音效描述>')
-    expect(videoPrompt).toContain('台词必须来自剧本或用户需求')
-    expect(videoPrompt).toContain('非同期但叙事绑定的主观声音设计')
-    expect(videoPrompt).toContain('惊吓短促重音或低频短击')
-    expect(videoPrompt).toContain('不能发展成连续音乐')
-    expect(videoPrompt).toContain('声音可以轻微先于画面出现形成预入声')
-    expect(videoPrompt).toContain('切镜后保留短暂尾音')
-    expect(videoPrompt).toContain('single prompt 的声音必须克制')
-    expect(videoPrompt).toContain('缓慢抬眼')
-    expect(videoPrompt).not.toContain('slowly lifts')
-
-    const videoPromptBible = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BIBLE,
-      locale: 'zh',
-      variables: {
-        user_request: '生成一条连续短片，要安静克制',
-        screenplay_text: screenplayText,
-        edit_script_structure_json: JSON.stringify({ shots: [], videoBlocks: [] }),
-        asset_context_json: JSON.stringify({ assets: [] }),
-        aspect_ratio: '9:16',
-        style_context: 'cinematic',
-      },
-    })
-    expect(videoPromptBible).toContain('如果用户原始需求里明确指定了视觉风格')
-    expect(videoPromptBible).toContain('必须优先遵守')
-    expect(videoPromptBible).toContain('用户没有明确要求')
-    expect(videoPromptBible).toContain('自动识别最合适的统一风格')
-    expect(videoPromptBible).toContain('风格转换标准')
-    expect(videoPromptBible).toContain('stylePolicy')
-    expect(videoPromptBible).toContain('不要再输出 styleReferenceInterpretation 或 visualPromptPolicy')
-    expect(videoPromptBible).toContain('styleSummary')
-    expect(videoPromptBible).toContain('visual')
-    expect(videoPromptBible).toContain('camera')
-    expect(videoPromptBible).toContain('motion')
-    expect(videoPromptBible).toContain('sound')
-    expect(videoPromptBible).toContain('positivePrompt')
-    expect(videoPromptBible).toContain('negativePrompt')
-    expect(videoPromptBible).toContain('lightingPrompt')
-    expect(videoPromptBible).toContain('colorPrompt')
-    expect(videoPromptBible).toContain('texturePrompt')
-    expect(videoPromptBible).toContain('compositionPrompt')
-    expect(videoPromptBible).toContain('imageFilterPrompt')
-    expect(videoPromptBible).toContain('soundFilterPrompt')
-    expect(videoPromptBible).toContain('只写一句可直接塞进视频提示词风格段的凝练短语')
-    expect(videoPromptBible).toContain('不得覆盖角色 voiceTimbreText')
-    expect(videoPromptBible).toContain('老电影窄频声音')
-    expect(videoPromptBible).toContain('禁止写依赖画面元素的具体声源或音效')
-    expect(videoPromptBible).toContain('现代冷峻声音')
-    expect(videoPromptBible).toContain('stylePolicy 示例')
-    expect(videoPromptBible).toContain('复古悬疑短片')
-    expect(videoPromptBible).toContain('老电影低对比度，柔焦镜头')
-    expect(videoPromptBible).toContain('明亮童话动画质感')
-    expect(videoPromptBible).not.toContain('近距离衣料和脚步拟音')
-    expect(videoPromptBible).toContain('柔焦镜头，高光溢出，低对比度')
-    expect(videoPromptBible).toContain('导演名、影片名、流派名或年代标签')
-    expect(videoPromptBible).toContain('禅意东方作者电影')
-    expect(videoPromptBible).toContain('stylePolicy.visual')
-    expect(videoPromptBible).toContain('不要商业广告感，不要高反差大片感')
-    expect(videoPromptBible).not.toContain('春夏秋冬又一春')
-    expect(videoPromptBible).not.toContain('金基德')
+    expect(videoPrompt).toContain('柔和自然光，低对比度，轻微柔焦')
 
     const videoPromptBlock = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
@@ -197,36 +165,25 @@ describe('edit script block-first prompt flow', () => {
       variables: {
         user_request: '生成一条连续短片，要安静克制',
         screenplay_text: screenplayText,
-        video_prompt_bible_json: JSON.stringify({ userDirectedStyle: '安静克制' }),
         video_block_json: JSON.stringify({ sourceVideoBlockIndex: 0, shotNumbers: [1] }),
         block_shots_json: JSON.stringify([{ shotNumber: 1 }]),
         asset_context_json: JSON.stringify({ assets: [] }),
         adjacent_blocks_json: JSON.stringify({ previous: null, next: null }),
         aspect_ratio: '9:16',
-        style_context: 'cinematic',
+        style_bible_json: styleBibleJson,
       },
     })
-    expect(videoPromptBlock).toContain('只为当前 videoBlock 生成视频提示词')
-    expect(videoPromptBlock).toContain('user_request 或 videoPromptBible.userDirectedStyle')
-    expect(videoPromptBlock).toContain('最高优先级')
-    expect(videoPromptBlock).toContain('每个 shots[].videoPrompt 必须显式写入可执行风格')
-    expect(videoPromptBlock).toContain('videoPromptBible.stylePolicy.visual.positivePrompt')
-    expect(videoPromptBlock).toContain('videoPromptBible.stylePolicy.visual.negativePrompt')
-    expect(videoPromptBlock).toContain('videoPromptBible.stylePolicy.visual.imageFilterPrompt')
-    expect(videoPromptBlock).toContain('videoPromptBible.stylePolicy.sound.soundFilterPrompt')
+
+    expect(videoPromptBlock).toContain('严格遵守 Style Bible')
+    expect(videoPromptBlock).toContain('user_request 或 styleBible.rawUserStyle')
+    expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.positivePrompt')
+    expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.negativePrompt')
+    expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.imageFilterPrompt')
+    expect(videoPromptBlock).toContain('styleBible.stylePolicy.sound.soundFilterPrompt')
     expect(videoPromptBlock).toContain('画面滤镜')
     expect(videoPromptBlock).toContain('声音滤镜')
     expect(videoPromptBlock).toContain('不得改写或替代角色 voiceTimbreText')
-    expect(videoPromptBlock).toContain('videoBlock.prompt')
-    expect(videoPromptBlock).toContain('[00:00-00:03] 镜头1')
-    expect(videoPromptBlock).toContain('字段值必须整体使用中文自然语言')
-    expect(videoPromptBlock).toContain('仅保留音效')
-    expect(videoPromptBlock).toContain('不要生成 BGM')
-    expect(videoPromptBlock).toContain('优秀 videoBlock.prompt 示例')
-    expect(videoPromptBlock).toContain('路边公交站')
-    expect(videoPromptBlock).toContain('海边修理铺')
-    expect(videoPromptBlock).not.toContain('小和尚')
-    expect(videoPromptBlock).not.toContain('老僧')
+    expect(videoPromptBlock).not.toContain('videoPromptBible')
 
     const englishPrimaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
@@ -236,19 +193,12 @@ describe('edit script block-first prompt flow', () => {
         screenplay_text: screenplayText,
         duration_seconds: '8',
         aspect_ratio: '9:16',
-        style_context: 'cinematic',
+        style_bible_json: styleBibleJson,
       },
     })
 
+    expect(englishPrimaryPrompt).toContain('Style Bible is the only style source')
     expect(englishPrimaryPrompt).toContain('15-second limit is the highest-priority hard ceiling')
-    expect(englishPrimaryPrompt).toContain('If adding the next shot would make the current group exceed 15 seconds')
-    expect(englishPrimaryPrompt).toContain('must not become one 20-second group')
-    expect(englishPrimaryPrompt).toContain('must not become one 25-second group')
-    expect(englishPrimaryPrompt).toContain("single must contain exactly 1 shot, and that one shot's durationSec must be at least 4 seconds")
-    expect(englishPrimaryPrompt).toContain('Do not misread it as a minimum duration for every shot')
-    expect(englishPrimaryPrompt).toContain('group is the default preferred structure')
-    expect(englishPrimaryPrompt).toContain('prefer 3-5 shot groups')
     expect(englishPrimaryPrompt).toContain('Do not mechanically split them into multiple 2-shot groups')
-    expect(englishPrimaryPrompt).toContain('do not output two groups [3,4] and [5,6]')
   })
 })

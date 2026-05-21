@@ -166,9 +166,6 @@ describe('final render plan', () => {
         artStylePrompt: 'high contrast neon city with rain reflections',
         visualStylePresetSource: 'system',
         visualStylePresetId: 'neo-noir',
-        directorStylePresetSource: 'system',
-        directorStylePresetId: 'kinetic-thriller',
-        directorStyleDoc: '{"camera":"urgent handheld energy","pacing":"fast escalation"}',
       },
       clips,
       totalDurationSeconds: 9,
@@ -180,7 +177,6 @@ describe('final render plan', () => {
     expect(prompt).toContain('"kind": "group"')
     expect(prompt).toContain('Full-screen continuous rooftop chase')
     expect(prompt).toContain('high contrast neon city with rain reflections')
-    expect(prompt).toContain('urgent handheld energy')
     expect(prompt).toContain('Instrumentation')
     expect(prompt).toContain('Tempo and rhythm')
     expect(prompt).toContain('quiet suspense, sparse piano, low synth pulse')

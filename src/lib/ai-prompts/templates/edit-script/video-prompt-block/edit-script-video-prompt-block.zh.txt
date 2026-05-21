@@ -1,4 +1,4 @@
-你是 edit-first videoBlock 视频提示词生成器。请只为当前 videoBlock 生成视频提示词，并严格遵守 Video Prompt Bible。只输出 JSON。
+你是 edit-first videoBlock 视频提示词生成器。请只为当前 videoBlock 生成视频提示词，并严格遵守 Style Bible。只输出 JSON。
 
 核心原则：
 - 剪辑结构表是唯一结构事实；不得新增、删除、重排或改写任何 shot、shotNumbers、durationSec、visualAction、charactersAndScene、camera、sound。
@@ -10,15 +10,15 @@
 - 中文流程中，shots[].videoPrompt 与 videoBlock.prompt 会显示在画布上，字段值必须整体使用中文自然语言；除角色名、专有名词、模型字段名和原文台词外，不要输出英文句子。
 
 风格硬性要求：
-- 用户在 user_request 或 videoPromptBible.userDirectedStyle 中明确要求的风格和限制最高优先级。
-- 若用户没有明确要求，遵守 videoPromptBible.inferredSystemStyle、stylePolicy 和 style_context。
+- 用户在 user_request 或 styleBible.rawUserStyle 中明确要求的风格和限制最高优先级。
+- 若用户没有明确要求，遵守 styleBible.styleSummary 和 styleBible.stylePolicy。
 - 每个 shots[].videoPrompt 必须显式写入可执行风格，不得只写“按 Bible 风格”。
 - 每个 videoBlock.prompt 必须显式写入统一视频风格、画面滤镜、声音滤镜、光线、色彩、镜头节奏、运动风格和画幅。
-- 必须优先使用 videoPromptBible.stylePolicy.visual.positivePrompt 作为正向视觉策略，并把其中的光线、色彩、质感、构图和画面滤镜落实到 shots[].videoPrompt 与 videoBlock.prompt。
-- 必须使用 videoPromptBible.stylePolicy.visual.negativePrompt 作为负向视觉约束，把它转写进 prompt 的“避免/禁止”部分；不要只依赖默认禁用项。
-- 必须使用 videoPromptBible.stylePolicy.visual.imageFilterPrompt；画面滤镜要作为视频提示词的一部分出现。
-- 必须使用 videoPromptBible.stylePolicy.sound.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感，不得改写或替代角色 voiceTimbreText。
-- 必须按需使用 videoPromptBible.stylePolicy.camera、stylePolicy.motion 和 stylePolicy.sound 的字段来控制镜头节奏、运镜、动作、表演和声音。
+- 必须优先使用 styleBible.stylePolicy.visual.positivePrompt 作为正向视觉策略，并把其中的光线、色彩、质感、构图和画面滤镜落实到 shots[].videoPrompt 与 videoBlock.prompt。
+- 必须使用 styleBible.stylePolicy.visual.negativePrompt 作为负向视觉约束，把它转写进 prompt 的“避免/禁止”部分；不要只依赖默认禁用项。
+- 必须使用 styleBible.stylePolicy.visual.imageFilterPrompt；画面滤镜要作为视频提示词的一部分出现。
+- 必须使用 styleBible.stylePolicy.sound.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感，不得改写或替代角色 voiceTimbreText。
+- 必须按需使用 styleBible.stylePolicy.camera、styleBible.stylePolicy.motion 和 styleBible.stylePolicy.sound 的字段来控制镜头节奏、运镜、动作、表演和声音。
 - 如果用户给出导演名、影片名、流派名、年代感或摄影风格参考，最终 prompt 中应写可执行风格特征，而不是只写参考名。
 
 shots[].videoPrompt 写作规则：
@@ -74,8 +74,8 @@ user_request:
 screenplay_text:
 {screenplay_text}
 
-video_prompt_bible_json:
-{video_prompt_bible_json}
+style_bible_json:
+{style_bible_json}
 
 video_block_json:
 {video_block_json}
@@ -91,9 +91,6 @@ adjacent_blocks_json:
 
 aspect_ratio:
 {aspect_ratio}
-
-style_context:
-{style_context}
 
 只返回 JSON，不要 markdown，不要解释。Schema:
 {

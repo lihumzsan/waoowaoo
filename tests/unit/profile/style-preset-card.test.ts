@@ -10,7 +10,6 @@ import {
   splitStylePresetKindSections,
   type StylePresetListItem,
 } from '@/app/[locale]/profile/components/StylePresetsTab'
-import { buildDirectorStyleDoc } from '@/lib/director-style/presets'
 import { buildPromptOnlyVisualStyleConfig } from '@/lib/style-preset/visual-config'
 
 const messages = {
@@ -22,7 +21,6 @@ const messages = {
       sectionCount: '{count} 个',
       kind: {
         visual_style: '画风',
-        director_style: '导演风格',
       },
       source: {
         system: '系统内置',
@@ -85,7 +83,7 @@ describe('StylePresetCard', () => {
     expect(html).toContain('aria-label="删除"')
   })
 
-  it('splits styles into visual and director sections', () => {
+  it('keeps all presets in the visual style section', () => {
     const visualPreset: StylePresetListItem = {
       source: 'user',
       id: 'user-style-1',
@@ -94,18 +92,9 @@ describe('StylePresetCard', () => {
       summary: null,
       config: buildPromptOnlyVisualStyleConfig('提示词'),
     }
-    const directorPreset: StylePresetListItem = {
-      source: 'system',
-      id: 'director-style-1',
-      kind: 'director_style',
-      name: '导演风格',
-      summary: '镜头要求',
-      config: buildDirectorStyleDoc('horror-suspense'),
-    }
 
-    expect(splitStylePresetKindSections([directorPreset, visualPreset])).toEqual({
+    expect(splitStylePresetKindSections([visualPreset])).toEqual({
       visual_style: [visualPreset],
-      director_style: [directorPreset],
     })
   })
 })

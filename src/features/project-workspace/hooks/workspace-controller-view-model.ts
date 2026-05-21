@@ -28,8 +28,6 @@ interface ProjectSnapshotInput {
   artStyle: string | undefined
   visualStylePresetSource: string | undefined
   visualStylePresetId: string | undefined
-  directorStylePresetSource: string | undefined
-  directorStylePresetId: string | undefined
 }
 
 interface BuildWorkspaceControllerViewModelParams {

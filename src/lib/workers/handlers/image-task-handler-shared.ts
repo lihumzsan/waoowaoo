@@ -2,9 +2,6 @@ import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { type TaskJobData } from '@/lib/task/types'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import type { DirectorStyleDoc } from '@/lib/director-style'
-import { parseDirectorStyleDoc } from '@/lib/director-style'
-import { resolveProjectDirectorStyleDoc } from '@/lib/style-preset'
 import {
   findAppearanceForStoryboardReference,
   findCharacterForStoryboardReference,
@@ -55,7 +52,6 @@ interface LocationLike {
 
 interface NovelProjectData {
   videoRatio?: string | null
-  directorStyleDoc?: DirectorStyleDoc | null
   characters?: CharacterLike[]
   locations?: LocationLike[]
 }
@@ -203,7 +199,7 @@ export async function generateCleanImageToStorage(params: {
   return await generateImageToStorage(params)
 }
 
-export async function resolveNovelData(projectId: string, userId?: string) {
+export async function resolveNovelData(projectId: string, _userId?: string) {
   const db = prisma as unknown as ProjectDataDb
   const data = await db.project.findUnique({
     where: { id: projectId },
@@ -218,13 +214,6 @@ export async function resolveNovelData(projectId: string, userId?: string) {
   }
 
   return data
-    ? {
-      ...data,
-      directorStyleDoc: userId
-        ? await resolveProjectDirectorStyleDoc({ projectId, userId })
-        : parseDirectorStyleDoc((data as { directorStyleDoc?: string | null }).directorStyleDoc),
-    }
-    : data
 }
 
 export function parsePanelCharacterReferences(value: string | null | undefined): PanelCharacterReference[] {

@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildPromptOnlyVisualStyleConfig,
   normalizePromptOnlyVisualStyleConfig,
-  parseDirectorStyleConfig,
   parseStylePresetRef,
   parseVisualStyleConfig,
 } from '@/lib/style-preset'
-import { buildDirectorStyleDoc } from '@/lib/director-style'
 
 describe('style preset schema', () => {
   it('validates visual style configs with explicit fields', () => {
@@ -68,12 +66,6 @@ describe('style preset schema', () => {
       composition: '',
       detailLevel: 'medium',
     })).toThrow()
-  })
-
-  it('validates director style configs using the per-stage director field shape', () => {
-    const doc = buildDirectorStyleDoc('horror-suspense')
-
-    expect(parseDirectorStyleConfig(doc).image.prompt).toBe(doc.image.prompt)
   })
 
   it('parses explicit preset refs', () => {

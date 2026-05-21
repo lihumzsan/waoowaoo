@@ -1,6 +1,5 @@
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import type { LocationAvailableSlot } from '@/lib/location-available-slots'
-import type { DirectorStyleDoc } from '@/lib/director-style'
 
 export type ProjectVideoGenerationOptionValue = string | number | boolean
 export type ProjectVideoGenerationOptions = Record<string, ProjectVideoGenerationOptionValue>
@@ -436,9 +435,6 @@ export interface ProjectWorkflowData {
   artStylePrompt: string | null
   visualStylePresetSource: string | null
   visualStylePresetId: string | null
-  directorStylePresetSource: string | null
-  directorStylePresetId: string | null
-  directorStyleDoc: DirectorStyleDoc | null
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null

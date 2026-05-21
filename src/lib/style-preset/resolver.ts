@@ -1,9 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { parseDirectorStyleDoc, type DirectorStyleDoc } from '@/lib/director-style'
 import {
-  buildSystemDirectorStyleConfig,
   buildSystemVisualStyleConfig,
-  isSystemDirectorStylePresetId,
   isSystemVisualStylePresetId,
 } from './system'
 import { isPresetSource, parseStoredStylePresetConfig } from './schema'
@@ -26,11 +23,8 @@ interface StylePresetResolverDb {
   project: {
     findUnique(args: Record<string, unknown>): Promise<{
       artStyle?: string | null
-      directorStylePresetId?: string | null
-      directorStyleDoc?: string | null
       visualStylePresetSource?: string | null
       visualStylePresetId?: string | null
-      directorStylePresetSource?: string | null
     } | null>
   }
 }
@@ -123,54 +117,4 @@ export async function resolveProjectVisualStylePreset(params: {
     presetId,
     locale: params.locale,
   })
-}
-
-export async function resolveDirectorStylePreset(params: {
-  userId: string
-  presetSource: PresetSource
-  presetId: string
-}): Promise<DirectorStyleDoc> {
-  if (params.presetSource === 'system') {
-    if (!isSystemDirectorStylePresetId(params.presetId)) {
-      throw new Error(`DIRECTOR_STYLE_PRESET_INVALID:${params.presetId}`)
-    }
-    return buildSystemDirectorStyleConfig(params.presetId)
-  }
-
-  const preset = await loadUserPreset({
-    userId: params.userId,
-    presetId: params.presetId,
-    kind: 'director_style',
-  })
-  return parseStoredStylePresetConfig('director_style', preset.config) as DirectorStyleDoc
-}
-
-export async function resolveProjectDirectorStyleDoc(params: {
-  projectId: string
-  userId: string
-}): Promise<DirectorStyleDoc | null> {
-  const project = await db.project.findUnique({
-    where: { id: params.projectId },
-    select: {
-      directorStylePresetSource: true,
-      directorStylePresetId: true,
-      directorStyleDoc: true,
-    },
-  })
-  if (!project) throw new Error('Project not found')
-
-  const sourceValue = project.directorStylePresetSource
-  const presetId = typeof project.directorStylePresetId === 'string' ? project.directorStylePresetId.trim() : ''
-  if ((sourceValue !== null && sourceValue !== undefined) || presetId) {
-    const source = normalizeSource(sourceValue)
-    if (!source) throw new Error(`DIRECTOR_STYLE_PRESET_SOURCE_INVALID:${String(sourceValue)}`)
-    if (!presetId) throw new Error('DIRECTOR_STYLE_PRESET_ID_MISSING')
-    return resolveDirectorStylePreset({
-      userId: params.userId,
-      presetSource: source,
-      presetId,
-    })
-  }
-
-  return parseDirectorStyleDoc(project.directorStyleDoc)
 }

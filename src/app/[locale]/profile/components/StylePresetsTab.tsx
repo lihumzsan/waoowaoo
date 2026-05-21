@@ -4,11 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { GlassModalShell } from '@/components/ui/primitives'
-import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { apiFetch } from '@/lib/api-fetch'
 import { ART_STYLES, getArtStylePrompt } from '@/lib/constants'
-import { STYLE_PRESETS } from '@/lib/style-presets'
-import { buildDirectorStyleDoc, isDirectorStylePresetId } from '@/lib/director-style/presets'
 import { buildPromptOnlyVisualStyleConfig, normalizePromptOnlyVisualStyleConfig } from '@/lib/style-preset/visual-config'
 import StylePresetEditor from './StylePresetEditor'
 import {
@@ -18,14 +15,12 @@ import {
   type DraftState,
 } from './stylePresetEditorState'
 import type {
-  DirectorStyleConfig,
   PresetSource,
   StylePresetKind,
   StylePresetView,
   VisualStyleConfig,
 } from '@/lib/style-preset/types'
 
-type PresetFilter = 'all' | StylePresetKind
 type EditorMode = 'create' | 'edit-user' | 'view-system'
 
 export type StylePresetListItem = {
@@ -34,42 +29,25 @@ export type StylePresetListItem = {
   kind: StylePresetKind
   name: string
   summary: string | null
-  config: VisualStyleConfig | DirectorStyleConfig
+  config: VisualStyleConfig
 }
 
 export type StylePresetKindSections = Record<StylePresetKind, StylePresetListItem[]>
 
 export function splitStylePresetKindSections(presets: StylePresetListItem[]): StylePresetKindSections {
   return {
-    visual_style: presets.filter((preset) => preset.kind === 'visual_style'),
-    director_style: presets.filter((preset) => preset.kind === 'director_style'),
+    visual_style: presets,
   }
 }
-
-const STYLE_PRESET_SECTION_ORDER: StylePresetKind[] = ['visual_style', 'director_style']
 
 function buildSystemVisualConfig(presetId: string, locale: string): VisualStyleConfig {
   return buildPromptOnlyVisualStyleConfig(getArtStylePrompt(presetId, locale === 'en' ? 'en' : 'zh'))
-}
-
-function hasTextValue(value: unknown): boolean {
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.some((item) => hasTextValue(item))
-  if (value && typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).some((item) => hasTextValue(item))
-  }
-  return false
-}
-
-function hasDirectorStyleContent(config: DirectorStyleConfig): boolean {
-  return hasTextValue(config)
 }
 
 export default function StylePresetsTab() {
   const t = useTranslations('profile.stylePresets')
   const tc = useTranslations('common')
   const locale = useLocale()
-  const [activeKind, setActiveKind] = useState<PresetFilter>('all')
   const [presets, setPresets] = useState<StylePresetView[]>([])
   const [draft, setDraft] = useState<DraftState>(() => buildDraft('visual_style'))
   const [editorMode, setEditorMode] = useState<EditorMode>('create')
@@ -79,8 +57,8 @@ export default function StylePresetsTab() {
   const [designing, setDesigning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const systemPresets = useMemo<StylePresetListItem[]>(() => {
-    const visualPresets = ART_STYLES.map((style) => ({
+  const systemPresets = useMemo<StylePresetListItem[]>(() => (
+    ART_STYLES.map((style) => ({
       source: 'system' as const,
       id: style.value,
       kind: 'visual_style' as const,
@@ -88,21 +66,7 @@ export default function StylePresetsTab() {
       summary: getArtStylePrompt(style.value, locale === 'en' ? 'en' : 'zh'),
       config: buildSystemVisualConfig(style.value, locale),
     }))
-    const directorPresets = STYLE_PRESETS
-      .filter((preset) => preset.value)
-      .flatMap((preset) => {
-        if (!isDirectorStylePresetId(preset.value)) return []
-        return [{
-          source: 'system' as const,
-          id: preset.value,
-          kind: 'director_style' as const,
-          name: preset.label,
-          summary: preset.description,
-          config: buildDirectorStyleDoc(preset.value),
-        }]
-      })
-    return [...visualPresets, ...directorPresets]
-  }, [locale])
+  ), [locale])
 
   const listItems = useMemo<StylePresetListItem[]>(() => [
     ...systemPresets,
@@ -116,25 +80,10 @@ export default function StylePresetsTab() {
     })),
   ], [presets, systemPresets])
 
-  const filteredPresets = useMemo(
-    () => activeKind === 'all' ? listItems : listItems.filter((preset) => preset.kind === activeKind),
-    [activeKind, listItems],
-  )
-  const filterOptions = useMemo(
-    () => [
-      { value: 'all' as const, label: t('filters.all') },
-      { value: 'visual_style' as const, label: t('kind.visual_style') },
-      { value: 'director_style' as const, label: t('kind.director_style') },
-    ],
-    [t],
-  )
   const canSaveDraft = useMemo(() => {
     if (!draft.name.trim()) return false
-    if (draft.kind === 'visual_style') {
-      const config = normalizePromptOnlyVisualStyleConfig(draft.config as VisualStyleConfig)
-      return config.prompt.trim().length > 0
-    }
-    return hasDirectorStyleContent(draft.config as DirectorStyleConfig)
+    const config = normalizePromptOnlyVisualStyleConfig(draft.config)
+    return config.prompt.trim().length > 0
   }, [draft])
 
   const loadPresets = useCallback(async () => {
@@ -156,13 +105,8 @@ export default function StylePresetsTab() {
     void loadPresets()
   }, [loadPresets])
 
-  const switchKind = (kind: StylePresetKind) => {
-    setDraft(buildDraft(kind))
-    setError(null)
-  }
-
-  const createPreset = (kind: StylePresetKind = 'visual_style') => {
-    setDraft(buildDraft(kind))
+  const createPreset = () => {
+    setDraft(buildDraft('visual_style'))
     setEditorMode('create')
     setError(null)
     setEditorOpen(true)
@@ -175,9 +119,7 @@ export default function StylePresetsTab() {
       name: preset.name,
       summary: preset.summary ?? '',
       instruction: '',
-      config: preset.kind === 'visual_style'
-        ? normalizePromptOnlyVisualStyleConfig(preset.config as VisualStyleConfig)
-        : preset.config,
+      config: normalizePromptOnlyVisualStyleConfig(preset.config),
     })
     setEditorMode(preset.source === 'user' ? 'edit-user' : 'view-system')
     setError(null)
@@ -193,7 +135,7 @@ export default function StylePresetsTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          kind: draft.kind,
+          kind: 'visual_style',
           instruction: draft.instruction,
           locale,
         }),
@@ -207,9 +149,7 @@ export default function StylePresetsTab() {
         kind: designed.kind,
         name: designed.name,
         summary: designed.summary,
-        config: designed.kind === 'visual_style'
-          ? normalizePromptOnlyVisualStyleConfig(designed.config as VisualStyleConfig)
-          : designed.config,
+        config: normalizePromptOnlyVisualStyleConfig(designed.config),
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('designFailed'))
@@ -221,24 +161,17 @@ export default function StylePresetsTab() {
   const savePreset = async () => {
     if (saving) return
     if (!draft.name.trim()) return
-    if (draft.kind === 'visual_style') {
-      const config = normalizePromptOnlyVisualStyleConfig(draft.config as VisualStyleConfig)
-      if (!config.prompt.trim()) return
-    }
-    if (draft.kind === 'director_style' && !hasDirectorStyleContent(draft.config as DirectorStyleConfig)) {
-      setError(t('directorDesignRequired'))
-      return
-    }
+    const config = normalizePromptOnlyVisualStyleConfig(draft.config)
+    if (!config.prompt.trim()) return
+
     setSaving(true)
     setError(null)
     try {
       const payload = {
-        kind: draft.kind,
+        kind: 'visual_style' as const,
         name: draft.name,
         summary: draft.summary.trim() ? draft.summary : null,
-        config: draft.kind === 'visual_style'
-          ? normalizePromptOnlyVisualStyleConfig(draft.config as VisualStyleConfig)
-          : draft.config,
+        config,
       }
       const body = draft.id
         ? {
@@ -281,16 +214,13 @@ export default function StylePresetsTab() {
   }
 
   const updateVisualConfig = (patch: Partial<VisualStyleConfig>) => {
-    setDraft((current) => {
-      if (current.kind !== 'visual_style') return current
-      return {
-        ...current,
-        config: {
-          ...(current.config as VisualStyleConfig),
-          ...patch,
-        },
-      }
-    })
+    setDraft((current) => ({
+      ...current,
+      config: {
+        ...current.config,
+        ...patch,
+      },
+    }))
   }
 
   return (
@@ -301,18 +231,10 @@ export default function StylePresetsTab() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6 app-scrollbar">
-        <div className="mb-7 flex items-center justify-between gap-4">
-          <SegmentedControl
-            options={filterOptions}
-            value={activeKind}
-            onChange={setActiveKind}
-            layout="compact"
-            className="min-w-max"
-          />
-
+        <div className="mb-7 flex items-center justify-end gap-4">
           <button
             type="button"
-            onClick={() => createPreset(activeKind === 'director_style' ? 'director_style' : 'visual_style')}
+            onClick={createPreset}
             className="glass-btn-base glass-btn-primary flex items-center gap-2 px-4 py-2 text-sm font-semibold"
             aria-label={t('newPreset')}
             title={t('newPreset')}
@@ -329,7 +251,7 @@ export default function StylePresetsTab() {
         ) : null}
         <PresetList
           loading={loading}
-          presets={filteredPresets}
+          presets={listItems}
           onOpen={openPreset}
           onCreate={createPreset}
           onDelete={deletePreset}
@@ -345,39 +267,55 @@ export default function StylePresetsTab() {
         showDividers={false}
         footer={
           <div className="flex items-center justify-end gap-3">
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setEditorOpen(false)}
+              className="glass-btn-base glass-btn-secondary px-4 py-2 text-sm"
+            >
+              {tc('cancel')}
+            </button>
+            {editorMode !== 'view-system' ? (
               <button
                 type="button"
-                onClick={() => setEditorOpen(false)}
-                className="glass-btn-base glass-btn-secondary px-4 py-2 text-sm"
+                onClick={() => void savePreset()}
+                disabled={!canSaveDraft || saving}
+                className="glass-btn-base glass-btn-primary px-5 py-2 text-sm disabled:opacity-50"
               >
-                {tc('cancel')}
+                {saving ? t('saving') : t('save')}
               </button>
-              {editorMode !== 'view-system' ? (
-                <button
-                  type="button"
-                  onClick={() => void savePreset()}
-                  disabled={!canSaveDraft || saving}
-                  className="glass-btn-base glass-btn-primary px-5 py-2 text-sm disabled:opacity-50"
-                >
-                  {saving ? t('saving') : t('save')}
-                </button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         }
       >
         <StylePresetEditor
           draft={draft}
           error={error}
-          designing={designing}
           readOnly={editorMode === 'view-system'}
-          onKindChange={switchKind}
           onNameChange={(value) => setDraft((current) => ({ ...current, name: value }))}
-          onInstructionChange={(value) => setDraft((current) => ({ ...current, instruction: value }))}
-          onDesign={() => void designPreset()}
           onVisualConfigChange={updateVisualConfig}
         />
+        {editorMode !== 'view-system' ? (
+          <div className="mt-4 grid gap-2">
+            <label className="grid gap-1.5">
+              <span className="font-medium text-[var(--glass-text-secondary)]">{t('fields.instruction')}</span>
+              <textarea
+                value={draft.instruction}
+                onChange={(event) => setDraft((current) => ({ ...current, instruction: event.target.value }))}
+                rows={4}
+                className="glass-input-base resize-none px-3 py-2 text-sm leading-relaxed text-[var(--glass-text-primary)] app-scrollbar"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void designPreset()}
+              disabled={!draft.instruction.trim() || designing}
+              className="glass-btn-base glass-btn-primary h-10 w-fit px-4 text-sm disabled:opacity-50"
+            >
+              <AppIcon name="sparkles" className="h-4 w-4" />
+              {designing ? t('designing') : t('design')}
+            </button>
+          </div>
+        ) : null}
       </GlassModalShell>
     </div>
   )
@@ -393,18 +331,18 @@ function PresetList({
   loading: boolean
   presets: StylePresetListItem[]
   onOpen: (preset: StylePresetListItem) => void
-  onCreate: (kind?: StylePresetKind) => void
+  onCreate: () => void
   onDelete: (presetId: string) => Promise<void>
 }) {
   const t = useTranslations('profile.stylePresets')
   const sections = splitStylePresetKindSections(presets)
-  const visibleSectionKinds = STYLE_PRESET_SECTION_ORDER.filter((kind) => sections[kind].length > 0)
+  const visiblePresets = sections.visual_style
 
   return (
     <div>
       {loading ? (
         <div className="flex h-48 items-center justify-center text-sm text-[var(--glass-text-tertiary)]">{t('loading')}</div>
-      ) : presets.length === 0 ? (
+      ) : visiblePresets.length === 0 ? (
         <div className="glass-surface glass-card-shadow-soft flex min-h-[240px] flex-col items-center justify-center rounded-2xl p-8 text-center">
           <span className="glass-surface-soft mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl text-[var(--glass-text-secondary)]">
             <AppIcon name="sparkles" className="h-6 w-6" />
@@ -413,7 +351,7 @@ function PresetList({
           <p className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--glass-text-tertiary)]">{t('emptyDescription')}</p>
           <button
             type="button"
-            onClick={() => onCreate()}
+            onClick={onCreate}
             className="glass-btn-base glass-btn-primary mt-4 flex items-center gap-2 px-3 py-2 text-sm"
           >
             <AppIcon name="plus" className="h-4 w-4" />
@@ -421,18 +359,13 @@ function PresetList({
           </button>
         </div>
       ) : (
-        <div className="space-y-7">
-          {visibleSectionKinds.map((kind) => (
-            <StylePresetSection
-              key={kind}
-              title={t(`kind.${kind}`)}
-              count={sections[kind].length}
-              presets={sections[kind]}
-              onOpen={onOpen}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
+        <StylePresetSection
+          title={t('kind.visual_style')}
+          count={visiblePresets.length}
+          presets={visiblePresets}
+          onOpen={onOpen}
+          onDelete={onDelete}
+        />
       )}
     </div>
   )
@@ -494,12 +427,12 @@ export function StylePresetCard({
         className="flex min-w-0 flex-1 items-start gap-4 pr-20 text-left"
       >
         <span className="glass-surface-soft mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--glass-text-secondary)]">
-          <AppIcon name={preset.kind === 'visual_style' ? 'image' : 'video'} className="h-5 w-5" />
+          <AppIcon name="image" className="h-5 w-5" />
         </span>
         <div className="min-w-0">
           <div className="truncate text-base font-bold text-[var(--glass-text-primary)]">{preset.name}</div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm font-medium text-[var(--glass-text-tertiary)]">
-            <span>{t(`kind.${preset.kind}`)}</span>
+            <span>{t('kind.visual_style')}</span>
             <span className="h-1 w-1 rounded-full bg-[var(--glass-text-tertiary)] opacity-50" />
             <span className="rounded-full bg-[var(--glass-bg-muted)] px-2.5 py-1 text-xs font-semibold text-[var(--glass-text-secondary)]">
               {preset.source === 'system' ? t('source.system') : t('source.user')}
@@ -524,7 +457,7 @@ export function StylePresetCard({
           <button
             type="button"
             onClick={() => void onDelete(preset.id)}
-            className="glass-btn-base glass-btn-soft inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--glass-text-tertiary)] transition-colors hover:text-[var(--glass-tone-danger-fg)]"
+            className="glass-btn-base glass-btn-soft inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--glass-text-tertiary)] transition-colors hover:text-red-400"
             aria-label={t('delete')}
             title={t('delete')}
           >

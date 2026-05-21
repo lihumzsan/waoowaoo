@@ -23,8 +23,8 @@ Asset context JSON:
 {{asset_context_json}}
 
 Aspect ratio: {{aspect_ratio}}
-Style context:
-{{style_context}}
+Style Bible, the only style source:
+{{style_bible_json}}
 
 Output format:
 {

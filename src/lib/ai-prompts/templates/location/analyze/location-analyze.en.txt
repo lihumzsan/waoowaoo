@@ -1,9 +1,6 @@
 You are a location asset extraction specialist.
 Extract locations that need dedicated background assets.
 
-Director style requirements:
-{style_requirements}
-
 Input text:
 {input}
 

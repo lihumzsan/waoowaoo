@@ -3,10 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { ApiError } from '@/lib/api-errors'
 import { isArtStyleValue } from '@/lib/constants'
-import { resolveDirectorStyleFieldsFromPreset } from '@/lib/director-style'
 import {
   parseStylePresetRef,
-  resolveDirectorStylePreset,
   resolveVisualStylePreset,
 } from '@/lib/style-preset'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
@@ -252,12 +250,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           presetSource: z.enum(['system', 'user']),
           presetId: z.string(),
         }),
-        directorStylePresetId: z.string().nullable(),
-        directorStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }).nullable(),
-        directorStyleDoc: z.string().nullable(),
       }),
       execute: async (ctx) => {
         const projectData = await prisma.project.findUnique({
@@ -267,9 +259,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             artStyle: true,
             visualStylePresetSource: true,
             visualStylePresetId: true,
-            directorStylePresetId: true,
-            directorStylePresetSource: true,
-            directorStyleDoc: true,
             analysisModel: true,
             characterModel: true,
             locationModel: true,
@@ -301,22 +290,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             field: 'visualStylePresetId',
           })
         }
-        const hasDirectorStylePreset = Boolean(projectData.directorStylePresetSource || projectData.directorStylePresetId)
-        if (hasDirectorStylePreset) {
-          if (projectData.directorStylePresetSource !== 'system' && projectData.directorStylePresetSource !== 'user') {
-            throw new ApiError('INTERNAL_ERROR', {
-              code: 'DIRECTOR_STYLE_PRESET_SOURCE_INVALID',
-              field: 'directorStylePresetSource',
-            })
-          }
-          if (!projectData.directorStylePresetId?.trim()) {
-            throw new ApiError('INTERNAL_ERROR', {
-              code: 'DIRECTOR_STYLE_PRESET_ID_MISSING',
-              field: 'directorStylePresetId',
-            })
-          }
-        }
-
         const storedOverrides = parseStoredCapabilitySelections(projectData.capabilityOverrides)
         const modelContextMap = getNextProjectModelMap({
           analysisModel: projectData.analysisModel,
@@ -338,14 +311,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             presetSource: projectData.visualStylePresetSource,
             presetId: visualStylePresetId,
           },
-          directorStylePresetId: projectData.directorStylePresetId ?? null,
-          directorStylePreset: hasDirectorStylePreset
-            ? {
-                presetSource: projectData.directorStylePresetSource,
-                presetId: projectData.directorStylePresetId?.trim() ?? '',
-              }
-            : null,
-          directorStyleDoc: projectData.directorStyleDoc ?? null,
         }
       },
     },
@@ -381,11 +346,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           presetSource: z.enum(['system', 'user']),
           presetId: z.string(),
         }).optional(),
-        directorStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }).nullable().optional(),
-        directorStylePresetId: z.string().nullable().optional(),
         capabilityOverrides: z.unknown().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -418,8 +378,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           'videoRatio',
           'artStyle',
           'visualStylePreset',
-          'directorStylePreset',
-          'directorStylePresetId',
           'capabilityOverrides',
         ] as const
 
@@ -463,56 +421,12 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             continue
           }
 
-          if (field === 'directorStylePreset') {
-            if (body.directorStylePreset === null) {
-              updateData.directorStylePresetSource = null
-              updateData.directorStylePresetId = null
-              updateData.directorStyleDoc = null
-              continue
-            }
-            let ref: ReturnType<typeof parseStylePresetRef>
-            try {
-              ref = parseStylePresetRef(body.directorStylePreset)
-              const doc = await resolveDirectorStylePreset({
-                userId: ctx.userId,
-                presetSource: ref.presetSource,
-                presetId: ref.presetId,
-              })
-              updateData.directorStyleDoc = ref.presetSource === 'system' ? JSON.stringify(doc) : null
-            } catch {
-              throw new ApiError('INVALID_PARAMS', {
-                code: 'INVALID_DIRECTOR_STYLE_PRESET',
-                field: 'directorStylePreset',
-                message: 'directorStylePreset must reference a supported preset',
-              })
-            }
-            updateData.directorStylePresetSource = ref.presetSource
-            updateData.directorStylePresetId = ref.presetId
-            continue
-          }
-
           if (field === 'capabilityOverrides') {
             const overrides = normalizeCapabilitySelectionsInput(body.capabilityOverrides)
             const modelContextMap = getNextProjectModelMap(currentProjectConfig, body)
             const cleanedOverrides = sanitizeCapabilityOverrides(overrides, modelContextMap)
             validateCapabilityOverrides(cleanedOverrides, modelContextMap)
             updateData.capabilityOverrides = serializeCapabilitySelections(cleanedOverrides)
-            continue
-          }
-
-          if (field === 'directorStylePresetId') {
-            try {
-              const styleFields = resolveDirectorStyleFieldsFromPreset(body.directorStylePresetId)
-              updateData.directorStylePresetId = styleFields.directorStylePresetId
-              updateData.directorStylePresetSource = styleFields.directorStylePresetId ? 'system' : null
-              updateData.directorStyleDoc = styleFields.directorStyleDoc
-            } catch {
-              throw new ApiError('INVALID_PARAMS', {
-                code: 'INVALID_DIRECTOR_STYLE_PRESET',
-                field: 'directorStylePresetId',
-                message: 'directorStylePresetId must be a supported value',
-              })
-            }
             continue
           }
 

@@ -219,7 +219,6 @@ describe('worker video processor behavior', () => {
       analysisModel: 'openai::gpt-4.1',
       videoRatio: '9:16',
       artStyle: 'cinematic',
-      directorStyleDoc: null,
     })
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
       shotsJson: [

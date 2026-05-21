@@ -151,7 +151,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
   return {
     generate_edit_screenplay: defineOperation({
       id: 'generate_edit_screenplay',
-      summary: 'Generate the editable screenplay artifact for edit-first production from the current project request and configured project style context.',
+      summary: 'Generate the editable screenplay artifact and persisted Style Bible for edit-first production from the current project request.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -161,7 +161,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       },
       inputSchema: generateEditScreenplayInputSchema,
       outputSchema: editScreenplayOutputSchema,
-      execute: async (ctx, input: GenerateEditScreenplayInput) => generateProjectEditScreenplay({
+      execute: async (ctx, input: GenerateEditScreenplayInput) => editScreenplayOutputSchema.parse(await generateProjectEditScreenplay({
         request: ctx.request,
         projectId: ctx.projectId,
         userId: ctx.userId,
@@ -169,11 +169,11 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         locale: resolveLocale(ctx.context.locale),
         prompt: input.prompt,
         ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-      }),
+      })),
     }),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
-      summary: 'Generate the edit-first core table from an existing ready screenplay and the configured project style context. Fails if no ready screenplay exists.',
+      summary: 'Generate the edit-first core table from an existing ready screenplay and its persisted Style Bible. Fails if no ready screenplay exists.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,

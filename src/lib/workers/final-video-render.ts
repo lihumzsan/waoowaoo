@@ -242,9 +242,6 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
           artStylePrompt: true,
           visualStylePresetSource: true,
           visualStylePresetId: true,
-          directorStylePresetSource: true,
-          directorStylePresetId: true,
-          directorStyleDoc: true,
         },
       }),
       prisma.projectEpisode.findFirst({

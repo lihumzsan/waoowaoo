@@ -1,19 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, type CompositionEvent, type ReactNode } from 'react'
-import { RatioSelector, StylePresetSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
+import { RatioSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
 import { resolveTextareaTargetHeight } from '@/lib/ui/textarea-height'
 
 interface StoryInputComposerOption {
   value: string
   label: string
   recommended?: boolean
-}
-
-interface StoryInputComposerStylePresetOption {
-  value: string
-  label: string
-  description: string
 }
 
 interface StoryInputComposerProps {
@@ -35,9 +29,6 @@ interface StoryInputComposerProps {
   artStyle: string
   onArtStyleChange: (value: string) => void
   styleOptions: StoryInputComposerOption[]
-  stylePresetValue: string
-  onStylePresetChange: (value: string) => void
-  stylePresetOptions: readonly StoryInputComposerStylePresetOption[]
   onCompositionStart?: () => void
   onCompositionEnd?: (event: CompositionEvent<HTMLTextAreaElement>) => void
   textareaClassName?: string
@@ -65,9 +56,6 @@ export default function StoryInputComposer({
   artStyle,
   onArtStyleChange,
   styleOptions,
-  stylePresetValue,
-  onStylePresetChange,
-  stylePresetOptions,
   onCompositionStart,
   onCompositionEnd,
   textareaClassName,
@@ -174,15 +162,6 @@ export default function StoryInputComposer({
               options={styleOptions}
             />
           </div>
-          {stylePresetOptions.length > 0 ? (
-            <div className="w-[152px] flex-shrink-0">
-              <StylePresetSelector
-                value={stylePresetValue}
-                onChange={onStylePresetChange}
-                options={stylePresetOptions}
-              />
-            </div>
-          ) : null}
         </div>
         <div className="ml-auto flex min-w-max items-center gap-2">
           {secondaryActions}

@@ -14,6 +14,7 @@ export interface EditScreenplayPayload {
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
+  readonly styleBible: EditScriptStyleBible
   readonly screenplayText: string
   readonly status: string
 }
@@ -54,6 +55,7 @@ export interface EditScriptPayload {
   readonly projectId?: string
   readonly episodeId?: string
   readonly userPrompt?: string
+  readonly styleBible: EditScriptStyleBible
   readonly screenplayText?: string | null
   readonly title: string
   readonly logline?: string | null
@@ -117,49 +119,47 @@ export const editScriptVideoPromptSchema = z.object({
   })).min(1).max(60),
 })
 
-export const editScriptVideoPromptBibleSchema = z.object({
-  videoPromptBible: z.object({
-    strategy: z.literal('video_prompt_bible'),
-    storyPremise: z.string().trim().min(1),
-    userDirectedStyle: z.string().trim().nullable(),
-    inferredSystemStyle: z.string().trim().min(1),
-    stylePolicy: z.object({
-      rawUserStyle: z.string().trim().nullable(),
-      styleSummary: z.string().trim().min(1),
-      visual: z.object({
-        positivePrompt: z.string().trim().min(1),
-        negativePrompt: z.string().trim().min(1),
-        imageFilterPrompt: z.string().trim().min(1),
-        lightingPrompt: z.string().trim().min(1),
-        colorPrompt: z.string().trim().min(1),
-        texturePrompt: z.string().trim().min(1),
-        compositionPrompt: z.string().trim().min(1),
-      }),
-      camera: z.object({
-        rhythmPrompt: z.string().trim().min(1),
-        movementPrompt: z.string().trim().min(1),
-        lensAndDepthPrompt: z.string().trim().min(1),
-        editingPacingPrompt: z.string().trim().min(1),
-      }),
-      motion: z.object({
-        subjectMotionPrompt: z.string().trim().min(1),
-        actingPrompt: z.string().trim().min(1),
-      }),
-      sound: z.object({
-        positivePrompt: z.string().trim().min(1),
-        negativePrompt: z.string().trim().min(1),
-        soundFilterPrompt: z.string().trim().min(1),
-        soundStylePrompt: z.string().trim().min(1),
-      }),
-      hardBans: z.array(z.string().trim().min(1)).min(1),
-    }),
-    characterContinuityRules: z.array(z.string().trim().min(1)),
-    locationContinuityRules: z.array(z.string().trim().min(1)),
-    soundRules: z.array(z.string().trim().min(1)),
-    videoModelRules: z.array(z.string().trim().min(1)),
-    blockContinuityRules: z.array(z.string().trim().min(1)),
+export const editScriptStylePolicySchema = z.object({
+  rawUserStyle: z.string().trim().nullable(),
+  styleSummary: z.string().trim().min(1),
+  visual: z.object({
+    positivePrompt: z.string().trim().min(1),
+    negativePrompt: z.string().trim().min(1),
+    imageFilterPrompt: z.string().trim().min(1),
+    lightingPrompt: z.string().trim().min(1),
+    colorPrompt: z.string().trim().min(1),
+    texturePrompt: z.string().trim().min(1),
+    compositionPrompt: z.string().trim().min(1),
+  }),
+  camera: z.object({
+    rhythmPrompt: z.string().trim().min(1),
+    movementPrompt: z.string().trim().min(1),
+    lensAndDepthPrompt: z.string().trim().min(1),
+    editingPacingPrompt: z.string().trim().min(1),
+  }),
+  motion: z.object({
+    subjectMotionPrompt: z.string().trim().min(1),
+    actingPrompt: z.string().trim().min(1),
+  }),
+  sound: z.object({
+    positivePrompt: z.string().trim().min(1),
+    negativePrompt: z.string().trim().min(1),
+    soundFilterPrompt: z.string().trim().min(1),
+    soundStylePrompt: z.string().trim().min(1),
+  }),
+  hardBans: z.array(z.string().trim().min(1)).min(1),
+})
+
+export const editScriptStyleBibleSchema = z.object({
+  styleBible: z.object({
+    strategy: z.literal('style_bible'),
+    rawUserStyle: z.string().trim().nullable(),
+    styleSummary: z.string().trim().min(1),
+    stylePolicy: editScriptStylePolicySchema,
   }).passthrough(),
 })
+
+export type EditScriptStyleBible = z.infer<typeof editScriptStyleBibleSchema>['styleBible']
 
 export const editScriptVideoPromptBlockSchema = z.object({
   sourceVideoBlockIndex: z.number().int().min(0).max(59),
@@ -189,7 +189,6 @@ export const editScriptVideoBlockArrangementSchema = z.object({
   })).min(1).max(60),
 })
 
-export type EditScriptVideoPromptBibleOutput = z.infer<typeof editScriptVideoPromptBibleSchema>
 export type EditScriptVideoPromptBlockOutput = z.infer<typeof editScriptVideoPromptBlockSchema>
 export type EditScriptVideoBlockMergeOutput = z.infer<typeof editScriptVideoBlockMergeSchema>
 export type EditScriptVideoBlockArrangementOutput = z.infer<typeof editScriptVideoBlockArrangementSchema>
