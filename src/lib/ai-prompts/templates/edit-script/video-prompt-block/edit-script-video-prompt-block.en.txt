@@ -10,14 +10,14 @@ Core principles:
 
 Hard style requirements:
 - Explicit style and constraints in user_request or videoPromptBible.userDirectedStyle have the highest priority.
-- If the user did not specify a style, obey videoPromptBible.inferredSystemStyle, styleReferenceInterpretation, and style_context.
+- If the user did not specify a style, obey videoPromptBible.inferredSystemStyle, stylePolicy, and style_context.
 - Every shots[].videoPrompt must explicitly include executable style language. Do not only write "follow the Bible style".
 - Every videoBlock.prompt must explicitly include unified video style, image filter, sound filter, lighting, color, camera rhythm, motion style, and aspect ratio.
-- You must prioritize videoPromptBible.visualPromptPolicy.positivePrompt as the positive visual strategy and concretely apply its lighting, color, texture, composition, and image filter inside shots[].videoPrompt and videoBlock.prompt.
-- You must use videoPromptBible.visualPromptPolicy.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
-- You must use videoPromptBible.styleReferenceInterpretation.imageFilterPrompt; the image filter must appear as part of the video prompt.
-- You must use videoPromptBible.styleReferenceInterpretation.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture without rewriting or replacing character voiceTimbreText.
-- If visualPromptPolicy.imageFilterPrompt and styleReferenceInterpretation.imageFilterPrompt differ slightly, use visualPromptPolicy.imageFilterPrompt as the final model-facing image/video wording while preserving the same meaning.
+- You must prioritize videoPromptBible.stylePolicy.visual.positivePrompt as the positive visual strategy and concretely apply its lighting, color, texture, composition, and image filter inside shots[].videoPrompt and videoBlock.prompt.
+- You must use videoPromptBible.stylePolicy.visual.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
+- You must use videoPromptBible.stylePolicy.visual.imageFilterPrompt; the image filter must appear as part of the video prompt.
+- You must use videoPromptBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture without rewriting or replacing character voiceTimbreText.
+- Reuse videoPromptBible.stylePolicy.camera, stylePolicy.motion, and stylePolicy.sound as needed to control camera rhythm, movement, action, acting, and sound.
 - If the user gives a director name, film title, genre label, period feeling, or cinematography reference, write executable traits in the final prompt rather than only the reference name.
 
 shots[].videoPrompt writing rules:

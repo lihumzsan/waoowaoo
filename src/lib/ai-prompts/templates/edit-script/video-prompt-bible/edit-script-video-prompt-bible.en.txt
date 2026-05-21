@@ -5,24 +5,23 @@ Highest priority:
 2. If the user does not specify them, infer the best unified style from the screenplay, editScript, asset descriptions, and style_context.
 3. Do not introduce new styles, characters, locations, or story events that the user did not request and the story does not require.
 
+Style policy:
+- Output exactly one stylePolicy. Do not output styleReferenceInterpretation or visualPromptPolicy.
+- stylePolicy.rawUserStyle records the raw user style; null if none.
+- stylePolicy.styleSummary summarizes the whole-film unified style in one sentence.
+- stylePolicy.visual is reused by asset images, storyboard images, and video prompts. It controls positive visual prompt, negative visual prompt, image filter, lighting, color, texture, and composition.
+- stylePolicy.camera is reused by storyboard images and video prompts. It controls camera rhythm, movement, lens/depth, and editing pace.
+- stylePolicy.motion is reused by video prompts. It controls subject motion and acting.
+- stylePolicy.sound is reused by video prompts. It controls positive sound strategy, negative sound strategy, sound filter, and sound style.
+- stylePolicy.hardBans contains whole-chain hard bans, including text, subtitles, watermarks, logos, and strong style conflicts.
+
 Style conversion standard:
 - Do not merely keep user-provided director names, film titles, genre labels, or period labels; convert them into executable video-model dimensions.
-- If the user gives a director, film, genre, or period reference, extract executable traits and write them into styleReferenceInterpretation.
+- If the user gives a director, film, genre, or period reference, extract executable traits and write them into the visual/camera/motion/sound groups inside stylePolicy.
 - Do not ask the model to imitate a living artist/person. Convert the reference into camera rhythm, composition, lighting, color, filter texture, movement speed, sound, and editing pace.
-- The image filter must be written separately in imageFilterPrompt as a short phrase that can be directly inserted into video prompts, such as: soft-focus lens, blooming highlights, low contrast, vintage 1990s film texture, clear colors, dreamy softness, 35mm lens.
-- The sound filter must be written separately in soundFilterPrompt as one concise phrase that can be inserted directly into the style section of video prompts; infer it from the user request, screenplay genre, period feeling, genre tone, and story emotion, describe the whole-film sound texture, and never override character voiceTimbreText.
-- soundFilterPrompt may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
+- visual.imageFilterPrompt must be a phrase that can be directly inserted into image/video prompts, such as: soft-focus lens, blooming highlights, low contrast, vintage 1990s film texture, clear colors, dreamy softness, 35mm lens.
+- sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must never override character voiceTimbreText; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
 - Excellent soundFilterPrompt examples: narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss; clean modern sound, wide-band clarity, stable low end, restrained spatial reverb; handheld documentary sound, strong location presence, natural dynamics, lightly unpolished ambience; fairy-tale animation sound, bright clear texture, rounded transients, light short tones without harshness.
-
-Visual prompt policy:
-- You must output visualPromptPolicy as the reusable visual strategy for later asset images, storyboard images, and video prompts.
-- positivePrompt is the complete positive visual prompt: combine visual tone, lighting, color, texture, composition, and image filter into one natural-language sentence that can be directly inserted into image/video model prompts.
-- negativePrompt is the complete negative visual prompt: explicitly suppress unwanted style, lighting, color, texture, composition, text, watermarks, logos, low-quality artifacts, and tendencies that conflict with the requested style.
-- imageFilterPrompt is the concise image filter and must match styleReferenceInterpretation.imageFilterPrompt semantically.
-- lightingPrompt controls only light source, contrast ratio, direction, natural/artificial light, and exposure tendency.
-- colorPrompt controls only palette, saturation, temperature, dominant colors, and banned color tendencies.
-- texturePrompt controls only material, grain, skin/fabric/wall/air/film texture; do not write story action here.
-- compositionPrompt controls only composition, negative space, subject placement, foreground/midground/background, spatial depth, and camera distance.
 
 Purpose of this Bible:
 - Keep all parallel videoBlocks consistent in video style, image filter, character identity, location continuity, sound rules, and video-model constraints.
@@ -34,111 +33,141 @@ Must include:
 - storyPremise: core narrative of this episode.
 - userDirectedStyle: explicit user style or requirements; null if none.
 - inferredSystemStyle: style inferred from project/director/story when the user did not specify it.
-- styleReferenceInterpretation: standardized style-conversion layer.
-- visualPromptPolicy: positive/negative visual prompt policy plus lighting, color, texture, and composition prompt slices.
+- stylePolicy: the only style-policy field; later prompts reuse the relevant group as needed.
 - characterContinuityRules: fixed character identity, appearance, naming, and voice rules.
 - locationContinuityRules: location space, key anchors, and time/space continuity.
 - soundRules: dialogue, narration, sound effects, no BGM, no subtitle rules.
 - videoModelRules: hard constraints for the video model.
 - blockContinuityRules: action, emotion, and sound continuity between adjacent videoBlocks.
 
-Style conversion example, for structure only. Do not copy this content:
-If the user asks for "a quiet East Asian art-house film with seasonal change, nature, ritual, and sparse dialogue", convert it as:
+stylePolicy examples, for field-writing style only. Do not copy their story:
+
+1. Quiet East Asian art-house meditation film:
 {
   "rawUserStyle": "a quiet East Asian art-house film with seasonal change, nature, ritual, and sparse dialogue",
-  "visualTone": "observational, restrained, meditative, prioritizing nature-character relationships",
-  "cameraRhythm": "few cuts, static observation, slow push/pull only when emotion or space needs revealing",
-  "composition": "negative space, stable central anchors, figures placed within natural or architectural space, solitude and ritual emphasized",
-  "lighting": "natural light, seasonal light, no obvious commercial lighting",
-  "colorPalette": "low-saturation natural seasonal colors, clear spring tones, cold winter tones, dry autumn yellows",
-  "imageFilterPrompt": "soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights",
-  "soundFilterPrompt": "quiet naturalist sound, soft low dynamics, clear without excessive sharpness, preserving air and pauses",
-  "motionStyle": "slow continuous ritualized movement, no exaggerated acting",
-  "editingPacing": "slow pace, preserving pauses, gazes, and environmental breathing",
-  "soundStyle": "use only sound sources already present in the image or screenplay, ambience first, little or no music",
-  "hardBans": ["no fast cutting", "no commercial look", "no showy camera movement", "no subtitles", "no watermark"]
+  "styleSummary": "observational, restrained, meditative, nature-character relationships first, slow pacing, few cuts, ambience first",
+  "visual": {
+    "positivePrompt": "quiet East Asian art-house film look, observational, restrained, meditative, prioritizing nature-character relationships, soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights, low-saturation natural gray-green, wood, and stone-gray palette, generous negative space",
+    "negativePrompt": "no commercial look, no blockbuster high contrast, no showy camera movement, no oversaturated anime colors, no plastic skin, no excessive sharpening, no strong studio lighting, no subtitles, no watermark, no logo",
+    "imageFilterPrompt": "soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights",
+    "lightingPrompt": "natural light first, soft contrast, avoid obvious commercial lighting, preserve seasonal light and clear air",
+    "colorPrompt": "low-saturation natural gray-green, wood, and stone-gray palette, restrained and quiet overall",
+    "texturePrompt": "subtle film grain, realistic worn fabric, wood, stone walls, and humid air texture",
+    "compositionPrompt": "negative-space composition, stable central anchors, figures placed within nature or temple architecture, clear foreground/midground/background"
+  },
+  "camera": {
+    "rhythmPrompt": "few cuts, static observation, slow push or pull only when emotion or space needs revealing",
+    "movementPrompt": "restrained camera movement, mostly static observation and very slow push-in, no showy movement",
+    "lensAndDepthPrompt": "natural 35mm cinematic lens, moderate depth of field, preserving space and air",
+    "editingPacingPrompt": "slow pace, preserving pauses, gazes, and environmental breathing"
+  },
+  "motion": {
+    "subjectMotionPrompt": "slow continuous ritualized movement, small and natural range",
+    "actingPrompt": "restrained acting, emotion externalized through breath, pauses, gaze, and hand micro-actions"
+  },
+  "sound": {
+    "positivePrompt": "ambience first, preserving air, wind, wood/stone texture, and distant natural sound, little or no music",
+    "negativePrompt": "no continuous score, no sentimental melody, no lyrics, no sung vocals, no exaggerated sound effects",
+    "soundFilterPrompt": "quiet naturalist sound, soft low dynamics, clear without excessive sharpness, preserving air and pauses",
+    "soundStylePrompt": "use only sound sources already present in the image or screenplay, ambience first, pauses matter more than sound"
+  },
+  "hardBans": ["no fast cutting", "no commercial look", "no showy camera movement", "no subtitles", "no watermark", "no logo"]
 }
 
-The matching visualPromptPolicy should be:
+2. Vintage suspense short:
 {
-  "positivePrompt": "quiet East Asian art-house film look, observational, restrained, meditative, prioritizing nature-character relationships, soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights, low-saturation natural gray-green, wood, and stone-gray palette, slow continuous movement, generous negative space",
-  "negativePrompt": "no commercial look, no blockbuster high contrast, no showy camera movement, no oversaturated anime colors, no plastic skin, no excessive sharpening, no strong studio lighting, no subtitles, no watermark, no logo",
-  "imageFilterPrompt": "soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights",
-  "lightingPrompt": "natural light first, soft contrast, avoid obvious commercial lighting, preserve seasonal light and clear air",
-  "colorPrompt": "low-saturation natural gray-green, wood, and stone-gray palette, restrained and quiet overall",
-  "texturePrompt": "subtle film grain, realistic worn fabric, wood, stone walls, and humid air texture",
-  "compositionPrompt": "negative-space composition, stable central anchors, figures placed within nature or temple architecture, clear foreground/midground/background"
+  "rawUserStyle": "vintage suspense short",
+  "styleSummary": "oppressive restrained everyday suspense, low-level practical light, slow push-ins, foreground occlusion, ambience carrying edits",
+  "visual": {
+    "positivePrompt": "vintage suspense film look, oppressive and restrained, low-level tungsten light, pressure from doorframes, window shadows, corridor depth, and foreground occlusion, old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
+    "negativePrompt": "no modern sharp HD look, no vivid fantasy colors, no haunted-house cliché, no gore makeup, no glossy commercial portrait lighting, no unreadably dark image",
+    "imageFilterPrompt": "old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
+    "lightingPrompt": "low-level practical light, local shadows, door-gap light, window light, or tungsten light, while keeping the subject readable",
+    "colorPrompt": "low-saturation yellow-brown, dark green, gray-black, with small warm-light contrast",
+    "texturePrompt": "old walls, worn wood, damp floor, slight dust, and film grain",
+    "compositionPrompt": "off-center subjects, frame-within-frame, foreground occlusion, deep dark background"
+  },
+  "camera": {
+    "rhythmPrompt": "slow push-ins, static observation, sound-led cuts at key turns",
+    "movementPrompt": "slow probing movement, occasional occlusion transitions and sound-led cuts",
+    "lensAndDepthPrompt": "35mm or 50mm natural lens, moderate depth preserving background threat",
+    "editingPacingPrompt": "slow pacing, preserving empty frames and reaction gaps, with ambience carrying edits"
+  },
+  "motion": {
+    "subjectMotionPrompt": "small gestures, many pauses, tension driven by fingers, breath, eyes, and shoulders",
+    "actingPrompt": "restrained, hesitant, alert acting; no exaggerated fear faces"
+  },
+  "sound": {
+    "positivePrompt": "room tone, short low hits, and environmental tails serve story turns",
+    "negativePrompt": "no continuous score, no jump-scare wall of sound, no invented concrete sound source",
+    "soundFilterPrompt": "narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss",
+    "soundStylePrompt": "only reinforce sound sources already present in the current image, with room tone and short low hits serving story turns"
+  },
+  "hardBans": ["no subtitles", "no watermark", "no modern sharp HD look", "no unreadably dark image"]
 }
 
-Excellent styleReferenceInterpretation examples, for field-writing style only. Do not copy their story:
-1. Vintage suspense short:
+3. Clean modern sci-fi:
 {
-  "visualTone": "oppressive, restrained, period everyday suspense, not modern sharp HD",
-  "cameraRhythm": "slow push-ins, static observation, sound-led cuts at key turns",
-  "composition": "doorframes, window shadows, and corridor depth create pressure; figures are often partly occluded by foreground",
-  "lighting": "low-level tungsten light, local shadows, readable dark detail",
-  "colorPalette": "low-saturation yellow-brown, dark green, and gray-black, with slightly warm but muted skin tones",
-  "imageFilterPrompt": "old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
-  "soundFilterPrompt": "narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss",
-  "motionStyle": "small gestures, many pauses, emotion externalized through eyes, fingers, and breath",
-  "editingPacing": "slow pacing, preserving empty frames and reaction gaps, with ambience carrying edits",
-  "soundStyle": "only reinforce sound sources already present in the current image, with room tone and short low hits serving story turns"
+  "rawUserStyle": "clean modern sci-fi",
+  "styleSummary": "cool, precise, lonely, technical space pressing against human emotion, stable movement, desaturated blue-gray, clean wide-band sound",
+  "visual": {
+    "positivePrompt": "clean modern sci-fi look, cool, precise, lonely, desaturated blue-gray, clean hard light, screen reflections, slight lens flare, crisp detail, symmetrical composition, hard edges, figures surrounded by large technical space",
+    "negativePrompt": "no excessive cyber neon, no colorful light pollution, no cheap plastic sci-fi look, no excessive glow, no cluttered UI covering the frame",
+    "imageFilterPrompt": "cold sci-fi texture, desaturated blue-gray, clean hard light, slight lens flare, crisp detail",
+    "lightingPrompt": "cool hard light, screen reflections, rim light, clean shadows",
+    "colorPrompt": "desaturated blue-gray and silver white, with minimal warning red or cyan accents",
+    "texturePrompt": "clear but not cheap metal, glass, screen, and matte plastic textures",
+    "compositionPrompt": "symmetrical composition, hard edges, figures surrounded by space, calm pressure"
+  },
+  "camera": {
+    "rhythmPrompt": "stable pushes and slow lateral moves, no handheld shake, precise close views for interfaces or devices",
+    "movementPrompt": "precise, stable, restrained movement driven by machine sound and light changes",
+    "lensAndDepthPrompt": "clear moderate depth, readable hard-edged spatial lines",
+    "editingPacingPrompt": "medium-slow pacing, cuts triggered by machine sound, light, or micro-reactions"
+  },
+  "motion": {
+    "subjectMotionPrompt": "precise restrained human movement, slow continuous mechanical motion",
+    "actingPrompt": "calm restrained performance, emotion visible through small pauses, gaze, and hand movement"
+  },
+  "sound": {
+    "positivePrompt": "use visible or story-established device and space sounds, with short cues tied to plot or visible action",
+    "negativePrompt": "no continuous score, no epic drums, no invented machine sound source",
+    "soundFilterPrompt": "clean modern sound, wide-band clarity, stable low end, restrained spatial reverb",
+    "soundStylePrompt": "use only visible or story-established device and space sounds, with short cues tied to plot or visible action"
+  },
+  "hardBans": ["no subtitles", "no watermark", "no cheap plastic sci-fi look", "no colorful light pollution"]
 }
-Matching visualPromptPolicy:
+
+4. Bright fairy-tale animation:
 {
-  "positivePrompt": "vintage suspense film look, oppressive and restrained, low-level tungsten light, pressure from doorframes, window shadows, corridor depth, and foreground occlusion, old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
-  "negativePrompt": "no modern sharp HD look, no vivid fantasy colors, no haunted-house cliché, no gore makeup, no glossy commercial portrait lighting, no unreadably dark image",
-  "imageFilterPrompt": "old-film low contrast, soft-focus lens, slightly gray shadows, subtle film grain, controlled highlights",
-  "lightingPrompt": "low-level practical light, local shadows, door-gap light, window light, or tungsten light, while keeping the subject readable",
-  "colorPrompt": "low-saturation yellow-brown, dark green, gray-black, with small warm-light contrast",
-  "texturePrompt": "old walls, worn wood, damp floor, slight dust, and film grain",
-  "compositionPrompt": "off-center subjects, frame-within-frame, foreground occlusion, deep dark background"
-}
-2. Clean modern sci-fi:
-{
-  "visualTone": "cool, precise, lonely, with technical space pressing against human emotion",
-  "cameraRhythm": "stable pushes and slow lateral moves, no handheld shake, precise close views for interfaces or devices",
-  "composition": "symmetry, hard edges, figures surrounded by large negative space",
-  "lighting": "cool hard light, screen reflections, rim light, clean shadows",
-  "colorPalette": "desaturated blue-gray, silver white, with minimal warning red or cyan accents",
-  "imageFilterPrompt": "cold sci-fi texture, desaturated blue-gray, clean hard light, slight lens flare, crisp detail",
-  "soundFilterPrompt": "clean modern sound, wide-band clarity, stable low end, restrained spatial reverb",
-  "motionStyle": "precise restrained human movement, slow continuous mechanical motion",
-  "editingPacing": "medium-slow pacing, tension driven by machine sound and light changes",
-  "soundStyle": "use only visible or story-established device and space sounds, with short cues tied to plot or visible action, no continuous score"
-}
-Matching visualPromptPolicy:
-{
-  "positivePrompt": "clean modern sci-fi look, cool, precise, lonely, desaturated blue-gray, clean hard light, screen reflections, slight lens flare, crisp detail, symmetrical composition, hard edges, figures surrounded by large technical space",
-  "negativePrompt": "no excessive cyber neon, no colorful light pollution, no cheap plastic sci-fi look, no excessive glow, no cluttered UI covering the frame",
-  "imageFilterPrompt": "cold sci-fi texture, desaturated blue-gray, clean hard light, slight lens flare, crisp detail",
-  "lightingPrompt": "cool hard light, screen reflections, rim light, clean shadows",
-  "colorPrompt": "desaturated blue-gray and silver white, with minimal warning red or cyan accents",
-  "texturePrompt": "clear but not cheap metal, glass, screen, and matte plastic textures",
-  "compositionPrompt": "symmetrical composition, hard edges, figures surrounded by space, calm pressure"
-}
-3. Bright fairy-tale animation:
-{
-  "visualTone": "light, warm, fairy-tale-like, with visible emotion but no excessive exaggeration",
-  "cameraRhythm": "smooth following, gentle upward moves or arcs, soft transitions on action beats",
-  "composition": "clear centered subjects, layered foreground, rounded props and environmental shapes",
-  "lighting": "soft diffuse light, warm edge light, clean bright highlights",
-  "colorPalette": "bright but not oversaturated warm colors, grass green, sky blue, and cream white",
-  "imageFilterPrompt": "bright fairy-tale animation texture, soft diffuse light, clear colors, rounded edges, clean highlights",
-  "soundFilterPrompt": "fairy-tale animation sound, bright clear texture, rounded transients, light short tones without harshness",
-  "motionStyle": "fluid elastic movement, slight exaggeration while preserving character identity",
-  "editingPacing": "light and quick without feeling fragmented, preserving a short pause after actions finish",
-  "soundStyle": "generate light sound punctuation only from visible actions, without adding concrete sources not present in the image"
-}
-Matching visualPromptPolicy:
-{
-  "positivePrompt": "bright fairy-tale animation look, light, warm, soft, clear but not oversaturated colors, soft diffuse light, rounded edges, clean highlights, clear centered subject, layered foreground",
-  "negativePrompt": "no grimy horror look, no oppressive realism, no overly complex texture, no cheap oversaturated children-sticker look, no harsh sharp highlights",
-  "imageFilterPrompt": "bright fairy-tale animation texture, soft diffuse light, clear colors, rounded edges, clean highlights",
-  "lightingPrompt": "soft diffuse light, warm edge light, bright highlights without overexposure",
-  "colorPrompt": "warm colors, grass green, sky blue, cream white, bright but not oversaturated",
-  "texturePrompt": "soft, clean, light, rounded material edges, moderate detail",
-  "compositionPrompt": "clear subject, stable composition, fairy-tale layering across foreground, midground, and background"
+  "rawUserStyle": "bright fairy-tale animation",
+  "styleSummary": "light, warm, soft, bright but not oversaturated, rounded edges, smooth following camera, light sound punctuation",
+  "visual": {
+    "positivePrompt": "bright fairy-tale animation look, light, warm, soft, clear but not oversaturated colors, soft diffuse light, rounded edges, clean highlights, clear centered subject, layered foreground",
+    "negativePrompt": "no grimy horror look, no oppressive realism, no overly complex texture, no cheap oversaturated children-sticker look, no harsh sharp highlights",
+    "imageFilterPrompt": "bright fairy-tale animation texture, soft diffuse light, clear colors, rounded edges, clean highlights",
+    "lightingPrompt": "soft diffuse light, warm edge light, bright highlights without overexposure",
+    "colorPrompt": "warm colors, grass green, sky blue, cream white, bright but not oversaturated",
+    "texturePrompt": "soft, clean, light, rounded material edges, moderate detail",
+    "compositionPrompt": "clear subject, stable composition, fairy-tale layering across foreground, midground, and background"
+  },
+  "camera": {
+    "rhythmPrompt": "smooth following, gentle upward moves or arcs, soft transitions on action beats",
+    "movementPrompt": "gentle stable camera movement, preserving a short pause after actions finish",
+    "lensAndDepthPrompt": "moderate depth, clear subject, soft foreground layering",
+    "editingPacingPrompt": "light and quick without feeling fragmented, preserving a short pause after actions finish"
+  },
+  "motion": {
+    "subjectMotionPrompt": "fluid elastic movement, slight exaggeration while preserving character identity",
+    "actingPrompt": "visible emotion without excessive exaggeration, bright and readable expressions and movement"
+  },
+  "sound": {
+    "positivePrompt": "generate light sound punctuation only from visible actions, bright and clear sound texture",
+    "negativePrompt": "no harsh treble, no heavy horror tone, no invented concrete sound source",
+    "soundFilterPrompt": "fairy-tale animation sound, bright clear texture, rounded transients, light short tones without harshness",
+    "soundStylePrompt": "generate light sound punctuation only from visible actions, without adding concrete sources not present in the image"
+  },
+  "hardBans": ["no subtitles", "no watermark", "no cheap oversaturated children-sticker look", "no harsh sharp highlights"]
 }
 
 user_request:
@@ -166,28 +195,35 @@ Return JSON only. No markdown. No explanation. Schema:
     "storyPremise": "string",
     "userDirectedStyle": "string | null",
     "inferredSystemStyle": "string",
-    "styleReferenceInterpretation": {
+    "stylePolicy": {
       "rawUserStyle": "string | null",
-      "visualTone": "string",
-      "cameraRhythm": "string",
-      "composition": "string",
-      "lighting": "string",
-      "colorPalette": "string",
-      "imageFilterPrompt": "string",
-      "soundFilterPrompt": "string",
-      "motionStyle": "string",
-      "editingPacing": "string",
-      "soundStyle": "string",
+      "styleSummary": "string",
+      "visual": {
+        "positivePrompt": "string",
+        "negativePrompt": "string",
+        "imageFilterPrompt": "string",
+        "lightingPrompt": "string",
+        "colorPrompt": "string",
+        "texturePrompt": "string",
+        "compositionPrompt": "string"
+      },
+      "camera": {
+        "rhythmPrompt": "string",
+        "movementPrompt": "string",
+        "lensAndDepthPrompt": "string",
+        "editingPacingPrompt": "string"
+      },
+      "motion": {
+        "subjectMotionPrompt": "string",
+        "actingPrompt": "string"
+      },
+      "sound": {
+        "positivePrompt": "string",
+        "negativePrompt": "string",
+        "soundFilterPrompt": "string",
+        "soundStylePrompt": "string"
+      },
       "hardBans": ["string"]
-    },
-    "visualPromptPolicy": {
-      "positivePrompt": "string",
-      "negativePrompt": "string",
-      "imageFilterPrompt": "string",
-      "lightingPrompt": "string",
-      "colorPrompt": "string",
-      "texturePrompt": "string",
-      "compositionPrompt": "string"
     },
     "characterContinuityRules": ["string"],
     "locationContinuityRules": ["string"],

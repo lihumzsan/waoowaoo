@@ -5,142 +5,170 @@
 2. 如果用户没有明确要求，则根据 screenplay、editScript、资产描述、style_context 自动识别最合适的统一风格。
 3. 不要引入用户未要求且剧情不需要的新风格、新人物、新场景、新剧情。
 
+风格策略 stylePolicy：
+- 必须只输出一个 stylePolicy；不要再输出 styleReferenceInterpretation 或 visualPromptPolicy。
+- stylePolicy.rawUserStyle 记录用户原始风格描述；没有则为 null。
+- stylePolicy.styleSummary 用一句话总结整片统一风格。
+- stylePolicy.visual 供资产图、分镜图、视频提示词复用，负责正向视觉、负向视觉、画面滤镜、光线、色彩、质感和构图。
+- stylePolicy.camera 供分镜图和视频提示词复用，负责镜头节奏、运镜、焦段景深和剪辑节奏。
+- stylePolicy.motion 供视频提示词复用，负责主体动作和表演方式。
+- stylePolicy.sound 供视频提示词复用，负责声音正向策略、声音负向策略、声音滤镜和声音风格。
+- stylePolicy.hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo 以及与风格冲突的强禁项。
+- 所有会被后续拼入画布提示词的字段值必须使用中文，包括 positivePrompt、negativePrompt、imageFilterPrompt、soundFilterPrompt、hardBans、soundRules、videoModelRules 和 blockContinuityRules；除专有名词、模型字段名和原文台词外，不要输出英文句子。
+
 风格转换标准：
 - 不要只保留用户输入的导演名、影片名、流派名或年代标签，必须转换为视频模型可执行的具体维度。
-- 如果用户给出导演、影片、流派或年代参考，先提炼其可执行特征，再写入 styleReferenceInterpretation。
+- 如果用户给出导演、影片、流派或年代参考，先提炼其可执行特征，再写入 stylePolicy 的 visual/camera/motion/sound 分组。
 - 不允许要求模型“模仿某导演本人”。应转写为镜头节奏、构图、光线、色彩、滤镜质感、动作速度、声音和剪辑方式。
-- 画面滤镜必须单独写入 imageFilterPrompt，必须是可直接放进视频提示词的短语，例如：柔焦镜头，高光溢出，低对比度，复古90年代胶片质感，色彩清澈，梦幻柔和，35mm镜头。
-- 声音滤镜必须单独写入 soundFilterPrompt，只写一句可直接塞进视频提示词风格段的凝练短语；它应根据用户输入、剧本类型、年代感、类型片气质和剧情情绪自动推理，描述整片声音质感，不得覆盖角色 voiceTimbreText。
-- soundFilterPrompt 只能写声音质感、频响、动态范围、空间感、清晰度、年代感和混音倾向；禁止写依赖画面元素的具体声源或音效，例如脚步、衣料、门轴、雨声、机械声、动物声、物体碰撞。
+- visual.imageFilterPrompt 必须是可直接放进图像/视频提示词的短语，例如：柔焦镜头，高光溢出，低对比度，复古90年代胶片质感，色彩清澈，梦幻柔和，35mm镜头。
+- sound.soundFilterPrompt 只写一句可直接塞进视频提示词风格段的凝练短语；它只能写声音质感、频响、动态范围、空间感、清晰度、年代感和混音倾向，不得覆盖角色 voiceTimbreText；禁止写依赖画面元素的具体声源或音效，例如脚步、衣料、门轴、雨声、机械声、动物声、物体碰撞。
 - 优秀 soundFilterPrompt 示例：老电影窄频声音，轻微低通，闷厚中低频，弱高频，轻微磁带底噪；现代冷峻声音，干净宽频，低频稳定，空间混响克制；手持纪录片声音，现场感强，动态自然，环境底噪不过度修饰；童话动画声音，清澈明亮，瞬态圆润，短促音色轻巧不刺耳。
-
-视觉提示策略 visualPromptPolicy：
-- 必须输出 visualPromptPolicy，作为后续资产图、分镜图和视频提示词可复用的统一视觉策略。
-- positivePrompt 是总正向视觉提示词：把视觉气质、光线、色彩、质感、构图和画面滤镜合成一段可直接拼入图像/视频模型的中文自然语言。
-- negativePrompt 是总负向视觉提示词：明确压制不想要的画风、光线、色彩、质感、构图、文字、水印、logo、低质感和与用户风格冲突的倾向。
-- imageFilterPrompt 是凝练画面滤镜，必须与 styleReferenceInterpretation.imageFilterPrompt 语义一致。
-- lightingPrompt 只控制光源、光比、方向、自然光/人工光和曝光倾向。
-- colorPrompt 只控制色盘、饱和度、冷暖、主色关系和禁用色彩倾向。
-- texturePrompt 只控制材质、颗粒、皮肤/布料/墙面/空气/胶片质地，不写剧情动作。
-- compositionPrompt 只控制构图、留白、主体位置、前中后景、空间层次和镜头距离。
-- visualPromptPolicy 的所有字段必须使用中文；除专有名词、模型字段名和原文台词外，不要输出英文句子。
 
 Bible 的作用：
 - 统一所有并行 videoBlock 的视频风格、画面滤镜、角色身份、场景连续性、声音规则和视频模型禁令。
 - 不生成具体 shot prompt。
 - 不生成最终 videoBlock prompt。
 - 只输出后续 block prompt 必须共同遵守的规则。
-- 所有会被后续拼入画布提示词的字段值必须使用中文，包括 imageFilterPrompt、soundFilterPrompt、soundStyle、hardBans、soundRules、videoModelRules 和 blockContinuityRules；除专有名词、模型字段名和原文台词外，不要输出英文句子。
 
 必须包含：
 - storyPremise：本集核心叙事。
 - userDirectedStyle：用户明确指定的风格或要求；没有则为 null。
 - inferredSystemStyle：用户未指定时，从项目风格、导演风格、剧情自动推导的风格。
-- styleReferenceInterpretation：标准化风格转换层。
-- visualPromptPolicy：正向/负向视觉提示词与光线、色彩、质感、构图拆分策略。
+- stylePolicy：唯一风格策略字段，后续按需复用。
 - characterContinuityRules：角色身份、外观、称谓、声音固定规则。
 - locationContinuityRules：场景空间、关键锚点和时空连续规则。
 - soundRules：对白、旁白、音效、禁 BGM、禁字幕的规则。
 - videoModelRules：面向视频模型的硬约束。
 - blockContinuityRules：相邻 videoBlock 的动作、情绪、声音衔接规则。
 
-风格转换示例，仅学习结构，不要复制示例内容：
-用户说“一部安静的东方作者电影，四季变化、自然修行、少对白”时，应该转成：
+stylePolicy 示例，仅学习字段写法，不要复制剧情：
+
+1. 禅意东方作者电影：
 {
   "rawUserStyle": "一部安静的东方作者电影，四季变化、自然修行、少对白",
-  "visualTone": "静观、克制、冥想感、自然与人物关系优先",
-  "cameraRhythm": "少切、静态观察、缓慢推拉，只在情绪或空间揭示时移动",
-  "composition": "留白、稳定中心锚点、人物置于自然或建筑空间中，强调孤独与仪式感",
-  "lighting": "自然光，季节性光线，避免明显商业布光",
-  "colorPalette": "随季节变化的低饱和自然色，春季清澈，冬季冷淡，秋季枯黄",
-  "imageFilterPrompt": "柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光",
-  "soundFilterPrompt": "安静自然主义声音，柔和低动态，清晰但不过度锐利，保留空气感与停顿",
-  "motionStyle": "动作缓慢、连续、仪式化，避免夸张表演",
-  "editingPacing": "慢节奏，保留停顿、凝视和环境呼吸",
-  "soundStyle": "声音只使用画面和剧本已存在的声源，环境声优先，少音乐或无音乐",
-  "hardBans": ["不要快切", "不要商业广告感", "不要炫技运镜", "不要字幕", "不要水印"]
+  "styleSummary": "静观、克制、冥想感，自然空间与人物关系优先，慢节奏、少切、环境声优先。",
+  "visual": {
+    "positivePrompt": "安静的东方作者电影视觉，静观、克制、冥想感，自然空间与人物关系优先，柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光，低饱和自然灰绿、木色、石灰色，画面留白充足",
+    "negativePrompt": "不要商业广告感，不要高反差大片感，不要炫技运镜，不要高饱和动漫色，不要塑料皮肤，不要过度锐化，不要强烈棚拍光，不要字幕、水印、logo",
+    "imageFilterPrompt": "柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光",
+    "lightingPrompt": "自然光为主，光比柔和，避免明显商业布光，保留季节性光线和空气透亮感",
+    "colorPrompt": "低饱和自然灰绿、木色、石灰色，整体淡雅克制",
+    "texturePrompt": "细微胶片颗粒，旧布料、木头、石墙和空气湿度有真实质感",
+    "compositionPrompt": "留白构图，稳定中心锚点，人物置于自然或寺院建筑空间中，前中后景清楚"
+  },
+  "camera": {
+    "rhythmPrompt": "少切、静态观察、缓慢推拉，只在情绪或空间揭示时移动",
+    "movementPrompt": "运镜克制，优先静止观察和极慢推进，避免炫技运动",
+    "lensAndDepthPrompt": "35mm自然电影焦段，中等景深，保留空间与空气感",
+    "editingPacingPrompt": "慢节奏，保留停顿、凝视和环境呼吸"
+  },
+  "motion": {
+    "subjectMotionPrompt": "动作缓慢、连续、仪式化，幅度小且自然",
+    "actingPrompt": "表演克制，情绪通过呼吸、停顿、视线和手部微动作外化"
+  },
+  "sound": {
+    "positivePrompt": "环境声优先，保留空气、风、木石材质和远处自然声，少音乐或无音乐",
+    "negativePrompt": "不要连续配乐，不要煽情旋律，不要歌词，不要人声演唱，不要夸张音效",
+    "soundFilterPrompt": "安静自然主义声音，柔和低动态，清晰但不过度锐利，保留空气感与停顿",
+    "soundStylePrompt": "声音只使用画面和剧本已存在的声源，环境声优先，停顿比声音更重要"
+  },
+  "hardBans": ["不要快切", "不要商业广告感", "不要炫技运镜", "不要字幕", "不要水印", "不要 logo"]
 }
 
-对应的 visualPromptPolicy 应该写成：
+2. 复古悬疑短片：
 {
-  "positivePrompt": "安静的东方作者电影视觉，静观、克制、冥想感，自然空间与人物关系优先，柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光，低饱和自然灰绿、木色、石灰色，动作缓慢连续，画面留白充足",
-  "negativePrompt": "不要商业广告感，不要高反差大片感，不要炫技运镜，不要高饱和动漫色，不要塑料皮肤，不要过度锐化，不要强烈棚拍光，不要字幕、水印、logo",
-  "imageFilterPrompt": "柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感，35mm镜头，克制高光",
-  "lightingPrompt": "自然光为主，光比柔和，避免明显商业布光，保留季节性光线和空气透亮感",
-  "colorPrompt": "低饱和自然灰绿、木色、石灰色，整体淡雅克制",
-  "texturePrompt": "细微胶片颗粒，旧布料、木头、石墙和空气湿度有真实质感",
-  "compositionPrompt": "留白构图，稳定中心锚点，人物置于自然或寺院建筑空间中，前中后景清楚"
+  "rawUserStyle": "复古悬疑短片",
+  "styleSummary": "压抑克制、带年代感的日常悬疑，低照度实景光、慢推、前景遮挡和环境声延续剪辑。",
+  "visual": {
+    "positivePrompt": "复古悬疑电影视觉，压抑克制，低照度钨丝灯，门框、窗影、走廊纵深和前景遮挡形成压迫构图，老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
+    "negativePrompt": "不要现代锐利高清感，不要鲜艳幻想色，不要鬼屋套路，不要血腥妆容，不要商业写真光，不要画面暗到不可读",
+    "imageFilterPrompt": "老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
+    "lightingPrompt": "低照度实景光，局部阴影，门缝光、窗光或钨丝灯，主体仍清楚可读",
+    "colorPrompt": "低饱和黄褐、暗绿、灰黑，少量暖光对比",
+    "texturePrompt": "旧墙面、磨损木料、潮湿地面、轻微灰尘和胶片颗粒",
+    "compositionPrompt": "偏心主体，框中框，前景遮挡，背景保留暗部纵深"
+  },
+  "camera": {
+    "rhythmPrompt": "慢推、静态观察、关键转折处用声音引导切换",
+    "movementPrompt": "运镜缓慢试探，少量遮挡转场和声音引导切换",
+    "lensAndDepthPrompt": "35mm或50mm自然焦段，中等景深保留背景威胁",
+    "editingPacingPrompt": "慢节奏，保留空镜和反应间隔，用环境声延续剪辑"
+  },
+  "motion": {
+    "subjectMotionPrompt": "动作幅度小，停顿多，手指、呼吸、眼神和肩颈微动作推动紧张感",
+    "actingPrompt": "表演压抑、迟疑、警觉，不使用夸张惊吓表情"
+  },
+  "sound": {
+    "positivePrompt": "空间底噪、短促低频重音和环境尾音服务转折",
+    "negativePrompt": "不要连续配乐，不要惊吓音墙，不要凭空添加具体声源",
+    "soundFilterPrompt": "老电影窄频声音，轻微低通，闷厚中低频，弱高频，轻微磁带底噪",
+    "soundStylePrompt": "只强化当前画面已有声源，空间底噪和短促低频重音服务转折"
+  },
+  "hardBans": ["不要字幕", "不要水印", "不要现代锐利高清感", "不要画面暗到不可读"]
 }
 
-优秀 styleReferenceInterpretation 示例，仅学习字段写法，不要复制剧情：
-1. 复古悬疑短片：
+3. 现代冷峻科幻：
 {
-  "visualTone": "压抑、克制、带年代感的日常悬疑，不追求现代锐利高清",
-  "cameraRhythm": "慢推、静态观察、关键转折处用声音引导切换",
-  "composition": "门框、窗影、走廊纵深形成压迫构图，人物常被前景遮挡一部分",
-  "lighting": "低照度钨丝灯，局部阴影，暗部保留层次",
-  "colorPalette": "低饱和黄褐、暗绿和灰黑，肤色略暖但不鲜艳",
-  "imageFilterPrompt": "老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
-  "soundFilterPrompt": "老电影窄频声音，轻微低通，闷厚中低频，弱高频，轻微磁带底噪",
-  "motionStyle": "动作幅度小，停顿多，情绪通过眼神、手指和呼吸外化",
-  "editingPacing": "慢节奏，保留空镜和反应间隔，用环境声延续剪辑",
-  "soundStyle": "只强化当前画面已有声源，空间底噪和短促低频重音服务转折，不额外添加具体音源"
+  "rawUserStyle": "现代冷峻科幻",
+  "styleSummary": "冷静、精密、孤独，技术空间压过人物情绪，稳定推移、低饱和蓝灰和干净宽频声音。",
+  "visual": {
+    "positivePrompt": "现代冷峻科幻视觉，冷静、精密、孤独，低饱和蓝灰色，干净硬光，屏幕反光，轻微镜头眩光，高清细节，对称构图和硬边线条，人物被大面积技术空间包围",
+    "negativePrompt": "不要赛博霓虹泛滥，不要彩色光污染，不要廉价塑料科幻感，不要过度发光，不要杂乱 UI 堆满画面",
+    "imageFilterPrompt": "冷峻科幻质感，低饱和蓝灰色，干净硬光，轻微镜头眩光，高清细节",
+    "lightingPrompt": "冷色硬光、屏幕反光、边缘轮廓光，阴影干净",
+    "colorPrompt": "低饱和蓝灰、银白，少量警示红或青色点缀",
+    "texturePrompt": "金属、玻璃、屏幕、磨砂塑料材质清晰但不廉价",
+    "compositionPrompt": "对称构图，硬边线条，人物被空间包围，留出冷静压迫感"
+  },
+  "camera": {
+    "rhythmPrompt": "稳定推移和缓慢横移，避免手持晃动，关键界面或装置用精准近景",
+    "movementPrompt": "运镜精确、稳定、克制，靠机械声和灯光变化推动紧张感",
+    "lensAndDepthPrompt": "清晰中等景深，硬边空间线条保持可读",
+    "editingPacingPrompt": "中慢节奏，剪辑点由机械声、灯光或角色微反应触发"
+  },
+  "motion": {
+    "subjectMotionPrompt": "动作精确、节制，机械环境运动缓慢连续",
+    "actingPrompt": "人物表演冷静克制，情绪通过细小停顿、视线和手部动作体现"
+  },
+  "sound": {
+    "positivePrompt": "使用画面内已有装置和空间声，短促提示音必须来自剧情或可见动作",
+    "negativePrompt": "不要连续配乐，不要史诗鼓点，不要凭空添加机器声源",
+    "soundFilterPrompt": "现代冷峻声音，干净宽频，低频稳定，空间混响克制",
+    "soundStylePrompt": "以画面内已有装置和空间声为准，短促提示音服务剧情或可见动作"
+  },
+  "hardBans": ["不要字幕", "不要水印", "不要廉价塑料科幻感", "不要彩色光污染"]
 }
-对应的 visualPromptPolicy：
+
+4. 明亮童话动画：
 {
-  "positivePrompt": "复古悬疑电影视觉，压抑克制，低照度钨丝灯，门框、窗影、走廊纵深和前景遮挡形成压迫构图，老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
-  "negativePrompt": "不要现代锐利高清感，不要鲜艳幻想色，不要鬼屋套路，不要血腥妆容，不要商业写真光，不要画面暗到不可读",
-  "imageFilterPrompt": "老电影低对比度，柔焦镜头，暗部轻微发灰，细微胶片颗粒，高光不过曝",
-  "lightingPrompt": "低照度实景光，局部阴影，门缝光、窗光或钨丝灯，主体仍清楚可读",
-  "colorPrompt": "低饱和黄褐、暗绿、灰黑，少量暖光对比",
-  "texturePrompt": "旧墙面、磨损木料、潮湿地面、轻微灰尘和胶片颗粒",
-  "compositionPrompt": "偏心主体，框中框，前景遮挡，背景保留暗部纵深"
-}
-2. 现代冷峻科幻：
-{
-  "visualTone": "冷静、精密、孤独，技术空间压过人物情绪",
-  "cameraRhythm": "稳定推移和缓慢横移，避免手持晃动，关键界面或装置用精准近景",
-  "composition": "对称构图、硬边线条、人物被大面积空间包围",
-  "lighting": "冷色硬光、屏幕反光、边缘轮廓光，阴影干净",
-  "colorPalette": "低饱和蓝灰、银白、少量警示红或青色点缀",
-  "imageFilterPrompt": "冷峻科幻质感，低饱和蓝灰色，干净硬光，轻微镜头眩光，高清细节",
-  "soundFilterPrompt": "现代冷峻声音，干净宽频，低频稳定，空间混响克制",
-  "motionStyle": "动作精确、节制、机械环境运动缓慢连续",
-  "editingPacing": "中慢节奏，靠机械声和灯光变化推动紧张感",
-  "soundStyle": "以画面内已有装置和空间声为准，短促提示音必须来自剧情或可见动作，禁止连续配乐"
-}
-对应的 visualPromptPolicy：
-{
-  "positivePrompt": "现代冷峻科幻视觉，冷静、精密、孤独，低饱和蓝灰色，干净硬光，屏幕反光，轻微镜头眩光，高清细节，对称构图和硬边线条，人物被大面积技术空间包围",
-  "negativePrompt": "不要赛博霓虹泛滥，不要彩色光污染，不要廉价塑料科幻感，不要过度发光，不要杂乱 UI 堆满画面",
-  "imageFilterPrompt": "冷峻科幻质感，低饱和蓝灰色，干净硬光，轻微镜头眩光，高清细节",
-  "lightingPrompt": "冷色硬光、屏幕反光、边缘轮廓光，阴影干净",
-  "colorPrompt": "低饱和蓝灰、银白，少量警示红或青色点缀",
-  "texturePrompt": "金属、玻璃、屏幕、磨砂塑料材质清晰但不廉价",
-  "compositionPrompt": "对称构图，硬边线条，人物被空间包围，留出冷静压迫感"
-}
-3. 明亮童话动画：
-{
-  "visualTone": "轻盈、温暖、童话感，情绪外化但不过度夸张",
-  "cameraRhythm": "平稳跟随、轻微上扬或环绕，动作点用柔和转场",
-  "composition": "主体清晰居中，前景形成层次，道具和环境形状圆润",
-  "lighting": "柔和漫射光，边缘暖光，高光干净明亮",
-  "colorPalette": "明亮但不过饱和的暖色、草绿、天空蓝和奶油白",
-  "imageFilterPrompt": "明亮童话动画质感，柔和漫射光，色彩清澈，边缘圆润，高光干净",
-  "soundFilterPrompt": "童话动画声音，清澈明亮，瞬态圆润，短促音色轻巧不刺耳",
-  "motionStyle": "动作流畅、有弹性，小幅夸张但保持角色身份稳定",
-  "editingPacing": "轻快但不碎，动作完成后保留短暂停顿",
-  "soundStyle": "只根据画面已有动作生成轻巧声音标点，不凭空添加具体声源"
-}
-对应的 visualPromptPolicy：
-{
-  "positivePrompt": "明亮童话动画视觉，轻盈、温暖、柔和，色彩清澈但不过饱和，柔和漫射光，边缘圆润，高光干净，主体清晰居中，前景形成层次",
-  "negativePrompt": "不要脏暗恐怖感，不要写实压抑感，不要过度复杂纹理，不要高饱和廉价儿童贴纸感，不要尖锐刺眼高光",
-  "imageFilterPrompt": "明亮童话动画质感，柔和漫射光，色彩清澈，边缘圆润，高光干净",
-  "lightingPrompt": "柔和漫射光，暖边缘光，高光明亮但不过曝",
-  "colorPrompt": "暖色、草绿、天空蓝、奶油白，明亮但不过饱和",
-  "texturePrompt": "柔软、干净、轻盈，材质边缘圆润，细节适中",
-  "compositionPrompt": "主体清晰，构图稳定，前景中景背景有童话层次"
+  "rawUserStyle": "明亮童话动画",
+  "styleSummary": "轻盈温暖、柔和明亮，清澈不过饱和的颜色，圆润边缘、平稳跟随和轻巧声音标点。",
+  "visual": {
+    "positivePrompt": "明亮童话动画视觉，轻盈、温暖、柔和，色彩清澈但不过饱和，柔和漫射光，边缘圆润，高光干净，主体清晰居中，前景形成层次",
+    "negativePrompt": "不要脏暗恐怖感，不要写实压抑感，不要过度复杂纹理，不要高饱和廉价儿童贴纸感，不要尖锐刺眼高光",
+    "imageFilterPrompt": "明亮童话动画质感，柔和漫射光，色彩清澈，边缘圆润，高光干净",
+    "lightingPrompt": "柔和漫射光，暖边缘光，高光明亮但不过曝",
+    "colorPrompt": "暖色、草绿、天空蓝、奶油白，明亮但不过饱和",
+    "texturePrompt": "柔软、干净、轻盈，材质边缘圆润，细节适中",
+    "compositionPrompt": "主体清晰，构图稳定，前景中景背景有童话层次"
+  },
+  "camera": {
+    "rhythmPrompt": "平稳跟随、轻微上扬或环绕，动作点用柔和转场",
+    "movementPrompt": "运镜轻柔平稳，动作完成后保留短暂停顿",
+    "lensAndDepthPrompt": "中等景深，主体清楚，前景层次柔和",
+    "editingPacingPrompt": "轻快但不碎，保持动作完成后的短暂停顿"
+  },
+  "motion": {
+    "subjectMotionPrompt": "动作流畅、有弹性，小幅夸张但保持角色身份稳定",
+    "actingPrompt": "情绪外化但不过度夸张，表情和动作明亮清楚"
+  },
+  "sound": {
+    "positivePrompt": "只根据画面已有动作生成轻巧声音标点，声音清澈明亮",
+    "negativePrompt": "不要刺耳高频，不要厚重恐怖音色，不要凭空添加具体声源",
+    "soundFilterPrompt": "童话动画声音，清澈明亮，瞬态圆润，短促音色轻巧不刺耳",
+    "soundStylePrompt": "只根据画面已有动作生成轻巧声音标点，不凭空添加具体声源"
+  },
+  "hardBans": ["不要字幕", "不要水印", "不要高饱和廉价儿童贴纸感", "不要尖锐刺眼高光"]
 }
 
 user_request:
@@ -168,28 +196,35 @@ style_context:
     "storyPremise": "string",
     "userDirectedStyle": "string | null",
     "inferredSystemStyle": "string",
-    "styleReferenceInterpretation": {
+    "stylePolicy": {
       "rawUserStyle": "string | null",
-      "visualTone": "string",
-      "cameraRhythm": "string",
-      "composition": "string",
-      "lighting": "string",
-      "colorPalette": "string",
-      "imageFilterPrompt": "string",
-      "soundFilterPrompt": "string",
-      "motionStyle": "string",
-      "editingPacing": "string",
-      "soundStyle": "string",
+      "styleSummary": "string",
+      "visual": {
+        "positivePrompt": "string",
+        "negativePrompt": "string",
+        "imageFilterPrompt": "string",
+        "lightingPrompt": "string",
+        "colorPrompt": "string",
+        "texturePrompt": "string",
+        "compositionPrompt": "string"
+      },
+      "camera": {
+        "rhythmPrompt": "string",
+        "movementPrompt": "string",
+        "lensAndDepthPrompt": "string",
+        "editingPacingPrompt": "string"
+      },
+      "motion": {
+        "subjectMotionPrompt": "string",
+        "actingPrompt": "string"
+      },
+      "sound": {
+        "positivePrompt": "string",
+        "negativePrompt": "string",
+        "soundFilterPrompt": "string",
+        "soundStylePrompt": "string"
+      },
       "hardBans": ["string"]
-    },
-    "visualPromptPolicy": {
-      "positivePrompt": "string",
-      "negativePrompt": "string",
-      "imageFilterPrompt": "string",
-      "lightingPrompt": "string",
-      "colorPrompt": "string",
-      "texturePrompt": "string",
-      "compositionPrompt": "string"
     },
     "characterContinuityRules": ["string"],
     "locationContinuityRules": ["string"],
