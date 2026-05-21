@@ -116,12 +116,51 @@ function createStoryboard(input: {
   }
 }
 
+function createStyleBible(): Record<string, unknown> {
+  return {
+    strategy: 'style_bible',
+    rawUserStyle: '禅修短片',
+    styleSummary: '低饱和自然光禅意电影质感。',
+    stylePolicy: {
+      rawUserStyle: '禅修短片',
+      styleSummary: '低饱和自然光禅意电影质感。',
+      visual: {
+        positivePrompt: '柔和自然光，低对比度，淡雅胶片质感。',
+        negativePrompt: '避免商业广告感，避免高反差大片感。',
+        imageFilterPrompt: '清澈空气感，35mm 镜头，克制高光。',
+        lightingPrompt: '柔和自然光。',
+        colorPrompt: '自然灰绿、木色、石灰色。',
+        texturePrompt: '轻微柔焦，淡雅胶片颗粒。',
+        compositionPrompt: '留白构图，稳定观察。',
+      },
+      camera: {
+        rhythmPrompt: '缓慢呼吸感节奏。',
+        movementPrompt: '避免炫技运镜。',
+        lensAndDepthPrompt: '35mm，自然景深。',
+        editingPacingPrompt: '克制剪辑。',
+      },
+      motion: {
+        subjectMotionPrompt: '主体动作缓慢自然。',
+        actingPrompt: '内敛表演。',
+      },
+      sound: {
+        positivePrompt: '安静环境声。',
+        negativePrompt: '避免夸张配乐。',
+        soundFilterPrompt: '清澈低噪。',
+        soundStylePrompt: '自然空间声。',
+      },
+      hardBans: ['商业广告感', '高反差大片感', '炫技运镜'],
+    },
+  }
+}
+
 function createEditScreenplay(input?: Partial<ProjectEditScreenplay>): ProjectEditScreenplay {
   return {
     id: input?.id ?? 'screenplay-1',
     projectId: input?.projectId ?? 'project-1',
     episodeId: input?.episodeId ?? 'episode-1',
     userPrompt: input?.userPrompt ?? 'make a one minute sci-fi film',
+    ...(input?.styleBible !== undefined ? { styleBible: input.styleBible } : {}),
     screenplayText: input?.screenplayText ?? '标题：《光影回溯》\n\n故事梗概：飞船追赶远古光线。',
     status: input?.status ?? 'ready',
   }
@@ -133,6 +172,7 @@ function createSingleVideoEditScript(input?: Partial<ProjectEditScript>): Projec
     projectId: input?.projectId ?? 'project-1',
     episodeId: input?.episodeId ?? 'episode-1',
     userPrompt: input?.userPrompt ?? 'single video',
+    ...(input?.styleBible !== undefined ? { styleBible: input.styleBible } : {}),
     title: input?.title ?? 'Single Video',
     logline: input?.logline ?? null,
     durationSec: input?.durationSec ?? 2,
@@ -311,6 +351,59 @@ describe('workspace node canvas projection', () => {
         fields: [{ label: 'nodeFields.duration', value: '2s' }],
       },
     ])
+  })
+
+  it('projects the style bible as the style source between screenplay and edit generation', () => {
+    const styleBible = createStyleBible()
+    const editScreenplay = createEditScreenplay({ styleBible })
+    const editScript = createSingleVideoEditScript({ videoBlocks: [], styleBible })
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editScript,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.map((node) => node.id)).toEqual([
+      'edit-screenplay:screenplay-1',
+      'edit-style-bible:screenplay-1',
+      'edit-pipeline:edit-video:timeline',
+      'edit-pipeline:edit-video:visualAction',
+      'edit-pipeline:edit-video:camera',
+      'edit-pipeline:edit-video:audio',
+      'edit-pipeline:edit-video:primaryTable',
+      'edit-pipeline:edit-video:assetExtract',
+      'edit-script:edit-video',
+    ])
+    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
+      'edit-screenplay:screenplay-1->edit-style-bible:screenplay-1',
+      'edit-style-bible:screenplay-1->edit-pipeline:edit-video:timeline',
+      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visualAction',
+      'edit-pipeline:edit-video:visualAction->edit-pipeline:edit-video:camera',
+      'edit-pipeline:edit-video:camera->edit-pipeline:edit-video:audio',
+      'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
+      'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
+      'edit-pipeline:edit-video:assetExtract->edit-script:edit-video',
+    ])
+
+    const styleNode = projection.nodes.find((node) => node.id === 'edit-style-bible:screenplay-1')
+    const timelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-video:timeline')
+    expect(styleNode?.data.kind).toBe('editStyleBible')
+    expect(styleNode?.data.layoutNodeType).toBe('editStyleBible')
+    expect(styleNode?.data.targetType).toBe('editStyleBible')
+    expect(styleNode?.data.title).toBe('nodes.editStyleBible.title')
+    expect(styleNode?.data.body).toBe('低饱和自然光禅意电影质感。')
+    expect(styleNode?.data.styleBibleDetails?.styleSummary).toBe('低饱和自然光禅意电影质感。')
+    expect(styleNode?.data.styleBibleDetails?.visual.imageFilterPrompt).toBe('清澈空气感，35mm 镜头，克制高光。')
+    expect(styleNode?.data.styleBibleDetails?.hardBans).toEqual(['商业广告感', '高反差大片感', '炫技运镜'])
+    expect(timelineNode?.position.y ?? 0).toBeGreaterThanOrEqual(
+      (styleNode?.position.y ?? 0) + (styleNode?.data.height ?? 0),
+    )
+    expect(styleNode && timelineNode ? nodesOverlap(styleNode, timelineNode) : true).toBe(false)
   })
 
   it('keeps long edit screenplay cards from covering the edit pipeline in the default layout', () => {
@@ -1665,7 +1758,6 @@ describe('workspace node canvas projection', () => {
               project: {
                 videoRatio: '16:9',
                 artStyle: null,
-                directorStyleDoc: null,
               },
               editScript: {
                 id: 'edit-grid',
@@ -1879,7 +1971,6 @@ describe('workspace node canvas projection', () => {
               project: {
                 videoRatio: '16:9',
                 artStyle: null,
-                directorStyleDoc: null,
               },
               editScript: {
                 id: 'edit-grid-empty',

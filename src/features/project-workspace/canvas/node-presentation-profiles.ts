@@ -46,6 +46,11 @@ export const WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE: WorkspaceCanvasNodeSize
   height: 380,
 }
 
+export const WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE: WorkspaceCanvasNodeSize = {
+  width: 420,
+  height: 420,
+}
+
 export const WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE: WorkspaceCanvasNodeSize = {
   width: 420,
   height: 360,
@@ -98,6 +103,15 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
   },
   editScreenplay: {
     collapsed: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
+  editStyleBible: {
+    collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
+    expanded: {
+      width: 620,
+      height: 720,
+    },
     expandedLayout: 'stack',
     defaultExpanded: false,
   },

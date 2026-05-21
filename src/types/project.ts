@@ -289,6 +289,7 @@ export interface ProjectEditScreenplay {
   projectId: string
   episodeId: string
   userPrompt: string
+  styleBible?: unknown
   screenplayText: string
   status: string
 }
@@ -298,6 +299,7 @@ export interface ProjectEditScript {
   projectId: string
   episodeId: string
   userPrompt: string
+  styleBible?: unknown
   screenplayText?: string | null
   title: string
   logline: string | null

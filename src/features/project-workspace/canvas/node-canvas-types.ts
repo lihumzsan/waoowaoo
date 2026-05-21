@@ -10,6 +10,7 @@ export type WorkspaceCanvasNodeKind =
   | 'videoClip'
   | 'finalTimeline'
   | 'editScreenplay'
+  | 'editStyleBible'
   | 'editPipelineStep'
   | 'editScript'
   | 'spaceConsistency'
@@ -17,7 +18,7 @@ export type WorkspaceCanvasNodeKind =
   | 'bgmScore'
   | 'editRequiredAsset'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editPipelineStep' | 'editScript' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | { readonly type: 'update_story'; readonly value: string }
@@ -290,6 +291,45 @@ export interface WorkspaceCanvasEditScreenplayDetails {
   readonly userPrompt: string
 }
 
+export interface WorkspaceCanvasStyleBibleVisualPolicy {
+  readonly positivePrompt?: string | null
+  readonly negativePrompt?: string | null
+  readonly imageFilterPrompt?: string | null
+  readonly lightingPrompt?: string | null
+  readonly colorPrompt?: string | null
+  readonly texturePrompt?: string | null
+  readonly compositionPrompt?: string | null
+}
+
+export interface WorkspaceCanvasStyleBibleCameraPolicy {
+  readonly rhythmPrompt?: string | null
+  readonly movementPrompt?: string | null
+  readonly lensAndDepthPrompt?: string | null
+  readonly editingPacingPrompt?: string | null
+}
+
+export interface WorkspaceCanvasStyleBibleMotionPolicy {
+  readonly subjectMotionPrompt?: string | null
+  readonly actingPrompt?: string | null
+}
+
+export interface WorkspaceCanvasStyleBibleSoundPolicy {
+  readonly positivePrompt?: string | null
+  readonly negativePrompt?: string | null
+  readonly soundFilterPrompt?: string | null
+  readonly soundStylePrompt?: string | null
+}
+
+export interface WorkspaceCanvasStyleBibleDetails {
+  readonly rawUserStyle?: string | null
+  readonly styleSummary?: string | null
+  readonly visual: WorkspaceCanvasStyleBibleVisualPolicy
+  readonly camera: WorkspaceCanvasStyleBibleCameraPolicy
+  readonly motion: WorkspaceCanvasStyleBibleMotionPolicy
+  readonly sound: WorkspaceCanvasStyleBibleSoundPolicy
+  readonly hardBans: readonly string[]
+}
+
 export interface WorkspaceCanvasVideoPlanDetails {
   readonly editScriptId: string
   readonly blockIndex: number
@@ -439,6 +479,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
   readonly editScreenplayDetails?: WorkspaceCanvasEditScreenplayDetails
+  readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails
   readonly editPipelineStepDetails?: WorkspaceCanvasEditPipelineStepDetails
   readonly editScriptDetails?: WorkspaceCanvasEditScriptDetails
   readonly spaceConsistencyDetails?: WorkspaceCanvasSpaceConsistencyDetails
