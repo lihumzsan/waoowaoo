@@ -1,0 +1,34 @@
+{
+  "eyebrow": "Coordinate model test",
+  "title": "2D Coordinate Person Placement Test",
+  "subtitle": "Upload a scene image and a person image, choose a coordinate reference style, then submit them to the edit model to test whether it can place the person at the requested X/Y coordinate.",
+  "sceneImage": "Scene image",
+  "characterImage": "Person image",
+  "emptyFile": "Choose image",
+  "referenceMode": "Coordinate reference style",
+  "modes": {
+    "overlay": "Grid overlay",
+    "outerAxes": "Outer axes"
+  },
+  "gridPreset": "Grid preset",
+  "presets": {
+    "12x8": "12 x 8 coarse grid",
+    "16x9": "16 x 9 production grid",
+    "24x14": "24 x 14 fine grid"
+  },
+  "targetX": "Target X",
+  "targetY": "Target Y",
+  "prompt": "Prompt",
+  "promptPlaceholder": "Example: Place the person naturally in front of the sofa, preserving the scene lighting and perspective, without coordinate lines.",
+  "generate": "Generate test image",
+  "generating": "Generating",
+  "rebuildPreview": "Rebuild coordinate map",
+  "coordinatePreview": "Coordinate reference",
+  "characterPreview": "Person reference",
+  "result": "Model result",
+  "emptyPreview": "Upload a scene image to build the coordinate reference.",
+  "emptyCharacter": "Upload a person image to preview it here.",
+  "emptyResult": "The model output appears here after a test run.",
+  "model": "Model",
+  "storageKey": "Storage key"
+}

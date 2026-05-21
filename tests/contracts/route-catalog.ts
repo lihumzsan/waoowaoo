@@ -169,6 +169,7 @@ const ROUTE_FILES = [
   'src/app/api/user/api-config/test-connection/route.ts',
   'src/app/api/user/api-config/test-provider/route.ts',
   'src/app/api/user/balance/route.ts',
+  'src/app/api/user/coordinate-placement-test/generate/route.ts',
   'src/app/api/user/costs/details/route.ts',
   'src/app/api/user/costs/route.ts',
   'src/app/api/user/ai-story-expand/route.ts',

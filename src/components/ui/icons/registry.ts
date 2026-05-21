@@ -36,6 +36,8 @@ import {
   FolderOpen,
   Globe,
   GripVertical,
+  Crosshair,
+  Grid3X3,
   Image,
   ImagePlus,
   Info,
@@ -186,6 +188,8 @@ export const iconRegistry = {
   film: Film,
   folderOpen: FolderOpen,
   gripVertical: GripVertical,
+  crosshair: Crosshair,
+  grid: Grid3X3,
 } as const satisfies Record<string, LucideIcon>
 
 export type AppIconName = keyof typeof iconRegistry

@@ -1,0 +1,34 @@
+{
+  "eyebrow": "坐标模型测试",
+  "title": "2D 坐标人物放置测试",
+  "subtitle": "上传场景图和人物图，选择坐标参考方式后提交给修图模型，验证模型能否按指定 X/Y 坐标把人物放进场景。",
+  "sceneImage": "场景图片",
+  "characterImage": "人物图片",
+  "emptyFile": "选择图片",
+  "referenceMode": "坐标参考方式",
+  "modes": {
+    "overlay": "网格叠图",
+    "outerAxes": "外置坐标轴"
+  },
+  "gridPreset": "网格规格",
+  "presets": {
+    "12x8": "12 x 8 粗网格",
+    "16x9": "16 x 9 生产网格",
+    "24x14": "24 x 14 细网格"
+  },
+  "targetX": "目标 X",
+  "targetY": "目标 Y",
+  "prompt": "提示词",
+  "promptPlaceholder": "例如：把人物自然放在沙发前方，保持原场景光照和透视，不要出现坐标线。",
+  "generate": "生成测试图",
+  "generating": "生成中",
+  "rebuildPreview": "重建坐标图",
+  "coordinatePreview": "坐标参考图",
+  "characterPreview": "人物参考图",
+  "result": "模型结果",
+  "emptyPreview": "上传场景图后会生成坐标参考图。",
+  "emptyCharacter": "上传人物图后会显示在这里。",
+  "emptyResult": "提交测试后显示模型输出。",
+  "model": "模型",
+  "storageKey": "存储 Key"
+}
