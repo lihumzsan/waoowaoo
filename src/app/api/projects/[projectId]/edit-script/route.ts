@@ -8,8 +8,10 @@ import {
   updateProjectEditScriptAssetRequirementDescription,
   updateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/edit-script/service'
+import { arrangeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-arrangement'
 import { mergeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-merge'
 import {
+  arrangeEditScriptVideoBlocksRequestSchema,
   createEditScriptRequestSchema,
   getEditScriptRequestSchema,
   mergeEditScriptVideoBlocksRequestSchema,
@@ -79,13 +81,27 @@ export const PATCH = apiHandler(async (
   const body = await request.json().catch(() => ({})) as unknown
   const parsed = updateEditScriptVideoBlockPromptRequestSchema
     .or(updateEditScriptAssetRequirementDescriptionRequestSchema)
+    .or(arrangeEditScriptVideoBlocksRequestSchema)
     .or(mergeEditScriptVideoBlocksRequestSchema)
     .safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
   }
 
-  if ('operation' in parsed.data) {
+  if ('operation' in parsed.data && parsed.data.operation === 'arrangeVideoBlocks') {
+    const editScript = await arrangeProjectEditScriptVideoBlocks({
+      projectId,
+      episodeId: parsed.data.episodeId,
+      editScriptId: parsed.data.editScriptId,
+      blocks: parsed.data.blocks,
+      userId: authResult.session.user.id,
+      locale: resolveRequiredTaskLocale(request, body),
+    })
+
+    return NextResponse.json({ editScript })
+  }
+
+  if ('operation' in parsed.data && parsed.data.operation === 'mergeVideoBlocks') {
     const editScript = await mergeProjectEditScriptVideoBlocks({
       projectId,
       episodeId: parsed.data.episodeId,

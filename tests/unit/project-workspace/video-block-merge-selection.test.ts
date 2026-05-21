@@ -122,8 +122,8 @@ function editScript(): ProjectEditScript {
   }
 }
 
-describe('video block merge selection', () => {
-  it('uses a selection action instead of merging immediately from the node button', () => {
+describe('video block arrangement action', () => {
+  it('opens the manual arrangement panel instead of merging from the node button', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -139,31 +139,10 @@ describe('video block merge selection', () => {
 
     expect(videoPlanNodes).toHaveLength(2)
     expect(videoPlanNodes[0]?.data.secondaryAction).toEqual({
-      type: 'select_video_block_for_merge',
+      type: 'open_video_block_arrangement',
       editScriptId: 'edit-script-1',
       blockIndex: 0,
     })
-    expect(videoPlanNodes[0]?.data.secondaryActionLabel).toBe('actions.selectVideoBlockToMerge')
-  })
-
-  it('marks the selected segment and adjacent merge target before submit', () => {
-    const projection = buildWorkspaceNodeCanvasProjection({
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      storyText: 'story',
-      clips: [clip()],
-      storyboards: [storyboard()],
-      editScript: editScript(),
-      savedLayouts: [],
-      videoBlockMergeSelection: { editScriptId: 'edit-script-1', blockIndex: 0 },
-      translate: t,
-    })
-
-    const videoPlanNodes = projection.nodes.filter((node) => node.data.kind === 'videoPlan')
-
-    expect(videoPlanNodes[0]?.data.visualState).toBe('videoBlockMergeSelected')
-    expect(videoPlanNodes[0]?.data.secondaryActionLabel).toBe('actions.cancelVideoBlockMerge')
-    expect(videoPlanNodes[1]?.data.visualState).toBe('videoBlockMergeCandidate')
-    expect(videoPlanNodes[1]?.data.secondaryActionLabel).toBe('actions.mergeWithSelectedVideoBlock')
+    expect(videoPlanNodes[0]?.data.secondaryActionLabel).toBe('actions.arrangeVideoBlocks')
   })
 })

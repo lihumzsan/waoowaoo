@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { WorkspaceRuntimeValue } from '../WorkspaceRuntimeContext'
+import type { WorkspaceRuntimeValue, WorkspaceVideoBlockArrangementBlock } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
@@ -65,7 +65,7 @@ interface UseWorkspaceRuntimeParams {
     field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
   handleUpdateVideoPlanPrompt: (editScriptId: string, blockIndex: number, prompt: string) => Promise<void>
-  handleMergeVideoBlocks: (editScriptId: string, leftBlockIndex: number, rightBlockIndex: number) => Promise<void>
+  handleArrangeVideoBlocks: (editScriptId: string, blocks: readonly WorkspaceVideoBlockArrangementBlock[]) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
 }
@@ -105,7 +105,7 @@ export function useWorkspaceRuntime({
   handleGenerateEditStoryboardCoordinates,
   handleUpdateVideoPrompt,
   handleUpdateVideoPlanPrompt,
-  handleMergeVideoBlocks,
+  handleArrangeVideoBlocks,
   handleUpdateEditAssetRequirementDescription,
   handleUpdatePanelVideoModel,
 }: UseWorkspaceRuntimeParams) {
@@ -158,7 +158,7 @@ export function useWorkspaceRuntime({
     onGenerateEditStoryboardCoordinates: handleGenerateEditStoryboardCoordinates,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateVideoPlanPrompt: handleUpdateVideoPlanPrompt,
-    onMergeVideoBlocks: handleMergeVideoBlocks,
+    onArrangeVideoBlocks: handleArrangeVideoBlocks,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
@@ -183,7 +183,7 @@ export function useWorkspaceRuntime({
     handleUpdateClip,
     handleUpdateConfig,
     handleUpdateEpisode,
-    handleMergeVideoBlocks,
+    handleArrangeVideoBlocks,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,
     handleUpdateVideoPlanPrompt,

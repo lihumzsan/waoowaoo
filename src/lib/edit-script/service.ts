@@ -460,6 +460,9 @@ function parseVideoBlocksJson(value: Prisma.JsonValue | null, shots: readonly Ed
     response: { items: value },
     allShotNumbers: shots.map((shot) => shot.shotNumber),
     shots,
+    coverageMode: 'set',
+    requireContinuousGroups: false,
+    enforceSingleMinDuration: false,
   }).items
 }
 

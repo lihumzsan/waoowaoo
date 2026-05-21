@@ -162,7 +162,6 @@ function parseGroupShotNumbers(value: unknown): number[] {
   return value
     .map((item) => (typeof item === 'number' ? item : Number(item)))
     .filter((item) => Number.isInteger(item) && item > 0)
-    .sort((left, right) => left - right)
 }
 
 function shotSoundForGroup(shotNumbers: readonly number[], editScript: FinalRenderEditScriptInput | null): string | null {
@@ -268,7 +267,97 @@ export function parseFinalRenderEditScriptVideoBlocks(input: {
     response: { items: input.value },
     allShotNumbers: input.shots.map((shot) => shot.shotNumber),
     shots: input.shots,
+    coverageMode: 'set',
+    requireContinuousGroups: false,
+    enforceSingleMinDuration: false,
   }).items
+}
+
+function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((shotNumber, index) => shotNumber === right[index])
+}
+
+function buildPanelClip(panel: FinalRenderPanelInput, editScript: FinalRenderEditScriptInput | null): FinalRenderClipPlan {
+  const shot = findShotByPanel(panel, editScript)
+  const shotNumber = shotNumberForPanelClip(shot, panel)
+  const durationSeconds = clampPositiveDuration(panel.duration, shot?.durationSec ?? 3)
+  const source = resolvePanelVideoSource(panel)
+  return {
+    panelId: panel.id,
+    groupId: null,
+    sourceKind: 'panel',
+    source: source ?? '',
+    durationSeconds,
+    order: 0,
+    shotNumber,
+    shotNumbers: shotNumber === null ? [] : [shotNumber],
+    description: normalizeString(panel.description) || null,
+    sound: normalizeString(shot?.sound) || null,
+  }
+}
+
+function buildEditScriptOrderedFinalRenderClips(input: {
+  readonly panels: readonly FinalRenderPanelInput[]
+  readonly videoGroups: readonly FinalRenderVideoGroupInput[]
+  readonly editScript: FinalRenderEditScriptInput
+}): FinalRenderClipPlan[] {
+  const sortedPanels = sortPanelsForFinalRender(input.panels, input.editScript)
+  const panelByShotNumber = new Map<number, FinalRenderPanelInput>()
+  sortedPanels.forEach((panel) => {
+    const shot = findShotByPanel(panel, input.editScript)
+    const shotNumber = shotNumberForPanelClip(shot, panel)
+    if (typeof shotNumber === 'number' && !panelByShotNumber.has(shotNumber)) {
+      panelByShotNumber.set(shotNumber, panel)
+    }
+  })
+
+  const groups = input.videoGroups.map((group) => ({
+    group,
+    shotNumbers: parseGroupShotNumbers(group.shotNumbers),
+  }))
+  const clips: FinalRenderClipPlan[] = []
+  const coveredShotNumbers = new Set<number>()
+
+  input.editScript.videoBlocks.forEach((block) => {
+    const matchingGroup = groups.find((item) => sameShotNumbers(item.shotNumbers, block.shotNumbers))
+    const source = matchingGroup ? resolveVideoGroupSource(matchingGroup.group) : null
+    if (matchingGroup && source) {
+      block.shotNumbers.forEach((shotNumber) => coveredShotNumbers.add(shotNumber))
+      clips.push({
+        panelId: matchingGroup.group.id,
+        groupId: matchingGroup.group.id,
+        sourceKind: 'videoGroup',
+        source,
+        durationSeconds: clampPositiveDuration(matchingGroup.group.durationSec, block.shotNumbers.length * 3),
+        order: 0,
+        shotNumber: block.shotNumbers[0] ?? null,
+        shotNumbers: block.shotNumbers,
+        description: shotDescriptionForGroup(block.shotNumbers, input.editScript, matchingGroup.group.prompt ?? block.prompt),
+        sound: shotSoundForGroup(block.shotNumbers, input.editScript),
+      })
+      return
+    }
+
+    block.shotNumbers.forEach((shotNumber) => {
+      const panel = panelByShotNumber.get(shotNumber)
+      if (!panel) return
+      coveredShotNumbers.add(shotNumber)
+      clips.push(buildPanelClip(panel, input.editScript))
+    })
+  })
+
+  sortedPanels.forEach((panel) => {
+    const shot = findShotByPanel(panel, input.editScript)
+    const shotNumber = shotNumberForPanelClip(shot, panel)
+    if (typeof shotNumber === 'number' && coveredShotNumbers.has(shotNumber)) return
+    clips.push(buildPanelClip(panel, input.editScript))
+  })
+
+  return clips.map((clip, index) => ({
+    ...clip,
+    order: index + 1,
+  }))
 }
 
 export function buildFinalRenderClips(input: {
@@ -276,6 +365,14 @@ export function buildFinalRenderClips(input: {
   readonly videoGroups?: readonly FinalRenderVideoGroupInput[]
   readonly editScript: FinalRenderEditScriptInput | null
 }): FinalRenderClipPlan[] {
+  if (input.editScript?.videoBlocks.length) {
+    return buildEditScriptOrderedFinalRenderClips({
+      panels: input.panels,
+      videoGroups: input.videoGroups ?? [],
+      editScript: input.editScript,
+    })
+  }
+
   const groupPlans = (input.videoGroups ?? [])
     .map((group) => ({
       group,

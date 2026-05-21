@@ -33,6 +33,31 @@ describe('video block plan validator', () => {
     })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
   })
 
+  it('allows manual arrangement to preserve user-defined shot order', () => {
+    const plan = normalizeVideoBlockPlanResponse({
+      allShotNumbers: [1, 2, 3],
+      shots: [
+        { shotNumber: 1, durationSec: 3 },
+        { shotNumber: 2, durationSec: 3 },
+        { shotNumber: 3, durationSec: 3 },
+      ],
+      coverageMode: 'set',
+      requireContinuousGroups: false,
+      enforceSingleMinDuration: false,
+      response: {
+        items: [
+          { type: 'group', shotNumbers: [1, 3], reason: 'manual adjacency', prompt: 'manual group prompt' },
+          { type: 'single', shotNumbers: [2], reason: 'remaining beat', prompt: 'single prompt' },
+        ],
+      },
+    })
+
+    expect(plan.items).toEqual([
+      { kind: 'group', shotNumbers: [1, 3], gridMode: '2x2', reason: 'manual adjacency', prompt: 'manual group prompt' },
+      { kind: 'single', shotNumbers: [2], reason: 'remaining beat', prompt: 'single prompt' },
+    ])
+  })
+
   it('requires final prompts for every planned video block', () => {
     expect(() => normalizeVideoBlockPlanResponse({
       allShotNumbers: [1],

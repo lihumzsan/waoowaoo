@@ -173,9 +173,19 @@ export const editScriptVideoBlockMergeSchema = z.object({
   prompt: z.string().trim().min(1),
 })
 
+export const editScriptVideoBlockArrangementSchema = z.object({
+  videoBlocks: z.array(z.object({
+    blockIndex: z.number().int().min(0).max(59),
+    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+    reason: z.string().trim().min(1),
+    prompt: z.string().trim().min(1),
+  })).min(1).max(60),
+})
+
 export type EditScriptVideoPromptBibleOutput = z.infer<typeof editScriptVideoPromptBibleSchema>
 export type EditScriptVideoPromptBlockOutput = z.infer<typeof editScriptVideoPromptBlockSchema>
 export type EditScriptVideoBlockMergeOutput = z.infer<typeof editScriptVideoBlockMergeSchema>
+export type EditScriptVideoBlockArrangementOutput = z.infer<typeof editScriptVideoBlockArrangementSchema>
 
 export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
@@ -241,6 +251,15 @@ export const mergeEditScriptVideoBlocksRequestSchema = z.object({
   editScriptId: z.string().trim().min(1),
   leftBlockIndex: z.number().int().min(0).max(58),
   rightBlockIndex: z.number().int().min(1).max(59),
+})
+
+export const arrangeEditScriptVideoBlocksRequestSchema = z.object({
+  operation: z.literal('arrangeVideoBlocks'),
+  episodeId: z.string().trim().min(1),
+  editScriptId: z.string().trim().min(1),
+  blocks: z.array(z.object({
+    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+  })).min(1).max(60),
 })
 
 export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object({

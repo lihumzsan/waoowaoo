@@ -281,12 +281,6 @@ function validateAssetReferenceShotNumbers(value: unknown): number[] {
   if (shotNumbers.length < 1 || shotNumbers.length > 9) {
     throw new Error(`ASSET_REFERENCE_VIDEO_SHOT_COUNT_UNSUPPORTED:${shotNumbers.length}`)
   }
-  shotNumbers.forEach((shotNumber, index) => {
-    if (index === 0) return
-    if (shotNumber !== shotNumbers[index - 1] + 1) {
-      throw new Error('ASSET_REFERENCE_VIDEO_SHOT_NUMBERS_NOT_CONTINUOUS')
-    }
-  })
   return shotNumbers
 }
 
@@ -527,6 +521,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   const shotNumbers = validateVideoGroupShotNumbers({
     gridMode,
     shotNumbers: parseShotNumbers(payload.shotNumbers),
+    requireContinuous: false,
   })
 
   await prisma.projectVideoGroup.update({

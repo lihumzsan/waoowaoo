@@ -56,10 +56,36 @@ function assertPlanCoverage(items: readonly VideoBlockPlanItem[], allShotNumbers
   })
 }
 
+function assertPlanSetCoverage(items: readonly VideoBlockPlanItem[], allShotNumbers: readonly number[]) {
+  const flattened = items.flatMap((item) => item.shotNumbers)
+  if (flattened.length !== allShotNumbers.length) {
+    throw new Error(`VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID:${flattened.length}:${allShotNumbers.length}`)
+  }
+  const expected = new Set(allShotNumbers)
+  const seen = new Set<number>()
+  flattened.forEach((shotNumber) => {
+    if (!expected.has(shotNumber)) {
+      throw new Error(`VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID:${shotNumber}:unexpected`)
+    }
+    if (seen.has(shotNumber)) {
+      throw new Error(`VIDEO_BLOCK_PLAN_SHOT_COVERAGE_DUPLICATE:${shotNumber}`)
+    }
+    seen.add(shotNumber)
+  })
+  allShotNumbers.forEach((shotNumber) => {
+    if (!seen.has(shotNumber)) {
+      throw new Error(`VIDEO_BLOCK_PLAN_SHOT_COVERAGE_MISSING:${shotNumber}`)
+    }
+  })
+}
+
 export function normalizeVideoBlockPlanResponse(params: {
   readonly response: unknown
   readonly allShotNumbers: readonly number[]
   readonly shots?: readonly Pick<VideoGroupShot, 'shotNumber' | 'durationSec'>[]
+  readonly coverageMode?: 'ordered' | 'set'
+  readonly requireContinuousGroups?: boolean
+  readonly enforceSingleMinDuration?: boolean
 }): VideoBlockPlan {
   const durationByShot = new Map((params.shots ?? []).map((shot) => [shot.shotNumber, shot.durationSec]))
   const root = isRecord(params.response) ? params.response : null
@@ -75,7 +101,7 @@ export function normalizeVideoBlockPlanResponse(params: {
 
     if (kind === 'single') {
       if (shotNumbers.length !== 1) throw new Error('VIDEO_BLOCK_PLAN_SINGLE_SHOT_COUNT_INVALID')
-      if (durationByShot.size > 0) {
+      if ((params.enforceSingleMinDuration ?? true) && durationByShot.size > 0) {
         const durationSec = durationByShot.get(shotNumbers[0])
         if (!durationSec) throw new Error(`VIDEO_BLOCK_PLAN_SHOT_DURATION_MISSING:${shotNumbers[0]}`)
         if (durationSec < 4) {
@@ -93,6 +119,7 @@ export function normalizeVideoBlockPlanResponse(params: {
     const normalizedShotNumbers = validateVideoGroupShotNumbers({
       gridMode: inferredGridMode,
       shotNumbers,
+      requireContinuous: params.requireContinuousGroups ?? true,
     })
     if (durationByShot.size > 0) {
       const durationSec = normalizedShotNumbers.reduce((total, shotNumber) => {
@@ -113,6 +140,10 @@ export function normalizeVideoBlockPlanResponse(params: {
     }
   })
 
-  assertPlanCoverage(items, params.allShotNumbers)
+  if (params.coverageMode === 'set') {
+    assertPlanSetCoverage(items, params.allShotNumbers)
+  } else {
+    assertPlanCoverage(items, params.allShotNumbers)
+  }
   return { items }
 }

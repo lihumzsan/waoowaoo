@@ -5,13 +5,19 @@ const GRID_CELLS = {
   '3x3': 9,
 } as const satisfies Record<VideoGridMode, number>
 
-function normalizeShotNumbers(shotNumbers: readonly number[]): number[] {
+function normalizeShotNumbers(input: {
+  readonly shotNumbers: readonly number[]
+  readonly requireContinuous: boolean
+}): number[] {
+  const { shotNumbers, requireContinuous } = input
   const normalized = shotNumbers.map((value) => Number(value))
   if (normalized.some((value) => !Number.isInteger(value) || value <= 0)) {
     throw new Error('VIDEO_GROUP_SHOT_NUMBERS_INVALID')
   }
   const unique = new Set(normalized)
   if (unique.size !== normalized.length) throw new Error('VIDEO_GROUP_SHOT_NUMBERS_DUPLICATE')
+  if (!requireContinuous) return normalized
+
   const sorted = [...normalized].sort((left, right) => left - right)
   sorted.forEach((shotNumber, index) => {
     if (index === 0) return
@@ -29,8 +35,12 @@ export function videoGridCellCount(gridMode: VideoGridMode): number {
 export function validateVideoGroupShotNumbers(params: {
   readonly gridMode: VideoGridMode
   readonly shotNumbers: readonly number[]
+  readonly requireContinuous?: boolean
 }): number[] {
-  const normalized = normalizeShotNumbers(params.shotNumbers)
+  const normalized = normalizeShotNumbers({
+    shotNumbers: params.shotNumbers,
+    requireContinuous: params.requireContinuous ?? true,
+  })
   const maxCount = videoGridCellCount(params.gridMode)
   if (normalized.length < 2 || normalized.length > maxCount) {
     throw new Error(`VIDEO_GROUP_SHOT_COUNT_MISMATCH:${normalized.length}:2-${maxCount}`)
@@ -48,7 +58,10 @@ export function chunkVideoGroupShots(params: {
   readonly gridMode: VideoGridMode
   readonly shotNumbers: readonly number[]
 }): number[][] {
-  const normalized = normalizeShotNumbers(params.shotNumbers)
+  const normalized = normalizeShotNumbers({
+    shotNumbers: params.shotNumbers,
+    requireContinuous: true,
+  })
   const cellCount = videoGridCellCount(params.gridMode)
   const chunks: number[][] = []
   for (let index = 0; index < normalized.length; index += cellCount) {

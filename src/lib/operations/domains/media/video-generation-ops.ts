@@ -478,6 +478,9 @@ async function buildEpisodeVideoBlockPlan(params: {
       response: { items: editScript.videoBlocksJson },
       allShotNumbers: shots.map((shot) => shot.shotNumber),
       shots,
+      coverageMode: 'set',
+      requireContinuousGroups: false,
+      enforceSingleMinDuration: false,
     }),
   }
 }
@@ -513,6 +516,7 @@ async function resolveVideoGroupInput(params: {
   const shotNumbers = validateVideoGroupShotNumbers({
     gridMode: params.gridMode,
     shotNumbers: params.shotNumbers,
+    requireContinuous: false,
   })
   const [episode, editScript, panels] = await Promise.all([
     prisma.projectEpisode.findFirst({
@@ -612,12 +616,6 @@ function validateAssetReferenceShotNumbers(shotNumbers: readonly number[]): numb
   if (normalized.length < 1 || normalized.length > 9) {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_SHOT_COUNT_UNSUPPORTED:${normalized.length}`)
   }
-  normalized.forEach((shotNumber, index) => {
-    if (index === 0) return
-    if (shotNumber !== normalized[index - 1] + 1) {
-      throw new Error('PROJECT_AGENT_ASSET_REFERENCE_SHOT_NUMBERS_NOT_CONTINUOUS')
-    }
-  })
   return normalized
 }
 

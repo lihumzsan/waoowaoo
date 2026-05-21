@@ -141,6 +141,31 @@ const videoBlockMergeMock = vi.hoisted(() => ({
   })),
 }))
 
+const videoBlockArrangementMock = vi.hoisted(() => ({
+  arrangeProjectEditScriptVideoBlocks: vi.fn(async () => ({
+    id: 'edit-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'one minute sci-fi',
+    title: 'Orbital Silence',
+    logline: 'A pilot meets a machine intelligence.',
+    durationSec: 60,
+    shotCount: 8,
+    status: 'ready',
+    shots: [],
+    videoBlocks: [
+      {
+        kind: 'group',
+        shotNumbers: [1, 3, 2],
+        gridMode: '2x2',
+        reason: 'manual arrangement',
+        prompt: 'rewritten manual prompt',
+      },
+    ],
+    requirements: [],
+  })),
+}))
+
 const storyboardConsistencyServiceMock = vi.hoisted(() => ({
   submitEditScriptCoordinateStoryboard: vi.fn(async () => ({
     success: true,
@@ -182,6 +207,7 @@ vi.mock('@/lib/api-auth', () => {
 })
 
 vi.mock('@/lib/edit-script/service', () => serviceMock)
+vi.mock('@/lib/edit-script/video-block-arrangement', () => videoBlockArrangementMock)
 vi.mock('@/lib/edit-script/video-block-merge', () => videoBlockMergeMock)
 vi.mock('@/lib/edit-script/storyboard-consistency/service', () => storyboardConsistencyServiceMock)
 
@@ -393,6 +419,40 @@ describe('project edit script route', () => {
       editScriptId: 'edit-1',
       leftBlockIndex: 0,
       rightBlockIndex: 1,
+      userId: 'user-1',
+      locale: 'zh',
+    })
+  })
+
+  it('PATCH /api/projects/[projectId]/edit-script -> arranges video block shots and rewrites affected prompts', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script',
+      method: 'PATCH',
+      headers: { 'accept-language': 'zh' },
+      body: {
+        operation: 'arrangeVideoBlocks',
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+        blocks: [
+          { shotNumbers: [1, 3, 2] },
+          { shotNumbers: [4] },
+        ],
+      },
+    })
+
+    const response = await editScriptPatch(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.editScript.videoBlocks[0].shotNumbers).toEqual([1, 3, 2])
+    expect(videoBlockArrangementMock.arrangeProjectEditScriptVideoBlocks).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      blocks: [
+        { shotNumbers: [1, 3, 2] },
+        { shotNumbers: [4] },
+      ],
       userId: 'user-1',
       locale: 'zh',
     })

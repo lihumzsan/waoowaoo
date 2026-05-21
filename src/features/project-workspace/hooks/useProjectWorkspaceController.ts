@@ -23,10 +23,11 @@ import {
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
   useGenerateProjectEditScriptStoryboardCoordinates,
-  useMergeProjectEditScriptVideoBlocks,
+  useArrangeProjectEditScriptVideoBlocks,
   useUpdateProjectEditScriptAssetRequirementDescription,
   useUpdateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/query/hooks'
+import type { WorkspaceVideoBlockArrangementBlock } from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
   project,
@@ -121,7 +122,7 @@ export function useProjectWorkspaceController({
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
   const updateVideoPlanPrompt = useUpdateProjectEditScriptVideoBlockPrompt(projectId)
-  const mergeVideoBlocks = useMergeProjectEditScriptVideoBlocks(projectId)
+  const arrangeVideoBlocks = useArrangeProjectEditScriptVideoBlocks(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
   const handleGenerateEditAssets = async (editScriptId: string, requirementId?: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
@@ -148,9 +149,9 @@ export function useProjectWorkspaceController({
     await updateVideoPlanPrompt.mutateAsync({ episodeId, editScriptId, blockIndex, prompt })
     await onRefresh({ mode: 'full' })
   }
-  const handleMergeVideoBlocks = async (editScriptId: string, leftBlockIndex: number, rightBlockIndex: number) => {
+  const handleArrangeVideoBlocks = async (editScriptId: string, blocks: readonly WorkspaceVideoBlockArrangementBlock[]) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await mergeVideoBlocks.mutateAsync({ episodeId, editScriptId, leftBlockIndex, rightBlockIndex })
+    await arrangeVideoBlocks.mutateAsync({ episodeId, editScriptId, blocks })
     await onRefresh({ mode: 'full' })
   }
   const handleUpdateEditAssetRequirementDescription = async (editScriptId: string, requirementId: string, description: string) => {
@@ -194,7 +195,7 @@ export function useProjectWorkspaceController({
     handleGenerateEditStoryboardCoordinates,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateVideoPlanPrompt,
-    handleMergeVideoBlocks,
+    handleArrangeVideoBlocks,
     handleUpdateEditAssetRequirementDescription,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
   })

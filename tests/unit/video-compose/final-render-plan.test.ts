@@ -127,6 +127,37 @@ describe('final render plan', () => {
     }))
   })
 
+  it('uses manually arranged videoBlock order for final render clips', () => {
+    const arrangedEditScript: FinalRenderEditScriptInput = {
+      ...editScript,
+      videoBlocks: [
+        {
+          kind: 'single',
+          shotNumbers: [2],
+          reason: 'manual first beat',
+          prompt: 'shot 2 first',
+        },
+        {
+          kind: 'single',
+          shotNumbers: [1],
+          reason: 'manual second beat',
+          prompt: 'shot 1 second',
+        },
+      ],
+    }
+
+    const clips = buildFinalRenderClips({
+      editScript: arrangedEditScript,
+      panels: [
+        panel({ id: 'shot-1', panelNumber: 1 }),
+        panel({ id: 'shot-2', panelNumber: 2 }),
+      ],
+    })
+
+    expect(clips.map((clip) => clip.shotNumber)).toEqual([2, 1])
+    expect(clips.map((clip) => clip.order)).toEqual([1, 2])
+  })
+
   it('selects supported Google Lyria durations without exceeding Pro limits', () => {
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-clip-preview', 118)).toBe(30)
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 31)).toBe(60)

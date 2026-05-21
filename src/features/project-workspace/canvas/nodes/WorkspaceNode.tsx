@@ -1605,7 +1605,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const canToggleDetails = nodeCanToggleDetails(data.kind)
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
-  const secondaryActionIcon: AppIconName = secondaryAction?.type === 'merge_video_blocks' || secondaryAction?.type === 'select_video_block_for_merge'
+  const secondaryActionIcon: AppIconName = secondaryAction?.type === 'open_video_block_arrangement'
     ? 'link'
     : 'externalLink'
   const nodeId = data.nodeId
@@ -1648,7 +1648,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
       {hasTarget ? <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
       {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 
-      <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-200 ring-2 ring-sky-100' : data.visualState === 'videoBlockMergeSelected' ? 'border-amber-300 ring-2 ring-amber-200' : data.visualState === 'videoBlockMergeCandidate' ? 'border-emerald-200 ring-2 ring-emerald-100' : 'border-slate-200'}`}>
+      <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-200 ring-2 ring-sky-100' : 'border-slate-200'}`}>
         <div ref={measuredContentRef}>
           <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
             <div className="min-w-0">
