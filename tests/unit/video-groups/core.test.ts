@@ -13,6 +13,7 @@ describe('video group core', () => {
     expect(validateVideoGroupShotNumbers({ gridMode: '3x3', shotNumbers: [1, 2, 3, 4, 5, 6, 7] })).toEqual([1, 2, 3, 4, 5, 6, 7])
     expect(validateVideoGroupShotNumbers({ gridMode: '3x3', shotNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9] })).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
     expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [1, 2, 4, 5] })).toThrow('VIDEO_GROUP_SHOT_NUMBERS_NOT_CONTINUOUS')
+    expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [2, 1] })).toThrow('VIDEO_GROUP_SHOT_NUMBERS_NOT_CONTINUOUS')
     expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [1] })).toThrow('VIDEO_GROUP_SHOT_COUNT_MISMATCH')
     expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [1, 2, 3, 4, 5] })).toThrow('VIDEO_GROUP_SHOT_COUNT_MISMATCH')
   })

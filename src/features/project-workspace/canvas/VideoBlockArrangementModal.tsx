@@ -1,12 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
+
+const MAX_BLOCK_DURATION_SEC = 15
+const MAX_BLOCK_SHOT_COUNT = 9
+
+type BoundaryMoveDirection = 'left' | 'right'
 
 interface ArrangementBlockDraft {
   readonly id: string
@@ -60,41 +64,78 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
   return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
-function moveShotInBlocks(input: {
-  readonly blocks: readonly ArrangementBlockDraft[]
-  readonly sourceShotNumber: number
-  readonly targetShotNumber: number
-  readonly placement: 'before' | 'after'
-}): readonly ArrangementBlockDraft[] {
-  if (input.sourceShotNumber === input.targetShotNumber) return input.blocks
-  const withoutSource = input.blocks
-    .map((block) => ({
-      ...block,
-      shotNumbers: block.shotNumbers.filter((shotNumber) => shotNumber !== input.sourceShotNumber),
-    }))
-    .filter((block) => block.shotNumbers.length > 0)
-
-  let inserted = false
-  const nextBlocks = withoutSource.map((block) => {
-    const targetIndex = block.shotNumbers.indexOf(input.targetShotNumber)
-    if (targetIndex < 0) return block
-    const insertIndex = input.placement === 'before' ? targetIndex : targetIndex + 1
-    inserted = true
-    return {
-      ...block,
-      shotNumbers: [
-        ...block.shotNumbers.slice(0, insertIndex),
-        input.sourceShotNumber,
-        ...block.shotNumbers.slice(insertIndex),
-      ],
-    }
-  })
-
-  return inserted ? nextBlocks : input.blocks
-}
-
 function durationForBlock(block: ArrangementBlockDraft, durationByShotNumber: ReadonlyMap<number, number>): number {
   return block.shotNumbers.reduce((total, shotNumber) => total + (durationByShotNumber.get(shotNumber) ?? 0), 0)
+}
+
+function targetBlockIndex(blockIndex: number, direction: BoundaryMoveDirection): number {
+  return direction === 'left' ? blockIndex - 1 : blockIndex + 1
+}
+
+function boundaryShotNumber(block: ArrangementBlockDraft, direction: BoundaryMoveDirection): number | null {
+  if (block.shotNumbers.length === 0) return null
+  return direction === 'left'
+    ? block.shotNumbers[0] ?? null
+    : block.shotNumbers[block.shotNumbers.length - 1] ?? null
+}
+
+function canMoveBoundaryShot(input: {
+  readonly blocks: readonly ArrangementBlockDraft[]
+  readonly blockIndex: number
+  readonly direction: BoundaryMoveDirection
+  readonly durationByShotNumber: ReadonlyMap<number, number>
+}): boolean {
+  const sourceBlock = input.blocks[input.blockIndex]
+  if (!sourceBlock || sourceBlock.shotNumbers.length === 0) return false
+
+  const targetIndex = targetBlockIndex(input.blockIndex, input.direction)
+  const targetBlock = input.blocks[targetIndex]
+  if (!targetBlock || targetBlock.shotNumbers.length >= MAX_BLOCK_SHOT_COUNT) return false
+
+  const shotNumber = boundaryShotNumber(sourceBlock, input.direction)
+  if (shotNumber === null) return false
+
+  const nextTargetDuration = durationForBlock(targetBlock, input.durationByShotNumber)
+    + (input.durationByShotNumber.get(shotNumber) ?? 0)
+  return nextTargetDuration <= MAX_BLOCK_DURATION_SEC
+}
+
+function moveBoundaryShot(input: {
+  readonly blocks: readonly ArrangementBlockDraft[]
+  readonly blockIndex: number
+  readonly direction: BoundaryMoveDirection
+  readonly durationByShotNumber: ReadonlyMap<number, number>
+}): readonly ArrangementBlockDraft[] {
+  const sourceBlock = input.blocks[input.blockIndex]
+  if (!sourceBlock) return input.blocks
+  const shotNumber = boundaryShotNumber(sourceBlock, input.direction)
+  if (shotNumber === null || !canMoveBoundaryShot(input)) return input.blocks
+
+  const targetIndex = targetBlockIndex(input.blockIndex, input.direction)
+  return input.blocks.map((block, index) => {
+    if (index === input.blockIndex) {
+      return {
+        ...block,
+        shotNumbers: input.direction === 'left'
+          ? block.shotNumbers.slice(1)
+          : block.shotNumbers.slice(0, -1),
+      }
+    }
+    if (index === targetIndex) {
+      return {
+        ...block,
+        shotNumbers: input.direction === 'left'
+          ? [...block.shotNumbers, shotNumber]
+          : [shotNumber, ...block.shotNumbers],
+      }
+    }
+    return block
+  }).filter((block) => block.shotNumbers.length > 0)
+}
+
+function clampBlockIndex(index: number, blockCount: number): number {
+  if (blockCount <= 0) return 0
+  return Math.min(Math.max(index, 0), blockCount - 1)
 }
 
 export default function VideoBlockArrangementModal({
@@ -106,15 +147,11 @@ export default function VideoBlockArrangementModal({
 }: VideoBlockArrangementModalProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace.videoBlockArrangement')
   const [draftBlocks, setDraftBlocks] = useState<readonly ArrangementBlockDraft[]>(() => buildInitialDraftBlocks(editScript))
-  const [selectedShotNumber, setSelectedShotNumber] = useState<number | null>(null)
-  const [draggedShotNumber, setDraggedShotNumber] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     setDraftBlocks(buildInitialDraftBlocks(editScript))
-    setSelectedShotNumber(null)
-    setDraggedShotNumber(null)
     setErrorMessage(null)
   }, [editScript])
 
@@ -138,7 +175,6 @@ export default function VideoBlockArrangementModal({
     return panels
   }, [storyboards])
 
-  const shotByNumber = useMemo(() => new Map(editScript.shots.map((shot) => [shot.shotNumber, shot])), [editScript.shots])
   const durationByShotNumber = useMemo(() => (
     new Map(editScript.shots.map((shot) => [shot.shotNumber, shot.durationSec]))
   ), [editScript.shots])
@@ -159,11 +195,28 @@ export default function VideoBlockArrangementModal({
     return views
   }, [editScript.shots, panelByShotNumber, t])
 
+  const focusedBlockIndex = useMemo(
+    () => clampBlockIndex(initialBlockIndex, draftBlocks.length),
+    [draftBlocks.length, initialBlockIndex],
+  )
+
+  const visibleBlockIndexes = useMemo(() => {
+    const startIndex = Math.max(0, focusedBlockIndex - 1)
+    const endIndex = Math.min(draftBlocks.length - 1, focusedBlockIndex + 1)
+    const indexes: number[] = []
+    for (let index = startIndex; index <= endIndex; index += 1) indexes.push(index)
+    return indexes
+  }, [draftBlocks.length, focusedBlockIndex])
+
+  const visibleShotCount = useMemo(() => (
+    visibleBlockIndexes.reduce((total, blockIndex) => total + (draftBlocks[blockIndex]?.shotNumbers.length ?? 0), 0)
+  ), [draftBlocks, visibleBlockIndexes])
+
   const invalidBlockIndexes = useMemo(() => {
     const invalid = new Set<number>()
     draftBlocks.forEach((block, index) => {
       const durationSec = durationForBlock(block, durationByShotNumber)
-      if (durationSec > 15 || block.shotNumbers.length > 9) invalid.add(index)
+      if (durationSec > MAX_BLOCK_DURATION_SEC || block.shotNumbers.length > MAX_BLOCK_SHOT_COUNT) invalid.add(index)
     })
     return invalid
   }, [draftBlocks, durationByShotNumber])
@@ -173,38 +226,17 @@ export default function VideoBlockArrangementModal({
     return draftBlocks.some((block, index) => !sameShotNumbers(block.shotNumbers, editScript.videoBlocks[index]?.shotNumbers ?? []))
   }, [draftBlocks, editScript.videoBlocks])
 
-  const selectedShot = selectedShotNumber ? shotByNumber.get(selectedShotNumber) ?? null : null
-  const activeMovingShotNumber = draggedShotNumber ?? selectedShotNumber
   const canSubmit = hasChanges && invalidBlockIndexes.size === 0 && !isSubmitting
 
-  const moveShot = useCallback((targetShotNumber: number, placement: 'before' | 'after') => {
-    const sourceShotNumber = draggedShotNumber ?? selectedShotNumber
-    if (!sourceShotNumber) return
-    setDraftBlocks((current) => moveShotInBlocks({
+  const moveShot = useCallback((blockIndex: number, direction: BoundaryMoveDirection) => {
+    setDraftBlocks((current) => moveBoundaryShot({
       blocks: current,
-      sourceShotNumber,
-      targetShotNumber,
-      placement,
+      blockIndex,
+      direction,
+      durationByShotNumber,
     }))
-    setSelectedShotNumber(sourceShotNumber)
-    setDraggedShotNumber(null)
     setErrorMessage(null)
-  }, [draggedShotNumber, selectedShotNumber])
-
-  const handleDrop = useCallback((event: DragEvent<HTMLElement>, targetShotNumber: number, placement: 'before' | 'after') => {
-    event.preventDefault()
-    const sourceShotNumber = Number(event.dataTransfer.getData('text/plain')) || draggedShotNumber
-    if (!sourceShotNumber) return
-    setDraftBlocks((current) => moveShotInBlocks({
-      blocks: current,
-      sourceShotNumber,
-      targetShotNumber,
-      placement,
-    }))
-    setSelectedShotNumber(sourceShotNumber)
-    setDraggedShotNumber(null)
-    setErrorMessage(null)
-  }, [draggedShotNumber])
+  }, [durationByShotNumber])
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return
@@ -225,108 +257,111 @@ export default function VideoBlockArrangementModal({
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 cursor-default" aria-label={t('close')} onClick={onClose} />
-      <section className="relative flex h-[min(820px,92vh)] w-[min(1180px,96vw)] flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.28)]">
+      <section className="relative flex h-[min(820px,92vh)] w-[min(1100px,96vw)] flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.28)]">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
           <div className="min-w-0">
             <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">{t('title')}</h2>
-            <p className="mt-1 text-xs font-medium text-slate-500">{t('summary', { blocks: draftBlocks.length, shots: editScript.shots.length })}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {t('localSummary', { blocks: visibleBlockIndexes.length, shots: visibleShotCount })}
+            </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {selectedShot ? (
-              <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
-                {t('selectedShot', { shot: selectedShot.shotNumber })}
-              </span>
-            ) : null}
-            <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50" onClick={onClose} aria-label={t('close')}>
-              <AppIcon name="close" className="h-4 w-4" />
-            </button>
-          </div>
+          <button type="button" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50" onClick={onClose} aria-label={t('close')}>
+            <AppIcon name="close" className="h-4 w-4" />
+          </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden bg-slate-50/80 p-5">
-          <div className="flex h-full min-w-max items-stretch gap-4">
-            {draftBlocks.map((block, blockIndex) => {
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-5 app-scrollbar">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {visibleBlockIndexes.map((blockIndex) => {
+              const block = draftBlocks[blockIndex]
+              if (!block) return null
               const durationSec = durationForBlock(block, durationByShotNumber)
               const invalid = invalidBlockIndexes.has(blockIndex)
+              const isFocused = blockIndex === focusedBlockIndex
               return (
                 <article
                   key={block.id}
-                  className={`flex w-72 shrink-0 flex-col rounded-[18px] border bg-white shadow-sm ${invalid ? 'border-red-300 ring-2 ring-red-100' : blockIndex === initialBlockIndex ? 'border-sky-300 ring-2 ring-sky-100' : 'border-slate-200'}`}
+                  className={`flex min-h-[480px] flex-col rounded-[18px] border bg-white shadow-sm ${invalid ? 'border-red-300 ring-2 ring-red-100' : isFocused ? 'border-sky-300 ring-2 ring-sky-100' : 'border-slate-200'}`}
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-sm font-semibold text-slate-950">{t('blockTitle', { block: blockIndex + 1 })}</h3>
-                      <p className={`mt-0.5 text-xs font-medium ${invalid ? 'text-red-600' : 'text-slate-500'}`}>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-slate-950">{t('blockTitle', { block: blockIndex + 1 })}</h3>
+                        {isFocused ? (
+                          <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{t('currentBlock')}</span>
+                        ) : null}
+                      </div>
+                      <p className={`mt-1 text-xs font-medium ${invalid ? 'text-red-600' : 'text-slate-500'}`}>
                         {t('blockMeta', { shots: block.shotNumbers.length, duration: Number(durationSec.toFixed(1)) })}
                       </p>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${invalid ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                      {durationSec > 15 ? t('overLimit') : `${durationSec}s`}
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${invalid ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {durationSec > MAX_BLOCK_DURATION_SEC ? t('overLimit') : t('durationShort', { duration: Number(durationSec.toFixed(1)) })}
                     </span>
                   </div>
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 app-scrollbar">
-                    {block.shotNumbers.map((shotNumber) => {
+
+                  <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 app-scrollbar">
+                    {block.shotNumbers.map((shotNumber, shotIndex) => {
                       const shot = shotViewByNumber.get(shotNumber)
-                      const selected = selectedShotNumber === shotNumber
-                      const moving = activeMovingShotNumber !== null && activeMovingShotNumber !== shotNumber
+                      const isFirstShot = shotIndex === 0
+                      const isLastShot = shotIndex === block.shotNumbers.length - 1
+                      const canMoveLeft = isFirstShot && canMoveBoundaryShot({
+                        blocks: draftBlocks,
+                        blockIndex,
+                        direction: 'left',
+                        durationByShotNumber,
+                      })
+                      const canMoveRight = isLastShot && canMoveBoundaryShot({
+                        blocks: draftBlocks,
+                        blockIndex,
+                        direction: 'right',
+                        durationByShotNumber,
+                      })
                       return (
-                        <div key={`${block.id}:${shotNumber}`} className="group relative">
-                          {moving ? (
-                            <button
-                              type="button"
-                              className="absolute -left-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 opacity-0 shadow-sm transition hover:border-sky-300 hover:text-sky-700 group-hover:opacity-100"
-                              aria-label={t('insertBefore', { shot: shotNumber })}
-                              onClick={() => moveShot(shotNumber, 'before')}
-                              onDragOver={(event) => event.preventDefault()}
-                              onDrop={(event) => handleDrop(event, shotNumber, 'before')}
-                            >
-                              <AppIcon name="chevronLeft" className="h-4 w-4" />
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            draggable
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData('text/plain', String(shotNumber))
-                              event.dataTransfer.effectAllowed = 'move'
-                              setDraggedShotNumber(shotNumber)
-                              setSelectedShotNumber(shotNumber)
-                            }}
-                            onDragEnd={() => setDraggedShotNumber(null)}
-                            onClick={() => setSelectedShotNumber((current) => current === shotNumber ? null : shotNumber)}
-                            className={`flex w-full items-center gap-3 rounded-[14px] border p-2 text-left transition ${selected ? 'border-amber-300 bg-amber-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
-                          >
-                            <span className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-slate-100 text-xs font-semibold text-slate-400">
-                              {shot?.imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={shot.imageUrl} alt={shot.title} className="h-full w-full object-cover" />
-                              ) : (
-                                t('shotFallback', { shot: shotNumber })
-                              )}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-950">
-                                <AppIcon name="gripVertical" className="h-3.5 w-3.5 text-slate-400" />
-                                {shot?.title ?? t('shotTitle', { shot: shotNumber })}
+                        <div key={`${block.id}:${shotNumber}`} className="relative overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+                          <div className="relative aspect-video bg-slate-100">
+                            {shot?.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={shot.imageUrl} alt={shot.title} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center px-2 text-center text-xs font-semibold text-slate-400">
+                                {t('shotFallback', { shot: shotNumber })}
+                              </div>
+                            )}
+                            {isFirstShot && blockIndex > 0 ? (
+                              <button
+                                type="button"
+                                className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+                                aria-label={t('moveLeftShot', { shot: shotNumber })}
+                                title={canMoveLeft ? t('moveLeftShot', { shot: shotNumber }) : t('moveUnavailable')}
+                                disabled={!canMoveLeft}
+                                onClick={() => moveShot(blockIndex, 'left')}
+                              >
+                                <AppIcon name="chevronLeft" className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                            {isLastShot && blockIndex < draftBlocks.length - 1 ? (
+                              <button
+                                type="button"
+                                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+                                aria-label={t('moveRightShot', { shot: shotNumber })}
+                                title={canMoveRight ? t('moveRightShot', { shot: shotNumber }) : t('moveUnavailable')}
+                                disabled={!canMoveRight}
+                                onClick={() => moveShot(blockIndex, 'right')}
+                              >
+                                <AppIcon name="chevronRight" className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 p-2">
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                              <span className="truncate text-xs font-semibold text-slate-950">{shot?.title ?? t('shotTitle', { shot: shotNumber })}</span>
+                              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                {t('durationShort', { duration: shot?.durationSec ?? 0 })}
                               </span>
-                              <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-500">{shot?.description ?? ''}</span>
-                            </span>
-                            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
-                              {shot?.durationSec ?? 0}s
-                            </span>
-                          </button>
-                          {moving ? (
-                            <button
-                              type="button"
-                              className="absolute -right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 opacity-0 shadow-sm transition hover:border-sky-300 hover:text-sky-700 group-hover:opacity-100"
-                              aria-label={t('insertAfter', { shot: shotNumber })}
-                              onClick={() => moveShot(shotNumber, 'after')}
-                              onDragOver={(event) => event.preventDefault()}
-                              onDrop={(event) => handleDrop(event, shotNumber, 'after')}
-                            >
-                              <AppIcon name="chevronRight" className="h-4 w-4" />
-                            </button>
-                          ) : null}
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{shot?.description ?? ''}</p>
+                          </div>
                         </div>
                       )
                     })}

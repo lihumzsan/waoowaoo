@@ -109,9 +109,9 @@ describe('edit script video block arrangement', () => {
         videoBlocks: [
           {
             blockIndex: 0,
-            shotNumbers: [1, 3, 2],
-            reason: 'manual reordered continuity',
-            prompt: 'rewritten reordered prompt',
+            shotNumbers: [1, 2, 3],
+            reason: 'manual adjacent continuity',
+            prompt: 'rewritten adjacent prompt',
           },
           {
             blockIndex: 1,
@@ -124,13 +124,13 @@ describe('edit script video block arrangement', () => {
     })
   })
 
-  it('saves manually arranged shot order and rewrites changed block prompts', async () => {
+  it('moves a boundary shot between adjacent video blocks and rewrites changed block prompts', async () => {
     const result = await arrangeProjectEditScriptVideoBlocks({
       projectId: 'project-1',
       episodeId: 'episode-1',
       editScriptId: 'edit-1',
       blocks: [
-        { shotNumbers: [1, 3, 2] },
+        { shotNumbers: [1, 2, 3] },
         { shotNumbers: [4] },
       ],
       userId: 'user-1',
@@ -140,10 +140,10 @@ describe('edit script video block arrangement', () => {
     expect(result.videoBlocks).toEqual([
       {
         kind: 'group',
-        shotNumbers: [1, 3, 2],
+        shotNumbers: [1, 2, 3],
         gridMode: '2x2',
-        reason: 'manual reordered continuity',
-        prompt: 'rewritten reordered prompt',
+        reason: 'manual adjacent continuity',
+        prompt: 'rewritten adjacent prompt',
       },
       {
         kind: 'single',
@@ -158,10 +158,10 @@ describe('edit script video block arrangement', () => {
         videoBlocksJson: [
           {
             kind: 'group',
-            shotNumbers: [1, 3, 2],
+            shotNumbers: [1, 2, 3],
             gridMode: '2x2',
-            reason: 'manual reordered continuity',
-            prompt: 'rewritten reordered prompt',
+            reason: 'manual adjacent continuity',
+            prompt: 'rewritten adjacent prompt',
           },
           {
             kind: 'single',
@@ -175,6 +175,30 @@ describe('edit script video block arrangement', () => {
     expect(aiExecMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT,
     }))
+  })
+
+  it('rejects reordered shots before calling AI or writing data', async () => {
+    await expect(arrangeProjectEditScriptVideoBlocks({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      blocks: [
+        { shotNumbers: [1, 3, 2] },
+        { shotNumbers: [4] },
+      ],
+      userId: 'user-1',
+      locale: 'en',
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_ORDER_INVALID',
+        shotNumber: 3,
+        expectedShotNumber: 2,
+        position: 1,
+      }),
+    })
+
+    expect(aiExecMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.update).not.toHaveBeenCalled()
   })
 
   it('rejects a manually arranged block above fifteen seconds before calling AI or writing data', async () => {

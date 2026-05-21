@@ -267,8 +267,6 @@ export function parseFinalRenderEditScriptVideoBlocks(input: {
     response: { items: input.value },
     allShotNumbers: input.shots.map((shot) => shot.shotNumber),
     shots: input.shots,
-    coverageMode: 'set',
-    requireContinuousGroups: false,
     enforceSingleMinDuration: false,
   }).items
 }

@@ -116,8 +116,6 @@ function parseVideoBlocksJson(value: Prisma.JsonValue | null, shots: readonly Ed
     response: { items: value },
     allShotNumbers: shots.map((shot) => shot.shotNumber),
     shots,
-    coverageMode: 'set',
-    requireContinuousGroups: false,
     enforceSingleMinDuration: false,
   }).items
 }
@@ -193,12 +191,13 @@ function blockShots(shots: readonly EditScriptShot[], block: EditScriptVideoBloc
   })
 }
 
-function assertArrangementCoverage(input: {
+function assertArrangementOrder(input: {
   readonly requestedBlocks: readonly { readonly shotNumbers: readonly number[] }[]
   readonly allShotNumbers: readonly number[]
 }): void {
   const expected = new Set(input.allShotNumbers)
   const seen = new Set<number>()
+  const flattened: number[] = []
   input.requestedBlocks.forEach((block) => {
     if (block.shotNumbers.length === 0 || block.shotNumbers.length > 9) {
       throw new ApiError('INVALID_PARAMS', {
@@ -219,13 +218,32 @@ function assertArrangementCoverage(input: {
         })
       }
       seen.add(shotNumber)
+      flattened.push(shotNumber)
     })
   })
-  input.allShotNumbers.forEach((shotNumber) => {
-    if (!seen.has(shotNumber)) {
+  if (flattened.length !== input.allShotNumbers.length) {
+    input.allShotNumbers.forEach((shotNumber) => {
+      if (!seen.has(shotNumber)) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_SHOT_MISSING',
+          shotNumber,
+        })
+      }
+    })
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_ORDER_INVALID',
+      receivedShotCount: flattened.length,
+      expectedShotCount: input.allShotNumbers.length,
+    })
+  }
+  flattened.forEach((shotNumber, index) => {
+    const expectedShotNumber = input.allShotNumbers[index]
+    if (shotNumber !== expectedShotNumber) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_SHOT_MISSING',
+        code: 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_ORDER_INVALID',
         shotNumber,
+        expectedShotNumber,
+        position: index,
       })
     }
   })
@@ -255,7 +273,7 @@ function buildDraftVideoBlocks(input: {
   readonly structure: Omit<EditScriptPayload, 'requirements'>
   readonly requestedBlocks: readonly { readonly shotNumbers: readonly number[] }[]
 }): readonly DraftVideoBlock[] {
-  assertArrangementCoverage({
+  assertArrangementOrder({
     requestedBlocks: input.requestedBlocks,
     allShotNumbers: input.structure.shots.map((shot) => shot.shotNumber),
   })
@@ -452,8 +470,6 @@ function normalizeArrangedVideoBlocks(input: {
     response: { items: input.blocks },
     allShotNumbers: input.shots.map((shot) => shot.shotNumber),
     shots: input.shots,
-    coverageMode: 'set',
-    requireContinuousGroups: false,
     enforceSingleMinDuration: false,
   }).items
 }

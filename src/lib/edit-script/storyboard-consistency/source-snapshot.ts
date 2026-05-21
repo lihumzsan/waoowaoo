@@ -97,8 +97,6 @@ function mapEditScript(script: PersistedEditScript): EditScriptPayload {
       response: { items: Array.isArray(script.videoBlocksJson) ? script.videoBlocksJson : [] },
       allShotNumbers: shots.map((shot) => shot.shotNumber),
       shots,
-      coverageMode: 'set',
-      requireContinuousGroups: false,
       enforceSingleMinDuration: false,
     }).items,
     requirements: mapRequirements(script.requirements),

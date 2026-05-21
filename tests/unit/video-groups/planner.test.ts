@@ -31,9 +31,20 @@ describe('video block plan validator', () => {
         ],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
+
+    expect(() => normalizeVideoBlockPlanResponse({
+      allShotNumbers: [1, 2, 3],
+      response: {
+        items: [
+          { type: 'single', shotNumbers: [1], reason: 'ok', prompt: 'prompt 1' },
+          { type: 'single', shotNumbers: [3], reason: 'wrong order', prompt: 'prompt 3' },
+          { type: 'single', shotNumbers: [2], reason: 'wrong order', prompt: 'prompt 2' },
+        ],
+      },
+    })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
   })
 
-  it('allows manual arrangement to preserve user-defined shot order', () => {
+  it('allows boundary arrangement to preserve edit-first order with short single leftovers', () => {
     const plan = normalizeVideoBlockPlanResponse({
       allShotNumbers: [1, 2, 3],
       shots: [
@@ -41,20 +52,18 @@ describe('video block plan validator', () => {
         { shotNumber: 2, durationSec: 3 },
         { shotNumber: 3, durationSec: 3 },
       ],
-      coverageMode: 'set',
-      requireContinuousGroups: false,
       enforceSingleMinDuration: false,
       response: {
         items: [
-          { type: 'group', shotNumbers: [1, 3], reason: 'manual adjacency', prompt: 'manual group prompt' },
-          { type: 'single', shotNumbers: [2], reason: 'remaining beat', prompt: 'single prompt' },
+          { type: 'group', shotNumbers: [1, 2], reason: 'manual adjacency', prompt: 'manual group prompt' },
+          { type: 'single', shotNumbers: [3], reason: 'remaining beat', prompt: 'single prompt' },
         ],
       },
     })
 
     expect(plan.items).toEqual([
-      { kind: 'group', shotNumbers: [1, 3], gridMode: '2x2', reason: 'manual adjacency', prompt: 'manual group prompt' },
-      { kind: 'single', shotNumbers: [2], reason: 'remaining beat', prompt: 'single prompt' },
+      { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'manual adjacency', prompt: 'manual group prompt' },
+      { kind: 'single', shotNumbers: [3], reason: 'remaining beat', prompt: 'single prompt' },
     ])
   })
 

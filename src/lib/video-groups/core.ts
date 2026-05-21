@@ -5,27 +5,20 @@ const GRID_CELLS = {
   '3x3': 9,
 } as const satisfies Record<VideoGridMode, number>
 
-function normalizeShotNumbers(input: {
-  readonly shotNumbers: readonly number[]
-  readonly requireContinuous: boolean
-}): number[] {
-  const { shotNumbers, requireContinuous } = input
+function normalizeShotNumbers(shotNumbers: readonly number[]): number[] {
   const normalized = shotNumbers.map((value) => Number(value))
   if (normalized.some((value) => !Number.isInteger(value) || value <= 0)) {
     throw new Error('VIDEO_GROUP_SHOT_NUMBERS_INVALID')
   }
   const unique = new Set(normalized)
   if (unique.size !== normalized.length) throw new Error('VIDEO_GROUP_SHOT_NUMBERS_DUPLICATE')
-  if (!requireContinuous) return normalized
-
-  const sorted = [...normalized].sort((left, right) => left - right)
-  sorted.forEach((shotNumber, index) => {
+  normalized.forEach((shotNumber, index) => {
     if (index === 0) return
-    if (shotNumber !== sorted[index - 1] + 1) {
+    if (shotNumber !== normalized[index - 1] + 1) {
       throw new Error('VIDEO_GROUP_SHOT_NUMBERS_NOT_CONTINUOUS')
     }
   })
-  return sorted
+  return normalized
 }
 
 export function videoGridCellCount(gridMode: VideoGridMode): number {
@@ -35,12 +28,8 @@ export function videoGridCellCount(gridMode: VideoGridMode): number {
 export function validateVideoGroupShotNumbers(params: {
   readonly gridMode: VideoGridMode
   readonly shotNumbers: readonly number[]
-  readonly requireContinuous?: boolean
 }): number[] {
-  const normalized = normalizeShotNumbers({
-    shotNumbers: params.shotNumbers,
-    requireContinuous: params.requireContinuous ?? true,
-  })
+  const normalized = normalizeShotNumbers(params.shotNumbers)
   const maxCount = videoGridCellCount(params.gridMode)
   if (normalized.length < 2 || normalized.length > maxCount) {
     throw new Error(`VIDEO_GROUP_SHOT_COUNT_MISMATCH:${normalized.length}:2-${maxCount}`)
@@ -58,10 +47,7 @@ export function chunkVideoGroupShots(params: {
   readonly gridMode: VideoGridMode
   readonly shotNumbers: readonly number[]
 }): number[][] {
-  const normalized = normalizeShotNumbers({
-    shotNumbers: params.shotNumbers,
-    requireContinuous: true,
-  })
+  const normalized = normalizeShotNumbers(params.shotNumbers)
   const cellCount = videoGridCellCount(params.gridMode)
   const chunks: number[][] = []
   for (let index = 0; index < normalized.length; index += cellCount) {

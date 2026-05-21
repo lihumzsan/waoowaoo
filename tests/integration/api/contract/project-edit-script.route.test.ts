@@ -156,10 +156,10 @@ const videoBlockArrangementMock = vi.hoisted(() => ({
     videoBlocks: [
       {
         kind: 'group',
-        shotNumbers: [1, 3, 2],
+        shotNumbers: [1, 2, 3],
         gridMode: '2x2',
-        reason: 'manual arrangement',
-        prompt: 'rewritten manual prompt',
+        reason: 'manual adjacent arrangement',
+        prompt: 'rewritten adjacent prompt',
       },
     ],
     requirements: [],
@@ -424,7 +424,7 @@ describe('project edit script route', () => {
     })
   })
 
-  it('PATCH /api/projects/[projectId]/edit-script -> arranges video block shots and rewrites affected prompts', async () => {
+  it('PATCH /api/projects/[projectId]/edit-script -> moves adjacent video block boundary shots and rewrites affected prompts', async () => {
     const request = buildMockRequest({
       path: '/api/projects/project-1/edit-script',
       method: 'PATCH',
@@ -434,7 +434,7 @@ describe('project edit script route', () => {
         episodeId: 'episode-1',
         editScriptId: 'edit-1',
         blocks: [
-          { shotNumbers: [1, 3, 2] },
+          { shotNumbers: [1, 2, 3] },
           { shotNumbers: [4] },
         ],
       },
@@ -444,13 +444,13 @@ describe('project edit script route', () => {
     const payload = await response.json()
 
     expect(response.status).toBe(200)
-    expect(payload.editScript.videoBlocks[0].shotNumbers).toEqual([1, 3, 2])
+    expect(payload.editScript.videoBlocks[0].shotNumbers).toEqual([1, 2, 3])
     expect(videoBlockArrangementMock.arrangeProjectEditScriptVideoBlocks).toHaveBeenCalledWith({
       projectId: 'project-1',
       episodeId: 'episode-1',
       editScriptId: 'edit-1',
       blocks: [
-        { shotNumbers: [1, 3, 2] },
+        { shotNumbers: [1, 2, 3] },
         { shotNumbers: [4] },
       ],
       userId: 'user-1',

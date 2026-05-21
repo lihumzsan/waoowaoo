@@ -4,7 +4,7 @@
 - 不得新增、删除或替换任何 shot；draft_video_blocks_json 是新的唯一结构事实。
 - 输出的每个 videoBlocks item 必须使用 changed_video_blocks_json 中的 blockIndex 与 shotNumbers，shotNumbers 顺序必须完全一致。
 - previous_video_blocks_json 只作为旧提示词、风格和连续性参考；不要机械拼接旧 prompt。
-- 允许用户手动编排后的 shotNumbers 非连续或相对原始 shotNumber 顺序发生变化，但必须按 draft_video_blocks_json 内的顺序写提示词。
+- 用户只能调整相邻片段的边界；所有 shotNumbers 必须保持原始 shotNumber 顺序，不得重排。必须按 draft_video_blocks_json 内的顺序写提示词。
 - 不得改变剧本事实、主体身份、场景关系、动作因果、对白/旁白/画外音和音效事实。
 - 必须结合 asset_context_json 保持角色身份、场景身份、服装/外貌、空间锚点和视觉连续性。
 - 中文流程中 reason 与 prompt 必须整体使用中文自然语言；除角色名、专有名词、模型字段名和原文台词外，不要输出英文句子。
@@ -55,7 +55,7 @@ style_context:
   "videoBlocks": [
     {
       "blockIndex": 0,
-      "shotNumbers": [1, 3, 2],
+      "shotNumbers": [1, 2, 3],
       "reason": "手动编排后的连续性理由",
       "prompt": "该片段新的最终视频提示词"
     }

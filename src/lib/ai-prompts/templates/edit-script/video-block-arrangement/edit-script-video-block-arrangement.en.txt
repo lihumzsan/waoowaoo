@@ -4,7 +4,7 @@ Hard rules:
 - Do not add, delete, or replace any shot; draft_video_blocks_json is the only target structure truth.
 - Every returned videoBlocks item must use a blockIndex and shotNumbers from changed_video_blocks_json, and shotNumbers order must match exactly.
 - previous_video_blocks_json is only reference material for old prompts, style, and continuity. Do not mechanically concatenate old prompts.
-- User-arranged shotNumbers may be non-contiguous or differ from the original shotNumber order. Write the prompt in the exact order shown in draft_video_blocks_json.
+- The user can only adjust boundaries between adjacent segments; all shotNumbers must stay in the original shotNumber order. Write the prompt in the exact order shown in draft_video_blocks_json.
 - Do not alter screenplay facts, subject identity, scene relationships, action causality, dialogue, voiceover, offscreen voice, or sound-effect facts.
 - Use asset_context_json to preserve character identity, location identity, wardrobe/appearance, spatial anchors, and visual continuity.
 
@@ -54,7 +54,7 @@ Return only JSON, no markdown, no explanation. Schema:
   "videoBlocks": [
     {
       "blockIndex": 0,
-      "shotNumbers": [1, 3, 2],
+      "shotNumbers": [1, 2, 3],
       "reason": "why this manually arranged segment can work continuously",
       "prompt": "new final video prompt for this segment"
     }

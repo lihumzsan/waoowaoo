@@ -478,8 +478,6 @@ async function buildEpisodeVideoBlockPlan(params: {
       response: { items: editScript.videoBlocksJson },
       allShotNumbers: shots.map((shot) => shot.shotNumber),
       shots,
-      coverageMode: 'set',
-      requireContinuousGroups: false,
       enforceSingleMinDuration: false,
     }),
   }
@@ -516,7 +514,6 @@ async function resolveVideoGroupInput(params: {
   const shotNumbers = validateVideoGroupShotNumbers({
     gridMode: params.gridMode,
     shotNumbers: params.shotNumbers,
-    requireContinuous: false,
   })
   const [episode, editScript, panels] = await Promise.all([
     prisma.projectEpisode.findFirst({

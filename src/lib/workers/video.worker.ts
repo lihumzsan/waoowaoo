@@ -521,7 +521,6 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   const shotNumbers = validateVideoGroupShotNumbers({
     gridMode,
     shotNumbers: parseShotNumbers(payload.shotNumbers),
-    requireContinuous: false,
   })
 
   await prisma.projectVideoGroup.update({
