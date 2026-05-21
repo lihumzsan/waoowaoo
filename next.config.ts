@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental
   logging: false,
   devIndicators: false,
+  outputFileTracingExcludes: {
+    '/api/admin/download-logs': [
+      './logs/**/*',
+      './public/demo-assets/**/*',
+    ],
+  },
   allowedDevOrigins: [
     'http://192.168.31.218:3000',
     'http://192.168.31.*:3000',
