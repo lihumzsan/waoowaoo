@@ -4,7 +4,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
-import { classifyStoryboardConsistencyBlocks } from './strategies'
+import { classifyStoryboardConsistencyBlocks, isFloorPlanLocationEligible } from './strategies'
 
 interface SubmitCoordinateStoryboardInput {
   readonly projectId: string
@@ -56,22 +56,17 @@ async function resolveEditScriptId(input: Pick<SubmitCoordinateStoryboardInput, 
 export function assertRequiredLocationPreviews(input: {
   readonly sourceSnapshot: Awaited<ReturnType<typeof buildStoryboardConsistencySource>>['sourceSnapshot']
 }) {
-  const hasLocationReference = input.sourceSnapshot.assets.some((asset) => asset.kind === 'location' && Boolean(asset.previewImageUrl))
-  if (!hasLocationReference) {
-    throw new ApiError('CONFLICT', {
-      code: 'EDIT_SCRIPT_STORYBOARD_LOCATION_REFERENCE_REQUIRED',
-      message: 'Location reference images are required before coordinate storyboard generation: scene asset',
-    })
-  }
   const classifications = classifyStoryboardConsistencyBlocks(input.sourceSnapshot)
   const missing = classifications.flatMap((classification) => {
     if (classification.classification === 'no_fixed_space') return []
     const block = input.sourceSnapshot.videoBlocks.find((item) => item.sourceVideoBlockId === classification.sourceVideoBlockId)
     if (!block) throw new Error(`EDIT_SCRIPT_STORYBOARD_BLOCK_MISSING:${classification.sourceVideoBlockId}`)
-    const locationAssets = input.sourceSnapshot.assets.filter((asset) => (
+    const blockLocationAssets = input.sourceSnapshot.assets.filter((asset) => (
       asset.kind === 'location'
       && asset.shotNumbers.some((shotNumber) => block.shotNumbers.includes(shotNumber))
     ))
+    const locationAssets = blockLocationAssets.filter(isFloorPlanLocationEligible)
+    if (blockLocationAssets.length > 0 && locationAssets.length === 0) return []
     if (locationAssets.length === 0) return [classification.locationNames[0] ?? classification.sourceVideoBlockId]
     return locationAssets
       .filter((asset) => !asset.previewImageUrl)

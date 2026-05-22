@@ -251,10 +251,7 @@ function dedupeFloorPlansByScene(
   }
   const byLocation = new Map<string, GridFloorPlanModelOutput['floorPlans'][number]>()
   floorPlans.forEach((plan) => {
-    const matchedGroup = sceneGroups.find((group) => (
-      plan.sourceVideoBlockIds.some((sourceVideoBlockId) => group.sourceVideoBlockIds.includes(sourceVideoBlockId))
-      || (plan.location !== null && plan.location.trim() === group.locationName)
-    ))
+    const matchedGroup = matchFloorPlanSceneGroup(sceneGroups, plan)
     if (!matchedGroup) return
     const previous = byLocation.get(matchedGroup.locationTargetId)
     if (!previous || previous.skipped) {
@@ -271,6 +268,29 @@ function dedupeFloorPlansByScene(
   const deduped = Array.from(byLocation.values()).sort((left, right) => left.groupIndex - right.groupIndex)
   if (deduped.length === sceneGroups.length) return deduped
   throw new Error('EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_SCENE_GROUP_MISMATCH')
+}
+
+function normalizeSceneName(value: string): string {
+  return value.trim().toLocaleLowerCase()
+}
+
+function matchFloorPlanSceneGroup(
+  sceneGroups: readonly StoryboardFloorPlanSceneGroup[],
+  plan: GridFloorPlanModelOutput['floorPlans'][number],
+): StoryboardFloorPlanSceneGroup | null {
+  const normalizedLocation = plan.location === null ? '' : normalizeSceneName(plan.location)
+  if (normalizedLocation) {
+    const locationMatched = sceneGroups.find((group) => normalizeSceneName(group.locationName) === normalizedLocation)
+    if (locationMatched) return locationMatched
+  }
+
+  const groupIndexMatched = sceneGroups.find((group) => group.groupIndex === plan.groupIndex)
+  if (groupIndexMatched) return groupIndexMatched
+
+  const sourceMatchedGroups = sceneGroups.filter((group) => (
+    plan.sourceVideoBlockIds.some((sourceVideoBlockId) => group.sourceVideoBlockIds.includes(sourceVideoBlockId))
+  ))
+  return sourceMatchedGroups.length === 1 ? sourceMatchedGroups[0] ?? null : null
 }
 
 function readStrategyOutput(raw: Record<string, unknown>): unknown {
