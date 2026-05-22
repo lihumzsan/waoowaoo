@@ -114,13 +114,13 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
 }
 
 describe('storyboard consistency service prechecks', () => {
-  it('rejects fixed-space coordinate generation when no scene reference image is available', () => {
+  it('does not block floor-plan suitability analysis before the model can return empty plans', () => {
     expect(() => assertRequiredLocationPreviews({
       sourceSnapshot: buildSourceSnapshot(),
-    })).toThrow('Location reference images are required before coordinate storyboard generation: scene asset')
+    })).not.toThrow()
   })
 
-  it('allows fixed-space coordinate generation when the matching scene reference image exists', () => {
+  it('allows floor-plan suitability analysis when the matching scene reference image exists', () => {
     expect(() => assertRequiredLocationPreviews({
       sourceSnapshot: buildSourceSnapshot({
         assets: [

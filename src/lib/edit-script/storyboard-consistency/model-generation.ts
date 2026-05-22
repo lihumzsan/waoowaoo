@@ -245,14 +245,14 @@ function dedupeFloorPlansByScene(
   sceneGroups: readonly StoryboardFloorPlanSceneGroup[],
   floorPlans: GridFloorPlanModelOutput['floorPlans'],
 ): GridFloorPlanModelOutput['floorPlans'] {
+  if (floorPlans.length === 0) return floorPlans
   if (sceneGroups.length === 0) {
-    if (floorPlans.length === 0) return floorPlans
     throw new Error('EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_SCENE_GROUP_MISMATCH')
   }
   const byLocation = new Map<string, GridFloorPlanModelOutput['floorPlans'][number]>()
   floorPlans.forEach((plan) => {
     const matchedGroup = matchFloorPlanSceneGroup(sceneGroups, plan)
-    if (!matchedGroup) return
+    if (!matchedGroup) throw new Error('EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_SCENE_GROUP_MISMATCH')
     const previous = byLocation.get(matchedGroup.locationTargetId)
     if (!previous || previous.skipped) {
       byLocation.set(matchedGroup.locationTargetId, {
@@ -266,8 +266,7 @@ function dedupeFloorPlansByScene(
     }
   })
   const deduped = Array.from(byLocation.values()).sort((left, right) => left.groupIndex - right.groupIndex)
-  if (deduped.length === sceneGroups.length) return deduped
-  throw new Error('EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_SCENE_GROUP_MISMATCH')
+  return deduped
 }
 
 function normalizeSceneName(value: string): string {

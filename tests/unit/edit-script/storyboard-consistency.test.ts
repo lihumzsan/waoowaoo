@@ -13,7 +13,6 @@ import {
   resolveGridDensity,
   resolveGridDensityFromDimensions,
 } from '@/lib/edit-script/storyboard-consistency/strategies'
-import { assertRequiredLocationPreviews } from '@/lib/edit-script/storyboard-consistency/service'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
 vi.mock('@/lib/ai-prompts', () => ({
@@ -408,104 +407,25 @@ describe('edit-script storyboard coordinate consistency', () => {
     expect(output.floorPlans.map((plan) => plan.location)).toEqual(['Temple courtyard', 'Training hall'])
   })
 
-  it('excludes macro exterior locations from floor-plan scene groups while keeping fixed interiors', () => {
-    const snapshot = buildSnapshot({
-      shots: [
-        {
-          ...buildSnapshot().shots[0],
-          shotNumber: 1,
-          visualAction: 'Kyle sits in the cockpit and watches the instruments.',
-          charactersAndScene: 'Kyle remains inside the exploration ship cockpit.',
-          videoPrompt: 'Cockpit interior with control panels and a round window.',
-        },
-        {
-          ...buildSnapshot().shots[1],
-          shotNumber: 2,
-          visualAction: 'A tiny ship drifts near a giant black hole accretion disk.',
-          charactersAndScene: 'Kyle is seen through the cockpit window against the black hole exterior.',
-          videoPrompt: 'Giant black hole and accretion disk outside the tiny ship.',
-        },
-      ],
-      videoBlocks: [{
-        ...buildSnapshot().videoBlocks[0],
-        prompt: 'Kyle stays inside the cockpit while the tiny ship approaches a giant black hole exterior.',
-      }],
-      assets: [
-        {
-          requirementId: 'char-kyle',
-          kind: 'character',
-          name: 'Kyle',
-          description: 'astronaut pilot',
-          shotNumbers: [1, 2],
-          targetId: 'character-kyle',
-          previewImageUrl: 'https://cdn.example.com/kyle.png',
-        },
-        {
-          requirementId: 'loc-cockpit',
-          kind: 'location',
-          name: 'Exploration ship cockpit interior',
-          description: 'compact cockpit interior with control panels, walls, pilot chair, and round window',
-          shotNumbers: [1, 2],
-          targetId: 'location-cockpit',
-          previewImageUrl: 'https://cdn.example.com/cockpit.png',
-        },
-        {
-          requirementId: 'loc-black-hole',
-          kind: 'location',
-          name: 'Giant black hole and accretion disk exterior',
-          description: 'deep space black hole, accretion disk, starfield, and tiny distant ship',
-          shotNumbers: [2],
-          targetId: 'location-black-hole',
-          previewImageUrl: 'https://cdn.example.com/black-hole.png',
-        },
-      ],
-    })
-
-    expect(buildFloorPlanSceneGroups(snapshot)).toMatchObject([
-      {
-        locationName: 'Exploration ship cockpit interior',
-        locationTargetId: 'location-cockpit',
-        sourceVideoBlockIds: ['edit-1:videoBlock:1'],
+  it('accepts empty floor plans when the model decides scene groups are unsuitable for coordinates', async () => {
+    expect(buildFloorPlanSceneGroups(buildSnapshot())).toHaveLength(1)
+    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
+      strategyOutput: {
+        strategy: 'grid_coordinates',
+        grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
+        floorPlans: [],
       },
-    ])
-  })
+    })))
 
-  it('does not require location previews when only macro exterior scene groups are present', () => {
-    const snapshot = buildSnapshot({
-      shots: buildSnapshot().shots.map((shot) => ({
-        ...shot,
-        visualAction: 'Kyle watches a tiny ship cross the giant black hole accretion disk.',
-        charactersAndScene: 'Kyle is associated with a giant black hole and deep space exterior.',
-        videoPrompt: 'Deep space black hole exterior with a tiny distant ship.',
-      })),
-      videoBlocks: [{
-        ...buildSnapshot().videoBlocks[0],
-        prompt: 'Kyle observes the giant black hole exterior and tiny ship from a distant cosmic view.',
-      }],
-      assets: [
-        {
-          requirementId: 'char-kyle',
-          kind: 'character',
-          name: 'Kyle',
-          description: 'astronaut pilot',
-          shotNumbers: [1, 2],
-          targetId: 'character-kyle',
-          previewImageUrl: 'https://cdn.example.com/kyle.png',
-        },
-        {
-          requirementId: 'loc-black-hole',
-          kind: 'location',
-          name: 'Giant black hole and accretion disk exterior',
-          description: 'deep space black hole, accretion disk, starfield, and tiny distant ship',
-          shotNumbers: [1, 2],
-          targetId: 'location-black-hole',
-          previewImageUrl: null,
-        },
-      ],
+    const output = await generateGridFloorPlan({
+      userId: 'user-1',
+      projectId: 'project-1',
+      model: 'analysis-model',
+      locale: 'zh',
+      snapshot: buildSnapshot(),
     })
 
-    expect(buildFloorPlanSceneGroups(snapshot)).toEqual([])
-    expect(() => assertRequiredLocationPreviews({ sourceSnapshot: snapshot })).not.toThrow()
+    expect(output.floorPlans).toEqual([])
   })
 
   it('returns no floor plans when no fixed-space scene groups exist', async () => {

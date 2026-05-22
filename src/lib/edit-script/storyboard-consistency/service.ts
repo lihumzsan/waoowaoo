@@ -4,7 +4,6 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
-import { classifyStoryboardConsistencyBlocks, isFloorPlanLocationEligible } from './strategies'
 
 interface SubmitCoordinateStoryboardInput {
   readonly projectId: string
@@ -56,29 +55,7 @@ async function resolveEditScriptId(input: Pick<SubmitCoordinateStoryboardInput, 
 export function assertRequiredLocationPreviews(input: {
   readonly sourceSnapshot: Awaited<ReturnType<typeof buildStoryboardConsistencySource>>['sourceSnapshot']
 }) {
-  const classifications = classifyStoryboardConsistencyBlocks(input.sourceSnapshot)
-  const missing = classifications.flatMap((classification) => {
-    if (classification.classification === 'no_fixed_space') return []
-    const block = input.sourceSnapshot.videoBlocks.find((item) => item.sourceVideoBlockId === classification.sourceVideoBlockId)
-    if (!block) throw new Error(`EDIT_SCRIPT_STORYBOARD_BLOCK_MISSING:${classification.sourceVideoBlockId}`)
-    const blockLocationAssets = input.sourceSnapshot.assets.filter((asset) => (
-      asset.kind === 'location'
-      && asset.shotNumbers.some((shotNumber) => block.shotNumbers.includes(shotNumber))
-    ))
-    const locationAssets = blockLocationAssets.filter(isFloorPlanLocationEligible)
-    if (blockLocationAssets.length > 0 && locationAssets.length === 0) return []
-    if (locationAssets.length === 0) return [classification.locationNames[0] ?? classification.sourceVideoBlockId]
-    return locationAssets
-      .filter((asset) => !asset.previewImageUrl)
-      .map((asset) => asset.name)
-  })
-  const uniqueMissing = Array.from(new Set(missing))
-  if (uniqueMissing.length > 0) {
-    throw new ApiError('CONFLICT', {
-      code: 'EDIT_SCRIPT_STORYBOARD_LOCATION_REFERENCE_REQUIRED',
-      message: `Location reference images are required before coordinate storyboard generation: ${uniqueMissing.join(', ')}`,
-    })
-  }
+  if (input.sourceSnapshot.schemaVersion !== 1) throw new Error('EDIT_SCRIPT_STORYBOARD_SOURCE_SNAPSHOT_INVALID')
 }
 
 export async function submitEditScriptCoordinateStoryboard(input: SubmitCoordinateStoryboardInput) {

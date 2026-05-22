@@ -25,60 +25,6 @@ const NO_FIXED_SPACE_PATTERNS = [
   '快速跳切',
 ] as const
 
-const MACRO_EXTERIOR_LOCATION_PATTERNS = [
-  'black hole',
-  'wormhole',
-  'deep space',
-  'outer space',
-  'starfield',
-  'nebula',
-  'galaxy',
-  'sky',
-  'cloud layer',
-  '黑洞',
-  '虫洞',
-  '深空',
-  '宇宙',
-  '星空',
-  '星云',
-  '银河',
-  '天空',
-  '云层',
-  '吸积盘',
-] as const
-
-const FLOOR_PLAN_ANCHOR_PATTERNS = [
-  'interior',
-  'room',
-  'cockpit',
-  'cabin',
-  'bridge',
-  'corridor',
-  'hall',
-  'courtyard',
-  'street',
-  'road',
-  'door',
-  'wall',
-  'table',
-  'chair',
-  '内景',
-  '房间',
-  '室',
-  '舱',
-  '驾驶舱',
-  '舰桥',
-  '走廊',
-  '大厅',
-  '庭院',
-  '街',
-  '道路',
-  '门',
-  '墙',
-  '桌',
-  '椅',
-] as const
-
 function includesPattern(value: string, patterns: readonly string[]): boolean {
   const normalized = value.toLocaleLowerCase()
   return patterns.some((pattern) => normalized.includes(pattern.toLocaleLowerCase()))
@@ -176,16 +122,6 @@ function classificationRank(classification: FixedSpaceClassification): number {
   return 0
 }
 
-export function isFloorPlanLocationEligible(location: {
-  readonly name: string
-  readonly description: string
-}): boolean {
-  const locationText = `${location.name}\n${location.description}`
-  const hasMacroExteriorSignal = includesPattern(locationText, MACRO_EXTERIOR_LOCATION_PATTERNS)
-  const hasFloorPlanAnchorSignal = includesPattern(locationText, FLOOR_PLAN_ANCHOR_PATTERNS)
-  return !hasMacroExteriorSignal || hasFloorPlanAnchorSignal
-}
-
 export function buildFloorPlanSceneGroups(
   snapshot: StoryboardConsistencySourceSnapshot,
   classifications: readonly StoryboardBlockClassification[] = classifyStoryboardConsistencyBlocks(snapshot),
@@ -208,7 +144,6 @@ export function buildFloorPlanSceneGroups(
     if (!block) continue
     const locations = snapshot.assets.filter((asset) => (
       asset.kind === 'location'
-      && isFloorPlanLocationEligible(asset)
       && asset.shotNumbers.some((shotNumber) => block.shotNumbers.includes(shotNumber))
     ))
     for (const location of locations) {

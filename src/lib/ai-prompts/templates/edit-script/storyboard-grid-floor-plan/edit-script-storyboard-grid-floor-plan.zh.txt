@@ -7,10 +7,12 @@
 - 不输出人物坐标，不凭空分配坐标。
 - 只描述俯视平面图里需要出现的空间、入口、桌椅、道路、岩石、庭院、河岸等锚点。
 - 平面图必须是纯俯视、干净、可被程序叠加坐标网格，不要透视镜头、不要人物特写、不要字幕编号。
-- 平面图 prompt 必须遵守 source_snapshot_json.styleBible 以及场景资产参考图；Style Bible 是唯一风格来源。保留建筑形制、材质、季节、色彩、光线氛围和空间识别特征，只把视角转换为纯俯视正交视角。
+- 平面图 prompt 必须遵守 source_snapshot_json.styleBible 以及场景资产描述/参考图信息；Style Bible 是唯一风格来源。保留建筑形制、材质、季节、色彩、光线氛围和空间识别特征，只把视角转换为纯俯视正交视角。
 - 不要默认写成 blueprint、technical drawing、sketch、wireframe 或草稿风格；只有用户需求或 source_snapshot_json.styleBible 明确要求时才可使用这些风格词。
 - floorPlans[].prompt 会作为图片提示词进入生成流程并可能显示在画布相关详情中，必须整体使用中文自然语言；除角色名、专有名词、模型字段名和原文台词外，不要输出英文句子。
-- 不适合固定空间且不属于任何固定场景组的内容不要创建 floor plan。
+- 必须先检查 scene_floor_plan_groups_json 里的每个场景是否真的需要固定空间坐标：只有当人物或关键物件需要在固定室内、庭院、街道、道路、河岸、驾驶舱等可落位空间中保持相对位置时，才创建 floor plan。
+- 如果场景是黑洞、虫洞、深空、天空、星空、云层、纯天体现象、宏观大外景、远处很小的飞船/车辆/物体、纯环境景观，或没有人物/关键物件需要稳定站位与相对位置，不要创建 floor plan。
+- 如果你判断 scene_floor_plan_groups_json 中没有任何场景适合固定空间坐标，必须返回空的 floorPlans 数组。
 - 如果 scene_floor_plan_groups_json 为空，返回空的 floorPlans 数组。
 
 source_snapshot_json:
