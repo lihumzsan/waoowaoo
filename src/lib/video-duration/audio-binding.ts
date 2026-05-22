@@ -8,6 +8,8 @@ export type VideoDurationBinding = {
 
 export type AudioDurationCandidate = {
   id: string
+  speaker?: string | null
+  content?: string | null
   audioDuration?: number | null
 }
 
@@ -23,6 +25,36 @@ export type AudioDrivenVideoTimingContext = {
 export type VideoTimingProfile = {
   fps: number
   maxDurationSeconds: number | null
+}
+
+export type AudioDrivenVideoSplitVoiceLine = {
+  id: string
+  speaker?: string | null
+  content: string
+  audioDuration: number
+}
+
+export type AudioDrivenVideoSplitSegment = {
+  segmentIndex: number
+  voiceLineIds: string[]
+  voiceLines: AudioDrivenVideoSplitVoiceLine[]
+  audioDurationMs: number
+  audioDurationSeconds: number
+  targetDurationSeconds: number
+  targetFrameCount: number
+}
+
+export type AudioDrivenVideoSplitPlan = {
+  mode: 'split_audio'
+  selectedVoiceLineIds: string[]
+  matchedVoiceLineIds: string[]
+  fps: number
+  maxDurationSeconds: number
+  totalAudioDurationMs: number
+  totalAudioDurationSeconds: number
+  totalTargetDurationSeconds: number
+  segments: AudioDrivenVideoSplitSegment[]
+  reason: string
 }
 
 export type ResolvedAudioDrivenVideoTiming = {
@@ -44,10 +76,11 @@ export type ResolvedAudioDrivenVideoTiming = {
   capped: boolean
   canGenerate: boolean
   blockedReason?: 'audio_exceeds_max_duration' | 'target_exceeds_max_duration'
+  splitPlan?: AudioDrivenVideoSplitPlan
 }
 
 export const COMFYUI_LTX23_DEFAULT_FPS = 25
-export const PRODUCT_VIDEO_MAX_DURATION_SECONDS = 10
+export const PRODUCT_VIDEO_MAX_DURATION_SECONDS = 12
 export const COMFYUI_LTX23_MAX_DURATION_SECONDS = PRODUCT_VIDEO_MAX_DURATION_SECONDS
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -102,9 +135,224 @@ function normalizeDurationOptions(value: unknown): number[] {
     .sort((left, right) => left - right)
 }
 
+function normalizeAudioDurationMs(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+  return Math.round(value)
+}
+
+function toSeconds(valueMs: number): number {
+  return Number((valueMs / 1000).toFixed(2))
+}
+
+function supportsAutomaticAudioSplit(modelKey: string | null | undefined): boolean {
+  const normalized = typeof modelKey === 'string' ? modelKey.trim().toLowerCase() : ''
+  if (!normalized.includes('comfyui::')) return false
+  return normalized.includes('ltx2.3')
+    || normalized.includes('ltx-2.3')
+    || normalized.includes('/ltx')
+    || normalized.includes('ltxv')
+}
+
+type MatchedAudioLine = {
+  id: string
+  speaker?: string | null
+  content: string
+  audioDurationMs: number
+}
+
+function resolveMatchedAudioLines(
+  binding: VideoDurationBinding,
+  candidates: AudioDurationCandidate[],
+): { selectedVoiceLineIds: string[]; lines: MatchedAudioLine[] } {
+  const normalizedBinding = normalizeVideoDurationBinding(binding)
+  const selectedVoiceLineIds = normalizeVoiceLineIds(normalizedBinding.voiceLineIds)
+  if (normalizedBinding.mode !== 'match_audio' || selectedVoiceLineIds.length === 0) {
+    return { selectedVoiceLineIds, lines: [] }
+  }
+
+  const candidateMap = new Map(
+    candidates.map((candidate) => [candidate.id, candidate]),
+  )
+  const lines: MatchedAudioLine[] = []
+
+  for (const voiceLineId of selectedVoiceLineIds) {
+    const candidate = candidateMap.get(voiceLineId)
+    if (!candidate) continue
+    const audioDurationMs = normalizeAudioDurationMs(candidate.audioDuration)
+    if (audioDurationMs === null) continue
+    lines.push({
+      id: voiceLineId,
+      speaker: candidate.speaker,
+      content: typeof candidate.content === 'string' ? candidate.content : '',
+      audioDurationMs,
+    })
+  }
+
+  return { selectedVoiceLineIds, lines }
+}
+
 function clampToProductMaxDuration(value: number | null): number {
   if (value === null) return PRODUCT_VIDEO_MAX_DURATION_SECONDS
   return Math.min(value, PRODUCT_VIDEO_MAX_DURATION_SECONDS)
+}
+
+function normalizeTextUnits(text: string): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  const units = trimmed.match(/[^。！？!?；;，,.\n]+[。！？!?；;，,.\n]*/g)
+  return units && units.length > 0 ? units.map((unit) => unit.trim()).filter(Boolean) : Array.from(trimmed)
+}
+
+function splitTextByWeight(text: string, count: number): string[] {
+  const safeCount = Math.max(1, Math.floor(count))
+  const trimmed = text.trim()
+  if (!trimmed) return Array.from({ length: safeCount }, () => '')
+  if (safeCount === 1) return [trimmed]
+
+  const units = normalizeTextUnits(trimmed)
+  if (units.length <= safeCount) {
+    const chars = Array.from(trimmed)
+    const chunkSize = Math.max(1, Math.ceil(chars.length / safeCount))
+    return Array.from({ length: safeCount }, (_, index) =>
+      chars.slice(index * chunkSize, (index + 1) * chunkSize).join('').trim(),
+    )
+  }
+
+  const weights = units.map((unit) => Math.max(1, Array.from(unit.replace(/\s+/g, '')).length))
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  const targetWeight = totalWeight / safeCount
+  const chunks: string[] = []
+  let currentUnits: string[] = []
+  let currentWeight = 0
+
+  units.forEach((unit, index) => {
+    currentUnits.push(unit)
+    currentWeight += weights[index] ?? 1
+    const remainingUnits = units.length - index - 1
+    const remainingChunks = safeCount - chunks.length - 1
+    if (
+      chunks.length < safeCount - 1
+      && currentWeight >= targetWeight
+      && remainingUnits >= remainingChunks
+    ) {
+      chunks.push(currentUnits.join('').trim())
+      currentUnits = []
+      currentWeight = 0
+    }
+  })
+
+  if (currentUnits.length > 0) chunks.push(currentUnits.join('').trim())
+  while (chunks.length < safeCount) chunks.push('')
+  return chunks.slice(0, safeCount)
+}
+
+function buildSplitSegment(
+  segmentIndex: number,
+  lines: MatchedAudioLine[],
+  fps: number,
+): AudioDrivenVideoSplitSegment {
+  const audioDurationMs = lines.reduce((sum, line) => sum + line.audioDurationMs, 0)
+  const audioDurationSeconds = toSeconds(audioDurationMs)
+  const targetDurationSeconds = Math.max(0.4, audioDurationSeconds)
+  return {
+    segmentIndex,
+    voiceLineIds: lines.map((line) => line.id),
+    voiceLines: lines.map((line) => ({
+      id: line.id,
+      speaker: line.speaker,
+      content: line.content,
+      audioDuration: line.audioDurationMs,
+    })),
+    audioDurationMs,
+    audioDurationSeconds,
+    targetDurationSeconds,
+    targetFrameCount: Math.max(1, Math.round(targetDurationSeconds * fps)),
+  }
+}
+
+function splitLongLine(line: MatchedAudioLine, maxDurationMs: number): MatchedAudioLine[] {
+  const segmentCount = Math.max(2, Math.ceil(line.audioDurationMs / maxDurationMs))
+  const chunks = splitTextByWeight(line.content, segmentCount)
+  const baseDurationMs = Math.floor(line.audioDurationMs / segmentCount)
+  let allocated = 0
+
+  return Array.from({ length: segmentCount }, (_, index) => {
+    const audioDurationMs = index === segmentCount - 1
+      ? line.audioDurationMs - allocated
+      : baseDurationMs
+    allocated += audioDurationMs
+    return {
+      id: line.id,
+      speaker: line.speaker,
+      content: chunks[index] || line.content,
+      audioDurationMs,
+    }
+  })
+}
+
+export function resolveAudioDrivenVideoSplitPlan(params: {
+  binding: VideoDurationBinding
+  candidates: AudioDurationCandidate[]
+  modelKey?: string | null
+  durationOptions?: readonly number[] | null
+}): AudioDrivenVideoSplitPlan | null {
+  if (!supportsAutomaticAudioSplit(params.modelKey)) return null
+
+  const binding = normalizeVideoDurationBinding(params.binding)
+  if (binding.mode !== 'match_audio') return null
+
+  const profile = getVideoTimingProfile(params.modelKey, params.durationOptions)
+  if (profile.maxDurationSeconds === null || profile.maxDurationSeconds <= 0) return null
+
+  const { selectedVoiceLineIds, lines } = resolveMatchedAudioLines(binding, params.candidates)
+  if (lines.length === 0) return null
+
+  const totalAudioDurationMs = lines.reduce((sum, line) => sum + line.audioDurationMs, 0)
+  const maxDurationMs = Math.round(profile.maxDurationSeconds * 1000)
+  if (totalAudioDurationMs <= maxDurationMs) return null
+
+  const segments: AudioDrivenVideoSplitSegment[] = []
+  let currentLines: MatchedAudioLine[] = []
+  let currentDurationMs = 0
+
+  const flushCurrent = () => {
+    if (currentLines.length === 0) return
+    segments.push(buildSplitSegment(segments.length, currentLines, profile.fps))
+    currentLines = []
+    currentDurationMs = 0
+  }
+
+  for (const line of lines) {
+    if (line.audioDurationMs > maxDurationMs) {
+      flushCurrent()
+      for (const part of splitLongLine(line, maxDurationMs)) {
+        segments.push(buildSplitSegment(segments.length, [part], profile.fps))
+      }
+      continue
+    }
+
+    if (currentLines.length > 0 && currentDurationMs + line.audioDurationMs > maxDurationMs) {
+      flushCurrent()
+    }
+    currentLines.push(line)
+    currentDurationMs += line.audioDurationMs
+  }
+  flushCurrent()
+
+  if (segments.length < 2) return null
+
+  return {
+    mode: 'split_audio',
+    selectedVoiceLineIds,
+    matchedVoiceLineIds: lines.map((line) => line.id),
+    fps: profile.fps,
+    maxDurationSeconds: profile.maxDurationSeconds,
+    totalAudioDurationMs,
+    totalAudioDurationSeconds: toSeconds(totalAudioDurationMs),
+    totalTargetDurationSeconds: Number(segments.reduce((sum, segment) => sum + segment.targetDurationSeconds, 0).toFixed(2)),
+    segments,
+    reason: 'linked audio exceeds current ComfyUI LTX workflow max duration; split into continuous video segments',
+  }
 }
 
 export function getVideoTimingProfile(
@@ -336,6 +584,14 @@ export function resolveAudioDrivenVideoTiming(params: {
     : targetExceedsMax
       ? 'target_exceeds_max_duration'
       : undefined
+  const splitPlan = audioExceedsMax
+    ? resolveAudioDrivenVideoSplitPlan({
+      binding,
+      candidates: params.candidates,
+      modelKey: params.modelKey,
+      durationOptions: params.durationOptions,
+    })
+    : null
   const cappedDurationSeconds = profile.maxDurationSeconds === null
     ? desiredDurationSeconds
     : Math.min(desiredDurationSeconds, profile.maxDurationSeconds)
@@ -372,5 +628,6 @@ export function resolveAudioDrivenVideoTiming(params: {
     capped,
     canGenerate: !blockedReason,
     ...(blockedReason ? { blockedReason } : {}),
+    ...(splitPlan ? { splitPlan } : {}),
   }
 }

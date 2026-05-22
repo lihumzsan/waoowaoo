@@ -1,6 +1,6 @@
 'use client'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import './ImageSection.css'
 import { GlassButton } from '@/components/ui/primitives'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
@@ -9,6 +9,7 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import ImageSectionCandidateMode from './ImageSectionCandidateMode'
 import ImageSectionActionButtons from './ImageSectionActionButtons'
 import { AppIcon } from '@/components/ui/icons'
+import { toDisplayImageUrl } from '@/lib/media/image-url'
 
 interface PanelCandidateData {
   candidates: string[]
@@ -27,6 +28,7 @@ interface ImageSectionProps {
   failedError: string | null
   candidateData: PanelCandidateData | null
   previousImageUrl?: string | null
+  priority?: boolean
   onRegeneratePanelImage: (panelId: string, count?: number, force?: boolean) => void
   onOpenEditModal: () => void
   onOpenAIDataModal: () => void
@@ -50,6 +52,7 @@ export default function ImageSection({
   failedError,
   candidateData,
   previousImageUrl,
+  priority = false,
   onRegeneratePanelImage,
   onOpenEditModal,
   onOpenAIDataModal,
@@ -63,6 +66,8 @@ export default function ImageSection({
   const t = useTranslations('storyboard')
   const [isTaskPulseAnimating, setIsTaskPulseAnimating] = useState(false)
   const cssAspectRatio = videoRatio.replace(':', '/')
+  const displayImageUrl = useMemo(() => toDisplayImageUrl(imageUrl), [imageUrl])
+  const displayPreviousImageUrl = useMemo(() => toDisplayImageUrl(previousImageUrl), [previousImageUrl])
   const hasValidCandidates = !!candidateData && candidateData.candidates.some((url) => !url.startsWith('PENDING:'))
 
   const triggerPulse = () => {
@@ -90,6 +95,7 @@ export default function ImageSection({
             containerClassName="absolute inset-0 h-full w-full"
             className="absolute inset-0 h-full w-full object-cover"
             sizes="(max-width: 768px) 100vw, 33vw"
+            priority={priority}
           />
         )}
         <div className={`absolute inset-0 ${backdropImageUrl ? 'bg-black/45 backdrop-blur-[1px]' : 'bg-[var(--glass-bg-surface-modal)] backdrop-blur-md'}`} />
@@ -138,11 +144,11 @@ export default function ImageSection({
       style={{ aspectRatio: cssAspectRatio }}
     >
       {isDeleting ? (
-        renderLoadingState('process', imageUrl)
+        renderLoadingState('process', displayImageUrl)
       ) : isModifying ? (
-        renderLoadingState('modify', imageUrl)
+        renderLoadingState('modify', displayImageUrl)
       ) : isSubmittingPanelImageTask ? (
-        renderLoadingState('regenerate', imageUrl)
+        renderLoadingState('regenerate', displayImageUrl)
       ) : candidateData ? (
         hasValidCandidates ? (
           <ImageSectionCandidateMode
@@ -153,21 +159,23 @@ export default function ImageSection({
             onConfirmCandidate={onConfirmCandidate}
             onCancelCandidate={onCancelCandidate}
             onPreviewImage={onPreviewImage}
+            priority={priority}
           />
         ) : (
-          renderLoadingState(imageUrl ? 'regenerate' : 'generate', imageUrl)
+          renderLoadingState(displayImageUrl ? 'regenerate' : 'generate', displayImageUrl)
         )
       ) : failedError ? (
         renderFailedState()
-      ) : imageUrl ? (
+      ) : displayImageUrl ? (
         <MediaImageWithLoading
-          src={imageUrl}
+          src={displayImageUrl}
           alt={t('variant.shotNum', { number: globalPanelNumber })}
           containerClassName="h-full w-full"
           className={`w-full h-full object-cover ${onPreviewImage ? 'cursor-zoom-in' : ''}`}
-          onClick={onPreviewImage ? () => onPreviewImage(imageUrl) : undefined}
+          onClick={onPreviewImage ? () => onPreviewImage(imageUrl || displayImageUrl) : undefined}
           title={onPreviewImage ? t('image.clickToPreview') : undefined}
           sizes="(max-width: 768px) 100vw, 33vw"
+          priority={priority}
         />
       ) : (
         renderEmptyState()
@@ -185,7 +193,7 @@ export default function ImageSection({
         <ImageSectionActionButtons
           panelId={panelId}
           imageUrl={imageUrl}
-          previousImageUrl={previousImageUrl}
+          previousImageUrl={displayPreviousImageUrl}
           isSubmittingPanelImageTask={isSubmittingPanelImageTask}
           isModifying={isModifying}
           onRegeneratePanelImage={onRegeneratePanelImage}

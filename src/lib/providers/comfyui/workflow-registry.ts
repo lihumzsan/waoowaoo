@@ -64,6 +64,31 @@ export type ComfyUiWorkflowLlmApiInject = {
   model: string
 }
 
+export type ComfyUiWorkflowParameterContract = {
+  name: string
+  promptNodeIds: string[]
+  positiveConditioningNodeIds: string[]
+  negativeConditioningNodeIds: string[]
+  aspectRatioNodeIds: string[]
+  longestSideNodeIds: string[]
+  imageInputNodeIds: string[]
+  finalOutputNodeIds: string[]
+  allowInternalLlmExpansion: boolean
+  maxReferenceImages: number
+}
+
+export type ComfyUiWorkflowPreflightResult = {
+  ok: true
+  workflowKey: string
+  contractName: string | null
+  summary: {
+    promptLocked: boolean
+    aspectRatioLocked: boolean
+    referenceImageCount: number
+    finalOutputNodeIds: string[]
+  }
+}
+
 type UiWorkflowInput = {
   name?: unknown
   type?: unknown
@@ -719,6 +744,17 @@ function isPromptRelayEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
   return node.class_type.trim().toLowerCase() === 'promptrelayencode'
 }
 
+function isAudioTranscriptionNode(node: ComfyUiWorkflowGraphNode): boolean {
+  const classType = node.class_type.toLowerCase()
+  const title = readTrimmedString(node._meta?.title).toLowerCase()
+  return classType.includes('whisper')
+    || classType.includes('transcrib')
+    || classType.includes('speechrecognition')
+    || title.includes('whisper')
+    || title.includes('转写')
+    || title.includes('识别')
+}
+
 function extractPromptRelaySection(text: string, section: 'GLOBAL' | 'LOCAL'): string {
   const nextSectionPattern = section === 'GLOBAL'
     ? String.raw`\s*(?:LOCAL|LENGTHS)\s*[:：]`
@@ -855,6 +891,10 @@ function applyPromptHeuristics(
       const field = inputName.trim().toLowerCase()
       if (!field) continue
       const currentValue = node.inputs[inputName]
+
+      if (field === 'prompt' && isAudioTranscriptionNode(node)) {
+        continue
+      }
 
       if (
         conditioningRole === 'negative'
@@ -1223,6 +1263,206 @@ function assignRandomSeedValues(graph: ComfyUiWorkflowGraph): void {
       node.inputs[seedField] = Math.floor(Math.random() * (COMFYUI_SAFE_RANDOM_SEED_MAX + 1))
     }
   }
+}
+
+function isQwenStoryboardWorkflowKey(workflowKey: string): boolean {
+  const normalized = workflowKey.trim().replace(/\\/g, '/')
+  return normalized.includes('baseimage/')
+    && normalized.includes('Qwen')
+    && (normalized.includes('分镜') || normalized.toLowerCase().includes('storyboard'))
+}
+
+export function getComfyUiWorkflowParameterContract(workflowKey: string): ComfyUiWorkflowParameterContract | null {
+  if (!isQwenStoryboardWorkflowKey(workflowKey)) return null
+
+  return {
+    name: 'qwen-storyboard-controlled-single-panel',
+    promptNodeIds: ['103'],
+    positiveConditioningNodeIds: ['68'],
+    negativeConditioningNodeIds: ['61'],
+    aspectRatioNodeIds: ['91'],
+    longestSideNodeIds: ['104'],
+    imageInputNodeIds: ['74'],
+    finalOutputNodeIds: ['105'],
+    allowInternalLlmExpansion: false,
+    maxReferenceImages: 1,
+  }
+}
+
+function preflightFail(code: string, message: string): never {
+  throw new Error(`${code}: ${message}`)
+}
+
+function normalizeWorkflowNodeClass(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function readConnectionNodeId(value: unknown): string | null {
+  if (!isConnectionValue(value)) return null
+  return normalizeNodeId(value[0]) || null
+}
+
+function nodeHasClassToken(node: ComfyUiWorkflowGraphNode | undefined, tokens: string[]): boolean {
+  if (!node) return false
+  const normalized = normalizeWorkflowNodeClass(node.class_type)
+  return tokens.some((token) => normalized.includes(token))
+}
+
+function upstreamPathHasNodeClass(
+  graph: ComfyUiWorkflowGraph,
+  startNodeId: string,
+  tokens: string[],
+  visited = new Set<string>(),
+): boolean {
+  if (visited.has(startNodeId)) return false
+  visited.add(startNodeId)
+
+  const node = graph[startNodeId]
+  if (!node) return false
+  if (nodeHasClassToken(node, tokens)) return true
+
+  for (const value of Object.values(node.inputs)) {
+    const nextNodeId = readConnectionNodeId(value)
+    if (!nextNodeId) continue
+    if (upstreamPathHasNodeClass(graph, nextNodeId, tokens, visited)) return true
+  }
+
+  return false
+}
+
+function validateQwenStoryboardPreflight(
+  workflowKey: string,
+  graph: ComfyUiWorkflowGraph,
+  inject: ComfyUiWorkflowInject,
+  contract: ComfyUiWorkflowParameterContract,
+): ComfyUiWorkflowPreflightResult {
+  const prompt = readTrimmedString(inject.prompt)
+  const negativePrompt = readTrimmedString(inject.negativePrompt)
+  const imageFilenames = Array.isArray(inject.imageFilenames)
+    ? inject.imageFilenames.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : []
+
+  if (imageFilenames.length > contract.maxReferenceImages) {
+    preflightFail(
+      'COMFYUI_PREFLIGHT_REFERENCE_OVER_CONTRACT',
+      `${workflowKey} accepts at most ${contract.maxReferenceImages} reference image(s), got ${imageFilenames.length}`,
+    )
+  }
+
+  const positiveNode = graph[contract.positiveConditioningNodeIds[0] || '']
+  if (!positiveNode) {
+    preflightFail('COMFYUI_PREFLIGHT_NODE_MISSING', `${workflowKey} missing positive conditioning node`)
+  }
+
+  const positivePrompt = positiveNode.inputs.prompt
+  const positivePromptSourceId = readConnectionNodeId(positivePrompt)
+  if (positivePromptSourceId) {
+    const leaksLlmRewrite = upstreamPathHasNodeClass(graph, positivePromptSourceId, [
+      'rhllmapinode',
+      'processstring',
+      'easypromptline',
+      'promptline',
+    ])
+    if (leaksLlmRewrite) {
+      preflightFail(
+        'COMFYUI_PREFLIGHT_LLM_REWRITE_LEAK',
+        `${workflowKey} routes internal LLM rewrite output into final positive conditioning`,
+      )
+    }
+    preflightFail('COMFYUI_PREFLIGHT_PROMPT_NOT_LOCKED', `${workflowKey} final positive prompt is still connected`)
+  }
+
+  if (prompt && positivePrompt !== prompt) {
+    preflightFail('COMFYUI_PREFLIGHT_PROMPT_NOT_LOCKED', `${workflowKey} final positive prompt is not locked`)
+  }
+
+  const promptNode = graph[contract.promptNodeIds[0] || '']
+  if (prompt && promptNode && promptNode.inputs.text !== prompt) {
+    preflightFail('COMFYUI_PREFLIGHT_PROMPT_NOT_LOCKED', `${workflowKey} relay prompt node is not locked`)
+  }
+
+  const negativeNode = graph[contract.negativeConditioningNodeIds[0] || '']
+  if (negativePrompt && negativeNode && negativeNode.inputs.prompt !== negativePrompt) {
+    preflightFail('COMFYUI_PREFLIGHT_NEGATIVE_PROMPT_NOT_LOCKED', `${workflowKey} negative prompt is not locked`)
+  }
+
+  const width = clampDimension(inject.width)
+  const height = clampDimension(inject.height)
+  if (width !== null && height !== null) {
+    const expectedAspect = formatAspectRatio(width, height)
+    const aspectNode = graph[contract.aspectRatioNodeIds[0] || '']
+    if (aspectNode?.inputs.aspect_ratio !== expectedAspect) {
+      preflightFail(
+        'COMFYUI_PREFLIGHT_ASPECT_RATIO_NOT_LOCKED',
+        `${workflowKey} aspect ratio is not locked to ${expectedAspect}`,
+      )
+    }
+
+    const longestSideNode = graph[contract.longestSideNodeIds[0] || '']
+    if (longestSideNode?.inputs.value !== Math.max(width, height)) {
+      preflightFail(
+        'COMFYUI_PREFLIGHT_SIZE_NOT_LOCKED',
+        `${workflowKey} longest side is not locked to ${Math.max(width, height)}`,
+      )
+    }
+  }
+
+  if (imageFilenames.length > 0) {
+    const inputNode = graph[contract.imageInputNodeIds[0] || '']
+    if (inputNode?.inputs.image !== imageFilenames[0]) {
+      preflightFail('COMFYUI_PREFLIGHT_REFERENCE_NOT_LOCKED', `${workflowKey} reference image slot is not locked`)
+    }
+  }
+
+  for (const outputNodeId of contract.finalOutputNodeIds) {
+    if (!nodeHasClassToken(graph[outputNodeId], ['saveimage'])) {
+      preflightFail('COMFYUI_PREFLIGHT_OUTPUT_NODE_INVALID', `${workflowKey} missing final SaveImage output ${outputNodeId}`)
+    }
+  }
+
+  for (const node of Object.values(graph)) {
+    if (!nodeHasClassToken(node, ['ksampler'])) continue
+    const positiveSourceNodeId = readConnectionNodeId(node.inputs.positive)
+    if (!positiveSourceNodeId || !contract.positiveConditioningNodeIds.includes(positiveSourceNodeId)) {
+      preflightFail('COMFYUI_PREFLIGHT_CONDITIONING_ROUTE_INVALID', `${workflowKey} sampler positive conditioning is not locked`)
+    }
+  }
+
+  return {
+    ok: true,
+    workflowKey,
+    contractName: contract.name,
+    summary: {
+      promptLocked: true,
+      aspectRatioLocked: width !== null && height !== null,
+      referenceImageCount: imageFilenames.length,
+      finalOutputNodeIds: contract.finalOutputNodeIds,
+    },
+  }
+}
+
+export function validateResolvedWorkflowPreflight(
+  workflowKey: string,
+  graph: ComfyUiWorkflowGraph,
+  inject: ComfyUiWorkflowInject = {},
+  _options: { expect?: 'image' | 'video' | 'audio' } = {},
+): ComfyUiWorkflowPreflightResult {
+  const contract = getComfyUiWorkflowParameterContract(workflowKey)
+  if (!contract) {
+    return {
+      ok: true,
+      workflowKey,
+      contractName: null,
+      summary: {
+        promptLocked: false,
+        aspectRatioLocked: false,
+        referenceImageCount: inject.imageFilenames?.length ?? 0,
+        finalOutputNodeIds: [],
+      },
+    }
+  }
+
+  return validateQwenStoryboardPreflight(workflowKey, graph, inject, contract)
 }
 
 export function resolveComfyUiWorkflow(

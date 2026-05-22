@@ -32,7 +32,7 @@ export interface StoryboardPanel {
     voiceUrl: string | null
     voiceMedia?: MediaRef | null
     videoUrl: string | null
-    videoGenerationMode?: 'normal' | 'firstlastframe' | null
+    videoGenerationMode?: 'normal' | 'firstlastframe' | 'split' | null
     videoMedia?: MediaRef | null
     imageTaskRunning?: boolean
     videoTaskRunning?: boolean

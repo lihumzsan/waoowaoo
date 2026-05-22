@@ -16,15 +16,22 @@ Storyboard panel data:
 Source text:
 {source_text}
 
-Style requirement:
+Project style definition:
 {style}
+
+Visible character lock:
+1. `panel.characters` / `characters` in the storyboard data is the only visible character list for this image.
+2. Any person mentioned, addressed, watched, heard, remembered, or standing opposite in source text or panel description but not listed in that visible character list is off-screen context only.
+3. Do not draw off-screen people as background figures, blurred figures, cropped torsos, reflections, shadows, assistants, doctors, patients, or passersby.
+4. If the visible character list contains exactly one character, the image must show only that one person; the watched or addressed person stays outside the camera frame.
 
 Execution rules:
 1. Respect panel composition, character placement, and action logic.
 2. If storyboard data contains `slot`, treat it as a preferred placement anchor for consistency, not as an absolute restriction.
 3. If location data contains `available_slots`, treat them as typical anchor references rather than a complete map of all valid positions.
 4. When the panel description, source text, action flow, or scene nature implies movement, entry/exit, path traversal, transition space, temporary space, empty space, or abstract/non-literal space, do not force the character to remain inside an existing slot.
-5. Use reference images for style/identity consistency only.
+5. Use reference images only for identity, clothing, body shape, scene layout, and atmosphere cues.
 6. Repaint the background according to shot type and angle.
-7. If storyboard conflicts with source text, keep narrative logic from source text.
-8. Keep final visual style consistent with provided references.
+7. If storyboard conflicts with source text, keep narrative logic from source text, but never override the visible character lock.
+8. If reference image texture, line treatment, color, or rendering conflicts with the project style definition, follow the project style definition.
+9. Do not let reference images override or dilute the project style definition.

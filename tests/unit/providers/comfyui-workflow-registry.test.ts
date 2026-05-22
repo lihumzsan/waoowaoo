@@ -4,9 +4,11 @@ import { dirname, join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   comfyUiWorkflowRequiresLlmApi,
+  getComfyUiWorkflowParameterContract,
   getComfyUiWorkflowImageInputCount,
   listComfyUiWorkflowKeys,
   resolveComfyUiWorkflow,
+  validateResolvedWorkflowPreflight,
 } from '@/lib/providers/comfyui/workflow-registry'
 
 function getLoadImageNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
@@ -109,6 +111,84 @@ describe('comfyui workflow registry', () => {
     expect(workflow[intNodeId]?.inputs.value).toBe(1280)
   })
 
+  it('locks Qwen storyboard workflow parameters before submit', () => {
+    const workflowKey = listComfyUiWorkflowKeys().find((key) =>
+      key.includes('baseimage/')
+      && key.includes('Qwen')
+    )
+
+    expect(workflowKey).toBeTruthy()
+    expect(getComfyUiWorkflowParameterContract(workflowKey!)).toEqual(expect.objectContaining({
+      allowInternalLlmExpansion: false,
+      finalOutputNodeIds: ['105'],
+    }))
+
+    const workflow = resolveComfyUiWorkflow(workflowKey!, {
+      prompt: 'locked current panel prompt',
+      negativePrompt: 'locked negative prompt',
+      width: 1280,
+      height: 720,
+      imageFilenames: ['reference.jpg'],
+      llmApi: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'or-test-key',
+        model: 'openrouter/test-model',
+      },
+    })
+
+    const result = validateResolvedWorkflowPreflight(workflowKey!, workflow, {
+      prompt: 'locked current panel prompt',
+      negativePrompt: 'locked negative prompt',
+      width: 1280,
+      height: 720,
+      imageFilenames: ['reference.jpg'],
+      llmApi: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'or-test-key',
+        model: 'openrouter/test-model',
+      },
+    }, { expect: 'image' })
+
+    expect(result.ok).toBe(true)
+    expect(workflow['68']?.inputs.prompt).toBe('locked current panel prompt')
+    expect(workflow['61']?.inputs.prompt).toBe('locked negative prompt')
+    expect(workflow['105']?.class_type).toBe('SaveImage')
+  })
+
+  it('rejects Qwen storyboard workflows when internal LLM rewrite drives final conditioning', () => {
+    const workflowKey = listComfyUiWorkflowKeys().find((key) =>
+      key.includes('baseimage/')
+      && key.includes('Qwen')
+    )
+
+    expect(workflowKey).toBeTruthy()
+
+    const workflow = resolveComfyUiWorkflow(workflowKey!, {
+      prompt: 'locked current panel prompt',
+      width: 1280,
+      height: 720,
+      imageFilenames: ['reference.jpg'],
+      llmApi: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'or-test-key',
+        model: 'openrouter/test-model',
+      },
+    })
+    workflow['68']!.inputs.prompt = ['76', 0]
+
+    expect(() => validateResolvedWorkflowPreflight(workflowKey!, workflow, {
+      prompt: 'locked current panel prompt',
+      width: 1280,
+      height: 720,
+      imageFilenames: ['reference.jpg'],
+      llmApi: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'or-test-key',
+        model: 'openrouter/test-model',
+      },
+    }, { expect: 'image' })).toThrow('COMFYUI_PREFLIGHT_LLM_REWRITE_LEAK')
+  })
+
   it('duplicates the last provided reference into every remaining LoadImage slot', () => {
     const workflowKey = 'baseimage/图片编辑/qwen双图编辑'
     expect(getComfyUiWorkflowImageInputCount(workflowKey)).toBeGreaterThan(1)
@@ -139,5 +219,21 @@ describe('comfyui workflow registry', () => {
     expect(loadImageNodes.length).toBeGreaterThan(1)
     expect(loadImageNodes.every((node) => !Object.prototype.hasOwnProperty.call(node.inputs, 'image'))).toBe(true)
     expect(loadImageNodes.every((node) => !Object.prototype.hasOwnProperty.call(node.inputs, 'upload'))).toBe(true)
+  })
+
+  it('keeps S2 voice-clone reference transcription prompt separate from render text', () => {
+    const workflowKey = listComfyUiWorkflowKeys().find((key) => key.endsWith('/s2-one'))
+    expect(workflowKey).toBeTruthy()
+
+    const workflow = resolveComfyUiWorkflow(workflowKey!, {
+      prompt: '[中年男声][冷静] 可以。',
+      audioFilenames: ['reference.wav'],
+    })
+
+    const ttsNode = Object.values(workflow).find((node) => node.class_type === 'FishS2VoiceCloneTTS')
+    expect(ttsNode?.inputs.text).toEqual(['33', 0])
+    expect(workflow['33']?.inputs.text).toBe('[中年男声][冷静] 可以。')
+    expect(workflow['37']?.class_type).toBe('Apply Whisper')
+    expect(workflow['37']?.inputs.prompt).toBe('')
   })
 })

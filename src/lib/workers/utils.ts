@@ -7,12 +7,13 @@ import { generateLipSync } from '@/lib/lipsync'
 import { pollAsyncTask } from '@/lib/async-poll'
 import { getSignedUrl, toFetchableUrl } from '@/lib/storage'
 import { initializeFonts, createLabelSVG } from '@/lib/fonts'
-import { processMediaResult } from '@/lib/media-process'
+import { processMediaResult, processMediaResultWithMetadata } from '@/lib/media-process'
 import {
   getProjectModelConfig,
   getUserModelConfig,
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/model-capabilities/lookup'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
@@ -417,6 +418,18 @@ export async function resolveImageSourcesFromGeneration(
   return [polled.url]
 }
 
+function resolveCapabilityValidationDuration(modelId: string, requestedDuration: number): number {
+  const durationOptions = resolveBuiltinCapabilitiesByModelKey('video', modelId)?.video?.durationOptions
+  const sortedOptions = Array.isArray(durationOptions)
+    ? durationOptions
+      .filter((option): option is number => typeof option === 'number' && Number.isFinite(option) && option > 0)
+      .sort((left, right) => left - right)
+    : []
+  if (sortedOptions.length === 0) return requestedDuration
+
+  return sortedOptions.find((option) => option + 0.001 >= requestedDuration) ?? requestedDuration
+}
+
 export async function resolveVideoSourceFromGeneration(
   job: Job<TaskJobData>,
   params: {
@@ -434,6 +447,7 @@ export async function resolveVideoSourceFromGeneration(
       generationMode?: 'normal' | 'firstlastframe'
       [key: string]: string | number | boolean | undefined
     }
+    allowCustomDuration?: boolean
     pollProgress?: { start?: number; end?: number }
   },
 ): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
@@ -474,8 +488,14 @@ export async function resolveVideoSourceFromGeneration(
   })
 
   const runtimeSelections: Record<string, string | number | boolean> = {}
-  if (typeof params.options?.duration === 'number') {
-    runtimeSelections.duration = params.options.duration
+  const requestedDuration = typeof params.options?.duration === 'number' && Number.isFinite(params.options.duration)
+    ? params.options.duration
+    : null
+  const allowCustomDuration = params.allowCustomDuration === true && requestedDuration !== null
+  if (requestedDuration !== null) {
+    runtimeSelections.duration = allowCustomDuration
+      ? resolveCapabilityValidationDuration(params.modelId, requestedDuration)
+      : requestedDuration
   }
   if (typeof params.options?.resolution === 'string') {
     runtimeSelections.resolution = params.options.resolution
@@ -501,6 +521,9 @@ export async function resolveVideoSourceFromGeneration(
 
   const providerCapabilityOptions: Record<string, string | number | boolean> = { ...capabilityOptions }
   delete providerCapabilityOptions.generationMode
+  if (allowCustomDuration) {
+    delete providerCapabilityOptions.duration
+  }
   const providerRequestOptions: Record<string, string | number | boolean> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
     if (key === 'generationMode' || value === undefined) continue
@@ -685,6 +708,19 @@ export async function uploadImageSourceToCos(source: string | Buffer, keyPrefix:
     keyPrefix,
     targetId,
   })
+}
+
+export async function uploadImageSourceToCosWithMetadata(source: string | Buffer, keyPrefix: string, targetId: string) {
+  const result = await processMediaResultWithMetadata({
+    source,
+    type: 'image',
+    keyPrefix,
+    targetId,
+  })
+  return {
+    key: result.storageKey,
+    metadata: result.metadata,
+  }
 }
 
 export async function uploadVideoSourceToCos(

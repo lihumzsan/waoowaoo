@@ -115,4 +115,43 @@ describe('VideoPanelCardHeader', () => {
 
     expect(markup).not.toContain('Restore Previous')
   })
+
+  it('disables the regenerate overlay action when linked audio cannot fit the workflow duration', () => {
+    const runtime = createRuntime()
+    runtime.durationBinding = {
+      ...runtime.durationBinding,
+      timing: {
+        canGenerate: false,
+      },
+    } as unknown as VideoPanelRuntime['durationBinding']
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardHeader, {
+        runtime,
+      }),
+    )
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
+  })
+
+  it('keeps the regenerate overlay action enabled when long audio can be auto-split', () => {
+    const runtime = createRuntime()
+    runtime.durationBinding = {
+      ...runtime.durationBinding,
+      timing: {
+        canGenerate: false,
+        splitPlan: {
+          segments: [{ segmentIndex: 0 }, { segmentIndex: 1 }],
+        },
+      },
+    } as unknown as VideoPanelRuntime['durationBinding']
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardHeader, {
+        runtime,
+      }),
+    )
+
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
+  })
 })

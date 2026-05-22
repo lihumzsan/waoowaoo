@@ -4,6 +4,7 @@ import {
   COMFYUI_LTX23_MAX_DURATION_SECONDS,
   normalizeVideoDurationBinding,
   parseVideoDurationBinding,
+  resolveAudioDrivenVideoSplitPlan,
   resolveAudioDrivenVideoTiming,
 } from '@/lib/video-duration/audio-binding'
 
@@ -82,7 +83,7 @@ describe('video audio duration binding', () => {
     expect(timing?.canGenerate).toBe(true)
   })
 
-  it('blocks ltx2.3 timing when linked audio exceeds the 10 second product max duration', () => {
+  it('blocks ltx2.3 timing when linked audio exceeds the product max duration', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',
@@ -97,8 +98,8 @@ describe('video audio duration binding', () => {
 
     expect(timing).not.toBeNull()
     expect(timing?.fps).toBe(COMFYUI_LTX23_DEFAULT_FPS)
-    expect(timing?.maxDurationSeconds).toBe(10)
-    expect(timing?.targetDurationSeconds).toBe(10)
+    expect(timing?.maxDurationSeconds).toBe(12)
+    expect(timing?.targetDurationSeconds).toBe(12)
     expect(timing?.targetFrameCount).toBe(COMFYUI_LTX23_DEFAULT_FPS * COMFYUI_LTX23_MAX_DURATION_SECONDS)
     expect(timing?.capped).toBe(true)
     expect(timing?.canGenerate).toBe(false)
@@ -126,22 +127,94 @@ describe('video audio duration binding', () => {
     expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
   })
 
-  it('clamps configured 12 second duration options to the 10 second product max', () => {
+  it('allows configured 12 second LTX duration options for 11.4 second linked audio', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',
         voiceLineIds: ['line-1'],
       },
       candidates: [
-        { id: 'line-1', audioDuration: 11_000 },
+        { id: 'line-1', audioDuration: 11_400 },
       ],
       modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
       durationOptions: [2, 4, 6, 8, 12],
     })
 
-    expect(timing?.maxDurationSeconds).toBe(10)
-    expect(timing?.targetDurationSeconds).toBe(10)
+    expect(timing?.maxDurationSeconds).toBe(12)
+    expect(timing?.targetDurationSeconds).toBe(11.4)
+    expect(timing?.targetFrameCount).toBe(285)
+    expect(timing?.canGenerate).toBe(true)
+    expect(timing?.blockedReason).toBeUndefined()
+  })
+
+  it('builds a split plan when linked audio exceeds the workflow max duration', () => {
+    const plan = resolveAudioDrivenVideoSplitPlan({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['line-1'],
+      },
+      candidates: [
+        {
+          id: 'line-1',
+          speaker: 'Doctor',
+          content: 'We need to review the symptoms carefully, then decide whether this treatment can continue.',
+          audioDuration: 23_700,
+        },
+      ],
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      durationOptions: [4, 5, 6, 8, 10, 12],
+    })
+
+    expect(plan).not.toBeNull()
+    expect(plan?.segments).toHaveLength(2)
+    expect(plan?.totalAudioDurationSeconds).toBe(23.7)
+    expect(plan?.segments.every((segment) => segment.targetDurationSeconds <= 12)).toBe(true)
+    expect(plan?.segments.map((segment) => segment.targetFrameCount)).toEqual([296, 296])
+    expect(plan?.segments[0]?.voiceLines[0]?.content).not.toEqual(plan?.segments[1]?.voiceLines[0]?.content)
+  })
+
+  it('prefers voice-line boundaries when splitting multiple linked lines', () => {
+    const plan = resolveAudioDrivenVideoSplitPlan({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['a', 'b', 'c'],
+      },
+      candidates: [
+        { id: 'a', speaker: 'A', content: 'first line', audioDuration: 7_000 },
+        { id: 'b', speaker: 'B', content: 'second line', audioDuration: 4_500 },
+        { id: 'c', speaker: 'A', content: 'third line', audioDuration: 8_000 },
+      ],
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      durationOptions: [4, 6, 8, 12],
+    })
+
+    expect(plan?.segments).toHaveLength(2)
+    expect(plan?.segments[0]?.voiceLineIds).toEqual(['a', 'b'])
+    expect(plan?.segments[1]?.voiceLineIds).toEqual(['c'])
+    expect(plan?.segments[0]?.audioDurationSeconds).toBe(11.5)
+    expect(plan?.segments[1]?.audioDurationSeconds).toBe(8)
+  })
+
+  it('attaches a split plan to blocked timing so callers can allow automatic generation', () => {
+    const timing = resolveAudioDrivenVideoTiming({
+      binding: {
+        mode: 'match_audio',
+        voiceLineIds: ['line-1'],
+      },
+      candidates: [
+        {
+          id: 'line-1',
+          speaker: 'Doctor',
+          content: 'This is a deliberately long spoken sentence that should be split automatically.',
+          audioDuration: 23_700,
+        },
+      ],
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      durationOptions: [4, 5, 6, 8, 10, 12],
+    })
+
     expect(timing?.canGenerate).toBe(false)
     expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
+    expect(timing?.splitPlan?.segments).toHaveLength(2)
   })
 })

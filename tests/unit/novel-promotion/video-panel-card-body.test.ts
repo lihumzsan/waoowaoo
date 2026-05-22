@@ -177,4 +177,60 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
   })
+  it('shows automatic split messaging and keeps generation enabled for long audio', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, {
+        runtime: createRuntime({
+          layout: {
+            isLinked: false,
+            isLastFrame: false,
+            nextPanel: null,
+            prevPanel: null,
+            hasNext: true,
+            flModel: '',
+            flModelOptions: [],
+            flGenerationOptions: {},
+            flCapabilityFields: [],
+            flMissingCapabilityFields: [],
+            flCustomPrompt: '',
+            defaultFlPrompt: '',
+            videoRatio: '9:16',
+          },
+          durationBinding: {
+            localBinding: {
+              mode: 'match_audio',
+              voiceLineIds: ['line-1'],
+            },
+            isAudioDriven: true,
+            hasValidAudioSelection: true,
+            hasAvailableVoiceLines: true,
+            availableVoiceLines: [
+              {
+                id: 'line-1',
+                speaker: 'Doctor',
+                content: 'long dialogue',
+                audioUrl: 'https://example.com/line.mp3',
+                audioDuration: 23_700,
+              },
+            ],
+            selectedVoiceLineIds: ['line-1'],
+            selectedCount: 1,
+            targetDurationOptions: [],
+            setLocalBinding: () => undefined,
+            timing: {
+              canGenerate: false,
+              audioDurationSeconds: 23.7,
+              maxDurationSeconds: 12,
+              splitPlan: {
+                segments: [{ segmentIndex: 0 }, { segmentIndex: 1 }],
+              },
+            },
+          },
+        } as unknown as Partial<VideoPanelRuntime>),
+      }),
+    )
+
+    expect(markup).toContain('将自动拆成 2 段生成')
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>鐢熸垚瑙嗛<\/button>/)
+  })
 })

@@ -7,6 +7,7 @@ import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-strea
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { getUserModelConfig } from '@/lib/config-service'
+import { MAX_EPISODE_WORDS } from '@/lib/episode-marker-detector'
 import { createTextMarkerMatcher } from '@/lib/novel-promotion/story-to-script/clip-matching'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
 import type { TaskJobData } from '@/lib/task/types'
@@ -261,12 +262,17 @@ export async function handleEpisodeSplitTask(job: Job<TaskJobData>) {
             throw new Error(`episode_${idx + 1} 匹配内容为空`)
           }
 
+          const wordCount = countWords(episodeContent)
+          if (wordCount > MAX_EPISODE_WORDS) {
+            throw new Error(`episode_${idx + 1} exceeds ${MAX_EPISODE_WORDS} words (${wordCount})`)
+          }
+
           resolved.push({
             number: episodeNumber,
             title,
             summary: typeof ep.summary === 'string' ? ep.summary : '',
             content: episodeContent,
-            wordCount: countWords(episodeContent),
+            wordCount,
           })
           searchFrom = endPos
         }

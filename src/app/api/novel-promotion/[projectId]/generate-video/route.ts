@@ -16,8 +16,10 @@ import {
 import { resolveBuiltinPricing } from '@/lib/model-pricing/lookup'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import {
+  resolvePanelVideoAutoSplitPlan,
   resolvePanelVideoReadinessIssue,
   summarizeVideoReadinessIssues,
+  type VideoReadinessPanelLike,
 } from '@/lib/novel-promotion/video-readiness'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,6 +187,27 @@ function buildVideoPanelBillingInfoOrThrow(payload: unknown) {
   }
 }
 
+function withAutoSplitBillingCount(
+  payload: unknown,
+  panel: VideoReadinessPanelLike,
+  options: {
+    modelKey?: string | null
+    durationOptions?: readonly number[] | null
+  },
+): unknown {
+  if (!isRecord(payload)) return payload
+  const splitPlan = resolvePanelVideoAutoSplitPlan(panel, {
+    payload,
+    modelKey: options.modelKey,
+    durationOptions: options.durationOptions,
+  })
+  if (!splitPlan) return payload
+  return {
+    ...payload,
+    count: splitPlan.segments.length,
+  }
+}
+
 export const POST = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -277,8 +300,12 @@ export const POST = apiHandler(async (
     }
 
     const results = await Promise.all(
-      readyPanels.map(async (panel) =>
-        submitTask({
+      readyPanels.map(async (panel) => {
+        const taskPayload = withAutoSplitBillingCount(body, panel, {
+          modelKey: batchModelKey,
+          durationOptions: batchCapabilities?.video?.durationOptions,
+        })
+        return await submitTask({
           userId: session.user.id,
           locale,
           requestId: getRequestId(request),
@@ -287,13 +314,13 @@ export const POST = apiHandler(async (
           type: TASK_TYPE.VIDEO_PANEL,
           targetType: 'NovelPromotionPanel',
           targetId: panel.id,
-          payload: withTaskUiPayload(body, {
+          payload: withTaskUiPayload(taskPayload, {
             hasOutputAtStart: await hasPanelVideoOutput(panel.id),
           }),
           dedupeKey: `video_panel:${panel.id}`,
-          billingInfo: buildVideoPanelBillingInfoOrThrow(body),
-        }),
-      ),
+          billingInfo: buildVideoPanelBillingInfoOrThrow(taskPayload),
+        })
+      }),
     )
 
     return NextResponse.json({
@@ -312,12 +339,48 @@ export const POST = apiHandler(async (
 
   const panel = await prisma.novelPromotionPanel.findFirst({
     where: { storyboardId, panelIndex: Number(panelIndex) },
-    select: { id: true },
+    select: {
+      id: true,
+      imageUrl: true,
+      videoPrompt: true,
+      videoPromptEditedByUser: true,
+      description: true,
+      srtSegment: true,
+      videoDurationBinding: true,
+      shotType: true,
+      cameraMove: true,
+      sceneType: true,
+      storyboard: {
+        select: {
+          clip: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      },
+      matchedVoiceLines: {
+        select: {
+          id: true,
+          content: true,
+          audioDuration: true,
+        },
+      },
+    },
   })
 
   if (!panel) {
     throw new ApiError('NOT_FOUND')
   }
+
+  const singleModelKey = resolveVideoModelKeyFromPayload(body)
+  const singleCapabilities = singleModelKey
+    ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
+    : undefined
+  const taskPayload = withAutoSplitBillingCount(body, panel, {
+    modelKey: singleModelKey,
+    durationOptions: singleCapabilities?.video?.durationOptions,
+  })
 
   const result = await submitTask({
     userId: session.user.id,
@@ -327,11 +390,11 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.VIDEO_PANEL,
     targetType: 'NovelPromotionPanel',
     targetId: panel.id,
-    payload: withTaskUiPayload(body, {
+    payload: withTaskUiPayload(taskPayload, {
       hasOutputAtStart: await hasPanelVideoOutput(panel.id),
     }),
     dedupeKey: `video_panel:${panel.id}`,
-    billingInfo: buildVideoPanelBillingInfoOrThrow(body),
+    billingInfo: buildVideoPanelBillingInfoOrThrow(taskPayload),
   })
 
   return NextResponse.json(result)

@@ -1,6 +1,8 @@
 import {
   parseVideoDurationBinding,
+  resolveAudioDrivenVideoSplitPlan,
   resolveAudioDrivenVideoTiming,
+  type AudioDrivenVideoSplitPlan,
   type VideoDurationBinding,
 } from '@/lib/video-duration/audio-binding'
 import { pickPanelContinuityBasePrompt, type PanelContinuityPanelLike } from '@/lib/novel-promotion/panel-continuity'
@@ -49,6 +51,12 @@ function readPayloadDurationBinding(payload: unknown): VideoDurationBinding | nu
   return parseVideoDurationBinding(raw)
 }
 
+function payloadRequestsFirstLastFrame(payload: unknown): boolean {
+  if (!isRecord(payload)) return false
+  const firstLastFrame = payload.firstLastFrame
+  return isRecord(firstLastFrame)
+}
+
 function resolveEffectiveBinding(
   panel: VideoReadinessPanelLike,
   payload: unknown,
@@ -86,6 +94,32 @@ function findSelectedVoiceLines(
   if (selected.length === 0) return []
   const selectedSet = new Set(selected)
   return (panel.matchedVoiceLines || []).filter((line) => selectedSet.has(line.id))
+}
+
+export function resolvePanelVideoAutoSplitPlan(
+  panel: VideoReadinessPanelLike,
+  options?: {
+    payload?: unknown
+    modelKey?: string | null
+    durationOptions?: readonly number[] | null
+  },
+): AudioDrivenVideoSplitPlan | null {
+  if (payloadRequestsFirstLastFrame(options?.payload)) return null
+
+  const binding = resolveEffectiveBinding(panel, options?.payload)
+  const selectedVoiceLines = findSelectedVoiceLines(panel, binding)
+  if (selectedVoiceLines.length === 0) return null
+
+  return resolveAudioDrivenVideoSplitPlan({
+    binding,
+    candidates: selectedVoiceLines.map((line) => ({
+      id: line.id,
+      content: line.content,
+      audioDuration: line.audioDuration,
+    })),
+    modelKey: options?.modelKey,
+    durationOptions: options?.durationOptions,
+  })
 }
 
 export function resolvePanelVideoReadinessIssue(
@@ -131,10 +165,18 @@ export function resolvePanelVideoReadinessIssue(
     }
   }
 
+  const shortDialogueLongAudio = selectedVoiceLines.find((line) =>
+    typeof line.audioDuration === 'number'
+    && Number.isFinite(line.audioDuration)
+    && line.audioDuration > SHORT_DIALOGUE_LONG_AUDIO_MS
+    && normalizeDialogueLength(line.content) > 0
+    && normalizeDialogueLength(line.content) <= SHORT_DIALOGUE_CHARACTER_LIMIT)
+
   const timing = resolveAudioDrivenVideoTiming({
     binding,
     candidates: selectedVoiceLines.map((line) => ({
       id: line.id,
+      content: line.content,
       audioDuration: line.audioDuration,
     })),
     modelKey: options?.modelKey,
@@ -150,23 +192,20 @@ export function resolvePanelVideoReadinessIssue(
   })
 
   if (timing && !timing.canGenerate) {
-    return {
-      code: 'audio_duration_exceeds_model',
-      message: 'Matched audio exceeds the selected video workflow duration.',
-      details: {
-        audioDurationSeconds: timing.audioDurationSeconds,
-        maxDurationSeconds: timing.maxDurationSeconds,
-        blockedReason: timing.blockedReason,
-      },
+    if (timing.splitPlan && !payloadRequestsFirstLastFrame(options?.payload)) {
+      if (!shortDialogueLongAudio) return null
+    } else {
+      return {
+        code: 'audio_duration_exceeds_model',
+        message: 'Matched audio exceeds the selected video workflow duration.',
+        details: {
+          audioDurationSeconds: timing.audioDurationSeconds,
+          maxDurationSeconds: timing.maxDurationSeconds,
+          blockedReason: timing.blockedReason,
+        },
+      }
     }
   }
-
-  const shortDialogueLongAudio = selectedVoiceLines.find((line) =>
-    typeof line.audioDuration === 'number'
-    && Number.isFinite(line.audioDuration)
-    && line.audioDuration > SHORT_DIALOGUE_LONG_AUDIO_MS
-    && normalizeDialogueLength(line.content) > 0
-    && normalizeDialogueLength(line.content) <= SHORT_DIALOGUE_CHARACTER_LIMIT)
 
   if (shortDialogueLongAudio) {
     return {

@@ -129,6 +129,7 @@ export default function PanelCard({
           failedError={failedError}
           candidateData={candidateData}
           previousImageUrl={previousImageUrl}
+          priority={globalPanelNumber <= 6}
           onRegeneratePanelImage={onRegeneratePanelImage}
           onOpenEditModal={onOpenEditModal}
           onOpenAIDataModal={onOpenAIDataModal}

@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import type { CSSProperties, ImgHTMLAttributes, MouseEventHandler } from 'react'
+import { forwardRef, type CSSProperties, type ImgHTMLAttributes, type MouseEventHandler } from 'react'
 
 export type MediaImageProps = {
   src: string | null | undefined
@@ -20,7 +20,7 @@ function isStableMediaRoute(src: string) {
   return src.startsWith('/m/')
 }
 
-export function MediaImage({
+export const MediaImage = forwardRef<HTMLImageElement, MediaImageProps>(function MediaImage({
   src,
   alt,
   className,
@@ -32,13 +32,14 @@ export function MediaImage({
   sizes,
   priority = false,
   ...imgProps
-}: MediaImageProps) {
+}: MediaImageProps, ref) {
   if (!src) return null
 
   if (isStableMediaRoute(src)) {
     if (fill) {
       return (
         <Image
+          ref={ref}
           src={src}
           alt={alt}
           fill
@@ -55,6 +56,7 @@ export function MediaImage({
 
     return (
       <Image
+        ref={ref}
         src={src}
         alt={alt}
         unoptimized
@@ -74,6 +76,7 @@ export function MediaImage({
     // 外部 URL 兜底，避免 next/image 远程域名限制影响兼容链路
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={ref}
       src={src}
       alt={alt}
       className={className}
@@ -83,4 +86,4 @@ export function MediaImage({
       {...imgProps}
     />
   )
-}
+})

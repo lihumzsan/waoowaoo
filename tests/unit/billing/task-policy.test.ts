@@ -71,6 +71,25 @@ describe('billing/task-policy', () => {
     expect(info.quantity).toBe(1)
   })
 
+  it('charges split video generation by requested segment count', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {
+      videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+      count: 3,
+      generationOptions: {
+        duration: 12,
+        resolution: '720p',
+      },
+    }))
+
+    expect(info.apiType).toBe('video')
+    expect(info.quantity).toBe(3)
+    expect(info.metadata).toMatchObject({
+      duration: 12,
+      resolution: '720p',
+      generationMode: 'normal',
+    })
+  })
+
   it('uses explicit lip sync model from payload', () => {
     const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.LIP_SYNC, {
       lipSyncModel: 'vidu::vidu-lipsync',

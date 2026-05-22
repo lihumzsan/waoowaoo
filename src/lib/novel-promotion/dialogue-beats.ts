@@ -300,11 +300,55 @@ function annotatePanelWithBeat(panel: StoryboardPanelLike, beat: DialogueBeat): 
   }
 }
 
+function stripDialogueBeatFields(panel: StoryboardPanelLike): StoryboardPanelLike {
+  const {
+    dialogueBeatId: _dialogueBeatId,
+    dialogue_beat_id: _dialogueBeatIdSnake,
+    dialogueBeatIds: _dialogueBeatIds,
+    dialogue_beat_ids: _dialogueBeatIdsSnake,
+    dialogueSpeaker: _dialogueSpeaker,
+    estimatedDialogueSeconds: _estimatedDialogueSeconds,
+    ...rest
+  } = panel
+  return rest
+}
+
 function renumberPanels(panels: StoryboardPanelLike[]): StoryboardPanelLike[] {
   return panels.map((panel, index) => ({
     ...panel,
     panel_number: index + 1,
   }))
+}
+
+function enforceUniqueDialogueBeatPanels(params: {
+  panels: StoryboardPanelLike[]
+  dialogueBeats: DialogueBeat[]
+}): StoryboardPanelLike[] {
+  const beatById = new Map(params.dialogueBeats.map((beat) => [beat.beatId, beat]))
+  const covered = new Set<string>()
+  const normalized: StoryboardPanelLike[] = []
+
+  for (const panel of params.panels) {
+    const availableIds = getPanelDialogueBeatIds(panel)
+      .filter((id) => beatById.has(id))
+      .filter((id) => !covered.has(id))
+
+    if (availableIds.length === 0) {
+      normalized.push(stripDialogueBeatFields(panel))
+      continue
+    }
+
+    const beat = beatById.get(availableIds[0])
+    if (!beat) {
+      normalized.push(stripDialogueBeatFields(panel))
+      continue
+    }
+
+    covered.add(beat.beatId)
+    normalized.push(annotatePanelWithBeat(stripDialogueBeatFields(panel), beat))
+  }
+
+  return normalized
 }
 
 export function alignStoryboardPanelsToDialogueBeats(params: {
@@ -325,15 +369,7 @@ export function alignStoryboardPanelsToDialogueBeats(params: {
 
   for (const panel of panels) {
     const explicitBeatIds = getPanelDialogueBeatIds(panel)
-    if (explicitBeatIds.length > 1) {
-      nextPanels.push(panel)
-      for (const beatId of explicitBeatIds) {
-        if (beatById.has(beatId)) covered.add(beatId)
-      }
-      continue
-    }
-
-    const matchedBeatIds = explicitBeatIds.length === 1
+    const matchedBeatIds = explicitBeatIds.length > 0
       ? explicitBeatIds
       : inferBeatIdsFromPanel(panel, dialogueBeats)
       .filter((id) => beatById.has(id))
@@ -341,7 +377,12 @@ export function alignStoryboardPanelsToDialogueBeats(params: {
       nextPanels.push(panel)
       continue
     }
-    for (const beatId of matchedBeatIds) {
+    const availableBeatIds = matchedBeatIds.filter((id) => !covered.has(id))
+    if (availableBeatIds.length === 0) {
+      nextPanels.push(stripDialogueBeatFields(panel))
+      continue
+    }
+    for (const beatId of availableBeatIds) {
       const beat = beatById.get(beatId)
       if (!beat) continue
       covered.add(beat.beatId)
@@ -358,7 +399,10 @@ export function alignStoryboardPanelsToDialogueBeats(params: {
     }, beat))
   }
 
-  return renumberPanels(nextPanels)
+  return renumberPanels(enforceUniqueDialogueBeatPanels({
+    panels: nextPanels,
+    dialogueBeats,
+  }))
 }
 
 export function validateStoryboardDialogueBudget(params: {

@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { getArtStylePrompt } from '@/lib/constants'
 
 const SINGLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen单图编辑'
 const DOUBLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen双图编辑'
@@ -13,7 +14,15 @@ const prismaMock = vi.hoisted(() => ({
   novelPromotionPanel: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     update: vi.fn(async () => ({})),
+  },
+  task: {
+    update: vi.fn(async () => ({})),
+  },
+  mediaObject: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
   },
 }))
 
@@ -21,6 +30,7 @@ const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getProjectModels: vi.fn(async () => ({
     storyboardModel: 'storyboard-model-1',
+    analysisModel: 'analysis-model-1',
     artStyle: 'realistic',
     editModel: SINGLE_EDIT_MODEL,
   })),
@@ -29,6 +39,11 @@ const utilsMock = vi.hoisted(() => ({
     typeof value === 'string' && value.trim() ? `signed:${value}` : null,
   ),
   uploadImageSourceToCos: vi.fn(),
+  uploadImageSourceToCosWithMetadata: vi.fn(),
+}))
+
+const aiRuntimeMock = vi.hoisted(() => ({
+  executeAiVisionStep: vi.fn(),
 }))
 
 const sharedMock = vi.hoisted(() => ({
@@ -75,6 +90,7 @@ const apiConfigMock = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/api-config', () => apiConfigMock)
+vi.mock('@/lib/ai-runtime/client', () => aiRuntimeMock)
 vi.mock('@/lib/media/outbound-image', () => outboundMock)
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 vi.mock('@/lib/logging/core', () => ({
@@ -121,6 +137,18 @@ function buildJob(payload: Record<string, unknown>, targetId = 'panel-1'): Job<T
   } as unknown as Job<TaskJobData>
 }
 
+function mockImageUploads(...keys: string[]) {
+  utilsMock.uploadImageSourceToCos.mockReset()
+  utilsMock.uploadImageSourceToCosWithMetadata.mockReset()
+  for (const key of keys) {
+    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce(key)
+    utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValueOnce({
+      key,
+      metadata: { mimeType: 'image/png', sizeBytes: 1024, width: 1280, height: 720 },
+    })
+  }
+}
+
 describe('worker panel-image-task-handler behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -143,6 +171,31 @@ describe('worker panel-image-task-handler behavior', () => {
       imageUrl: null,
     })
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(null)
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValue([])
+    prismaMock.task.update.mockResolvedValue({})
+    prismaMock.mediaObject.findUnique.mockResolvedValue(null)
+    prismaMock.mediaObject.upsert.mockImplementation(async (args: {
+      create: {
+        publicId: string
+        storageKey: string
+        mimeType?: string | null
+        sizeBytes?: bigint | number | null
+        width?: number | null
+        height?: number | null
+        durationMs?: number | null
+      }
+    }) => ({
+      id: `media:${args.create.storageKey}`,
+      publicId: args.create.publicId,
+      storageKey: args.create.storageKey,
+      sha256: null,
+      mimeType: args.create.mimeType ?? null,
+      sizeBytes: args.create.sizeBytes ?? null,
+      width: args.create.width ?? null,
+      height: args.create.height ?? null,
+      durationMs: args.create.durationMs ?? null,
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    }))
 
     utilsMock.resolveImageSourceFromGeneration
       .mockResolvedValueOnce('generated-source-1')
@@ -151,6 +204,18 @@ describe('worker panel-image-task-handler behavior', () => {
     utilsMock.uploadImageSourceToCos
       .mockResolvedValueOnce('cos/panel-candidate-1.png')
       .mockResolvedValueOnce('cos/panel-candidate-2.png')
+    utilsMock.uploadImageSourceToCosWithMetadata
+      .mockResolvedValueOnce({
+        key: 'cos/panel-candidate-1.png',
+        metadata: { mimeType: 'image/png', sizeBytes: 1024, width: 1280, height: 720 },
+      })
+      .mockResolvedValueOnce({
+        key: 'cos/panel-candidate-2.png',
+        metadata: { mimeType: 'image/png', sizeBytes: 1024, width: 1280, height: 720 },
+      })
+    aiRuntimeMock.executeAiVisionStep.mockResolvedValue({
+      text: JSON.stringify({ passes: true, issues: [] }),
+    })
   })
 
   it('missing panelId -> explicit error', async () => {
@@ -162,11 +227,11 @@ describe('worker panel-image-task-handler behavior', () => {
     const job = buildJob({ candidateCount: 2 })
     const result = await handlePanelImageTask(job)
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       panelId: 'panel-1',
       candidateCount: 2,
       imageUrl: 'cos/panel-candidate-1.png',
-    })
+    }))
 
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
@@ -213,14 +278,154 @@ describe('worker panel-image-task-handler behavior', () => {
       where: { id: 'panel-1' },
       data: {
         imageUrl: 'cos/panel-candidate-1.png',
+        imageMediaId: 'media:cos/panel-candidate-1.png',
         candidateImages: JSON.stringify(['cos/panel-candidate-1.png', 'cos/panel-candidate-2.png']),
       },
     })
   })
 
+  it('sanitizes off-screen people from single-character image prompt facts', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 1,
+      shotType: '平视近景',
+      cameraMove: '缓缓推近',
+      description: '近景：老刘坐在桌前，眼睛注视前方对面的陈迹。',
+      imagePrompt: null,
+      videoPrompt: null,
+      location: '办公室_夜间',
+      characters: JSON.stringify([{ name: '老刘', appearance: '初始形象' }]),
+      srtSegment: '老刘认真打量对面的少年。',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: '老刘',
+          appearances: [{
+            changeReason: '初始形象',
+            description: 'middle-aged doctor',
+            descriptions: JSON.stringify(['middle-aged doctor']),
+            imageUrls: JSON.stringify([]),
+            imageUrl: null,
+            selectedIndex: 0,
+          }],
+        },
+        {
+          name: '陈迹',
+          appearances: [],
+        },
+      ],
+      locations: [],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-sanitized-source')
+    mockImageUploads('cos/panel-sanitized.png')
+
+    await handlePanelImageTask(buildJob({ candidateCount: 1 }))
+
+    const buildPromptCalls = promptMock.buildPrompt.mock.calls as unknown as Array<[{
+      variables: Record<string, string>
+    }]>
+    const promptArgs = buildPromptCalls[buildPromptCalls.length - 1]?.[0]
+    expect(promptArgs).toBeTruthy()
+    expect(promptArgs.variables.source_text).not.toContain('少年')
+    expect(promptArgs.variables.source_text).toContain('镜头外对象')
+    expect(promptArgs.variables.storyboard_text_json_input).not.toContain('陈迹')
+    expect(promptArgs.variables.storyboard_text_json_input).toContain('画外对象（不可见，不得绘制）')
+    expect(promptArgs.variables.storyboard_text_json_input).toContain('画面只显示老刘')
+  })
+
+  it('blocks candidate persistence when generated image aspect ratio is not compliant', async () => {
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-wrong-aspect-source')
+    utilsMock.uploadImageSourceToCosWithMetadata.mockReset()
+    utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValueOnce({
+      key: 'cos/panel-wrong-aspect.png',
+      metadata: { mimeType: 'image/png', sizeBytes: 1024, width: 720, height: 1280 },
+    })
+
+    await expect(handlePanelImageTask(buildJob({ candidateCount: 1 }))).rejects.toThrow(
+      'PANEL_IMAGE_AUDIT_ASPECT_RATIO_MISMATCH',
+    )
+
+    expect(prismaMock.novelPromotionPanel.update).not.toHaveBeenCalled()
+    expect(prismaMock.task.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'task-panel-image-1' },
+      data: expect.objectContaining({
+        result: expect.objectContaining({
+          panelImageAudit: expect.objectContaining({
+            code: 'PANEL_IMAGE_AUDIT_ASPECT_RATIO_MISMATCH',
+          }),
+        }),
+      }),
+    }))
+  })
+
+  it('blocks candidate persistence when vision audit detects wrong content', async () => {
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-wrong-content-source')
+    mockImageUploads('cos/panel-wrong-content.png')
+    aiRuntimeMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        passes: false,
+        issues: ['wrong people', 'wrong scene'],
+      }),
+    })
+
+    await expect(handlePanelImageTask(buildJob({ candidateCount: 1 }))).rejects.toThrow(
+      'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
+    )
+
+    expect(prismaMock.novelPromotionPanel.update).not.toHaveBeenCalled()
+    expect(prismaMock.task.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'task-panel-image-1' },
+      data: expect.objectContaining({
+        result: expect.objectContaining({
+          panelImageAudit: expect.objectContaining({
+            code: 'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
+          }),
+        }),
+      }),
+    }))
+  })
+
+  it('records audit report and persists candidate when vision runtime is unavailable', async () => {
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-vision-runtime-source')
+    mockImageUploads('cos/panel-vision-runtime.png')
+    aiRuntimeMock.executeAiVisionStep.mockRejectedValueOnce(new Error('401 User not found.'))
+
+    const result = await handlePanelImageTask(buildJob({ candidateCount: 1 }))
+
+    expect(result).toEqual(expect.objectContaining({
+      panelId: 'panel-1',
+      candidateCount: 1,
+      imageUrl: 'cos/panel-vision-runtime.png',
+      panelImageAuditReports: [
+        expect.objectContaining({
+          ok: false,
+          code: 'PANEL_IMAGE_AUDIT_VISION_RUNTIME_FAILED',
+          message: expect.stringContaining('401 User not found.'),
+        }),
+      ],
+    }))
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        imageUrl: 'cos/panel-vision-runtime.png',
+      }),
+    }))
+  })
+
   it('regeneration branch -> keeps old image in previousImageUrl and stores candidates only', async () => {
     utilsMock.resolveImageSourceFromGeneration.mockReset()
-    utilsMock.uploadImageSourceToCos.mockReset()
+    mockImageUploads('cos/panel-regenerated.png')
 
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
@@ -238,24 +443,27 @@ describe('worker panel-image-task-handler behavior', () => {
       actingNotes: null,
       sketchImageUrl: 'images/sketch.png',
       imageUrl: 'cos/panel-old.png',
+      imageMediaId: null,
+      previousImageUrl: null,
+      previousImageMediaId: null,
     })
 
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-source-regen')
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-regenerated.png')
 
     const job = buildJob({ candidateCount: 1 })
     const result = await handlePanelImageTask(job)
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       panelId: 'panel-1',
       candidateCount: 1,
       imageUrl: null,
-    })
+    }))
 
     expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
       where: { id: 'panel-1' },
       data: {
         previousImageUrl: 'cos/panel-old.png',
+        previousImageMediaId: 'media:cos/panel-old.png',
         candidateImages: JSON.stringify(['cos/panel-regenerated.png']),
       },
     })
@@ -277,27 +485,155 @@ describe('worker panel-image-task-handler behavior', () => {
     )
   })
 
-  it('keeps qwen storyboard path for non-square projects when a sketch exists', async () => {
+  it('keeps chinese-comic text-to-image workflow and appends project style authority', async () => {
+    utilsMock.getProjectModels.mockResolvedValueOnce({
+      storyboardModel: QWEN_STORYBOARD_MODEL,
+      analysisModel: 'analysis-model-1',
+      artStyle: 'chinese-comic',
+      editModel: SINGLE_EDIT_MODEL,
+    })
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-comic-source')
+    mockImageUploads('cos/panel-comic.png')
+
+    await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: FLUX_TEXT_TO_IMAGE_MODEL,
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
+    const generationArgs = utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]
+    expect(generationArgs?.modelId).toBe(FLUX_TEXT_TO_IMAGE_MODEL)
+    expect(generationArgs?.prompt).toContain(getArtStylePrompt('chinese-comic', 'zh'))
+    expect(generationArgs?.prompt).toContain('项目风格定义：')
+    expect(generationArgs?.prompt).toContain('参考图只提供人物身份、服装、体型、场景布局和氛围线索')
+    expect(generationArgs?.prompt).toContain('参考图不能覆盖项目风格的媒介、渲染方式或成片质感')
+    expect(generationArgs?.prompt).toContain('当参考图质感与项目风格冲突时，以项目风格定义为准')
+    expect(generationArgs?.prompt).not.toContain('现代高质量国漫/2D漫画成片')
+    expect(generationArgs?.prompt).not.toContain('禁止输出真人照片')
+  })
+
+  it('keeps realistic text-to-image workflow and appends realistic story style definition', async () => {
+    utilsMock.getProjectModels.mockResolvedValueOnce({
+      storyboardModel: QWEN_STORYBOARD_MODEL,
+      analysisModel: 'analysis-model-1',
+      artStyle: 'realistic',
+      editModel: SINGLE_EDIT_MODEL,
+    })
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-realistic-source')
+    mockImageUploads('cos/panel-realistic.png')
+
+    await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: FLUX_TEXT_TO_IMAGE_MODEL,
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_TEXT_TO_IMAGE_MODEL,
+      }),
+    )
+    const generationArgs = utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]
+    expect(generationArgs?.prompt).toContain(getArtStylePrompt('realistic', 'zh'))
+  })
+
+  it('appends project style authority to qwen storyboard identity edit without hardcoded style bans', async () => {
+    utilsMock.getProjectModels.mockResolvedValueOnce({
+      storyboardModel: QWEN_STORYBOARD_MODEL,
+      analysisModel: 'analysis-model-1',
+      artStyle: 'chinese-comic',
+      editModel: SINGLE_EDIT_MODEL,
+    })
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
       panelIndex: 2,
       shotType: 'close-up',
       cameraMove: 'static',
-      description: 'hero close-up in hallway',
+      description: '中年医生 close-up in hallway',
       imagePrompt: 'panel anchor prompt',
       videoPrompt: null,
       location: 'Old Town',
-      characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+      characters: JSON.stringify([{ name: '中年医生', appearance: 'default' }]),
+      srtSegment: 'dialogue segment',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: '中年医生',
+          appearances: [{
+            changeReason: 'default',
+            description: 'hero',
+            descriptions: JSON.stringify(['hero']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['left']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-qwen-style-base')
+      .mockResolvedValueOnce('generated-qwen-style-source')
+    mockImageUploads('cos/panel-qwen-style.png')
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }))
+
+    const baseArgs = utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]
+    const generationArgs = utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]
+    expect(baseArgs?.modelId).toBe(FLUX_TEXT_TO_IMAGE_MODEL)
+    expect(baseArgs?.options?.referenceImages).toEqual([])
+    expect(generationArgs?.modelId).toBe(FLUX_MULTI_EDIT_MODEL)
+    expect(generationArgs?.options?.referenceImages).toEqual([
+      'normalized:generated-qwen-style-base',
+      'normalized:signed:images/hero.png',
+    ])
+    expect(generationArgs?.prompt).toContain(getArtStylePrompt('chinese-comic', 'zh'))
+    expect(generationArgs?.prompt).toContain('风格优先级：必须以项目风格定义作为最终画面风格的最高依据')
+    expect(generationArgs?.prompt).toContain('参考图只提供人物身份、服装、体型、场景布局和氛围线索')
+    expect(generationArgs?.prompt).not.toContain('现代高质量国漫/2D漫画成片')
+    expect(generationArgs?.prompt).not.toContain('禁止输出真人照片')
+  })
+
+  it('keeps sketched qwen storyboard shots on the controlled storyboard workflow', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'close-up',
+      cameraMove: 'static',
+      description: '中年医生 close-up in hallway',
+      imagePrompt: 'panel anchor prompt',
+      videoPrompt: null,
+      location: 'Old Town',
+      characters: JSON.stringify([{ name: '中年医生', appearance: 'default' }]),
       srtSegment: 'dialogue segment',
       photographyRules: null,
       actingNotes: null,
       sketchImageUrl: 'images/sketch.png',
       imageUrl: null,
-    })
-    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
-      imageUrl: 'images/previous-panel.png',
-      linkedToNextPanel: false,
     })
     sharedMock.resolveNovelData.mockResolvedValueOnce({
       videoRatio: '16:9',
@@ -328,10 +664,9 @@ describe('worker panel-image-task-handler behavior', () => {
     } as never)
     utilsMock.resolveImageSourceFromGeneration.mockReset()
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-scene-source')
-    utilsMock.uploadImageSourceToCos.mockReset()
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-qwen.png')
+    mockImageUploads('cos/panel-qwen.png')
 
-    await handlePanelImageTask(buildJob({
+    const result = await handlePanelImageTask(buildJob({
       candidateCount: 1,
       imageModel: QWEN_STORYBOARD_MODEL,
     }))
@@ -341,18 +676,18 @@ describe('worker panel-image-task-handler behavior', () => {
       expect.anything(),
       expect.objectContaining({
         modelId: QWEN_STORYBOARD_MODEL,
-        prompt: expect.stringContaining('参考图只用于辅助当前分镜'),
         options: expect.objectContaining({
           referenceImages: [
             'normalized:signed:images/sketch.png',
           ],
           aspectRatio: '16:9',
         }),
+        prompt: expect.stringContaining('参考图只用于辅助当前分镜的场景'),
       }),
     )
   })
 
-  it('routes qwen storyboard without a sketch to text-to-image for non-square projects', async () => {
+  it('routes single-character qwen storyboard without a sketch through identity edit references', async () => {
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -360,6 +695,189 @@ describe('worker panel-image-task-handler behavior', () => {
       shotType: 'close-up',
       cameraMove: 'static',
       description: 'hero close-up in hallway',
+      imagePrompt: 'panel anchor prompt',
+      videoPrompt: null,
+      location: 'Old Town',
+      characters: JSON.stringify([{ name: '中年医生', appearance: 'default' }]),
+      srtSegment: 'dialogue segment',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: '中年医生',
+          appearances: [{
+            changeReason: 'default',
+            description: 'doctor',
+            descriptions: JSON.stringify(['doctor']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['left']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-base-composition')
+      .mockResolvedValueOnce('generated-identity-source')
+    mockImageUploads('cos/panel-qwen.png')
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_TEXT_TO_IMAGE_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_MULTI_EDIT_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [
+            'normalized:generated-base-composition',
+            'normalized:signed:images/hero.png',
+          ],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('if the base composition face conflicts with a character asset, repaint the visible face to match the asset'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Different character slots'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Composition slot rule'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Slot-aware background rule'),
+    }))
+    const uploadedSource = utilsMock.uploadImageSourceToCosWithMetadata.mock.calls[0]?.[0]
+    expect(uploadedSource).toBe('generated-identity-source')
+    expect(result.panelImageGenerationPacket.references).toEqual([
+      { index: 0, url: 'normalized:signed:images/hero.png' },
+    ])
+  })
+
+  it('blocks over-the-shoulder foreground people in single-character qwen storyboard prompts', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-2',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'over-the-shoulder close-up',
+      cameraMove: 'push in',
+      description: 'Over-the-shoulder close-up: Hero looks toward Doctor outside frame, with Doctor shoulder implied in the foreground.',
+      imagePrompt: 'Hero reacts to the off-screen Doctor.',
+      videoPrompt: 'Hero looks toward the off-screen Doctor while the camera pushes in.',
+      location: 'Old Town',
+      characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: 'front visitor chair' }]),
+      srtSegment: 'Doctor asks a question.',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: 'Hero',
+          appearances: [{
+            changeReason: 'default',
+            description: 'hero',
+            descriptions: JSON.stringify(['hero']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+        {
+          name: 'Doctor',
+          appearances: [{
+            changeReason: 'default',
+            description: 'doctor',
+            descriptions: JSON.stringify(['doctor']),
+            imageUrls: JSON.stringify(['images/doctor.png']),
+            imageUrl: 'images/doctor.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['front visitor chair', 'doctor chair']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-base-composition')
+      .mockResolvedValueOnce('generated-identity-source')
+    mockImageUploads('cos/panel-no-over-shoulder.png')
+
+    await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }, 'panel-2'))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Single-character reverse-shot rule'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Single-character reverse-shot rule'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Do not include over-the-shoulder foreground shoulder'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.not.stringContaining('Doctor shoulder implied'),
+    }))
+  })
+
+  it('uses a confirmed previous same-location panel as qwen storyboard scene continuity base', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-2',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'close-up',
+      cameraMove: 'push in',
+      description: 'hero close-up in the same office',
       imagePrompt: 'panel anchor prompt',
       videoPrompt: null,
       location: 'Old Town',
@@ -370,10 +888,17 @@ describe('worker panel-image-task-handler behavior', () => {
       sketchImageUrl: null,
       imageUrl: null,
     })
-    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
-      imageUrl: 'images/previous-panel.png',
-      linkedToNextPanel: false,
-    })
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-0',
+        panelIndex: 0,
+        shotType: 'wide',
+        description: 'confirmed wide office panel',
+        srtSegment: 'dialogue segment',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+        imageUrl: 'images/previous-office.png',
+      },
+    ])
     sharedMock.resolveNovelData.mockResolvedValueOnce({
       videoRatio: '16:9',
       characters: [
@@ -402,17 +927,122 @@ describe('worker panel-image-task-handler behavior', () => {
       ],
     } as never)
     utilsMock.resolveImageSourceFromGeneration.mockReset()
-    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-scene-source')
-    utilsMock.uploadImageSourceToCos.mockReset()
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-qwen.png')
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-continuity-source')
+    mockImageUploads('cos/panel-continuity.png')
 
-    await handlePanelImageTask(buildJob({
+    const result = await handlePanelImageTask(buildJob({
       candidateCount: 1,
       imageModel: QWEN_STORYBOARD_MODEL,
-    }))
+    }, 'panel-2'))
 
+    expect(prismaMock.novelPromotionPanel.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        storyboardId: 'storyboard-1',
+        location: 'Old Town',
+        panelIndex: { lt: 2 },
+        imageUrl: { not: null },
+      }),
+      orderBy: { panelIndex: 'desc' },
+    }))
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
-    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_MULTI_EDIT_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [
+            'normalized:signed:images/previous-office.png',
+            'normalized:signed:images/hero.png',
+            'normalized:signed:images/location.png',
+          ],
+          aspectRatio: '16:9',
+        }),
+        prompt: expect.stringContaining('Scene continuity lock: reference image 1 is a confirmed neighboring panel'),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('secondary location proof only'),
+    }))
+    expect(result.panelImageGenerationPacket.modelRoutingReason).toBe('qwen_storyboard_tight_scene_one_character_identity_edit_with_panel_continuity')
+    expect(result.panelImageGenerationPacket.references).toEqual([
+      { index: 0, url: 'normalized:signed:images/hero.png' },
+      { index: 1, url: 'normalized:signed:images/previous-office.png' },
+      { index: 2, url: 'normalized:signed:images/location.png' },
+    ])
+  })
+
+  it('does not lock qwen storyboard continuity across different source beats for the same character', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-2',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'close-up',
+      cameraMove: 'push in',
+      description: 'Hero close-up from a new reverse angle in the same office',
+      imagePrompt: 'panel anchor prompt',
+      videoPrompt: null,
+      location: 'Old Town',
+      characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: 'front visitor chair' }]),
+      srtSegment: 'current dialogue beat',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-1',
+        panelIndex: 1,
+        shotType: 'close-up',
+        description: 'Hero close-up in the same office but earlier dialogue',
+        srtSegment: 'previous dialogue beat',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: 'front visitor chair' }]),
+        imageUrl: 'images/previous-same-character.png',
+      },
+    ])
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: 'Hero',
+          appearances: [{
+            changeReason: 'default',
+            description: 'hero',
+            descriptions: JSON.stringify(['hero']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['front visitor chair', 'doctor chair']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-base-composition')
+      .mockResolvedValueOnce('generated-identity-source')
+    mockImageUploads('cos/panel-no-stale-continuity.png')
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }, 'panel-2'))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       expect.objectContaining({
         modelId: FLUX_TEXT_TO_IMAGE_MODEL,
@@ -422,9 +1052,241 @@ describe('worker panel-image-task-handler behavior', () => {
         }),
       }),
     )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_MULTI_EDIT_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [
+            'normalized:generated-base-composition',
+            'normalized:signed:images/hero.png',
+          ],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('front visitor chair'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('不得复用完全相同的背景板'),
+    }))
+    expect(utilsMock.resolveImageSourceFromGeneration.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining('Single-character image rule'),
+    }))
+    expect(result.panelImageGenerationPacket.modelRoutingReason).toBe('qwen_storyboard_tight_scene_one_character_identity_edit')
+    expect(result.panelImageGenerationPacket.references).toEqual([
+      { index: 0, url: 'normalized:signed:images/hero.png' },
+    ])
   })
 
-  it('still uses definition-aware edit references for square qwen storyboard projects', async () => {
+  it('does not reuse previous panel continuity when the same-location panel shows a different character', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-2',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'close-up',
+      cameraMove: 'push in',
+      description: 'Hero close-up from the opposite side of the office',
+      imagePrompt: 'panel anchor prompt',
+      videoPrompt: null,
+      location: 'Old Town',
+      characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+      srtSegment: 'dialogue segment',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-1',
+        panelIndex: 1,
+        shotType: 'close-up',
+        description: 'OtherHero close-up in the same office',
+        srtSegment: 'dialogue segment',
+        characters: JSON.stringify([{ name: 'OtherHero', appearance: 'default' }]),
+        imageUrl: 'images/previous-other-character.png',
+      },
+    ])
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: 'Hero',
+          appearances: [{
+            changeReason: 'default',
+            description: 'hero',
+            descriptions: JSON.stringify(['hero']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['left']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-base-composition')
+      .mockResolvedValueOnce('generated-identity-source')
+    mockImageUploads('cos/panel-no-cross-character-continuity.png')
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }, 'panel-2'))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_TEXT_TO_IMAGE_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_MULTI_EDIT_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [
+            'normalized:generated-base-composition',
+            'normalized:signed:images/hero.png',
+          ],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(result.panelImageGenerationPacket.modelRoutingReason).toBe('qwen_storyboard_tight_scene_one_character_identity_edit')
+    expect(result.panelImageGenerationPacket.references).toEqual([
+      { index: 0, url: 'normalized:signed:images/hero.png' },
+    ])
+  })
+
+  it('routes two-character qwen storyboard without a sketch through identity edit references', async () => {
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 2,
+      shotType: 'wide',
+      cameraMove: 'static',
+      description: 'hero and doctor stand in the old town street',
+      imagePrompt: 'panel anchor prompt',
+      videoPrompt: null,
+      location: 'Old Town',
+      characters: JSON.stringify([
+        { name: 'Hero', appearance: 'default' },
+        { name: 'DoctorA', appearance: 'default' },
+      ]),
+      srtSegment: 'dialogue segment',
+      photographyRules: null,
+      actingNotes: null,
+      sketchImageUrl: null,
+      imageUrl: null,
+    })
+    sharedMock.resolveNovelData.mockResolvedValueOnce({
+      videoRatio: '16:9',
+      characters: [
+        {
+          name: 'Hero',
+          appearances: [{
+            changeReason: 'default',
+            description: 'hero',
+            descriptions: JSON.stringify(['hero']),
+            imageUrls: JSON.stringify(['images/hero.png']),
+            imageUrl: 'images/hero.png',
+            selectedIndex: 0,
+          }],
+        },
+        {
+          name: 'DoctorA',
+          appearances: [{
+            changeReason: 'default',
+            description: 'doctor-a',
+            descriptions: JSON.stringify(['doctor-a']),
+            imageUrls: JSON.stringify(['images/doctor-a.png']),
+            imageUrl: 'images/doctor-a.png',
+            selectedIndex: 0,
+          }],
+        },
+      ],
+      locations: [
+        {
+          name: 'Old Town',
+          images: [{
+            isSelected: true,
+            description: 'night clinic',
+            imageUrl: 'images/location.png',
+            availableSlots: JSON.stringify(['left']),
+          }],
+        },
+      ],
+    } as never)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration
+      .mockResolvedValueOnce('generated-two-character-base')
+      .mockResolvedValueOnce('generated-two-character-identity-source')
+    mockImageUploads('cos/panel-wide.png')
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: QWEN_STORYBOARD_MODEL,
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_TEXT_TO_IMAGE_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        modelId: FLUX_MULTI_EDIT_MODEL,
+        options: expect.objectContaining({
+          referenceImages: [
+            'normalized:generated-two-character-base',
+            'normalized:signed:images/hero.png',
+            'normalized:signed:images/doctor-a.png',
+            'normalized:signed:images/location.png',
+          ],
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.uploadImageSourceToCosWithMetadata.mock.calls[0]?.[0]).toBe('generated-two-character-identity-source')
+    expect(result.panelImageGenerationPacket.references).toEqual([
+      { index: 0, url: 'normalized:signed:images/hero.png' },
+      { index: 1, url: 'normalized:signed:images/doctor-a.png' },
+      { index: 2, url: 'normalized:signed:images/location.png' },
+    ])
+  })
+
+  it('still allows qwen storyboard sketch reference for square projects', async () => {
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -441,10 +1303,6 @@ describe('worker panel-image-task-handler behavior', () => {
       actingNotes: null,
       sketchImageUrl: 'images/sketch.png',
       imageUrl: null,
-    })
-    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
-      imageUrl: 'images/previous-panel.png',
-      linkedToNextPanel: false,
     })
     sharedMock.resolveNovelData.mockResolvedValueOnce({
       videoRatio: '1:1',
@@ -475,8 +1333,12 @@ describe('worker panel-image-task-handler behavior', () => {
     } as never)
     utilsMock.resolveImageSourceFromGeneration.mockReset()
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-scene-source')
-    utilsMock.uploadImageSourceToCos.mockReset()
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-qwen-square.png')
+    mockImageUploads('cos/panel-qwen-square.png')
+    utilsMock.uploadImageSourceToCosWithMetadata.mockReset()
+    utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValueOnce({
+      key: 'cos/panel-qwen-square.png',
+      metadata: { mimeType: 'image/png', sizeBytes: 1024, width: 1024, height: 1024 },
+    })
 
     await handlePanelImageTask(buildJob({
       candidateCount: 1,
@@ -487,19 +1349,19 @@ describe('worker panel-image-task-handler behavior', () => {
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        modelId: DOUBLE_EDIT_MODEL,
+        modelId: QWEN_STORYBOARD_MODEL,
         options: expect.objectContaining({
           referenceImages: [
             'normalized:signed:images/sketch.png',
-            'normalized:signed:images/hero.png',
           ],
           aspectRatio: '1:1',
         }),
+        prompt: expect.stringContaining('参考图只用于辅助当前分镜的场景'),
       }),
     )
   })
 
-  it('routes qwen storyboard workflow to text-to-image and blocks source-text characters when panel characters are empty', async () => {
+  it('routes qwen storyboard location-only panels to text-to-image and blocks source-text characters', async () => {
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -534,8 +1396,7 @@ describe('worker panel-image-task-handler behavior', () => {
     } as never)
     utilsMock.resolveImageSourceFromGeneration.mockReset()
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-text-source')
-    utilsMock.uploadImageSourceToCos.mockReset()
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-qwen-empty.png')
+    mockImageUploads('cos/panel-qwen-empty.png')
 
     await handlePanelImageTask(buildJob({
       candidateCount: 1,
@@ -635,16 +1496,15 @@ describe('worker panel-image-task-handler behavior', () => {
 
     utilsMock.resolveImageSourceFromGeneration.mockReset()
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-three-character-source')
-    utilsMock.uploadImageSourceToCos.mockReset()
-    utilsMock.uploadImageSourceToCos.mockResolvedValueOnce('cos/panel-three-character.png')
+    mockImageUploads('cos/panel-three-character.png')
 
     const result = await handlePanelImageTask(buildJob({ candidateCount: 1 }))
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       panelId: 'panel-1',
       candidateCount: 1,
       imageUrl: 'cos/panel-three-character.png',
-    })
+    }))
 
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(

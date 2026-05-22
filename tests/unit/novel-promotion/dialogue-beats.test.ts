@@ -135,4 +135,120 @@ describe('dialogue beats', () => {
       }),
     ])
   })
+
+  it('keeps only the first panel when a dialogue beat id is duplicated', () => {
+    const dialogueBeats = buildDialogueBeatsFromScreenplay({
+      clipId: 'clip-1',
+      screenplay: {
+        scenes: [
+          {
+            content: [
+              { type: 'dialogue', character: 'Doctor', lines: 'Can you answer?' },
+            ],
+          },
+        ],
+      },
+    })
+
+    const panels = alignStoryboardPanelsToDialogueBeats({
+      dialogueBeats,
+      panels: [
+        {
+          panel_number: 1,
+          description: 'Doctor speaks.',
+          source_text: 'Can you answer?',
+          dialogueBeatId: dialogueBeats[0].beatId,
+        },
+        {
+          panel_number: 2,
+          description: 'Reaction shot with the same dialogue context.',
+          source_text: 'Can you answer?',
+          dialogueBeatId: dialogueBeats[0].beatId,
+        },
+      ],
+    })
+
+    expect(panels[0]).toMatchObject({ dialogueBeatId: dialogueBeats[0].beatId })
+    expect(panels[1]).not.toHaveProperty('dialogueBeatId')
+    expect(validateStoryboardDialogueBudget({ dialogueBeats, panels })).toEqual([])
+  })
+
+  it('does not infer the same dialogue beat onto repeated reaction panels', () => {
+    const dialogueBeats = buildDialogueBeatsFromScreenplay({
+      clipId: 'clip-1',
+      screenplay: {
+        scenes: [
+          {
+            content: [
+              { type: 'dialogue', character: 'Doctor', lines: 'Can you answer?' },
+            ],
+          },
+        ],
+      },
+    })
+
+    const panels = alignStoryboardPanelsToDialogueBeats({
+      dialogueBeats,
+      panels: [
+        {
+          panel_number: 1,
+          description: 'Doctor speaks.',
+          source_text: 'Can you answer?',
+        },
+        {
+          panel_number: 2,
+          description: 'Reaction shot that repeats source context.',
+          source_text: 'Can you answer?',
+        },
+      ],
+    })
+
+    expect(panels[0]).toMatchObject({ dialogueBeatId: dialogueBeats[0].beatId })
+    expect(panels[1]).not.toHaveProperty('dialogueBeatId')
+    expect(validateStoryboardDialogueBudget({ dialogueBeats, panels })).toEqual([])
+  })
+
+  it('normalizes duplicated dialogue beat ids across alternate model fields', () => {
+    const dialogueBeats = buildDialogueBeatsFromScreenplay({
+      clipId: 'clip-1',
+      screenplay: {
+        scenes: [
+          {
+            content: [
+              { type: 'dialogue', character: 'Doctor', lines: 'First line.' },
+              { type: 'dialogue', character: 'Patient', lines: 'Second line.' },
+            ],
+          },
+        ],
+      },
+    })
+
+    const panels = alignStoryboardPanelsToDialogueBeats({
+      dialogueBeats,
+      panels: [
+        {
+          panel_number: 1,
+          description: 'Doctor speaks.',
+          source_text: 'First line.',
+          dialogueBeatId: dialogueBeats[0].beatId,
+        },
+        {
+          panel_number: 2,
+          description: 'Reaction shot repeats the first line.',
+          source_text: 'First line.',
+          dialogue_beat_id: dialogueBeats[0].beatId,
+        },
+        {
+          panel_number: 3,
+          description: 'Panel incorrectly carries both ids.',
+          source_text: 'First line. Second line.',
+          dialogueBeatIds: [dialogueBeats[0].beatId, dialogueBeats[1].beatId],
+        },
+      ],
+    })
+
+    expect(panels.filter((panel) => panel.dialogueBeatId === dialogueBeats[0].beatId)).toHaveLength(1)
+    expect(panels.filter((panel) => panel.dialogueBeatId === dialogueBeats[1].beatId)).toHaveLength(1)
+    expect(validateStoryboardDialogueBudget({ dialogueBeats, panels })).toEqual([])
+  })
 })

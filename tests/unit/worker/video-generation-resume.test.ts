@@ -22,6 +22,12 @@ const generatorApiMock = vi.hoisted(() => ({
   generateVideo: vi.fn(),
 }))
 
+const configServiceMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(),
+  getUserModelConfig: vi.fn(),
+  resolveProjectModelCapabilityGenerationOptions: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/service', () => taskServiceMock)
 vi.mock('@/lib/async-poll', () => asyncPollMock)
@@ -33,11 +39,7 @@ vi.mock('@/lib/storage', () => ({
 }))
 vi.mock('@/lib/fonts', () => ({ initializeFonts: vi.fn(), createLabelSVG: vi.fn() }))
 vi.mock('@/lib/media-process', () => ({ processMediaResult: vi.fn() }))
-vi.mock('@/lib/config-service', () => ({
-  getProjectModelConfig: vi.fn(),
-  getUserModelConfig: vi.fn(),
-  resolveProjectModelCapabilityGenerationOptions: vi.fn(),
-}))
+vi.mock('@/lib/config-service', () => configServiceMock)
 
 import { resolveImageSourceFromGeneration, resolveVideoSourceFromGeneration } from '@/lib/workers/utils'
 
@@ -60,6 +62,8 @@ function buildJob(): Job<TaskJobData> {
 describe('worker utils video generation resume', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: null })
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValue({})
   })
 
   it('continues polling from existing externalId without re-submitting generation', async () => {
@@ -114,6 +118,57 @@ describe('worker utils video generation resume', () => {
     expect(prismaMock.task.findUnique).not.toHaveBeenCalled()
     expect(asyncPollMock.pollAsyncTask).not.toHaveBeenCalled()
     expect(generatorApiMock.generateVideo).toHaveBeenCalledTimes(1)
+  })
+
+  it('validates custom audio-driven ComfyUI durations against the next allowed duration but submits the exact duration', async () => {
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
+      runtimeSelections?: Record<string, unknown>
+    }) => {
+      if (input.runtimeSelections?.duration !== 12) {
+        throw new Error(`CAPABILITY_VALUE_NOT_ALLOWED: duration ${String(input.runtimeSelections?.duration)}`)
+      }
+      return {
+        duration: 12,
+        resolution: '720p',
+        generationMode: 'normal',
+      }
+    })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/exact-duration.mp4',
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      imageUrl: 'data:image/png;base64,QQ==',
+      allowCustomDuration: true,
+      options: {
+        prompt: 'animate this frame',
+        duration: 11.43,
+        resolution: '720p',
+        generationMode: 'normal',
+      },
+    })
+
+    expect(result).toEqual({ url: 'https://comfy.test/exact-duration.mp4' })
+    expect(configServiceMock.resolveProjectModelCapabilityGenerationOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSelections: expect.objectContaining({
+          duration: 12,
+        }),
+      }),
+    )
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      'data:image/png;base64,QQ==',
+      expect.objectContaining({
+        duration: 11.43,
+        resolution: '720p',
+        prompt: 'animate this frame',
+      }),
+    )
   })
 
   it('prevents duplicate panel candidates by skipping task externalId resume when requested', async () => {

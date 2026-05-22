@@ -1,4 +1,5 @@
 import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
+import sharp from 'sharp'
 
 export interface ProcessMediaOptions {
   source: string | Buffer
@@ -6,6 +7,19 @@ export interface ProcessMediaOptions {
   keyPrefix: string
   targetId: string
   downloadHeaders?: Record<string, string>
+}
+
+export type ProcessedMediaMetadata = {
+  mimeType: string
+  sizeBytes: number
+  width?: number | null
+  height?: number | null
+  durationMs?: number | null
+}
+
+export type ProcessedMediaResult = {
+  storageKey: string
+  metadata: ProcessedMediaMetadata
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -117,6 +131,47 @@ export function resolveMediaExt(
   return detectAudioExtFromBuffer(buffer) || normalizeAudioExtFromMime(mimeHint) || 'mp3'
 }
 
+async function inspectMediaMetadata(
+  buffer: Buffer,
+  type: ProcessMediaOptions['type'],
+  mimeType: string,
+): Promise<ProcessedMediaMetadata> {
+  const metadata: ProcessedMediaMetadata = {
+    mimeType,
+    sizeBytes: buffer.byteLength,
+  }
+
+  if (type !== 'image') return metadata
+
+  try {
+    const imageMetadata = await sharp(buffer).metadata()
+    metadata.width = imageMetadata.width ?? null
+    metadata.height = imageMetadata.height ?? null
+  } catch {
+    metadata.width = null
+    metadata.height = null
+  }
+
+  return metadata
+}
+
+async function uploadTypedBufferWithMetadata(
+  buffer: Buffer,
+  type: ProcessMediaOptions['type'],
+  keyPrefix: string,
+  targetId: string,
+  mimeHint: string | null = null,
+): Promise<ProcessedMediaResult> {
+  const ext = resolveMediaExt(type, buffer, mimeHint)
+  const key = generateUniqueKey(`${keyPrefix}-${targetId}`, ext)
+  const mimeType = resolveMediaContentType(ext)
+  const storageKey = await uploadObject(buffer, key, undefined, mimeType)
+  return {
+    storageKey,
+    metadata: await inspectMediaMetadata(buffer, type, mimeType),
+  }
+}
+
 async function uploadTypedBuffer(
   buffer: Buffer,
   type: ProcessMediaOptions['type'],
@@ -124,9 +179,7 @@ async function uploadTypedBuffer(
   targetId: string,
   mimeHint: string | null = null,
 ) {
-  const ext = resolveMediaExt(type, buffer, mimeHint)
-  const key = generateUniqueKey(`${keyPrefix}-${targetId}`, ext)
-  return await uploadObject(buffer, key, undefined, resolveMediaContentType(ext))
+  return (await uploadTypedBufferWithMetadata(buffer, type, keyPrefix, targetId, mimeHint)).storageKey
 }
 
 export async function processMediaResult(options: ProcessMediaOptions): Promise<string> {
@@ -153,4 +206,30 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
   }
 
   return await uploadTypedBuffer(source, type, keyPrefix, targetId)
+}
+
+export async function processMediaResultWithMetadata(options: ProcessMediaOptions): Promise<ProcessedMediaResult> {
+  const { source, type, keyPrefix, targetId, downloadHeaders } = options
+
+  if (typeof source === 'string') {
+    if (source.startsWith('data:')) {
+      const base64Start = source.indexOf(';base64,')
+      if (base64Start === -1) throw new Error('Unable to parse data URL')
+      const mimeHint = source.slice(5, base64Start) || null
+      const base64Data = source.substring(base64Start + 8)
+      const buffer = Buffer.from(base64Data, 'base64') as Buffer
+      return await uploadTypedBufferWithMetadata(buffer, type, keyPrefix, targetId, mimeHint)
+    }
+
+    const response = await fetch(toFetchableUrl(source), {
+      headers: downloadHeaders,
+    })
+    if (!response.ok) {
+      throw new Error(`Failed to download media: ${response.status} ${response.statusText}`)
+    }
+    const buffer = Buffer.from(await response.arrayBuffer()) as Buffer
+    return await uploadTypedBufferWithMetadata(buffer, type, keyPrefix, targetId, response.headers.get('content-type'))
+  }
+
+  return await uploadTypedBufferWithMetadata(source, type, keyPrefix, targetId)
 }

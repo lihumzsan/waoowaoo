@@ -5,6 +5,7 @@ import {
   comfyUiWorkflowRequiresLlmApi,
   getComfyUiWorkflowImageInputCount,
   resolveComfyUiWorkflow,
+  validateResolvedWorkflowPreflight,
   type ComfyUiWorkflowGraph,
   type ComfyUiWorkflowLlmApiInject,
 } from './workflow-registry'
@@ -692,6 +693,14 @@ export async function runComfyUiImageWorkflow(params: {
       llmApi: params.llmApi,
     },
   )
+  validateResolvedWorkflowPreflight(workflowKey, workflow, {
+    prompt: params.prompt,
+    negativePrompt: params.negativePrompt,
+    width: params.width,
+    height: params.height,
+    imageFilenames,
+    llmApi: params.llmApi,
+  }, { expect: 'image' })
 
   const { dataBase64, mimeType } = await runComfyUiWorkflow({
     baseUrl: base,

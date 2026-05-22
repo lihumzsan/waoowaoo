@@ -13,7 +13,7 @@ export interface VideoModelOption {
   videoPricingTiers?: VideoPricingTier[]
 }
 
-export type VideoGenerationMode = 'normal' | 'firstlastframe'
+export type VideoGenerationMode = 'normal' | 'firstlastframe' | 'split'
 export type VideoDurationMode = 'manual' | 'match_audio'
 
 export interface VideoDurationBinding {

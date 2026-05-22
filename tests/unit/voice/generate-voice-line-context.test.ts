@@ -43,7 +43,7 @@ describe('buildComfyUiLineRenderText', () => {
       userId: 'user-1',
       locale: 'zh',
       projectId: 'project-1',
-      workflowKey: 'baseaudio/单人/LongCat-one',
+      workflowKey: 'baseaudio/单人/s2-one',
       speakerName: '陈迹',
       lineIndex: 1,
       lineText: '可以。',
@@ -57,6 +57,30 @@ describe('buildComfyUiLineRenderText', () => {
     expect(result).toEqual({
       renderText: 'render:[calm]可以。',
       derivedEmotionPrompt: 'calm restrained',
+    })
+  })
+
+  it('does not apply Fish Audio S2 bracket tags to LongCat workflows', async () => {
+    configServiceMock.getProjectModelConfig.mockResolvedValue({
+      analysisModel: 'openrouter::x-ai/grok-4.1-fast',
+    })
+
+    const result = await buildComfyUiLineRenderText({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      workflowKey: 'baseaudio/单人/LongCat-one',
+      speakerName: '陈迹',
+      lineIndex: 1,
+      lineText: '可以。',
+      emotionPrompt: '冷静',
+    })
+
+    expect(fishAudioMock.generateFishAudioS2LinePrompt).not.toHaveBeenCalled()
+    expect(fishAudioMock.buildFishAudioS2RenderText).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      renderText: '可以。',
+      derivedEmotionPrompt: '冷静',
     })
   })
 })

@@ -6,11 +6,12 @@ Input text:
 
 Core rules:
 1. Keep episode lengths as balanced as possible.
-2. Prefer natural breakpoints (chapter boundary, scene shift, time jump).
-3. Keep chronology and full coverage (no overlap, no missing text).
-4. Provide reliable startMarker and endMarker copied from source text.
-5. Return JSON only.
-6. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+2. No episode may exceed 400 words. Estimate episodeCount with ceil(totalWords / 400).
+3. Prefer natural breakpoints (chapter boundary, scene shift, time jump), including "第X章" / "第一章" markers.
+4. Keep chronology and full coverage (no overlap, no missing text).
+5. Provide reliable startMarker and endMarker copied from source text.
+6. Return JSON only.
+7. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
 
 Output format:
 {

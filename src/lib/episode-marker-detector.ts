@@ -29,6 +29,8 @@ export interface EpisodeMarkerResult {
     previewSplits: PreviewSplit[]
 }
 
+export const MAX_EPISODE_WORDS = 400
+
 // 中文数字映射
 const CHINESE_NUMBERS: Record<string, number> = {
     '零': 0, '〇': 0,
@@ -93,7 +95,7 @@ interface DetectionPattern {
 const DETECTION_PATTERNS: DetectionPattern[] = [
     // 1. 中文"第X集"
     {
-        regex: /^第([一二三四五六七八九十百千\d]+)集[：:\s]*(.*)?/gm,
+        regex: /^第\s*([一二三四五六七八九十百千\d]+)\s*集[：:\s]*(.*)?/gm,
         typeKey: 'episode',
         typeName: '第X集',
         extractNumber: (match) => chineseToNumber(match[1]),
@@ -101,7 +103,7 @@ const DETECTION_PATTERNS: DetectionPattern[] = [
     },
     // 2. 中文"第X章"
     {
-        regex: /^第([一二三四五六七八九十百千\d]+)章[：:\s]*(.*)?/gm,
+        regex: /^第\s*([一二三四五六七八九十百千\d]+)\s*章[：:\s]*(.*)?/gm,
         typeKey: 'chapter',
         typeName: '第X章',
         extractNumber: (match) => chineseToNumber(match[1]),
@@ -109,7 +111,7 @@ const DETECTION_PATTERNS: DetectionPattern[] = [
     },
     // 3. 中文"第X幕"
     {
-        regex: /^第([一二三四五六七八九十百千\d]+)幕[：:\s]*(.*)?/gm,
+        regex: /^第\s*([一二三四五六七八九十百千\d]+)\s*幕[：:\s]*(.*)?/gm,
         typeKey: 'act',
         typeName: '第X幕',
         extractNumber: (match) => chineseToNumber(match[1]),
@@ -181,6 +183,72 @@ const DETECTION_PATTERNS: DetectionPattern[] = [
         extractTitle: () => ''
     },
 ]
+
+function buildPreviewText(text: string): string {
+    const preview = text.slice(0, 50).trim().slice(0, 20)
+    return preview + (preview.length >= 20 ? '...' : '')
+}
+
+function splitRangeByWordLimit(
+    content: string,
+    startIndex: number,
+    endIndex: number,
+    maxWords = MAX_EPISODE_WORDS,
+): Array<{ startIndex: number; endIndex: number }> {
+    const segment = content.slice(startIndex, endIndex)
+    if (countWords(segment) <= maxWords) {
+        return [{ startIndex, endIndex }]
+    }
+
+    const units = segment.match(/[\s\r\n]+|[A-Za-z0-9]+|[\u3400-\u9fff\uf900-\ufaff]|./gu) || []
+    const ranges: Array<{ startIndex: number; endIndex: number }> = []
+    let cursor = startIndex
+    let chunkStart = startIndex
+    let chunkWords = 0
+
+    for (const unit of units) {
+        const unitStart = cursor
+        const unitEnd = cursor + unit.length
+        const unitWords = countWords(unit)
+
+        if (chunkWords > 0 && chunkWords + unitWords > maxWords) {
+            ranges.push({ startIndex: chunkStart, endIndex: unitStart })
+            chunkStart = unitStart
+            chunkWords = 0
+        }
+
+        chunkWords += unitWords
+        cursor = unitEnd
+    }
+
+    if (chunkStart < endIndex) {
+        ranges.push({ startIndex: chunkStart, endIndex })
+    }
+
+    return ranges.filter((range) => countWords(content.slice(range.startIndex, range.endIndex).trim()) > 0)
+}
+
+function enforcePreviewSplitWordLimit(content: string, splits: PreviewSplit[]): PreviewSplit[] {
+    const nextSplits: PreviewSplit[] = []
+
+    for (const split of splits) {
+        const ranges = splitRangeByWordLimit(content, split.startIndex, split.endIndex)
+        for (const range of ranges) {
+            const number = nextSplits.length + 1
+            const episodeContent = content.slice(range.startIndex, range.endIndex)
+            nextSplits.push({
+                number,
+                title: `第 ${number} 集`,
+                wordCount: countWords(episodeContent),
+                startIndex: range.startIndex,
+                endIndex: range.endIndex,
+                preview: buildPreviewText(episodeContent),
+            })
+        }
+    }
+
+    return nextSplits
+}
 
 /**
  * 检测文本中的分集标记
@@ -264,14 +332,13 @@ export function detectEpisodeMarkers(content: string): EpisodeMarkerResult {
             // 只有第1集使用所有前面的内容
             if (i === 1) {
                 const episodeContent = content.slice(0, firstMatch.index)
-                const preview = episodeContent.slice(0, 50).trim().slice(0, 20)
                 previewSplits.push({
                     number: i,
                     title: `第 ${i} 集`,
                     wordCount: countWords(episodeContent),
                     startIndex: 0,
                     endIndex: firstMatch.index,
-                    preview: preview + (preview.length >= 20 ? '...' : '')
+                    preview: buildPreviewText(episodeContent)
                 })
                 break // 只补充第1集，后续的1和2可能只是格式不同
             }
@@ -309,7 +376,7 @@ export function detectEpisodeMarkers(content: string): EpisodeMarkerResult {
         })
     })
 
-    result.previewSplits = previewSplits
+    result.previewSplits = enforcePreviewSplitWordLimit(content, previewSplits)
 
     return result
 }

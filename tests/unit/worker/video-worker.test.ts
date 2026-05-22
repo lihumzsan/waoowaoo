@@ -47,9 +47,18 @@ const utilsMock = vi.hoisted(() => ({
   resolveVideoSourceFromGeneration:
     vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(
       async () => ({ url: 'https://provider.example/video.mp4' }),
-    ),
+  ),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
-  uploadVideoSourceToCos: vi.fn(async () => 'cos/lip-sync/video.mp4'),
+  uploadImageSourceToCos: vi.fn<(...args: [unknown, string, string]) => Promise<string>>(
+    async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`,
+  ),
+  uploadVideoSourceToCos: vi.fn<(...args: [unknown, string, string, Record<string, string>?]) => Promise<string>>(
+    async () => 'cos/lip-sync/video.mp4',
+  ),
+}))
+const ffmpegMock = vi.hoisted(() => ({
+  extractVideoLastFrame: vi.fn(async () => Buffer.from('tail-frame')),
+  concatVideos: vi.fn(async () => Buffer.from('merged-video')),
 }))
 const configServiceMock = vi.hoisted(() => ({
   getUserWorkflowConcurrencyConfig: vi.fn(async () => ({
@@ -84,7 +93,23 @@ const prismaMock = vi.hoisted(() => ({
   },
   novelPromotionVoiceLine: {
     findUnique: vi.fn(),
-    findMany: vi.fn(async () => []),
+    findMany: vi.fn(async (): Promise<Array<{
+      id: string
+      speaker?: string | null
+      content?: string | null
+      audioDuration?: number | null
+    }>> => []),
+  },
+  novelPromotionPanelVideoSegment: {
+    findMany: vi.fn<(...args: unknown[]) => Promise<Array<{
+      segmentIndex: number
+      status?: string | null
+      videoUrl?: string | null
+      tailFrameImageUrl?: string | null
+    }>>>(async () => []),
+    upsert: vi.fn(async (args: unknown) => args),
+    update: vi.fn(async (args: unknown) => args),
+    deleteMany: vi.fn(async () => ({ count: 0 })),
   },
 }))
 
@@ -117,6 +142,7 @@ vi.mock('@/lib/workers/shared', () => ({
 }))
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/video-processing/ffmpeg', () => ffmpegMock)
 vi.mock('@/lib/media/outbound-image', () => ({
   normalizeToBase64ForGeneration: vi.fn(async (input: string) => input),
 }))
@@ -188,6 +214,20 @@ describe('worker video processor behavior', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     workerState.processor = null
+    utilsMock.getProjectModels.mockResolvedValue({ videoRatio: '16:9' })
+    utilsMock.resolveVideoSourceFromGeneration.mockResolvedValue({ url: 'https://provider.example/video.mp4' })
+    utilsMock.resolveLipSyncVideoSource.mockResolvedValue('https://provider.example/lipsync.mp4')
+    utilsMock.toSignedUrlIfCos.mockImplementation((url: string | null) => (url ? `https://signed.example/${url}` : null))
+    utilsMock.uploadImageSourceToCos.mockImplementation(async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`)
+    utilsMock.uploadVideoSourceToCos.mockImplementation(async () => 'cos/lip-sync/video.mp4')
+    ffmpegMock.extractVideoLastFrame.mockResolvedValue(Buffer.from('tail-frame'))
+    ffmpegMock.concatVideos.mockResolvedValue(Buffer.from('merged-video'))
+    ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mockImplementation(async (input: { originalPrompt: string }) => ({
+      prompt: input.originalPrompt,
+      enhanced: false,
+      textModel: null,
+    }))
+    ltxPromptEnhanceMock.isLtx23VideoModel.mockImplementation((modelKey: string | null | undefined) => String(modelKey || '').toLowerCase().includes('ltx2.3'))
 
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValue(buildPanel())
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(buildPanel())
@@ -197,6 +237,10 @@ describe('worker video processor behavior', () => {
       audioDuration: 1200,
     })
     prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([])
+    prismaMock.novelPromotionPanelVideoSegment.findMany.mockResolvedValue([])
+    prismaMock.novelPromotionPanelVideoSegment.upsert.mockImplementation(async (args: unknown) => args)
+    prismaMock.novelPromotionPanelVideoSegment.update.mockImplementation(async (args: unknown) => args)
+    prismaMock.novelPromotionPanelVideoSegment.deleteMany.mockResolvedValue({ count: 0 })
 
     const mod = await import('@/lib/workers/video.worker')
     mod.createVideoWorker()
@@ -341,6 +385,184 @@ describe('worker video processor behavior', () => {
         }),
       }),
     )
+  })
+
+  it('VIDEO_PANEL: allows exact audio-driven LTX2.3 duration to bypass enum duration options downstream', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: '中年医生',
+        content: '陈迹你好，我现在需要问你一些问题。',
+        audioDuration: 11_430,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 8,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 11.43,
+          fps: 25,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: auto-splits long linked audio into continuous video segments', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'We need to review every symptom carefully before giving the next instruction.',
+        audioDuration: 23_700,
+      },
+    ])
+    utilsMock.resolveVideoSourceFromGeneration
+      .mockResolvedValueOnce({ url: 'https://provider.example/segment-1.mp4' })
+      .mockResolvedValueOnce({ url: 'https://provider.example/segment-2.mp4' })
+    utilsMock.uploadVideoSourceToCos.mockImplementation(async (_source: unknown, keyPrefix: string, targetId: string) => {
+      if (keyPrefix === 'panel-video-segment') return `video/${targetId}.mp4`
+      if (keyPrefix === 'panel-video') return 'video/panel-1-merged.mp4'
+      return 'video/other.mp4'
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 8,
+          resolution: '720p',
+        },
+      },
+    })
+
+    const result = await processor!(job) as { panelId: string; videoUrl: string }
+
+    expect(result).toEqual({
+      panelId: 'panel-1',
+      videoUrl: 'video/panel-1-merged.mp4',
+    })
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        imageUrl: 'https://signed.example/cos/panel-image.png',
+        options: expect.objectContaining({
+          duration: 11.85,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        imageUrl: 'https://signed.example/images/panel-1-segment-0-last-frame.jpg',
+        options: expect.objectContaining({
+          duration: 11.85,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+    expect(ffmpegMock.extractVideoLastFrame).toHaveBeenCalledTimes(2)
+    expect(ffmpegMock.concatVideos).toHaveBeenCalledWith([
+      'https://signed.example/video/panel-1-segment-0.mp4',
+      'https://signed.example/video/panel-1-segment-1.mp4',
+    ])
+    expect(prismaMock.novelPromotionPanelVideoSegment.upsert).toHaveBeenCalledTimes(2)
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        videoUrl: 'video/panel-1-merged.mp4',
+        videoGenerationMode: 'split',
+      }),
+    })
+  })
+
+  it('VIDEO_PANEL: resumes split generation from completed segment records', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'We need to review every symptom carefully before giving the next instruction.',
+        audioDuration: 23_700,
+      },
+    ])
+    prismaMock.novelPromotionPanelVideoSegment.findMany.mockResolvedValueOnce([
+      {
+        segmentIndex: 0,
+        status: 'completed',
+        videoUrl: 'video/existing-segment-0.mp4',
+        tailFrameImageUrl: 'images/existing-tail-0.jpg',
+      },
+    ])
+    utilsMock.resolveVideoSourceFromGeneration.mockResolvedValueOnce({
+      url: 'https://provider.example/segment-2.mp4',
+    })
+    utilsMock.uploadVideoSourceToCos.mockImplementation(async (_source: unknown, keyPrefix: string, targetId: string) => {
+      if (keyPrefix === 'panel-video-segment') return `video/${targetId}.mp4`
+      if (keyPrefix === 'panel-video') return 'video/panel-1-merged.mp4'
+      return 'video/other.mp4'
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(1)
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        imageUrl: 'https://signed.example/images/existing-tail-0.jpg',
+      }),
+    )
+    expect(ffmpegMock.concatVideos).toHaveBeenCalledWith([
+      'https://signed.example/video/existing-segment-0.mp4',
+      'https://signed.example/video/panel-1-segment-1.mp4',
+    ])
   })
 
   it('VIDEO_PANEL: ignores stale structured multi-shot prompts when saved prompt was not user edited', async () => {

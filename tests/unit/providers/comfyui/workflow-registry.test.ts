@@ -699,8 +699,11 @@ describe('comfyui workflow registry prompt injection', () => {
         {
           id: 37,
           type: 'Apply Whisper',
+          inputs: [
+            { name: 'prompt', type: 'STRING', widget: { name: 'prompt' }, link: null },
+          ],
           outputs: [{ name: 'text', type: 'STRING', links: [57] }],
-          widgets_values: [],
+          widgets_values: ['keep reference transcription prompt'],
         },
         {
           id: 38,
@@ -759,6 +762,7 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['38']).toBeUndefined()
     expect(graph['43']).toBeUndefined()
     expect(graph['44']).toBeUndefined()
+    expect(graph['37']?.inputs?.prompt).toBe('keep reference transcription prompt')
     expect(graph['30']?.inputs?.reference_text).toEqual(['37', 0])
     expect(graph['35']?.inputs?.audio).toEqual(['30', 0])
     expect(terminalNodes).toEqual([{ nodeId: '35', classType: 'SaveAudio' }])

@@ -187,7 +187,7 @@ export interface NovelPromotionPanel {
   firstLastFramePromptEditedByUser?: boolean
   videoDurationBinding?: string | null
   videoUrl: string | null
-  videoGenerationMode?: 'normal' | 'firstlastframe' | null
+  videoGenerationMode?: 'normal' | 'firstlastframe' | 'split' | null
   videoMedia?: MediaRef | null
   lipSyncVideoUrl?: string | null
   lipSyncVideoMedia?: MediaRef | null

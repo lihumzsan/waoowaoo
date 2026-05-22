@@ -82,7 +82,7 @@ function normalizeEmotionPrompt(value: string | null | undefined): string | null
 
 function shouldUseFishAudioS2LinePrompt(workflowKey: string): boolean {
   const normalized = workflowKey.trim().toLowerCase()
-  return normalized.includes('s2') || normalized.includes('longcat')
+  return normalized.includes('s2') || normalized.includes('fish')
 }
 
 function toCharacterContext(character?: VoiceLineContextCharacter | null): VoiceDesignCharacterContext | null {

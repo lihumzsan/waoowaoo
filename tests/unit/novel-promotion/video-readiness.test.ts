@@ -50,8 +50,28 @@ describe('video readiness', () => {
     expect(issue?.code).toBe('audio_duration_exceeds_model')
     expect(issue?.details).toMatchObject({
       audioDurationSeconds: 23.88,
-      maxDurationSeconds: 10,
+      maxDurationSeconds: 12,
     })
+  })
+
+  it('allows batch readiness when long LTX audio can be auto-split in normal mode', () => {
+    const issue = resolvePanelVideoReadinessIssue(buildPanel({
+      matchedVoiceLines: [
+        {
+          id: 'line-1',
+          content: 'This long line should be split into continuous video segments automatically.',
+          audioDuration: 23_884,
+        },
+      ],
+    }), {
+      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
+      durationOptions: [4, 5, 6, 8, 10, 12],
+      payload: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+      },
+    })
+
+    expect(issue).toBeNull()
   })
 
   it('blocks short dialogue that is bound to unusually long audio before batch submission', () => {

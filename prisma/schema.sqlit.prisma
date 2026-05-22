@@ -226,6 +226,7 @@ model NovelPromotionPanel {
   previousImageMedia MediaObject?             @relation("NovelPromotionPanelPreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
   storyboard        NovelPromotionStoryboard  @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
   matchedVoiceLines NovelPromotionVoiceLine[]
+  videoSegments     NovelPromotionPanelVideoSegment[]
 
   @@unique([storyboardId, panelIndex])
   @@index([storyboardId])
@@ -235,6 +236,28 @@ model NovelPromotionPanel {
   @@index([sketchImageMediaId])
   @@index([previousImageMediaId])
   @@map("novel_promotion_panels")
+}
+
+model NovelPromotionPanelVideoSegment {
+  id                    String                @id @default(uuid())
+  panelId               String
+  segmentIndex          Int
+  status                String                @default("pending")
+  videoUrl              String?
+  tailFrameImageUrl     String?
+  dialogueText          String?
+  prompt                String?
+  audioDurationMs       Int?
+  targetDurationSeconds Float?
+  targetFrameCount      Int?
+  errorMessage          String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @default(now()) @updatedAt
+  panel                 NovelPromotionPanel   @relation(fields: [panelId], references: [id], onDelete: Cascade)
+
+  @@unique([panelId, segmentIndex])
+  @@index([panelId])
+  @@map("novel_promotion_panel_video_segments")
 }
 
 model NovelPromotionProject {

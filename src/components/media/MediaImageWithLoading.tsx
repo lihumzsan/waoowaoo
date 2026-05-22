@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MediaImage, type MediaImageProps } from './MediaImage'
 
 type MediaImageWithLoadingProps = MediaImageProps & {
@@ -13,6 +13,18 @@ type MediaImageWithLoadingProps = MediaImageProps & {
 
 function mergeClassNames(...classNames: Array<string | undefined | false>): string {
   return classNames.filter(Boolean).join(' ')
+}
+
+export function readCompletedImageState(image: Pick<HTMLImageElement, 'complete' | 'naturalWidth'> | null) {
+  if (!image?.complete) return null
+  return {
+    isLoaded: true,
+    isError: image.naturalWidth <= 0,
+  }
+}
+
+export function isCurrentImageElement(target: HTMLImageElement, current: HTMLImageElement | null) {
+  return target === current
 }
 
 export function MediaImageWithLoading({
@@ -28,12 +40,18 @@ export function MediaImageWithLoading({
   onError,
   ...restProps
 }: MediaImageWithLoadingProps) {
+  const imageRef = useRef<HTMLImageElement | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [isError, setIsError] = useState(false)
 
   useEffect(() => {
     setIsLoaded(false)
     setIsError(false)
+    const completedState = readCompletedImageState(imageRef.current)
+    if (completedState) {
+      setIsLoaded(completedState.isLoaded)
+      setIsError(completedState.isError)
+    }
   }, [src])
 
   if (!src) return null
@@ -47,11 +65,14 @@ export function MediaImageWithLoading({
   )
 
   const handleLoad: NonNullable<MediaImageProps['onLoad']> = (event) => {
+    if (!isCurrentImageElement(event.currentTarget, imageRef.current)) return
+    setIsError(false)
     setIsLoaded(true)
     onLoad?.(event)
   }
 
   const handleError: NonNullable<MediaImageProps['onError']> = (event) => {
+    if (!isCurrentImageElement(event.currentTarget, imageRef.current)) return
     setIsError(true)
     setIsLoaded(true)
     onError?.(event)
@@ -79,6 +100,7 @@ export function MediaImageWithLoading({
         </div>
       )}
       <MediaImage
+        ref={imageRef}
         src={src}
         alt={alt}
         className={imageClassName}

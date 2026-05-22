@@ -6,6 +6,7 @@ import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
+import { toDisplayImageUrl } from '@/lib/media/image-url'
 
 interface PanelCandidateData {
   candidates: string[]
@@ -20,6 +21,7 @@ interface ImageSectionCandidateModeProps {
   onConfirmCandidate: (panelId: string, imageUrl: string) => Promise<void>
   onCancelCandidate: (panelId: string) => void
   onPreviewImage?: (url: string) => void
+  priority?: boolean
 }
 
 export default function ImageSectionCandidateMode({
@@ -30,6 +32,7 @@ export default function ImageSectionCandidateMode({
   onConfirmCandidate,
   onCancelCandidate,
   onPreviewImage,
+  priority = false,
 }: ImageSectionCandidateModeProps) {
   const t = useTranslations('storyboard')
   const [isConfirming, setIsConfirming] = useState(false)
@@ -40,6 +43,8 @@ export default function ImageSectionCandidateMode({
   }
 
   const safeSelectedIndex = Math.min(candidateData.selectedIndex, validCandidates.length - 1)
+  const selectedCandidateUrl = validCandidates[safeSelectedIndex]
+  const selectedDisplayUrl = toDisplayImageUrl(selectedCandidateUrl) || selectedCandidateUrl
   const confirmingState = isConfirming
     ? resolveTaskPresentationState({
       phase: 'processing',
@@ -52,13 +57,14 @@ export default function ImageSectionCandidateMode({
   return (
     <div className="w-full h-full relative">
       <MediaImageWithLoading
-        src={validCandidates[safeSelectedIndex]}
+        src={selectedDisplayUrl}
         alt={t('image.candidateCount', { count: safeSelectedIndex + 1 })}
         containerClassName="h-full w-full"
         className="w-full h-full object-cover cursor-pointer"
-        onClick={() => onPreviewImage?.(validCandidates[safeSelectedIndex])}
+        onClick={() => onPreviewImage?.(selectedCandidateUrl)}
         title={t('image.clickToPreview')}
         sizes="(max-width: 768px) 100vw, 33vw"
+        priority={priority}
       />
 
       <div className="absolute bottom-2 left-2 right-2 glass-surface-soft border border-[var(--glass-stroke-base)] p-2 rounded-xl">
@@ -74,7 +80,7 @@ export default function ImageSectionCandidateMode({
                     }`}
                 >
                   <MediaImageWithLoading
-                    src={url}
+                    src={toDisplayImageUrl(url) || url}
                     alt={t('image.candidateCount', { count: idx + 1 })}
                     containerClassName="h-full w-full"
                     className="w-full h-full object-cover"
@@ -109,10 +115,10 @@ export default function ImageSectionCandidateMode({
                 _ulogInfo('[ImageSection] 🎯 确认按钮被点击')
                 _ulogInfo('[ImageSection] panelId:', panelId)
                 _ulogInfo('[ImageSection] 选中的图片索引:', safeSelectedIndex)
-                _ulogInfo('[ImageSection] 选中的图片 URL:', validCandidates[safeSelectedIndex])
+                _ulogInfo('[ImageSection] 选中的图片 URL:', selectedCandidateUrl)
                 setIsConfirming(true)
                 try {
-                  await onConfirmCandidate(panelId, validCandidates[safeSelectedIndex])
+                  await onConfirmCandidate(panelId, selectedCandidateUrl)
                   _ulogInfo('[ImageSection] ✅ 确认操作完成')
                 } catch (error) {
                   _ulogError('[ImageSection] ❌ 确认操作失败:', error)

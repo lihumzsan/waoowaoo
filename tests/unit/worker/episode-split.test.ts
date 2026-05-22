@@ -108,6 +108,19 @@ describe('worker episode-split', () => {
     configServiceMock.getUserModelConfig.mockResolvedValue({
       analysisModel: 'codex::gpt-5.4',
     })
+    aiRuntimeMock.executeAiTextStep.mockResolvedValue({
+      text: JSON.stringify({
+        episodes: [
+          {
+            number: 1,
+            title: 'Episode 1',
+            summary: 'Opening',
+            startMarker: 'START_MARKER',
+            endMarker: 'END_MARKER',
+          },
+        ],
+      }),
+    })
   })
 
   it('fails fast when content is too short', async () => {
@@ -153,5 +166,18 @@ describe('worker episode-split', () => {
     expect(result.episodes[0]?.title).toBe('Episode 1')
     expect(result.episodes[0]?.content).toContain('START_MARKER')
     expect(result.episodes[0]?.content).toContain('END_MARKER')
+  })
+
+  it('rejects ai episode boundaries that exceed 400 words', async () => {
+    const content = [
+      'This prefix makes the content long enough for validation. ',
+      'START_MARKER',
+      '山'.repeat(401),
+      'END_MARKER',
+    ].join('')
+
+    const job = buildJob(content)
+
+    await expect(handleEpisodeSplitTask(job)).rejects.toThrow('exceeds 400 words')
   })
 })

@@ -1,4 +1,4 @@
-export type VideoGenerationMode = 'normal' | 'firstlastframe'
+export type VideoGenerationMode = 'normal' | 'firstlastframe' | 'split'
 
 type PanelVideoSnapshot = {
   id: string
@@ -26,7 +26,7 @@ export function readTaskVideoUrl(result: unknown): string | null {
 export function readTaskGenerationMode(payload: unknown, result: unknown): VideoGenerationMode {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     const raw = (result as Record<string, unknown>).generationMode
-    if (raw === 'firstlastframe' || raw === 'normal') return raw
+    if (raw === 'firstlastframe' || raw === 'normal' || raw === 'split') return raw
   }
 
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {

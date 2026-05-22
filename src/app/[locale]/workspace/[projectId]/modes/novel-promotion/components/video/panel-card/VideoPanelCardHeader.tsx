@@ -34,6 +34,11 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
 
   const hasVisibleBaseVideo = !!media.baseVideoUrl
   const showFirstLastFrameSwitch = layout.hasNext
+  const blocksVideoGenerationForAudioTiming = Boolean(
+    durationBinding.timing
+    && !durationBinding.timing.canGenerate
+    && !durationBinding.timing.splitPlan,
+  )
   const canRestorePreviousVideo = !!panel.hasPreviousVideoVersion
     && hasVisibleBaseVideo
     && !taskStatus.isVideoTaskRunning
@@ -188,6 +193,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
             taskStatus.isVideoTaskRunning
             || !videoModel.selectedModel
             || videoModel.missingCapabilityFields.length > 0
+            || blocksVideoGenerationForAudioTiming
           }
           className="absolute bottom-2 right-2 bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay-strong)] text-white p-2 rounded-full transition-all z-20 disabled:cursor-not-allowed disabled:opacity-50"
         >
