@@ -47,6 +47,14 @@ interface GenerateEditScriptStoryboardResponse {
   deduped?: boolean
 }
 
+interface GenerateEditScriptTaskResponse {
+  success: boolean
+  async: true
+  taskId: string
+  status?: string
+  deduped?: boolean
+}
+
 interface UpdateEditScriptVideoBlockPromptInput {
   episodeId: string
   editScriptId: string
@@ -129,15 +137,17 @@ export function useCreateProjectEditScript(projectId: string | null) {
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate edit script')
       }
-      const data = await response.json() as EditScriptResponse
-      if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')
-      return data.editScript
+      const data = await response.json() as GenerateEditScriptTaskResponse
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_SCRIPT_TASK_RESPONSE_EMPTY')
+      return data
     },
-    onSuccess: async (editScript) => {
+    onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editScript.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editScript.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
   })

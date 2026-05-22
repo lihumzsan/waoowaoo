@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
-  generateProjectEditScript,
   readProjectEditScript,
   updateProjectEditScriptAssetRequirementDescription,
   updateProjectEditScriptVideoBlockPrompt,
@@ -56,18 +57,30 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const editScript = await generateProjectEditScript({
+  const result = await submitOperationTask({
     request,
     projectId,
-    episodeId: parsed.data.episodeId,
     userId: authResult.session.user.id,
+    episodeId: parsed.data.episodeId,
+    type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+    targetType: 'ProjectEpisode',
+    targetId: parsed.data.episodeId,
+    operationId: 'generate_edit_script',
+    source: 'project-ui',
+    confirmed: true,
+    payload: {
+      episodeId: parsed.data.episodeId,
+      ...(parsed.data.screenplayId ? { screenplayId: parsed.data.screenplayId } : {}),
+      ...(parsed.data.videoRatio ? { videoRatio: parsed.data.videoRatio } : {}),
+      ...(parsed.data.artStyle ? { artStyle: parsed.data.artStyle } : {}),
+      displayMode: 'detail',
+    },
+    dedupeKey: `edit_script_generate:${projectId}:${parsed.data.episodeId}`,
+    billingInfo: null,
     locale: resolveRequiredTaskLocale(request, body),
-    screenplayId: parsed.data.screenplayId,
-    videoRatio: parsed.data.videoRatio,
-    artStyle: parsed.data.artStyle,
   })
 
-  return NextResponse.json({ editScript })
+  return NextResponse.json(result)
 })
 
 export const PATCH = apiHandler(async (

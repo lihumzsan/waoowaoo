@@ -185,6 +185,15 @@ const storyboardConsistencyServiceMock = vi.hoisted(() => ({
   })),
 }))
 
+const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
+  success: true,
+  async: true,
+  taskId: 'task-edit-script-1',
+  runId: null,
+  status: 'queued',
+  deduped: false,
+})))
+
 vi.mock('@/lib/api-auth', () => {
   const unauthorized = () => new Response(
     JSON.stringify({ error: { code: 'UNAUTHORIZED' } }),
@@ -210,12 +219,16 @@ vi.mock('@/lib/edit-script/service', () => serviceMock)
 vi.mock('@/lib/edit-script/video-block-arrangement', () => videoBlockArrangementMock)
 vi.mock('@/lib/edit-script/video-block-merge', () => videoBlockMergeMock)
 vi.mock('@/lib/edit-script/storyboard-consistency/service', () => storyboardConsistencyServiceMock)
+vi.mock('@/lib/operations/submit-operation-task', () => ({
+  submitOperationTask: submitOperationTaskMock,
+}))
 
 import {
   GET as editScriptGet,
   PATCH as editScriptPatch,
   POST as editScriptPost,
 } from '@/app/api/projects/[projectId]/edit-script/route'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   POST as editScriptAssetsGeneratePost,
 } from '@/app/api/projects/[projectId]/edit-script/assets/generate/route'
@@ -232,7 +245,7 @@ describe('project edit script route', () => {
     vi.clearAllMocks()
   })
 
-  it('POST /api/projects/[projectId]/edit-script -> triggers the edit-first orchestration instead of assistant skills', async () => {
+  it('POST /api/projects/[projectId]/edit-script -> submits async edit-script task so canvas can render progress states', async () => {
     const request = buildMockRequest({
       path: '/api/projects/project-1/edit-script',
       method: 'POST',
@@ -248,15 +261,34 @@ describe('project edit script route', () => {
     const payload = await response.json()
 
     expect(response.status).toBe(200)
-    expect(payload.editScript.shotCount).toBe(8)
-    expect(serviceMock.generateProjectEditScript).toHaveBeenCalledTimes(1)
-    expect(serviceMock.generateProjectEditScript).toHaveBeenCalledWith(expect.objectContaining({
+    expect(payload).toEqual({
+      success: true,
+      async: true,
+      taskId: 'task-edit-script-1',
+      runId: null,
+      status: 'queued',
+      deduped: false,
+    })
+    expect(serviceMock.generateProjectEditScript).not.toHaveBeenCalled()
+    expect(submitOperationTaskMock).toHaveBeenCalledTimes(1)
+    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
-      episodeId: 'episode-1',
       userId: 'user-1',
+      episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      targetType: 'ProjectEpisode',
+      targetId: 'episode-1',
+      operationId: 'generate_edit_script',
+      source: 'project-ui',
+      confirmed: true,
       locale: 'zh',
-      screenplayId: 'screenplay-1',
-      videoRatio: '16:9',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+        videoRatio: '16:9',
+        displayMode: 'detail',
+      }),
+      dedupeKey: 'edit_script_generate:project-1:episode-1',
     }))
   })
 
