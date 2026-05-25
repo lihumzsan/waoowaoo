@@ -35,39 +35,8 @@ describe('ai prompt registry', () => {
     expect(visualEn).toContain('"negativePrompt"')
   })
 
-  it('registers Lyria prompt expansion templates in both locales', () => {
-    const zh = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.MUSIC_LYRIA_PROMPT_EXPAND,
-      locale: 'zh',
-      variables: {
-        user_input: '给追车戏做一段紧张配乐',
-        duration_seconds: '30',
-        vocal_mode: 'instrumental',
-        genre: 'cinematic',
-        mood: 'tense',
-      },
-    })
-    const en = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.MUSIC_LYRIA_PROMPT_EXPAND,
-      locale: 'en',
-      variables: {
-        user_input: 'tense chase cue',
-        duration_seconds: '30',
-        vocal_mode: 'instrumental',
-        genre: 'cinematic',
-        mood: 'tense',
-      },
-    })
-
-    expect(zh).toContain('给追车戏做一段紧张配乐')
-    expect(zh).toContain('instrumental')
-    expect(en).toContain('tense chase cue')
-    expect(en).toContain('instrumental')
-  })
-
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const variantTemplate = getAiPromptTemplate(AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE, 'zh')
-    const videoTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT, 'zh')
     const videoBlockTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK, 'zh')
     const storyboardDetailTemplate = getAiPromptTemplate(AI_PROMPT_IDS.STORYBOARD_REFINE_DETAIL, 'zh')
     const visualStyleTemplate = getAiPromptTemplate(AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET, 'zh')
@@ -76,11 +45,6 @@ describe('ai prompt registry', () => {
     expect(variantTemplate).toContain('❌ video_prompt 使用英文句子（必须中文）')
     expect(variantTemplate).not.toContain('必须英文')
     expect(variantTemplate).not.toContain('POV shot of a smartphone screen')
-
-    expect(videoTemplate).toContain('字段值必须整体使用中文自然语言')
-    expect(videoTemplate).toContain('温暖写实的室内情感戏')
-    expect(videoTemplate).not.toContain('Warm realistic indoor drama')
-    expect(videoTemplate).not.toContain('Sound effects only')
 
     expect(videoBlockTemplate).toContain('字段值必须整体使用中文自然语言')
     expect(videoBlockTemplate).toContain('安静的路边公交站单镜头')

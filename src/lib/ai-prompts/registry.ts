@@ -19,10 +19,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'character/modify',
     variableKeys: ['character_input', 'user_input'],
   },
-  [AI_PROMPT_IDS.CHARACTER_REGENERATE]: {
-    pathStem: 'character/regenerate',
-    variableKeys: ['character_name', 'current_descriptions', 'change_reason', 'novel_text'],
-  },
   [AI_PROMPT_IDS.CHARACTER_UPDATE_DESCRIPTION]: {
     pathStem: 'character/update-description',
     variableKeys: ['original_description', 'modify_instruction', 'image_context'],
@@ -47,10 +43,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.LOCATION_MODIFY]: {
     pathStem: 'location/modify',
     variableKeys: ['location_name', 'location_input', 'user_input'],
-  },
-  [AI_PROMPT_IDS.LOCATION_REGENERATE]: {
-    pathStem: 'location/regenerate',
-    variableKeys: ['location_name', 'current_descriptions'],
   },
   [AI_PROMPT_IDS.LOCATION_UPDATE_DESCRIPTION]: {
     pathStem: 'location/update-description',
@@ -123,10 +115,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'user_input',
     ],
   },
-  [AI_PROMPT_IDS.STORYBOARD_EDIT]: {
-    pathStem: 'storyboard/edit',
-    variableKeys: ['user_input'],
-  },
   [AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE]: {
     pathStem: 'storyboard/shot-variant-analysis',
     variableKeys: ['panel_description', 'shot_type', 'camera_move', 'location', 'characters_info'],
@@ -168,10 +156,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: ['input', 'characters_lib_name', 'characters_introduction', 'storyboard_json'],
     operationIds: ['generate_voice_lines'],
   },
-  [AI_PROMPT_IDS.MUSIC_LYRIA_PROMPT_EXPAND]: {
-    pathStem: 'music/lyria-prompt-expand',
-    variableKeys: ['user_input', 'duration_seconds', 'vocal_mode', 'genre', 'mood'],
-  },
   [AI_PROMPT_IDS.MUSIC_FINAL_RENDER_BGM]: {
     pathStem: 'music/final-render-bgm',
     variableKeys: [
@@ -192,22 +176,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/screenplay',
     variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'style_bible_json'],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_TIMELINE]: {
-    pathStem: 'edit-script/timeline',
-    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VISUAL_ACTION]: {
-    pathStem: 'edit-script/visual-action',
-    variableKeys: ['user_request', 'screenplay_text', 'timeline_json'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_CAMERA]: {
-    pathStem: 'edit-script/camera',
-    variableKeys: ['user_request', 'screenplay_text', 'visual_action_json', 'aspect_ratio', 'style_context'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_AUDIO]: {
-    pathStem: 'edit-script/audio',
-    variableKeys: ['user_request', 'screenplay_text', 'camera_json'],
-  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY]: {
     pathStem: 'edit-script/primary',
     variableKeys: [
@@ -221,17 +189,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT]: {
     pathStem: 'edit-script/asset-extract',
     variableKeys: ['edit_script_json'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT]: {
-    pathStem: 'edit-script/video-prompt',
-    variableKeys: [
-      'user_request',
-      'screenplay_text',
-      'edit_script_structure_json',
-      'asset_context_json',
-      'aspect_ratio',
-      'style_bible_json',
-    ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK]: {
     pathStem: 'edit-script/video-prompt-block',

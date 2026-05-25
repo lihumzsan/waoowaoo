@@ -86,22 +86,13 @@ interface UpdateEditScriptAssetRequirementDescriptionInput {
 type PromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_TIMELINE
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VISUAL_ACTION
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_CAMERA
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_AUDIO
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK
 
 type EditScriptGenerationStage =
   | 'edit_script_prepare'
   | 'edit_script_style_bible'
-  | 'edit_script_timeline'
-  | 'edit_script_visual_action'
-  | 'edit_script_camera'
-  | 'edit_script_audio'
   | 'edit_script_primary'
   | 'edit_script_asset_extract'
   | 'edit_script_video_prompt'

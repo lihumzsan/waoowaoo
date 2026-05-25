@@ -128,39 +128,6 @@ describe('edit script block-first prompt flow', () => {
     expect(assetExtractPrompt).toContain('character 必须输出非空 voiceTimbreText；location 禁止输出 voiceTimbreText')
     expect(assetExtractPrompt).toContain('禁止因为当前角色无台词而省略、置空、写 null')
 
-    const videoPrompt = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT,
-      locale: 'zh',
-      variables: {
-        user_request: '生成一条连续短片',
-        screenplay_text: screenplayText,
-        edit_script_structure_json: JSON.stringify({
-          shots: [{ shotNumber: 1, durationSec: 3, visualAction: '人物走入房间', charactersAndScene: '人物 / 房间', camera: '中景推近', sound: '脚步声' }],
-          videoBlocks: [{ kind: 'single', shotNumbers: [1], reason: '单镜头稳定' }],
-        }),
-        asset_context_json: JSON.stringify({
-          assets: [
-            {
-              kind: 'character',
-              name: '人物',
-              description: '稳定人物视觉资产。',
-              voiceTimbreText: '年轻女性声线，清亮、柔和、略带气声。',
-              shotNumbers: [1],
-            },
-          ],
-        }),
-        aspect_ratio: '9:16',
-        style_bible_json: styleBibleJson,
-      },
-    })
-
-    expect(videoPrompt).toContain('Style Bible（唯一风格来源）')
-    expect(videoPrompt).toContain('videoBlocks[].prompt 是后续直接发给视频模型的最终提示词')
-    expect(videoPrompt).toContain('每个 prompt 必须包含声音约束')
-    expect(videoPrompt).toContain('不要生成 BGM、背景音乐、持续配乐')
-    expect(videoPrompt).toContain('voiceTimbreText 是角色固定音色依据')
-    expect(videoPrompt).toContain('柔和自然光，低对比度，轻微柔焦')
-
     const videoPromptBlock = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
       locale: 'zh',
