@@ -16,7 +16,9 @@ import {
   buildCoordinateThreeViewPrompt,
 } from '@/lib/coordinate-placement-test/prompt'
 import {
-  coordinatePlacementAnalysisSchema,
+  coordinatePlacementAnalysisSequenceSchema,
+  type CoordinateGrid,
+  type CoordinatePlacementAnalysisSequence,
   type CoordinatePlacementAnalyzeRequest,
   type CoordinatePlacementAnalyzeResult,
   type CoordinatePlacementGenerateRequest,
@@ -91,6 +93,20 @@ function readReferenceNormalizationResult(params: {
       message: 'all coordinate placement reference images must normalize successfully',
       issues: params.issues,
     })
+  }
+}
+
+function validateShotSequenceInsideGrid(analysis: CoordinatePlacementAnalysisSequence, grid: CoordinateGrid) {
+  for (const shot of analysis.shots) {
+    if (shot.person.x > grid.columns || shot.person.y > grid.rows || shot.camera.x > grid.columns || shot.camera.y > grid.rows) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'COORDINATE_PLACEMENT_TEST_ANALYSIS_OUT_OF_GRID',
+        shotNumber: shot.shotNumber,
+        grid,
+        person: shot.person,
+        camera: shot.camera,
+      })
+    }
   }
 }
 
@@ -255,7 +271,8 @@ export async function analyzeCoordinatePlacement(input: {
     { temperature: 0.1 },
   )
   const rawText = getCompletionContent(completion)
-  const analysis = coordinatePlacementAnalysisSchema.parse(safeParseJsonObject(rawText))
+  const analysis = coordinatePlacementAnalysisSequenceSchema.parse(safeParseJsonObject(rawText))
+  validateShotSequenceInsideGrid(analysis, input.request.grid)
 
   return {
     success: true,
@@ -323,6 +340,8 @@ export async function runCoordinatePlacementTest(input: {
     imageUrl: getSignedUrl(storageKey, 3600),
     storageKey,
     modelKey: input.request.imageModelKey,
+    shotNumber: input.request.analysis.shotNumber,
+    shotLabel: input.request.analysis.shotLabel,
     promptVariant: input.request.promptVariant,
     finalPrompt,
   }

@@ -8,10 +8,11 @@ import {
   buildCoordinateCameraGenerationPrompt,
 } from '@/lib/coordinate-placement-test/prompt'
 import {
-  coordinatePlacementAnalysisSchema,
-  type CoordinatePlacementAnalysis,
+  coordinatePlacementAnalysisSequenceSchema,
+  type CoordinatePlacementAnalysisSequence,
   type CoordinateFinalPromptVariant,
   type CoordinateReferenceMode,
+  type CoordinatePlacementShot,
 } from '@/lib/coordinate-placement-test/types'
 import type { Locale } from '@/i18n/routing'
 import { useUserModels } from '@/lib/query/hooks'
@@ -35,7 +36,7 @@ interface AnalyzeResponse {
   readonly success: true
   readonly modelKey: string
   readonly finalPrompt: string
-  readonly analysis: CoordinatePlacementAnalysis
+  readonly analysis: CoordinatePlacementAnalysisSequence
   readonly rawText: string
 }
 
@@ -57,6 +58,8 @@ interface GeneratedResponse {
   readonly imageUrl: string
   readonly storageKey: string
   readonly modelKey: string
+  readonly shotNumber: number
+  readonly shotLabel: string
   readonly promptVariant: CoordinateFinalPromptVariant
   readonly finalPrompt: string
 }
@@ -72,12 +75,8 @@ const GRID_PRESETS: readonly GridPreset[] = [
   { id: '24x14', columns: 24, rows: 14 },
 ]
 
-const FINAL_PROMPT_VARIANTS: readonly CoordinateFinalPromptVariant[] = [
-  'camera_ray_cast',
-  'reconstruct_3d',
-  'director_blocking',
-  'strict_not_map',
-]
+const ACTIVE_FINAL_PROMPT_VARIANT: CoordinateFinalPromptVariant = 'camera_ray_cast'
+const FINAL_PROMPT_VARIANTS: readonly CoordinateFinalPromptVariant[] = [ACTIVE_FINAL_PROMPT_VARIANT]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -89,7 +88,7 @@ function isAnalyzeResponse(value: unknown): value is AnalyzeResponse {
     && typeof value.modelKey === 'string'
     && typeof value.finalPrompt === 'string'
     && typeof value.rawText === 'string'
-    && coordinatePlacementAnalysisSchema.safeParse(value.analysis).success
+    && coordinatePlacementAnalysisSequenceSchema.safeParse(value.analysis).success
 }
 
 function isReferenceViewsResponse(value: unknown): value is ReferenceViewsResponse {
@@ -112,6 +111,8 @@ function isGeneratedResponse(value: unknown): value is GeneratedResponse {
     && typeof value.imageUrl === 'string'
     && typeof value.storageKey === 'string'
     && typeof value.modelKey === 'string'
+    && Number.isInteger(value.shotNumber)
+    && typeof value.shotLabel === 'string'
     && FINAL_PROMPT_VARIANTS.includes(value.promptVariant as CoordinateFinalPromptVariant)
     && typeof value.finalPrompt === 'string'
 }
@@ -120,9 +121,9 @@ function readErrorMessage(payload: unknown, fallback: string): string {
   return isRecord(payload) ? JSON.stringify(payload) : fallback
 }
 
-function parseAnalysisJson(value: string): CoordinatePlacementAnalysis | null {
+function parseAnalysisJson(value: string): CoordinatePlacementAnalysisSequence | null {
   try {
-    return coordinatePlacementAnalysisSchema.parse(JSON.parse(value))
+    return coordinatePlacementAnalysisSequenceSchema.parse(JSON.parse(value))
   } catch {
     return null
   }
@@ -141,14 +142,13 @@ export function CoordinatePlacementTestClient() {
   const [gridPresetId, setGridPresetId] = useState<GridPresetId>('16x9')
   const [llmModelKey, setLlmModelKey] = useState('')
   const [imageModelKey, setImageModelKey] = useState('')
-  const [userPrompt, setUserPrompt] = useState('')
   const [coordinatePreview, setCoordinatePreview] = useState<string | null>(null)
-  const [cameraPreview, setCameraPreview] = useState<string | null>(null)
+  const [cameraPreviewsByShot, setCameraPreviewsByShot] = useState<Partial<Record<number, string>>>({})
   const [analysisJson, setAnalysisJson] = useState('')
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null)
   const [referenceViewsResult, setReferenceViewsResult] = useState<ReferenceViewsResponse | null>(null)
-  const [generatedByVariant, setGeneratedByVariant] = useState<Partial<Record<CoordinateFinalPromptVariant, GeneratedResponse>>>({})
-  const [generatingVariants, setGeneratingVariants] = useState<readonly CoordinateFinalPromptVariant[]>([])
+  const [generatedByShot, setGeneratedByShot] = useState<Partial<Record<number, GeneratedResponse>>>({})
+  const [generatingShotNumbers, setGeneratingShotNumbers] = useState<readonly number[]>([])
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [referenceViewsError, setReferenceViewsError] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
@@ -171,7 +171,7 @@ export function CoordinatePlacementTestClient() {
 
   const analysisPromptPreview = useMemo(() => buildCoordinateAnalysisPrompt({
     coordinateReferenceImage: 'data:image/png;base64,PREVIEW',
-    userPrompt: userPrompt.trim() || t('emptyUserPrompt'),
+    userPrompt: '',
     referenceMode,
     llmModelKey: llmModelKey || 'MODEL_NOT_SELECTED',
     grid: {
@@ -184,33 +184,29 @@ export function CoordinatePlacementTestClient() {
     llmModelKey,
     promptLocale,
     referenceMode,
-    t,
-    userPrompt,
   ])
 
   const imagePromptPreviews = useMemo(() => {
     if (!parsedAnalysis) return {}
-    return Object.fromEntries(FINAL_PROMPT_VARIANTS.map((variant) => [variant, buildCoordinateCameraGenerationPrompt({
+    return Object.fromEntries(parsedAnalysis.shots.map((shot) => [shot.shotNumber, buildCoordinateCameraGenerationPrompt({
       cameraReferenceImage: 'data:image/png;base64,PREVIEW',
       threeViewReferenceImage: 'data:image/png;base64,PREVIEW',
       characterImage: 'data:image/png;base64,PREVIEW',
-      userPrompt: userPrompt.trim() || t('emptyUserPrompt'),
+      userPrompt: '',
       imageModelKey: imageModelKey || 'MODEL_NOT_SELECTED',
-      promptVariant: variant,
+      promptVariant: ACTIVE_FINAL_PROMPT_VARIANT,
       grid: {
         columns: gridPreset.columns,
         rows: gridPreset.rows,
       },
-      analysis: parsedAnalysis,
-    }, promptLocale)])) as Partial<Record<CoordinateFinalPromptVariant, string>>
+      analysis: shot,
+    }, promptLocale)])) as Partial<Record<number, string>>
   }, [
     gridPreset.columns,
     gridPreset.rows,
     imageModelKey,
     parsedAnalysis,
     promptLocale,
-    t,
-    userPrompt,
   ])
 
   const rebuildCoordinatePreview = useCallback(async () => {
@@ -243,24 +239,27 @@ export function CoordinatePlacementTestClient() {
 
   useEffect(() => {
     if (!floorPlanImage || !parsedAnalysis) {
-      setCameraPreview(null)
+      setCameraPreviewsByShot({})
       return
     }
-    const analysis = parsedAnalysis
+    const shots = parsedAnalysis.shots
     const floorPlanImageDataUrl = floorPlanImage.dataUrl
     let cancelled = false
     async function rebuildCameraPreview() {
       try {
-        const preview = await buildCameraMarkerReference({
-          sceneImage: floorPlanImageDataUrl,
-          columns: gridPreset.columns,
-          rows: gridPreset.rows,
-          analysis,
-        })
-        if (!cancelled) setCameraPreview(preview)
+        const previews = await Promise.all(shots.map(async (shot) => {
+          const preview = await buildCameraMarkerReference({
+            sceneImage: floorPlanImageDataUrl,
+            columns: gridPreset.columns,
+            rows: gridPreset.rows,
+            analysis: shot,
+          })
+          return [shot.shotNumber, preview] as const
+        }))
+        if (!cancelled) setCameraPreviewsByShot(Object.fromEntries(previews))
       } catch (error) {
         if (!cancelled) {
-          setCameraPreview(null)
+          setCameraPreviewsByShot({})
           setPreviewError(error instanceof Error ? error.message : String(error))
         }
       }
@@ -288,16 +287,16 @@ export function CoordinatePlacementTestClient() {
     }
     setAnalysisResult(null)
     setAnalysisJson('')
-    setGeneratedByVariant({})
+    setGeneratedByShot({})
   }, [])
 
-  const referenceViewsDisabled = !sceneImage || !userPrompt.trim() || !imageModelKey || isGeneratingReferenceViews
-  const analyzeDisabled = !floorPlanImage || !coordinatePreview || !userPrompt.trim() || !llmModelKey || isAnalyzing
-  const generateDisabled = !cameraPreview || !threeViewImage || !characterImage || !parsedAnalysis || !userPrompt.trim() || !imageModelKey
-  const isGeneratingAnyVariant = generatingVariants.length > 0
+  const referenceViewsDisabled = !sceneImage || !imageModelKey || isGeneratingReferenceViews
+  const analyzeDisabled = !floorPlanImage || !coordinatePreview || !llmModelKey || isAnalyzing
+  const generateDisabled = !threeViewImage || !characterImage || !parsedAnalysis || parsedAnalysis.shots.length === 0 || !imageModelKey
+  const isGeneratingAnyShot = generatingShotNumbers.length > 0
 
   const handleGenerateReferenceViews = useCallback(async () => {
-    if (!sceneImage || !userPrompt.trim() || !imageModelKey) return
+    if (!sceneImage || !imageModelKey) return
     setIsGeneratingReferenceViews(true)
     setReferenceViewsError(null)
     setReferenceViewsResult(null)
@@ -305,14 +304,13 @@ export function CoordinatePlacementTestClient() {
     setThreeViewImage(null)
     setAnalysisResult(null)
     setAnalysisJson('')
-    setGeneratedByVariant({})
+    setGeneratedByShot({})
     try {
       const response = await fetch('/api/user/coordinate-placement-test/reference-views', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           sceneImage: sceneImage.dataUrl,
-          userPrompt: userPrompt.trim(),
           locale,
           imageModelKey,
         }),
@@ -333,22 +331,20 @@ export function CoordinatePlacementTestClient() {
     locale,
     sceneImage,
     t,
-    userPrompt,
   ])
 
   const handleAnalyze = useCallback(async () => {
-    if (!coordinatePreview || !userPrompt.trim() || !llmModelKey) return
+    if (!coordinatePreview || !llmModelKey) return
     setIsAnalyzing(true)
     setAnalysisError(null)
     setAnalysisResult(null)
-    setGeneratedByVariant({})
+    setGeneratedByShot({})
     try {
       const response = await fetch('/api/user/coordinate-placement-test/analyze', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           coordinateReferenceImage: coordinatePreview,
-          userPrompt: userPrompt.trim(),
           locale,
           referenceMode,
           llmModelKey,
@@ -375,13 +371,13 @@ export function CoordinatePlacementTestClient() {
     llmModelKey,
     locale,
     referenceMode,
-    userPrompt,
   ])
 
-  const handleGenerate = useCallback(async (promptVariant: CoordinateFinalPromptVariant) => {
-    if (!cameraPreview || !threeViewImage || !characterImage || !parsedAnalysis || !userPrompt.trim() || !imageModelKey) return
+  const handleGenerateShot = useCallback(async (shot: CoordinatePlacementShot) => {
+    const cameraPreview = cameraPreviewsByShot[shot.shotNumber]
+    if (!cameraPreview || !threeViewImage || !characterImage || !imageModelKey) return
     const threeViewImageDataUrl = threeViewImage.dataUrl
-    setGeneratingVariants((current) => current.includes(promptVariant) ? current : [...current, promptVariant])
+    setGeneratingShotNumbers((current) => current.includes(shot.shotNumber) ? current : [...current, shot.shotNumber])
     setGenerateError(null)
     try {
       const response = await fetch('/api/user/coordinate-placement-test/generate', {
@@ -391,43 +387,39 @@ export function CoordinatePlacementTestClient() {
           cameraReferenceImage: cameraPreview,
           threeViewReferenceImage: threeViewImageDataUrl,
           characterImage: characterImage.dataUrl,
-          userPrompt: userPrompt.trim(),
           locale,
           imageModelKey,
-          promptVariant,
+          promptVariant: ACTIVE_FINAL_PROMPT_VARIANT,
           grid: {
             columns: gridPreset.columns,
             rows: gridPreset.rows,
           },
-          analysis: parsedAnalysis,
+          analysis: shot,
         }),
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok) throw new Error(readErrorMessage(payload, response.statusText))
       if (!isGeneratedResponse(payload)) throw new Error('INVALID_GENERATE_RESPONSE')
-      setGeneratedByVariant((current) => ({ ...current, [promptVariant]: payload }))
+      setGeneratedByShot((current) => ({ ...current, [shot.shotNumber]: payload }))
     } catch (error) {
       setGenerateError(error instanceof Error ? error.message : String(error))
     } finally {
-      setGeneratingVariants((current) => current.filter((variant) => variant !== promptVariant))
+      setGeneratingShotNumbers((current) => current.filter((shotNumber) => shotNumber !== shot.shotNumber))
     }
   }, [
-    cameraPreview,
+    cameraPreviewsByShot,
     characterImage,
     gridPreset.columns,
     gridPreset.rows,
     imageModelKey,
     locale,
-    parsedAnalysis,
     threeViewImage,
-    userPrompt,
   ])
 
   const handleGenerateAll = useCallback(async () => {
-    for (const variant of FINAL_PROMPT_VARIANTS) {
-      await handleGenerate(variant)
-    }
-  }, [handleGenerate])
+    if (!parsedAnalysis) return
+    await Promise.all(parsedAnalysis.shots.map((shot) => handleGenerateShot(shot)))
+  }, [handleGenerateShot, parsedAnalysis])
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -518,16 +510,6 @@ export function CoordinatePlacementTestClient() {
               </select>
             </label>
 
-            <label className="grid gap-2 text-sm">
-              <span className="font-medium text-slate-800">{t('prompt')}</span>
-              <textarea
-                className="min-h-36 resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none ring-cyan-500 focus:ring-2"
-                value={userPrompt}
-                placeholder={t('promptPlaceholder')}
-                onChange={(event) => setUserPrompt(event.currentTarget.value)}
-              />
-            </label>
-
             <button
               type="button"
               disabled={referenceViewsDisabled}
@@ -545,17 +527,17 @@ export function CoordinatePlacementTestClient() {
               onClick={() => void handleAnalyze()}
             >
               {isAnalyzing ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : <AppIcon name="crosshair" className="h-4 w-4" />}
-              {isAnalyzing ? t('analyzing') : t('analyzeCoordinates')}
+              {isAnalyzing ? t('analyzing') : t('analyzeSequence')}
             </button>
 
             <button
               type="button"
-              disabled={generateDisabled || isGeneratingAnyVariant}
+              disabled={generateDisabled || isGeneratingAnyShot}
               className="flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
               onClick={() => void handleGenerateAll()}
             >
-              {isGeneratingAnyVariant ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : <AppIcon name="sparklesAlt" className="h-4 w-4" />}
-              {isGeneratingAnyVariant ? t('generatingAll') : t('generateAllVariants')}
+              {isGeneratingAnyShot ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : <AppIcon name="sparklesAlt" className="h-4 w-4" />}
+              {isGeneratingAnyShot ? t('generatingSequence') : t('generateSequenceResults')}
             </button>
 
             <button
@@ -593,22 +575,25 @@ export function CoordinatePlacementTestClient() {
               imageUrl={coordinatePreview}
             />
             <PreviewPanel
-              title={t('cameraPreview')}
-              empty={t('emptyCameraPreview')}
-              imageUrl={cameraPreview}
-            />
-            <PreviewPanel
               title={t('characterPreview')}
               empty={t('emptyCharacter')}
               imageUrl={characterImage?.dataUrl || null}
             />
-            {FINAL_PROMPT_VARIANTS.map((variant) => (
+            {parsedAnalysis?.shots.map((shot) => (
               <PreviewPanel
-                key={variant}
-                title={t(`promptVariants.${variant}`)}
-                loading={generatingVariants.includes(variant)}
+                key={`camera-${shot.shotNumber}`}
+                title={t('shotCameraTitle', { number: shot.shotNumber, label: shot.shotLabel })}
+                empty={t('emptyCameraPreview')}
+                imageUrl={cameraPreviewsByShot[shot.shotNumber] || null}
+              />
+            ))}
+            {parsedAnalysis?.shots.map((shot) => (
+              <PreviewPanel
+                key={`result-${shot.shotNumber}`}
+                title={t('shotResultTitle', { number: shot.shotNumber, label: shot.shotLabel })}
+                loading={generatingShotNumbers.includes(shot.shotNumber)}
                 empty={t('emptyResult')}
-                imageUrl={generatedByVariant[variant]?.imageUrl || null}
+                imageUrl={generatedByShot[shot.shotNumber]?.imageUrl || null}
               />
             ))}
 
@@ -659,34 +644,34 @@ export function CoordinatePlacementTestClient() {
                   <span className="font-medium text-slate-800">{t('finalPrompt')}</span>
                   <button
                     type="button"
-                    disabled={generateDisabled || isGeneratingAnyVariant}
+                    disabled={generateDisabled || isGeneratingAnyShot}
                     className="rounded-md bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                     onClick={() => void handleGenerateAll()}
                   >
-                    {isGeneratingAnyVariant ? t('generatingAll') : t('generateAllVariants')}
+                    {isGeneratingAnyShot ? t('generatingSequence') : t('generateSequenceResults')}
                   </button>
                 </div>
                 {!parsedAnalysis ? <p className="text-sm text-slate-500">{t('analysisRequiredForImagePrompt')}</p> : null}
-                {FINAL_PROMPT_VARIANTS.map((variant) => {
-                  const generated = generatedByVariant[variant]
-                  const isGeneratingVariant = generatingVariants.includes(variant)
+                {parsedAnalysis?.shots.map((shot) => {
+                  const generated = generatedByShot[shot.shotNumber]
+                  const isGeneratingShot = generatingShotNumbers.includes(shot.shotNumber)
                   return (
-                    <div key={variant} className="grid gap-2 rounded-md border border-slate-200 p-3">
+                    <div key={shot.shotNumber} className="grid gap-2 rounded-md border border-slate-200 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-900">{t(`promptVariants.${variant}`)}</h3>
-                          <p className="text-xs text-slate-500">{t(`promptVariantDescriptions.${variant}`)}</p>
+                          <h3 className="text-sm font-semibold text-slate-900">{t('shotPromptTitle', { number: shot.shotNumber, label: shot.shotLabel })}</h3>
+                          <p className="text-xs text-slate-500">{shot.shotIntent}</p>
                         </div>
                         <button
                           type="button"
-                          disabled={generateDisabled || isGeneratingVariant}
+                          disabled={generateDisabled || isGeneratingShot}
                           className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300"
-                          onClick={() => void handleGenerate(variant)}
+                          onClick={() => void handleGenerateShot(shot)}
                         >
-                          {isGeneratingVariant ? t('generating') : t('generateThisVariant')}
+                          {isGeneratingShot ? t('generating') : t('generateThisShot')}
                         </button>
                       </div>
-                      <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated?.finalPrompt || imagePromptPreviews[variant] || t('analysisRequiredForImagePrompt')}</pre>
+                      <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated?.finalPrompt || imagePromptPreviews[shot.shotNumber] || t('analysisRequiredForImagePrompt')}</pre>
                       {generated ? (
                         <div className="flex flex-wrap gap-3 text-xs text-slate-600">
                           <span>{t('model')}: {generated.modelKey}</span>

@@ -21,10 +21,48 @@ const engineMock = vi.hoisted(() => ({
     choices: [{
       message: {
         content: JSON.stringify({
-          person: { x: 7, y: 4 },
-          camera: { x: 3, y: 8 },
-          cameraFacing: 'north',
-          shotIntent: 'Shoot from the room interior toward the door.',
+          shots: [
+            {
+              shotNumber: 1,
+              shotLabel: 'Entrance establish',
+              person: { x: 7, y: 4 },
+              camera: { x: 3, y: 8 },
+              cameraFacing: 'north',
+              shotIntent: 'Shoot from the room interior toward the door.',
+            },
+            {
+              shotNumber: 2,
+              shotLabel: 'Table cross',
+              person: { x: 8, y: 4 },
+              camera: { x: 4, y: 8 },
+              cameraFacing: 'north',
+              shotIntent: 'Track the person moving across the table area.',
+            },
+            {
+              shotNumber: 3,
+              shotLabel: 'Side shift',
+              person: { x: 9, y: 5 },
+              camera: { x: 5, y: 8 },
+              cameraFacing: 'northeast',
+              shotIntent: 'Shift to a diagonal side view.',
+            },
+            {
+              shotNumber: 4,
+              shotLabel: 'Near mark',
+              person: { x: 10, y: 5 },
+              camera: { x: 7, y: 7 },
+              cameraFacing: 'northeast',
+              shotIntent: 'Move closer while keeping continuity.',
+            },
+            {
+              shotNumber: 5,
+              shotLabel: 'Exit view',
+              person: { x: 11, y: 5 },
+              camera: { x: 8, y: 7 },
+              cameraFacing: 'east',
+              shotIntent: 'Finish with a view toward the exit side.',
+            },
+          ],
         }),
       },
     }],
@@ -96,6 +134,8 @@ function buildGenerateRequest(): CoordinatePlacementGenerateRequest {
     promptVariant: 'strict_not_map',
     grid: { columns: 16, rows: 9 },
     analysis: {
+      shotNumber: 1,
+      shotLabel: '入口建立',
       person: { x: 7, y: 4 },
       camera: { x: 3, y: 8 },
       cameraFacing: 'north',
@@ -160,7 +200,10 @@ describe('coordinate placement test service', () => {
       request: buildAnalyzeRequest(),
     })
 
-    expect(result.analysis).toEqual({
+    expect(result.analysis.shots).toHaveLength(5)
+    expect(result.analysis.shots[0]).toEqual({
+      shotNumber: 1,
+      shotLabel: 'Entrance establish',
       person: { x: 7, y: 4 },
       camera: { x: 3, y: 8 },
       cameraFacing: 'north',
@@ -169,10 +212,78 @@ describe('coordinate placement test service', () => {
     expect(engineMock.chatCompletionWithVision).toHaveBeenCalledWith(
       'user-1',
       'llm-model-1',
-      expect.stringContaining('摄影机镜头朝向'),
+      expect.stringContaining('规划 5 到 10 个连续镜头'),
       [coordinateReference],
       { temperature: 0.1 },
     )
+  })
+
+  it('rejects analyzed continuous shots outside the selected grid', async () => {
+    engineMock.chatCompletionWithVision.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            shots: [
+              {
+                shotNumber: 1,
+                shotLabel: 'Outside grid',
+                person: { x: 17, y: 4 },
+                camera: { x: 3, y: 8 },
+                cameraFacing: 'north',
+                shotIntent: 'Invalid person placement.',
+              },
+              {
+                shotNumber: 2,
+                shotLabel: 'Table cross',
+                person: { x: 8, y: 4 },
+                camera: { x: 4, y: 8 },
+                cameraFacing: 'north',
+                shotIntent: 'Track the person moving across the table area.',
+              },
+              {
+                shotNumber: 3,
+                shotLabel: 'Side shift',
+                person: { x: 9, y: 5 },
+                camera: { x: 5, y: 8 },
+                cameraFacing: 'northeast',
+                shotIntent: 'Shift to a diagonal side view.',
+              },
+              {
+                shotNumber: 4,
+                shotLabel: 'Near mark',
+                person: { x: 10, y: 5 },
+                camera: { x: 7, y: 7 },
+                cameraFacing: 'northeast',
+                shotIntent: 'Move closer while keeping continuity.',
+              },
+              {
+                shotNumber: 5,
+                shotLabel: 'Exit view',
+                person: { x: 11, y: 5 },
+                camera: { x: 8, y: 7 },
+                cameraFacing: 'east',
+                shotIntent: 'Finish with a view toward the exit side.',
+              },
+            ],
+          }),
+        },
+      }],
+    })
+    const coordinateReference = await buildPngDataUrl(96, 96)
+    outboundImageMock.normalizeReferenceImagesForGeneration.mockResolvedValue([coordinateReference])
+    const { analyzeCoordinatePlacement } = await import('@/lib/coordinate-placement-test/service')
+
+    await expect(analyzeCoordinatePlacement({
+      userId: 'user-1',
+      locale: 'zh',
+      request: buildAnalyzeRequest(),
+    })).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: expect.objectContaining({
+        code: 'COORDINATE_PLACEMENT_TEST_ANALYSIS_OUT_OF_GRID',
+        shotNumber: 1,
+      }),
+    })
   })
 
   it('passes the selected image model and camera-reference aspectRatio to image generation', async () => {
@@ -193,6 +304,8 @@ describe('coordinate placement test service', () => {
     })
 
     expect(result.imageUrl).toBe('https://signed.example/coordinate-placement-test/result.jpg')
+    expect(result.shotNumber).toBe(1)
+    expect(result.shotLabel).toBe('入口建立')
     expect(engineMock.generateImage).toHaveBeenCalledWith(
       'user-1',
       'image-model-1',

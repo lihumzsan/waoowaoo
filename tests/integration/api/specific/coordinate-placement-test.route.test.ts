@@ -22,12 +22,50 @@ const serviceMock = vi.hoisted(() => ({
     success: true,
     modelKey: 'llm-model-1',
     finalPrompt: 'analysis prompt',
-    rawText: '{"person":{"x":7,"y":4},"camera":{"x":3,"y":8},"cameraFacing":"north","shotIntent":"Door view"}',
+    rawText: '{"shots":[{"shotNumber":1,"shotLabel":"Door view","person":{"x":7,"y":4},"camera":{"x":3,"y":8},"cameraFacing":"north","shotIntent":"Door view"}]}',
     analysis: {
-      person: { x: 7, y: 4 },
-      camera: { x: 3, y: 8 },
-      cameraFacing: 'north',
-      shotIntent: 'Door view',
+      shots: [
+        {
+          shotNumber: 1,
+          shotLabel: 'Door view',
+          person: { x: 7, y: 4 },
+          camera: { x: 3, y: 8 },
+          cameraFacing: 'north',
+          shotIntent: 'Door view',
+        },
+        {
+          shotNumber: 2,
+          shotLabel: 'Table view',
+          person: { x: 8, y: 4 },
+          camera: { x: 4, y: 8 },
+          cameraFacing: 'north',
+          shotIntent: 'Table view',
+        },
+        {
+          shotNumber: 3,
+          shotLabel: 'Side view',
+          person: { x: 9, y: 5 },
+          camera: { x: 5, y: 8 },
+          cameraFacing: 'northeast',
+          shotIntent: 'Side view',
+        },
+        {
+          shotNumber: 4,
+          shotLabel: 'Closer view',
+          person: { x: 10, y: 5 },
+          camera: { x: 7, y: 7 },
+          cameraFacing: 'northeast',
+          shotIntent: 'Closer view',
+        },
+        {
+          shotNumber: 5,
+          shotLabel: 'Exit view',
+          person: { x: 11, y: 5 },
+          camera: { x: 8, y: 7 },
+          cameraFacing: 'east',
+          shotIntent: 'Exit view',
+        },
+      ],
     },
   })),
   runCoordinatePlacementTest: vi.fn(async () => ({
@@ -35,6 +73,8 @@ const serviceMock = vi.hoisted(() => ({
     imageUrl: '/api/files/coordinate-placement-test.jpg',
     storageKey: 'coordinate-placement-test.jpg',
     modelKey: 'image-model-1',
+    shotNumber: 1,
+    shotLabel: 'Door view',
     promptVariant: 'strict_not_map',
     finalPrompt: 'final camera prompt',
   })),
@@ -64,7 +104,6 @@ import { POST as REFERENCE_VIEWS_POST } from '@/app/api/user/coordinate-placemen
 function validAnalyzeBody() {
   return {
     coordinateReferenceImage: 'data:image/png;base64,AAAA',
-    userPrompt: 'Put the person on the marked floor tile.',
     referenceMode: 'outer_axes',
     llmModelKey: 'llm-model-1',
     grid: { columns: 16, rows: 9 },
@@ -81,6 +120,8 @@ function validGenerateBody() {
     promptVariant: 'strict_not_map',
     grid: { columns: 16, rows: 9 },
     analysis: {
+      shotNumber: 1,
+      shotLabel: 'Door view',
       person: { x: 7, y: 4 },
       camera: { x: 3, y: 8 },
       cameraFacing: 'north',
@@ -98,7 +139,6 @@ describe('coordinate placement test route', () => {
   it('POST /api/user/coordinate-placement-test/reference-views -> generates floor plan and three-view references', async () => {
     const body = {
       sceneImage: 'data:image/png;base64,SCENE',
-      userPrompt: 'Build references.',
       imageModelKey: 'image-model-1',
     }
     const request = buildMockRequest({
@@ -120,7 +160,7 @@ describe('coordinate placement test route', () => {
     expect(serviceMock.generateCoordinateReferenceViews).toHaveBeenCalledWith({
       userId: 'user-1',
       locale: 'zh',
-      request: body,
+      request: { ...body, userPrompt: '' },
     })
   })
 
@@ -136,7 +176,10 @@ describe('coordinate placement test route', () => {
     const payload = await response.json()
 
     expect(response.status).toBe(200)
-    expect(payload.analysis).toEqual({
+    expect(payload.analysis.shots).toHaveLength(5)
+    expect(payload.analysis.shots[0]).toEqual({
+      shotNumber: 1,
+      shotLabel: 'Door view',
       person: { x: 7, y: 4 },
       camera: { x: 3, y: 8 },
       cameraFacing: 'north',
@@ -145,7 +188,7 @@ describe('coordinate placement test route', () => {
     expect(serviceMock.analyzeCoordinatePlacement).toHaveBeenCalledWith({
       userId: 'user-1',
       locale: 'zh',
-      request: validAnalyzeBody(),
+      request: { ...validAnalyzeBody(), userPrompt: '' },
     })
   })
 
@@ -166,6 +209,8 @@ describe('coordinate placement test route', () => {
       imageUrl: '/api/files/coordinate-placement-test.jpg',
       storageKey: 'coordinate-placement-test.jpg',
       modelKey: 'image-model-1',
+      shotNumber: 1,
+      shotLabel: 'Door view',
       promptVariant: 'strict_not_map',
       finalPrompt: 'final camera prompt',
     })

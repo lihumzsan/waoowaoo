@@ -30,16 +30,33 @@ export const coordinatePointSchema = z.object({
   y: z.number().int().min(1).max(64),
 })
 
-export const coordinatePlacementAnalysisSchema = z.object({
+export const coordinatePlacementShotSchema = z.object({
+  shotNumber: z.number().int().min(1).max(10),
+  shotLabel: z.string().trim().min(1).max(120),
   person: coordinatePointSchema,
   camera: coordinatePointSchema,
   cameraFacing: coordinateCameraFacingSchema,
   shotIntent: z.string().trim().min(1).max(1000),
 })
 
+export const coordinatePlacementAnalysisSequenceSchema = z.object({
+  shots: z.array(coordinatePlacementShotSchema).min(5).max(10),
+}).superRefine((value, ctx) => {
+  value.shots.forEach((shot, index) => {
+    const expectedShotNumber = index + 1
+    if (shot.shotNumber !== expectedShotNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['shots', index, 'shotNumber'],
+        message: `shotNumber must be ${expectedShotNumber}`,
+      })
+    }
+  })
+})
+
 export const coordinatePlacementAnalyzeRequestSchema = z.object({
   coordinateReferenceImage: z.string().trim().min(1),
-  userPrompt: z.string().trim().min(1).max(4000),
+  userPrompt: z.string().trim().max(4000).optional().default(''),
   referenceMode: coordinateReferenceModeSchema,
   llmModelKey: z.string().trim().min(1),
   grid: coordinateGridSchema,
@@ -47,7 +64,7 @@ export const coordinatePlacementAnalyzeRequestSchema = z.object({
 
 export const coordinatePlacementReferenceViewsRequestSchema = z.object({
   sceneImage: z.string().trim().min(1),
-  userPrompt: z.string().trim().min(1).max(4000),
+  userPrompt: z.string().trim().max(4000).optional().default(''),
   imageModelKey: z.string().trim().min(1),
 })
 
@@ -55,11 +72,11 @@ export const coordinatePlacementGenerateRequestSchema = z.object({
   cameraReferenceImage: z.string().trim().min(1),
   threeViewReferenceImage: z.string().trim().min(1),
   characterImage: z.string().trim().min(1),
-  userPrompt: z.string().trim().min(1).max(4000),
+  userPrompt: z.string().trim().max(4000).optional().default(''),
   imageModelKey: z.string().trim().min(1),
   promptVariant: coordinateFinalPromptVariantSchema.default('camera_ray_cast'),
   grid: coordinateGridSchema,
-  analysis: coordinatePlacementAnalysisSchema,
+  analysis: coordinatePlacementShotSchema,
 }).superRefine((value, ctx) => {
   if (value.analysis.person.x > value.grid.columns) {
     ctx.addIssue({
@@ -95,7 +112,9 @@ export type CoordinateReferenceMode = z.infer<typeof coordinateReferenceModeSche
 export type CoordinateCameraFacing = z.infer<typeof coordinateCameraFacingSchema>
 export type CoordinateFinalPromptVariant = z.infer<typeof coordinateFinalPromptVariantSchema>
 export type CoordinateGrid = z.infer<typeof coordinateGridSchema>
-export type CoordinatePlacementAnalysis = z.infer<typeof coordinatePlacementAnalysisSchema>
+export type CoordinatePlacementShot = z.infer<typeof coordinatePlacementShotSchema>
+export type CoordinatePlacementAnalysisSequence = z.infer<typeof coordinatePlacementAnalysisSequenceSchema>
+export type CoordinatePlacementAnalysis = CoordinatePlacementShot
 export type CoordinatePlacementAnalyzeRequest = z.infer<typeof coordinatePlacementAnalyzeRequestSchema>
 export type CoordinatePlacementReferenceViewsRequest = z.infer<typeof coordinatePlacementReferenceViewsRequestSchema>
 export type CoordinatePlacementGenerateRequest = z.infer<typeof coordinatePlacementGenerateRequestSchema>
@@ -104,7 +123,7 @@ export interface CoordinatePlacementAnalyzeResult {
   readonly success: true
   readonly modelKey: string
   readonly finalPrompt: string
-  readonly analysis: CoordinatePlacementAnalysis
+  readonly analysis: CoordinatePlacementAnalysisSequence
   readonly rawText: string
 }
 
@@ -126,6 +145,8 @@ export interface CoordinatePlacementTestResult {
   readonly imageUrl: string
   readonly storageKey: string
   readonly modelKey: string
+  readonly shotNumber: number
+  readonly shotLabel: string
   readonly promptVariant: CoordinateFinalPromptVariant
   readonly finalPrompt: string
 }

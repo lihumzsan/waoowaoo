@@ -5,15 +5,24 @@ import type {
 } from '@/lib/coordinate-placement-test/types'
 import type { Locale } from '@/i18n/routing'
 
+function readPromptNote(input: { readonly userPrompt: string }, locale: Locale): string {
+  const trimmed = input.userPrompt.trim()
+  if (trimmed) return trimmed
+  return locale === 'zh'
+    ? '无额外用户提示；请基于参考图本身自动规划测试内容。'
+    : 'No extra user prompt; automatically plan the test content from the reference image itself.'
+}
+
 export function buildCoordinateFloorPlanPrompt(input: CoordinatePlacementReferenceViewsRequest, locale: Locale): string {
+  const promptNote = readPromptNote(input, locale)
   if (locale === 'zh') {
     return [
       '根据参考图生成一张干净的 2D 俯视平面图，用于后续坐标网格和摄影机调度测试。',
       '要求：纯俯视、正交视角、不要透视镜头、不要人物、不要摄影机、不要网格、不要坐标、不要文字标签。',
       '保留原场景的主要空间结构、入口、墙体、家具、道路、窗户、桌椅等可定位锚点。',
       '输出只能是一张 2D 平面图，不要做分屏，不要生成三视图。',
-      '用户场景/剧情说明：',
-      input.userPrompt,
+      '场景/测试说明：',
+      promptNote,
     ].join('\n')
   }
 
@@ -22,12 +31,13 @@ export function buildCoordinateFloorPlanPrompt(input: CoordinatePlacementReferen
     'Requirements: pure orthographic top-down view, no perspective camera, no people, no camera icons, no grid, no coordinates, no text labels.',
     'Preserve the main spatial structure, entrances, walls, furniture, roads, windows, tables, chairs, and other positionable anchors from the original scene.',
     'Output only one 2D floor plan. Do not create a split sheet and do not create three views.',
-    'User scene/story note:',
-    input.userPrompt,
+    'Scene/test note:',
+    promptNote,
   ].join('\n')
 }
 
 export function buildCoordinateThreeViewPrompt(input: CoordinatePlacementReferenceViewsRequest, locale: Locale): string {
+  const promptNote = readPromptNote(input, locale)
   if (locale === 'zh') {
     return [
       '根据参考图生成一张三视图参考图，三视图必须包含在同一张图片内。',
@@ -35,8 +45,8 @@ export function buildCoordinateThreeViewPrompt(input: CoordinatePlacementReferen
       '目标是帮助后续图像模型理解场景的高度、墙面、门窗、家具立面和空间风格。',
       '不要加入人物、摄影机图标、箭头、坐标网格、界面文字、水印或无关注释。',
       '保持材质、色彩、光照氛围和主要空间识别特征与参考图一致。',
-      '用户场景/剧情说明：',
-      input.userPrompt,
+      '场景/测试说明：',
+      promptNote,
     ].join('\n')
   }
 
@@ -46,28 +56,32 @@ export function buildCoordinateThreeViewPrompt(input: CoordinatePlacementReferen
     'The goal is to help the later image model understand scene height, walls, doors, windows, furniture elevations, and spatial style.',
     'Do not add people, camera icons, arrows, coordinate grids, UI text, watermarks, or unrelated annotations.',
     'Keep materials, color, lighting mood, and the main recognizable spatial features consistent with the reference image.',
-    'User scene/story note:',
-    input.userPrompt,
+    'Scene/test note:',
+    promptNote,
   ].join('\n')
 }
 
 export function buildCoordinateAnalysisPrompt(input: CoordinatePlacementAnalyzeRequest, locale: Locale): string {
+  const promptNote = readPromptNote(input, locale)
   if (locale === 'zh') {
     const referenceDescription = input.referenceMode === 'outer_axes'
       ? '参考图是原始 2D 平面图，图片上方有 X 坐标标签，图片左侧留白处有 Y 坐标标签；场景图片本身没有网格线。'
       : '参考图是叠加了坐标网格和坐标标签的 2D 平面图。'
 
     return [
-      '你是 2D 平面图上的摄影调度规划器。请根据用户剧情和参考图输出一个严格 JSON 对象。',
+      '你是 2D 平面图上的连续镜头摄影调度规划器。请根据参考图自动输出一组连续镜头的严格 JSON 对象。',
       referenceDescription,
       `网格共有 ${input.grid.columns} 个 X 列、${input.grid.rows} 个 Y 行。坐标 (1,1) 是左上角格子；X 向右递增，Y 向下递增。`,
-      '任务：选择人物应该站立的网格坐标、摄影机所在网格坐标，以及摄影机镜头朝向。',
+      '任务：规划 5 到 10 个连续镜头。每个镜头都要选择人物站立网格坐标、摄影机所在网格坐标，以及摄影机镜头朝向。',
+      '连续性要求：镜头之间的人物位置和摄影机位置应形成可测试的连续移动，不要每个镜头都放在同一个坐标；同时不要跳到明显不连贯的远端位置。',
+      '覆盖要求：镜头组应覆盖不同距离、不同方向和不同人物站位，让测试能观察模型是否持续遵循坐标。',
       'cameraFacing 只能使用：north, northeast, east, southeast, south, southwest, west, northwest。',
       '不要输出 markdown，不要解释，只返回 JSON。',
       'Schema:',
-      '{"person":{"x":number,"y":number},"camera":{"x":number,"y":number},"cameraFacing":"north|northeast|east|southeast|south|southwest|west|northwest","shotIntent":"string"}',
-      '用户剧情/测试要求：',
-      input.userPrompt,
+      '{"shots":[{"shotNumber":number,"shotLabel":"string","person":{"x":number,"y":number},"camera":{"x":number,"y":number},"cameraFacing":"north|northeast|east|southeast|south|southwest|west|northwest","shotIntent":"string"}]}',
+      'shotNumber 必须从 1 开始连续递增。shotLabel 用短标题描述镜头，例如“入口建立”“中景跟随”“近景对话”。',
+      '额外测试说明：',
+      promptNote,
     ].join('\n')
   }
 
@@ -76,26 +90,31 @@ export function buildCoordinateAnalysisPrompt(input: CoordinatePlacementAnalyzeR
     : 'The reference is a 2D floor plan with overlaid coordinate grid lines and coordinate labels.'
 
   return [
-    'You are a cinematography planner on a 2D floor plan. Return one strict JSON object based on the user story and reference image.',
+    'You are a continuous-shot cinematography planner on a 2D floor plan. Return one strict JSON object based on the reference image.',
     referenceDescription,
     `The grid has ${input.grid.columns} X columns and ${input.grid.rows} Y rows. Coordinate (1,1) is the top-left cell; X increases to the right and Y increases downward.`,
-    'Task: choose the grid coordinate where the person should stand, the grid coordinate where the camera should be placed, and the camera facing direction.',
+    'Task: plan 5 to 10 continuous shots. For each shot, choose the grid coordinate where the person should stand, the grid coordinate where the camera should be placed, and the camera facing direction.',
+    'Continuity requirement: person and camera positions should form a testable continuous movement across shots; do not keep every shot on the same coordinates, and do not jump to obviously unrelated far locations.',
+    'Coverage requirement: cover different distances, directions, and person placements so the test can observe whether the model follows coordinates over time.',
     'cameraFacing must be one of: north, northeast, east, southeast, south, southwest, west, northwest.',
     'Do not return markdown. Do not explain. Return JSON only.',
     'Schema:',
-    '{"person":{"x":number,"y":number},"camera":{"x":number,"y":number},"cameraFacing":"north|northeast|east|southeast|south|southwest|west|northwest","shotIntent":"string"}',
-    'User story/test request:',
-    input.userPrompt,
+    '{"shots":[{"shotNumber":number,"shotLabel":"string","person":{"x":number,"y":number},"camera":{"x":number,"y":number},"cameraFacing":"north|northeast|east|southeast|south|southwest|west|northwest","shotIntent":"string"}]}',
+    'shotNumber must start at 1 and increase continuously. shotLabel is a short title such as "establishing entrance", "medium follow", or "close dialogue".',
+    'Extra test note:',
+    promptNote,
   ].join('\n')
 }
 
 export function buildCoordinateCameraGenerationPrompt(input: CoordinatePlacementGenerateRequest, locale: Locale): string {
   const analysis = input.analysis
+  const promptNote = readPromptNote(input, locale)
   if (locale === 'zh') {
     const shared = [
       '参考图 1 是摄影机机位示意图，只用于读取空间布局、摄影机位置和镜头朝向。它不是最终画面背景，绝对不要把这张 2D 平面图直接画进输出。',
       '参考图 2 是三视图场景参考，用于理解墙面高度、门窗、家具立面、材质、光照和空间风格。',
       '参考图 3 是人物外观参考，尽量保持人物外观一致。',
+      `当前镜头：第 ${analysis.shotNumber} 镜，${analysis.shotLabel}。`,
       `人物目标位置：网格坐标 (${analysis.person.x}, ${analysis.person.y})。`,
       `摄影机位置：网格坐标 (${analysis.camera.x}, ${analysis.camera.y})，镜头朝向 ${analysis.cameraFacing}。`,
       `镜头意图：${analysis.shotIntent}`,
@@ -126,8 +145,8 @@ export function buildCoordinateCameraGenerationPrompt(input: CoordinatePlacement
     return [
       ...shared,
       ...variantLines[input.promptVariant],
-      '用户补充提示词：',
-      input.userPrompt,
+      '额外测试说明：',
+      promptNote,
     ].join('\n')
   }
 
@@ -135,6 +154,7 @@ export function buildCoordinateCameraGenerationPrompt(input: CoordinatePlacement
     'Reference image 1 is a camera blocking diagram only. Use it to read spatial layout, camera position, and facing direction. It is not the final image background; do not copy the 2D floor plan into the output.',
     'Reference image 2 is the three-view scene reference for wall height, doors, windows, furniture elevations, materials, lighting, and spatial style.',
     'Reference image 3 is the exact character/person appearance reference.',
+    `Current shot: shot ${analysis.shotNumber}, ${analysis.shotLabel}.`,
     `Person target position: grid coordinate (${analysis.person.x}, ${analysis.person.y}).`,
     `Camera position: grid coordinate (${analysis.camera.x}, ${analysis.camera.y}), facing ${analysis.cameraFacing}.`,
     `Shot intent: ${analysis.shotIntent}`,
@@ -165,7 +185,7 @@ export function buildCoordinateCameraGenerationPrompt(input: CoordinatePlacement
   return [
     ...shared,
     ...variantLines[input.promptVariant],
-    'Additional user prompt:',
-    input.userPrompt,
+    'Extra test note:',
+    promptNote,
   ].join('\n')
 }
