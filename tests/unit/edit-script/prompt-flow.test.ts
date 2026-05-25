@@ -6,10 +6,7 @@ const styleBibleJson = JSON.stringify({
   rawUserStyle: '禅修短片',
   styleSummary: '安静克制的东方自然主义禅修影像。',
   stylePolicy: {
-    rawUserStyle: '禅修短片',
-    styleSummary: '安静克制的东方自然主义禅修影像。',
     visual: {
-      positivePrompt: '柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感。',
       negativePrompt: '不要商业广告感，不要高反差大片感，不要炫技运镜。',
       imageFilterPrompt: '柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感',
       lightingPrompt: '晨间漫射自然光，低光比。',
@@ -18,20 +15,12 @@ const styleBibleJson = JSON.stringify({
       compositionPrompt: '留白多，稳定构图。',
     },
     camera: {
-      rhythmPrompt: '慢节奏，长停顿，少切换。',
       movementPrompt: '固定镜头、缓慢推近、轻微横移。',
       lensAndDepthPrompt: '35mm，自然景深。',
-      editingPacingPrompt: '剪辑克制。',
-    },
-    motion: {
-      subjectMotionPrompt: '主体动作缓慢、轻、少。',
-      actingPrompt: '表演内收。',
+      videoRhythmPrompt: '慢节奏，长停顿，少切换，剪辑克制。',
     },
     sound: {
-      positivePrompt: '安静自然主义声音，空气感清晰。',
-      negativePrompt: '不要连续配乐，不要广告式声音设计。',
       soundFilterPrompt: '柔和低动态，自然空气感，清晰但不过度锐利',
-      soundStylePrompt: '保留细微环境层次。',
     },
     hardBans: ['不要字幕', '不要水印', '不要logo'],
   },
@@ -63,7 +52,7 @@ describe('edit script block-first prompt flow', () => {
     expect(styleBiblePrompt).toContain('唯一风格圣经生成器')
     expect(styleBiblePrompt).toContain('任何剧本、资产、分镜或视频提示词生成之前')
     expect(styleBiblePrompt).toContain('Style Bible 是后续资产图、分镜图、视频提示词、声音提示词的唯一风格来源')
-    expect(styleBiblePrompt).toContain('positivePrompt 写要什么，negativePrompt 写不要什么')
+    expect(styleBiblePrompt).toContain('不要输出大而全的正向风格字段')
     expect(styleBiblePrompt).toContain('imageFilterPrompt 必须是一句可直接塞进图片或视频提示词的画面滤镜短语')
     expect(styleBiblePrompt).toContain('sound.soundFilterPrompt')
     expect(styleBiblePrompt).toContain('hardBans')
@@ -145,7 +134,6 @@ describe('edit script block-first prompt flow', () => {
 
     expect(videoPromptBlock).toContain('严格遵守 Style Bible')
     expect(videoPromptBlock).toContain('user_request 或 styleBible.rawUserStyle')
-    expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.positivePrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.negativePrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.imageFilterPrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.sound.soundFilterPrompt')

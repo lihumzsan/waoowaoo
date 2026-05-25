@@ -33,12 +33,13 @@ describe('style-bible-prompt', () => {
     })
 
     expect(block).toContain('用途：分镜图生成')
-    expect(block).toContain('镜头节奏：缓慢呼吸式节奏，镜头停留足够久。')
     expect(block).toContain('运镜：静态或极慢推拉，避免炫技运镜。')
+    expect(block).toContain('镜头与景深：35mm镜头，中浅景深，自然透视。')
+    expect(block).not.toContain('视频节奏：')
     expect(block).not.toContain('声音正向风格：')
   })
 
-  it('video usage includes visual, camera, motion, and sound policies', () => {
+  it('video usage includes visual, camera, and sound-filter policies', () => {
     const block = renderStyleBiblePromptBlock({
       styleBible: buildZenStyleBibleFixture(),
       usage: 'video',
@@ -46,9 +47,11 @@ describe('style-bible-prompt', () => {
     })
 
     expect(block).toContain('用途：最终视频生成')
-    expect(block).toContain('主体运动：动作轻微、缓慢、像呼吸一样连续。')
-    expect(block).toContain('声音正向风格：安静环境声，远处风声与木质细响。')
-    expect(block).toContain('声音负向约束：避免史诗配乐、强鼓点、夸张音效。')
+    expect(block).toContain('视频节奏：缓慢呼吸式节奏，镜头停留足够久，慢剪辑，镜头之间自然过渡。')
+    expect(block).toContain('声音滤镜：低噪、近自然声场、不过度压缩。')
+    expect(block).not.toContain('主体运动：')
+    expect(block).not.toContain('表演：')
+    expect(block).not.toContain('声音负向约束：')
   })
 
   it('invalid non-null Style Bible json fails explicitly', () => {

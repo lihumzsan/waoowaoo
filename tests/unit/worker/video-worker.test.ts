@@ -408,7 +408,7 @@ describe('worker video processor behavior', () => {
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       options: expect.objectContaining({
-        prompt: expect.stringContaining('声音正向风格：安静环境声，远处风声与木质细响。'),
+        prompt: expect.stringContaining('声音滤镜：低噪、近自然声场、不过度压缩。'),
       }),
     }))
   })
@@ -876,7 +876,7 @@ describe('worker video processor behavior', () => {
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          prompt: expect.stringContaining('主体运动：动作轻微、缓慢、像呼吸一样连续。'),
+          prompt: expect.stringContaining('声音滤镜：低噪、近自然声场、不过度压缩。'),
         }),
       }),
     )

@@ -268,7 +268,7 @@ describe('worker panel-image-task-handler behavior', () => {
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        prompt: expect.stringContaining('镜头节奏：缓慢呼吸式节奏，镜头停留足够久。'),
+        prompt: expect.stringContaining('镜头与景深：35mm镜头，中浅景深，自然透视。'),
       }),
     )
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(

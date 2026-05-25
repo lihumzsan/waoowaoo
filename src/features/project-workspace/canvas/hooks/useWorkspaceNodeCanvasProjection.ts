@@ -203,14 +203,12 @@ function readStringArray(value: unknown): string[] {
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
   const visualValues = Object.values(details.visual)
   const cameraValues = Object.values(details.camera)
-  const motionValues = Object.values(details.motion)
   const soundValues = Object.values(details.sound)
   return [
     details.rawUserStyle,
     details.styleSummary,
     ...visualValues,
     ...cameraValues,
-    ...motionValues,
     ...soundValues,
   ].some((value) => typeof value === 'string' && value.trim().length > 0) || details.hardBans.length > 0
 }
@@ -220,13 +218,11 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
   const stylePolicy = readJsonRecord(value.stylePolicy)
   const visual = readJsonRecord(stylePolicy.visual)
   const camera = readJsonRecord(stylePolicy.camera)
-  const motion = readJsonRecord(stylePolicy.motion)
   const sound = readJsonRecord(stylePolicy.sound)
   const details: WorkspaceCanvasStyleBibleDetails = {
-    rawUserStyle: stringValue(value.rawUserStyle) ?? stringValue(stylePolicy.rawUserStyle),
-    styleSummary: stringValue(value.styleSummary) ?? stringValue(stylePolicy.styleSummary),
+    rawUserStyle: stringValue(value.rawUserStyle),
+    styleSummary: stringValue(value.styleSummary),
     visual: {
-      positivePrompt: stringValue(visual.positivePrompt),
       negativePrompt: stringValue(visual.negativePrompt),
       imageFilterPrompt: stringValue(visual.imageFilterPrompt),
       lightingPrompt: stringValue(visual.lightingPrompt),
@@ -235,20 +231,12 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
       compositionPrompt: stringValue(visual.compositionPrompt),
     },
     camera: {
-      rhythmPrompt: stringValue(camera.rhythmPrompt),
       movementPrompt: stringValue(camera.movementPrompt),
       lensAndDepthPrompt: stringValue(camera.lensAndDepthPrompt),
-      editingPacingPrompt: stringValue(camera.editingPacingPrompt),
-    },
-    motion: {
-      subjectMotionPrompt: stringValue(motion.subjectMotionPrompt),
-      actingPrompt: stringValue(motion.actingPrompt),
+      videoRhythmPrompt: stringValue(camera.videoRhythmPrompt),
     },
     sound: {
-      positivePrompt: stringValue(sound.positivePrompt),
-      negativePrompt: stringValue(sound.negativePrompt),
       soundFilterPrompt: stringValue(sound.soundFilterPrompt),
-      soundStylePrompt: stringValue(sound.soundStylePrompt),
     },
     hardBans: readStringArray(stylePolicy.hardBans),
   }
@@ -1251,7 +1239,6 @@ export function buildWorkspaceNodeCanvasProjection({
         body: compactText(
           styleBibleDetails.styleSummary
             ?? styleBibleDetails.visual.imageFilterPrompt
-            ?? styleBibleDetails.visual.positivePrompt
             ?? translate('nodes.editStyleBible.body'),
           translate('nodes.editStyleBible.body'),
         ),

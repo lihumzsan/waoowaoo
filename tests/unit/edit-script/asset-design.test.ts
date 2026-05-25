@@ -51,10 +51,7 @@ const styleBible: EditScriptStyleBible = {
   rawUserStyle: '冷峻科幻风格',
   styleSummary: '低饱和银灰色、硬质冷光、干净宽频、克制高光的冷峻科幻质感。',
   stylePolicy: {
-    rawUserStyle: '冷峻科幻风格',
-    styleSummary: '低饱和银灰色、硬质冷光、干净宽频、克制高光的冷峻科幻质感。',
     visual: {
-      positivePrompt: '低饱和银灰色，硬质冷光，干净未来材质，克制高光。',
       negativePrompt: '不要塑料感，不要霓虹赛博感，不要商业广告锐度。',
       imageFilterPrompt: '低饱和银灰色，硬质冷光，干净未来材质，克制高光',
       lightingPrompt: '硬质冷光，阴影边缘清楚但不过度高反差。',
@@ -63,20 +60,12 @@ const styleBible: EditScriptStyleBible = {
       compositionPrompt: '对称、留白、秩序感强。',
     },
     camera: {
-      rhythmPrompt: '缓慢、克制。',
       movementPrompt: '固定镜头和轻微推近。',
       lensAndDepthPrompt: '35mm，自然景深。',
-      editingPacingPrompt: '少切换。',
-    },
-    motion: {
-      subjectMotionPrompt: '动作低缓、精确。',
-      actingPrompt: '表演内收。',
+      videoRhythmPrompt: '缓慢、克制，少切换。',
     },
     sound: {
-      positivePrompt: '干净宽频，低频舱体底噪克制。',
-      negativePrompt: '不要连续配乐。',
       soundFilterPrompt: '干净宽频，低动态，轻微空间混响',
-      soundStylePrompt: '低频舱体底噪自然铺底。',
     },
     hardBans: ['不要字幕', '不要水印', '不要logo'],
   },

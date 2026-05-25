@@ -294,7 +294,6 @@ export interface WorkspaceCanvasEditScreenplayDetails {
 }
 
 export interface WorkspaceCanvasStyleBibleVisualPolicy {
-  readonly positivePrompt?: string | null
   readonly negativePrompt?: string | null
   readonly imageFilterPrompt?: string | null
   readonly lightingPrompt?: string | null
@@ -304,22 +303,13 @@ export interface WorkspaceCanvasStyleBibleVisualPolicy {
 }
 
 export interface WorkspaceCanvasStyleBibleCameraPolicy {
-  readonly rhythmPrompt?: string | null
   readonly movementPrompt?: string | null
   readonly lensAndDepthPrompt?: string | null
-  readonly editingPacingPrompt?: string | null
-}
-
-export interface WorkspaceCanvasStyleBibleMotionPolicy {
-  readonly subjectMotionPrompt?: string | null
-  readonly actingPrompt?: string | null
+  readonly videoRhythmPrompt?: string | null
 }
 
 export interface WorkspaceCanvasStyleBibleSoundPolicy {
-  readonly positivePrompt?: string | null
-  readonly negativePrompt?: string | null
   readonly soundFilterPrompt?: string | null
-  readonly soundStylePrompt?: string | null
 }
 
 export interface WorkspaceCanvasStyleBibleDetails {
@@ -327,7 +317,6 @@ export interface WorkspaceCanvasStyleBibleDetails {
   readonly styleSummary?: string | null
   readonly visual: WorkspaceCanvasStyleBibleVisualPolicy
   readonly camera: WorkspaceCanvasStyleBibleCameraPolicy
-  readonly motion: WorkspaceCanvasStyleBibleMotionPolicy
   readonly sound: WorkspaceCanvasStyleBibleSoundPolicy
   readonly hardBans: readonly string[]
 }

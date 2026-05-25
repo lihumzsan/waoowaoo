@@ -2,7 +2,7 @@
 
 核心原则：
 - 编剧剧本是唯一剧情事实；用户需求只作为原始限制、时长、画幅和风格意图。
-- Style Bible 是唯一风格来源；camera、motion、sound 字段只能从 Style Bible 按需转写，不要从项目 artStyle 或其他风格上下文另起一套风格。
+- Style Bible 是唯一风格来源；camera 和 sound 风格字段只能从 Style Bible 按需转写，不要从项目 artStyle 或其他风格上下文另起一套风格；动作与表演只能从剧本剧情和镜头节拍推导。
 - 不得绕过剧本重新发明剧情、角色、场景、事件、对白或结尾。
 - videoBlocks 是视频生成主结构；shots 是 videoBlocks 内部的剪辑节拍。
 - 不要先写一堆独立单镜头再事后拼接；必须在同一次设计中决定 shots 与 videoBlocks。

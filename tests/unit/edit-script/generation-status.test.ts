@@ -93,10 +93,7 @@ const mockStyleBible = {
   rawUserStyle: '科幻短片',
   styleSummary: 'quiet realistic sci-fi',
   stylePolicy: {
-    rawUserStyle: '科幻短片',
-    styleSummary: 'quiet realistic sci-fi',
     visual: {
-      positivePrompt: '冷峻科幻视觉，低对比度，干净未来质感，轻微光晕，35mm 镜头。',
       negativePrompt: '不要字幕，不要水印，不要廉价塑料科幻感。',
       imageFilterPrompt: 'low contrast, clean futuristic texture, subtle bloom, 35mm lens',
       lightingPrompt: 'cold practical lights and restrained bloom',
@@ -105,20 +102,12 @@ const mockStyleBible = {
       compositionPrompt: 'minimal corridor composition with negative space',
     },
     camera: {
-      rhythmPrompt: 'slow push-in',
       movementPrompt: 'slow controlled camera movement',
       lensAndDepthPrompt: '35mm lens with readable corridor depth',
-      editingPacingPrompt: 'restrained pacing',
-    },
-    motion: {
-      subjectMotionPrompt: 'slow continuous motion',
-      actingPrompt: 'restrained micro acting',
+      videoRhythmPrompt: 'slow push-in, restrained pacing',
     },
     sound: {
-      positivePrompt: 'room tone and electrical hum',
-      negativePrompt: 'no BGM',
       soundFilterPrompt: 'clean modern sci-fi sound, wide-band clarity, low mechanical hum, restrained spatial reverb',
-      soundStylePrompt: 'room tone and electrical hum',
     },
     hardBans: ['no subtitles'],
   },

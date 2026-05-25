@@ -127,10 +127,7 @@ function createStyleBible(): Record<string, unknown> {
     rawUserStyle: '禅修短片',
     styleSummary: '低饱和自然光禅意电影质感。',
     stylePolicy: {
-      rawUserStyle: '禅修短片',
-      styleSummary: '低饱和自然光禅意电影质感。',
       visual: {
-        positivePrompt: '柔和自然光，低对比度，淡雅胶片质感。',
         negativePrompt: '避免商业广告感，避免高反差大片感。',
         imageFilterPrompt: '清澈空气感，35mm 镜头，克制高光。',
         lightingPrompt: '柔和自然光。',
@@ -139,20 +136,12 @@ function createStyleBible(): Record<string, unknown> {
         compositionPrompt: '留白构图，稳定观察。',
       },
       camera: {
-        rhythmPrompt: '缓慢呼吸感节奏。',
         movementPrompt: '避免炫技运镜。',
         lensAndDepthPrompt: '35mm，自然景深。',
-        editingPacingPrompt: '克制剪辑。',
-      },
-      motion: {
-        subjectMotionPrompt: '主体动作缓慢自然。',
-        actingPrompt: '内敛表演。',
+        videoRhythmPrompt: '缓慢呼吸感节奏，克制剪辑。',
       },
       sound: {
-        positivePrompt: '安静环境声。',
-        negativePrompt: '避免夸张配乐。',
         soundFilterPrompt: '清澈低噪。',
-        soundStylePrompt: '自然空间声。',
       },
       hardBans: ['商业广告感', '高反差大片感', '炫技运镜'],
     },

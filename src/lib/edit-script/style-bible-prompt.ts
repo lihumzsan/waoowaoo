@@ -99,81 +99,59 @@ export async function resolveEditScriptStyleBibleForStoryboardTask(input: {
   })
 }
 
-function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale): string[] {
+function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale, usage: StyleBiblePromptUsage): string[] {
   const visual = styleBible.stylePolicy.visual
   if (locale === 'en') {
-    return [
-      `Style summary: ${styleBible.styleSummary}`,
-      `Positive style: ${visual.positivePrompt}`,
+    const base = [
       `Image filter: ${visual.imageFilterPrompt}`,
       `Lighting: ${visual.lightingPrompt}`,
       `Color: ${visual.colorPrompt}`,
-      `Texture: ${visual.texturePrompt}`,
-      `Composition: ${visual.compositionPrompt}`,
+      usage === 'assetImage' ? `Texture: ${visual.texturePrompt}` : null,
+      usage === 'video' ? null : `Composition: ${visual.compositionPrompt}`,
       `Negative constraints: ${visual.negativePrompt}`,
       `Hard bans: ${styleBible.stylePolicy.hardBans.join('; ')}`,
     ]
+    return base.filter((line): line is string => typeof line === 'string')
   }
-  return [
-    `风格摘要：${styleBible.styleSummary}`,
-    `正向风格：${visual.positivePrompt}`,
+  const base = [
     `画面滤镜：${visual.imageFilterPrompt}`,
     `光线：${visual.lightingPrompt}`,
     `色彩：${visual.colorPrompt}`,
-    `质感：${visual.texturePrompt}`,
-    `构图：${visual.compositionPrompt}`,
+    usage === 'assetImage' ? `质感：${visual.texturePrompt}` : null,
+    usage === 'video' ? null : `构图：${visual.compositionPrompt}`,
     `负向约束：${visual.negativePrompt}`,
     `硬禁用项：${styleBible.stylePolicy.hardBans.join('；')}`,
   ]
+  return base.filter((line): line is string => typeof line === 'string')
 }
 
-function renderCameraLines(styleBible: EditScriptStyleBible, locale: Locale): string[] {
+function renderCameraLines(styleBible: EditScriptStyleBible, locale: Locale, usage: StyleBiblePromptUsage): string[] {
   const camera = styleBible.stylePolicy.camera
   if (locale === 'en') {
-    return [
-      `Camera rhythm: ${camera.rhythmPrompt}`,
+    const base = [
       `Camera movement: ${camera.movementPrompt}`,
       `Lens and depth: ${camera.lensAndDepthPrompt}`,
-      `Editing pace: ${camera.editingPacingPrompt}`,
+      usage === 'video' ? `Video rhythm: ${camera.videoRhythmPrompt}` : null,
     ]
+    return base.filter((line): line is string => typeof line === 'string')
   }
-  return [
-    `镜头节奏：${camera.rhythmPrompt}`,
+  const base = [
     `运镜：${camera.movementPrompt}`,
     `镜头与景深：${camera.lensAndDepthPrompt}`,
-    `剪辑节奏：${camera.editingPacingPrompt}`,
   ]
-}
-
-function renderMotionLines(styleBible: EditScriptStyleBible, locale: Locale): string[] {
-  const motion = styleBible.stylePolicy.motion
-  if (locale === 'en') {
-    return [
-      `Subject motion: ${motion.subjectMotionPrompt}`,
-      `Acting: ${motion.actingPrompt}`,
-    ]
-  }
-  return [
-    `主体运动：${motion.subjectMotionPrompt}`,
-    `表演：${motion.actingPrompt}`,
-  ]
+  if (usage === 'video') base.push(`视频节奏：${camera.videoRhythmPrompt}`)
+  return base
 }
 
 function renderSoundLines(styleBible: EditScriptStyleBible, locale: Locale): string[] {
   const sound = styleBible.stylePolicy.sound
   if (locale === 'en') {
     return [
-      `Sound positive style: ${sound.positivePrompt}`,
       `Sound filter: ${sound.soundFilterPrompt}`,
-      `Sound style: ${sound.soundStylePrompt}`,
-      `Sound negative constraints: ${sound.negativePrompt}`,
     ]
   }
   return [
-    `声音正向风格：${sound.positivePrompt}`,
     `声音滤镜：${sound.soundFilterPrompt}`,
-    `声音风格：${sound.soundStylePrompt}`,
-    `声音负向约束：${sound.negativePrompt}`,
   ]
 }
 
@@ -190,19 +168,18 @@ export function renderStyleBiblePromptBlock(input: {
     if (locale === 'en') {
       if (usage === 'assetImage') return 'Usage: asset image generation. Apply these visual rules to the generated asset itself.'
       if (usage === 'storyboardImage') return 'Usage: storyboard image generation. Apply these visual and camera rules to the whole frame.'
-      return 'Usage: final video generation. Apply these visual, camera, motion, and sound rules to the generated video.'
+      return 'Usage: final video generation. Apply these visual, camera, and sound-filter rules to the generated video.'
     }
     if (usage === 'assetImage') return '用途：资产图生成。将这些视觉规则应用到资产本身。'
     if (usage === 'storyboardImage') return '用途：分镜图生成。将这些视觉与镜头规则应用到整张画面。'
-    return '用途：最终视频生成。将这些视觉、镜头、运动与声音规则应用到生成视频。'
+    return '用途：最终视频生成。将这些视觉、镜头与声音滤镜规则应用到生成视频。'
   })()
 
   const lines = [
     title,
     usageLine,
-    ...renderVisualLines(styleBible, locale),
-    ...(usage === 'assetImage' ? [] : renderCameraLines(styleBible, locale)),
-    ...(usage === 'video' ? renderMotionLines(styleBible, locale) : []),
+    ...renderVisualLines(styleBible, locale, usage),
+    ...(usage === 'assetImage' ? [] : renderCameraLines(styleBible, locale, usage)),
     ...(usage === 'video' ? renderSoundLines(styleBible, locale) : []),
   ]
 

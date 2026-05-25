@@ -79,10 +79,7 @@ function buildStyleBibleJson() {
     rawUserStyle: null,
     styleSummary: 'Cinematic realism.',
     stylePolicy: {
-      rawUserStyle: null,
-      styleSummary: 'Cinematic realism.',
       visual: {
-        positivePrompt: 'Cinematic realism with clear subject detail.',
         negativePrompt: 'No distortion or unreadable frames.',
         imageFilterPrompt: 'Clean cinematic image.',
         lightingPrompt: 'Soft contrast lighting.',
@@ -91,20 +88,12 @@ function buildStyleBibleJson() {
         compositionPrompt: 'Balanced composition.',
       },
       camera: {
-        rhythmPrompt: 'Steady visual rhythm.',
         movementPrompt: 'Smooth camera movement.',
         lensAndDepthPrompt: '35mm lens with moderate depth.',
-        editingPacingPrompt: 'Clear continuity pacing.',
-      },
-      motion: {
-        subjectMotionPrompt: 'Natural subject movement.',
-        actingPrompt: 'Grounded physical acting.',
+        videoRhythmPrompt: 'Steady visual rhythm with clear continuity pacing.',
       },
       sound: {
-        positivePrompt: 'Clear production sound.',
-        negativePrompt: 'No noisy artifacts.',
         soundFilterPrompt: 'Clean room tone.',
-        soundStylePrompt: 'Realistic sound design.',
       },
       hardBans: ['No subtitles.'],
     },

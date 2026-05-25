@@ -7,7 +7,7 @@
 - 用户只能调整相邻片段的边界；所有 shotNumbers 必须保持原始 shotNumber 顺序，不得重排。必须按 draft_video_blocks_json 内的顺序写提示词。
 - 不得改变剧本事实、主体身份、场景关系、动作因果、对白/旁白/画外音和音效事实。
 - 必须结合 asset_context_json 保持角色身份、场景身份、服装/外貌、空间锚点和视觉连续性。
-- 必须使用 style_bible_json 作为唯一风格来源，把其中的 visual、camera、motion、sound 和 hardBans 按需写入新 prompt，不得从旧 prompt 或项目风格另起一套风格。
+- 必须使用 style_bible_json 作为唯一风格来源，把其中的 visual、camera、sound 和 hardBans 按需写入新 prompt；动作与表演只根据剧本、剪辑结构表和资产上下文写，不得从旧 prompt 或项目风格另起一套风格。
 - 中文流程中 reason 与 prompt 必须整体使用中文自然语言；除角色名、专有名词、模型字段名和原文台词外，不要输出英文句子。
 
 reason 写作规则：

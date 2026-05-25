@@ -122,10 +122,7 @@ export const editScriptVideoPromptSchema = z.object({
 })
 
 export const editScriptStylePolicySchema = z.object({
-  rawUserStyle: z.string().trim().nullable(),
-  styleSummary: z.string().trim().min(1),
   visual: z.object({
-    positivePrompt: z.string().trim().min(1),
     negativePrompt: z.string().trim().min(1),
     imageFilterPrompt: z.string().trim().min(1),
     lightingPrompt: z.string().trim().min(1),
@@ -134,20 +131,12 @@ export const editScriptStylePolicySchema = z.object({
     compositionPrompt: z.string().trim().min(1),
   }),
   camera: z.object({
-    rhythmPrompt: z.string().trim().min(1),
     movementPrompt: z.string().trim().min(1),
     lensAndDepthPrompt: z.string().trim().min(1),
-    editingPacingPrompt: z.string().trim().min(1),
-  }),
-  motion: z.object({
-    subjectMotionPrompt: z.string().trim().min(1),
-    actingPrompt: z.string().trim().min(1),
+    videoRhythmPrompt: z.string().trim().min(1),
   }),
   sound: z.object({
-    positivePrompt: z.string().trim().min(1),
-    negativePrompt: z.string().trim().min(1),
     soundFilterPrompt: z.string().trim().min(1),
-    soundStylePrompt: z.string().trim().min(1),
   }),
   hardBans: z.array(z.string().trim().min(1)).min(1),
 })

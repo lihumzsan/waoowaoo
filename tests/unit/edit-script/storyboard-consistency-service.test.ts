@@ -8,10 +8,7 @@ function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
     rawUserStyle: 'temple lesson',
     styleSummary: 'Restrained naturalistic temple visual style.',
     stylePolicy: {
-      rawUserStyle: 'temple lesson',
-      styleSummary: 'Restrained naturalistic temple visual style.',
       visual: {
-        positivePrompt: 'Soft natural light, low contrast, quiet temple textures.',
         negativePrompt: 'No subtitles, no logos, no commercial gloss.',
         imageFilterPrompt: 'soft natural light, low contrast, quiet temple textures',
         lightingPrompt: 'Soft diffused daylight.',
@@ -20,20 +17,12 @@ function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
         compositionPrompt: 'Stable balanced composition.',
       },
       camera: {
-        rhythmPrompt: 'Slow rhythm.',
         movementPrompt: 'Locked camera and slow push-in.',
         lensAndDepthPrompt: '35mm lens, natural depth.',
-        editingPacingPrompt: 'Restrained pacing.',
-      },
-      motion: {
-        subjectMotionPrompt: 'Small slow gestures.',
-        actingPrompt: 'Contained acting.',
+        videoRhythmPrompt: 'Slow rhythm. Restrained pacing.',
       },
       sound: {
-        positivePrompt: 'Natural quiet room tone.',
-        negativePrompt: 'No continuous music.',
         soundFilterPrompt: 'soft natural low dynamic sound',
-        soundStylePrompt: 'Quiet ambience.',
       },
       hardBans: ['No subtitles.', 'No watermark.', 'No logo.'],
     },

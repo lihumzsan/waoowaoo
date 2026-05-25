@@ -6,7 +6,7 @@ Hard rules:
 - source_video_blocks_json is only source material. Do not mechanically concatenate the two old prompts; rewrite one complete continuous segment.
 - Do not alter screenplay facts, subject identity, scene relationships, shot order, or action causality.
 - Use asset_context_json to preserve character identity, location identity, wardrobe/appearance, spatial anchors, and visual continuity.
-- Use style_bible_json as the only style source, and apply its visual, camera, motion, sound, and hardBans fields as needed inside the new prompt. Do not create another style from old prompts or project style.
+- Use style_bible_json as the only style source, and apply its visual, camera, sound, and hardBans fields as needed inside the new prompt. Write action and acting only from the screenplay, edit structure table, and asset context. Do not create another style from old prompts or project style.
 
 reason rules:
 - Write one sentence explaining why the two segments can become one continuous generation segment.

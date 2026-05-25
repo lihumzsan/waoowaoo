@@ -1141,7 +1141,6 @@ function StyleBibleContent({
     return (
       <div className="space-y-2">
         {details.styleSummary ? renderSection(labels('styleSummary'), renderSummaryText(details.styleSummary, 3)) : null}
-        {details.visual.positivePrompt ? renderSection(labels('positivePrompt'), renderSummaryText(details.visual.positivePrompt, 3)) : null}
         {details.visual.imageFilterPrompt ? renderSection(labels('imageFilterPrompt'), renderSummaryText(details.visual.imageFilterPrompt, 3)) : null}
         {details.visual.negativePrompt ? renderSection(labels('negativePrompt'), renderSummaryText(details.visual.negativePrompt, 3)) : null}
       </div>
@@ -1153,7 +1152,6 @@ function StyleBibleContent({
       {renderTextSection(labels('styleSummary'), details.styleSummary)}
       {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
       {renderStylePolicySection(labels('visualPolicy'), [
-        { label: labels('positivePrompt'), value: details.visual.positivePrompt },
         { label: labels('negativePrompt'), value: details.visual.negativePrompt },
         { label: labels('imageFilterPrompt'), value: details.visual.imageFilterPrompt },
         { label: labels('lightingPrompt'), value: details.visual.lightingPrompt },
@@ -1162,20 +1160,12 @@ function StyleBibleContent({
         { label: labels('compositionPrompt'), value: details.visual.compositionPrompt },
       ])}
       {renderStylePolicySection(labels('cameraPolicy'), [
-        { label: labels('rhythmPrompt'), value: details.camera.rhythmPrompt },
         { label: labels('movementPrompt'), value: details.camera.movementPrompt },
         { label: labels('lensAndDepthPrompt'), value: details.camera.lensAndDepthPrompt },
-        { label: labels('editingPacingPrompt'), value: details.camera.editingPacingPrompt },
-      ])}
-      {renderStylePolicySection(labels('motionPolicy'), [
-        { label: labels('subjectMotionPrompt'), value: details.motion.subjectMotionPrompt },
-        { label: labels('actingPrompt'), value: details.motion.actingPrompt },
+        { label: labels('videoRhythmPrompt'), value: details.camera.videoRhythmPrompt },
       ])}
       {renderStylePolicySection(labels('soundPolicy'), [
-        { label: labels('positivePrompt'), value: details.sound.positivePrompt },
-        { label: labels('negativePrompt'), value: details.sound.negativePrompt },
         { label: labels('soundFilterPrompt'), value: details.sound.soundFilterPrompt },
-        { label: labels('soundStylePrompt'), value: details.sound.soundStylePrompt },
       ])}
       {renderChips(labels('hardBans'), details.hardBans)}
     </div>

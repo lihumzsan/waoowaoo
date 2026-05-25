@@ -69,10 +69,7 @@ function buildSourceSnapshot() {
       rawUserStyle: 'plain',
       styleSummary: 'plain',
       stylePolicy: {
-        rawUserStyle: 'plain',
-        styleSummary: 'plain',
         visual: {
-          positivePrompt: 'plain',
           negativePrompt: 'none',
           imageFilterPrompt: 'plain',
           lightingPrompt: 'plain',
@@ -81,20 +78,12 @@ function buildSourceSnapshot() {
           compositionPrompt: 'plain',
         },
         camera: {
-          rhythmPrompt: 'plain',
           movementPrompt: 'plain',
           lensAndDepthPrompt: 'plain',
-          editingPacingPrompt: 'plain',
-        },
-        motion: {
-          subjectMotionPrompt: 'plain',
-          actingPrompt: 'plain',
+          videoRhythmPrompt: 'plain',
         },
         sound: {
-          positivePrompt: 'plain',
-          negativePrompt: 'none',
           soundFilterPrompt: 'plain',
-          soundStylePrompt: 'plain',
         },
         hardBans: ['No labels.'],
       },
