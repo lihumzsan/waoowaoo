@@ -1,4 +1,8 @@
-import type { CoordinateReferenceMode } from '@/lib/coordinate-placement-test/types'
+import type {
+  CoordinateCameraFacing,
+  CoordinatePlacementAnalysis,
+  CoordinateReferenceMode,
+} from '@/lib/coordinate-placement-test/types'
 
 export function clampInteger(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
@@ -171,6 +175,79 @@ export async function buildCoordinateReference(input: {
       rows: input.rows,
     })
   }
+
+  return canvas.toDataURL('image/png')
+}
+
+function facingVector(facing: CoordinateCameraFacing): { readonly x: number; readonly y: number } {
+  switch (facing) {
+    case 'north': return { x: 0, y: -1 }
+    case 'northeast': return { x: 1, y: -1 }
+    case 'east': return { x: 1, y: 0 }
+    case 'southeast': return { x: 1, y: 1 }
+    case 'south': return { x: 0, y: 1 }
+    case 'southwest': return { x: -1, y: 1 }
+    case 'west': return { x: -1, y: 0 }
+    case 'northwest': return { x: -1, y: -1 }
+  }
+}
+
+export async function buildCameraMarkerReference(input: {
+  readonly sceneImage: string
+  readonly columns: number
+  readonly rows: number
+  readonly analysis: CoordinatePlacementAnalysis
+}): Promise<string> {
+  const image = await loadImage(input.sceneImage)
+  const maxImageWidth = 1280
+  const scale = Math.min(1, maxImageWidth / image.naturalWidth)
+  const imageWidth = Math.max(1, Math.round(image.naturalWidth * scale))
+  const imageHeight = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = imageWidth
+  canvas.height = imageHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('CANVAS_CONTEXT_UNAVAILABLE')
+
+  ctx.drawImage(image, 0, 0, imageWidth, imageHeight)
+
+  const cellWidth = imageWidth / input.columns
+  const cellHeight = imageHeight / input.rows
+  const cameraX = Math.round((input.analysis.camera.x - 0.5) * cellWidth)
+  const cameraY = Math.round((input.analysis.camera.y - 0.5) * cellHeight)
+  const vector = facingVector(input.analysis.cameraFacing)
+  const arrowLength = Math.max(48, Math.min(cellWidth, cellHeight) * 1.4)
+  const arrowEndX = cameraX + vector.x * arrowLength
+  const arrowEndY = cameraY + vector.y * arrowLength
+
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = '#f97316'
+  ctx.fillStyle = '#f97316'
+  ctx.lineWidth = 7
+  ctx.beginPath()
+  ctx.moveTo(cameraX, cameraY)
+  ctx.lineTo(arrowEndX, arrowEndY)
+  ctx.stroke()
+
+  const angle = Math.atan2(arrowEndY - cameraY, arrowEndX - cameraX)
+  const headLength = 20
+  ctx.beginPath()
+  ctx.moveTo(arrowEndX, arrowEndY)
+  ctx.lineTo(arrowEndX - headLength * Math.cos(angle - Math.PI / 6), arrowEndY - headLength * Math.sin(angle - Math.PI / 6))
+  ctx.lineTo(arrowEndX - headLength * Math.cos(angle + Math.PI / 6), arrowEndY - headLength * Math.sin(angle + Math.PI / 6))
+  ctx.closePath()
+  ctx.fill()
+
+  ctx.font = '900 42px "Apple Color Emoji", "Segoe UI Emoji", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = 8
+  ctx.strokeStyle = '#ffffff'
+  ctx.strokeText('📷', cameraX, cameraY)
+  ctx.fillText('📷', cameraX, cameraY)
+  ctx.restore()
 
   return canvas.toDataURL('image/png')
 }
