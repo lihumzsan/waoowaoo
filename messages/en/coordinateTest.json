@@ -18,8 +18,10 @@
   },
   "targetX": "Target X",
   "targetY": "Target Y",
+  "targetHint": "The target coordinate is written into the final prompt: X={x} means column {x} from left to right, Y={y} means row {y} from top to bottom, so the model receives coordinate ({x}, {y}).",
   "prompt": "Prompt",
   "promptPlaceholder": "Example: Place the person naturally in front of the sofa, preserving the scene lighting and perspective, without coordinate lines.",
+  "emptyUserPrompt": "No extra user prompt has been entered yet.",
   "generate": "Generate test image",
   "generating": "Generating",
   "rebuildPreview": "Rebuild coordinate map",
@@ -29,6 +31,9 @@
   "emptyPreview": "Upload a scene image to build the coordinate reference.",
   "emptyCharacter": "Upload a person image to preview it here.",
   "emptyResult": "The model output appears here after a test run.",
+  "finalPrompt": "Final prompt",
+  "clientPromptPreview": "Preview before generation",
+  "serverPromptReturned": "Actual server prompt",
   "model": "Model",
   "storageKey": "Storage key"
 }

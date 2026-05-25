@@ -18,8 +18,10 @@
   },
   "targetX": "目标 X",
   "targetY": "目标 Y",
+  "targetHint": "目标坐标会写入最终提示词：X={x} 表示从左到右第 {x} 列，Y={y} 表示从上到下第 {y} 行，发送给模型的是坐标 ({x}, {y})。",
   "prompt": "提示词",
   "promptPlaceholder": "例如：把人物自然放在沙发前方，保持原场景光照和透视，不要出现坐标线。",
+  "emptyUserPrompt": "用户尚未输入额外提示词。",
   "generate": "生成测试图",
   "generating": "生成中",
   "rebuildPreview": "重建坐标图",
@@ -29,6 +31,9 @@
   "emptyPreview": "上传场景图后会生成坐标参考图。",
   "emptyCharacter": "上传人物图后会显示在这里。",
   "emptyResult": "提交测试后显示模型输出。",
+  "finalPrompt": "最终提示词",
+  "clientPromptPreview": "生成前预览",
+  "serverPromptReturned": "服务端实际返回",
   "model": "模型",
   "storageKey": "存储 Key"
 }

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { buildCoordinatePlacementPrompt } from '@/lib/coordinate-placement-test/prompt'
 import type { CoordinateReferenceMode } from '@/lib/coordinate-placement-test/types'
+import type { Locale } from '@/i18n/routing'
 import { AppIcon } from '@/components/ui/icons'
 import { FileInput, NumberField, PreviewPanel } from './CoordinatePlacementPanels'
 import { buildCoordinateReference, clampInteger, readFileAsDataUrl } from './coordinate-reference'
@@ -66,6 +68,30 @@ export function CoordinatePlacementTestClient() {
     () => GRID_PRESETS.find((item) => item.id === gridPresetId) || GRID_PRESETS[1],
     [gridPresetId],
   )
+  const promptLocale: Locale = locale === 'en' ? 'en' : 'zh'
+  const finalPromptPreview = useMemo(() => buildCoordinatePlacementPrompt({
+    coordinateReferenceImage: 'data:image/png;base64,PREVIEW',
+    characterImage: 'data:image/png;base64,PREVIEW',
+    userPrompt: userPrompt.trim() || t('emptyUserPrompt'),
+    referenceMode,
+    grid: {
+      columns: gridPreset.columns,
+      rows: gridPreset.rows,
+    },
+    target: {
+      x: targetX,
+      y: targetY,
+    },
+  }, promptLocale), [
+    gridPreset.columns,
+    gridPreset.rows,
+    promptLocale,
+    referenceMode,
+    t,
+    targetX,
+    targetY,
+    userPrompt,
+  ])
 
   useEffect(() => {
     setTargetX((value) => clampInteger(value, 1, gridPreset.columns))
@@ -244,6 +270,9 @@ export function CoordinatePlacementTestClient() {
                 onChange={setTargetY}
               />
             </div>
+            <p className="rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-600">
+              {t('targetHint', { x: targetX, y: targetY })}
+            </p>
 
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-slate-800">{t('prompt')}</span>
@@ -297,6 +326,15 @@ export function CoordinatePlacementTestClient() {
               imageUrl={generated?.imageUrl || null}
               className="lg:col-span-2"
             />
+            <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm lg:col-span-2">
+              <div className="grid gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-slate-600">
+                  <span className="font-medium text-slate-800">{t('finalPrompt')}</span>
+                  {generated ? <span>{t('serverPromptReturned')}</span> : <span>{t('clientPromptPreview')}</span>}
+                </div>
+                <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated?.finalPrompt || finalPromptPreview}</pre>
+              </div>
+            </section>
             {generated ? (
               <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm lg:col-span-2">
                 <div className="grid gap-2">
@@ -304,7 +342,6 @@ export function CoordinatePlacementTestClient() {
                     <span>{t('model')}: {generated.modelKey}</span>
                     <span>{t('storageKey')}: {generated.storageKey}</span>
                   </div>
-                  <pre className="max-h-52 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated.finalPrompt}</pre>
                 </div>
               </section>
             ) : null}
