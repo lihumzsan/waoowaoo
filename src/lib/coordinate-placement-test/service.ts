@@ -1,3 +1,4 @@
+import sharp from 'sharp'
 import { ApiError } from '@/lib/api-errors'
 import { getUserModelConfig, resolveModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { generateImage } from '@/lib/ai-exec/engine'
@@ -17,6 +18,37 @@ const POLL_INTERVAL_MS = 3000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left)
+  let b = Math.abs(right)
+  while (b > 0) {
+    const next = a % b
+    a = b
+    b = next
+  }
+  return a || 1
+}
+
+function bufferFromDataUrl(source: string): Buffer {
+  const marker = ';base64,'
+  const markerIndex = source.indexOf(marker)
+  if (!source.startsWith('data:') || markerIndex === -1) {
+    throw new Error('COORDINATE_PLACEMENT_TEST_REFERENCE_DATA_URL_REQUIRED')
+  }
+  return Buffer.from(source.slice(markerIndex + marker.length), 'base64')
+}
+
+async function resolveImageAspectRatio(source: string): Promise<string> {
+  const metadata = await sharp(bufferFromDataUrl(source)).metadata()
+  const width = metadata.width
+  const height = metadata.height
+  if (!Number.isInteger(width) || !Number.isInteger(height) || !width || !height) {
+    throw new Error('COORDINATE_PLACEMENT_TEST_REFERENCE_DIMENSIONS_REQUIRED')
+  }
+  const divisor = greatestCommonDivisor(width, height)
+  return `${width / divisor}:${height / divisor}`
 }
 
 async function resolveGeneratedImageSource(result: Awaited<ReturnType<typeof generateImage>>, userId: string): Promise<string> {
@@ -86,10 +118,14 @@ export async function runCoordinatePlacementTest(input: {
     modelKey: editModel,
     capabilityDefaults: userConfig.capabilityDefaults,
   })
+  const coordinateReferenceImage = referenceImages[0]
+  if (!coordinateReferenceImage) throw new Error('COORDINATE_PLACEMENT_TEST_COORDINATE_REFERENCE_REQUIRED')
+  const aspectRatio = await resolveImageAspectRatio(coordinateReferenceImage)
   const finalPrompt = buildCoordinatePlacementPrompt(input.request, input.locale)
   const generated = await generateImage(input.userId, editModel, finalPrompt, {
     referenceImages,
     ...capabilityOptions,
+    aspectRatio,
   })
   const source = await resolveGeneratedImageSource(generated, input.userId)
   const storageKey = await processMediaResult({
