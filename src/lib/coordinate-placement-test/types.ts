@@ -13,6 +13,13 @@ export const coordinateCameraFacingSchema = z.enum([
   'northwest',
 ])
 
+export const coordinateFinalPromptVariantSchema = z.enum([
+  'camera_ray_cast',
+  'reconstruct_3d',
+  'director_blocking',
+  'strict_not_map',
+])
+
 export const coordinateGridSchema = z.object({
   columns: z.number().int().min(2).max(64),
   rows: z.number().int().min(2).max(64),
@@ -50,6 +57,7 @@ export const coordinatePlacementGenerateRequestSchema = z.object({
   characterImage: z.string().trim().min(1),
   userPrompt: z.string().trim().min(1).max(4000),
   imageModelKey: z.string().trim().min(1),
+  promptVariant: coordinateFinalPromptVariantSchema.default('camera_ray_cast'),
   grid: coordinateGridSchema,
   analysis: coordinatePlacementAnalysisSchema,
 }).superRefine((value, ctx) => {
@@ -85,6 +93,7 @@ export const coordinatePlacementGenerateRequestSchema = z.object({
 
 export type CoordinateReferenceMode = z.infer<typeof coordinateReferenceModeSchema>
 export type CoordinateCameraFacing = z.infer<typeof coordinateCameraFacingSchema>
+export type CoordinateFinalPromptVariant = z.infer<typeof coordinateFinalPromptVariantSchema>
 export type CoordinateGrid = z.infer<typeof coordinateGridSchema>
 export type CoordinatePlacementAnalysis = z.infer<typeof coordinatePlacementAnalysisSchema>
 export type CoordinatePlacementAnalyzeRequest = z.infer<typeof coordinatePlacementAnalyzeRequestSchema>
@@ -117,5 +126,6 @@ export interface CoordinatePlacementTestResult {
   readonly imageUrl: string
   readonly storageKey: string
   readonly modelKey: string
+  readonly promptVariant: CoordinateFinalPromptVariant
   readonly finalPrompt: string
 }

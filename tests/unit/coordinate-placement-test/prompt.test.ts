@@ -50,6 +50,7 @@ describe('coordinate placement test prompt', () => {
       characterImage: 'data:image/png;base64,BBBB',
       userPrompt: '把人物放在桌子旁边。',
       imageModelKey: 'image-model-1',
+      promptVariant: 'camera_ray_cast',
       grid: { columns: 16, rows: 9 },
       analysis: {
         person: { x: 7, y: 4 },
@@ -61,13 +62,38 @@ describe('coordinate placement test prompt', () => {
 
     const prompt = buildCoordinateCameraGenerationPrompt(parsed, 'zh')
 
-    expect(prompt).toContain('📷 图标表示摄影机位置')
-    expect(prompt).toContain('参考图 2 作为三视图场景参考')
-    expect(prompt).toContain('使用参考图 3 作为要放入场景的人物参考')
-    expect(prompt).toContain('人物目标位置是网格坐标 (7, 4)')
-    expect(prompt).toContain('摄影机位置是网格坐标 (3, 8)，镜头朝向 north')
+    expect(prompt).toContain('它不是最终画面背景')
+    expect(prompt).toContain('参考图 2 是三视图场景参考')
+    expect(prompt).toContain('参考图 3 是人物外观参考')
+    expect(prompt).toContain('人物目标位置：网格坐标 (7, 4)')
+    expect(prompt).toContain('摄影机位置：网格坐标 (3, 8)，镜头朝向 north')
+    expect(prompt).toContain('最终画面必须像真实摄影机从该位置拍摄出来')
     expect(prompt).toContain('输出图中不得出现摄影机图标、箭头、网格线')
     expect(prompt).toContain('把人物放在桌子旁边。')
+  })
+
+  it('builds a strict no-map final prompt variant', () => {
+    const parsed = coordinatePlacementGenerateRequestSchema.parse({
+      cameraReferenceImage: 'data:image/png;base64,AAAA',
+      threeViewReferenceImage: 'data:image/png;base64,CCCC',
+      characterImage: 'data:image/png;base64,BBBB',
+      userPrompt: 'Place the person in the room.',
+      imageModelKey: 'image-model-1',
+      promptVariant: 'strict_not_map',
+      grid: { columns: 16, rows: 9 },
+      analysis: {
+        person: { x: 7, y: 4 },
+        camera: { x: 3, y: 8 },
+        cameraFacing: 'north',
+        shotIntent: 'Door view.',
+      },
+    })
+
+    const prompt = buildCoordinateCameraGenerationPrompt(parsed, 'en')
+
+    expect(prompt).toContain('Hard constraint')
+    expect(prompt).toContain('do not output a top-down view')
+    expect(prompt).toContain('ground-level or eye-level perspective')
   })
 
   it('rejects camera coordinates outside the selected grid', () => {
@@ -77,6 +103,7 @@ describe('coordinate placement test prompt', () => {
       characterImage: 'data:image/png;base64,BBBB',
       userPrompt: 'Place the person near the table.',
       imageModelKey: 'image-model-1',
+      promptVariant: 'camera_ray_cast',
       grid: { columns: 12, rows: 8 },
       analysis: {
         person: { x: 7, y: 4 },

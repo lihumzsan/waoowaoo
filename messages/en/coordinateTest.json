@@ -34,6 +34,9 @@
   "analyzing": "Analyzing",
   "generate": "Generate test image",
   "generating": "Generating",
+  "generateAllVariants": "Generate all prompt variants",
+  "generatingAll": "Generating all",
+  "generateThisVariant": "Generate this prompt",
   "rebuildPreview": "Rebuild coordinate map",
   "floorPlanPreview": "2D floor plan",
   "threeViewPreview": "Three-view reference",
@@ -56,6 +59,18 @@
   "clientPromptPreview": "Preview before generation",
   "serverPromptReturned": "Actual server prompt",
   "analysisRequiredForImagePrompt": "A valid coordinate analysis JSON is required before previewing the final image prompt.",
+  "promptVariants": {
+    "camera_ray_cast": "Sightline raycast",
+    "reconstruct_3d": "Reconstruct 3D first",
+    "director_blocking": "Director blocking",
+    "strict_not_map": "Hard no-map constraint"
+  },
+  "promptVariantDescriptions": {
+    "camera_ray_cast": "Treat the 2D image as an architectural plan and raycast from the camera cell along the arrow.",
+    "reconstruct_3d": "Reconstruct the 3D scene from the 2D layout and three-view sheet before rendering.",
+    "director_blocking": "Use the coordinates as film blocking: person position, camera position, and lens direction.",
+    "strict_not_map": "Strongly forbids top-down maps or floor plans and requires a ground/eye-level perspective."
+  },
   "model": "Model",
   "floorPlanStorageKey": "2D storage key",
   "threeViewStorageKey": "Three-view storage key",

@@ -93,6 +93,7 @@ function buildGenerateRequest(): CoordinatePlacementGenerateRequest {
     characterImage: 'data:image/png;base64,CHARACTER',
     userPrompt: '把人物放在目标位置。',
     imageModelKey: 'image-model-1',
+    promptVariant: 'strict_not_map',
     grid: { columns: 16, rows: 9 },
     analysis: {
       person: { x: 7, y: 4 },
@@ -195,7 +196,7 @@ describe('coordinate placement test service', () => {
     expect(engineMock.generateImage).toHaveBeenCalledWith(
       'user-1',
       'image-model-1',
-      expect.stringContaining('📷 图标表示摄影机位置'),
+      expect.stringContaining('不要输出 top-down view'),
       expect.objectContaining({
         referenceImages: [cameraReference, threeViewReference, characterReference],
         resolution: '1K',

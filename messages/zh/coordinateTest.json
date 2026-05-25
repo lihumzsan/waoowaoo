@@ -34,6 +34,9 @@
   "analyzing": "解析中",
   "generate": "生成测试图",
   "generating": "生成中",
+  "generateAllVariants": "一键生成全部提示词",
+  "generatingAll": "批量生成中",
+  "generateThisVariant": "生成这个提示词",
   "rebuildPreview": "重建坐标图",
   "floorPlanPreview": "2D 平面图",
   "threeViewPreview": "三视图参考图",
@@ -56,6 +59,18 @@
   "clientPromptPreview": "生成前预览",
   "serverPromptReturned": "服务端实际返回",
   "analysisRequiredForImagePrompt": "需要先得到有效的坐标解析 JSON，才能预览最终图像提示词。",
+  "promptVariants": {
+    "camera_ray_cast": "视线投射",
+    "reconstruct_3d": "先重建 3D",
+    "director_blocking": "导演调度",
+    "strict_not_map": "强禁平面图"
+  },
+  "promptVariantDescriptions": {
+    "camera_ray_cast": "把 2D 图当建筑平面图，从摄影机格子沿箭头方向投射视线。",
+    "reconstruct_3d": "先用 2D 布局和三视图在脑中重建 3D 场景，再从机位渲染。",
+    "director_blocking": "把坐标当电影分镜调度，强调人物位置、摄影机位置和镜头方向。",
+    "strict_not_map": "强烈禁止输出俯视图、地图、平面图，要求地面或人眼高度透视。"
+  },
   "model": "模型",
   "floorPlanStorageKey": "2D 存储 Key",
   "threeViewStorageKey": "三视图存储 Key",

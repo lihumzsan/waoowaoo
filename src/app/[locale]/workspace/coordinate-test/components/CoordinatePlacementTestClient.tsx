@@ -10,6 +10,7 @@ import {
 import {
   coordinatePlacementAnalysisSchema,
   type CoordinatePlacementAnalysis,
+  type CoordinateFinalPromptVariant,
   type CoordinateReferenceMode,
 } from '@/lib/coordinate-placement-test/types'
 import type { Locale } from '@/i18n/routing'
@@ -56,6 +57,7 @@ interface GeneratedResponse {
   readonly imageUrl: string
   readonly storageKey: string
   readonly modelKey: string
+  readonly promptVariant: CoordinateFinalPromptVariant
   readonly finalPrompt: string
 }
 
@@ -68,6 +70,13 @@ const GRID_PRESETS: readonly GridPreset[] = [
   { id: '12x8', columns: 12, rows: 8 },
   { id: '16x9', columns: 16, rows: 9 },
   { id: '24x14', columns: 24, rows: 14 },
+]
+
+const FINAL_PROMPT_VARIANTS: readonly CoordinateFinalPromptVariant[] = [
+  'camera_ray_cast',
+  'reconstruct_3d',
+  'director_blocking',
+  'strict_not_map',
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -103,6 +112,7 @@ function isGeneratedResponse(value: unknown): value is GeneratedResponse {
     && typeof value.imageUrl === 'string'
     && typeof value.storageKey === 'string'
     && typeof value.modelKey === 'string'
+    && FINAL_PROMPT_VARIANTS.includes(value.promptVariant as CoordinateFinalPromptVariant)
     && typeof value.finalPrompt === 'string'
 }
 
@@ -137,7 +147,8 @@ export function CoordinatePlacementTestClient() {
   const [analysisJson, setAnalysisJson] = useState('')
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null)
   const [referenceViewsResult, setReferenceViewsResult] = useState<ReferenceViewsResponse | null>(null)
-  const [generated, setGenerated] = useState<GeneratedResponse | null>(null)
+  const [generatedByVariant, setGeneratedByVariant] = useState<Partial<Record<CoordinateFinalPromptVariant, GeneratedResponse>>>({})
+  const [generatingVariants, setGeneratingVariants] = useState<readonly CoordinateFinalPromptVariant[]>([])
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [referenceViewsError, setReferenceViewsError] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
@@ -145,7 +156,6 @@ export function CoordinatePlacementTestClient() {
   const [isBuildingPreview, setIsBuildingPreview] = useState(false)
   const [isGeneratingReferenceViews, setIsGeneratingReferenceViews] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
 
   const gridPreset = useMemo(
     () => GRID_PRESETS.find((item) => item.id === gridPresetId) || GRID_PRESETS[1],
@@ -178,20 +188,21 @@ export function CoordinatePlacementTestClient() {
     userPrompt,
   ])
 
-  const imagePromptPreview = useMemo(() => {
-    if (!parsedAnalysis) return t('analysisRequiredForImagePrompt')
-    return buildCoordinateCameraGenerationPrompt({
+  const imagePromptPreviews = useMemo(() => {
+    if (!parsedAnalysis) return {}
+    return Object.fromEntries(FINAL_PROMPT_VARIANTS.map((variant) => [variant, buildCoordinateCameraGenerationPrompt({
       cameraReferenceImage: 'data:image/png;base64,PREVIEW',
       threeViewReferenceImage: 'data:image/png;base64,PREVIEW',
       characterImage: 'data:image/png;base64,PREVIEW',
       userPrompt: userPrompt.trim() || t('emptyUserPrompt'),
       imageModelKey: imageModelKey || 'MODEL_NOT_SELECTED',
+      promptVariant: variant,
       grid: {
         columns: gridPreset.columns,
         rows: gridPreset.rows,
       },
       analysis: parsedAnalysis,
-    }, promptLocale)
+    }, promptLocale)])) as Partial<Record<CoordinateFinalPromptVariant, string>>
   }, [
     gridPreset.columns,
     gridPreset.rows,
@@ -277,12 +288,13 @@ export function CoordinatePlacementTestClient() {
     }
     setAnalysisResult(null)
     setAnalysisJson('')
-    setGenerated(null)
+    setGeneratedByVariant({})
   }, [])
 
   const referenceViewsDisabled = !sceneImage || !userPrompt.trim() || !imageModelKey || isGeneratingReferenceViews
   const analyzeDisabled = !floorPlanImage || !coordinatePreview || !userPrompt.trim() || !llmModelKey || isAnalyzing
-  const generateDisabled = !cameraPreview || !threeViewImage || !characterImage || !parsedAnalysis || !userPrompt.trim() || !imageModelKey || isGenerating
+  const generateDisabled = !cameraPreview || !threeViewImage || !characterImage || !parsedAnalysis || !userPrompt.trim() || !imageModelKey
+  const isGeneratingAnyVariant = generatingVariants.length > 0
 
   const handleGenerateReferenceViews = useCallback(async () => {
     if (!sceneImage || !userPrompt.trim() || !imageModelKey) return
@@ -293,7 +305,7 @@ export function CoordinatePlacementTestClient() {
     setThreeViewImage(null)
     setAnalysisResult(null)
     setAnalysisJson('')
-    setGenerated(null)
+    setGeneratedByVariant({})
     try {
       const response = await fetch('/api/user/coordinate-placement-test/reference-views', {
         method: 'POST',
@@ -329,7 +341,7 @@ export function CoordinatePlacementTestClient() {
     setIsAnalyzing(true)
     setAnalysisError(null)
     setAnalysisResult(null)
-    setGenerated(null)
+    setGeneratedByVariant({})
     try {
       const response = await fetch('/api/user/coordinate-placement-test/analyze', {
         method: 'POST',
@@ -366,12 +378,11 @@ export function CoordinatePlacementTestClient() {
     userPrompt,
   ])
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (promptVariant: CoordinateFinalPromptVariant) => {
     if (!cameraPreview || !threeViewImage || !characterImage || !parsedAnalysis || !userPrompt.trim() || !imageModelKey) return
     const threeViewImageDataUrl = threeViewImage.dataUrl
-    setIsGenerating(true)
+    setGeneratingVariants((current) => current.includes(promptVariant) ? current : [...current, promptVariant])
     setGenerateError(null)
-    setGenerated(null)
     try {
       const response = await fetch('/api/user/coordinate-placement-test/generate', {
         method: 'POST',
@@ -383,6 +394,7 @@ export function CoordinatePlacementTestClient() {
           userPrompt: userPrompt.trim(),
           locale,
           imageModelKey,
+          promptVariant,
           grid: {
             columns: gridPreset.columns,
             rows: gridPreset.rows,
@@ -393,11 +405,11 @@ export function CoordinatePlacementTestClient() {
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok) throw new Error(readErrorMessage(payload, response.statusText))
       if (!isGeneratedResponse(payload)) throw new Error('INVALID_GENERATE_RESPONSE')
-      setGenerated(payload)
+      setGeneratedByVariant((current) => ({ ...current, [promptVariant]: payload }))
     } catch (error) {
       setGenerateError(error instanceof Error ? error.message : String(error))
     } finally {
-      setIsGenerating(false)
+      setGeneratingVariants((current) => current.filter((variant) => variant !== promptVariant))
     }
   }, [
     cameraPreview,
@@ -410,6 +422,12 @@ export function CoordinatePlacementTestClient() {
     threeViewImage,
     userPrompt,
   ])
+
+  const handleGenerateAll = useCallback(async () => {
+    for (const variant of FINAL_PROMPT_VARIANTS) {
+      await handleGenerate(variant)
+    }
+  }, [handleGenerate])
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -532,12 +550,12 @@ export function CoordinatePlacementTestClient() {
 
             <button
               type="button"
-              disabled={generateDisabled}
+              disabled={generateDisabled || isGeneratingAnyVariant}
               className="flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-              onClick={() => void handleGenerate()}
+              onClick={() => void handleGenerateAll()}
             >
-              {isGenerating ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : <AppIcon name="sparklesAlt" className="h-4 w-4" />}
-              {isGenerating ? t('generating') : t('generate')}
+              {isGeneratingAnyVariant ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : <AppIcon name="sparklesAlt" className="h-4 w-4" />}
+              {isGeneratingAnyVariant ? t('generatingAll') : t('generateAllVariants')}
             </button>
 
             <button
@@ -584,12 +602,15 @@ export function CoordinatePlacementTestClient() {
               empty={t('emptyCharacter')}
               imageUrl={characterImage?.dataUrl || null}
             />
-            <PreviewPanel
-              title={t('result')}
-              loading={isGenerating}
-              empty={t('emptyResult')}
-              imageUrl={generated?.imageUrl || null}
-            />
+            {FINAL_PROMPT_VARIANTS.map((variant) => (
+              <PreviewPanel
+                key={variant}
+                title={t(`promptVariants.${variant}`)}
+                loading={generatingVariants.includes(variant)}
+                empty={t('emptyResult')}
+                imageUrl={generatedByVariant[variant]?.imageUrl || null}
+              />
+            ))}
 
             {referenceViewsResult ? (
               <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm lg:col-span-2">
@@ -633,23 +654,50 @@ export function CoordinatePlacementTestClient() {
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm lg:col-span-2">
-              <div className="grid gap-2">
+              <div className="grid gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-slate-600">
                   <span className="font-medium text-slate-800">{t('finalPrompt')}</span>
-                  <span>{generated ? t('serverPromptReturned') : t('clientPromptPreview')}</span>
+                  <button
+                    type="button"
+                    disabled={generateDisabled || isGeneratingAnyVariant}
+                    className="rounded-md bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    onClick={() => void handleGenerateAll()}
+                  >
+                    {isGeneratingAnyVariant ? t('generatingAll') : t('generateAllVariants')}
+                  </button>
                 </div>
-                <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated?.finalPrompt || imagePromptPreview}</pre>
+                {!parsedAnalysis ? <p className="text-sm text-slate-500">{t('analysisRequiredForImagePrompt')}</p> : null}
+                {FINAL_PROMPT_VARIANTS.map((variant) => {
+                  const generated = generatedByVariant[variant]
+                  const isGeneratingVariant = generatingVariants.includes(variant)
+                  return (
+                    <div key={variant} className="grid gap-2 rounded-md border border-slate-200 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900">{t(`promptVariants.${variant}`)}</h3>
+                          <p className="text-xs text-slate-500">{t(`promptVariantDescriptions.${variant}`)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={generateDisabled || isGeneratingVariant}
+                          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300"
+                          onClick={() => void handleGenerate(variant)}
+                        >
+                          {isGeneratingVariant ? t('generating') : t('generateThisVariant')}
+                        </button>
+                      </div>
+                      <pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">{generated?.finalPrompt || imagePromptPreviews[variant] || t('analysisRequiredForImagePrompt')}</pre>
+                      {generated ? (
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+                          <span>{t('model')}: {generated.modelKey}</span>
+                          <span>{t('storageKey')}: {generated.storageKey}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
               </div>
             </section>
-
-            {generated ? (
-              <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm lg:col-span-2">
-                <div className="flex flex-wrap gap-3 text-slate-600">
-                  <span>{t('model')}: {generated.modelKey}</span>
-                  <span>{t('storageKey')}: {generated.storageKey}</span>
-                </div>
-              </section>
-            ) : null}
           </div>
         </section>
       </div>

@@ -92,31 +92,79 @@ export function buildCoordinateAnalysisPrompt(input: CoordinatePlacementAnalyzeR
 export function buildCoordinateCameraGenerationPrompt(input: CoordinatePlacementGenerateRequest, locale: Locale): string {
   const analysis = input.analysis
   if (locale === 'zh') {
-    return [
-      '使用参考图 1 作为摄影机机位参考图。参考图 1 是无网格的 2D 平面图，上面的 📷 图标表示摄影机位置，箭头表示摄影机镜头朝向。',
-      '使用参考图 2 作为三视图场景参考。参考图 2 包含同一场景的正视图、侧视图、背视图或等价前/侧/后空间外观，用于理解墙面高度、门窗、家具立面和场景风格。',
-      '使用参考图 3 作为要放入场景的人物参考，尽量保持人物外观一致。',
-      `人物目标位置是网格坐标 (${analysis.person.x}, ${analysis.person.y})。`,
-      `摄影机位置是网格坐标 (${analysis.camera.x}, ${analysis.camera.y})，镜头朝向 ${analysis.cameraFacing}。`,
+    const shared = [
+      '参考图 1 是摄影机机位示意图，只用于读取空间布局、摄影机位置和镜头朝向。它不是最终画面背景，绝对不要把这张 2D 平面图直接画进输出。',
+      '参考图 2 是三视图场景参考，用于理解墙面高度、门窗、家具立面、材质、光照和空间风格。',
+      '参考图 3 是人物外观参考，尽量保持人物外观一致。',
+      `人物目标位置：网格坐标 (${analysis.person.x}, ${analysis.person.y})。`,
+      `摄影机位置：网格坐标 (${analysis.camera.x}, ${analysis.camera.y})，镜头朝向 ${analysis.cameraFacing}。`,
       `镜头意图：${analysis.shotIntent}`,
-      '请根据摄影机机位和镜头朝向，输出一张自然的最终场景图。',
-      '输出图中不得出现摄影机图标、箭头、网格线、坐标标签、坐标轴、标记点、界面文字、字幕、水印或注释。',
-      '尽量保持原场景空间关系、光照和比例，让人物在目标位置看起来物理合理。',
+      '输出图中不得出现摄影机图标、箭头、网格线、坐标标签、坐标轴、俯视平面图、界面文字、字幕、水印或注释。',
+    ]
+    const variantLines: Record<CoordinatePlacementGenerateRequest['promptVariant'], readonly string[]> = {
+      camera_ray_cast: [
+        '把参考图 1 当作一张“建筑平面图”。请想象摄影机站在 📷 所在格子，从箭头方向沿视线向前看。',
+        '沿这条视线把 2D 平面关系转换为真实 3D 透视画面：近处物体更大，远处物体更小，墙面、地面、门窗要有真实透视。',
+        '最终画面必须像真实摄影机从该位置拍摄出来，而不是俯视图、地图、剖面图或平面图。',
+      ],
+      reconstruct_3d: [
+        '先在脑中根据参考图 1 的布局和参考图 2 的三视图重建一个完整 3D 场景。',
+        '重建完成后，删除所有图标和辅助线，只从摄影机位置与朝向渲染一张真实透视照片。',
+        '如果 2D 平面图和三视图冲突，以三视图的立面/高度/材质为准，以 2D 图的位置关系为准。',
+      ],
+      director_blocking: [
+        '请按电影导演的分镜调度执行：人物站在目标坐标，摄影机站在摄影机坐标，镜头朝向指定方向。',
+        '画面需要是正常电影镜头，可见地面延伸、墙面立起、空间纵深和人物所在位置。',
+        '参考图 1 只是一张场面调度图，不是美术背景，不要照抄它的俯视构图。',
+      ],
+      strict_not_map: [
+        '强约束：不要输出 top-down view、floor plan、map view、orthographic view、diagram、blueprint、layout drawing。',
+        '必须输出 ground-level 或 eye-level 的透视场景画面，从摄影机箭头方向看过去。',
+        '如果模型不确定空间细节，也必须保持摄影机视角，不允许退回到俯视平面图。',
+      ],
+    }
+    return [
+      ...shared,
+      ...variantLines[input.promptVariant],
       '用户补充提示词：',
       input.userPrompt,
     ].join('\n')
   }
 
-  return [
-    'Use reference image 1 as the camera placement reference. Reference image 1 is an ungridded 2D floor plan; the 📷 icon marks the camera position, and the arrow marks the camera facing direction.',
-    'Use reference image 2 as the three-view scene reference. It contains front, side, and rear views, or equivalent front/side/back spatial appearance references, to understand wall height, doors, windows, furniture elevations, and scene style.',
-    'Use reference image 3 as the exact character/person reference.',
-    `The person target position is grid coordinate (${analysis.person.x}, ${analysis.person.y}).`,
-    `The camera position is grid coordinate (${analysis.camera.x}, ${analysis.camera.y}), facing ${analysis.cameraFacing}.`,
+  const shared = [
+    'Reference image 1 is a camera blocking diagram only. Use it to read spatial layout, camera position, and facing direction. It is not the final image background; do not copy the 2D floor plan into the output.',
+    'Reference image 2 is the three-view scene reference for wall height, doors, windows, furniture elevations, materials, lighting, and spatial style.',
+    'Reference image 3 is the exact character/person appearance reference.',
+    `Person target position: grid coordinate (${analysis.person.x}, ${analysis.person.y}).`,
+    `Camera position: grid coordinate (${analysis.camera.x}, ${analysis.camera.y}), facing ${analysis.cameraFacing}.`,
     `Shot intent: ${analysis.shotIntent}`,
-    'Generate one natural final scene image from that camera position and facing direction.',
-    'Do not include the camera icon, arrows, grid lines, coordinate labels, axes, markers, UI text, subtitles, watermarks, or annotations in the output image.',
-    'Preserve the scene spatial relationship, lighting, and scale as much as possible while making the person physically plausible at the target position.',
+    'Do not include the camera icon, arrows, grid lines, coordinate labels, axes, top-down floor plan, UI text, subtitles, watermarks, or annotations in the output image.',
+  ]
+  const variantLines: Record<CoordinatePlacementGenerateRequest['promptVariant'], readonly string[]> = {
+    camera_ray_cast: [
+      'Treat reference image 1 as an architectural plan. Imagine the camera standing on the 📷 cell and looking along the arrow direction.',
+      'Convert the 2D plan into a true 3D perspective view along that sight line: near objects larger, far objects smaller, walls and floor with real perspective.',
+      'The final image must look photographed from that camera location, not like a top-down map, section, diagram, or floor plan.',
+    ],
+    reconstruct_3d: [
+      'First mentally reconstruct a complete 3D scene from reference image 1 layout and reference image 2 three-view sheet.',
+      'After reconstruction, remove all icons and guides, then render one realistic perspective image from the camera position and facing direction.',
+      'If the floor plan and three-view sheet conflict, use the three-view sheet for elevation/height/materials and the floor plan for spatial positions.',
+    ],
+    director_blocking: [
+      'Execute this as a film director blocking note: person at the target coordinate, camera at the camera coordinate, lens facing the specified direction.',
+      'The image should be a normal cinematic shot with visible floor depth, upright walls, spatial depth, and the person placed in the intended location.',
+      'Reference image 1 is only a blocking diagram, not an art background; do not mimic its top-down composition.',
+    ],
+    strict_not_map: [
+      'Hard constraint: do not output a top-down view, floor plan, map view, orthographic view, diagram, blueprint, or layout drawing.',
+      'You must output a ground-level or eye-level perspective scene from the camera arrow direction.',
+      'If spatial details are uncertain, still preserve the camera viewpoint; never fall back to a top-down floor plan.',
+    ],
+  }
+  return [
+    ...shared,
+    ...variantLines[input.promptVariant],
     'Additional user prompt:',
     input.userPrompt,
   ].join('\n')

@@ -323,6 +323,7 @@ export async function runCoordinatePlacementTest(input: {
     imageUrl: getSignedUrl(storageKey, 3600),
     storageKey,
     modelKey: input.request.imageModelKey,
+    promptVariant: input.request.promptVariant,
     finalPrompt,
   }
 }

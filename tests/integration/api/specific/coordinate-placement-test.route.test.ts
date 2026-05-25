@@ -35,6 +35,7 @@ const serviceMock = vi.hoisted(() => ({
     imageUrl: '/api/files/coordinate-placement-test.jpg',
     storageKey: 'coordinate-placement-test.jpg',
     modelKey: 'image-model-1',
+    promptVariant: 'strict_not_map',
     finalPrompt: 'final camera prompt',
   })),
 }))
@@ -77,6 +78,7 @@ function validGenerateBody() {
     characterImage: 'data:image/png;base64,BBBB',
     userPrompt: 'Put the person on the marked floor tile.',
     imageModelKey: 'image-model-1',
+    promptVariant: 'strict_not_map',
     grid: { columns: 16, rows: 9 },
     analysis: {
       person: { x: 7, y: 4 },
@@ -164,6 +166,7 @@ describe('coordinate placement test route', () => {
       imageUrl: '/api/files/coordinate-placement-test.jpg',
       storageKey: 'coordinate-placement-test.jpg',
       modelKey: 'image-model-1',
+      promptVariant: 'strict_not_map',
       finalPrompt: 'final camera prompt',
     })
     expect(serviceMock.runCoordinatePlacementTest).toHaveBeenCalledWith({
