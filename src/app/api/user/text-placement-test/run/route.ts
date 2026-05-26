@@ -3,7 +3,18 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { runTextPlacementTest } from '@/lib/text-placement-test/service'
-import { textPlacementTestRunRequestSchema } from '@/lib/text-placement-test/types'
+import { textPlacementTestRunRequestSchema, type TextPlacementTestProgressEvent } from '@/lib/text-placement-test/types'
+
+type TextPlacementTestStreamEvent =
+  | TextPlacementTestProgressEvent
+  | {
+      readonly type: 'error'
+      readonly message: string
+    }
+
+function formatTextPlacementEvent(event: TextPlacementTestStreamEvent): string {
+  return `event: text-placement-test\ndata: ${JSON.stringify(event)}\n\n`
+}
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
@@ -28,11 +39,54 @@ export const POST = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  const result = await runTextPlacementTest({
-    userId: authResult.session.user.id,
-    locale: resolveRequiredTaskLocale(request, body),
-    request: parsed.data,
+  const userId = authResult.session.user.id
+  const locale = resolveRequiredTaskLocale(request, body)
+  const encoder = new TextEncoder()
+  let closeStream: (() => void) | null = null
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false
+      const close = () => {
+        if (closed) return
+        closed = true
+        try {
+          controller.close()
+        } catch {}
+      }
+      closeStream = close
+      const send = (event: TextPlacementTestStreamEvent) => {
+        if (closed) return
+        controller.enqueue(encoder.encode(formatTextPlacementEvent(event)))
+      }
+
+      request.signal.addEventListener('abort', close)
+
+      void runTextPlacementTest({
+        userId,
+        locale,
+        request: parsed.data,
+        onProgress: send,
+      }).then(() => {
+        close()
+      }).catch((caught: unknown) => {
+        send({
+          type: 'error',
+          message: caught instanceof Error ? caught.message : String(caught),
+        })
+        close()
+      })
+    },
+    cancel() {
+      closeStream?.()
+    },
   })
 
-  return NextResponse.json(result)
+  return new NextResponse(stream as unknown as BodyInit, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 })

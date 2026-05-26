@@ -46,10 +46,39 @@ export const textPlacementTestRunRequestSchema = z.object({
   imageModelKey: z.string().trim().min(1),
 })
 
+export const textPlacementAssetKindSchema = z.enum(['scene', 'characterA', 'characterB'])
+
+export const textPlacementRetryAssetRequestSchema = z.object({
+  type: z.literal('asset'),
+  imageModelKey: z.string().trim().min(1),
+  asset: textPlacementAssetKindSchema,
+  prompt: z.string().trim().min(1).max(8000),
+})
+
+export const textPlacementRetryFinalImageRequestSchema = z.object({
+  type: z.literal('finalImage'),
+  storyPrompt: z.string().trim().min(1).max(4000),
+  imageModelKey: z.string().trim().min(1),
+  shot: textPlacementShotSchema,
+  referenceImages: z.tuple([
+    z.string().trim().min(1),
+    z.string().trim().min(1),
+    z.string().trim().min(1),
+  ]),
+})
+
+export const textPlacementRetryRequestSchema = z.discriminatedUnion('type', [
+  textPlacementRetryAssetRequestSchema,
+  textPlacementRetryFinalImageRequestSchema,
+])
+
 export type TextPlacementCharacterPlacement = z.infer<typeof textPlacementCharacterPlacementSchema>
 export type TextPlacementShot = z.infer<typeof textPlacementShotSchema>
 export type TextPlacementPlan = z.infer<typeof textPlacementPlanSchema>
 export type TextPlacementTestRunRequest = z.infer<typeof textPlacementTestRunRequestSchema>
+export type TextPlacementRetryAssetRequest = z.infer<typeof textPlacementRetryAssetRequestSchema>
+export type TextPlacementRetryFinalImageRequest = z.infer<typeof textPlacementRetryFinalImageRequestSchema>
+export type TextPlacementRetryRequest = z.infer<typeof textPlacementRetryRequestSchema>
 
 export interface TextPlacementFinalImageResult {
   readonly shotNumber: number
@@ -77,3 +106,37 @@ export interface TextPlacementTestRunResult {
   readonly characterBStorageKey: string
   readonly finalImages: readonly TextPlacementFinalImageResult[]
 }
+
+export type TextPlacementAssetKind = 'scene' | 'characterA' | 'characterB'
+
+export interface TextPlacementAssetResult {
+  readonly asset: TextPlacementAssetKind
+  readonly prompt: string
+  readonly imageUrl: string
+  readonly storageKey: string
+}
+
+export type TextPlacementTestProgressEvent =
+  | {
+      readonly type: 'placementPlan'
+      readonly placementPlan: TextPlacementPlan
+      readonly placementPrompt: string
+      readonly placementRawText: string
+    }
+  | {
+      readonly type: 'asset'
+      readonly asset: TextPlacementAssetKind
+      readonly prompt: string
+      readonly imageUrl: string
+      readonly storageKey: string
+    }
+  | {
+      readonly type: 'finalImage'
+      readonly image: TextPlacementFinalImageResult
+      readonly completedFinalImageCount: number
+      readonly totalFinalImageCount: number
+    }
+  | {
+      readonly type: 'complete'
+      readonly result: TextPlacementTestRunResult
+    }

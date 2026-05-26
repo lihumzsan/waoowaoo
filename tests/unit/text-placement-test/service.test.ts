@@ -118,11 +118,15 @@ describe('text placement test service', () => {
 
   it('generates scene, two character assets, and sequential final images from text placement planning', async () => {
     const { runTextPlacementTest } = await import('@/lib/text-placement-test/service')
+    const progressEvents: unknown[] = []
 
     const result = await runTextPlacementTest({
       userId: 'user-1',
       locale: 'en',
       request: buildRequest(),
+      onProgress: (event) => {
+        progressEvents.push(event)
+      },
     })
 
     expect(result.placementPlan).toEqual(placementPlan)
@@ -135,6 +139,14 @@ describe('text placement test service', () => {
       shotLabel: 'Separated by pillar',
       storageKey: 'text-placement-test-final-shot-1/stored.jpg',
     })
+    expect(progressEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'placementPlan' }),
+      expect.objectContaining({ type: 'asset', asset: 'scene' }),
+      expect.objectContaining({ type: 'asset', asset: 'characterA' }),
+      expect.objectContaining({ type: 'asset', asset: 'characterB' }),
+      expect.objectContaining({ type: 'finalImage', totalFinalImageCount: 5 }),
+      expect.objectContaining({ type: 'complete' }),
+    ]))
     expect(engineMock.chatCompletion).toHaveBeenCalledWith(
       'user-1',
       'llm-model-1',
@@ -220,5 +232,82 @@ describe('text placement test service', () => {
         field: 'llmModelKey',
       }),
     })
+  })
+
+  it('retries a single generated asset with the selected image model', async () => {
+    const { retryTextPlacementAsset } = await import('@/lib/text-placement-test/service')
+
+    const result = await retryTextPlacementAsset({
+      userId: 'user-1',
+      request: {
+        type: 'asset',
+        imageModelKey: 'image-model-1',
+        asset: 'characterA',
+        prompt: 'retry character A prompt',
+      },
+    })
+
+    expect(result).toEqual({
+      asset: 'characterA',
+      prompt: 'retry character A prompt',
+      imageUrl: 'https://signed.example/text-placement-test-character-a/stored.jpg',
+      storageKey: 'text-placement-test-character-a/stored.jpg',
+    })
+    expect(engineMock.generateImage).toHaveBeenCalledWith(
+      'user-1',
+      'image-model-1',
+      'retry character A prompt',
+      expect.objectContaining({ resolution: '1K', aspectRatio: '3:4' }),
+    )
+  })
+
+  it('retries one final shot using normalized scene and two character references', async () => {
+    const { retryTextPlacementFinalImage } = await import('@/lib/text-placement-test/service')
+
+    const result = await retryTextPlacementFinalImage({
+      userId: 'user-1',
+      locale: 'en',
+      request: {
+        type: 'finalImage',
+        storyPrompt: 'Two people meet in a concrete hall.',
+        imageModelKey: 'image-model-1',
+        shot: placementPlan.shots[0],
+        referenceImages: [
+          'https://signed.example/text-placement-test-scene/stored.jpg',
+          'https://signed.example/text-placement-test-character-a/stored.jpg',
+          'https://signed.example/text-placement-test-character-b/stored.jpg',
+        ],
+      },
+    })
+
+    expect(result).toMatchObject({
+      shotNumber: 1,
+      shotLabel: 'Separated by pillar',
+      storageKey: 'text-placement-test-final-shot-1/stored.jpg',
+    })
+    expect(outboundImageMock.normalizeReferenceImagesForGeneration).toHaveBeenCalledWith(
+      [
+        'https://signed.example/text-placement-test-scene/stored.jpg',
+        'https://signed.example/text-placement-test-character-a/stored.jpg',
+        'https://signed.example/text-placement-test-character-b/stored.jpg',
+      ],
+      expect.objectContaining({
+        context: { scope: 'text-placement-test.retry-final' },
+      }),
+    )
+    expect(engineMock.generateImage).toHaveBeenCalledWith(
+      'user-1',
+      'image-model-1',
+      expect.stringContaining('Current shot: shot 1, Separated by pillar'),
+      expect.objectContaining({
+        referenceImages: [
+          'https://normalized.example/scene.png',
+          'https://normalized.example/character-a.png',
+          'https://normalized.example/character-b.png',
+        ],
+        resolution: '1K',
+        aspectRatio: '16:9',
+      }),
+    )
   })
 })

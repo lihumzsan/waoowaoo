@@ -16,8 +16,13 @@ import {
 } from '@/lib/text-placement-test/prompt'
 import {
   textPlacementPlanSchema,
+  type TextPlacementAssetKind,
+  type TextPlacementAssetResult,
   type TextPlacementFinalImageResult,
+  type TextPlacementRetryAssetRequest,
+  type TextPlacementRetryFinalImageRequest,
   type TextPlacementShot,
+  type TextPlacementTestProgressEvent,
   type TextPlacementTestRunRequest,
   type TextPlacementTestRunResult,
 } from '@/lib/text-placement-test/types'
@@ -27,9 +32,30 @@ const IMAGE_ASPECT_RATIO = '16:9'
 const CHARACTER_ASPECT_RATIO = '3:4'
 const POLL_TIMEOUT_MS = 4 * 60 * 1000
 const POLL_INTERVAL_MS = 3000
+const TEXT_PLACEMENT_REFERENCE_IMAGE_COUNT = 3
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getAssetAspectRatio(asset: TextPlacementAssetKind): string {
+  return asset === 'scene' ? IMAGE_ASPECT_RATIO : CHARACTER_ASPECT_RATIO
+}
+
+function getAssetKeyPrefix(asset: TextPlacementAssetKind): string {
+  if (asset === 'scene') return 'text-placement-test-scene'
+  if (asset === 'characterA') return 'text-placement-test-character-a'
+  return 'text-placement-test-character-b'
+}
+
+function formatSettledErrors(input: {
+  readonly scope: string
+  readonly failures: readonly PromiseRejectedResult[]
+}): string {
+  const messages = input.failures
+    .map((failure) => failure.reason instanceof Error ? failure.reason.message : String(failure.reason))
+    .join(' | ')
+  return `${input.scope}:${input.failures.length}:${messages}`
 }
 
 async function assertUserSelectableModel(input: {
@@ -113,10 +139,12 @@ async function persistGeneratedImage(input: {
 async function generateAndPersistImageAsset(input: {
   readonly userId: string
   readonly imageModelKey: string
+  readonly asset: TextPlacementAssetKind
   readonly prompt: string
   readonly aspectRatio: string
   readonly keyPrefix: string
   readonly capabilityOptions: ReturnType<typeof resolveModelCapabilityGenerationOptions>
+  readonly onProgress?: (event: TextPlacementTestProgressEvent) => void | Promise<void>
 }): Promise<{
   readonly imageUrl: string
   readonly storageKey: string
@@ -126,10 +154,30 @@ async function generateAndPersistImageAsset(input: {
     aspectRatio: input.aspectRatio,
   })
   const source = await resolveGeneratedImageSource(generated, input.userId)
-  return persistGeneratedImage({
+  const image = await persistGeneratedImage({
     source,
     userId: input.userId,
     keyPrefix: input.keyPrefix,
+  })
+  await input.onProgress?.({
+    type: 'asset',
+    asset: input.asset,
+    prompt: input.prompt,
+    imageUrl: image.imageUrl,
+    storageKey: image.storageKey,
+  })
+  return image
+}
+
+async function getImageCapabilityOptions(input: {
+  readonly userId: string
+  readonly imageModelKey: string
+}): Promise<ReturnType<typeof resolveModelCapabilityGenerationOptions>> {
+  const userConfig = await getUserModelConfig(input.userId)
+  return resolveModelCapabilityGenerationOptions({
+    modelType: 'image',
+    modelKey: input.imageModelKey,
+    capabilityDefaults: userConfig.capabilityDefaults,
   })
 }
 
@@ -141,6 +189,9 @@ async function generateFinalShotImage(input: {
   readonly locale: Locale
   readonly referenceImages: readonly string[]
   readonly capabilityOptions: ReturnType<typeof resolveModelCapabilityGenerationOptions>
+  readonly onProgress?: (event: TextPlacementTestProgressEvent) => void | Promise<void>
+  readonly completedFinalImageCount: () => number
+  readonly totalFinalImageCount: number
 }): Promise<TextPlacementFinalImageResult> {
   const prompt = buildTextPlacementFinalPrompt({
     storyPrompt: input.storyPrompt,
@@ -159,19 +210,27 @@ async function generateFinalShotImage(input: {
     keyPrefix: `text-placement-test-final-shot-${input.shot.shotNumber}`,
   })
 
-  return {
+  const finalImage = {
     shotNumber: input.shot.shotNumber,
     shotLabel: input.shot.shotLabel,
     prompt,
     imageUrl: image.imageUrl,
     storageKey: image.storageKey,
   }
+  await input.onProgress?.({
+    type: 'finalImage',
+    image: finalImage,
+    completedFinalImageCount: input.completedFinalImageCount(),
+    totalFinalImageCount: input.totalFinalImageCount,
+  })
+  return finalImage
 }
 
 export async function runTextPlacementTest(input: {
   readonly userId: string
   readonly locale: Locale
   readonly request: TextPlacementTestRunRequest
+  readonly onProgress?: (event: TextPlacementTestProgressEvent) => void | Promise<void>
 }): Promise<TextPlacementTestRunResult> {
   await assertUserSelectableModel({
     userId: input.userId,
@@ -193,43 +252,67 @@ export async function runTextPlacementTest(input: {
   ], { temperature: 0.2 })
   const placementRawText = getCompletionContent(completion)
   const placementPlan = textPlacementPlanSchema.parse(safeParseJsonObject(placementRawText))
+  await input.onProgress?.({
+    type: 'placementPlan',
+    placementPlan,
+    placementPrompt,
+    placementRawText,
+  })
 
-  const userConfig = await getUserModelConfig(input.userId)
-  const capabilityOptions = resolveModelCapabilityGenerationOptions({
-    modelType: 'image',
-    modelKey: input.request.imageModelKey,
-    capabilityDefaults: userConfig.capabilityDefaults,
+  const capabilityOptions = await getImageCapabilityOptions({
+    userId: input.userId,
+    imageModelKey: input.request.imageModelKey,
   })
 
   const scenePrompt = buildTextPlacementScenePrompt(placementPlan, input.locale)
   const characterAPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'A')
   const characterBPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'B')
-  const [scene, characterA, characterB] = await Promise.all([
+  const assetResults = await Promise.allSettled([
     generateAndPersistImageAsset({
       userId: input.userId,
       imageModelKey: input.request.imageModelKey,
+      asset: 'scene',
       prompt: scenePrompt,
-      aspectRatio: IMAGE_ASPECT_RATIO,
-      keyPrefix: 'text-placement-test-scene',
+      aspectRatio: getAssetAspectRatio('scene'),
+      keyPrefix: getAssetKeyPrefix('scene'),
       capabilityOptions,
+      onProgress: input.onProgress,
     }),
     generateAndPersistImageAsset({
       userId: input.userId,
       imageModelKey: input.request.imageModelKey,
+      asset: 'characterA',
       prompt: characterAPrompt,
-      aspectRatio: CHARACTER_ASPECT_RATIO,
-      keyPrefix: 'text-placement-test-character-a',
+      aspectRatio: getAssetAspectRatio('characterA'),
+      keyPrefix: getAssetKeyPrefix('characterA'),
       capabilityOptions,
+      onProgress: input.onProgress,
     }),
     generateAndPersistImageAsset({
       userId: input.userId,
       imageModelKey: input.request.imageModelKey,
+      asset: 'characterB',
       prompt: characterBPrompt,
-      aspectRatio: CHARACTER_ASPECT_RATIO,
-      keyPrefix: 'text-placement-test-character-b',
+      aspectRatio: getAssetAspectRatio('characterB'),
+      keyPrefix: getAssetKeyPrefix('characterB'),
       capabilityOptions,
+      onProgress: input.onProgress,
     }),
   ])
+  const assetFailures = assetResults.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (assetFailures.length > 0) {
+    throw new Error(formatSettledErrors({
+      scope: 'TEXT_PLACEMENT_TEST_ASSETS_FAILED',
+      failures: assetFailures,
+    }))
+  }
+  const [sceneResult, characterAResult, characterBResult] = assetResults
+  if (sceneResult.status !== 'fulfilled' || characterAResult.status !== 'fulfilled' || characterBResult.status !== 'fulfilled') {
+    throw new Error('TEXT_PLACEMENT_TEST_ASSET_RESULT_INVALID')
+  }
+  const scene = sceneResult.value
+  const characterA = characterAResult.value
+  const characterB = characterBResult.value
 
   const normalizationIssues: OutboundImageNormalizationIssue[] = []
   const referenceImages = await normalizeReferenceImagesForGeneration([
@@ -243,10 +326,11 @@ export async function runTextPlacementTest(input: {
   readReferenceNormalizationResult({
     normalized: referenceImages,
     issues: normalizationIssues,
-    expectedCount: 3,
+    expectedCount: TEXT_PLACEMENT_REFERENCE_IMAGE_COUNT,
   })
 
-  const finalImages = await Promise.all(placementPlan.shots.map((shot) => generateFinalShotImage({
+  let completedFinalImageCount = 0
+  const finalImageResults = await Promise.allSettled(placementPlan.shots.map((shot) => generateFinalShotImage({
     userId: input.userId,
     imageModelKey: input.request.imageModelKey,
     storyPrompt: input.request.storyPrompt,
@@ -254,9 +338,28 @@ export async function runTextPlacementTest(input: {
     locale: input.locale,
     referenceImages,
     capabilityOptions,
+    onProgress: input.onProgress,
+    completedFinalImageCount: () => {
+      completedFinalImageCount += 1
+      return completedFinalImageCount
+    },
+    totalFinalImageCount: placementPlan.shots.length,
   })))
+  const finalImageFailures = finalImageResults.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (finalImageFailures.length > 0) {
+    throw new Error(formatSettledErrors({
+      scope: 'TEXT_PLACEMENT_TEST_FINAL_IMAGES_FAILED',
+      failures: finalImageFailures,
+    }))
+  }
+  const finalImages = finalImageResults.map((finalImageResult) => {
+    if (finalImageResult.status !== 'fulfilled') {
+      throw new Error('TEXT_PLACEMENT_TEST_FINAL_IMAGE_RESULT_INVALID')
+    }
+    return finalImageResult.value
+  })
 
-  return {
+  const result: TextPlacementTestRunResult = {
     success: true,
     llmModelKey: input.request.llmModelKey,
     imageModelKey: input.request.imageModelKey,
@@ -274,4 +377,76 @@ export async function runTextPlacementTest(input: {
     characterBStorageKey: characterB.storageKey,
     finalImages,
   }
+  await input.onProgress?.({
+    type: 'complete',
+    result,
+  })
+  return result
+}
+
+export async function retryTextPlacementAsset(input: {
+  readonly userId: string
+  readonly request: TextPlacementRetryAssetRequest
+}): Promise<TextPlacementAssetResult> {
+  await assertUserSelectableModel({
+    userId: input.userId,
+    type: 'image',
+    modelKey: input.request.imageModelKey,
+  })
+  const capabilityOptions = await getImageCapabilityOptions({
+    userId: input.userId,
+    imageModelKey: input.request.imageModelKey,
+  })
+  const image = await generateAndPersistImageAsset({
+    userId: input.userId,
+    imageModelKey: input.request.imageModelKey,
+    asset: input.request.asset,
+    prompt: input.request.prompt,
+    aspectRatio: getAssetAspectRatio(input.request.asset),
+    keyPrefix: getAssetKeyPrefix(input.request.asset),
+    capabilityOptions,
+  })
+  return {
+    asset: input.request.asset,
+    prompt: input.request.prompt,
+    imageUrl: image.imageUrl,
+    storageKey: image.storageKey,
+  }
+}
+
+export async function retryTextPlacementFinalImage(input: {
+  readonly userId: string
+  readonly locale: Locale
+  readonly request: TextPlacementRetryFinalImageRequest
+}): Promise<TextPlacementFinalImageResult> {
+  await assertUserSelectableModel({
+    userId: input.userId,
+    type: 'image',
+    modelKey: input.request.imageModelKey,
+  })
+  const capabilityOptions = await getImageCapabilityOptions({
+    userId: input.userId,
+    imageModelKey: input.request.imageModelKey,
+  })
+  const normalizationIssues: OutboundImageNormalizationIssue[] = []
+  const referenceImages = await normalizeReferenceImagesForGeneration([...input.request.referenceImages], {
+    onIssue: (issue) => normalizationIssues.push(issue),
+    context: { scope: 'text-placement-test.retry-final' },
+  })
+  readReferenceNormalizationResult({
+    normalized: referenceImages,
+    issues: normalizationIssues,
+    expectedCount: TEXT_PLACEMENT_REFERENCE_IMAGE_COUNT,
+  })
+  return generateFinalShotImage({
+    userId: input.userId,
+    imageModelKey: input.request.imageModelKey,
+    storyPrompt: input.request.storyPrompt,
+    shot: input.request.shot,
+    locale: input.locale,
+    referenceImages,
+    capabilityOptions,
+    completedFinalImageCount: () => 1,
+    totalFinalImageCount: 1,
+  })
 }

@@ -6,7 +6,9 @@ const authState = vi.hoisted(() => ({
 }))
 
 const serviceMock = vi.hoisted(() => ({
-  runTextPlacementTest: vi.fn(async () => {
+  runTextPlacementTest: vi.fn(async (input: {
+    readonly onProgress?: (event: unknown) => void | Promise<void>
+  }) => {
     const placementPlan = {
       sceneBrief: 'A concrete hall.',
       characterABrief: 'Character A in a black coat.',
@@ -42,7 +44,7 @@ const serviceMock = vi.hoisted(() => ({
         ],
       })),
     }
-    return {
+    const result = {
       success: true,
       llmModelKey: 'llm-model-1',
       imageModelKey: 'image-model-1',
@@ -75,6 +77,17 @@ const serviceMock = vi.hoisted(() => ({
         },
       ],
     }
+    await input.onProgress?.({
+      type: 'placementPlan',
+      placementPlan,
+      placementPrompt: 'placement prompt',
+      placementRawText: JSON.stringify(placementPlan),
+    })
+    await input.onProgress?.({
+      type: 'complete',
+      result,
+    })
+    return result
   }),
 }))
 
@@ -96,6 +109,25 @@ vi.mock('@/lib/api-auth', () => {
 vi.mock('@/lib/text-placement-test/service', () => serviceMock)
 
 import { POST } from '@/app/api/user/text-placement-test/run/route'
+
+function parseStreamEvents(streamText: string): readonly unknown[] {
+  return streamText
+    .split('\n\n')
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const data = block
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+        .join('\n')
+      return JSON.parse(data) as unknown
+    })
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
 
 function validBody() {
   return {
@@ -120,16 +152,27 @@ describe('text placement test route', () => {
     })
 
     const response = await POST(request, { params: Promise.resolve({}) })
-    const payload = await response.json()
+    const events = parseStreamEvents(await response.text())
+    const completeEvent = events.find((event) => isRecord(event) && event.type === 'complete')
+    const payload = isRecord(completeEvent) ? completeEvent.result : null
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('text/event-stream')
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'placementPlan' }),
+      expect.objectContaining({ type: 'complete' }),
+    ]))
+    expect(isRecord(payload)).toBe(true)
+    if (!isRecord(payload)) throw new Error('expected complete payload')
     expect(payload).toMatchObject({
       success: true,
       sceneImageUrl: '/api/files/scene.jpg',
       characterAImageUrl: '/api/files/character-a.jpg',
       characterBImageUrl: '/api/files/character-b.jpg',
     })
-    expect(payload.placementPlan.shots[0]).toMatchObject({
+    const placementPlan = payload.placementPlan
+    if (!isRecord(placementPlan) || !Array.isArray(placementPlan.shots)) throw new Error('expected placement plan shots')
+    expect(placementPlan.shots[0]).toMatchObject({
       characterAPlacement: expect.objectContaining({
         absoluteLocation: 'center-right of the hall',
         anchorObject: 'concrete pillar',
@@ -140,12 +183,13 @@ describe('text placement test route', () => {
       }),
       relationshipBetweenCharacters: 'character A and character B face each other across the pillar',
     })
-    expect(payload.finalImages).toHaveLength(2)
-    expect(serviceMock.runTextPlacementTest).toHaveBeenCalledWith({
+    expect(Array.isArray(payload.finalImages) ? payload.finalImages : []).toHaveLength(2)
+    expect(serviceMock.runTextPlacementTest).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       locale: 'zh',
       request: validBody(),
-    })
+      onProgress: expect.any(Function),
+    }))
   })
 
   it('POST /api/user/text-placement-test/run -> rejects invalid body before execution', async () => {
