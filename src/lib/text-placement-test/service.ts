@@ -110,6 +110,29 @@ async function persistGeneratedImage(input: {
   }
 }
 
+async function generateAndPersistImageAsset(input: {
+  readonly userId: string
+  readonly imageModelKey: string
+  readonly prompt: string
+  readonly aspectRatio: string
+  readonly keyPrefix: string
+  readonly capabilityOptions: ReturnType<typeof resolveModelCapabilityGenerationOptions>
+}): Promise<{
+  readonly imageUrl: string
+  readonly storageKey: string
+}> {
+  const generated = await generateImage(input.userId, input.imageModelKey, input.prompt, {
+    ...input.capabilityOptions,
+    aspectRatio: input.aspectRatio,
+  })
+  const source = await resolveGeneratedImageSource(generated, input.userId)
+  return persistGeneratedImage({
+    source,
+    userId: input.userId,
+    keyPrefix: input.keyPrefix,
+  })
+}
+
 async function generateFinalShotImage(input: {
   readonly userId: string
   readonly imageModelKey: string
@@ -179,40 +202,34 @@ export async function runTextPlacementTest(input: {
   })
 
   const scenePrompt = buildTextPlacementScenePrompt(placementPlan, input.locale)
-  const sceneGenerated = await generateImage(input.userId, input.request.imageModelKey, scenePrompt, {
-    ...capabilityOptions,
-    aspectRatio: IMAGE_ASPECT_RATIO,
-  })
-  const sceneSource = await resolveGeneratedImageSource(sceneGenerated, input.userId)
-  const scene = await persistGeneratedImage({
-    source: sceneSource,
-    userId: input.userId,
-    keyPrefix: 'text-placement-test-scene',
-  })
-
   const characterAPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'A')
-  const characterAGenerated = await generateImage(input.userId, input.request.imageModelKey, characterAPrompt, {
-    ...capabilityOptions,
-    aspectRatio: CHARACTER_ASPECT_RATIO,
-  })
-  const characterASource = await resolveGeneratedImageSource(characterAGenerated, input.userId)
-  const characterA = await persistGeneratedImage({
-    source: characterASource,
-    userId: input.userId,
-    keyPrefix: 'text-placement-test-character-a',
-  })
-
   const characterBPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'B')
-  const characterBGenerated = await generateImage(input.userId, input.request.imageModelKey, characterBPrompt, {
-    ...capabilityOptions,
-    aspectRatio: CHARACTER_ASPECT_RATIO,
-  })
-  const characterBSource = await resolveGeneratedImageSource(characterBGenerated, input.userId)
-  const characterB = await persistGeneratedImage({
-    source: characterBSource,
-    userId: input.userId,
-    keyPrefix: 'text-placement-test-character-b',
-  })
+  const [scene, characterA, characterB] = await Promise.all([
+    generateAndPersistImageAsset({
+      userId: input.userId,
+      imageModelKey: input.request.imageModelKey,
+      prompt: scenePrompt,
+      aspectRatio: IMAGE_ASPECT_RATIO,
+      keyPrefix: 'text-placement-test-scene',
+      capabilityOptions,
+    }),
+    generateAndPersistImageAsset({
+      userId: input.userId,
+      imageModelKey: input.request.imageModelKey,
+      prompt: characterAPrompt,
+      aspectRatio: CHARACTER_ASPECT_RATIO,
+      keyPrefix: 'text-placement-test-character-a',
+      capabilityOptions,
+    }),
+    generateAndPersistImageAsset({
+      userId: input.userId,
+      imageModelKey: input.request.imageModelKey,
+      prompt: characterBPrompt,
+      aspectRatio: CHARACTER_ASPECT_RATIO,
+      keyPrefix: 'text-placement-test-character-b',
+      capabilityOptions,
+    }),
+  ])
 
   const normalizationIssues: OutboundImageNormalizationIssue[] = []
   const referenceImages = await normalizeReferenceImagesForGeneration([
