@@ -7,10 +7,8 @@ import { useUserModels } from '@/lib/query/hooks'
 import type { TextPlacementAssetKind, TextPlacementFinalImageResult, TextPlacementShot } from '@/lib/text-placement-test/types'
 import { FinalShotPanel, ImagePanel, TextPanel } from './TextPlacementPanels'
 import {
-  isPersistedTextPlacementTestState,
   isRetryResponse,
   isTextPlacementTestStreamEvent,
-  TEXT_PLACEMENT_TEST_STORAGE_KEY,
   type PersistedTextPlacementTestState,
   type RetryAssetPayload,
   type RetryResponse,
@@ -18,6 +16,11 @@ import {
   type TextPlacementTestResponse,
   type TextPlacementTestStreamEvent,
 } from './client-state'
+import {
+  clearTextPlacementTestState,
+  loadTextPlacementTestState,
+  saveTextPlacementTestState,
+} from './client-persistence'
 import {
   getAssetPrompt,
   getFinalImageByShot,
@@ -41,23 +44,29 @@ export function TextPlacementTestClient() {
   const [hasLoadedPersistedState, setHasLoadedPersistedState] = useState(false)
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(TEXT_PLACEMENT_TEST_STORAGE_KEY)
-    if (raw) {
-      try {
-        const parsed: unknown = JSON.parse(raw)
-        if (isPersistedTextPlacementTestState(parsed)) {
-          setStoryPrompt(parsed.storyPrompt)
-          setLlmModelKey(parsed.llmModelKey)
-          setImageModelKey(parsed.imageModelKey)
-          setResult(parsed.result)
-          setProgressResult(parsed.progressResult)
-          setError(parsed.error)
+    let isMounted = true
+    void loadTextPlacementTestState()
+      .then((persisted) => {
+        if (!isMounted) return
+        if (persisted) {
+          setStoryPrompt(persisted.storyPrompt)
+          setLlmModelKey(persisted.llmModelKey)
+          setImageModelKey(persisted.imageModelKey)
+          setResult(persisted.result)
+          setProgressResult(persisted.progressResult)
+          setError(persisted.error)
         }
-      } catch {
-        window.localStorage.removeItem(TEXT_PLACEMENT_TEST_STORAGE_KEY)
-      }
+      })
+      .catch((caught: unknown) => {
+        if (!isMounted) return
+        setError(caught instanceof Error ? caught.message : String(caught))
+      })
+      .finally(() => {
+        if (isMounted) setHasLoadedPersistedState(true)
+      })
+    return () => {
+      isMounted = false
     }
-    setHasLoadedPersistedState(true)
   }, [])
 
   useEffect(() => {
@@ -70,7 +79,9 @@ export function TextPlacementTestClient() {
       progressResult,
       error,
     }
-    window.localStorage.setItem(TEXT_PLACEMENT_TEST_STORAGE_KEY, JSON.stringify(persisted))
+    void saveTextPlacementTestState(persisted).catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    })
   }, [error, hasLoadedPersistedState, imageModelKey, llmModelKey, progressResult, result, storyPrompt])
 
   useEffect(() => {
@@ -337,7 +348,9 @@ export function TextPlacementTestClient() {
   }, [displayResult, isRetrying, isRunning, retryFinalShot])
 
   const handleClearSavedState = useCallback(() => {
-    window.localStorage.removeItem(TEXT_PLACEMENT_TEST_STORAGE_KEY)
+    void clearTextPlacementTestState().catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    })
     setStoryPrompt('')
     setResult(null)
     setProgressResult(null)
