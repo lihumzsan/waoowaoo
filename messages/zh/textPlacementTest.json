@@ -1,7 +1,7 @@
 {
   "eyebrow": "文字定位测试",
   "title": "文字绝对定位生成测试",
-  "subtitle": "输入一段剧情，系统会自动生成场景资产、人物资产、文字绝对定位方案，并用场景锚点、相对位置、画面层次和负约束生成最终画面。",
+  "subtitle": "输入一段剧情，系统会自动生成场景资产、人物资产、5-10 张顺序镜头的文字绝对定位方案，并用同一套资产批量生成一组最终画面。",
   "storyPrompt": "剧情",
   "storyPlaceholder": "例如：一名穿黑色长风衣的男子走进废弃大楼大厅，停在一排水泥柱旁，窗外冷光照进室内。",
   "llmModel": "定位规划 LLM",
@@ -12,15 +12,16 @@
   "running": "生成中",
   "sceneAsset": "场景资产",
   "characterAsset": "人物资产",
-  "finalImage": "最终定位结果",
+  "finalImageSequence": "最终顺序图组",
+  "finalImageCount": "最终图数量",
   "emptyScene": "运行后显示自动生成的无人物场景资产。",
   "emptyCharacter": "运行后显示自动生成的人物资产。",
-  "emptyFinal": "运行后显示按文字绝对定位生成的最终画面。",
+  "emptyFinal": "运行后显示按文字绝对定位生成的一组顺序最终画面。",
   "placementJson": "文字定位 JSON",
   "placementPrompt": "定位规划提示词",
   "scenePrompt": "场景资产提示词",
   "characterPrompt": "人物资产提示词",
-  "finalPrompt": "最终生图提示词",
+  "finalPrompts": "最终生图提示词组",
   "rawPlan": "LLM 原始定位输出",
   "emptyText": "运行后显示。"
 }

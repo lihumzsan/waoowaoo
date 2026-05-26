@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { useUserModels } from '@/lib/query/hooks'
-import { textPlacementPlanSchema, type TextPlacementPlan } from '@/lib/text-placement-test/types'
+import {
+  textPlacementPlanSchema,
+  type TextPlacementFinalImageResult,
+  type TextPlacementPlan,
+} from '@/lib/text-placement-test/types'
 
 interface TextPlacementTestResponse {
   readonly success: true
@@ -15,13 +19,11 @@ interface TextPlacementTestResponse {
   readonly placementRawText: string
   readonly scenePrompt: string
   readonly characterPrompt: string
-  readonly finalPrompt: string
   readonly sceneImageUrl: string
   readonly sceneStorageKey: string
   readonly characterImageUrl: string
   readonly characterStorageKey: string
-  readonly finalImageUrl: string
-  readonly finalStorageKey: string
+  readonly finalImages: readonly TextPlacementFinalImageResult[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -38,13 +40,19 @@ function isTextPlacementTestResponse(value: unknown): value is TextPlacementTest
     && typeof value.placementRawText === 'string'
     && typeof value.scenePrompt === 'string'
     && typeof value.characterPrompt === 'string'
-    && typeof value.finalPrompt === 'string'
     && typeof value.sceneImageUrl === 'string'
     && typeof value.sceneStorageKey === 'string'
     && typeof value.characterImageUrl === 'string'
     && typeof value.characterStorageKey === 'string'
-    && typeof value.finalImageUrl === 'string'
-    && typeof value.finalStorageKey === 'string'
+    && Array.isArray(value.finalImages)
+    && value.finalImages.every((item) => (
+      isRecord(item)
+      && Number.isInteger(item.shotNumber)
+      && typeof item.shotLabel === 'string'
+      && typeof item.prompt === 'string'
+      && typeof item.imageUrl === 'string'
+      && typeof item.storageKey === 'string'
+    ))
 }
 
 function readErrorMessage(payload: unknown, fallback: string): string {
@@ -72,6 +80,19 @@ function ImagePanel(props: {
         )}
       </div>
     </section>
+  )
+}
+
+function FinalShotPanel(props: {
+  readonly image: TextPlacementFinalImageResult
+}) {
+  return (
+    <ImagePanel
+      title={`${props.image.shotNumber}. ${props.image.shotLabel}`}
+      empty=""
+      imageUrl={props.image.imageUrl}
+      storageKey={props.image.storageKey}
+    />
   )
 }
 
@@ -199,6 +220,7 @@ export function TextPlacementTestClient() {
               <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
                 <span>{t('llmModel')}: {result.llmModelKey}</span>
                 <span>{t('imageModel')}: {result.imageModelKey}</span>
+                <span>{t('finalImageCount')}: {result.finalImages.length}</span>
               </div>
             ) : null}
           </aside>
@@ -216,12 +238,20 @@ export function TextPlacementTestClient() {
               imageUrl={result?.characterImageUrl || null}
               storageKey={result?.characterStorageKey}
             />
-            <ImagePanel
-              title={t('finalImage')}
-              empty={t('emptyFinal')}
-              imageUrl={result?.finalImageUrl || null}
-              storageKey={result?.finalStorageKey}
-            />
+            {result?.finalImages.length ? (
+              <section className="grid gap-3 lg:col-span-2">
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">{t('finalImageSequence')}</h2>
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  {result.finalImages.map((image) => <FinalShotPanel key={image.shotNumber} image={image} />)}
+                </div>
+              </section>
+            ) : (
+              <ImagePanel
+                title={t('finalImageSequence')}
+                empty={t('emptyFinal')}
+                imageUrl={null}
+              />
+            )}
             <TextPanel
               title={t('placementJson')}
               value={result ? JSON.stringify(result.placementPlan, null, 2) : ''}
@@ -230,7 +260,14 @@ export function TextPlacementTestClient() {
             <TextPanel title={t('placementPrompt')} value={result?.placementPrompt || ''} empty={t('emptyText')} />
             <TextPanel title={t('scenePrompt')} value={result?.scenePrompt || ''} empty={t('emptyText')} />
             <TextPanel title={t('characterPrompt')} value={result?.characterPrompt || ''} empty={t('emptyText')} />
-            <TextPanel title={t('finalPrompt')} value={result?.finalPrompt || ''} empty={t('emptyText')} />
+            <TextPanel
+              title={t('finalPrompts')}
+              value={result?.finalImages.map((image) => [
+                `# ${image.shotNumber}. ${image.shotLabel}`,
+                image.prompt,
+              ].join('\n')).join('\n\n') || ''}
+              empty={t('emptyText')}
+            />
             <TextPanel title={t('rawPlan')} value={result?.placementRawText || ''} empty={t('emptyText')} />
           </div>
         </section>

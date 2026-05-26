@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-export const textPlacementPlanSchema = z.object({
-  sceneBrief: z.string().trim().min(1).max(1200),
-  characterBrief: z.string().trim().min(1).max(1200),
+export const textPlacementShotSchema = z.object({
+  shotNumber: z.number().int().min(1).max(10),
+  shotLabel: z.string().trim().min(1).max(120),
   absoluteLocation: z.string().trim().min(1).max(800),
   anchorObject: z.string().trim().min(1).max(300),
   relationToAnchor: z.string().trim().min(1).max(800),
@@ -16,14 +16,40 @@ export const textPlacementPlanSchema = z.object({
   negativeConstraints: z.array(z.string().trim().min(1).max(300)).min(3).max(10),
 })
 
+export const textPlacementPlanSchema = z.object({
+  sceneBrief: z.string().trim().min(1).max(1200),
+  characterBrief: z.string().trim().min(1).max(1200),
+  shots: z.array(textPlacementShotSchema).min(5).max(10),
+}).superRefine((value, ctx) => {
+  value.shots.forEach((shot, index) => {
+    const expectedShotNumber = index + 1
+    if (shot.shotNumber !== expectedShotNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['shots', index, 'shotNumber'],
+        message: `shotNumber must be ${expectedShotNumber}`,
+      })
+    }
+  })
+})
+
 export const textPlacementTestRunRequestSchema = z.object({
   storyPrompt: z.string().trim().min(1).max(4000),
   llmModelKey: z.string().trim().min(1),
   imageModelKey: z.string().trim().min(1),
 })
 
+export type TextPlacementShot = z.infer<typeof textPlacementShotSchema>
 export type TextPlacementPlan = z.infer<typeof textPlacementPlanSchema>
 export type TextPlacementTestRunRequest = z.infer<typeof textPlacementTestRunRequestSchema>
+
+export interface TextPlacementFinalImageResult {
+  readonly shotNumber: number
+  readonly shotLabel: string
+  readonly prompt: string
+  readonly imageUrl: string
+  readonly storageKey: string
+}
 
 export interface TextPlacementTestRunResult {
   readonly success: true
@@ -34,11 +60,9 @@ export interface TextPlacementTestRunResult {
   readonly placementRawText: string
   readonly scenePrompt: string
   readonly characterPrompt: string
-  readonly finalPrompt: string
   readonly sceneImageUrl: string
   readonly sceneStorageKey: string
   readonly characterImageUrl: string
   readonly characterStorageKey: string
-  readonly finalImageUrl: string
-  readonly finalStorageKey: string
+  readonly finalImages: readonly TextPlacementFinalImageResult[]
 }

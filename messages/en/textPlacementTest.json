@@ -1,7 +1,7 @@
 {
   "eyebrow": "Text placement test",
   "title": "Text-Based Absolute Placement Test",
-  "subtitle": "Enter one story. The system automatically generates a scene asset, character asset, text-based absolute placement plan, and a final image using anchors, relative position, composition layers, and negative constraints.",
+  "subtitle": "Enter one story. The system automatically generates a scene asset, character asset, a 5-10 shot text-based absolute placement plan, and a sequential final image set from the same assets.",
   "storyPrompt": "Story",
   "storyPlaceholder": "Example: A man in a long black coat enters an abandoned concrete hall, stops beside a row of pillars, and cold window light cuts into the room.",
   "llmModel": "Placement planning LLM",
@@ -12,15 +12,16 @@
   "running": "Generating",
   "sceneAsset": "Scene asset",
   "characterAsset": "Character asset",
-  "finalImage": "Final placement result",
+  "finalImageSequence": "Final sequential image set",
+  "finalImageCount": "Final image count",
   "emptyScene": "The generated no-person scene asset appears here after running.",
   "emptyCharacter": "The generated character asset appears here after running.",
-  "emptyFinal": "The final image generated from text-based absolute placement appears here after running.",
+  "emptyFinal": "The sequential final images generated from text-based absolute placement appear here after running.",
   "placementJson": "Text placement JSON",
   "placementPrompt": "Placement planning prompt",
   "scenePrompt": "Scene asset prompt",
   "characterPrompt": "Character asset prompt",
-  "finalPrompt": "Final image prompt",
+  "finalPrompts": "Final image prompts",
   "rawPlan": "Raw LLM placement output",
   "emptyText": "Appears after running."
 }

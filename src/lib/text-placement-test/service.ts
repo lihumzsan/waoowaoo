@@ -16,6 +16,8 @@ import {
 } from '@/lib/text-placement-test/prompt'
 import {
   textPlacementPlanSchema,
+  type TextPlacementFinalImageResult,
+  type TextPlacementShot,
   type TextPlacementTestRunRequest,
   type TextPlacementTestRunResult,
 } from '@/lib/text-placement-test/types'
@@ -108,6 +110,41 @@ async function persistGeneratedImage(input: {
   }
 }
 
+async function generateFinalShotImage(input: {
+  readonly userId: string
+  readonly imageModelKey: string
+  readonly storyPrompt: string
+  readonly shot: TextPlacementShot
+  readonly locale: Locale
+  readonly referenceImages: readonly string[]
+  readonly capabilityOptions: ReturnType<typeof resolveModelCapabilityGenerationOptions>
+}): Promise<TextPlacementFinalImageResult> {
+  const prompt = buildTextPlacementFinalPrompt({
+    storyPrompt: input.storyPrompt,
+    shot: input.shot,
+    locale: input.locale,
+  })
+  const generated = await generateImage(input.userId, input.imageModelKey, prompt, {
+    referenceImages: [...input.referenceImages],
+    ...input.capabilityOptions,
+    aspectRatio: IMAGE_ASPECT_RATIO,
+  })
+  const source = await resolveGeneratedImageSource(generated, input.userId)
+  const image = await persistGeneratedImage({
+    source,
+    userId: input.userId,
+    keyPrefix: `text-placement-test-final-shot-${input.shot.shotNumber}`,
+  })
+
+  return {
+    shotNumber: input.shot.shotNumber,
+    shotLabel: input.shot.shotLabel,
+    prompt,
+    imageUrl: image.imageUrl,
+    storageKey: image.storageKey,
+  }
+}
+
 export async function runTextPlacementTest(input: {
   readonly userId: string
   readonly locale: Locale
@@ -179,22 +216,15 @@ export async function runTextPlacementTest(input: {
     expectedCount: 2,
   })
 
-  const finalPrompt = buildTextPlacementFinalPrompt({
-    storyPrompt: input.request.storyPrompt,
-    plan: placementPlan,
-    locale: input.locale,
-  })
-  const finalGenerated = await generateImage(input.userId, input.request.imageModelKey, finalPrompt, {
-    referenceImages,
-    ...capabilityOptions,
-    aspectRatio: IMAGE_ASPECT_RATIO,
-  })
-  const finalSource = await resolveGeneratedImageSource(finalGenerated, input.userId)
-  const finalImage = await persistGeneratedImage({
-    source: finalSource,
+  const finalImages = await Promise.all(placementPlan.shots.map((shot) => generateFinalShotImage({
     userId: input.userId,
-    keyPrefix: 'text-placement-test-final',
-  })
+    imageModelKey: input.request.imageModelKey,
+    storyPrompt: input.request.storyPrompt,
+    shot,
+    locale: input.locale,
+    referenceImages,
+    capabilityOptions,
+  })))
 
   return {
     success: true,
@@ -205,12 +235,10 @@ export async function runTextPlacementTest(input: {
     placementRawText,
     scenePrompt,
     characterPrompt,
-    finalPrompt,
     sceneImageUrl: scene.imageUrl,
     sceneStorageKey: scene.storageKey,
     characterImageUrl: character.imageUrl,
     characterStorageKey: character.storageKey,
-    finalImageUrl: finalImage.imageUrl,
-    finalStorageKey: finalImage.storageKey,
+    finalImages,
   }
 }
