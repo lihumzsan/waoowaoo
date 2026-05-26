@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { NextRequest } from 'next/server'
 import { ApiError, getRequestId } from '@/lib/api-errors'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
@@ -771,6 +772,8 @@ async function revertGlobalAssetRender(input: AssetRevertInput) {
         data: {
           imageUrl: image.previousImageUrl,
           previousImageUrl: null,
+          spatialProfileStatus: 'stale',
+          spatialProfileError: null,
           description: image.previousDescription ?? image.description,
           previousDescription: null,
         },
@@ -832,6 +835,8 @@ async function revertProjectAssetRender(input: AssetRevertInput) {
         data: {
           imageUrl: image.previousImageUrl,
           previousImageUrl: null,
+          spatialProfileStatus: 'stale',
+          spatialProfileError: null,
           description: image.previousDescription ?? image.description,
           previousDescription: null,
         },
@@ -924,6 +929,13 @@ async function copyLocationFromGlobal(input: AssetCopyInput) {
         description: image.description,
         availableSlots: image.availableSlots,
         imageUrl: image.imageUrl,
+        spatialProfileJson: input.kind === 'location' && image.spatialProfileJson !== null
+          ? image.spatialProfileJson as Prisma.InputJsonValue
+          : undefined,
+        spatialProfileStatus: input.kind === 'location' ? image.spatialProfileStatus : undefined,
+        spatialProfileError: input.kind === 'location' ? image.spatialProfileError : undefined,
+        spatialProfileAnalyzedAt: input.kind === 'location' ? image.spatialProfileAnalyzedAt : undefined,
+        spatialProfileModel: input.kind === 'location' ? image.spatialProfileModel : undefined,
         isSelected: image.isSelected,
       },
     })

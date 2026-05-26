@@ -3,6 +3,10 @@ import {
   formatLocationAvailableSlotsText,
   parseLocationAvailableSlots,
 } from '@/lib/location-available-slots'
+import {
+  formatLocationSpatialProfileForPrompt,
+  parseLocationSpatialProfile,
+} from '@/lib/location-spatial-profile/types'
 
 type PromptLocale = 'zh' | 'en'
 
@@ -30,6 +34,7 @@ export type PromptLocationAsset = {
     isSelected?: boolean
     description?: string | null
     availableSlots?: string | null
+    spatialProfileJson?: unknown
   }>
 }
 
@@ -155,9 +160,14 @@ export function buildPromptAssetContext(input: PromptAssetContextInput): PromptA
     parseLocationAvailableSlots(selectedImage?.availableSlots),
     input.locale ?? 'zh',
   )
-  const locationDescriptionText = locationSlotsText
-    ? `${locationDescription}\n\n${locationSlotsText}`
-    : locationDescription
+  const spatialProfileText = selectedImage?.spatialProfileJson
+    ? formatLocationSpatialProfileForPrompt(parseLocationSpatialProfile(selectedImage.spatialProfileJson))
+    : ''
+  const locationDescriptionText = [
+    locationDescription,
+    spatialProfileText,
+    locationSlotsText,
+  ].filter(Boolean).join('\n\n')
 
   return {
     subjectNames,

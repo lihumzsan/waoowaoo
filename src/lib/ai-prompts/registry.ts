@@ -44,6 +44,10 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'location/modify',
     variableKeys: ['location_name', 'location_input', 'user_input'],
   },
+  [AI_PROMPT_IDS.LOCATION_SPATIAL_PROFILE]: {
+    pathStem: 'location/spatial-profile',
+    variableKeys: ['location_name', 'location_description'],
+  },
   [AI_PROMPT_IDS.LOCATION_UPDATE_DESCRIPTION]: {
     pathStem: 'location/update-description',
     variableKeys: ['location_name', 'original_description', 'modify_instruction', 'image_context'],

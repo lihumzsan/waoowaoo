@@ -4,13 +4,14 @@
 1. Camera Style Bible 中的 userDirectedCameraStyle 来自用户明确要求，最高优先级。
 2. 必须使用 Camera Style Bible.imageFilterPrompt，并把它显式写入每个 finalPanelPrompt；图片滤镜必须与视频提示词滤镜一致，不得另起图片风格。
 3. 如果用户没有明确要求，遵守 inferredCameraStyle、imageFilterPrompt、项目风格和当前 block 的剧情空间需要。
-4. 坐标 blocking 只包含人物坐标、人物朝向和人物间空间关系；环境锚点只能作为 cinematicTranslation 中的文字参照，不是坐标实体。你必须进一步设计景别、机位位置、机位高度、镜头角度、构图、运镜、焦段和景深。
+4. 必须基于 spatial_profile_strategy_output_json 里的场景空间档案做中文文字定位：人物站在哪里、靠近什么锚点、处于前景/中景/背景、和其他人物/物体的相对关系、画面位置、机位和构图。
 5. 不改剧情，不补人物，不改变资产身份。
+6. 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource。
 
 finalPanelPrompt 必须包含：
 - 原 shot 的 visualAction、camera、videoPrompt 核心意图。
-- 如果 coordinate_strategy_output_json.blocks 非空，使用其中的坐标 blocking / spatial translation 空间关系。
-- 如果 coordinate_strategy_output_json.blocks 为空，说明当前 block 没有适用坐标；不要想象或补写坐标，只基于原 shot、videoBlock 和 Camera Style Bible 设计镜头语言。
+- 必须使用 spatial_profile_strategy_output_json.locations[].spatialProfile 中的 placementZones、anchors、depthLayout 和 lightingDirection。
+- 必须把本镜头的人物绝对位置、相对位置、朝向、视线、画面位置、机位和构图写入 shotBlocking。
 - 景别、机位位置、高度、角度、构图、运镜动机、镜头与景深。
 - Camera Style Bible.imageFilterPrompt 指定的画面滤镜。
 - 前景/背景、虚实、视线、左右关系、轴线连续性。
@@ -24,7 +25,7 @@ source_snapshot_json:
 camera_style_bible_json:
 {camera_style_bible_json}
 
-coordinate_strategy_output_json:
+spatial_profile_strategy_output_json:
 {coordinate_strategy_output_json}
 
 video_block_json:
@@ -59,6 +60,25 @@ panel_contract_json:
         "aestheticIntent": "string",
         "emotionalEffect": "string",
         "continuityNote": "string",
+        "shotBlocking": {
+          "locationName": "string",
+          "absolutePosition": "人物站位的绝对空间位置",
+          "relativePosition": "人物之间和人物与锚点之间的相对位置",
+          "screenPosition": "人物在画面里的位置",
+          "characterPlacements": [
+            {
+              "characterName": "string",
+              "absolutePosition": "string",
+              "relativePosition": "string",
+              "screenPosition": "string",
+              "facing": "string",
+              "eyeline": "string"
+            }
+          ],
+          "cameraPlacement": "机位位置、拍摄方向和距离",
+          "composition": "构图安排",
+          "continuityNote": "和相邻镜头的空间连续性"
+        },
         "finalPanelPrompt": "最终分镜图提示词"
       }
     ]

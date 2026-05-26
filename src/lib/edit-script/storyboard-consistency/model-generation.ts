@@ -129,7 +129,7 @@ function validatePanels(
 function cameraPlanMetadata(panel: CameraPlanPanel): Record<string, unknown> {
   return {
     source: 'camera_plan',
-    strategy: 'grid_coordinates_camera_plan',
+    strategy: 'spatial_text_blocking',
     cameraPlan: {
       shotScale: panel.shotScale,
       cameraPosition: panel.cameraPosition,
@@ -142,6 +142,7 @@ function cameraPlanMetadata(panel: CameraPlanPanel): Record<string, unknown> {
       aestheticIntent: panel.aestheticIntent,
       emotionalEffect: panel.emotionalEffect,
       continuityNote: panel.continuityNote,
+      shotBlocking: panel.shotBlocking,
     },
   }
 }
@@ -321,6 +322,12 @@ function coordinateStrategyOutputForCameraPlan(
   sourceVideoBlockId: string | null,
 ): Record<string, unknown> {
   const base = isRecord(coordinateStrategyOutput) ? coordinateStrategyOutput : {}
+  if (base.strategy === 'spatial_text_blocking') {
+    return {
+      ...base,
+      sourceVideoBlockId,
+    }
+  }
   const blocks = coordinateBlocks(coordinateStrategyOutput).filter((block) => (
     hasUsableCoordinates(block)
     && (sourceVideoBlockId === null || block.sourceVideoBlockId === sourceVideoBlockId)
@@ -409,7 +416,7 @@ export async function generateCameraPlan(input: GenerationContext & {
   const cameraPlanPanels = blockOutputs.flatMap((block) => block.panels)
   const parsed = cameraPlanModelOutputSchema.parse({
     cameraPlanOutput: {
-      strategy: 'camera_plan',
+      strategy: 'spatial_text_blocking',
       cameraStyleBible: bible.cameraStyleBible,
       blocks: blockOutputs,
       panels: cameraPlanPanels,
@@ -424,7 +431,7 @@ export async function generateCameraPlan(input: GenerationContext & {
       sourceVideoBlockId: panel.sourceVideoBlockId,
       prompt: panel.finalPanelPrompt,
     })),
-    { source: 'camera_plan', strategy: 'grid_coordinates_camera_plan' },
+    { source: 'camera_plan', strategy: 'spatial_text_blocking' },
   ).map((panel) => {
     const cameraPlan = parsed.cameraPlanOutput.panels.find((item) => panelKey(item) === panelKey(panel))
     if (!cameraPlan) throw new Error(`EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_PANEL_MISSING:${panel.sourceShotNumber}`)

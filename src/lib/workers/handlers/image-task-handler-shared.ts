@@ -40,6 +40,7 @@ interface CharacterLike {
 interface LocationImageLike {
   description?: string | null
   availableSlots?: string | null
+  spatialProfileJson?: unknown
   imageIndex?: number
   isSelected: boolean
   imageUrl: string | null

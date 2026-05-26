@@ -14,6 +14,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveProjectImageStyleSignatureForTask } from '@/lib/image-generation/style'
+import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 function parseReferenceImages(body: Record<string, unknown>): string[] {
   const list = Array.isArray(body.referenceImageUrls)
@@ -409,12 +410,18 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
             ? input.imageIndex
             : (location.images?.length || 0)
           const existingImage = location.images?.find((img) => img.imageIndex === targetImageIndex)
+          const modelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
+          if (!modelConfig.analysisModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
 
           let imageId: string
           if (existingImage) {
             const updated = await prisma.locationImage.update({
               where: { id: existingImage.id },
-              data: { imageUrl: key },
+              data: {
+                imageUrl: key,
+                spatialProfileStatus: 'stale',
+                spatialProfileError: null,
+              },
               select: { id: true },
             })
             imageId = updated.id
@@ -424,6 +431,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
                 locationId: input.id,
                 imageIndex: targetImageIndex,
                 imageUrl: key,
+                spatialProfileStatus: 'stale',
                 description: null,
                 isSelected: targetImageIndex === 0,
               },
@@ -438,6 +446,14 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
               data: { selectedImageId: imageId },
             })
           }
+
+          await analyzeAndPersistProjectLocationImageSpatialProfile({
+            imageId,
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            model: modelConfig.analysisModel,
+            locale: resolveRequiredTaskLocale(ctx.request, input as Record<string, unknown>),
+          })
 
           return { success: true, imageKey: key, imageIndex: targetImageIndex }
         }

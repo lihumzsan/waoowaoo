@@ -53,25 +53,6 @@ function parseJsonUnknown(raw: string | null | undefined): unknown | null {
   }
 }
 
-function readJsonRecord(raw: string | null | undefined): Record<string, unknown> {
-  const parsed = parseJsonUnknown(raw)
-  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item) => {
-    const text = readString(item)
-    return text ? [text] : []
-  })
-}
-
 function parseDescriptionList(raw: string | null | undefined): string[] {
   if (!raw) return []
   try {
@@ -98,57 +79,6 @@ function pickAppearanceDescription(appearance: {
     return appearance.description.trim()
   }
   return '无描述'
-}
-
-function sourceVideoBlockIdFromPhotographyRules(raw: string | null | undefined): string | null {
-  return readString(readJsonRecord(raw).sourceVideoBlockId)
-}
-
-function artifactMatchesSourceVideoBlock(
-  artifact: {
-    readonly sourceVideoBlockId: string | null
-    readonly metadataJson: unknown
-  },
-  sourceVideoBlockId: string,
-): boolean {
-  if (artifact.sourceVideoBlockId === sourceVideoBlockId) return true
-  const metadata = artifact.metadataJson && typeof artifact.metadataJson === 'object' && !Array.isArray(artifact.metadataJson)
-    ? artifact.metadataJson as Record<string, unknown>
-    : {}
-  return readStringArray(metadata.sourceVideoBlockIds).includes(sourceVideoBlockId)
-}
-
-async function collectCoordinateOverlayReferenceItems(params: {
-  readonly storyboardId: string
-  readonly photographyRules: string | null
-}): Promise<ReferenceImageItem[]> {
-  const sourceVideoBlockId = sourceVideoBlockIdFromPhotographyRules(params.photographyRules)
-  if (!sourceVideoBlockId) return []
-  const artifacts = await prisma.projectStoryboardBlockingArtifact.findMany({
-    where: {
-      storyboardId: params.storyboardId,
-      kind: 'grid_coordinate_overlay',
-      status: 'ready',
-      imageUrl: { not: null },
-    },
-    orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }],
-    select: {
-      id: true,
-      imageUrl: true,
-      sourceVideoBlockId: true,
-      metadataJson: true,
-    },
-  })
-  const matched = artifacts.filter((artifact) => artifactMatchesSourceVideoBlock(artifact, sourceVideoBlockId))
-  return matched.map((artifact) => {
-    const signed = toSignedUrlIfCos(artifact.imageUrl, 3600)
-    if (!signed) throw new Error(`PANEL_COORDINATE_OVERLAY_REFERENCE_INVALID:${artifact.id}`)
-    return {
-      url: signed,
-      role: 'coordinate_overlay',
-      name: `2D coordinate anchor map for ${sourceVideoBlockId}`,
-    }
-  })
 }
 
 function buildPanelPromptContext(params: {
@@ -199,6 +129,21 @@ function buildPanelPromptContext(params: {
     }
   })
 
+  const photographyRules = parseJsonUnknown(params.panel.photographyRules)
+  const photographyRuleRecord = photographyRules && typeof photographyRules === 'object' && !Array.isArray(photographyRules)
+    ? photographyRules as Record<string, unknown>
+    : {}
+  const consistencyMetadataRecord = photographyRuleRecord.consistencyMetadata
+    && typeof photographyRuleRecord.consistencyMetadata === 'object'
+    && !Array.isArray(photographyRuleRecord.consistencyMetadata)
+    ? photographyRuleRecord.consistencyMetadata as Record<string, unknown>
+    : {}
+  const cameraPlanSource = photographyRuleRecord.cameraPlan ?? consistencyMetadataRecord.cameraPlan
+  const cameraPlanRecord = cameraPlanSource && typeof cameraPlanSource === 'object' && !Array.isArray(cameraPlanSource)
+    ? cameraPlanSource as Record<string, unknown>
+    : {}
+  const shotBlocking = cameraPlanRecord.shotBlocking ?? photographyRuleRecord.shotBlocking ?? null
+
   const locationContext = (() => {
     if (!params.panel.location) return null
     const matchedLocation = (params.projectData.locations || []).find(
@@ -210,6 +155,7 @@ function buildPanelPromptContext(params: {
       name: matchedLocation.name,
       description: selectedImage?.description || null,
       available_slots: parseLocationAvailableSlots(selectedImage?.availableSlots),
+      spatial_profile: selectedImage && 'spatialProfileJson' in selectedImage ? selectedImage.spatialProfileJson ?? null : null,
     }
   })()
 
@@ -224,7 +170,8 @@ function buildPanelPromptContext(params: {
       location: params.panel.location || '',
       characters: panelCharacters,
       source_text: params.panel.srtSegment || '',
-      photography_rules: parseJsonUnknown(params.panel.photographyRules),
+      photography_rules: photographyRules,
+      shot_blocking: shotBlocking,
       acting_notes: parseJsonUnknown(params.panel.actingNotes),
     },
     context: {
@@ -280,10 +227,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     ? EMPTY_PANEL_REFERENCE_COLLECTION
     : await collectPanelReferenceImageItemsWithDiagnostics(projectData, panel, { strict: true })
   const referenceImageItems: ReferenceImageItem[] = [...refCollection.items]
-  referenceImageItems.push(...await collectCoordinateOverlayReferenceItems({
-    storyboardId: panel.storyboardId,
-    photographyRules: panel.photographyRules,
-  }))
   if (Array.isArray(payload.referencePanelImageUrls)) {
     for (const [index, url] of payload.referencePanelImageUrls.entries()) {
       const signed = toSignedUrlIfCos(typeof url === 'string' ? url : null, 3600)

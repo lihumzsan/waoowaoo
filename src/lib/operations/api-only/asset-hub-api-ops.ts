@@ -8,6 +8,9 @@ import { buildCharacterDescriptionFields } from '@/lib/assets/description-fields
 import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { getUserModelConfig } from '@/lib/config-service'
+import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { analyzeAndPersistGlobalLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 type UploadFileLike = {
   name: string
@@ -397,9 +400,12 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
             include: { images: { orderBy: { imageIndex: 'asc' } } },
           })
           if (!location) throw new ApiError('NOT_FOUND')
+          const userConfig = await getUserModelConfig(ctx.userId)
+          if (!userConfig.analysisModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
 
           if (imageIndex !== null) {
             const existingImage = location.images.find((img) => img.imageIndex === imageIndex)
+            let imageId: string
             if (existingImage) {
               if (existingImage.imageUrl) {
                 await prisma.globalLocationImage.update({
@@ -409,31 +415,53 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
               }
               await prisma.globalLocationImage.update({
                 where: { id: existingImage.id },
-                data: { imageUrl: key },
+                data: {
+                  imageUrl: key,
+                  spatialProfileStatus: 'stale',
+                  spatialProfileError: null,
+                },
               })
+              imageId = existingImage.id
             } else {
-              await prisma.globalLocationImage.create({
+              const created = await prisma.globalLocationImage.create({
                 data: {
                   locationId: id,
                   imageIndex,
                   imageUrl: key,
+                  spatialProfileStatus: 'stale',
                   description: labelText,
                   isSelected: imageIndex === 0,
                 },
+                select: { id: true },
               })
+              imageId = created.id
             }
+            await analyzeAndPersistGlobalLocationImageSpatialProfile({
+              imageId,
+              userId: ctx.userId,
+              model: userConfig.analysisModel,
+              locale: resolveRequiredTaskLocale(ctx.request, { type, id, imageIndex }),
+            })
             return { success: true, imageKey: key, imageIndex }
           }
 
           const maxIndex = location.images.length
-          await prisma.globalLocationImage.create({
+          const created = await prisma.globalLocationImage.create({
             data: {
               locationId: id,
               imageIndex: maxIndex,
               imageUrl: key,
+              spatialProfileStatus: 'stale',
               description: labelText,
               isSelected: maxIndex === 0,
             },
+            select: { id: true },
+          })
+          await analyzeAndPersistGlobalLocationImageSpatialProfile({
+            imageId: created.id,
+            userId: ctx.userId,
+            model: userConfig.analysisModel,
+            locale: resolveRequiredTaskLocale(ctx.request, { type, id, imageIndex: maxIndex }),
           })
           return { success: true, imageKey: key, imageIndex: maxIndex }
         }

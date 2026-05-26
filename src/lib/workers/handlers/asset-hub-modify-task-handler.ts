@@ -28,6 +28,7 @@ import {
   generateModifiedAssetDescription,
   readIndexedDescription,
 } from './modify-description-sync'
+import { analyzeAndPersistGlobalLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 const logger = createScopedLogger({ module: 'worker.asset-hub-modify' })
 
@@ -225,6 +226,8 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
 
     const isProp = payload.type === 'prop'
+    const spatialProfileModel = userModels.analysisModel
+    if (!isProp && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
     const prompt = isProp
       ? `请根据以下指令修改道具图片，保持道具主体、结构和关键材质一致：\n${modifyInstruction}`
       : `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
@@ -272,12 +275,29 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
         previousImageUrl: locationImage.imageUrl,
         previousDescription: locationImage.description || null,
         imageUrl: imageKey,
+        ...(!isProp
+          ? {
+            spatialProfileStatus: 'stale',
+            spatialProfileError: null,
+          }
+          : {}),
         ...(extractedDescription ? {
           description: extractedDescription.prompt,
           availableSlots: stringifyLocationAvailableSlots(extractedDescription.availableSlots),
         } : {}),
       },
     })
+    if (!isProp) {
+      const profileModel = spatialProfileModel
+      if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+      await assertTaskActive(job, 'analyze_global_location_spatial_profile')
+      await analyzeAndPersistGlobalLocationImageSpatialProfile({
+        imageId: locationImage.id,
+        userId,
+        model: profileModel,
+        locale: job.data.locale === 'en' ? 'en' : 'zh',
+      })
+    }
 
     return { type: payload.type, locationImageId: locationImage.id, imageUrl: imageKey }
   }

@@ -9,6 +9,7 @@ export const AI_PROMPT_IDS = {
   LOCATION_ANALYZE: 'location-analyze',
   LOCATION_CREATE: 'location-create',
   LOCATION_MODIFY: 'location-modify',
+  LOCATION_SPATIAL_PROFILE: 'location-spatial-profile',
   LOCATION_UPDATE_DESCRIPTION: 'location-update-description',
   PROP_ANALYZE: 'prop-analyze',
   PROP_UPDATE_DESCRIPTION: 'prop-update-description',

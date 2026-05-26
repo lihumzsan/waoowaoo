@@ -530,6 +530,25 @@ describe('edit-script storyboard coordinate consistency', () => {
             aestheticIntent: 'quiet balanced composition emphasizes patient teaching',
             emotionalEffect: 'calm intimacy',
             continuityNote: 'preserve the dialogue axis and eyeline across the reverse shot',
+            shotBlocking: {
+              locationName: 'Temple courtyard',
+              absolutePosition: 'old monk stands beside the central flower bed',
+              relativePosition: 'disciple remains across the flower bed from the old monk',
+              screenPosition: 'old monk screen left, disciple foreground right',
+              characterPlacements: [
+                {
+                  characterName: 'Old monk',
+                  absolutePosition: 'beside the central flower bed',
+                  relativePosition: 'opposite the disciple',
+                  screenPosition: 'screen left',
+                  facing: 'toward the disciple',
+                  eyeline: 'toward the disciple',
+                },
+              ],
+              cameraPlacement: 'over the disciple shoulder toward the old monk',
+              composition: 'flower bed anchors the lower third',
+              continuityNote: 'preserve the dialogue axis and eyeline across the reverse shot',
+            },
             finalPanelPrompt: 'Medium close-up storyboard frame, soft natural light, low contrast, subtle film grain. Old monk speaks beside the flower bed, over the disciple shoulder, old monk screen left and disciple blurred foreground right, eye-level three-quarter frontal camera, balanced lower-third flower bed composition, slow push-in feeling, mild telephoto shallow depth of field, preserve eyeline and left-right continuity, no text, no watermarks.',
           },
           {
@@ -547,6 +566,25 @@ describe('edit-script storyboard coordinate consistency', () => {
             aestheticIntent: 'reverse composition keeps the teaching relationship stable',
             emotionalEffect: 'attentive humility',
             continuityNote: 'maintain the same axis and flower bed anchor',
+            shotBlocking: {
+              locationName: 'Temple courtyard',
+              absolutePosition: 'young disciple stands across the central flower bed',
+              relativePosition: 'disciple remains opposite the old monk',
+              screenPosition: 'disciple right of center',
+              characterPlacements: [
+                {
+                  characterName: 'Young disciple',
+                  absolutePosition: 'across the central flower bed',
+                  relativePosition: 'opposite the old monk',
+                  screenPosition: 'right of center',
+                  facing: 'toward the old monk',
+                  eyeline: 'toward the old monk',
+                },
+              ],
+              cameraPlacement: 'over the old monk shoulder toward the young disciple',
+              composition: 'old monk shoulder soft on left edge, disciple placed right of center',
+              continuityNote: 'maintain the same axis and flower bed anchor',
+            },
             finalPanelPrompt: 'Reverse medium close-up storyboard frame, soft natural light, low contrast, subtle film grain. Young disciple listens and answers across the flower bed, old monk soft foreground shoulder on the left edge, disciple right of center, eye-level three-quarter reverse angle, static camera, mild telephoto shallow depth of field, preserve eyeline and left-right continuity, no text, no watermarks.',
           },
         ],
@@ -560,30 +598,40 @@ describe('edit-script storyboard coordinate consistency', () => {
       locale: 'zh',
       snapshot: buildSnapshot(),
       coordinateStrategyOutput: {
-        strategy: 'grid_coordinates',
-        blocks: [
+        strategy: 'spatial_text_blocking',
+        locations: [
           {
-            sourceVideoBlockId: 'edit-1:videoBlock:1',
-            classification: 'fixed_space_strong',
-            coordinates: [
-              { name: 'Old monk', kind: 'character', x: 6, y: 5, facing: 'east' },
-            ],
-            cinematicTranslation: 'Old monk stays screen left, disciple stays screen right.',
-            skipped: false,
-          },
-          {
-            sourceVideoBlockId: 'edit-1:videoBlock:2',
-            classification: 'no_fixed_space',
-            coordinates: [],
-            cinematicTranslation: 'No fixed-space blocking.',
-            skipped: true,
-          },
-          {
-            sourceVideoBlockId: 'edit-1:videoBlock:1',
-            classification: 'fixed_space_weak',
-            coordinates: [],
-            cinematicTranslation: 'Empty coordinate result for the same block.',
-            skipped: false,
+            requirementId: 'loc-1',
+            targetId: 'location-1',
+            name: 'Temple courtyard',
+            description: 'courtyard with a central flower bed',
+            shotNumbers: [1, 2],
+            spatialProfile: {
+              schemaVersion: 1,
+              sceneSummary: 'Courtyard with central flower bed and open paths around it.',
+              anchors: [{
+                id: 'anchor_flower_bed',
+                label: 'central flower bed',
+                screenArea: 'center of frame',
+                depthLayer: 'midground',
+                spatialRelations: ['open standing space around both sides'],
+              }],
+              placementZones: [{
+                id: 'zone_flower_left',
+                label: 'left side of the flower bed',
+                absolutePosition: 'midground left of the flower bed',
+                nearAnchors: ['central flower bed'],
+                depthLayer: 'midground',
+                visibility: 'suitable for half-body dialogue',
+                spatialRelations: ['opposite the right-side standing area'],
+              }],
+              depthLayout: {
+                foreground: 'stone path foreground',
+                midground: 'flower bed and standing areas',
+                background: 'temple wall',
+              },
+              lightingDirection: 'soft daylight from above right',
+            },
           },
         ],
       },
@@ -600,12 +648,13 @@ describe('edit-script storyboard coordinate consistency', () => {
     if (!biblePromptInput?.variables || !blockPromptInput?.variables) throw new Error('PROMPT_INPUT_MISSING')
     const bibleCoordinateInput = JSON.parse(
       biblePromptInput.variables.coordinate_strategy_output_json,
-    ) as { readonly blocks?: readonly { readonly sourceVideoBlockId?: string }[] }
+    ) as { readonly locations?: readonly { readonly name?: string }[] }
     const blockCoordinateInput = JSON.parse(
       blockPromptInput.variables.coordinate_strategy_output_json,
-    ) as { readonly blocks?: readonly { readonly sourceVideoBlockId?: string }[] }
-    expect(bibleCoordinateInput.blocks?.map((block) => block.sourceVideoBlockId)).toEqual(['edit-1:videoBlock:1'])
-    expect(blockCoordinateInput.blocks?.map((block) => block.sourceVideoBlockId)).toEqual(['edit-1:videoBlock:1'])
+    ) as { readonly locations?: readonly { readonly name?: string }[]; readonly sourceVideoBlockId?: string | null }
+    expect(bibleCoordinateInput.locations?.map((location) => location.name)).toEqual(['Temple courtyard'])
+    expect(blockCoordinateInput.locations?.map((location) => location.name)).toEqual(['Temple courtyard'])
+    expect(blockCoordinateInput.sourceVideoBlockId).toBe('edit-1:videoBlock:1')
     expect(result.cameraStyleBible.userDirectedCameraStyle).toBe('quiet restrained temple camera')
     expect(result.cameraStyleBible.imageFilterPrompt).toBe('soft natural light, low contrast, subtle film grain')
     expect(blockPromptInput.variables.camera_style_bible_json).toContain('soft natural light, low contrast, subtle film grain')
@@ -619,10 +668,13 @@ describe('edit-script storyboard coordinate consistency', () => {
     expect(result.panels[0]?.prompt).toContain('mild telephoto shallow depth of field')
     expect(result.panels[0]?.metadata).toMatchObject({
       source: 'camera_plan',
-      strategy: 'grid_coordinates_camera_plan',
+      strategy: 'spatial_text_blocking',
       cameraPlan: expect.objectContaining({
         composition: expect.stringContaining('flower bed'),
         aestheticIntent: expect.stringContaining('patient teaching'),
+        shotBlocking: expect.objectContaining({
+          cameraPlacement: 'over the disciple shoulder toward the old monk',
+        }),
       }),
     })
   })

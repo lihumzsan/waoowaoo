@@ -60,6 +60,11 @@ model LocationImage {
   description         String?
   availableSlots      String?
   imageUrl            String?
+  spatialProfileJson  Json?
+  spatialProfileStatus String                  @default("pending")
+  spatialProfileError String?
+  spatialProfileAnalyzedAt DateTime?
+  spatialProfileModel String?
   isSelected          Boolean                @default(false)
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @default(now()) @updatedAt
@@ -884,6 +889,11 @@ model GlobalLocationImage {
   description         String?
   availableSlots      String?
   imageUrl            String?
+  spatialProfileJson  Json?
+  spatialProfileStatus String   @default("pending")
+  spatialProfileError String?
+  spatialProfileAnalyzedAt DateTime?
+  spatialProfileModel String?
   imageMediaId        String?
   imageMedia          MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
   isSelected          Boolean  @default(false)

@@ -14,9 +14,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const modelGenerationMock = vi.hoisted(() => ({
-  analyzeGridCoordinates: vi.fn(),
   generateCameraPlan: vi.fn(),
-  generateGridFloorPlan: vi.fn(),
 }))
 
 const persistenceMock = vi.hoisted(() => ({
@@ -100,7 +98,30 @@ function buildSourceSnapshot() {
     sourceEditScriptId: 'edit-script-1',
     project: {
       videoRatio: '16:9',
-      artStyle: null,
+    },
+    styleBible: {
+      strategy: 'style_bible',
+      rawUserStyle: 'temple lesson',
+      styleSummary: 'quiet temple style',
+      stylePolicy: {
+        visual: {
+          negativePrompt: 'no text',
+          imageFilterPrompt: 'soft natural light',
+          lightingPrompt: 'soft light',
+          colorPrompt: 'muted colors',
+          texturePrompt: 'stone and wood',
+          compositionPrompt: 'balanced frame',
+        },
+        camera: {
+          movementPrompt: 'static',
+          lensAndDepthPrompt: '35mm natural depth',
+          videoRhythmPrompt: 'slow rhythm',
+        },
+        sound: {
+          soundFilterPrompt: 'quiet wind',
+        },
+        hardBans: ['no text'],
+      },
     },
     editScript: {
       id: 'edit-script-1',
@@ -146,19 +167,15 @@ describe('edit script storyboard camera plan handler', () => {
           storyboardModel: 'storyboard-model-1',
         },
         strategyOutput: {
-          strategy: 'grid_coordinates',
-          blocks: [{
-            sourceVideoBlockId: 'edit-script-1:videoBlock:1',
-            classification: 'fixed_space_strong',
-            coordinates: [{ name: 'Old monk', kind: 'character', x: 5, y: 5 }],
-          }],
+          strategy: 'spatial_text_blocking',
+          locations: [],
         },
       }),
       blockingArtifacts: [],
     })
     modelGenerationMock.generateCameraPlan.mockResolvedValue({
       cameraPlanOutput: {
-        strategy: 'camera_plan',
+        strategy: 'spatial_text_blocking',
         blocks: [{
           sourceVideoBlockId: 'edit-script-1:videoBlock:1',
           panels: [{
@@ -183,6 +200,23 @@ describe('edit script storyboard camera plan handler', () => {
           aestheticIntent: 'quiet',
           emotionalEffect: 'calm',
           continuityNote: 'same space',
+          shotBlocking: {
+            locationName: 'Temple courtyard',
+            absolutePosition: 'courtyard midground',
+            relativePosition: 'old monk near disciple',
+            screenPosition: 'center frame',
+            characterPlacements: [{
+              characterName: 'Old monk',
+              absolutePosition: 'courtyard midground',
+              relativePosition: 'near disciple',
+              screenPosition: 'center frame',
+              facing: 'toward disciple',
+              eyeline: 'toward disciple',
+            }],
+            cameraPlacement: 'front of courtyard',
+            composition: 'balanced',
+            continuityNote: 'same space',
+          },
           finalPanelPrompt: 'large prompt that belongs on ProjectPanel, not photographyPlan',
         }],
       },
@@ -225,7 +259,7 @@ describe('edit script storyboard camera plan handler', () => {
     }]>
     const storedPlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan))
     expect(storedPlan.cameraPlanOutput).toEqual({
-      strategy: 'camera_plan',
+      strategy: 'spatial_text_blocking',
       panels: [{
         panelIndex: 0,
         sourceShotNumber: 1,
@@ -241,6 +275,23 @@ describe('edit script storyboard camera plan handler', () => {
         aestheticIntent: 'quiet',
         emotionalEffect: 'calm',
         continuityNote: 'same space',
+        shotBlocking: {
+          locationName: 'Temple courtyard',
+          absolutePosition: 'courtyard midground',
+          relativePosition: 'old monk near disciple',
+          screenPosition: 'center frame',
+          characterPlacements: [{
+            characterName: 'Old monk',
+            absolutePosition: 'courtyard midground',
+            relativePosition: 'near disciple',
+            screenPosition: 'center frame',
+            facing: 'toward disciple',
+            eyeline: 'toward disciple',
+          }],
+          cameraPlacement: 'front of courtyard',
+          composition: 'balanced',
+          continuityNote: 'same space',
+        },
       }],
     })
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalPanelPrompt')
@@ -248,61 +299,14 @@ describe('edit script storyboard camera plan handler', () => {
     expect(submitterMock.submitTask).not.toHaveBeenCalled()
   })
 
-  it('stops coordinate generation after grid analysis without enqueueing storyboard panels', async () => {
-    const sourceSnapshot = buildSourceSnapshot()
-    prismaMock.projectStoryboard.findFirst.mockResolvedValueOnce({
-      id: 'storyboard-1',
-      photographyPlan: JSON.stringify({
-        currentStage: 'floor_plans_ready',
-        sourceSnapshot,
-        modelConfigSnapshot: {
-          analysisModel: 'analysis-model-1',
-          storyboardModel: 'storyboard-model-1',
-        },
-      }),
-      blockingArtifacts: [{
-        id: 'overlay-1',
-        kind: 'grid_coordinate_overlay',
-        status: 'ready',
-        imageUrl: 'images/overlay.png',
-        sourceVideoBlockId: 'edit-script-1:videoBlock:1',
-        groupIndex: 0,
-        metadataJson: {
-          sourceVideoBlockIds: ['edit-script-1:videoBlock:1'],
-        },
-      }],
-    })
-    modelGenerationMock.analyzeGridCoordinates.mockResolvedValueOnce({
-      strategyOutput: {
-        strategy: 'grid_coordinates',
-        blocks: [{
-          sourceVideoBlockId: 'edit-script-1:videoBlock:1',
-          classification: 'fixed_space_weak',
-          skipped: false,
-          coordinates: [{ name: 'Old monk', kind: 'character', x: 5, y: 5 }],
-          cinematicTranslation: 'Old monk remains screen left.',
-        }],
-      },
-    })
+  it('disables the old grid analysis task instead of enqueueing storyboard panels', async () => {
     const { handleEditScriptStoryboardGridAnalyzeTask } = await import(
       '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
     )
 
-    const result = await handleEditScriptStoryboardGridAnalyzeTask(buildGridAnalyzeJob())
-
-    expect(result).toEqual({ storyboardId: 'storyboard-1', nextTaskId: null })
-    expect(modelGenerationMock.analyzeGridCoordinates).toHaveBeenCalledWith(expect.objectContaining({
-      overlayImageUrls: ['https://cdn.example.com/overlay-signed.png'],
-    }))
-    const updateCalls = prismaMock.projectStoryboard.update.mock.calls as unknown as Array<[{
-      readonly data?: {
-        readonly photographyPlan?: string
-        readonly lastError?: string | null
-      }
-    }]>
-    const storedPlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan))
-    expect(storedPlan.currentStage).toBe('grid_analyze_ready')
-    expect(storedPlan.strategyOutput.blocks[0].sourceVideoBlockId).toBe('edit-script-1:videoBlock:1')
+    await expect(handleEditScriptStoryboardGridAnalyzeTask(buildGridAnalyzeJob())).rejects.toThrow(
+      'EDIT_SCRIPT_STORYBOARD_GRID_COORDINATES_DISABLED',
+    )
     expect(submitterMock.submitTask).not.toHaveBeenCalled()
   })
 })

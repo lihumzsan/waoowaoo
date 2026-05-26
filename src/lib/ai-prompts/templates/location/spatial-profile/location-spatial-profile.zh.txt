@@ -1,0 +1,44 @@
+你是场景空间分析模型。请只根据输入的最终场景资产图，输出这个场景的真实空间事实档案。
+
+场景名称：{location_name}
+原始场景描述（仅辅助理解，不得覆盖图片事实）：{location_description}
+
+硬性规则：
+1. 只描述最终图片里能看见或能由画面结构直接推断的空间事实。
+2. 不做导演决策，不输出镜头建议、机位候选、禁用区域或来源标记。
+3. 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource。
+4. 所有描述字段使用自然中文，重点描述人物可以站在哪里、相对什么物体、处于前景/中景/背景。
+5. placementZones 必须至少 1 个；每个 zone 都必须能指导人物站位。
+6. 只输出 JSON 对象，不要 Markdown，不要解释。
+
+JSON 结构必须严格如下：
+{
+  "schemaVersion": 1,
+  "sceneSummary": "最终场景图里的真实空间结构总结",
+  "anchors": [
+    {
+      "id": "anchor_left_door",
+      "label": "左侧木门",
+      "screenArea": "画面左后方",
+      "depthLayer": "背景",
+      "spatialRelations": ["木门右侧是长桌", "木门前方有可站空地"]
+    }
+  ],
+  "placementZones": [
+    {
+      "id": "zone_left_door_inside",
+      "label": "左侧木门内侧靠墙的位置",
+      "absolutePosition": "画面左后方靠墙",
+      "nearAnchors": ["左侧木门"],
+      "depthLayer": "背景",
+      "visibility": "适合半身或全身出现",
+      "spatialRelations": ["位于长桌左后方", "距离窗户较远"]
+    }
+  ],
+  "depthLayout": {
+    "foreground": "前景空间描述",
+    "midground": "中景空间描述",
+    "background": "背景空间描述"
+  },
+  "lightingDirection": "光线方向描述"
+}

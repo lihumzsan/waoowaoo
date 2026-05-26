@@ -2,11 +2,16 @@ import {
   formatLocationAvailableSlotsText,
   parseLocationAvailableSlots,
 } from '@/lib/location-available-slots'
+import {
+  formatLocationSpatialProfileForPrompt,
+  parseLocationSpatialProfile,
+} from '@/lib/location-spatial-profile/types'
 
 type PromptLocationImage = {
   isSelected?: boolean
   description?: string | null
   availableSlots?: string | null
+  spatialProfileJson?: unknown
 }
 
 type PromptLocationAsset = {
@@ -37,10 +42,11 @@ export function buildInsertPanelLocationsDescription(
         parseLocationAvailableSlots(selectedImage?.availableSlots),
         locale,
       )
+      const spatialProfileText = selectedImage?.spatialProfileJson
+        ? formatLocationSpatialProfileForPrompt(parseLocationSpatialProfile(selectedImage.spatialProfileJson))
+        : ''
 
-      return slotsText
-        ? `${location.name}: ${description}\n${slotsText}`
-        : `${location.name}: ${description}`
+      return [ `${location.name}: ${description}`, spatialProfileText, slotsText ].filter(Boolean).join('\n')
     })
     .join('\n')
 }

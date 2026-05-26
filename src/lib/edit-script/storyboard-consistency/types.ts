@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { locationSpatialProfileSchema, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import type { EditAssetRequirement, EditScriptPayload, EditScriptShot, EditScriptStyleBible, EditScriptVideoBlock } from '@/lib/edit-script/types'
 
 export const STORYBOARD_BLOCKING_ARTIFACT_KINDS = [
@@ -27,6 +28,7 @@ export interface StoryboardConsistencyAssetSnapshot {
   readonly shotNumbers: readonly number[]
   readonly targetId: string
   readonly previewImageUrl: string | null
+  readonly spatialProfile?: LocationSpatialProfile | null
 }
 
 export interface StoryboardConsistencySourceVideoBlock extends EditScriptVideoBlock {
@@ -115,6 +117,7 @@ const sourceAssetSchema = z.object({
   shotNumbers: z.array(z.number().int().positive()),
   targetId: z.string().min(1),
   previewImageUrl: z.string().nullable(),
+  spatialProfile: locationSpatialProfileSchema.nullable().optional(),
 })
 
 export const storyboardConsistencySourceSnapshotSchema = z.object({
@@ -178,6 +181,26 @@ export const gridCoordinateAnalysisModelOutputSchema = z.object({
 
 export type GridCoordinateAnalysisModelOutput = z.infer<typeof gridCoordinateAnalysisModelOutputSchema>
 
+const characterPlacementSchema = z.object({
+  characterName: z.string().trim().min(1),
+  absolutePosition: z.string().trim().min(2),
+  relativePosition: z.string().trim().min(2),
+  screenPosition: z.string().trim().min(2),
+  facing: z.string().trim().min(1),
+  eyeline: z.string().trim().min(1),
+}).strict()
+
+export const shotBlockingSchema = z.object({
+  locationName: z.string().trim().min(1),
+  absolutePosition: z.string().trim().min(2),
+  relativePosition: z.string().trim().min(2),
+  screenPosition: z.string().trim().min(2),
+  characterPlacements: z.array(characterPlacementSchema),
+  cameraPlacement: z.string().trim().min(2),
+  composition: z.string().trim().min(2),
+  continuityNote: z.string().trim().min(2),
+}).strict()
+
 export const cameraPlanPanelSchema = z.object({
   panelIndex: z.number().int().min(0),
   sourceShotNumber: z.number().int().positive(),
@@ -193,16 +216,17 @@ export const cameraPlanPanelSchema = z.object({
   aestheticIntent: z.string().trim().min(2),
   emotionalEffect: z.string().trim().min(2),
   continuityNote: z.string().trim().min(2),
+  shotBlocking: shotBlockingSchema,
   finalPanelPrompt: z.string().trim().min(30),
-})
+}).strict()
 
 export const cameraPlanModelOutputSchema = z.object({
   cameraPlanOutput: z.object({
-    strategy: z.literal('camera_plan'),
+    strategy: z.literal('spatial_text_blocking'),
     cameraStyleBible: z.unknown().optional(),
     blocks: z.array(z.unknown()).optional(),
     panels: z.array(cameraPlanPanelSchema).min(1),
-  }).passthrough(),
+  }).strict(),
 })
 
 export const cameraStyleBibleModelOutputSchema = z.object({

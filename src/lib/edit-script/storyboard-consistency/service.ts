@@ -34,8 +34,8 @@ function parseJsonRecord(value: string | null): Record<string, unknown> {
   }
 }
 
-function coordinateAnalysisReady(stage: string | null): boolean {
-  return stage === 'grid_analyze_ready' || stage === 'panel_prompts_ready'
+function spatialProfileReady(stage: string | null): boolean {
+  return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
 }
 
 async function resolveEditScriptId(input: Pick<SubmitCoordinateStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
@@ -75,7 +75,7 @@ export async function submitEditScriptCoordinateStoryboard(input: SubmitCoordina
     type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
     targetType: 'ProjectEditScript',
     targetId: editScriptId,
-    operationId: 'generate_edit_script_storyboard_coordinates',
+    operationId: 'generate_edit_script_storyboard_spatial_blocking',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
     payload: {
@@ -110,11 +110,11 @@ export async function submitEditScriptStoryboardPanels(input: SubmitCoordinateSt
     if (sourceEditScriptId !== editScriptId) return []
     return [{ storyboardId: storyboard.id, plan }]
   })
-  const ready = matchingStoryboards.find((item) => coordinateAnalysisReady(readString(item.plan.currentStage)))
+  const ready = matchingStoryboards.find((item) => spatialProfileReady(readString(item.plan.currentStage)))
   if (!ready || !ready.plan.strategyOutput || typeof ready.plan.strategyOutput !== 'object' || Array.isArray(ready.plan.strategyOutput)) {
     throw new ApiError('CONFLICT', {
-      code: 'EDIT_SCRIPT_STORYBOARD_COORDINATES_REQUIRED',
-      message: 'Generate space coordinate maps before generating storyboard panels',
+      code: 'LOCATION_SPATIAL_PROFILE_REQUIRED',
+      message: 'Ready location spatial profiles are required before generating storyboard panels',
     })
   }
   return await submitTask({

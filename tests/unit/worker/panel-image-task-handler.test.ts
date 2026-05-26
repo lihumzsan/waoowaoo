@@ -77,6 +77,32 @@ const sharedMock = vi.hoisted(() => ({
           {
             isSelected: true,
             description: '雨夜街道',
+            spatialProfileJson: {
+              schemaVersion: 1,
+              sceneSummary: '街道左侧有墙面，右侧有路灯。',
+              anchors: [{
+                id: 'anchor_wall',
+                label: '左侧墙面',
+                screenArea: '画面左侧',
+                depthLayer: '中景',
+                spatialRelations: ['墙面右侧是街道'],
+              }],
+              placementZones: [{
+                id: 'zone_wall',
+                label: '街道左侧靠墙的留白位置',
+                absolutePosition: '画面左侧靠墙',
+                nearAnchors: ['左侧墙面'],
+                depthLayer: '中景',
+                visibility: '适合半身出现',
+                spatialRelations: ['位于路灯前方'],
+              }],
+              depthLayout: {
+                foreground: '街道前景',
+                midground: '墙边位置',
+                background: '远处店铺',
+              },
+              lightingDirection: '路灯从右侧照入',
+            },
             availableSlots: JSON.stringify([
               '街道左侧靠墙的留白位置',
             ]),
@@ -330,7 +356,7 @@ describe('worker panel-image-task-handler behavior', () => {
     }))
   })
 
-  it('includes matching coordinate overlay artifact as a panel generation reference', async () => {
+  it('uses spatial profile and shotBlocking without collecting coordinate overlay references', async () => {
     prismaMock.projectPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -344,72 +370,56 @@ describe('worker panel-image-task-handler behavior', () => {
       characters: JSON.stringify([{ name: 'Hero', appearance: 'default', slot: '街道左侧靠墙的留白位置' }]),
       srtSegment: '台词片段',
       photographyRules: JSON.stringify({
-        consistencyMode: 'grid_coordinates',
+        consistencyMode: 'spatial_text_blocking',
         sourceVideoBlockId: 'edit-script-1:videoBlock:2',
+        consistencyMetadata: {
+          cameraPlan: {
+            shotBlocking: {
+              locationName: 'Old Town',
+              absolutePosition: '画面左侧靠墙',
+              relativePosition: '主角站在路灯前方',
+              screenPosition: '画面左三分之一',
+              characterPlacements: [{
+                characterName: 'Hero',
+                absolutePosition: '画面左侧靠墙',
+                relativePosition: '位于路灯前方',
+                screenPosition: '画面左三分之一',
+                facing: '朝向画面右侧',
+                eyeline: '看向街道深处',
+              }],
+              cameraPlacement: '从街道中线偏右拍向左侧墙面',
+              composition: '主角占左侧，街道延伸到右后方',
+              continuityNote: '保持街道左墙在主角身后',
+            },
+          },
+        },
       }),
       actingNotes: null,
       sketchImageUrl: null,
       imageUrl: null,
     })
-    prismaMock.projectStoryboardBlockingArtifact.findMany.mockResolvedValueOnce([
-      {
-        id: 'overlay-1',
-        imageUrl: 'images/grid-overlay-1.png',
-        sourceVideoBlockId: null,
-        metadataJson: { sourceVideoBlockIds: ['edit-script-1:videoBlock:2'] },
-      },
-      {
-        id: 'overlay-2',
-        imageUrl: 'images/grid-overlay-2.png',
-        sourceVideoBlockId: 'edit-script-1:videoBlock:3',
-        metadataJson: {},
-      },
-    ])
-
     await handlePanelImageTask(buildJob({ candidateCount: 1 }))
 
-    expect(prismaMock.projectStoryboardBlockingArtifact.findMany).toHaveBeenCalledWith({
-      where: {
-        storyboardId: 'storyboard-1',
-        kind: 'grid_coordinate_overlay',
-        status: 'ready',
-        imageUrl: { not: null },
-      },
-      orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }],
-      select: {
-        id: true,
-        imageUrl: true,
-        sourceVideoBlockId: true,
-        metadataJson: true,
-      },
-    })
-    expect(sharedMock.normalizeReferenceImageItemsForGeneration).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          url: 'images/grid-overlay-1.png',
-          role: 'coordinate_overlay',
-          name: '2D coordinate anchor map for edit-script-1:videoBlock:2',
-        }),
-      ]),
-      expect.objectContaining({ locale: 'zh' }),
-    )
+    expect(prismaMock.projectStoryboardBlockingArtifact.findMany).not.toHaveBeenCalled()
     const promptCalls = promptMock.buildPrompt.mock.calls as unknown as Array<[{
       variables?: { storyboard_text_json_input?: string }
     }]>
     const contextJson = promptCalls[0]?.[0].variables?.storyboard_text_json_input || '{}'
     const context = JSON.parse(contextJson) as {
-      context?: { reference_images?: Array<{ image_no: string; role: string; name: string }> }
+      panel?: { shot_blocking?: { cameraPlacement?: string } }
+      context?: {
+        location_reference?: { spatial_profile?: { placementZones?: Array<{ label: string }> } }
+        reference_images?: Array<{ image_no: string; role: string; name: string }>
+      }
     }
-    expect(context.context?.reference_images).toContainEqual({
-      image_no: '图 4',
-      role: 'coordinate_overlay',
-      name: '2D coordinate anchor map for edit-script-1:videoBlock:2',
-    })
+    expect(context.panel?.shot_blocking?.cameraPlacement).toBe('从街道中线偏右拍向左侧墙面')
+    expect(context.context?.location_reference?.spatial_profile?.placementZones?.[0]?.label).toBe('街道左侧靠墙的留白位置')
+    expect(context.context?.reference_images?.map((item) => item.role)).toEqual(['sketch', 'character', 'location'])
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          referenceImages: expect.arrayContaining(['normalized:images/grid-overlay-1.png']),
+          referenceImages: ['normalized-sketch', 'normalized-hero', 'normalized-location'],
         }),
       }),
     )

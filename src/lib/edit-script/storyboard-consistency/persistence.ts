@@ -250,6 +250,7 @@ function buildBasePanelPrompt(input: {
         requirementId: location.requirementId,
         name: location.name,
         description: location.description,
+        spatialProfile: location.spatialProfile,
       }] : []),
     },
   })
@@ -281,7 +282,7 @@ function buildPanelDrafts(input: {
       sourceVideoBlockId: block.sourceVideoBlockId,
       sourceVideoBlockIndex: block.blockIndex,
       sourceVideoBlockKind: block.kind,
-      consistencyMode: 'grid_coordinates',
+      consistencyMode: 'spatial_text_blocking',
       consistencyMetadata: generated?.metadata ?? null,
     }
     return {

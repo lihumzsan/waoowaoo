@@ -6,7 +6,7 @@ import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bibl
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
-  getProjectModels: vi.fn(async () => ({ locationModel: 'location-model-1', artStyle: 'japanese-anime' })),
+  getProjectModels: vi.fn(async () => ({ locationModel: 'location-model-1', analysisModel: 'analysis-model-1', artStyle: 'japanese-anime' })),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -32,6 +32,35 @@ const sharedMock = vi.hoisted(() => ({
   generateCleanImageToStorage: vi.fn(async () => 'cos/location-generated-1.png'),
 }))
 
+const spatialProfileServiceMock = vi.hoisted(() => ({
+  analyzeAndPersistProjectLocationImageSpatialProfile: vi.fn(async () => ({
+    schemaVersion: 1,
+    sceneSummary: '街道空间',
+    anchors: [{
+      id: 'anchor_wall',
+      label: '左侧墙面',
+      screenArea: '画面左侧',
+      depthLayer: '中景',
+      spatialRelations: ['墙面右侧是街道'],
+    }],
+    placementZones: [{
+      id: 'zone_wall',
+      label: '左侧墙边站位',
+      absolutePosition: '画面左侧靠墙',
+      nearAnchors: ['左侧墙面'],
+      depthLayer: '中景',
+      visibility: '适合全身出现',
+      spatialRelations: ['位于街道左侧'],
+    }],
+    depthLayout: {
+      foreground: '街道前景',
+      midground: '墙边和路面',
+      background: '远处街灯',
+    },
+    lightingDirection: '街灯从右后方照入',
+  })),
+}))
+
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
@@ -44,6 +73,7 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
     generateCleanImageToStorage: sharedMock.generateCleanImageToStorage,
   }
 })
+vi.mock('@/lib/location-spatial-profile/service', () => spatialProfileServiceMock)
 
 import { handleLocationImageTask } from '@/lib/workers/handlers/location-image-task-handler'
 
@@ -108,8 +138,13 @@ describe('worker location-image-task-handler behavior', () => {
   })
 
   it('locationModel missing -> explicit error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: '', artStyle: 'japanese-anime' })
+    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: '', analysisModel: 'analysis-model-1', artStyle: 'japanese-anime' })
     await expect(handleLocationImageTask(buildJob({}))).rejects.toThrow('Location model not configured')
+  })
+
+  it('analysis model missing for location -> explicit spatial profile error', async () => {
+    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: 'location-model-1', analysisModel: '', artStyle: 'japanese-anime' })
+    await expect(handleLocationImageTask(buildJob({ imageIndex: 0 }))).rejects.toThrow('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
   })
 
   it('success path -> generates and persists concrete location image url', async () => {
@@ -152,7 +187,18 @@ describe('worker location-image-task-handler behavior', () => {
 
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
-      data: { imageUrl: 'cos/location-generated-1.png' },
+      data: {
+        imageUrl: 'cos/location-generated-1.png',
+        spatialProfileStatus: 'stale',
+        spatialProfileError: null,
+      },
+    })
+    expect(spatialProfileServiceMock.analyzeAndPersistProjectLocationImageSpatialProfile).toHaveBeenCalledWith({
+      imageId: 'location-image-1',
+      userId: 'user-1',
+      projectId: 'project-1',
+      model: 'analysis-model-1',
+      locale: 'zh',
     })
   })
 
@@ -218,7 +264,11 @@ describe('worker location-image-task-handler behavior', () => {
     expect(prismaMock.locationImage.update).toHaveBeenCalledTimes(1)
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
-      data: { imageUrl: 'cos/location-generated-1.png' },
+      data: {
+        imageUrl: 'cos/location-generated-1.png',
+        spatialProfileStatus: 'stale',
+        spatialProfileError: null,
+      },
     })
   })
 
@@ -230,5 +280,6 @@ describe('worker location-image-task-handler behavior', () => {
         options: expect.objectContaining({ aspectRatio: PROP_IMAGE_RATIO }),
       }),
     )
+    expect(spatialProfileServiceMock.analyzeAndPersistProjectLocationImageSpatialProfile).not.toHaveBeenCalled()
   })
 })

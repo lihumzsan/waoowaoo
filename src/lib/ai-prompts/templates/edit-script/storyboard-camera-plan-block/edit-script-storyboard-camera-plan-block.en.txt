@@ -4,13 +4,14 @@ Priority:
 1. userDirectedCameraStyle in the Camera Style Bible comes from explicit user requirements and has highest priority.
 2. You must use Camera Style Bible.imageFilterPrompt and explicitly write it into every finalPanelPrompt; the image filter must stay consistent with the video prompt filter and must not create a separate image-only style.
 3. If the user did not specify a style, obey inferredCameraStyle, imageFilterPrompt, project style, and the current block's story/space needs.
-4. Coordinate blocking contains only character coordinates, character facing, and character-to-character spatial relationships. Environmental anchors may only be textual references inside cinematicTranslation, not coordinate entities. You must further design shot scale, camera position, camera height, camera angle, composition, movement, lens, and depth.
+4. You must use spatial_profile_strategy_output_json for natural-language blocking: where characters stand, nearby anchors, foreground/midground/background layer, relative position to other characters and objects, screen position, camera placement, and composition.
 5. Do not rewrite the story, add characters, or change asset identity.
+6. Do not output x/y, coordinates, grids, coordinate, blockedZones, cameraVantages, or profileSource.
 
 finalPanelPrompt must include:
 - The original shot visualAction, camera, and videoPrompt intent.
-- If coordinate_strategy_output_json.blocks is non-empty, use its coordinate blocking / spatial translation.
-- If coordinate_strategy_output_json.blocks is empty, the current block has no applicable coordinates; do not imagine or add coordinates, and design camera language only from the original shot, videoBlock, and Camera Style Bible.
+- Use placementZones, anchors, depthLayout, and lightingDirection from spatial_profile_strategy_output_json.locations[].spatialProfile.
+- Write character absolute position, relative position, facing, eyeline, screen position, camera placement, and composition into shotBlocking.
 - Shot scale, camera position, height, angle, composition, movement motivation, lens, and depth.
 - The image filter specified by Camera Style Bible.imageFilterPrompt.
 - Foreground/background, focus relationship, eyeline, left/right relation, and axis continuity.
@@ -23,7 +24,7 @@ source_snapshot_json:
 camera_style_bible_json:
 {camera_style_bible_json}
 
-coordinate_strategy_output_json:
+spatial_profile_strategy_output_json:
 {coordinate_strategy_output_json}
 
 video_block_json:
@@ -58,6 +59,25 @@ Return JSON only. No markdown. No explanation. Schema:
         "aestheticIntent": "string",
         "emotionalEffect": "string",
         "continuityNote": "string",
+        "shotBlocking": {
+          "locationName": "string",
+          "absolutePosition": "absolute standing position in the scene",
+          "relativePosition": "relative position among characters and anchors",
+          "screenPosition": "position inside the frame",
+          "characterPlacements": [
+            {
+              "characterName": "string",
+              "absolutePosition": "string",
+              "relativePosition": "string",
+              "screenPosition": "string",
+              "facing": "string",
+              "eyeline": "string"
+            }
+          ],
+          "cameraPlacement": "camera location, direction, and distance",
+          "composition": "composition arrangement",
+          "continuityNote": "spatial continuity with adjacent shots"
+        },
         "finalPanelPrompt": "final storyboard image prompt"
       }
     ]

@@ -5,6 +5,7 @@ import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { parseLocationSpatialProfile, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import type { EditAssetRequirement, EditScriptPayload, EditScriptShot } from '@/lib/edit-script/types'
 import type {
   StoryboardConsistencyAssetSnapshot,
@@ -123,8 +124,13 @@ function requireModelConfig(config: Awaited<ReturnType<typeof getProjectModelCon
   }
 }
 
-async function resolveAssetPreview(requirement: EditAssetRequirement): Promise<string | null> {
-  if (!requirement.targetId) return null
+interface ResolvedAssetImage {
+  readonly previewImageUrl: string | null
+  readonly spatialProfile: LocationSpatialProfile | null
+}
+
+async function resolveAssetImage(requirement: EditAssetRequirement): Promise<ResolvedAssetImage> {
+  if (!requirement.targetId) return { previewImageUrl: null, spatialProfile: null }
   if (requirement.kind === 'character') {
     const character = await prisma.projectCharacter.findUnique({
       where: { id: requirement.targetId },
@@ -140,21 +146,44 @@ async function resolveAssetPreview(requirement: EditAssetRequirement): Promise<s
       },
     })
     const appearance = character?.appearances[0]
-    if (!appearance) return null
+    if (!appearance) return { previewImageUrl: null, spatialProfile: null }
     const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'editScript.storyboardConsistency.character.imageUrls')
-    return appearance.imageUrl || imageUrls[0] || null
+    return {
+      previewImageUrl: appearance.imageUrl || imageUrls[0] || null,
+      spatialProfile: null,
+    }
   }
   const location = await prisma.projectLocation.findUnique({
     where: { id: requirement.targetId },
     select: {
+      selectedImageId: true,
       images: {
         orderBy: { imageIndex: 'asc' },
-        take: 1,
-        select: { imageUrl: true },
+        select: {
+          id: true,
+          imageUrl: true,
+          isSelected: true,
+          spatialProfileJson: true,
+          spatialProfileStatus: true,
+        },
       },
     },
   })
-  return location?.images[0]?.imageUrl ?? null
+  const image = location?.images.find((item) => item.id === location.selectedImageId)
+    ?? location?.images.find((item) => item.isSelected)
+    ?? location?.images.find((item) => !!item.imageUrl)
+    ?? null
+  if (!image?.imageUrl) return { previewImageUrl: null, spatialProfile: null }
+  if (image.spatialProfileStatus !== 'ready' || !image.spatialProfileJson) {
+    throw new ApiError('CONFLICT', {
+      code: 'LOCATION_SPATIAL_PROFILE_REQUIRED',
+      message: `Location spatial profile must be ready before storyboard generation: ${requirement.name}`,
+    })
+  }
+  return {
+    previewImageUrl: image.imageUrl,
+    spatialProfile: parseLocationSpatialProfile(image.spatialProfileJson),
+  }
 }
 
 export async function buildAssetSnapshots(requirements: readonly EditAssetRequirement[]): Promise<StoryboardConsistencyAssetSnapshot[]> {
@@ -171,10 +200,10 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
         snapshot: null,
       }
     }
-    const previewImageUrl = await resolveAssetPreview(requirement)
+    const resolvedImage = await resolveAssetImage(requirement)
     return {
       requirement,
-      snapshot: previewImageUrl
+      snapshot: resolvedImage.previewImageUrl
         ? {
             requirementId: requirement.id,
             kind: requirement.kind,
@@ -182,7 +211,8 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
             description: requirement.description,
             shotNumbers: requirement.shotNumbers,
             targetId: requirement.targetId,
-            previewImageUrl,
+            previewImageUrl: resolvedImage.previewImageUrl,
+            spatialProfile: resolvedImage.spatialProfile,
           }
         : null,
     }

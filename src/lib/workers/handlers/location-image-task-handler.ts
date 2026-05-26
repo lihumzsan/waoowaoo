@@ -20,6 +20,7 @@ import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForTask,
 } from '@/lib/edit-script/style-bible-prompt'
+import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 interface LocationImageRecord {
   id: string
@@ -59,6 +60,9 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   const models = await getProjectModels(projectId, userId)
   const modelId = models.locationModel
   if (!modelId) throw new Error('Location model not configured')
+  const assetType = payload.type === 'prop' ? 'prop' : 'location'
+  const spatialProfileModel = models.analysisModel
+  if (assetType === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
   const requestedCount = resolveRequestedLocationCount(payload)
 
   const artStyle = (await resolveProjectImageStyleForTask({
@@ -72,8 +76,6 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
     projectId,
     episodeId: job.data.episodeId,
   })
-  const assetType = payload.type === 'prop' ? 'prop' : 'location'
-
   // targetId may be locationId (group) or locationImageId (single)
   const maybeLocationImage = await db.locationImage.findUnique({
     where: { id: job.data.targetId },
@@ -162,8 +164,32 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
     await assertTaskActive(job, 'persist_location_image')
     await db.locationImage.update({
       where: { id: item.id },
-      data: { imageUrl: imageKey },
+      data: {
+        imageUrl: imageKey,
+        ...(assetType === 'location'
+          ? {
+            spatialProfileStatus: 'stale',
+            spatialProfileError: null,
+          }
+          : {}),
+      },
     })
+    if (assetType === 'location') {
+      const profileModel = spatialProfileModel
+      if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+      await assertTaskActive(job, 'analyze_location_spatial_profile')
+      await reportTaskProgress(job, 78 + Math.floor((i / Math.max(locationImages.length, 1)) * 15), {
+        stage: 'analyze_location_spatial_profile',
+        imageId: item.id,
+      })
+      await analyzeAndPersistProjectLocationImageSpatialProfile({
+        imageId: item.id,
+        userId,
+        projectId,
+        model: profileModel,
+        locale: job.data.locale === 'en' ? 'en' : 'zh',
+      })
+    }
   }
 
   return {
