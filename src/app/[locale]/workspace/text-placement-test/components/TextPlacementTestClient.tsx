@@ -18,11 +18,14 @@ interface TextPlacementTestResponse {
   readonly placementPrompt: string
   readonly placementRawText: string
   readonly scenePrompt: string
-  readonly characterPrompt: string
+  readonly characterAPrompt: string
+  readonly characterBPrompt: string
   readonly sceneImageUrl: string
   readonly sceneStorageKey: string
-  readonly characterImageUrl: string
-  readonly characterStorageKey: string
+  readonly characterAImageUrl: string
+  readonly characterAStorageKey: string
+  readonly characterBImageUrl: string
+  readonly characterBStorageKey: string
   readonly finalImages: readonly TextPlacementFinalImageResult[]
 }
 
@@ -39,11 +42,14 @@ function isTextPlacementTestResponse(value: unknown): value is TextPlacementTest
     && typeof value.placementPrompt === 'string'
     && typeof value.placementRawText === 'string'
     && typeof value.scenePrompt === 'string'
-    && typeof value.characterPrompt === 'string'
+    && typeof value.characterAPrompt === 'string'
+    && typeof value.characterBPrompt === 'string'
     && typeof value.sceneImageUrl === 'string'
     && typeof value.sceneStorageKey === 'string'
-    && typeof value.characterImageUrl === 'string'
-    && typeof value.characterStorageKey === 'string'
+    && typeof value.characterAImageUrl === 'string'
+    && typeof value.characterAStorageKey === 'string'
+    && typeof value.characterBImageUrl === 'string'
+    && typeof value.characterBStorageKey === 'string'
     && Array.isArray(value.finalImages)
     && value.finalImages.every((item) => (
       isRecord(item)
@@ -233,10 +239,16 @@ export function TextPlacementTestClient() {
               storageKey={result?.sceneStorageKey}
             />
             <ImagePanel
-              title={t('characterAsset')}
-              empty={t('emptyCharacter')}
-              imageUrl={result?.characterImageUrl || null}
-              storageKey={result?.characterStorageKey}
+              title={t('characterAAsset')}
+              empty={t('emptyCharacterA')}
+              imageUrl={result?.characterAImageUrl || null}
+              storageKey={result?.characterAStorageKey}
+            />
+            <ImagePanel
+              title={t('characterBAsset')}
+              empty={t('emptyCharacterB')}
+              imageUrl={result?.characterBImageUrl || null}
+              storageKey={result?.characterBStorageKey}
             />
             {result?.finalImages.length ? (
               <section className="grid gap-3 lg:col-span-2">
@@ -259,7 +271,8 @@ export function TextPlacementTestClient() {
             />
             <TextPanel title={t('placementPrompt')} value={result?.placementPrompt || ''} empty={t('emptyText')} />
             <TextPanel title={t('scenePrompt')} value={result?.scenePrompt || ''} empty={t('emptyText')} />
-            <TextPanel title={t('characterPrompt')} value={result?.characterPrompt || ''} empty={t('emptyText')} />
+            <TextPanel title={t('characterAPrompt')} value={result?.characterAPrompt || ''} empty={t('emptyText')} />
+            <TextPanel title={t('characterBPrompt')} value={result?.characterBPrompt || ''} empty={t('emptyText')} />
             <TextPanel
               title={t('finalPrompts')}
               value={result?.finalImages.map((image) => [

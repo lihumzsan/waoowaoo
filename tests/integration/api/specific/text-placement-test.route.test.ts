@@ -9,104 +9,38 @@ const serviceMock = vi.hoisted(() => ({
   runTextPlacementTest: vi.fn(async () => {
     const placementPlan = {
       sceneBrief: 'A concrete hall.',
-      characterBrief: 'A man in a black coat.',
-      shots: [
-        {
-          shotNumber: 1,
-          shotLabel: 'Entrance',
-          absoluteLocation: 'center-right of the hall',
-          anchorObject: 'concrete pillar',
-          relationToAnchor: 'one step left of the pillar',
+      characterABrief: 'Character A in a black coat.',
+      characterBBrief: 'Character B in a red jacket.',
+      shots: Array.from({ length: 5 }, (_, index) => ({
+        shotNumber: index + 1,
+        shotLabel: index === 0 ? 'Entrance' : `Beat ${index + 1}`,
+        characterAPlacement: {
+          absoluteLocation: index === 0 ? 'center-right of the hall' : `A zone ${index + 1}`,
+          anchorObject: index === 0 ? 'concrete pillar' : `A anchor ${index + 1}`,
+          relationToAnchor: 'one step left of the anchor',
           distanceScale: 'medium distance',
-          bodyFacing: 'toward camera',
-          screenPosition: 'lower center-right third',
-          foregroundLayer: 'dusty floor',
-          midgroundLayer: 'character beside pillar',
-          backgroundLayer: 'rear wall',
-          cameraView: 'eye-level medium shot',
-          negativeConstraints: [
-            'do not place behind the pillar',
-            'do not place outside the hall',
-            'do not crop feet',
-          ],
-        },
-        {
-          shotNumber: 2,
-          shotLabel: 'Approach',
-          absoluteLocation: 'center of the hall',
-          anchorObject: 'first pillar',
-          relationToAnchor: 'half step in front',
-          distanceScale: 'closer distance',
-          bodyFacing: 'walking forward',
-          screenPosition: 'center third',
-          foregroundLayer: 'floor',
-          midgroundLayer: 'character and pillar',
-          backgroundLayer: 'windows',
-          cameraView: 'medium shot',
-          negativeConstraints: [
-            'do not hide behind pillar',
-            'do not place at wall',
-            'do not crop head',
-          ],
-        },
-        {
-          shotNumber: 3,
-          shotLabel: 'Window',
-          absoluteLocation: 'left side of the hall',
-          anchorObject: 'window light',
-          relationToAnchor: 'one step right of light',
-          distanceScale: 'medium close',
-          bodyFacing: 'toward window',
-          screenPosition: 'left third',
-          foregroundLayer: 'shadow',
-          midgroundLayer: 'character',
-          backgroundLayer: 'wall',
-          cameraView: 'medium shot',
-          negativeConstraints: [
-            'do not leave light',
-            'do not crop torso',
-            'do not remove window',
-          ],
-        },
-        {
-          shotNumber: 4,
-          shotLabel: 'Hold',
-          absoluteLocation: 'middle of the hall',
-          anchorObject: 'pillar row',
-          relationToAnchor: 'between pillars',
-          distanceScale: 'portrait distance',
-          bodyFacing: 'toward camera',
-          screenPosition: 'center frame',
-          foregroundLayer: 'pillar edge',
-          midgroundLayer: 'character',
-          backgroundLayer: 'pillar row',
-          cameraView: 'medium close shot',
-          negativeConstraints: [
-            'do not hide face',
-            'do not move to rear wall',
-            'do not top-down view',
-          ],
-        },
-        {
-          shotNumber: 5,
-          shotLabel: 'Exit',
-          absoluteLocation: 'near the second pillar',
-          anchorObject: 'second pillar',
-          relationToAnchor: 'one step in front',
-          distanceScale: 'wide distance',
-          bodyFacing: 'away from camera',
+          bodyFacing: 'toward character B',
           screenPosition: 'right third',
-          foregroundLayer: 'floor lines',
-          midgroundLayer: 'character',
-          backgroundLayer: 'deep hall',
-          cameraView: 'wide shot',
-          negativeConstraints: [
-            'do not crop feet',
-            'do not place at entrance',
-            'do not remove pillar',
-          ],
         },
-      ],
+        characterBPlacement: {
+          absoluteLocation: index === 0 ? 'left side of the hall' : `B zone ${index + 1}`,
+          anchorObject: index === 0 ? 'window light' : `B anchor ${index + 1}`,
+          relationToAnchor: 'one step right of the anchor',
+          distanceScale: 'farther than character A',
+          bodyFacing: 'toward character A',
+          screenPosition: 'left third',
+        },
+        relationshipBetweenCharacters: 'character A and character B face each other across the pillar',
+        foregroundLayer: 'dusty floor',
+        midgroundLayer: 'both characters and pillar',
+        backgroundLayer: 'rear wall',
+        cameraView: 'eye-level medium shot',
+        negativeConstraints: [
+          'do not merge character A and character B',
+          'do not swap character identities',
+          'do not show only one character',
+        ],
+      })),
     }
     return {
       success: true,
@@ -116,11 +50,14 @@ const serviceMock = vi.hoisted(() => ({
       placementPrompt: 'placement prompt',
       placementRawText: JSON.stringify(placementPlan),
       scenePrompt: 'scene prompt',
-      characterPrompt: 'character prompt',
+      characterAPrompt: 'character A prompt',
+      characterBPrompt: 'character B prompt',
       sceneImageUrl: '/api/files/scene.jpg',
       sceneStorageKey: 'scene.jpg',
-      characterImageUrl: '/api/files/character.jpg',
-      characterStorageKey: 'character.jpg',
+      characterAImageUrl: '/api/files/character-a.jpg',
+      characterAStorageKey: 'character-a.jpg',
+      characterBImageUrl: '/api/files/character-b.jpg',
+      characterBStorageKey: 'character-b.jpg',
       finalImages: [
         {
           shotNumber: 1,
@@ -131,7 +68,7 @@ const serviceMock = vi.hoisted(() => ({
         },
         {
           shotNumber: 2,
-          shotLabel: 'Approach',
+          shotLabel: 'Beat 2',
           prompt: 'final prompt 2',
           imageUrl: '/api/files/final-2.jpg',
           storageKey: 'final-2.jpg',
@@ -162,7 +99,7 @@ import { POST } from '@/app/api/user/text-placement-test/run/route'
 
 function validBody() {
   return {
-    storyPrompt: 'A man enters a concrete hall.',
+    storyPrompt: 'Two people meet in a concrete hall.',
     llmModelKey: 'llm-model-1',
     imageModelKey: 'image-model-1',
   }
@@ -174,7 +111,7 @@ describe('text placement test route', () => {
     vi.clearAllMocks()
   })
 
-  it('POST /api/user/text-placement-test/run -> validates input and runs text placement generation', async () => {
+  it('POST /api/user/text-placement-test/run -> validates input and runs two-character text placement generation', async () => {
     const request = buildMockRequest({
       path: '/api/user/text-placement-test/run',
       method: 'POST',
@@ -189,11 +126,19 @@ describe('text placement test route', () => {
     expect(payload).toMatchObject({
       success: true,
       sceneImageUrl: '/api/files/scene.jpg',
-      characterImageUrl: '/api/files/character.jpg',
+      characterAImageUrl: '/api/files/character-a.jpg',
+      characterBImageUrl: '/api/files/character-b.jpg',
     })
     expect(payload.placementPlan.shots[0]).toMatchObject({
-      absoluteLocation: 'center-right of the hall',
-      anchorObject: 'concrete pillar',
+      characterAPlacement: expect.objectContaining({
+        absoluteLocation: 'center-right of the hall',
+        anchorObject: 'concrete pillar',
+      }),
+      characterBPlacement: expect.objectContaining({
+        absoluteLocation: 'left side of the hall',
+        anchorObject: 'window light',
+      }),
+      relationshipBetweenCharacters: 'character A and character B face each other across the pillar',
     })
     expect(payload.finalImages).toHaveLength(2)
     expect(serviceMock.runTextPlacementTest).toHaveBeenCalledWith({

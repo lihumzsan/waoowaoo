@@ -1,14 +1,20 @@
 import { z } from 'zod'
 
-export const textPlacementShotSchema = z.object({
-  shotNumber: z.number().int().min(1).max(10),
-  shotLabel: z.string().trim().min(1).max(120),
+export const textPlacementCharacterPlacementSchema = z.object({
   absoluteLocation: z.string().trim().min(1).max(800),
   anchorObject: z.string().trim().min(1).max(300),
   relationToAnchor: z.string().trim().min(1).max(800),
   distanceScale: z.string().trim().min(1).max(500),
   bodyFacing: z.string().trim().min(1).max(500),
   screenPosition: z.string().trim().min(1).max(500),
+})
+
+export const textPlacementShotSchema = z.object({
+  shotNumber: z.number().int().min(1).max(10),
+  shotLabel: z.string().trim().min(1).max(120),
+  characterAPlacement: textPlacementCharacterPlacementSchema,
+  characterBPlacement: textPlacementCharacterPlacementSchema,
+  relationshipBetweenCharacters: z.string().trim().min(1).max(800),
   foregroundLayer: z.string().trim().min(1).max(500),
   midgroundLayer: z.string().trim().min(1).max(500),
   backgroundLayer: z.string().trim().min(1).max(500),
@@ -18,7 +24,8 @@ export const textPlacementShotSchema = z.object({
 
 export const textPlacementPlanSchema = z.object({
   sceneBrief: z.string().trim().min(1).max(1200),
-  characterBrief: z.string().trim().min(1).max(1200),
+  characterABrief: z.string().trim().min(1).max(1200),
+  characterBBrief: z.string().trim().min(1).max(1200),
   shots: z.array(textPlacementShotSchema).min(5).max(10),
 }).superRefine((value, ctx) => {
   value.shots.forEach((shot, index) => {
@@ -39,6 +46,7 @@ export const textPlacementTestRunRequestSchema = z.object({
   imageModelKey: z.string().trim().min(1),
 })
 
+export type TextPlacementCharacterPlacement = z.infer<typeof textPlacementCharacterPlacementSchema>
 export type TextPlacementShot = z.infer<typeof textPlacementShotSchema>
 export type TextPlacementPlan = z.infer<typeof textPlacementPlanSchema>
 export type TextPlacementTestRunRequest = z.infer<typeof textPlacementTestRunRequestSchema>
@@ -59,10 +67,13 @@ export interface TextPlacementTestRunResult {
   readonly placementPrompt: string
   readonly placementRawText: string
   readonly scenePrompt: string
-  readonly characterPrompt: string
+  readonly characterAPrompt: string
+  readonly characterBPrompt: string
   readonly sceneImageUrl: string
   readonly sceneStorageKey: string
-  readonly characterImageUrl: string
-  readonly characterStorageKey: string
+  readonly characterAImageUrl: string
+  readonly characterAStorageKey: string
+  readonly characterBImageUrl: string
+  readonly characterBStorageKey: string
   readonly finalImages: readonly TextPlacementFinalImageResult[]
 }

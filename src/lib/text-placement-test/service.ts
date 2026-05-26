@@ -190,22 +190,35 @@ export async function runTextPlacementTest(input: {
     keyPrefix: 'text-placement-test-scene',
   })
 
-  const characterPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale)
-  const characterGenerated = await generateImage(input.userId, input.request.imageModelKey, characterPrompt, {
+  const characterAPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'A')
+  const characterAGenerated = await generateImage(input.userId, input.request.imageModelKey, characterAPrompt, {
     ...capabilityOptions,
     aspectRatio: CHARACTER_ASPECT_RATIO,
   })
-  const characterSource = await resolveGeneratedImageSource(characterGenerated, input.userId)
-  const character = await persistGeneratedImage({
-    source: characterSource,
+  const characterASource = await resolveGeneratedImageSource(characterAGenerated, input.userId)
+  const characterA = await persistGeneratedImage({
+    source: characterASource,
     userId: input.userId,
-    keyPrefix: 'text-placement-test-character',
+    keyPrefix: 'text-placement-test-character-a',
+  })
+
+  const characterBPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'B')
+  const characterBGenerated = await generateImage(input.userId, input.request.imageModelKey, characterBPrompt, {
+    ...capabilityOptions,
+    aspectRatio: CHARACTER_ASPECT_RATIO,
+  })
+  const characterBSource = await resolveGeneratedImageSource(characterBGenerated, input.userId)
+  const characterB = await persistGeneratedImage({
+    source: characterBSource,
+    userId: input.userId,
+    keyPrefix: 'text-placement-test-character-b',
   })
 
   const normalizationIssues: OutboundImageNormalizationIssue[] = []
   const referenceImages = await normalizeReferenceImagesForGeneration([
     scene.imageUrl,
-    character.imageUrl,
+    characterA.imageUrl,
+    characterB.imageUrl,
   ], {
     onIssue: (issue) => normalizationIssues.push(issue),
     context: { scope: 'text-placement-test.final' },
@@ -213,7 +226,7 @@ export async function runTextPlacementTest(input: {
   readReferenceNormalizationResult({
     normalized: referenceImages,
     issues: normalizationIssues,
-    expectedCount: 2,
+    expectedCount: 3,
   })
 
   const finalImages = await Promise.all(placementPlan.shots.map((shot) => generateFinalShotImage({
@@ -234,11 +247,14 @@ export async function runTextPlacementTest(input: {
     placementPrompt,
     placementRawText,
     scenePrompt,
-    characterPrompt,
+    characterAPrompt,
+    characterBPrompt,
     sceneImageUrl: scene.imageUrl,
     sceneStorageKey: scene.storageKey,
-    characterImageUrl: character.imageUrl,
-    characterStorageKey: character.storageKey,
+    characterAImageUrl: characterA.imageUrl,
+    characterAStorageKey: characterA.storageKey,
+    characterBImageUrl: characterB.imageUrl,
+    characterBStorageKey: characterB.storageKey,
     finalImages,
   }
 }

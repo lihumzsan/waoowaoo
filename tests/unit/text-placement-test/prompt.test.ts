@@ -9,143 +9,90 @@ import { textPlacementTestRunRequestSchema, type TextPlacementPlan } from '@/lib
 
 const placementPlan: TextPlacementPlan = {
   sceneBrief: 'A concrete hall with tall windows and a row of pillars.',
-  characterBrief: 'A man wearing a long black coat.',
-  shots: [
-    {
-      shotNumber: 1,
-      shotLabel: 'Entrance mark',
-      absoluteLocation: 'center-right of the hall, two steps in front of the rear wall',
-      anchorObject: 'the nearest concrete pillar',
-      relationToAnchor: 'one body width to the left of the pillar, not hidden by it',
+  characterABrief: 'Character A is a man wearing a long black coat and dark glasses.',
+  characterBBrief: 'Character B is a woman wearing a red jacket and short hair.',
+  shots: Array.from({ length: 5 }, (_, index) => ({
+    shotNumber: index + 1,
+    shotLabel: index === 0 ? 'Separated by pillar' : `Relationship beat ${index + 1}`,
+    characterAPlacement: {
+      absoluteLocation: index === 0
+        ? 'center-right of the hall, two steps in front of the rear wall'
+        : `hall zone A ${index + 1}`,
+      anchorObject: index === 0 ? 'the nearest concrete pillar' : `pillar A ${index + 1}`,
+      relationToAnchor: index === 0
+        ? 'one body width to the left of the pillar, not hidden by it'
+        : `one step from pillar A ${index + 1}`,
       distanceScale: 'medium distance from camera, full body visible',
-      bodyFacing: 'body angled toward camera, face looking toward the window light',
-      screenPosition: 'lower center-right third, occupying half of frame height',
-      foregroundLayer: 'empty dusty floor',
-      midgroundLayer: 'the character beside the concrete pillar',
-      backgroundLayer: 'rear wall and tall windows',
-      cameraView: 'eye-level medium full shot from the hall entrance',
-      negativeConstraints: [
-        'do not place the character behind the pillar',
-        'do not place the character outside the hall',
-        'do not crop off the feet',
-      ],
+      bodyFacing: 'body angled toward character B',
+      screenPosition: 'lower center-right third',
     },
-    {
-      shotNumber: 2,
-      shotLabel: 'Pillar approach',
-      absoluteLocation: 'center of the hall near the first pillar',
-      anchorObject: 'the first concrete pillar',
-      relationToAnchor: 'half a step in front of the pillar',
-      distanceScale: 'slightly closer than shot one',
-      bodyFacing: 'walking toward the window light',
-      screenPosition: 'center third',
-      foregroundLayer: 'floor dust',
-      midgroundLayer: 'character and first pillar',
-      backgroundLayer: 'tall windows',
-      cameraView: 'eye-level medium shot',
-      negativeConstraints: [
-        'do not hide the character behind the pillar',
-        'do not place the character at the wall',
-        'do not crop the head',
-      ],
-    },
-    {
-      shotNumber: 3,
-      shotLabel: 'Window glance',
-      absoluteLocation: 'left side of the hall near the window light',
-      anchorObject: 'bright window rectangle',
-      relationToAnchor: 'one step to the right of the window light',
-      distanceScale: 'medium close distance',
-      bodyFacing: 'face turned toward the window',
+    characterBPlacement: {
+      absoluteLocation: index === 0
+        ? 'left side of the hall near the window light'
+        : `hall zone B ${index + 1}`,
+      anchorObject: index === 0 ? 'bright window rectangle' : `window B ${index + 1}`,
+      relationToAnchor: index === 0
+        ? 'one step to the right of the window light, facing character A'
+        : `one step from window B ${index + 1}`,
+      distanceScale: 'slightly farther from camera than character A',
+      bodyFacing: 'body turned toward character A',
       screenPosition: 'left third',
-      foregroundLayer: 'soft floor shadow',
-      midgroundLayer: 'character in window light',
-      backgroundLayer: 'concrete wall',
-      cameraView: 'medium shot from across the hall',
-      negativeConstraints: [
-        'do not place the character outside the light',
-        'do not make the window the main subject',
-        'do not crop the torso',
-      ],
     },
-    {
-      shotNumber: 4,
-      shotLabel: 'Close hold',
-      absoluteLocation: 'beside the pillar row in the middle of the hall',
-      anchorObject: 'pillar row',
-      relationToAnchor: 'between the first and second pillars',
-      distanceScale: 'closer portrait distance',
-      bodyFacing: 'body still, face toward camera',
-      screenPosition: 'center frame',
-      foregroundLayer: 'blurred pillar edge',
-      midgroundLayer: 'character face and coat',
-      backgroundLayer: 'pillar row receding',
-      cameraView: 'eye-level medium close shot',
-      negativeConstraints: [
-        'do not move the character to the back wall',
-        'do not hide the face',
-        'do not show a top-down view',
-      ],
-    },
-    {
-      shotNumber: 5,
-      shotLabel: 'Exit depth',
-      absoluteLocation: 'farther down the hall near the second pillar',
-      anchorObject: 'second concrete pillar',
-      relationToAnchor: 'one step in front of the second pillar',
-      distanceScale: 'wide distance with full body visible',
-      bodyFacing: 'walking away from camera',
-      screenPosition: 'right third',
-      foregroundLayer: 'empty floor leading lines',
-      midgroundLayer: 'character near second pillar',
-      backgroundLayer: 'deep hall perspective',
-      cameraView: 'wide eye-level shot',
-      negativeConstraints: [
-        'do not place the character at the entrance',
-        'do not crop the feet',
-        'do not remove the second pillar',
-      ],
-    },
-  ],
+    relationshipBetweenCharacters: index === 0
+      ? 'character A and character B face each other across the nearest concrete pillar'
+      : `relationship beat ${index + 1}`,
+    foregroundLayer: 'empty dusty floor',
+    midgroundLayer: 'both characters separated by the concrete pillar',
+    backgroundLayer: 'rear wall and tall windows',
+    cameraView: 'eye-level medium full shot from the hall entrance',
+    negativeConstraints: [
+      'do not merge character A and character B',
+      'do not swap character A and character B identities',
+      'do not show only one character',
+    ],
+  })),
 }
 
 describe('text placement test prompt', () => {
-  it('builds a strict JSON planning prompt from a story', () => {
+  it('builds a strict two-character JSON planning prompt from a story', () => {
     const parsed = textPlacementTestRunRequestSchema.parse({
-      storyPrompt: 'A man enters a concrete hall.',
+      storyPrompt: 'Two people meet in a concrete hall.',
       llmModelKey: 'llm-model-1',
       imageModelKey: 'image-model-1',
     })
 
     const prompt = buildTextPlacementPlanPrompt(parsed, 'en')
 
-    expect(prompt).toContain('continuous sequence')
-    expect(prompt).toContain('"shots":[{"shotNumber":number')
-    expect(prompt).toContain('"absoluteLocation":"string"')
-    expect(prompt).toContain('"negativeConstraints":["string"]')
-    expect(prompt).toContain('A man enters a concrete hall.')
+    expect(prompt).toContain('two-character text-based absolute placement shots')
+    expect(prompt).toContain('"characterABrief":"string"')
+    expect(prompt).toContain('"characterAPlacement"')
+    expect(prompt).toContain('"relationshipBetweenCharacters":"string"')
+    expect(prompt).toContain('Two people meet in a concrete hall.')
   })
 
-  it('builds asset prompts that preserve anchors without adding placement guides', () => {
-    expect(buildTextPlacementScenePrompt(placementPlan, 'en')).toContain('Required visible placement anchors: the nearest concrete pillar')
+  it('builds asset prompts that preserve anchors and separate character identities', () => {
+    expect(buildTextPlacementScenePrompt(placementPlan, 'en')).toContain('Required visible placement anchors: the nearest concrete pillar, bright window rectangle')
     expect(buildTextPlacementScenePrompt(placementPlan, 'en')).toContain('Do not add text, subtitles, coordinates')
-    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en')).toContain('A man wearing a long black coat.')
-    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en')).toContain('single-character asset')
+    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en', 'A')).toContain('Character A brief: Character A is a man wearing a long black coat')
+    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en', 'A')).toContain('Do not include character B')
+    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en', 'B')).toContain('Character B brief: Character B is a woman wearing a red jacket')
+    expect(buildTextPlacementCharacterPrompt(placementPlan, 'en', 'B')).toContain('Do not include character A')
   })
 
-  it('builds a final prompt with absolute location, anchor relation, layers, and negative constraints', () => {
+  it('builds a final prompt with both character placements, relationship, and identity constraints', () => {
     const prompt = buildTextPlacementFinalPrompt({
-      storyPrompt: 'A man enters a concrete hall.',
+      storyPrompt: 'Two people meet in a concrete hall.',
       shot: placementPlan.shots[0],
       locale: 'en',
     })
 
-    expect(prompt).toContain('Current shot: shot 1, Entrance mark')
-    expect(prompt).toContain('Character absolute location: center-right of the hall')
-    expect(prompt).toContain('Placement anchor: the nearest concrete pillar')
-    expect(prompt).toContain('Character relation to anchor: one body width to the left')
-    expect(prompt).toContain('Foreground: empty dusty floor')
-    expect(prompt).toContain('do not place the character behind the pillar')
-    expect(prompt).toContain('Do not include text, subtitles, coordinates')
+    expect(prompt).toContain('reference image 2 as character A')
+    expect(prompt).toContain('reference image 3 as character B')
+    expect(prompt).toContain('Current shot: shot 1, Separated by pillar')
+    expect(prompt).toContain('Character A absolute location: center-right of the hall')
+    expect(prompt).toContain('Character B absolute location: left side of the hall')
+    expect(prompt).toContain('Relationship between characters: character A and character B face each other')
+    expect(prompt).toContain('do not merge character A and character B')
+    expect(prompt).toContain('The final image must contain both character A and character B')
   })
 })
