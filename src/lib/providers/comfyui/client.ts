@@ -715,6 +715,7 @@ export async function runComfyUiVideoWorkflow(params: {
   workflowKey?: string
   prompt?: string
   firstFrameImageUrl: string
+  referenceImageUrls?: string[]
   lastFrameImageUrl?: string
   width?: number
   height?: number
@@ -725,7 +726,11 @@ export async function runComfyUiVideoWorkflow(params: {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const imageFilenames = await uploadComfyUiImages(
     base,
-    [params.firstFrameImageUrl, params.lastFrameImageUrl].filter((value): value is string => !!value),
+    [
+      params.firstFrameImageUrl,
+      ...(params.referenceImageUrls || []),
+      params.lastFrameImageUrl,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
   )
   const fps = typeof params.fps === 'number' && Number.isFinite(params.fps) && params.fps > 0
     ? params.fps

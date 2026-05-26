@@ -6,11 +6,12 @@ import {
   collectMediaRefsFromOutputs,
   resolveComfyUiPromptQueuePhase,
   runComfyUiImageWorkflow,
+  runComfyUiVideoWorkflow,
   runComfyUiWorkflow,
 } from '@/lib/providers/comfyui/client'
 
 function writeWorkflow(root: string, workflowKey: string, workflow: unknown) {
-  const filePath = join(root, `${workflowKey}.json`.replace(/\//g, '\\'))
+  const filePath = join(root, `${workflowKey}.json`)
   mkdirSync(dirname(filePath), { recursive: true })
   writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
 }
@@ -334,5 +335,101 @@ describe('comfyui client media refs', () => {
     expect(result.mimeType).toBe('image/png')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('neutral-upload.png')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).not.toBe('bundled-demo.png')
+  })
+
+  it('uploads video first, reference, and last frames before resolving workflow image filenames', async () => {
+    vi.useFakeTimers()
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'basevideo/client/reference-order', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'LoadImage', inputs: { image: 'old-reference.png', upload: 'image' } },
+      '3': { class_type: 'LoadImage', inputs: { image: 'old-last.png', upload: 'image' } },
+      '4': { class_type: 'SaveVideo', inputs: { images: ['1', 0] } },
+    })
+
+    const sourceFetches: string[] = []
+    const uploadFilenames = ['uploaded-first.png', 'uploaded-reference.png', 'uploaded-last.png']
+    let uploadCount = 0
+    let submittedWorkflow: unknown = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        sourceFetches.push(url)
+        return new Response(new Uint8Array([uploadCount + 1]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        const name = uploadFilenames[uploadCount]
+        uploadCount += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-video-reference-order' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-video-reference-order')) {
+        return new Response(JSON.stringify({
+          'prompt-video-reference-order': {
+            outputs: {
+              '4': {
+                video_url: '/view?filename=video-reference-order.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=video-reference-order.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'basevideo/client/reference-order',
+      prompt: 'video prompt',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+      referenceImageUrls: ['', 'https://assets.test/reference.png'],
+      lastFrameImageUrl: 'https://assets.test/last.png',
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(sourceFetches).toEqual([
+      'https://assets.test/first.png',
+      'https://assets.test/reference.png',
+      'https://assets.test/last.png',
+    ])
+    expect(result.mimeType).toBe('video/mp4')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('uploaded-first.png')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.image).toBe('uploaded-reference.png')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['3']?.inputs.image).toBe('uploaded-last.png')
   })
 })

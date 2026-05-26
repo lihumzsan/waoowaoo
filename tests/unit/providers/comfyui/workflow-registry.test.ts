@@ -12,7 +12,7 @@ function createWorkflowRoot() {
 }
 
 function writeWorkflow(root: string, workflowKey: string, workflow: unknown) {
-  const relativePath = `${workflowKey}.json`.replace(/\//g, '\\')
+  const relativePath = `${workflowKey}.json`
   const filePath = join(root, relativePath)
   mkdirSync(dirname(filePath), { recursive: true })
   writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
@@ -79,6 +79,46 @@ describe('comfyui workflow registry prompt injection', () => {
 
     expect(graph['235']?.inputs?.value).toBe('male doctor character prompt')
     expect(graph['64']?.inputs?.text).toEqual(['235', 0])
+  })
+
+  it('repeats a single image across all four LTX2.3 large-motion image slots', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-1.png', upload: 'image' } },
+      '2': { class_type: 'LoadImage', inputs: { image: 'old-2.png', upload: 'image' } },
+      '3': { class_type: 'LoadImage', inputs: { image: 'old-3.png', upload: 'image' } },
+      '4': { class_type: 'LoadImage', inputs: { image: 'old-4.png', upload: 'image' } },
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/ltx23-profiles/t8-single-image-large-motion-4stage', {
+      imageFilenames: ['source.png'],
+    })
+
+    expect(graph['1']?.inputs?.image).toBe('source.png')
+    expect(graph['2']?.inputs?.image).toBe('source.png')
+    expect(graph['3']?.inputs?.image).toBe('source.png')
+    expect(graph['4']?.inputs?.image).toBe('source.png')
+  })
+
+  it('uses the final filename as the last-frame image for LTX2.3 first-last slots', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/ltx23-profiles/t8-smooth-first-last-frame', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'LoadImage', inputs: { image: 'old-middle.png', upload: 'image' } },
+      '3': { class_type: 'LoadImage', inputs: { image: 'old-last.png', upload: 'image' } },
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/ltx23-profiles/t8-smooth-first-last-frame', {
+      imageFilenames: ['first.png', 'reference.png', 'last.png'],
+    })
+
+    expect(graph['1']?.inputs?.image).toBe('first.png')
+    expect(graph['2']?.inputs?.image).toBe('last.png')
+    expect(graph['3']?.inputs?.image).toBe('last.png')
   })
 
   it('prefers the latest ui nodes over stale embedded extra.prompt snapshots', () => {

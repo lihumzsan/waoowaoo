@@ -207,7 +207,7 @@ export function expandLtx23WorkflowImageFilenames(
     ? imageFilenames.filter((filename): filename is string => typeof filename === 'string' && filename.trim().length > 0)
     : []
   const firstImage = filenames[0]
-  const secondImage = filenames[1] ?? firstImage
+  const lastImage = filenames[filenames.length - 1] ?? firstImage
 
   switch (profile.imageSlotPolicy) {
     case 'repeat_single_to_four':
@@ -215,7 +215,7 @@ export function expandLtx23WorkflowImageFilenames(
     case 'repeat_single_to_three':
       return firstImage ? [firstImage, firstImage, firstImage] : []
     case 'first_last_three':
-      return firstImage ? [firstImage, secondImage, secondImage] : []
+      return firstImage ? [firstImage, lastImage, lastImage] : []
     case 'single':
     default:
       return firstImage ? [firstImage] : []

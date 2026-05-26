@@ -1,8 +1,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
+import {
+  COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+  expandLtx23WorkflowImageFilenames,
+} from './ltx23-workflow-profiles'
 
 export const COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID = 'baseimage/图片生成/Flux2Klein文生图'
-export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
+export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
 
 const LEGACY_BUNDLED_ROOT = join(process.cwd(), 'src', 'lib', 'providers', 'comfyui', 'workflows')
 const EXTERNAL_WORKFLOW_TOOL_DIR = 'tool'
@@ -1478,7 +1482,8 @@ export function resolveComfyUiWorkflow(
   bypassOptionalModelNodes(graph)
   applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   applyDimensionHeuristics(graph, inject.width, inject.height)
-  applyImageInjection(graph, inject.imageFilenames)
+  const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
+  applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)

@@ -40,6 +40,13 @@ describe('ltx23 workflow profiles', () => {
     )).toEqual(['first.png', 'last.png', 'last.png'])
   })
 
+  it('uses the final uploaded image as the last frame when references sit between first and last', () => {
+    expect(expandLtx23WorkflowImageFilenames(
+      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      ['first.png', 'reference.png', 'last.png'],
+    )).toEqual(['first.png', 'last.png', 'last.png'])
+  })
+
   it('marks long-video workflows separately', () => {
     expect(isComfyUiLtx23LongVideoWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s)).toBe(true)
     expect(isComfyUiLtx23LongVideoWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.microDetail)).toBe(false)
