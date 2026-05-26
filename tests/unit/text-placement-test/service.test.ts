@@ -141,6 +141,12 @@ describe('text placement test service', () => {
     })
     expect(progressEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'placementPlan' }),
+      expect.objectContaining({
+        type: 'assetPrompts',
+        scenePrompt: expect.stringContaining('Generate one clean scene asset image'),
+        characterAPrompt: expect.stringContaining('Character A brief: Character A is a man wearing a long black coat'),
+        characterBPrompt: expect.stringContaining('Character B brief: Character B is a woman wearing a red jacket'),
+      }),
       expect.objectContaining({ type: 'asset', asset: 'scene' }),
       expect.objectContaining({ type: 'asset', asset: 'characterA' }),
       expect.objectContaining({ type: 'asset', asset: 'characterB' }),

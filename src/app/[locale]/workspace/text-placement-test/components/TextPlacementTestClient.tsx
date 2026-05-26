@@ -122,6 +122,14 @@ export function TextPlacementTestClient() {
             placementRawText: event.placementRawText,
           }
         }
+        if (event.type === 'assetPrompts') {
+          return {
+            ...current,
+            scenePrompt: event.scenePrompt,
+            characterAPrompt: event.characterAPrompt,
+            characterBPrompt: event.characterBPrompt,
+          }
+        }
         if (event.type === 'asset') {
           if (event.asset === 'scene') {
             return {

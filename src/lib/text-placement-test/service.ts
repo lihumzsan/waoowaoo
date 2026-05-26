@@ -267,6 +267,12 @@ export async function runTextPlacementTest(input: {
   const scenePrompt = buildTextPlacementScenePrompt(placementPlan, input.locale)
   const characterAPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'A')
   const characterBPrompt = buildTextPlacementCharacterPrompt(placementPlan, input.locale, 'B')
+  await input.onProgress?.({
+    type: 'assetPrompts',
+    scenePrompt,
+    characterAPrompt,
+    characterBPrompt,
+  })
   const assetResults = await Promise.allSettled([
     generateAndPersistImageAsset({
       userId: input.userId,

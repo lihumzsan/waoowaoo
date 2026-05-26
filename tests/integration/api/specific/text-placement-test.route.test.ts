@@ -84,6 +84,12 @@ const serviceMock = vi.hoisted(() => ({
       placementRawText: JSON.stringify(placementPlan),
     })
     await input.onProgress?.({
+      type: 'assetPrompts',
+      scenePrompt: 'scene prompt',
+      characterAPrompt: 'character A prompt',
+      characterBPrompt: 'character B prompt',
+    })
+    await input.onProgress?.({
       type: 'complete',
       result,
     })
@@ -160,6 +166,12 @@ describe('text placement test route', () => {
     expect(response.headers.get('content-type')).toContain('text/event-stream')
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'placementPlan' }),
+      expect.objectContaining({
+        type: 'assetPrompts',
+        scenePrompt: 'scene prompt',
+        characterAPrompt: 'character A prompt',
+        characterBPrompt: 'character B prompt',
+      }),
       expect.objectContaining({ type: 'complete' }),
     ]))
     expect(isRecord(payload)).toBe(true)

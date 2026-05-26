@@ -131,6 +131,12 @@ export type TextPlacementTestProgressEvent =
       readonly storageKey: string
     }
   | {
+      readonly type: 'assetPrompts'
+      readonly scenePrompt: string
+      readonly characterAPrompt: string
+      readonly characterBPrompt: string
+    }
+  | {
       readonly type: 'finalImage'
       readonly image: TextPlacementFinalImageResult
       readonly completedFinalImageCount: number

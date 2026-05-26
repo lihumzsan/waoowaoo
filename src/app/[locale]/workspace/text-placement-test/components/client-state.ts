@@ -68,6 +68,12 @@ export type TextPlacementTestStreamEvent =
       readonly storageKey: string
     }
   | {
+      readonly type: 'assetPrompts'
+      readonly scenePrompt: string
+      readonly characterAPrompt: string
+      readonly characterBPrompt: string
+    }
+  | {
       readonly type: 'finalImage'
       readonly image: TextPlacementFinalImageResult
       readonly completedFinalImageCount: number
@@ -180,6 +186,11 @@ export function isTextPlacementTestStreamEvent(value: unknown): value is TextPla
       && typeof value.prompt === 'string'
       && typeof value.imageUrl === 'string'
       && typeof value.storageKey === 'string'
+  }
+  if (value.type === 'assetPrompts') {
+    return typeof value.scenePrompt === 'string'
+      && typeof value.characterAPrompt === 'string'
+      && typeof value.characterBPrompt === 'string'
   }
   if (value.type === 'finalImage') {
     return isFinalImageResult(value.image)
