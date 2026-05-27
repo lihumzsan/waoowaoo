@@ -18,6 +18,8 @@ import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-ser
 import {
   resolvePanelVideoReadinessIssue,
   summarizeVideoReadinessIssues,
+  type VideoReadinessPanelLike,
+  type VideoReadinessVoiceLine,
 } from '@/lib/novel-promotion/video-readiness'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,6 +187,68 @@ function buildVideoPanelBillingInfoOrThrow(payload: unknown) {
   }
 }
 
+type PanelReadinessInput = VideoReadinessPanelLike & {
+  id: string
+  storyboardId?: string | null
+  panelIndex?: number | null
+  storyboard?: (VideoReadinessPanelLike['storyboard'] & {
+    episodeId?: string | null
+  }) | null
+}
+
+function mergeVoiceLinesById(
+  relationLines: VideoReadinessVoiceLine[] | null | undefined,
+  fallbackLines: VideoReadinessVoiceLine[] | null | undefined,
+): VideoReadinessVoiceLine[] {
+  const seen = new Set<string>()
+  const merged: VideoReadinessVoiceLine[] = []
+  for (const line of [...(relationLines || []), ...(fallbackLines || [])]) {
+    if (!line.id || seen.has(line.id)) continue
+    seen.add(line.id)
+    merged.push(line)
+  }
+  return merged
+}
+
+async function resolvePanelReadinessInput(
+  panel: PanelReadinessInput,
+  episodeId?: unknown,
+): Promise<PanelReadinessInput> {
+  const effectiveEpisodeId = typeof episodeId === 'string' && episodeId
+    ? episodeId
+    : panel.storyboard?.episodeId
+  if (
+    !effectiveEpisodeId
+    || !panel.storyboardId
+    || typeof panel.panelIndex !== 'number'
+  ) {
+    return {
+      ...panel,
+      matchedVoiceLines: mergeVoiceLinesById(panel.matchedVoiceLines, []),
+    }
+  }
+
+  const fallbackVoiceLines = await prisma.novelPromotionVoiceLine.findMany({
+    where: {
+      episodeId: effectiveEpisodeId,
+      matchedPanelId: null,
+      matchedStoryboardId: panel.storyboardId,
+      matchedPanelIndex: panel.panelIndex,
+    },
+    orderBy: { lineIndex: 'asc' },
+    select: {
+      id: true,
+      content: true,
+      audioDuration: true,
+    },
+  })
+
+  return {
+    ...panel,
+    matchedVoiceLines: mergeVoiceLinesById(panel.matchedVoiceLines, fallbackVoiceLines),
+  }
+}
+
 export const POST = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -227,6 +291,8 @@ export const POST = apiHandler(async (
       },
       select: {
         id: true,
+        storyboardId: true,
+        panelIndex: true,
         imageUrl: true,
         videoPrompt: true,
         videoPromptEditedByUser: true,
@@ -238,6 +304,7 @@ export const POST = apiHandler(async (
         sceneType: true,
         storyboard: {
           select: {
+            episodeId: true,
             clip: {
               select: {
                 content: true,
@@ -254,7 +321,10 @@ export const POST = apiHandler(async (
         },
       },
     })
-    const readiness = panels.map((panel) => ({
+    const panelsForReadiness = await Promise.all(
+      panels.map((panel) => resolvePanelReadinessInput(panel, episodeId)),
+    )
+    const readiness = panelsForReadiness.map((panel) => ({
       panel,
       issue: resolvePanelVideoReadinessIssue(panel, {
         payload: body,
@@ -314,6 +384,8 @@ export const POST = apiHandler(async (
     where: { storyboardId, panelIndex: Number(panelIndex) },
     select: {
       id: true,
+      storyboardId: true,
+      panelIndex: true,
       imageUrl: true,
       videoPrompt: true,
       videoPromptEditedByUser: true,
@@ -325,6 +397,7 @@ export const POST = apiHandler(async (
       sceneType: true,
       storyboard: {
         select: {
+          episodeId: true,
           clip: {
             select: {
               content: true,
@@ -350,7 +423,8 @@ export const POST = apiHandler(async (
   const singleCapabilities = singleModelKey
     ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
     : undefined
-  const readinessIssue = resolvePanelVideoReadinessIssue(panel, {
+  const panelForReadiness = await resolvePanelReadinessInput(panel, body?.episodeId)
+  const readinessIssue = resolvePanelVideoReadinessIssue(panelForReadiness, {
     payload: body,
     modelKey: singleModelKey,
     durationOptions: singleCapabilities?.video?.durationOptions,

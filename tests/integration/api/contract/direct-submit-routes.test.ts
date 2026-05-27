@@ -88,6 +88,8 @@ const prismaMock = vi.hoisted(() => ({
   novelPromotionPanel: {
     findFirst: vi.fn(async () => ({
       id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
       imageUrl: 'cos/panel.png',
       videoUrl: 'cos/video.mp4',
       videoPrompt: 'panel prompt',
@@ -99,6 +101,7 @@ const prismaMock = vi.hoisted(() => ({
       cameraMove: 'static',
       sceneType: 'dialogue',
       storyboard: {
+        episodeId: 'episode-1',
         clip: {
           content: 'office conversation',
         },
@@ -179,7 +182,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   novelPromotionVoiceLine: {
     findMany: vi.fn(async () => [
-      { id: 'line-1', speaker: 'Narrator', content: 'hello world voice line' },
+      { id: 'line-1', speaker: 'Narrator', content: 'hello world voice line', audioDuration: null as number | null },
     ]),
     findFirst: vi.fn(async () => ({
       id: 'line-1',
@@ -645,6 +648,8 @@ describe('api contract - direct submit routes (behavior)', () => {
   it('blocks single generate-video submission when linked audio exceeds the selected LTX workflow max', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
       imageUrl: 'cos/panel.png',
       videoUrl: 'cos/video.mp4',
       videoPrompt: 'panel prompt',
@@ -656,6 +661,7 @@ describe('api contract - direct submit routes (behavior)', () => {
       cameraMove: 'static',
       sceneType: 'dialogue',
       storyboard: {
+        episodeId: 'episode-1',
         clip: {
           content: 'office conversation',
         },
@@ -689,6 +695,87 @@ describe('api contract - direct submit routes (behavior)', () => {
       expectedProjectId: 'project-1',
     })
 
+    expect(res.status).toBe(400)
+    expect(submitTaskMock).not.toHaveBeenCalled()
+    await expect(res.json()).resolves.toMatchObject({
+      error: {
+        details: {
+          code: 'VIDEO_READINESS_BLOCKED',
+          field: 'videoDurationBinding',
+          details: {
+            issue: {
+              code: 'audio_duration_exceeds_model',
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it('blocks single generate-video submission using fallback storyboard-bound voice lines', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'panel prompt',
+      videoPromptEditedByUser: false,
+      description: 'panel description',
+      srtSegment: 'long dialogue',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [] as Array<{
+        id: string
+        content: string
+        audioDuration: number
+      }>,
+    })
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValueOnce([
+      {
+        id: 'fallback-line-1',
+        speaker: 'Narrator',
+        content: 'This fallback line cannot fit the short workflow.',
+        audioDuration: 23_700,
+      },
+    ])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['fallback-line-1'],
+        },
+        generationOptions: {
+          duration: 12,
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        episodeId: 'episode-1',
+        matchedPanelId: null,
+        matchedStoryboardId: 'storyboard-1',
+        matchedPanelIndex: 0,
+      },
+    }))
     expect(res.status).toBe(400)
     expect(submitTaskMock).not.toHaveBeenCalled()
     await expect(res.json()).resolves.toMatchObject({
