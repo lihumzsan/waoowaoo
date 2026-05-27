@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type WorkspaceCanvasNodeKind =
   | 'storyInput'
@@ -363,6 +364,11 @@ export interface WorkspaceCanvasEditAssetDetails {
   readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
   readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
+  readonly spatialProfileJson?: unknown | null
+  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
+  readonly spatialProfileError?: string | null
+  readonly spatialProfileAnalyzedAt?: string | Date | null
+  readonly spatialProfileModel?: string | null
 }
 
 export interface WorkspaceCanvasSpaceConsistencyDetails {
@@ -377,6 +383,27 @@ export interface WorkspaceCanvasSpaceConsistencyDetails {
     readonly shotNumbers: readonly number[]
     readonly sceneSummary?: string | null
     readonly placementZones: readonly string[]
+    readonly anchors: readonly {
+      readonly label?: string | null
+      readonly screenArea?: string | null
+      readonly depthLayer?: string | null
+      readonly spatialRelations: readonly string[]
+    }[]
+    readonly placementZoneDetails: readonly {
+      readonly label?: string | null
+      readonly absolutePosition?: string | null
+      readonly nearAnchors: readonly string[]
+      readonly depthLayer?: string | null
+      readonly visibility?: string | null
+      readonly spatialRelations: readonly string[]
+    }[]
+    readonly depthLayout?: {
+      readonly foreground?: string | null
+      readonly midground?: string | null
+      readonly background?: string | null
+    } | null
+    readonly lightingDirection?: string | null
+    readonly rawProfile?: unknown | null
   }[]
   readonly cameraPlans: readonly {
     readonly panelIndex?: number | null

@@ -5,6 +5,7 @@ import {
   type LocationAvailableSlot,
   stringifyLocationAvailableSlots,
 } from '@/lib/location-available-slots'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type LocationBackedAssetKind = 'location' | 'prop'
 
@@ -34,6 +35,11 @@ type LocationBackedImageRow = {
   description: string | null
   availableSlots: string | null
   imageUrl: string | null
+  spatialProfileJson: unknown | null
+  spatialProfileStatus: LocationSpatialProfileStatus | null
+  spatialProfileError: string | null
+  spatialProfileAnalyzedAt: Date | null
+  spatialProfileModel: string | null
   imageMediaId: string | null
   previousImageUrl: string | null
   previousImageMediaId: string | null
@@ -95,6 +101,11 @@ async function readProjectLocationBackedImages(locationIds: string[]): Promise<M
       description,
       availableSlots,
       imageUrl,
+      spatialProfileJson,
+      spatialProfileStatus,
+      spatialProfileError,
+      spatialProfileAnalyzedAt,
+      spatialProfileModel,
       imageMediaId,
       previousImageUrl,
       NULL AS previousImageMediaId,
@@ -119,6 +130,11 @@ async function readGlobalLocationBackedImages(locationIds: string[]): Promise<Ma
       description,
       availableSlots,
       imageUrl,
+      spatialProfileJson,
+      spatialProfileStatus,
+      spatialProfileError,
+      spatialProfileAnalyzedAt,
+      spatialProfileModel,
       imageMediaId,
       previousImageUrl,
       previousImageMediaId,

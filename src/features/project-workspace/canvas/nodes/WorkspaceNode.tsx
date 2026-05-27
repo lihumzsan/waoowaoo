@@ -13,6 +13,7 @@ import type {
   WorkspaceCanvasScriptScene,
   WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconName {
   switch (kind) {
@@ -75,6 +76,15 @@ function renderSection(title: string, children: ReactNode) {
   )
 }
 
+function renderSubsection(title: string, children: ReactNode) {
+  return (
+    <div className="space-y-1.5 border-t border-slate-200/70 pt-2">
+      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{title}</p>
+      {children}
+    </div>
+  )
+}
+
 function renderValue(label: string, value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return null
   return (
@@ -88,6 +98,18 @@ function renderValue(label: string, value: string | number | null | undefined) {
 function renderTextBlock(value: string | null | undefined) {
   if (!hasText(value)) return null
   return <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]`}>{value}</p>
+}
+
+function renderJsonBlock(value: unknown) {
+  if (value === null || value === undefined) return null
+  return renderTextBlock(JSON.stringify(value, null, 2))
+}
+
+function spatialProfileStatusLabel(
+  labels: ReturnType<typeof useTranslations>,
+  status: LocationSpatialProfileStatus | null | undefined,
+): string | null {
+  return status ? labels(`spatialProfileStatus.${status}`) : null
 }
 
 function renderTextSection(title: string, value: string | null | undefined) {
@@ -1217,6 +1239,15 @@ function EditAssetContent({
         onSave={editAssetDescriptionSaveHandler(data)}
       />
       {renderChips(labels('linkedShots'), details.shotNumbers.map((shotNumber) => String(shotNumber)))}
+      {details.kind === 'location' ? renderSection(labels('spatialProfile'), (
+        <div className="space-y-1">
+          {renderValue(labels('status'), spatialProfileStatusLabel(labels, details.spatialProfileStatus))}
+          {renderValue(labels('spatialProfileAnalyzedAt'), typeof details.spatialProfileAnalyzedAt === 'string' ? details.spatialProfileAnalyzedAt : null)}
+          {renderValue(labels('spatialProfileModel'), details.spatialProfileModel)}
+          {details.spatialProfileError ? renderSubsection(labels('spatialProfileError'), renderTextBlock(details.spatialProfileError)) : null}
+          {expanded && details.spatialProfileJson ? renderSubsection(labels('spatialProfileJson'), renderJsonBlock(details.spatialProfileJson)) : null}
+        </div>
+      )) : null}
       {expanded && details.errorMessage ? renderSection(labels('error'), renderTextBlock(details.errorMessage)) : null}
     </div>
   )
@@ -1491,6 +1522,18 @@ function SpaceConsistencyContent({
                 </span>
               </div>
               {profile.sceneSummary ? renderTextBlock(profile.sceneSummary) : null}
+              {expanded && profile.anchors.length > 0 ? renderSubsection(labels('anchors'), (
+                <div className="space-y-1.5">
+                  {profile.anchors.map((anchor, anchorIndex) => (
+                    <div key={`${profile.targetId ?? profile.name ?? 'anchor'}:${anchor.label ?? anchorIndex}`} className="space-y-1 rounded-[10px] bg-white p-2 ring-1 ring-slate-100">
+                      {renderValue(labels('anchor'), anchor.label)}
+                      {renderValue(labels('screenArea'), anchor.screenArea)}
+                      {renderValue(labels('depthLayer'), anchor.depthLayer)}
+                      {anchor.spatialRelations.length > 0 ? renderChips(labels('spatialRelations'), anchor.spatialRelations) : null}
+                    </div>
+                  ))}
+                </div>
+              )) : null}
               {profile.placementZones.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {profile.placementZones.slice(0, expanded ? profile.placementZones.length : 6).map((zone, zoneIndex) => (
@@ -1500,6 +1543,29 @@ function SpaceConsistencyContent({
                   ))}
                 </div>
               ) : null}
+              {expanded && profile.placementZoneDetails.length > 0 ? renderSubsection(labels('placementZoneDetails'), (
+                <div className="space-y-1.5">
+                  {profile.placementZoneDetails.map((zone, zoneIndex) => (
+                    <div key={`${profile.targetId ?? profile.name ?? 'zone'}:${zone.label ?? zoneIndex}`} className="space-y-1 rounded-[10px] bg-white p-2 ring-1 ring-slate-100">
+                      {renderValue(labels('placementZone'), zone.label)}
+                      {renderValue(labels('absolutePosition'), zone.absolutePosition)}
+                      {renderValue(labels('depthLayer'), zone.depthLayer)}
+                      {renderValue(labels('visibility'), zone.visibility)}
+                      {zone.nearAnchors.length > 0 ? renderChips(labels('nearAnchors'), zone.nearAnchors) : null}
+                      {zone.spatialRelations.length > 0 ? renderChips(labels('spatialRelations'), zone.spatialRelations) : null}
+                    </div>
+                  ))}
+                </div>
+              )) : null}
+              {expanded && profile.depthLayout ? renderSubsection(labels('depthLayout'), (
+                <div className="space-y-1">
+                  {renderValue(labels('foreground'), profile.depthLayout.foreground)}
+                  {renderValue(labels('midground'), profile.depthLayout.midground)}
+                  {renderValue(labels('background'), profile.depthLayout.background)}
+                </div>
+              )) : null}
+              {expanded && profile.lightingDirection ? renderSubsection(labels('lightingDirection'), renderTextBlock(profile.lightingDirection)) : null}
+              {expanded && profile.rawProfile ? renderSubsection(labels('spatialProfileJson'), renderJsonBlock(profile.rawProfile)) : null}
             </section>
           ))}
           {!expanded && details.spatialProfiles.length > visibleProfiles.length ? (

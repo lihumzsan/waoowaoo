@@ -107,6 +107,13 @@
         "generating": "生成中",
         "regenerating": "重新生成中",
         "generatingPlaceholder": "待生成",
+        "spatialProfileStatus": {
+            "pending": "空间待分析",
+            "analyzing": "空间分析中",
+            "ready": "空间已就绪",
+            "failed": "空间分析失败",
+            "stale": "空间需重析"
+        },
         "selectTip": "选择并确认后，可对图片进行编辑和修改",
         "selectFirst": "请选择一张图片",
         "useThis": "选择此方案",

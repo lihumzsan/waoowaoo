@@ -107,6 +107,13 @@
         "generating": "Generating",
         "regenerating": "Regenerating",
         "generatingPlaceholder": "Waiting",
+        "spatialProfileStatus": {
+            "pending": "Spatial Pending",
+            "analyzing": "Analyzing Space",
+            "ready": "Spatial Ready",
+            "failed": "Spatial Failed",
+            "stale": "Spatial Stale"
+        },
         "selectTip": "Once selected and confirmed, you can edit and modify the image",
         "selectFirst": "Please select an image first",
         "useThis": "Use this option",

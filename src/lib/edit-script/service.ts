@@ -28,6 +28,7 @@ import type {
   EditScriptShot,
   EditScriptVideoBlock,
 } from './types'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import {
   editScriptStyleBibleSchema,
   editScriptVideoPromptBlockSchema,
@@ -154,6 +155,11 @@ interface ExistingAssetRef {
   readonly hasOutput: boolean
   readonly taskTargetType: 'CharacterAppearance' | 'LocationImage'
   readonly taskTargetId: string
+  readonly spatialProfileJson?: unknown | null
+  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
+  readonly spatialProfileError?: string | null
+  readonly spatialProfileAnalyzedAt?: Date | null
+  readonly spatialProfileModel?: string | null
 }
 
 function stringifyForPrompt(value: unknown): string {
@@ -526,17 +532,27 @@ async function resolveLocationAsset(projectId: string, targetId: string | null):
     where: { id: targetId, projectId },
     select: {
       id: true,
+      selectedImageId: true,
       images: {
         orderBy: { imageIndex: 'asc' },
-        take: 1,
         select: {
+          id: true,
           imageUrl: true,
           imageMediaId: true,
+          isSelected: true,
+          spatialProfileJson: true,
+          spatialProfileStatus: true,
+          spatialProfileError: true,
+          spatialProfileAnalyzedAt: true,
+          spatialProfileModel: true,
         },
       },
     },
   })
-  const image = location?.images[0]
+  const image = location?.images.find((item) => item.id === location.selectedImageId)
+    ?? location?.images.find((item) => item.isSelected)
+    ?? location?.images.find((item) => Boolean(item.imageUrl))
+    ?? null
   if (!location || !image) return null
   return {
     id: location.id,
@@ -544,6 +560,11 @@ async function resolveLocationAsset(projectId: string, targetId: string | null):
     hasOutput: Boolean(image.imageMediaId || image.imageUrl),
     taskTargetType: 'LocationImage',
     taskTargetId: location.id,
+    spatialProfileJson: image.spatialProfileJson ?? null,
+    spatialProfileStatus: image.spatialProfileStatus as LocationSpatialProfileStatus | null,
+    spatialProfileError: image.spatialProfileError ?? null,
+    spatialProfileAnalyzedAt: image.spatialProfileAnalyzedAt ?? null,
+    spatialProfileModel: image.spatialProfileModel ?? null,
   }
 }
 
@@ -600,6 +621,11 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
       errorMessage: status === 'failed' ? taskFailure || requirement.errorMessage : null,
       voiceTimbreText: null,
       previewImageUrl: resolvedAsset?.previewImageUrl ?? null,
+      spatialProfileJson: resolvedAsset?.spatialProfileJson ?? null,
+      spatialProfileStatus: resolvedAsset?.spatialProfileStatus ?? null,
+      spatialProfileError: resolvedAsset?.spatialProfileError ?? null,
+      spatialProfileAnalyzedAt: resolvedAsset?.spatialProfileAnalyzedAt ?? null,
+      spatialProfileModel: resolvedAsset?.spatialProfileModel ?? null,
     }
   }))
 

@@ -1,5 +1,6 @@
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import type { LocationAvailableSlot } from '@/lib/location-available-slots'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type ProjectVideoGenerationOptionValue = string | number | boolean
 export type ProjectVideoGenerationOptions = Record<string, ProjectVideoGenerationOptionValue>
@@ -84,6 +85,11 @@ export interface LocationImage {
   description: string | null
   availableSlots?: LocationAvailableSlot[] | null
   imageUrl: string | null
+  spatialProfileJson?: unknown | null
+  spatialProfileStatus?: LocationSpatialProfileStatus | null
+  spatialProfileError?: string | null
+  spatialProfileAnalyzedAt?: string | Date | null
+  spatialProfileModel?: string | null
   media?: MediaRef | null
   previousImageUrl: string | null // 上一次的图片URL（用于撤回）
   previousMedia?: MediaRef | null
@@ -283,6 +289,11 @@ export interface ProjectEditAssetRequirement {
   taskTargetId?: string | null
   errorMessage: string | null
   previewImageUrl?: string | null
+  spatialProfileJson?: unknown | null
+  spatialProfileStatus?: LocationSpatialProfileStatus | null
+  spatialProfileError?: string | null
+  spatialProfileAnalyzedAt?: string | Date | null
+  spatialProfileModel?: string | null
 }
 
 export interface ProjectEditScreenplay {

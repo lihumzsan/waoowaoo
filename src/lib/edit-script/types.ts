@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export const EDIT_ASSET_KINDS = ['character', 'location'] as const
 export type EditAssetKind = (typeof EDIT_ASSET_KINDS)[number]
@@ -50,6 +51,11 @@ export interface EditAssetRequirement {
   readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
   readonly previewImageUrl?: string | null
+  readonly spatialProfileJson?: unknown | null
+  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
+  readonly spatialProfileError?: string | null
+  readonly spatialProfileAnalyzedAt?: string | Date | null
+  readonly spatialProfileModel?: string | null
 }
 
 export interface EditScriptPayload {

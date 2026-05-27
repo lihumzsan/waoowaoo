@@ -28,6 +28,7 @@ import {
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
+import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeStageData } from '../hooks/useWorkspaceEpisodeStageData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -174,6 +175,8 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
   const { episodeName, novelText, clips, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeStageData()
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
+  const { data: projectAssets } = useProjectAssets(projectId)
+  const locations = projectAssets.locations
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -459,6 +462,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     episodeName,
     storyText: novelText,
     clips,
+    locations,
     storyboards,
     shots,
     editScreenplay,
@@ -666,6 +670,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       episodeName,
       storyText: novelText,
       clips,
+      locations,
       storyboards,
       shots,
       editScreenplay,
@@ -683,7 +688,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [attachNodeUiState, clips, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
+  }, [attachNodeUiState, clips, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     void reactFlow.fitView({ padding: 0.14, duration: 180 })

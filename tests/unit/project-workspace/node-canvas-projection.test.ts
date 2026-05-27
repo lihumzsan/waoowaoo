@@ -1313,6 +1313,28 @@ describe('workspace node canvas projection', () => {
             taskTargetId: 'location-1',
             errorMessage: null,
             previewImageUrl: 'https://example.com/location.png',
+            spatialProfileStatus: 'ready',
+            spatialProfileModel: 'vision-model',
+            spatialProfileJson: {
+              schemaVersion: 1,
+              sceneSummary: 'Docking bay left airlock and central platform.',
+              anchors: [],
+              placementZones: [{
+                id: 'zone-platform',
+                label: 'central platform',
+                absolutePosition: 'middle of the bay',
+                nearAnchors: ['airlock'],
+                depthLayer: 'midground',
+                visibility: 'full body',
+                spatialRelations: ['beside the warning light'],
+              }],
+              depthLayout: {
+                foreground: 'floor markings',
+                midground: 'central platform',
+                background: 'airlock wall',
+              },
+              lightingDirection: 'red light from rear wall',
+            },
           },
         ],
       },
@@ -1383,6 +1405,11 @@ describe('workspace node canvas projection', () => {
       taskTargetType: 'LocationImage',
       taskTargetId: 'location-1',
       shotNumbers: [1],
+      spatialProfileStatus: 'ready',
+      spatialProfileModel: 'vision-model',
+      spatialProfileJson: {
+        sceneSummary: 'Docking bay left airlock and central platform.',
+      },
     })
     expect(assetNode?.data.runtimeTargets).toEqual([
       {
@@ -1851,9 +1878,30 @@ describe('workspace node canvas projection', () => {
                 shotNumbers: [1],
                 spatialProfile: {
                   sceneSummary: 'Wood door at left rear, incense burner in midground.',
+                  anchors: [{
+                    id: 'anchor-left-door',
+                    label: 'Left wood door',
+                    screenArea: 'left rear',
+                    depthLayer: 'background',
+                    spatialRelations: ['Long table sits to the right of the door'],
+                  }],
                   placementZones: [
-                    { label: 'Left rear wall beside the wood door' },
+                    {
+                      id: 'zone-left-door',
+                      label: 'Left rear wall beside the wood door',
+                      absolutePosition: 'left rear wall',
+                      nearAnchors: ['Left wood door'],
+                      depthLayer: 'background',
+                      visibility: 'full body',
+                      spatialRelations: ['behind the incense burner'],
+                    },
                   ],
+                  depthLayout: {
+                    foreground: 'stone path',
+                    midground: 'incense burner',
+                    background: 'left wood door and wall',
+                  },
+                  lightingDirection: 'soft light from upper right',
                 },
               }],
             },
@@ -1945,6 +1993,26 @@ describe('workspace node canvas projection', () => {
         {
           name: 'Temple courtyard',
           placementZones: ['Left rear wall beside the wood door'],
+          anchors: [{
+            label: 'Left wood door',
+            screenArea: 'left rear',
+            depthLayer: 'background',
+            spatialRelations: ['Long table sits to the right of the door'],
+          }],
+          placementZoneDetails: [{
+            label: 'Left rear wall beside the wood door',
+            absolutePosition: 'left rear wall',
+            nearAnchors: ['Left wood door'],
+            depthLayer: 'background',
+            visibility: 'full body',
+            spatialRelations: ['behind the incense burner'],
+          }],
+          depthLayout: {
+            foreground: 'stone path',
+            midground: 'incense burner',
+            background: 'left wood door and wall',
+          },
+          lightingDirection: 'soft light from upper right',
         },
       ],
       cameraPlans: [

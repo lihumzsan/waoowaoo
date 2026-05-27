@@ -13,6 +13,7 @@ import type {
   ProjectEditScreenplay,
   ProjectEditScript,
   ProjectFinalVideo,
+  Location,
   ProjectPanel,
   ProjectShot,
   ProjectStoryboard,
@@ -128,6 +129,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly episodeName?: string
   readonly storyText: string
   readonly clips: readonly ProjectClip[]
+  readonly locations?: readonly Location[]
   readonly storyboards: readonly ProjectStoryboard[]
   readonly shots?: readonly ProjectShot[]
   readonly editScreenplay?: ProjectEditScreenplay | null
@@ -191,6 +193,12 @@ function uniqueStrings(values: readonly string[]): string[] {
 function readStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return uniqueStrings(value.flatMap((item) => (typeof item === 'string' ? [item] : [])))
+}
+
+function dateLikeToString(value: string | Date | null | undefined): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (value instanceof Date) return value.toISOString()
+  return null
 }
 
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
@@ -721,6 +729,8 @@ function spatialProfilesFromStrategyOutput(
     if (!isRecord(location)) return []
     const spatialProfile = readJsonRecord(location.spatialProfile)
     const placementZones = spatialProfile.placementZones
+    const anchors = spatialProfile.anchors
+    const depthLayout = readJsonRecord(spatialProfile.depthLayout)
     const shotNumbers = location.shotNumbers
     return [{
       requirementId: stringValue(location.requirementId),
@@ -740,8 +750,54 @@ function spatialProfilesFromStrategyOutput(
             return label ? [label] : []
           })
         : [],
+      anchors: Array.isArray(anchors)
+        ? anchors.flatMap((anchor) => {
+            if (!isRecord(anchor)) return []
+            return [{
+              label: stringValue(anchor.label),
+              screenArea: stringValue(anchor.screenArea),
+              depthLayer: stringValue(anchor.depthLayer),
+              spatialRelations: readStringArray(anchor.spatialRelations),
+            }]
+          })
+        : [],
+      placementZoneDetails: Array.isArray(placementZones)
+        ? placementZones.flatMap((zone) => {
+            if (!isRecord(zone)) return []
+            return [{
+              label: stringValue(zone.label),
+              absolutePosition: stringValue(zone.absolutePosition),
+              nearAnchors: readStringArray(zone.nearAnchors),
+              depthLayer: stringValue(zone.depthLayer),
+              visibility: stringValue(zone.visibility),
+              spatialRelations: readStringArray(zone.spatialRelations),
+            }]
+          })
+        : [],
+      depthLayout: Object.keys(depthLayout).length > 0
+        ? {
+          foreground: stringValue(depthLayout.foreground),
+          midground: stringValue(depthLayout.midground),
+          background: stringValue(depthLayout.background),
+        }
+        : null,
+      lightingDirection: stringValue(spatialProfile.lightingDirection),
+      rawProfile: Object.keys(spatialProfile).length > 0 ? spatialProfile : null,
     }]
   })
+}
+
+function selectedLocationImage(
+  locations: readonly Location[],
+  locationId: string | null | undefined,
+): Location['images'][number] | null {
+  if (!locationId) return null
+  const location = locations.find((item) => item.id === locationId)
+  if (!location) return null
+  return location.images.find((image) => image.id === location.selectedImageId)
+    ?? location.images.find((image) => image.isSelected)
+    ?? location.images.find((image) => Boolean(stringValue(image.imageUrl)))
+    ?? null
 }
 
 function cameraPlansFromValue(cameraPlanOutput: unknown): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>['cameraPlans'] {
@@ -1028,6 +1084,7 @@ export function buildWorkspaceNodeCanvasProjection({
   episodeId,
   storyText,
   clips,
+  locations = [],
   storyboards,
   shots = [],
   editScreenplay,
@@ -1357,6 +1414,14 @@ export function buildWorkspaceNodeCanvasProjection({
           ? { type: 'regenerate_edit_asset_image', assetId: asset.targetId, kind: asset.kind }
           : undefined
       const nodeHeight = estimateEditAssetNodeHeight(asset)
+      const selectedImage = asset.kind === 'location'
+        ? selectedLocationImage(locations, asset.targetId)
+        : null
+      const spatialProfileJson = asset.spatialProfileJson ?? selectedImage?.spatialProfileJson ?? null
+      const spatialProfileStatus = asset.spatialProfileStatus ?? selectedImage?.spatialProfileStatus ?? null
+      const spatialProfileError = asset.spatialProfileError ?? selectedImage?.spatialProfileError ?? null
+      const spatialProfileAnalyzedAt = asset.spatialProfileAnalyzedAt ?? selectedImage?.spatialProfileAnalyzedAt ?? null
+      const spatialProfileModel = asset.spatialProfileModel ?? selectedImage?.spatialProfileModel ?? null
       const column = index % EDIT_ASSET_GRID_COLUMNS
       if (column === 0 && index > 0) {
         assetRowY += assetRowMaxHeight + EDIT_ASSET_GRID_GAP_Y
@@ -1398,6 +1463,11 @@ export function buildWorkspaceNodeCanvasProjection({
             taskTargetType: asset.taskTargetType ?? null,
             taskTargetId: asset.taskTargetId ?? null,
             errorMessage: asset.errorMessage,
+            spatialProfileJson,
+            spatialProfileStatus,
+            spatialProfileError,
+            spatialProfileAnalyzedAt: dateLikeToString(spatialProfileAnalyzedAt),
+            spatialProfileModel,
           },
           actionLabel: assetAction
             ? canGenerateAsset ? translate('actions.generateEditAsset') : translate('actions.regenerateImage')
@@ -2059,6 +2129,7 @@ export function useWorkspaceNodeCanvasProjection({
   episodeName,
   storyText,
   clips,
+  locations,
   storyboards,
   shots,
   editScreenplay,
@@ -2078,6 +2149,7 @@ export function useWorkspaceNodeCanvasProjection({
       episodeName,
       storyText,
       clips,
+      locations,
       storyboards,
       shots,
       editScreenplay,
@@ -2092,6 +2164,7 @@ export function useWorkspaceNodeCanvasProjection({
     }),
     [
       clips,
+      locations,
       episodeId,
       episodeName,
       onAction,

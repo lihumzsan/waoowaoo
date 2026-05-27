@@ -115,6 +115,11 @@ describe('workspace node rendering', () => {
           shotNumbers: [1],
           sceneSummary: 'Wood door at left rear, incense burner in midground.',
           placementZones: ['Left rear wall beside the wood door'],
+          anchors: [],
+          placementZoneDetails: [],
+          depthLayout: null,
+          lightingDirection: null,
+          rawProfile: null,
         }],
         cameraPlans: [],
       },
@@ -122,6 +127,67 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('Temple courtyard')
     expect(html).toContain('Left rear wall beside the wood door')
+  })
+
+  it('renders expanded spatial profile details in space consistency nodes', () => {
+    const html = renderNode({
+      kind: 'spaceConsistency',
+      layoutNodeType: 'spaceConsistency',
+      targetType: 'storyboard',
+      targetId: 'storyboard-1',
+      title: 'Space consistency',
+      eyebrow: 'Text Blocking',
+      body: 'generation body',
+      meta: 'meta',
+      statusLabel: 'Ready',
+      isRunning: false,
+      expanded: true,
+      width: 460,
+      height: 620,
+      spaceConsistencyDetails: {
+        storyboardId: 'storyboard-1',
+        stage: 'spatial_profile_ready',
+        spatialProfileCount: 1,
+        cameraPlanCount: 0,
+        spatialProfiles: [{
+          requirementId: 'loc-1',
+          targetId: 'location-1',
+          name: 'Temple courtyard',
+          shotNumbers: [1],
+          sceneSummary: 'Wood door at left rear, incense burner in midground.',
+          placementZones: ['Left rear wall beside the wood door'],
+          anchors: [{
+            label: 'Left wood door',
+            screenArea: 'left rear',
+            depthLayer: 'background',
+            spatialRelations: ['Long table sits to the right of the door'],
+          }],
+          placementZoneDetails: [{
+            label: 'Left rear wall beside the wood door',
+            absolutePosition: 'left rear wall',
+            nearAnchors: ['Left wood door'],
+            depthLayer: 'background',
+            visibility: 'full body',
+            spatialRelations: ['behind the incense burner'],
+          }],
+          depthLayout: {
+            foreground: 'stone path',
+            midground: 'incense burner',
+            background: 'left wood door and wall',
+          },
+          lightingDirection: 'soft light from upper right',
+          rawProfile: {
+            sceneSummary: 'Wood door at left rear, incense burner in midground.',
+          },
+        }],
+        cameraPlans: [],
+      },
+    })
+
+    expect(html).toContain('Left wood door')
+    expect(html).toContain('left rear wall')
+    expect(html).toContain('stone path')
+    expect(html).toContain('soft light from upper right')
   })
 
   it('renders story input controls inline without opening a detail action', () => {
@@ -184,6 +250,45 @@ describe('workspace node rendering', () => {
     expect(html).not.toContain('asset-target-id')
     expect(html).not.toContain('shots 1')
     expect(html).not.toContain('src="images/character-1.jpg"')
+  })
+
+  it('renders location edit asset spatial profile status and JSON when expanded', () => {
+    const html = renderNode({
+      kind: 'editRequiredAsset',
+      layoutNodeType: 'editRequiredAsset',
+      targetType: 'editAssetRequirement',
+      targetId: 'req-location',
+      title: 'Location asset node',
+      eyebrow: 'Location',
+      body: 'location description',
+      meta: 'shots 1',
+      statusLabel: 'Ready',
+      expanded: true,
+      width: 360,
+      height: 520,
+      previewImageUrl: 'https://example.com/location.jpg',
+      editAssetDetails: {
+        editScriptId: 'edit-1',
+        requirementId: 'req-location',
+        kind: 'location',
+        description: 'location description',
+        shotNumbers: [1],
+        targetId: 'location-1',
+        errorMessage: null,
+        spatialProfileStatus: 'ready',
+        spatialProfileModel: 'vision-model',
+        spatialProfileAnalyzedAt: '2026-05-27T08:00:00.000Z',
+        spatialProfileJson: {
+          sceneSummary: 'Wood door at left rear',
+          placementZones: [{ label: 'Left door wall' }],
+        },
+      },
+    })
+
+    expect(html).toContain('spatialProfile')
+    expect(html).toContain('spatialProfileStatus.ready')
+    expect(html).toContain('vision-model')
+    expect(html).toContain('Wood door at left rear')
   })
 
   it('renders edit pipeline step cards with only that step fields', () => {

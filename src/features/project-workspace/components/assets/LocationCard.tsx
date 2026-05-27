@@ -256,6 +256,7 @@ export default function LocationCard({
           locationId={location.id}
           locationName={location.name}
           images={displaySelectionImages}
+          showSpatialProfile={assetType === 'location'}
           selectedImageId={location.selectedImageId}
           selectedIndex={selectedIndex}
           isGroupTaskRunning={isGroupTaskRunning}

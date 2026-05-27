@@ -12,11 +12,14 @@ import {
   countGeneratedImageSlots,
   resolveGroupedImageSlotPhase,
 } from '@/lib/image-generation/slot-state'
+import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 type SelectionImage = {
   id: string
   imageIndex: number
   imageUrl: string | null
+  spatialProfileStatus?: LocationSpatialProfileStatus | null
+  spatialProfileError?: string | null
   isSelected?: boolean
   lastError?: { code: string; message: string } | null
   imageErrorMessage?: string | null
@@ -28,6 +31,7 @@ type LocationImageListProps =
     locationId: string
     locationName: string
     images: SelectionImage[]
+    showSpatialProfile: boolean
     selectedImageId?: string | null
     selectedIndex: number | null
     isGroupTaskRunning: boolean
@@ -131,6 +135,20 @@ export default function LocationImageList(props: LocationImageListProps) {
                     <AppIcon name="checkTiny" className="h-3 w-3" />
                   )}
                 </div>
+
+                {props.showSpatialProfile && img.spatialProfileStatus ? (
+                  <div
+                    className={`absolute bottom-2 right-2 max-w-[calc(100%-5.5rem)] truncate rounded px-2 py-0.5 text-[10px] font-semibold shadow-sm ring-1 ${img.spatialProfileStatus === 'ready'
+                      ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)] ring-[var(--glass-tone-success-ring)]'
+                      : img.spatialProfileStatus === 'failed'
+                        ? 'bg-[var(--glass-tone-danger-bg)] text-[var(--glass-tone-danger-fg)] ring-[var(--glass-tone-danger-ring)]'
+                        : 'bg-white/90 text-[var(--glass-text-secondary)] ring-[var(--glass-stroke-base)]'
+                    }`}
+                    title={img.spatialProfileError ?? t(`image.spatialProfileStatus.${img.spatialProfileStatus}`)}
+                  >
+                    {t(`image.spatialProfileStatus.${img.spatialProfileStatus}`)}
+                  </div>
+                ) : null}
 
                 <button
                   onClick={(e) => {
