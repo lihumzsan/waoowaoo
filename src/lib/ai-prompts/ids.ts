@@ -38,7 +38,7 @@ export const AI_PROMPT_IDS = {
   EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'edit-script-video-block-merge',
   EDIT_SCRIPT_STORYBOARD_PANEL: 'edit-script-storyboard-panel',
   EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
-  EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_BLOCK: 'edit-script-storyboard-camera-plan-block',
+  EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK: 'edit-script-storyboard-panel-visual-plan-block',
 } as const
 
 export type AiPromptId = (typeof AI_PROMPT_IDS)[keyof typeof AI_PROMPT_IDS]

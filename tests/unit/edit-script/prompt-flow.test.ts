@@ -142,6 +142,32 @@ describe('edit script block-first prompt flow', () => {
     expect(videoPromptBlock).toContain('不得改写或替代角色 voiceTimbreText')
     expect(videoPromptBlock).not.toContain('videoPromptBible')
 
+    const panelVisualPlanBlock = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK,
+      locale: 'zh',
+      variables: {
+        source_snapshot_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        camera_style_bible_json: JSON.stringify({ imageFilterPrompt: '柔和自然光，低对比度' }),
+        spatial_profile_strategy_output_json: JSON.stringify({ strategy: 'spatial_text_blocking', locations: [] }),
+        video_block_json: JSON.stringify({ sourceVideoBlockId: 'block-1' }),
+        block_shots_json: JSON.stringify([{ shotNumber: 1 }]),
+        adjacent_blocks_json: JSON.stringify({ previous: null, next: null }),
+        panel_contract_json: JSON.stringify([{ panelIndex: 0, sourceShotNumber: 1 }]),
+      },
+    })
+
+    expect(panelVisualPlanBlock).toContain('videoBlock 分镜视觉计划师')
+    expect(panelVisualPlanBlock).toContain('生成 camera plan、shotBlocking 和 finalPanelPrompt')
+    expect(panelVisualPlanBlock).toContain('风格只能影响画面表达方式')
+    expect(panelVisualPlanBlock).toContain('不得因为风格添加原镜头、资产图或空间档案里没有的人物、道具、建筑、天气、时代元素、服装、符号或剧情动作')
+    expect(panelVisualPlanBlock).toContain('不要只在末尾堆成“风格：……”')
+    expect(panelVisualPlanBlock).toContain('优秀风格融合示例')
+    expect(panelVisualPlanBlock).toContain('东方禅意写实')
+    expect(panelVisualPlanBlock).toContain('冷峻未来写实')
+    expect(panelVisualPlanBlock).toContain('温暖家庭胶片')
+    expect(panelVisualPlanBlock).toContain('panelVisualPlanBlockOutput')
+    expect(panelVisualPlanBlock).not.toContain('cameraPlanBlockOutput')
+
     const englishPrimaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
       locale: 'en',

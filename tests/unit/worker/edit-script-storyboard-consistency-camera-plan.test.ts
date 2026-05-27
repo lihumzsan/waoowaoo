@@ -16,7 +16,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const modelGenerationMock = vi.hoisted(() => ({
-  generateCameraPlan: vi.fn(),
+  generateStoryboardPanelVisualPlan: vi.fn(),
 }))
 
 const persistenceMock = vi.hoisted(() => ({
@@ -199,7 +199,7 @@ describe('edit script storyboard camera plan handler', () => {
       }),
       blockingArtifacts: [],
     })
-    modelGenerationMock.generateCameraPlan.mockResolvedValue({
+    modelGenerationMock.generateStoryboardPanelVisualPlan.mockResolvedValue({
       cameraPlanOutput: {
         strategy: 'spatial_text_blocking',
         blocks: [{

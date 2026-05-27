@@ -251,8 +251,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'spatial_profile_strategy_output_json',
     ],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_BLOCK]: {
-    pathStem: 'edit-script/storyboard-camera-plan-block',
+  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK]: {
+    pathStem: 'edit-script/storyboard-panel-visual-plan-block',
     variableKeys: [
       'source_snapshot_json',
       'camera_style_bible_json',

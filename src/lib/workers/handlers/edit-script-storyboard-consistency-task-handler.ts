@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '../shared'
-import { generateCameraPlan } from '@/lib/edit-script/storyboard-consistency/model-generation'
+import { generateStoryboardPanelVisualPlan } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import {
   storyboardConsistencySourceSnapshotSchema,
   type StoryboardConsistencyModelConfigSnapshot,
@@ -303,7 +303,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
   const strategyOutput = buildSpatialProfileStrategyOutput(snapshot)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_camera_plan' })
   try {
-    const generated = await generateCameraPlan({
+    const generated = await generateStoryboardPanelVisualPlan({
       userId: job.data.userId,
       projectId: job.data.projectId,
       model: modelConfig.analysisModel,
