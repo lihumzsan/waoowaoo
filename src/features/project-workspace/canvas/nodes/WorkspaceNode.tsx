@@ -294,8 +294,12 @@ export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['
   return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'videoPlan' || kind === 'bgmScore'
 }
 
-async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
-  await Promise.resolve(data.onAction?.(action))
+export function nodeFreezesMeasurementWhileRunning(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
+  return kind === 'videoPlan'
+}
+
+export async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
+  await Promise.resolve(data.onAction?.(action, data.nodeId))
 }
 
 function panelPromptSaveHandler(
@@ -1682,7 +1686,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const showDetailsToggle = canToggleDetails && Boolean(data.onToggleExpanded)
   const showHeaderAction = Boolean(action && data.actionLabel && (data.kind === 'spaceConsistency' || data.kind === 'editRequiredAsset'))
   const showLargeTitle = data.kind !== 'shot'
-  const shouldShowFooter = !isRunning && (
+  const shouldShowFooter = (
     showDetailsToggle ||
     Boolean(action && data.actionLabel && !showHeaderAction) ||
     Boolean(secondaryAction && data.secondaryActionLabel) ||
@@ -1696,6 +1700,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
   useEffect(() => {
     if (!nodeId || !onMeasureNodeSize || !nodeNeedsActualHeightMeasurement(data.kind)) return undefined
+    if (data.isRunning === true && nodeFreezesMeasurementWhileRunning(data.kind)) return undefined
     const element = measuredContentRef.current
     if (!element) return undefined
 
@@ -1711,7 +1716,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [data.kind, data.expanded, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.isRunning, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
 
   return (
     <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>

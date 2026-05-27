@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
 import WorkspaceNode, {
+  dispatchNodeAction,
+  nodeFreezesMeasurementWhileRunning,
   nodeNeedsActualHeightMeasurement,
   videoElementAspectRatio,
 } from '@/features/project-workspace/canvas/nodes/WorkspaceNode'
@@ -52,6 +54,36 @@ describe('workspace node rendering', () => {
     expect(nodeNeedsActualHeightMeasurement('videoPlan')).toBe(true)
     expect(nodeNeedsActualHeightMeasurement('bgmScore')).toBe(true)
     expect(nodeNeedsActualHeightMeasurement('shot')).toBe(false)
+    expect(nodeFreezesMeasurementWhileRunning('videoPlan')).toBe(true)
+    expect(nodeFreezesMeasurementWhileRunning('bgmScore')).toBe(false)
+  })
+
+  it('dispatches inline node actions with the node id so running state can stay anchored', async () => {
+    const onAction = vi.fn()
+    const action = {
+      type: 'generate_video_group',
+      videoModel: 'video-model-1',
+      gridMode: '2x2',
+      shotNumbers: [1, 2],
+    } as const
+
+    await dispatchNodeAction({
+      kind: 'videoPlan',
+      layoutNodeType: 'videoPlan',
+      targetType: 'editScript',
+      targetId: 'edit-1:video-block:1',
+      nodeId: 'video-plan:edit-1:1',
+      title: 'Video plan',
+      eyebrow: 'Plan',
+      body: 'reason',
+      meta: 'shots',
+      statusLabel: 'Ready',
+      width: 420,
+      height: 560,
+      onAction,
+    }, action)
+
+    expect(onAction).toHaveBeenCalledWith(action, 'video-plan:edit-1:1')
   })
 
   it('uses intrinsic video dimensions to avoid letterboxing video plan output previews', () => {
@@ -435,6 +467,64 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('>3</div>')
     expect(html).toContain('>4</div>')
+    expect(html).toContain('disabled=""')
+  })
+
+  it('keeps the video plan footer mounted while a generation action is running', () => {
+    const html = renderNode({
+      kind: 'videoPlan',
+      layoutNodeType: 'videoPlan',
+      targetType: 'editScript',
+      targetId: 'edit-1:video-block:1',
+      nodeId: 'video-plan:edit-1:1',
+      title: 'Video plan node',
+      eyebrow: 'Video Plan',
+      body: 'reason',
+      meta: 'shots 1, 2',
+      statusLabel: 'Processing',
+      isRunning: true,
+      width: 420,
+      height: 620,
+      onAction: vi.fn(),
+      onToggleExpanded: vi.fn(),
+      actionLabel: 'Generate video',
+      action: {
+        type: 'generate_video_group',
+        videoModel: 'video-model-1',
+        gridMode: '2x2',
+        shotNumbers: [1, 2],
+      },
+      secondaryActionLabel: 'Arrange',
+      secondaryAction: {
+        type: 'open_video_block_arrangement',
+        editScriptId: 'edit-1',
+        blockIndex: 0,
+      },
+      videoPlanDetails: {
+        editScriptId: 'edit-1',
+        blockIndex: 0,
+        kind: 'group',
+        shotNumbers: [1, 2],
+        durationSec: 6,
+        gridMode: '2x2',
+        reason: 'continuous action',
+        prompt: 'final video prompt',
+        assetReferenceVideoModel: 'video-model-1',
+        outputUrl: null,
+        outputAspectRatio: null,
+        errorMessage: null,
+        sourceImages: [
+          { panelId: 'panel-1', storyboardId: 'storyboard-1', panelIndex: 0, shotNumber: 1, imageUrl: 'https://example.com/shot-1.png', aspectRatio: 16 / 9 },
+          { panelId: 'panel-2', storyboardId: 'storyboard-1', panelIndex: 1, shotNumber: 2, imageUrl: 'https://example.com/shot-2.png', aspectRatio: 16 / 9 },
+        ],
+        assetReferences: [],
+      },
+    })
+
+    expect(html).toContain('shots 1, 2')
+    expect(html).toContain('expandDetails')
+    expect(html).toContain('Generate video')
+    expect(html).toContain('Arrange')
     expect(html).toContain('disabled=""')
   })
 
