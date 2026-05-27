@@ -37,6 +37,8 @@ import {
   renderPanelContinuityPrompt,
   type PanelContinuityPacket,
 } from '@/lib/novel-promotion/panel-continuity'
+import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
@@ -44,13 +46,28 @@ type VideoOptionMap = Record<string, VideoOptionValue>
 type VideoGenerationMode = 'normal' | 'firstlastframe'
 type WorkflowVideoGenerationMode = 'normal' | 'firstlastframe'
 
-const DEFAULT_LTX23_SINGLE_SHOT_DURATION_SECONDS = 2
-const DEFAULT_LTX23_SINGLE_SHOT_FPS = 24
+const DEFAULT_LEGACY_LTX23_SINGLE_SHOT_DURATION_SECONDS = 2
+const DEFAULT_LEGACY_LTX23_SINGLE_SHOT_FPS = 24
 
 function readNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+function readPositiveFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function readSerializedLtx23RoutingDurationSeconds(payload: AnyObj, modelId: string): number | null {
+  const routing = payload.ltx23WorkflowRouting
+  if (!routing || typeof routing !== 'object' || Array.isArray(routing)) return null
+
+  const routeRecord = routing as AnyObj
+  const selectedModelKey = readNonEmptyString(routeRecord.selectedModelKey)
+  if (selectedModelKey && selectedModelKey !== modelId) return null
+
+  return readPositiveFiniteNumber(routeRecord.durationSeconds)
 }
 
 async function fetchPanelById(panelId: string) {
@@ -94,23 +111,24 @@ function extractGenerationOptions(payload: AnyObj): VideoOptionMap {
   return next
 }
 
-function withStableLtx23SingleShotTiming(
+function withLtx23ProfileTiming(
   options: VideoOptionMap,
   params: {
     modelId: string
     generationMode: WorkflowVideoGenerationMode
   },
 ): VideoOptionMap {
-  if (params.generationMode !== 'normal' || !isLtx23VideoModel(params.modelId)) {
+  const profile = getLtx23WorkflowProfile(params.modelId)
+  if (!profile && (params.generationMode !== 'normal' || !isLtx23VideoModel(params.modelId))) {
     return options
   }
 
   const next: VideoOptionMap = { ...options }
   if (typeof next.duration !== 'number' || !Number.isFinite(next.duration) || next.duration <= 0) {
-    next.duration = DEFAULT_LTX23_SINGLE_SHOT_DURATION_SECONDS
+    next.duration = profile?.defaultDurationSeconds ?? DEFAULT_LEGACY_LTX23_SINGLE_SHOT_DURATION_SECONDS
   }
   if (typeof next.fps !== 'number' || !Number.isFinite(next.fps) || next.fps <= 0) {
-    next.fps = DEFAULT_LTX23_SINGLE_SHOT_FPS
+    next.fps = profile?.fps ?? DEFAULT_LEGACY_LTX23_SINGLE_SHOT_FPS
   }
   return next
 }
@@ -296,6 +314,16 @@ async function resolveAudioDrivenDurationOverride(
   return timing
 }
 
+function sumVoiceLineDurationSeconds(voiceLines: Ltx23PromptEnhancementVoiceLine[]): number | null {
+  const totalMs = voiceLines.reduce((sum, line) => {
+    const duration = line.audioDuration
+    return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+      ? sum + duration
+      : sum
+  }, 0)
+  return totalMs > 0 ? Number((totalMs / 1000).toFixed(2)) : null
+}
+
 async function assembleVideoContinuityPacket(params: {
   panel: PanelRecord
   nextPanel?: Awaited<ReturnType<typeof fetchContinuityNeighborPanel>> | null
@@ -364,10 +392,6 @@ async function generateVideoForPanel(
       typeof firstLastFramePayload.flModel === 'string' && firstLastFramePayload.flModel
         ? firstLastFramePayload.flModel
         : modelId
-    const firstLastFrameCapabilities = resolveBuiltinCapabilitiesByModelKey('video', model)
-    if (firstLastFrameCapabilities?.video?.firstlastframe !== true) {
-      throw new Error(`VIDEO_FIRSTLASTFRAME_MODEL_UNSUPPORTED: ${model}`)
-    }
     if (
       typeof firstLastFramePayload.lastFrameStoryboardId === 'string' &&
       firstLastFramePayload.lastFrameStoryboardId &&
@@ -419,12 +443,46 @@ async function generateVideoForPanel(
 
   const durationBinding = await resolveEffectiveVideoDurationBinding(panel, payload)
   const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
+  let routedGenerationOptions = generationOptions
+  const serializedRouteDurationSeconds = readSerializedLtx23RoutingDurationSeconds(payload, model)
+  const workflowRoute = resolveLtx23WorkflowRoute({
+    modelKey: model,
+    selectionMode: payload.ltx23WorkflowSelection,
+    generationMode,
+    requestedDurationSeconds: serializedRouteDurationSeconds
+      ?? (typeof generationOptions.duration === 'number' ? generationOptions.duration : null),
+    audioDurationSeconds: sumVoiceLineDurationSeconds(linkedVoiceLines),
+    panel: {
+      videoPrompt: basePrompt,
+      description: panel.description,
+      shotType: panel.shotType,
+      cameraMove: panel.cameraMove,
+      sceneType: panel.sceneType,
+      srtSegment: panel.srtSegment,
+      clipContent: panel.storyboard.clip?.content ?? null,
+    },
+  })
+  if (workflowRoute) {
+    model = workflowRoute.selectedModelKey
+    routedGenerationOptions = {
+      ...routedGenerationOptions,
+      duration: workflowRoute.durationSeconds,
+    }
+  }
+
+  if (firstLastFramePayload) {
+    const firstLastFrameCapabilities = resolveBuiltinCapabilitiesByModelKey('video', model)
+    if (firstLastFrameCapabilities?.video?.firstlastframe !== true) {
+      throw new Error(`VIDEO_FIRSTLASTFRAME_MODEL_UNSUPPORTED: ${model}`)
+    }
+  }
+
   const audioDrivenDuration = await resolveAudioDrivenDurationOverride(panel, durationBinding, model, linkedVoiceLines)
   if (audioDrivenDuration && !audioDrivenDuration.canGenerate) {
     throwBlockedAudioTiming(audioDrivenDuration)
   }
-  const effectiveGenerationOptions = withStableLtx23SingleShotTiming({
-    ...generationOptions,
+  const effectiveGenerationOptions = withLtx23ProfileTiming({
+    ...routedGenerationOptions,
     ...(audioDrivenDuration ? {
       duration: audioDrivenDuration.targetDurationSeconds,
       fps: audioDrivenDuration.fps,
@@ -481,7 +539,7 @@ async function generateVideoForPanel(
     userId: job.data.userId,
     modelId: model,
     imageUrl: sourceImageBase64,
-    allowCustomDuration: Boolean(audioDrivenDuration && isLtx23VideoModel(model)),
+    allowCustomDuration: Boolean((audioDrivenDuration || workflowRoute) && isLtx23VideoModel(model)),
     options: {
       prompt: effectivePrompt,
       ...(projectVideoRatio ? { aspectRatio: projectVideoRatio } : {}),

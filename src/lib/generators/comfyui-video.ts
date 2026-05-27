@@ -2,6 +2,7 @@ import { getProviderConfig } from '@/lib/api-config'
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
 import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
 const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
@@ -52,15 +53,41 @@ function normalizeComfyUiProviderError(error: unknown): string {
   return message
 }
 
-export function selectComfyUiVideoWorkflowKey(
+type ComfyUiVideoWorkflowSelection = {
+  workflowKey: string
+  durationSeconds?: number
+}
+
+function resolveComfyUiVideoWorkflowSelection(
   workflowKey: string,
-  _prompt: string,
-  _options?: {
+  prompt: string,
+  options?: {
     generationMode?: unknown
     multiShotRange?: unknown
+    duration?: unknown
+    ltx23WorkflowSelection?: unknown
   },
+): ComfyUiVideoWorkflowSelection {
+  const trimmedWorkflowKey = workflowKey.trim()
+  const route = resolveLtx23WorkflowRoute({
+    modelKey: trimmedWorkflowKey,
+    selectionMode: options?.ltx23WorkflowSelection,
+    generationMode: options?.generationMode,
+    requestedDurationSeconds: typeof options?.duration === 'number' ? options.duration : null,
+    panel: { videoPrompt: prompt },
+  })
+  return {
+    workflowKey: route?.selectedWorkflowKey ?? trimmedWorkflowKey,
+    ...(route ? { durationSeconds: route.durationSeconds } : {}),
+  }
+}
+
+export function selectComfyUiVideoWorkflowKey(
+  workflowKey: string,
+  prompt: string,
+  options?: Parameters<typeof resolveComfyUiVideoWorkflowSelection>[2],
 ): string {
-  return workflowKey.trim()
+  return resolveComfyUiVideoWorkflowSelection(workflowKey, prompt, options).workflowKey
 }
 
 function parseWxH(size: string | undefined): { w: number; h: number } | null {
@@ -92,10 +119,13 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
     const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
       ? options.modelId.trim()
       : COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
-    const selectedWorkflowKey = selectComfyUiVideoWorkflowKey(workflowKey, prompt || '', {
+    const selectedWorkflow = resolveComfyUiVideoWorkflowSelection(workflowKey, prompt || '', {
       generationMode: options.generationMode,
       multiShotRange: options.multiShotRange,
+      duration: options.duration,
+      ltx23WorkflowSelection: options.ltx23WorkflowSelection,
     })
+    const selectedWorkflowKey = selectedWorkflow.workflowKey
     const directSize = parseWxH(typeof options.size === 'string' ? options.size : undefined)
     const aspectSize = typeof options.aspectRatio === 'string'
       ? ASPECT_TO_SIZE[options.aspectRatio.trim()]
@@ -118,7 +148,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
         width: targetSize?.w,
         height: targetSize?.h,
-        durationSeconds: typeof options.duration === 'number' ? options.duration : undefined,
+        durationSeconds: selectedWorkflow.durationSeconds ?? (typeof options.duration === 'number' ? options.duration : undefined),
         fps: typeof options.fps === 'number' ? options.fps : undefined,
         llmApi,
       })

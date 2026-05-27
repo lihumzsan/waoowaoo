@@ -37,6 +37,7 @@ const workerState = vi.hoisted(() => ({
 
 const LTX23_DEFAULT_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
 const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
+const LTX23_LARGE_MOTION_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage'
 
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
@@ -351,7 +352,7 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: defaults normal LTX2.3 panels to short stable timing', async () => {
+  it('VIDEO_PANEL: defaults normal LTX2.3 panels to the selected profile timing', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -365,15 +366,105 @@ describe('worker video processor behavior', () => {
     await processor!(job)
 
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      durationSeconds: 2,
-      fps: 24,
+      durationSeconds: 6,
+      fps: 25,
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          duration: 2,
-          fps: 24,
+          duration: 6,
+          fps: 25,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: auto-routes default LTX2.3 long linked audio to the long-video profile', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'We need to review every symptom carefully before giving the next instruction.',
+        audioDuration: 23_700,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_DEFAULT_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 8,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 23.7,
+          fps: 25,
+          generationMode: 'normal',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: preserves exact routed LTX2.3 duration while keeping capability duration bucket in payload', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: '男子突然转身奔跑，镜头跟拍推近',
+      description: '男子突然转身奔跑，镜头跟拍推近',
+      cameraMove: '跟拍推近',
+      sceneType: 'action',
+    }))
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_LARGE_MOTION_MODEL,
+        ltx23WorkflowSelection: 'auto',
+        ltx23WorkflowRouting: {
+          selectedModelKey: LTX23_LARGE_MOTION_MODEL,
+          durationSeconds: 14,
+        },
+        generationOptions: {
+          duration: 16,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_LARGE_MOTION_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 14,
+          fps: 25,
           generationMode: 'normal',
         }),
       }),

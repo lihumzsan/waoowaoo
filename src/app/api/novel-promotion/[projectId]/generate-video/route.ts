@@ -22,6 +22,10 @@ import {
   type VideoReadinessVoiceLine,
 } from '@/lib/novel-promotion/video-readiness'
 import { parseVideoDurationBinding } from '@/lib/video-duration/audio-binding'
+import {
+  resolveLtx23WorkflowRoute,
+  type Ltx23WorkflowRoutingResult,
+} from '@/lib/providers/comfyui/ltx23-workflow-router'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -197,6 +201,13 @@ type PanelReadinessInput = VideoReadinessPanelLike & {
   }) | null
 }
 
+type RoutedPanelPayload = {
+  panel: PanelReadinessInput
+  payload: Record<string, unknown>
+  modelKey: string | null
+  routing: Ltx23WorkflowRoutingResult | null
+}
+
 type LoadedReadinessVoiceLine = VideoReadinessVoiceLine & {
   lineIndex?: number | null
   matchedPanelId?: string | null
@@ -248,6 +259,126 @@ function stripLoadedVoiceLine(line: LoadedReadinessVoiceLine): VideoReadinessVoi
     id: line.id,
     content: line.content,
     audioDuration: line.audioDuration,
+  }
+}
+
+function readRequestedDurationSeconds(payload: unknown): number | null {
+  if (!isRecord(payload)) return null
+  const options = payload.generationOptions
+  if (!isRecord(options)) return null
+  const duration = options.duration
+  return typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : null
+}
+
+function estimateSelectedAudioDurationSeconds(
+  panel: PanelReadinessInput,
+  payload: unknown,
+): number | null {
+  const selectedVoiceLineIds = resolveSelectedVoiceLineIds({ payload, panel })
+  const matchedVoiceLines = panel.matchedVoiceLines || []
+  const selectedSet = new Set(selectedVoiceLineIds)
+  const voiceLinesForTiming = selectedVoiceLineIds.length > 0
+    ? matchedVoiceLines.filter((line) => selectedSet.has(line.id))
+    : matchedVoiceLines
+  const totalMs = voiceLinesForTiming.reduce((sum, line) => {
+      const duration = line.audioDuration
+      return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+        ? sum + duration
+        : sum
+  }, 0)
+  return totalMs > 0 ? Number((totalMs / 1000).toFixed(2)) : null
+}
+
+function resolveLtx23CapabilityDurationSeconds(route: Ltx23WorkflowRoutingResult): number {
+  const durationSeconds = route.durationSeconds
+  const maxDurationSeconds = route.profile.maxDurationSeconds
+  if (maxDurationSeconds !== null && durationSeconds > maxDurationSeconds + 0.001) {
+    return durationSeconds
+  }
+
+  const durationOptions = route.profile.durationOptions
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right)
+  return durationOptions.find((value) => value + 0.001 >= durationSeconds) ?? durationSeconds
+}
+
+function serializeLtx23WorkflowRouting(route: Ltx23WorkflowRoutingResult): Record<string, unknown> {
+  return {
+    selectedWorkflowKey: route.selectedWorkflowKey,
+    selectedModelKey: route.selectedModelKey,
+    category: route.profile.category,
+    promptPolicy: route.profile.promptPolicy,
+    selectionMode: route.selectionMode,
+    routed: route.routed,
+    confidence: route.confidence,
+    reasons: route.reasons,
+    durationSeconds: route.durationSeconds,
+    capabilityDurationSeconds: resolveLtx23CapabilityDurationSeconds(route),
+    fps: route.fps,
+  }
+}
+
+function withLtx23WorkflowRoutingPayload(
+  payload: Record<string, unknown>,
+  route: Ltx23WorkflowRoutingResult | null,
+): Record<string, unknown> {
+  if (!route) return payload
+
+  const generationOptions = isRecord(payload.generationOptions)
+    ? { ...payload.generationOptions }
+    : {}
+  generationOptions.duration = resolveLtx23CapabilityDurationSeconds(route)
+
+  const next: Record<string, unknown> = {
+    ...payload,
+    generationOptions,
+    ltx23WorkflowSelection: route.selectionMode,
+    ltx23WorkflowRouting: serializeLtx23WorkflowRouting(route),
+  }
+
+  if (isRecord(payload.firstLastFrame)) {
+    next.videoModel = route.selectedModelKey
+    next.firstLastFrame = {
+      ...payload.firstLastFrame,
+      flModel: route.selectedModelKey,
+    }
+  } else {
+    next.videoModel = route.selectedModelKey
+  }
+
+  return next
+}
+
+function resolvePanelLtx23RoutedPayload(
+  payload: Record<string, unknown>,
+  panel: PanelReadinessInput,
+): RoutedPanelPayload {
+  const modelKey = resolveVideoModelKeyFromPayload(payload)
+  const route = modelKey
+    ? resolveLtx23WorkflowRoute({
+        modelKey,
+        selectionMode: payload.ltx23WorkflowSelection,
+        generationMode: resolveVideoGenerationMode(payload),
+        requestedDurationSeconds: readRequestedDurationSeconds(payload),
+        audioDurationSeconds: estimateSelectedAudioDurationSeconds(panel, payload),
+        panel: {
+          videoPrompt: panel.videoPrompt,
+          description: panel.description,
+          shotType: panel.shotType,
+          cameraMove: panel.cameraMove,
+          sceneType: panel.sceneType,
+          srtSegment: panel.srtSegment,
+          clipContent: panel.storyboard?.clip?.content ?? null,
+        },
+      })
+    : null
+  const routedPayload = withLtx23WorkflowRoutingPayload(payload, route)
+
+  return {
+    panel,
+    payload: routedPayload,
+    modelKey: route?.selectedModelKey ?? modelKey,
+    routing: route,
   }
 }
 
@@ -477,18 +608,7 @@ export const POST = apiHandler(async (
   const locale = resolveRequiredTaskLocale(request, body)
   const isBatch = body?.all === true
 
-  validateFirstLastFrameModel(body?.firstLastFrame)
-  await validateVideoCapabilityCombination({
-    payload: body,
-    projectId,
-    userId: session.user.id,
-  })
-
   if (isBatch) {
-    const batchModelKey = resolveVideoModelKeyFromPayload(body)
-    const batchCapabilities = batchModelKey
-      ? resolveBuiltinCapabilitiesByModelKey('video', batchModelKey)
-      : undefined
     const episodeId = body?.episodeId
     if (!episodeId) {
       throw new ApiError('INVALID_PARAMS')
@@ -528,17 +648,27 @@ export const POST = apiHandler(async (
       },
     })
     const panelsForReadiness = await resolvePanelsReadinessInputs(panels, body)
-    const readiness = panelsForReadiness.map((panel) => ({
-      panel,
-      issue: resolvePanelVideoReadinessIssue(panel, {
-        payload: body,
-        modelKey: batchModelKey,
-        durationOptions: batchCapabilities?.video?.durationOptions,
-      }),
-    }))
+    const routedPanels = panelsForReadiness.map((panel) =>
+      resolvePanelLtx23RoutedPayload(body, panel))
+    const readiness = routedPanels.map((item) => {
+      const capabilities = item.modelKey
+        ? resolveBuiltinCapabilitiesByModelKey('video', item.modelKey)
+        : undefined
+      return {
+        ...item,
+        issue: resolvePanelVideoReadinessIssue(item.panel, {
+          payload: item.payload,
+          modelKey: item.modelKey,
+          durationOptions: capabilities?.video?.durationOptions,
+        }),
+      }
+    })
     const readyPanels = readiness
       .filter((item) => item.issue === null)
-      .map((item) => item.panel)
+      .map((item) => ({
+        panel: item.panel,
+        payload: item.payload,
+      }))
     const skippedReasons = summarizeVideoReadinessIssues(readiness.map((item) => item.issue))
 
     if (readyPanels.length === 0) {
@@ -550,8 +680,25 @@ export const POST = apiHandler(async (
       })
     }
 
+    const preparedSubmissions = await Promise.all(
+      readyPanels.map(async ({ panel, payload }) => {
+        validateFirstLastFrameModel(payload.firstLastFrame)
+        await validateVideoCapabilityCombination({
+          payload,
+          projectId,
+          userId: session.user.id,
+        })
+        return {
+          panel,
+          payload,
+          billingInfo: buildVideoPanelBillingInfoOrThrow(payload),
+          hasOutputAtStart: await hasPanelVideoOutput(panel.id),
+        }
+      }),
+    )
+
     const results = await Promise.all(
-      readyPanels.map(async (panel) => {
+      preparedSubmissions.map(async ({ panel, payload, billingInfo, hasOutputAtStart }) => {
         return await submitTask({
           userId: session.user.id,
           locale,
@@ -561,11 +708,11 @@ export const POST = apiHandler(async (
           type: TASK_TYPE.VIDEO_PANEL,
           targetType: 'NovelPromotionPanel',
           targetId: panel.id,
-          payload: withTaskUiPayload(body, {
-            hasOutputAtStart: await hasPanelVideoOutput(panel.id),
+          payload: withTaskUiPayload(payload, {
+            hasOutputAtStart,
           }),
           dedupeKey: `video_panel:${panel.id}`,
-          billingInfo: buildVideoPanelBillingInfoOrThrow(body),
+          billingInfo,
         })
       }),
     )
@@ -616,14 +763,20 @@ export const POST = apiHandler(async (
     throw new ApiError('NOT_FOUND')
   }
 
-  const singleModelKey = resolveVideoModelKeyFromPayload(body)
-  const singleCapabilities = singleModelKey
-    ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
-    : undefined
   const panelForReadiness = await resolvePanelReadinessInput(panel, body)
-  const readinessIssue = resolvePanelVideoReadinessIssue(panelForReadiness, {
-    payload: body,
-    modelKey: singleModelKey,
+  const routedPanel = resolvePanelLtx23RoutedPayload(body, panelForReadiness)
+  validateFirstLastFrameModel(routedPanel.payload.firstLastFrame)
+  await validateVideoCapabilityCombination({
+    payload: routedPanel.payload,
+    projectId,
+    userId: session.user.id,
+  })
+  const singleCapabilities = routedPanel.modelKey
+    ? resolveBuiltinCapabilitiesByModelKey('video', routedPanel.modelKey)
+    : undefined
+  const readinessIssue = resolvePanelVideoReadinessIssue(routedPanel.panel, {
+    payload: routedPanel.payload,
+    modelKey: routedPanel.modelKey,
     durationOptions: singleCapabilities?.video?.durationOptions,
   })
   if (readinessIssue) {
@@ -645,11 +798,11 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.VIDEO_PANEL,
     targetType: 'NovelPromotionPanel',
     targetId: panel.id,
-    payload: withTaskUiPayload(body, {
+    payload: withTaskUiPayload(routedPanel.payload, {
       hasOutputAtStart: await hasPanelVideoOutput(panel.id),
     }),
     dedupeKey: `video_panel:${panel.id}`,
-    billingInfo: buildVideoPanelBillingInfoOrThrow(body),
+    billingInfo: buildVideoPanelBillingInfoOrThrow(routedPanel.payload),
   })
 
   return NextResponse.json(result)

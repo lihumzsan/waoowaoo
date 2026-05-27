@@ -25,6 +25,28 @@ const isComfyUiWorkflowLlmApiRequiredMock = vi.mocked(isComfyUiWorkflowLlmApiReq
 const runComfyUiVideoWorkflowMock = vi.mocked(runComfyUiVideoWorkflow)
 
 describe('ComfyUI video workflow selection', () => {
+  it('auto-routes the default ltx23 workflow from prompt and duration context', () => {
+    expect(selectComfyUiVideoWorkflowKey(
+      COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+      '男子突然转身奔跑，镜头跟拍并逐渐推近',
+      { generationMode: 'normal', duration: 6 },
+    )).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion)
+
+    expect(selectComfyUiVideoWorkflowKey(
+      COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+      'GLOBAL: hospital room. LOCAL: Scene 1：女子抬头 | Scene 2：镜头缓慢推近',
+      { generationMode: 'normal', duration: 16 },
+    )).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay)
+  })
+
+  it('preserves the default ltx23 workflow when manual selection is explicit', () => {
+    expect(selectComfyUiVideoWorkflowKey(
+      COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+      '男子突然转身奔跑，镜头跟拍并逐渐推近',
+      { generationMode: 'normal', duration: 6, ltx23WorkflowSelection: 'manual' },
+    )).toBe(COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID)
+  })
+
   it('keeps the latest first-last-frame profile workflow request unchanged', () => {
     expect(selectComfyUiVideoWorkflowKey(COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame, 'bridge the two frames', {
       generationMode: 'firstlastframe',
@@ -56,7 +78,7 @@ describe('ComfyUI video generator', () => {
     })
   })
 
-  it('uses the ltx23 default workflow and forwards non-empty reference images', async () => {
+  it('auto-routes the default ltx23 workflow and forwards non-empty reference images', async () => {
     const generator = new ComfyUIVideoGenerator()
 
     const result = await generator.generate({
@@ -77,7 +99,8 @@ describe('ComfyUI video generator', () => {
 
     expect(result.success).toBe(true)
     expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
-      workflowKey: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
+      durationSeconds: 12,
       referenceImageUrls: [
         'https://example.com/ref-a.png',
         'https://example.com/ref-b.png',

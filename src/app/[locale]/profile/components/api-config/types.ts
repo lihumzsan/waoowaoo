@@ -151,8 +151,6 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'baseimage/图片编辑/qwen双图编辑', name: 'ComfyUI · Qwen 双图编辑', type: 'image', provider: 'comfyui' },
     { modelId: 'baseimage/图片编辑/qwen三图编辑', name: 'ComfyUI · Qwen 三图编辑', type: 'image', provider: 'comfyui' },
     { modelId: 'baseimage/图片编辑/Flux2多图编辑', name: 'ComfyUI · Flux2 多图编辑', type: 'image', provider: 'comfyui' },
-    { modelId: 'baseimage/图片视角切换/单图视角切换', name: 'ComfyUI · 单图视角切换', type: 'image', provider: 'comfyui' },
-    { modelId: 'baseimage/图片视角切换/单图视角切换提示词版本', name: 'ComfyUI · 单图视角切换提示词版', type: 'image', provider: 'comfyui' },
     // 视频模型
     { modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', name: 'ComfyUI · LTX 2.3 T8 Smart VBVR', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro', name: 'ComfyUI · LTX 2.3 T8 微动 PromptRelay', type: 'video', provider: 'comfyui' },
@@ -161,7 +159,6 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video', name: 'ComfyUI · LTX 2.3 大麦茶 30 秒长视频', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay', name: 'ComfyUI · LTX 2.3 大麦茶长视频 PromptRelay', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles', name: 'ComfyUI · LTX 2.3 大麦茶 AIO 无字幕', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/图生视频/Wan2.2Remix图生视频', name: 'ComfyUI · Wan 2.2 Remix 图生视频', type: 'video', provider: 'comfyui' },
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 Pro', type: 'video', provider: 'ark' },

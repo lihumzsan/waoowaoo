@@ -26,6 +26,12 @@ type DirectRouteCase = {
   expectedSubmitEpisodeId?: string
 }
 
+type CapabilityGenerationOptionsInput = {
+  runtimeSelections?: Record<string, unknown>
+}
+
+type CapabilityGenerationOptions = Record<string, string | number | boolean>
+
 const authState = vi.hoisted<AuthState>(() => ({
   authenticated: true,
 }))
@@ -53,9 +59,14 @@ const configServiceMock = vi.hoisted(() => ({
     ...input.basePayload,
     generationOptions: { resolution: '1024x1024' },
   })),
-  resolveProjectModelCapabilityGenerationOptions: vi.fn(async () => ({
-    resolution: '1024x1024',
-  })),
+  resolveProjectModelCapabilityGenerationOptions: vi.fn(async (
+    input?: CapabilityGenerationOptionsInput,
+  ): Promise<CapabilityGenerationOptions> => {
+    void input
+    return {
+      resolution: '1024x1024',
+    }
+  }),
 }))
 
 const hasOutputMock = vi.hoisted(() => ({
@@ -831,6 +842,211 @@ describe('api contract - direct submit routes (behavior)', () => {
       },
     }))
     expect(submitTaskMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('single generate-video writes the auto-routed LTX2.3 profile into the submitted payload', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: '男子突然转身奔跑，镜头跟拍并逐渐推近',
+      videoPromptEditedByUser: false,
+      description: '男子突然转身奔跑，镜头跟拍并逐渐推近',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: '跟拍推近',
+      sceneType: 'action',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 6,
+          resolution: '720p',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
+      ltx23WorkflowSelection: 'auto',
+      generationOptions: expect.objectContaining({
+        duration: 12,
+        resolution: '720p',
+      }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
+        category: 'single_image_large_motion',
+        routed: true,
+      }),
+    }))
+  })
+
+  it('single generate-video uses auto-matched voice lines when routing LTX2.3 long audio', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'doctor listens in a continuous single shot',
+      videoPromptEditedByUser: false,
+      description: 'doctor listens in a continuous single shot',
+      srtSegment: 'long dialogue',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          content: 'This relation line should push the router to the long-video profile.',
+          audioDuration: 23_700,
+        },
+      ])
+      .mockResolvedValueOnce([])
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input?: {
+      runtimeSelections?: Record<string, unknown>
+    }) => {
+      if (input?.runtimeSelections?.duration !== 24) {
+        throw new Error(`expected capability duration 24, got ${String(input?.runtimeSelections?.duration)}`)
+      }
+      return {
+        duration: 24,
+        generationMode: 'normal',
+        resolution: '720p',
+      }
+    })
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 6,
+          resolution: '720p',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+      generationOptions: expect.objectContaining({
+        duration: 24,
+      }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+        durationSeconds: 23.7,
+        reasons: ['duration_over_12s'],
+      }),
+    }))
+  })
+
+  it('batch generate-video validates all ready panels before submitting any task', async () => {
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-a',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        imageUrl: 'cos/panel-a.png',
+        videoPrompt: 'panel a prompt',
+        videoPromptEditedByUser: false,
+        description: 'panel a description',
+        srtSegment: '',
+        videoDurationBinding: null,
+        shotType: 'medium',
+        cameraMove: 'static',
+        sceneType: 'dialogue',
+        storyboard: {
+          episodeId: 'episode-1',
+          clip: { content: 'office conversation' },
+        },
+      },
+      {
+        id: 'panel-b',
+        storyboardId: 'storyboard-1',
+        panelIndex: 1,
+        imageUrl: 'cos/panel-b.png',
+        videoPrompt: 'panel b prompt',
+        videoPromptEditedByUser: false,
+        description: 'panel b description',
+        srtSegment: '',
+        videoDurationBinding: null,
+        shotType: 'medium',
+        cameraMove: 'static',
+        sceneType: 'dialogue',
+        storyboard: {
+          episodeId: 'episode-1',
+          clip: { content: 'office conversation' },
+        },
+      },
+    ])
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions
+      .mockResolvedValueOnce({ resolution: '720p' })
+      .mockRejectedValueOnce(new Error('unsupported generated capability combination'))
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        all: true,
+        episodeId: 'episode-1',
+        videoModel: 'ark::doubao-seedance-2-0-260128',
+        generationOptions: {
+          duration: 5,
+          resolution: '720p',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(400)
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('blocks single generate-video submission when episode-filtered relation audio exceeds the selected LTX workflow max', async () => {
