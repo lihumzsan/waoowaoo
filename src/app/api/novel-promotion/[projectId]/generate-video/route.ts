@@ -21,6 +21,7 @@ import {
   type VideoReadinessPanelLike,
   type VideoReadinessVoiceLine,
 } from '@/lib/novel-promotion/video-readiness'
+import { parseVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -197,23 +198,66 @@ type PanelReadinessInput = VideoReadinessPanelLike & {
 }
 
 function mergeVoiceLinesById(
-  relationLines: VideoReadinessVoiceLine[] | null | undefined,
-  fallbackLines: VideoReadinessVoiceLine[] | null | undefined,
+  ...lineGroups: Array<VideoReadinessVoiceLine[] | null | undefined>
 ): VideoReadinessVoiceLine[] {
   const seen = new Set<string>()
   const merged: VideoReadinessVoiceLine[] = []
-  for (const line of [...(relationLines || []), ...(fallbackLines || [])]) {
-    if (!line.id || seen.has(line.id)) continue
-    seen.add(line.id)
-    merged.push(line)
+  for (const lines of lineGroups) {
+    for (const line of lines || []) {
+      if (!line.id || seen.has(line.id)) continue
+      seen.add(line.id)
+      merged.push(line)
+    }
   }
   return merged
 }
 
-async function resolvePanelReadinessInput(
+function resolveSelectedVoiceLineIds(input: {
+  payload?: unknown
+  panel: PanelReadinessInput
+}): string[] {
+  const payloadBinding = isRecord(input.payload)
+    ? parseVideoDurationBinding(input.payload.videoDurationBinding)
+    : null
+  const payloadVoiceLineIds = payloadBinding?.voiceLineIds || []
+  if (payloadBinding?.mode === 'match_audio' && payloadVoiceLineIds.length > 0) {
+    return payloadVoiceLineIds
+  }
+
+  const savedBinding = parseVideoDurationBinding(input.panel.videoDurationBinding)
+  const savedVoiceLineIds = savedBinding.voiceLineIds || []
+  if (savedBinding.mode === 'match_audio' && savedVoiceLineIds.length > 0) {
+    return savedVoiceLineIds
+  }
+  return []
+}
+
+async function loadExplicitSelectedVoiceLines(
+  panel: PanelReadinessInput,
+  payload?: unknown,
+): Promise<VideoReadinessVoiceLine[]> {
+  const episodeId = panel.storyboard?.episodeId
+  const selectedVoiceLineIds = resolveSelectedVoiceLineIds({ payload, panel })
+  if (!episodeId || selectedVoiceLineIds.length === 0) return []
+
+  return await prisma.novelPromotionVoiceLine.findMany({
+    where: {
+      id: { in: selectedVoiceLineIds },
+      episodeId,
+    },
+    orderBy: { lineIndex: 'asc' },
+    select: {
+      id: true,
+      content: true,
+      audioDuration: true,
+    },
+  })
+}
+
+async function loadFallbackPanelVoiceLines(
   panel: PanelReadinessInput,
   episodeId?: unknown,
-): Promise<PanelReadinessInput> {
+): Promise<VideoReadinessVoiceLine[]> {
   const effectiveEpisodeId = typeof episodeId === 'string' && episodeId
     ? episodeId
     : panel.storyboard?.episodeId
@@ -222,13 +266,10 @@ async function resolvePanelReadinessInput(
     || !panel.storyboardId
     || typeof panel.panelIndex !== 'number'
   ) {
-    return {
-      ...panel,
-      matchedVoiceLines: mergeVoiceLinesById(panel.matchedVoiceLines, []),
-    }
+    return []
   }
 
-  const fallbackVoiceLines = await prisma.novelPromotionVoiceLine.findMany({
+  return await prisma.novelPromotionVoiceLine.findMany({
     where: {
       episodeId: effectiveEpisodeId,
       matchedPanelId: null,
@@ -242,10 +283,25 @@ async function resolvePanelReadinessInput(
       audioDuration: true,
     },
   })
+}
+
+async function resolvePanelReadinessInput(
+  panel: PanelReadinessInput,
+  episodeId?: unknown,
+  payload?: unknown,
+): Promise<PanelReadinessInput> {
+  const [fallbackVoiceLines, explicitSelectedVoiceLines] = await Promise.all([
+    loadFallbackPanelVoiceLines(panel, episodeId),
+    loadExplicitSelectedVoiceLines(panel, payload),
+  ])
 
   return {
     ...panel,
-    matchedVoiceLines: mergeVoiceLinesById(panel.matchedVoiceLines, fallbackVoiceLines),
+    matchedVoiceLines: mergeVoiceLinesById(
+      panel.matchedVoiceLines,
+      fallbackVoiceLines,
+      explicitSelectedVoiceLines,
+    ),
   }
 }
 
@@ -322,7 +378,7 @@ export const POST = apiHandler(async (
       },
     })
     const panelsForReadiness = await Promise.all(
-      panels.map((panel) => resolvePanelReadinessInput(panel, episodeId)),
+      panels.map((panel) => resolvePanelReadinessInput(panel, episodeId, body)),
     )
     const readiness = panelsForReadiness.map((panel) => ({
       panel,
@@ -423,7 +479,7 @@ export const POST = apiHandler(async (
   const singleCapabilities = singleModelKey
     ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
     : undefined
-  const panelForReadiness = await resolvePanelReadinessInput(panel)
+  const panelForReadiness = await resolvePanelReadinessInput(panel, undefined, body)
   const readinessIssue = resolvePanelVideoReadinessIssue(panelForReadiness, {
     payload: body,
     modelKey: singleModelKey,
