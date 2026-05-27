@@ -142,8 +142,8 @@ describe('edit script block-first prompt flow', () => {
     expect(videoPromptBlock).toContain('不得改写或替代角色 voiceTimbreText')
     expect(videoPromptBlock).not.toContain('videoPromptBible')
 
-    const panelVisualPlanBlock = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK,
+    const panelFinalPromptBlock = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK,
       locale: 'zh',
       variables: {
         source_snapshot_json: JSON.stringify({ shots: [], videoBlocks: [] }),
@@ -156,17 +156,21 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(panelVisualPlanBlock).toContain('videoBlock 分镜视觉计划师')
-    expect(panelVisualPlanBlock).toContain('生成 camera plan、shotBlocking 和 finalPanelPrompt')
-    expect(panelVisualPlanBlock).toContain('风格只能影响画面表达方式')
-    expect(panelVisualPlanBlock).toContain('不得因为风格添加原镜头、资产图或空间档案里没有的人物、道具、建筑、天气、时代元素、服装、符号或剧情动作')
-    expect(panelVisualPlanBlock).toContain('不要只在末尾堆成“风格：……”')
-    expect(panelVisualPlanBlock).toContain('优秀风格融合示例')
-    expect(panelVisualPlanBlock).toContain('东方禅意写实')
-    expect(panelVisualPlanBlock).toContain('冷峻未来写实')
-    expect(panelVisualPlanBlock).toContain('温暖家庭胶片')
-    expect(panelVisualPlanBlock).toContain('panelVisualPlanBlockOutput')
-    expect(panelVisualPlanBlock).not.toContain('cameraPlanBlockOutput')
+    expect(panelFinalPromptBlock).toContain('videoBlock 最终分镜图片提示词生成器')
+    expect(panelFinalPromptBlock).toContain('核心产物是每个 panel 的 finalPanelPrompt')
+    expect(panelFinalPromptBlock).toContain('camera_style_bible_json 就是本步骤使用的 Camera Style Bible')
+    expect(panelFinalPromptBlock).toContain('风格只能影响画面表达方式')
+    expect(panelFinalPromptBlock).toContain('严禁因为风格添加原 shot、videoPrompt、资产图或空间档案里没有的人物、道具、建筑、天气、时代元素、服装、符号或剧情动作')
+    expect(panelFinalPromptBlock).toContain('不要只在末尾堆成“风格：……”')
+    expect(panelFinalPromptBlock).toContain('完整输出示例仅用于学习字段完整度和通用风格融合写法')
+    expect(panelFinalPromptBlock).toContain('人物A / 人物B / 当前场景 / 主要锚点 / 可站区域')
+    expect(panelFinalPromptBlock).toContain('"shotScale": "中景"')
+    expect(panelFinalPromptBlock).toContain('"shotScale": "近景"')
+    expect(panelFinalPromptBlock).toContain('"shotScale": "全景"')
+    expect(panelFinalPromptBlock).toContain('禁止空字符串、泛泛的“string”、泛泛的“同上”')
+    expect(panelFinalPromptBlock).toContain('panelFinalPromptBlockOutput')
+    expect(panelFinalPromptBlock).not.toContain('panelVisualPlanBlockOutput')
+    expect(panelFinalPromptBlock).not.toContain('cameraPlanBlockOutput')
 
     const englishPrimaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,

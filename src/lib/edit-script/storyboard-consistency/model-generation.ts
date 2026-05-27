@@ -6,11 +6,11 @@ import {
   cameraPlanModelOutputSchema,
   cameraStyleBibleModelOutputSchema,
   generatedPanelPromptSchema,
-  panelVisualPlanBlockModelOutputSchema,
+  panelFinalPromptBlockModelOutputSchema,
   type CameraPlanModelOutput,
   type CameraPlanPanel,
   type CameraStyleBibleModelOutput,
-  type PanelVisualPlanBlockModelOutput,
+  type PanelFinalPromptBlockModelOutput,
   type StoryboardConsistencySourceVideoBlock,
   type StoryboardConsistencySourceSnapshot,
   type StoryboardPanelPromptDraft,
@@ -188,13 +188,13 @@ function spatialProfileStrategyOutputForCameraPlan(
   }
 }
 
-export async function generateStoryboardPanelVisualPlan(input: GenerationContext & {
+export async function generateStoryboardPanelFinalPrompts(input: GenerationContext & {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly spatialProfileStrategyOutput: unknown
 }): Promise<CameraPlanModelOutput & {
   readonly panels: readonly StoryboardPanelPromptDraft[]
   readonly cameraStyleBible: CameraStyleBibleModelOutput['cameraStyleBible']
-  readonly blockOutputs: readonly PanelVisualPlanBlockModelOutput['panelVisualPlanBlockOutput'][]
+  readonly blockOutputs: readonly PanelFinalPromptBlockModelOutput['panelFinalPromptBlockOutput'][]
 }> {
   const cameraPlanSpatialProfileOutput = spatialProfileStrategyOutputForCameraPlan(input.spatialProfileStrategyOutput, null)
   const bibleRaw = await runTextJsonStep({
@@ -214,7 +214,7 @@ export async function generateStoryboardPanelVisualPlan(input: GenerationContext
     const blockSpatialProfileOutput = spatialProfileStrategyOutputForCameraPlan(input.spatialProfileStrategyOutput, block.sourceVideoBlockId)
     const raw = await runTextJsonStep({
       ...input,
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK,
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK,
       variables: {
         source_snapshot_json: stringifyForPrompt(input.snapshot),
         camera_style_bible_json: stringifyForPrompt(bible.cameraStyleBible),
@@ -224,16 +224,16 @@ export async function generateStoryboardPanelVisualPlan(input: GenerationContext
         adjacent_blocks_json: stringifyForPrompt(adjacentBlocks(input.snapshot, block.blockIndex)),
         panel_contract_json: stringifyForPrompt(contract),
       },
-      stepTitle: `Generate edit-script storyboard panel visual plan for block ${block.blockIndex + 1}`,
+      stepTitle: `Generate edit-script storyboard final panel prompts for block ${block.blockIndex + 1}`,
       stepIndex: 2,
       stepTotal: 2,
     })
-    const parsed = panelVisualPlanBlockModelOutputSchema.parse(raw)
-    if (parsed.panelVisualPlanBlockOutput.sourceVideoBlockId !== block.sourceVideoBlockId) {
-      throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK_MISMATCH:${block.sourceVideoBlockId}`)
+    const parsed = panelFinalPromptBlockModelOutputSchema.parse(raw)
+    if (parsed.panelFinalPromptBlockOutput.sourceVideoBlockId !== block.sourceVideoBlockId) {
+      throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK_MISMATCH:${block.sourceVideoBlockId}`)
     }
-    validatePanelContractEntries(contract, parsed.panelVisualPlanBlockOutput.panels)
-    return parsed.panelVisualPlanBlockOutput
+    validatePanelContractEntries(contract, parsed.panelFinalPromptBlockOutput.panels)
+    return parsed.panelFinalPromptBlockOutput
   }))
   const cameraPlanPanels = blockOutputs.flatMap((block) => block.panels)
   const parsed = cameraPlanModelOutputSchema.parse({

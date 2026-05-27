@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { generateStoryboardPanelVisualPlan } from '@/lib/edit-script/storyboard-consistency/model-generation'
+import { generateStoryboardPanelFinalPrompts } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
 const promptMock = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const aiExecMock = vi.hoisted(() => ({
 vi.mock('@/lib/ai-prompts', () => ({
   AI_PROMPT_IDS: {
     EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
-    EDIT_SCRIPT_STORYBOARD_PANEL_VISUAL_PLAN_BLOCK: 'edit-script-storyboard-panel-visual-plan-block',
+    EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK: 'edit-script-storyboard-panel-final-prompt-block',
   },
   buildAiPrompt: promptMock.buildAiPrompt,
 }))
@@ -166,7 +166,7 @@ describe('edit-script storyboard spatial text blocking generation', () => {
       })
       .mockResolvedValueOnce({
         text: JSON.stringify({
-          panelVisualPlanBlockOutput: {
+          panelFinalPromptBlockOutput: {
             sourceVideoBlockId: 'edit-1:videoBlock:1',
             panels: [cameraPanel],
           },
@@ -186,7 +186,7 @@ describe('edit-script storyboard spatial text blocking generation', () => {
       }],
     }
 
-    const result = await generateStoryboardPanelVisualPlan({
+    const result = await generateStoryboardPanelFinalPrompts({
       userId: 'user-1',
       projectId: 'project-1',
       model: 'analysis-model-1',

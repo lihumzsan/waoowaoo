@@ -163,8 +163,8 @@ export const cameraStyleBibleModelOutputSchema = z.object({
   }).passthrough(),
 })
 
-export const panelVisualPlanBlockModelOutputSchema = z.object({
-  panelVisualPlanBlockOutput: z.object({
+export const panelFinalPromptBlockModelOutputSchema = z.object({
+  panelFinalPromptBlockOutput: z.object({
     sourceVideoBlockId: z.string().trim().min(1),
     panels: z.array(cameraPlanPanelSchema).min(1),
   }).passthrough(),
@@ -173,4 +173,4 @@ export const panelVisualPlanBlockModelOutputSchema = z.object({
 export type CameraPlanPanel = z.infer<typeof cameraPlanPanelSchema>
 export type CameraPlanModelOutput = z.infer<typeof cameraPlanModelOutputSchema>
 export type CameraStyleBibleModelOutput = z.infer<typeof cameraStyleBibleModelOutputSchema>
-export type PanelVisualPlanBlockModelOutput = z.infer<typeof panelVisualPlanBlockModelOutputSchema>
+export type PanelFinalPromptBlockModelOutput = z.infer<typeof panelFinalPromptBlockModelOutputSchema>
