@@ -712,7 +712,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     })
   })
 
-  it('blocks single generate-video submission using fallback storyboard-bound voice lines', async () => {
+  it('blocks single generate-video submission using fallback storyboard-bound voice lines from the panel episode', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -751,6 +751,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
+        episodeId: 'stale-episode',
         videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
         storyboardId: 'storyboard-1',
         panelIndex: 0,

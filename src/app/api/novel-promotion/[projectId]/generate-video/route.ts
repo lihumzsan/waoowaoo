@@ -423,7 +423,7 @@ export const POST = apiHandler(async (
   const singleCapabilities = singleModelKey
     ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
     : undefined
-  const panelForReadiness = await resolvePanelReadinessInput(panel, body?.episodeId)
+  const panelForReadiness = await resolvePanelReadinessInput(panel)
   const readinessIssue = resolvePanelVideoReadinessIssue(panelForReadiness, {
     payload: body,
     modelKey: singleModelKey,
