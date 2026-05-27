@@ -23,6 +23,7 @@ type DirectRouteCase = {
   expectedTargetType: string
   expectedProjectId: string
   expectedPayloadSubset?: Record<string, unknown>
+  expectedSubmitEpisodeId?: string
 }
 
 const authState = vi.hoisted<AuthState>(() => ({
@@ -435,6 +436,7 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
   {
     routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
     body: {
+      episodeId: 'stale-episode',
       videoModel: 'ark::doubao-seedance-2-0-260128',
       storyboardId: 'storyboard-1',
       panelIndex: 0,
@@ -450,6 +452,7 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedTaskType: TASK_TYPE.VIDEO_PANEL,
     expectedTargetType: 'NovelPromotionPanel',
     expectedProjectId: 'project-1',
+    expectedSubmitEpisodeId: 'episode-1',
     expectedPayloadSubset: {
       videoModel: 'ark::doubao-seedance-2-0-260128',
       generationOptions: {
@@ -628,6 +631,9 @@ describe('api contract - direct submit routes (behavior)', () => {
       expect(submitArg?.targetType).toBe(routeCase.expectedTargetType)
       expect(submitArg?.projectId).toBe(routeCase.expectedProjectId)
       expect(submitArg?.userId).toBe('user-1')
+      if (routeCase.expectedSubmitEpisodeId) {
+        expect(submitArg?.episodeId).toBe(routeCase.expectedSubmitEpisodeId)
+      }
       if (routeCase.expectedPayloadSubset) {
         expect(submitArg?.payload).toEqual(expect.objectContaining(routeCase.expectedPayloadSubset))
       }

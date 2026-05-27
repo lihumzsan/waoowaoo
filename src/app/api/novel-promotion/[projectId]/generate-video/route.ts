@@ -444,6 +444,7 @@ export const POST = apiHandler(async (
     locale,
     requestId: getRequestId(request),
     projectId,
+    episodeId: panel.storyboard.episodeId,
     type: TASK_TYPE.VIDEO_PANEL,
     targetType: 'NovelPromotionPanel',
     targetId: panel.id,
