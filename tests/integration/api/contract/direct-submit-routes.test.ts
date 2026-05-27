@@ -86,7 +86,29 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => ({})),
   },
   novelPromotionPanel: {
-    findFirst: vi.fn(async () => ({ id: 'panel-1' })),
+    findFirst: vi.fn(async () => ({
+      id: 'panel-1',
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'panel prompt',
+      videoPromptEditedByUser: false,
+      description: 'panel description',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [] as Array<{
+        id: string
+        content: string
+        audioDuration: number
+      }>,
+    })),
     findMany: vi.fn(async () => []),
     findUnique: vi.fn(async ({ where }: { where?: { id?: string } }) => {
       const id = where?.id || 'panel-1'
@@ -619,4 +641,68 @@ describe('api contract - direct submit routes (behavior)', () => {
       }
     })
   }
+
+  it('blocks single generate-video submission when linked audio exceeds the selected LTX workflow max', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'panel prompt',
+      videoPromptEditedByUser: false,
+      description: 'panel description',
+      srtSegment: 'long dialogue',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [
+        {
+          id: 'line-1',
+          content: 'This long line cannot fit the short workflow.',
+          audioDuration: 23_884,
+        },
+      ],
+    })
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 12,
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(400)
+    expect(submitTaskMock).not.toHaveBeenCalled()
+    await expect(res.json()).resolves.toMatchObject({
+      error: {
+        details: {
+          code: 'VIDEO_READINESS_BLOCKED',
+          field: 'videoDurationBinding',
+          details: {
+            issue: {
+              code: 'audio_duration_exceeds_model',
+            },
+          },
+        },
+      },
+    })
+  })
 })

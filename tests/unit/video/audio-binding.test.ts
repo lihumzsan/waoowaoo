@@ -202,7 +202,7 @@ describe('video audio duration binding', () => {
     expect(plan?.segments[1]?.audioDurationSeconds).toBe(8)
   })
 
-  it('attaches a split plan to blocked timing so callers can allow automatic generation', () => {
+  it('attaches a split plan to blocked timing for diagnostics or explicit split flows', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',

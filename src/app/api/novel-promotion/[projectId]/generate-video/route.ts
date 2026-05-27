@@ -346,6 +346,25 @@ export const POST = apiHandler(async (
     throw new ApiError('NOT_FOUND')
   }
 
+  const singleModelKey = resolveVideoModelKeyFromPayload(body)
+  const singleCapabilities = singleModelKey
+    ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
+    : undefined
+  const readinessIssue = resolvePanelVideoReadinessIssue(panel, {
+    payload: body,
+    modelKey: singleModelKey,
+    durationOptions: singleCapabilities?.video?.durationOptions,
+  })
+  if (readinessIssue) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_READINESS_BLOCKED',
+      field: 'videoDurationBinding',
+      details: {
+        issue: readinessIssue,
+      },
+    })
+  }
+
   const result = await submitTask({
     userId: session.user.id,
     locale,

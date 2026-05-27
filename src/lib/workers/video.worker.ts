@@ -12,7 +12,6 @@ import {
   resolveLipSyncVideoSource,
   resolveVideoSourceFromGeneration,
   toSignedUrlIfCos,
-  uploadImageSourceToCos,
   uploadVideoSourceToCos,
 } from './utils'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
@@ -22,12 +21,9 @@ import { getProviderConfig } from '@/lib/api-config'
 import {
   parseVideoDurationBinding,
   resolveAudioDrivenVideoTiming,
-  type AudioDrivenVideoSplitPlan,
-  type AudioDrivenVideoSplitSegment,
   type ResolvedAudioDrivenVideoTiming,
   type VideoDurationBinding,
 } from '@/lib/video-duration/audio-binding'
-import { concatVideos, extractVideoLastFrame } from '@/lib/video-processing/ffmpeg'
 import {
   enhanceLtx23VideoPrompt,
   isLtx23VideoModel,
@@ -45,28 +41,8 @@ import {
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
 type VideoOptionMap = Record<string, VideoOptionValue>
-type VideoGenerationMode = 'normal' | 'firstlastframe' | 'split'
+type VideoGenerationMode = 'normal' | 'firstlastframe'
 type WorkflowVideoGenerationMode = 'normal' | 'firstlastframe'
-
-type GeneratedVideoSource = {
-  url: string
-  actualVideoTokens?: number
-  downloadHeaders?: Record<string, string>
-}
-
-type PanelVideoSegmentRow = {
-  segmentIndex: number
-  status?: string | null
-  videoUrl?: string | null
-  tailFrameImageUrl?: string | null
-}
-
-type PanelVideoSegmentModel = {
-  findMany: (args: unknown) => Promise<PanelVideoSegmentRow[]>
-  upsert: (args: unknown) => Promise<unknown>
-  update: (args: unknown) => Promise<unknown>
-  deleteMany: (args: unknown) => Promise<unknown>
-}
 
 const DEFAULT_LTX23_SINGLE_SHOT_DURATION_SECONDS = 2
 const DEFAULT_LTX23_SINGLE_SHOT_FPS = 24
@@ -137,12 +113,6 @@ function withStableLtx23SingleShotTiming(
     next.fps = DEFAULT_LTX23_SINGLE_SHOT_FPS
   }
   return next
-}
-
-function getPanelVideoSegmentModel(): PanelVideoSegmentModel {
-  return (prisma as unknown as {
-    novelPromotionPanelVideoSegment: PanelVideoSegmentModel
-  }).novelPromotionPanelVideoSegment
 }
 
 function throwBlockedAudioTiming(timing: ResolvedAudioDrivenVideoTiming): never {
@@ -344,330 +314,6 @@ async function assembleVideoContinuityPacket(params: {
     dialogueLines: params.linkedVoiceLines,
     targetDurationSeconds: params.durationSeconds,
   })
-}
-
-async function resolveGeneratedVideoDownloadHeaders(params: {
-  generatedVideo: GeneratedVideoSource
-  model: string
-  userId: string
-}): Promise<Record<string, string> | undefined> {
-  if (params.generatedVideo.downloadHeaders) {
-    return params.generatedVideo.downloadHeaders
-  }
-
-  const videoSource = params.generatedVideo.url
-  const parsedModel = parseModelKeyStrict(params.model)
-  const isGoogleDownloadUrl = videoSource.includes('generativelanguage.googleapis.com/')
-    && videoSource.includes('/files/')
-    && videoSource.includes(':download')
-  if (parsedModel?.provider === 'google' && isGoogleDownloadUrl) {
-    const { apiKey } = await getProviderConfig(params.userId, 'google')
-    return { 'x-goog-api-key': apiKey }
-  }
-
-  return undefined
-}
-
-async function renderEffectiveVideoPrompt(params: {
-  job: Job<TaskJobData>
-  panel: PanelRecord
-  nextPanel?: Awaited<ReturnType<typeof fetchContinuityNeighborPanel>> | null
-  model: string
-  basePrompt: string
-  promptEditedByUser: boolean
-  projectArtStyle: string | null | undefined
-  generationMode: WorkflowVideoGenerationMode
-  linkedVoiceLines: Ltx23PromptEnhancementVoiceLine[]
-  durationSeconds?: number | null
-  fps?: number | null
-  audioTiming?: ResolvedAudioDrivenVideoTiming | null
-}): Promise<{
-  prompt: string
-  continuity: PanelContinuityPacket
-}> {
-  const continuityPacket = await assembleVideoContinuityPacket({
-    panel: params.panel,
-    nextPanel: params.nextPanel,
-    linkedVoiceLines: params.linkedVoiceLines,
-    durationSeconds: params.durationSeconds,
-  })
-  const continuityPrompt = renderPanelContinuityPrompt({
-    packet: continuityPacket,
-    basePrompt: params.basePrompt,
-    generationMode: params.generationMode,
-    userEdited: params.promptEditedByUser,
-  })
-  const effectivePrompt = (
-    await enhanceLtx23VideoPrompt({
-      userId: params.job.data.userId,
-      locale: params.job.data.locale,
-      projectId: params.job.data.projectId,
-      modelKey: params.model,
-      originalPrompt: continuityPrompt,
-      panel: {
-        panelIndex: params.panel.panelIndex,
-        shotType: params.panel.shotType,
-        cameraMove: params.panel.cameraMove,
-        description: params.panel.description,
-        location: params.panel.location,
-        characters: params.panel.characters,
-        props: params.panel.props,
-        srtSegment: params.panel.srtSegment,
-        sceneType: params.panel.sceneType,
-        clipContent: params.panel.storyboard.clip?.content ?? null,
-      },
-      linkedVoiceLines: params.linkedVoiceLines,
-      durationSeconds: params.durationSeconds ?? null,
-      fps: params.fps ?? null,
-      audioTiming: params.audioTiming ?? null,
-      generationMode: params.generationMode,
-      artStyle: params.projectArtStyle,
-      userEdited: params.promptEditedByUser,
-      continuity: continuityPacket,
-    })
-  ).prompt
-
-  return {
-    prompt: effectivePrompt,
-    continuity: continuityPacket,
-  }
-}
-
-function buildSegmentVoiceLines(segment: AudioDrivenVideoSplitSegment): Ltx23PromptEnhancementVoiceLine[] {
-  return segment.voiceLines.map((line) => ({
-    id: line.id,
-    speaker: line.speaker || '',
-    content: line.content,
-    audioDuration: line.audioDuration,
-  }))
-}
-
-function buildSegmentDialogueText(segment: AudioDrivenVideoSplitSegment): string {
-  return segment.voiceLines
-    .map((line) => [line.speaker, line.content].filter(Boolean).join(': '))
-    .filter(Boolean)
-    .join('\n')
-}
-
-function buildSegmentAudioTiming(
-  plan: AudioDrivenVideoSplitPlan,
-  segment: AudioDrivenVideoSplitSegment,
-): ResolvedAudioDrivenVideoTiming {
-  return {
-    mode: 'match_audio',
-    selectedVoiceLineIds: segment.voiceLineIds,
-    matchedVoiceLineIds: segment.voiceLineIds,
-    sourceDurationMs: segment.audioDurationMs,
-    audioDurationSeconds: segment.audioDurationSeconds,
-    targetDurationSeconds: segment.targetDurationSeconds,
-    targetFrameCount: segment.targetFrameCount,
-    fps: plan.fps,
-    maxDurationSeconds: plan.maxDurationSeconds,
-    preRollSeconds: 0,
-    postRollSeconds: 0,
-    dialogueStartSeconds: 0,
-    dialogueEndSeconds: segment.targetDurationSeconds,
-    timingStrategy: 'context_aware_audio',
-    reason: `auto split segment ${segment.segmentIndex + 1}/${plan.segments.length}`,
-    capped: false,
-    canGenerate: true,
-  }
-}
-
-async function resolveFirstFrameFromTail(tailFrameImageUrl: string): Promise<string> {
-  const signedTailFrameUrl = toSignedUrlIfCos(tailFrameImageUrl, 3600) || tailFrameImageUrl
-  return await normalizeToBase64ForGeneration(signedTailFrameUrl)
-}
-
-async function generateSplitVideoForPanel(params: {
-  job: Job<TaskJobData>
-  panel: PanelRecord
-  model: string
-  splitPlan: AudioDrivenVideoSplitPlan
-  sourceImageBase64: string
-  basePrompt: string
-  promptEditedByUser: boolean
-  projectVideoRatio: string | null | undefined
-  projectArtStyle: string | null | undefined
-  generationOptions: VideoOptionMap
-  requestedGenerateAudio?: boolean
-}): Promise<{
-  cosKey: string
-  generationMode: 'split'
-  actualVideoTokens?: number
-}> {
-  const segmentModel = getPanelVideoSegmentModel()
-  const existingSegments = await segmentModel.findMany({
-    where: { panelId: params.panel.id },
-    orderBy: { segmentIndex: 'asc' },
-  })
-  const existingByIndex = new Map(existingSegments.map((segment) => [segment.segmentIndex, segment]))
-  const segmentVideoKeys: string[] = []
-  let nextFirstFrameImage = params.sourceImageBase64
-  let actualVideoTokens = 0
-
-  for (const segment of params.splitPlan.segments) {
-    const existingSegment = existingByIndex.get(segment.segmentIndex)
-    if (
-      existingSegment?.status === 'completed'
-      && existingSegment.videoUrl
-      && existingSegment.tailFrameImageUrl
-    ) {
-      segmentVideoKeys.push(existingSegment.videoUrl)
-      nextFirstFrameImage = await resolveFirstFrameFromTail(existingSegment.tailFrameImageUrl)
-      continue
-    }
-
-    const segmentVoiceLines = buildSegmentVoiceLines(segment)
-    const segmentTiming = buildSegmentAudioTiming(params.splitPlan, segment)
-    const effectiveGenerationOptions = withStableLtx23SingleShotTiming({
-      ...params.generationOptions,
-      duration: segment.targetDurationSeconds,
-      fps: params.splitPlan.fps,
-    }, {
-      modelId: params.model,
-      generationMode: 'normal',
-    })
-    const { prompt: effectivePrompt } = await renderEffectiveVideoPrompt({
-      job: params.job,
-      panel: params.panel,
-      model: params.model,
-      basePrompt: params.basePrompt,
-      promptEditedByUser: params.promptEditedByUser,
-      projectArtStyle: params.projectArtStyle,
-      generationMode: 'normal',
-      linkedVoiceLines: segmentVoiceLines,
-      durationSeconds: segment.targetDurationSeconds,
-      fps: params.splitPlan.fps,
-      audioTiming: segmentTiming,
-    })
-
-    await segmentModel.upsert({
-      where: {
-        panelId_segmentIndex: {
-          panelId: params.panel.id,
-          segmentIndex: segment.segmentIndex,
-        },
-      },
-      create: {
-        panelId: params.panel.id,
-        segmentIndex: segment.segmentIndex,
-        status: 'processing',
-        dialogueText: buildSegmentDialogueText(segment),
-        prompt: effectivePrompt,
-        audioDurationMs: segment.audioDurationMs,
-        targetDurationSeconds: segment.targetDurationSeconds,
-        targetFrameCount: segment.targetFrameCount,
-        errorMessage: null,
-      },
-      update: {
-        status: 'processing',
-        dialogueText: buildSegmentDialogueText(segment),
-        prompt: effectivePrompt,
-        audioDurationMs: segment.audioDurationMs,
-        targetDurationSeconds: segment.targetDurationSeconds,
-        targetFrameCount: segment.targetFrameCount,
-        errorMessage: null,
-      },
-    })
-
-    try {
-      await reportTaskProgress(params.job, Math.min(90, 15 + segment.segmentIndex * 20), {
-        stage: 'generate_panel_video_segment',
-        panelId: params.panel.id,
-        segmentIndex: segment.segmentIndex,
-        segmentCount: params.splitPlan.segments.length,
-      })
-
-      const generatedVideo = await resolveVideoSourceFromGeneration(params.job, {
-        userId: params.job.data.userId,
-        modelId: params.model,
-        imageUrl: nextFirstFrameImage,
-        allowCustomDuration: true,
-        options: {
-          prompt: effectivePrompt,
-          ...(params.projectVideoRatio ? { aspectRatio: params.projectVideoRatio } : {}),
-          ...effectiveGenerationOptions,
-          generationMode: 'normal',
-          ...(typeof params.requestedGenerateAudio === 'boolean' ? { generateAudio: params.requestedGenerateAudio } : {}),
-        },
-      })
-      const downloadHeaders = await resolveGeneratedVideoDownloadHeaders({
-        generatedVideo,
-        model: params.model,
-        userId: params.job.data.userId,
-      })
-      const segmentTargetId = `${params.panel.id}-segment-${segment.segmentIndex}`
-      const segmentCosKey = await uploadVideoSourceToCos(
-        generatedVideo.url,
-        'panel-video-segment',
-        segmentTargetId,
-        downloadHeaders,
-      )
-      const signedSegmentVideoUrl = toSignedUrlIfCos(segmentCosKey, 7200) || segmentCosKey
-      const tailFrame = await extractVideoLastFrame(signedSegmentVideoUrl)
-      const tailFrameImageUrl = await uploadImageSourceToCos(
-        tailFrame,
-        'panel-video-segment-frame',
-        `${segmentTargetId}-last-frame`,
-      )
-
-      await segmentModel.update({
-        where: {
-          panelId_segmentIndex: {
-            panelId: params.panel.id,
-            segmentIndex: segment.segmentIndex,
-          },
-        },
-        data: {
-          status: 'completed',
-          videoUrl: segmentCosKey,
-          tailFrameImageUrl,
-          errorMessage: null,
-        },
-      })
-
-      if (typeof generatedVideo.actualVideoTokens === 'number') {
-        actualVideoTokens += generatedVideo.actualVideoTokens
-      }
-      segmentVideoKeys.push(segmentCosKey)
-      nextFirstFrameImage = await resolveFirstFrameFromTail(tailFrameImageUrl)
-    } catch (error) {
-      await segmentModel.update({
-        where: {
-          panelId_segmentIndex: {
-            panelId: params.panel.id,
-            segmentIndex: segment.segmentIndex,
-          },
-        },
-        data: {
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : String(error),
-        },
-      })
-      throw error
-    }
-  }
-
-  await reportTaskProgress(params.job, 92, {
-    stage: 'merge_panel_video_segments',
-    panelId: params.panel.id,
-    segmentCount: params.splitPlan.segments.length,
-  })
-  const mergedVideo = await concatVideos(segmentVideoKeys.map((videoKey) => toSignedUrlIfCos(videoKey, 7200) || videoKey))
-  const cosKey = await uploadVideoSourceToCos(mergedVideo, 'panel-video', params.panel.id)
-  await segmentModel.deleteMany({
-    where: {
-      panelId: params.panel.id,
-      segmentIndex: { gte: params.splitPlan.segments.length },
-    },
-  })
-
-  return {
-    cosKey,
-    generationMode: 'split',
-    ...(actualVideoTokens > 0 ? { actualVideoTokens } : {}),
-  }
 }
 
 async function generateVideoForPanel(
