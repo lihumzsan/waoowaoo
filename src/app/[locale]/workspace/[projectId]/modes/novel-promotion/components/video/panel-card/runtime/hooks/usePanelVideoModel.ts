@@ -8,10 +8,12 @@ import {
 } from '@/lib/model-capabilities/video-effective'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
 
-const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
+const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
 const LEGACY_DEFAULT_VIDEO_MODELS = new Set([
+  'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
   'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
   'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+  'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
   'basevideo/图生视频/LTX2.3图生视频快速版',
   'basevideo/图生视频/ltx2.3-图生视频-没字幕版',
 ])
