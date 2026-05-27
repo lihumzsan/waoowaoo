@@ -1,13 +1,9 @@
 import { getProviderConfig } from '@/lib/api-config'
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
-import {
-  COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
-  COMFYUI_LTX23_WORKFLOW_KEYS,
-} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
-const COMFYUI_MULTI_SHOT_VBVR_WORKFLOW_ID = 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
 const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX = 'basevideo/多镜头/'
 const COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX = 'basevideo/ltx23-profiles/'
 
@@ -41,14 +37,6 @@ function normalizeComfyUiVideoSize(size: { w: number; h: number } | null): { w: 
   }
 }
 
-function hasStructuredPromptRelayPrompt(prompt: string): boolean {
-  const value = prompt.trim()
-  if (!value) return false
-  const hasGlobalLocalSections = /(?:^|\n)\s*GLOBAL\s*[:：][\s\S]+(?:^|\n)\s*LOCAL\s*[:：]/i.test(value)
-  const hasTimedSegments = /\[\s*\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?\s*\]/.test(value)
-  return hasGlobalLocalSections || hasTimedSegments
-}
-
 function isMultiShotWorkflowKey(workflowKey: string): boolean {
   return workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX)
     || workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE)
@@ -56,9 +44,6 @@ function isMultiShotWorkflowKey(workflowKey: string): boolean {
 
 function isLtx23ProfileWorkflowKey(workflowKey: string): boolean {
   return workflowKey.startsWith(COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX)
-    || Object.values(COMFYUI_LTX23_WORKFLOW_KEYS).includes(
-      workflowKey as typeof COMFYUI_LTX23_WORKFLOW_KEYS[keyof typeof COMFYUI_LTX23_WORKFLOW_KEYS],
-    )
 }
 
 function normalizeComfyUiReferenceImageUrls(value: unknown): string[] | undefined {
@@ -104,13 +89,6 @@ export function selectComfyUiVideoWorkflowKey(
   }
   if (isMultiShotWorkflowKey(normalizedWorkflowKey)) {
     return normalizedWorkflowKey
-  }
-  if (
-    normalizedWorkflowKey === COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
-    && hasStructuredPromptRelayPrompt(prompt)
-    && allowMultiShot
-  ) {
-    return COMFYUI_MULTI_SHOT_VBVR_WORKFLOW_ID
   }
   return normalizedWorkflowKey
 }

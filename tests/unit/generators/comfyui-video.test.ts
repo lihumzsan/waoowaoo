@@ -70,7 +70,12 @@ describe('ComfyUI video workflow selection', () => {
 describe('ComfyUI video generator', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    getProviderConfigMock.mockResolvedValue({ baseUrl: 'https://comfy.example' })
+    getProviderConfigMock.mockResolvedValue({
+      id: 'comfyui',
+      name: 'ComfyUI',
+      apiKey: '',
+      baseUrl: 'https://comfy.example',
+    })
     isComfyUiWorkflowLlmApiRequiredMock.mockReturnValue(false)
     runComfyUiVideoWorkflowMock.mockResolvedValue({
       videoBase64: 'video-base64',
