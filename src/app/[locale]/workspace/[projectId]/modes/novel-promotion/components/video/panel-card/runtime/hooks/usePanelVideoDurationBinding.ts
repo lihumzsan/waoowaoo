@@ -111,6 +111,6 @@ export function usePanelVideoDurationBinding({
     targetDurationOptions,
     hasAvailableVoiceLines: availableVoiceLines.length > 0,
     isAudioDriven: normalizeVideoDurationBinding(localBinding).mode === 'match_audio',
-    hasValidAudioSelection: !!timing && (timing.canGenerate || !!timing.splitPlan),
+    hasValidAudioSelection: !!timing && timing.canGenerate,
   }
 }

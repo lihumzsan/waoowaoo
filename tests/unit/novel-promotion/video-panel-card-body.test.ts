@@ -177,7 +177,7 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
   })
-  it('shows automatic split messaging and keeps generation enabled for long audio', () => {
+  it('shows blocking guidance and disables generation when long audio only fits by auto-split', () => {
     const markup = renderToStaticMarkup(
       React.createElement(VideoPanelCardBody, {
         runtime: createRuntime({
@@ -202,7 +202,7 @@ describe('VideoPanelCardBody', () => {
               voiceLineIds: ['line-1'],
             },
             isAudioDriven: true,
-            hasValidAudioSelection: true,
+            hasValidAudioSelection: false,
             hasAvailableVoiceLines: true,
             availableVoiceLines: [
               {
@@ -230,7 +230,8 @@ describe('VideoPanelCardBody', () => {
       }),
     )
 
-    expect(markup).toContain('将自动拆成 2 段生成')
-    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>鐢熸垚瑙嗛<\/button>/)
+    expect(markup).not.toContain('将自动拆成 2 段生成')
+    expect(markup).toContain('请切换长视频工作流或拆分音频/镜头后生成')
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>生成视频<\/button>/)
   })
 })

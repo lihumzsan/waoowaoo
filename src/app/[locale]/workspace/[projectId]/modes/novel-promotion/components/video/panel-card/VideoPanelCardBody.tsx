@@ -55,7 +55,6 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
   const showsFirstLastFrameActions = layout.isLinked && !!layout.nextPanel
   const blocksVideoGenerationForMissingAudioTiming = durationBinding.isAudioDriven
     && !durationBinding.hasValidAudioSelection
-    && !durationBinding.timing?.splitPlan
 
   const persistDurationBinding = (nextBinding: VideoDurationBinding) => {
     durationBinding.setLocalBinding(nextBinding)
@@ -293,13 +292,9 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                                 配音 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，视频 {durationBinding.timing.targetDurationSeconds.toFixed(1)}s / {durationBinding.timing.targetFrameCount} 帧，前奏 {durationBinding.timing.preRollSeconds.toFixed(1)}s，余韵 {durationBinding.timing.postRollSeconds.toFixed(1)}s
                               </div>
                             </>
-                          ) : durationBinding.timing.splitPlan ? (
-                            <div className="rounded-lg bg-[var(--glass-tone-info-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-info-fg)]">
-                              当前音频 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，当前工作流上限 {durationBinding.timing.maxDurationSeconds?.toFixed(1) ?? '未知'}s，将自动拆成 {durationBinding.timing.splitPlan.segments.length} 段生成。
-                            </div>
                           ) : (
                             <div className="rounded-lg bg-[var(--glass-tone-warning-bg)] px-2 py-1.5 text-[10px] text-[var(--glass-tone-warning-fg)]">
-                              当前音频 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，当前工作流上限 {durationBinding.timing.maxDurationSeconds?.toFixed(1) ?? '未知'}s，请拆分音频或镜头后生成。
+                              当前音频 {durationBinding.timing.audioDurationSeconds.toFixed(1)}s，当前工作流上限 {durationBinding.timing.maxDurationSeconds?.toFixed(1) ?? '未知'}s，请切换长视频工作流或拆分音频/镜头后生成。
                             </div>
                           )}
                         </div>

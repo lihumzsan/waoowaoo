@@ -36,8 +36,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
   const showFirstLastFrameSwitch = layout.hasNext
   const blocksVideoGenerationForAudioTiming = Boolean(
     durationBinding.timing
-    && !durationBinding.timing.canGenerate
-    && !durationBinding.timing.splitPlan,
+    && !durationBinding.timing.canGenerate,
   )
   const canRestorePreviousVideo = !!panel.hasPreviousVideoVersion
     && hasVisibleBaseVideo

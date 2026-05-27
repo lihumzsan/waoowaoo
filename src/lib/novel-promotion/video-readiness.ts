@@ -192,18 +192,14 @@ export function resolvePanelVideoReadinessIssue(
   })
 
   if (timing && !timing.canGenerate) {
-    if (timing.splitPlan && !payloadRequestsFirstLastFrame(options?.payload)) {
-      if (!shortDialogueLongAudio) return null
-    } else {
-      return {
-        code: 'audio_duration_exceeds_model',
-        message: 'Matched audio exceeds the selected video workflow duration.',
-        details: {
-          audioDurationSeconds: timing.audioDurationSeconds,
-          maxDurationSeconds: timing.maxDurationSeconds,
-          blockedReason: timing.blockedReason,
-        },
-      }
+    return {
+      code: 'audio_duration_exceeds_model',
+      message: 'Matched audio exceeds the selected video workflow duration.',
+      details: {
+        audioDurationSeconds: timing.audioDurationSeconds,
+        maxDurationSeconds: timing.maxDurationSeconds,
+        blockedReason: timing.blockedReason,
+      },
     }
   }
 

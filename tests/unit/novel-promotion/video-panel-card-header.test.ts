@@ -134,7 +134,7 @@ describe('VideoPanelCardHeader', () => {
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
   })
 
-  it('keeps the regenerate overlay action enabled when long audio can be auto-split', () => {
+  it('disables the regenerate overlay action even when blocked timing has a split plan', () => {
     const runtime = createRuntime()
     runtime.durationBinding = {
       ...runtime.durationBinding,
@@ -152,6 +152,6 @@ describe('VideoPanelCardHeader', () => {
       }),
     )
 
-    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
   })
 })

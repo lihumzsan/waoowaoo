@@ -54,7 +54,7 @@ describe('video readiness', () => {
     })
   })
 
-  it('allows batch readiness when long LTX audio can be auto-split in normal mode', () => {
+  it('blocks batch readiness when long LTX audio only fits by auto-split in normal mode', () => {
     const issue = resolvePanelVideoReadinessIssue(buildPanel({
       matchedVoiceLines: [
         {
@@ -68,6 +68,30 @@ describe('video readiness', () => {
       durationOptions: [4, 5, 6, 8, 10, 12],
       payload: {
         videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+      },
+    })
+
+    expect(issue?.code).toBe('audio_duration_exceeds_model')
+    expect(issue?.details).toMatchObject({
+      audioDurationSeconds: 23.88,
+      maxDurationSeconds: 12,
+      blockedReason: 'audio_exceeds_max_duration',
+    })
+  })
+
+  it('allows batch readiness for 23.884s audio on the 30s Damaicha long-video workflow', () => {
+    const issue = resolvePanelVideoReadinessIssue(buildPanel({
+      matchedVoiceLines: [
+        {
+          id: 'line-1',
+          content: 'This long line should go through the selected long video workflow.',
+          audioDuration: 23_884,
+        },
+      ],
+    }), {
+      modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+      payload: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
       },
     })
 
