@@ -26,13 +26,6 @@ const prismaMock = vi.hoisted(() => ({
           type: 'audio',
           provider: 'comfyui',
         },
-        {
-          modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
-          modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
-          name: 'ComfyUI · LTX 2.3 多镜头 VBVR',
-          type: 'video',
-          provider: 'comfyui',
-        },
       ]),
       customProviders: JSON.stringify([
         {
@@ -83,7 +76,6 @@ describe('api specific - user models audio filter', () => {
       'bailian::qwen3-tts-vd-2026-01-26',
     ])
     expect(body.video.map((item) => item.value)).toEqual([
-      'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
       'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
       'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',

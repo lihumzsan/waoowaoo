@@ -35,6 +35,9 @@ const workerState = vi.hoisted(() => ({
   processor: null as WorkerProcessor | null,
 }))
 
+const LTX23_DEFAULT_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
+const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
+
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
   vi.fn(async (job: Job<TaskJobData>, handler: WorkerProcessor) => await handler(job)),
@@ -345,7 +348,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+        videoModel: LTX23_DEFAULT_MODEL,
         generationOptions: {
           duration: 5,
           resolution: '720p',
@@ -357,7 +360,7 @@ describe('worker video processor behavior', () => {
 
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
-      modelKey: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+      modelKey: LTX23_DEFAULT_MODEL,
       originalPrompt: expect.stringContaining('Creator prompt intent: panel prompt'),
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
@@ -377,7 +380,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/图生视频/LTX2.3图生视频快速版',
+        videoModel: LTX23_DEFAULT_MODEL,
       },
     })
 
@@ -415,7 +418,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+        videoModel: LTX23_DEFAULT_MODEL,
         videoDurationBinding: {
           mode: 'match_audio',
           voiceLineIds: ['line-1'],
@@ -523,7 +526,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/鍥剧敓瑙嗛/LTX2.3鍥剧敓瑙嗛蹇€熺増',
+        videoModel: LTX23_DEFAULT_MODEL,
       },
     })
 
@@ -554,7 +557,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/鍥剧敓瑙嗛/LTX2.3鍥剧敓瑙嗛蹇€熺増',
+        videoModel: LTX23_DEFAULT_MODEL,
       },
     })
 
@@ -598,9 +601,9 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+        videoModel: LTX23_FIRST_LAST_MODEL,
         firstLastFrame: {
-          flModel: 'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+          flModel: LTX23_FIRST_LAST_MODEL,
           lastFrameStoryboardId: 'storyboard-1',
           lastFramePanelIndex: 1,
           customPrompt: '',

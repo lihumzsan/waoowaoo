@@ -4,12 +4,6 @@ import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-conf
 import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
-const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX = 'basevideo/多镜头/'
-const COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX = 'basevideo/ltx23-profiles/'
-
-const COMFYUI_SINGLE_SHOT_LTX23_WORKFLOW_ID = 'basevideo/\u56fe\u751f\u89c6\u9891/ltx2.3-\u56fe\u751f\u89c6\u9891-\u6ca1\u5b57\u5e55\u7248'
-const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE = 'basevideo/\u591a\u955c\u5934/'
-
 const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
   '1:1': { w: 1024, h: 1024 },
   '16:9': { w: 1280, h: 736 },
@@ -37,15 +31,6 @@ function normalizeComfyUiVideoSize(size: { w: number; h: number } | null): { w: 
   }
 }
 
-function isMultiShotWorkflowKey(workflowKey: string): boolean {
-  return workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX)
-    || workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE)
-}
-
-function isLtx23ProfileWorkflowKey(workflowKey: string): boolean {
-  return workflowKey.startsWith(COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX)
-}
-
 function normalizeComfyUiReferenceImageUrls(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   const urls = value
@@ -69,28 +54,13 @@ function normalizeComfyUiProviderError(error: unknown): string {
 
 export function selectComfyUiVideoWorkflowKey(
   workflowKey: string,
-  prompt: string,
-  options?: {
+  _prompt: string,
+  _options?: {
     generationMode?: unknown
     multiShotRange?: unknown
   },
 ): string {
-  const normalizedWorkflowKey = workflowKey.trim()
-  if (!normalizedWorkflowKey) {
-    return normalizedWorkflowKey
-  }
-  if (isLtx23ProfileWorkflowKey(normalizedWorkflowKey)) {
-    return normalizedWorkflowKey
-  }
-  const generationMode = options?.generationMode === 'firstlastframe' ? 'firstlastframe' : 'normal'
-  const allowMultiShot = options?.multiShotRange === true
-  if (generationMode === 'normal' && !allowMultiShot && isMultiShotWorkflowKey(normalizedWorkflowKey)) {
-    return COMFYUI_SINGLE_SHOT_LTX23_WORKFLOW_ID
-  }
-  if (isMultiShotWorkflowKey(normalizedWorkflowKey)) {
-    return normalizedWorkflowKey
-  }
-  return normalizedWorkflowKey
+  return workflowKey.trim()
 }
 
 function parseWxH(size: string | undefined): { w: number; h: number } | null {

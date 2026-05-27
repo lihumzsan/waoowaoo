@@ -34,7 +34,7 @@ describe('task startup recovery', () => {
         {
           id: 'processing-comfy',
           type: 'video_panel',
-          payload: { videoModel: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版' },
+          payload: { videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2' },
           billingInfo: null,
         },
         {
@@ -53,7 +53,7 @@ describe('task startup recovery', () => {
           type: 'video_panel',
           targetType: 'NovelPromotionPanel',
           targetId: 'panel-1',
-          payload: { videoModel: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版', meta: { locale: 'zh' } },
+          payload: { videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', meta: { locale: 'zh' } },
           billingInfo: null,
           priority: 0,
         },

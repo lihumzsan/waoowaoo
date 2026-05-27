@@ -4,6 +4,7 @@ import {
   COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
   getLtx23WorkflowProfile,
+  getLtx23WorkflowProfiles,
   isComfyUiLtx23LongVideoWorkflow,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
@@ -18,12 +19,19 @@ describe('ltx23 workflow profiles', () => {
       maxDurationSeconds: 12,
       durationOptions: [4, 5, 6, 8, 10, 12],
       selectableInPanel: true,
-      postprocessOnly: false,
     })
   })
 
-  it('keeps the existing first-last-frame workflow key compatible with the bundled workflow', () => {
-    expect(COMFYUI_LTX23_WORKFLOW_KEYS.existingFirstLastFrame).toBe('basevideo/首尾帧/ltx2.3首尾帧')
+  it('exposes only the seven current selectable workflow profiles', () => {
+    expect(getLtx23WorkflowProfiles().map((profile) => profile.workflowKey)).toEqual([
+      COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
+      COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
+      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s,
+      COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay,
+      COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2,
+    ])
   })
 
   it('expands one image into four slots for the single-image large-motion profile', () => {

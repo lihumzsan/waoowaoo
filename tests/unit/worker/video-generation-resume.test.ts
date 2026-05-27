@@ -105,7 +105,7 @@ describe('worker utils video generation resume', () => {
 
     const result = await resolveVideoSourceFromGeneration(buildJob(), {
       userId: 'user-1',
-      modelId: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+      modelId: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       imageUrl: 'data:image/png;base64,QQ==',
       options: {
         prompt: 'animate this frame',
@@ -140,7 +140,7 @@ describe('worker utils video generation resume', () => {
 
     const result = await resolveVideoSourceFromGeneration(buildJob(), {
       userId: 'user-1',
-      modelId: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      modelId: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       imageUrl: 'data:image/png;base64,QQ==',
       allowCustomDuration: true,
       options: {
@@ -161,7 +161,7 @@ describe('worker utils video generation resume', () => {
     )
     expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
       'user-1',
-      'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       'data:image/png;base64,QQ==',
       expect.objectContaining({
         duration: 11.43,

@@ -3,12 +3,9 @@ export const COMFYUI_LTX23_WORKFLOW_KEYS = {
   microDetail: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
   singleImageLargeMotion: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
   smoothFirstLastFrame: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame',
-  existingFirstLastFrame: 'basevideo/首尾帧/ltx2.3首尾帧',
   damaichaImageTo30s: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
   damaichaLongPromptRelay: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
   damaichaAioV2: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
-  t8IcloraRestoreUpscale: 'basevideo/ltx23-profiles/t8-iclora-restore-upscale',
-  t8EditAnything: 'basevideo/ltx23-profiles/t8-edit-anything',
 } as const
 
 export const COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
@@ -20,7 +17,6 @@ export type Ltx23WorkflowCategory =
   | 'first_last_frame'
   | 'long_video'
   | 'aio_fallback'
-  | 'postprocess'
 
 export type Ltx23PromptPolicy =
   | 'stable_single_image'
@@ -29,7 +25,6 @@ export type Ltx23PromptPolicy =
   | 'first_last_frame'
   | 'long_promptrelay'
   | 'aio'
-  | 'postprocess'
 
 export type Ltx23ImageSlotPolicy =
   | 'single'
@@ -48,7 +43,6 @@ export type Ltx23WorkflowProfile = {
   durationOptions: number[]
   fps: number
   selectableInPanel: boolean
-  postprocessOnly: boolean
 }
 
 const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
@@ -63,7 +57,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [4, 5, 6, 8, 10, 12],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.microDetail]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
@@ -76,7 +69,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [4, 5, 6, 8, 10, 12],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
@@ -89,7 +81,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [12, 16, 20],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
@@ -102,7 +93,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [4, 5, 6, 8, 10, 12],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s,
@@ -115,7 +105,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [12, 16, 20, 24, 30],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay,
@@ -128,7 +117,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [12, 16, 20, 24],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2]: {
     workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2,
@@ -141,33 +129,6 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     durationOptions: [6, 8, 10, 12],
     fps: 25,
     selectableInPanel: true,
-    postprocessOnly: false,
-  },
-  [COMFYUI_LTX23_WORKFLOW_KEYS.t8IcloraRestoreUpscale]: {
-    workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.t8IcloraRestoreUpscale,
-    label: 'ComfyUI · LTX2.3 T8 ICLORA 修复高清化',
-    category: 'postprocess',
-    promptPolicy: 'postprocess',
-    imageSlotPolicy: 'single',
-    maxDurationSeconds: null,
-    defaultDurationSeconds: 0,
-    durationOptions: [],
-    fps: 25,
-    selectableInPanel: false,
-    postprocessOnly: true,
-  },
-  [COMFYUI_LTX23_WORKFLOW_KEYS.t8EditAnything]: {
-    workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.t8EditAnything,
-    label: 'ComfyUI · LTX2.3 T8 Edit Anything',
-    category: 'postprocess',
-    promptPolicy: 'postprocess',
-    imageSlotPolicy: 'single',
-    maxDurationSeconds: null,
-    defaultDurationSeconds: 0,
-    durationOptions: [],
-    fps: 25,
-    selectableInPanel: false,
-    postprocessOnly: true,
   },
 }
 

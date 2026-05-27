@@ -9,7 +9,7 @@ describe('task service model detection', () => {
         source: 'task',
         taskType: 'video_panel',
         apiType: 'video',
-        model: 'comfyui::basevideo/图生视频/ltx2.3-图生视频-没字幕版',
+        model: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         quantity: 1,
         unit: 'video',
         maxFrozenCost: 0,
@@ -23,12 +23,12 @@ describe('task service model detection', () => {
       payload: {
         videoModel: 'ark::doubao-seedance-2-0-fast-260128',
         firstLastFrame: {
-          flModel: 'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+          flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
         },
       },
     })).toEqual([
       'ark::doubao-seedance-2-0-fast-260128',
-      'comfyui::basevideo/首尾帧/ltx2.3首尾帧',
+      'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
     ])
   })
 
