@@ -29,7 +29,7 @@ describe('comfyui workflow registry', () => {
   function writeExternalWorkflow(workflowKey: string, workflow: unknown) {
     workflowRoot = workflowRoot || mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-workflow-'))
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
-    const filePath = join(workflowRoot, `${workflowKey}.json`.replace(/\//g, '\\'))
+    const filePath = join(workflowRoot, `${workflowKey}.json`)
     mkdirSync(dirname(filePath), { recursive: true })
     writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
   }
