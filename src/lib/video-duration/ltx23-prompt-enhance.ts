@@ -126,6 +126,38 @@ function allowsCameraMovement(policy: Ltx23PromptPolicy): boolean {
   return policy === 'large_motion_single_image' || policy === 'long_promptrelay' || policy === 'first_last_frame'
 }
 
+function buildCameraPolicyLines(policy: Ltx23PromptPolicy): string[] {
+  switch (policy) {
+    case 'large_motion_single_image':
+      return [
+        `Workflow profile: ${policy}.`,
+        'Use four continuous motion stages when the shot needs a larger progression, while keeping one uninterrupted shot.',
+        'Camera movement is allowed as continuous push-in, pull-back, pan, track, or similar smooth movement, but do not add scene cuts, time jumps, new people, unrelated locations, or camera angle jumps.',
+      ]
+    case 'long_promptrelay':
+      return [
+        `Workflow profile: ${policy}.`,
+        'Single-image long PromptRelay mode: keep one continuous shot and allow gradual continuous movement for the longer duration.',
+        'The enhanced_prompt must include explicit GLOBAL: and LOCAL: sections.',
+        'GLOBAL: describe only the visible environment and visible subjects from the source frame.',
+        'LOCAL: describe continuous visible-subject action and continuous camera movement only; do not add scene changes, time jumps, new people, unrelated locations, or camera angle jumps.',
+      ]
+    case 'first_last_frame':
+      return [
+        `Workflow profile: ${policy}.`,
+        'First-to-last-frame bridge mode: connect the start frame to the end frame with natural continuous motion.',
+        'Continuous camera movement is allowed when it helps bridge the two frames, but do not add new people, new locations, scene cuts, time jumps, or camera angle jumps.',
+      ]
+    default:
+      return [
+        `Workflow profile: ${policy}.`,
+        'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
+        'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
+        'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
+      ]
+  }
+}
+
 async function resolveLtx23PromptTextModel(userId: string, projectId: string): Promise<string | null> {
   const projectConfig = await getProjectModelConfig(projectId, userId)
   if (projectConfig.analysisModel && getProviderKey(projectConfig.analysisModel) !== 'bailian') {
@@ -373,19 +405,7 @@ function buildAudioContextText(
 
 function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string {
   const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
-  const cameraPolicyLines = allowsCameraMovement(promptPolicy)
-    ? [
-        `Workflow profile: ${promptPolicy}.`,
-        'Use four continuous motion stages when the shot needs a larger progression, while keeping one uninterrupted shot.',
-        'Camera movement is allowed as continuous push-in, pull-back, pan, track, or similar smooth movement, but do not add scene cuts, time jumps, new people, unrelated locations, or camera angle jumps.',
-        'For PromptRelay output, GLOBAL must describe only the visible environment and visible subjects; LOCAL may describe visible-subject motion plus continuous camera movement without scene changes.',
-      ]
-    : [
-        `Workflow profile: ${promptPolicy}.`,
-        'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
-        'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
-        'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
-      ]
+  const cameraPolicyLines = buildCameraPolicyLines(promptPolicy)
   const allowedSubjects = input.continuity?.characters?.length
     ? input.continuity.characters.map((character) => character.name).filter(Boolean)
     : parseNameList(input.panel.characters)

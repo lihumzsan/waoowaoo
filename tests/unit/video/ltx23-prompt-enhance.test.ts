@@ -307,6 +307,62 @@ describe('ltx23 video prompt enhance', () => {
     expect(beforeContinuityLock).not.toMatch(/\b(?:pan|panning|pans)\b/i)
   })
 
+  it('requires explicit PromptRelay sections for long PromptRelay workflow profiles', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'GLOBAL: The same office and the doctor remain visible. LOCAL: The doctor keeps speaking as the camera slowly tracks closer.',
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
+      originalPrompt: 'doctor speaks through a long quiet moment',
+      panel: {
+        description: 'doctor speaks through a long quiet moment',
+        characters: 'Doctor',
+      },
+      generationMode: 'normal',
+    })
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('Workflow profile: long_promptrelay.')
+    expect(promptText).toContain('GLOBAL:')
+    expect(promptText).toContain('LOCAL:')
+    expect(promptText).not.toContain('four continuous motion stages')
+    expect(result.prompt).toContain('GLOBAL:')
+    expect(result.prompt).toContain('LOCAL:')
+  })
+
+  it('preserves continuous camera movement for first-to-last-frame profiles without PromptRelay requirements', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'The doctor looks up as the camera slowly pans toward the ending frame.',
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      originalPrompt: 'doctor moves from start frame to end frame',
+      panel: {
+        description: 'doctor moves from start frame to end frame',
+        characters: 'Doctor',
+      },
+      generationMode: 'firstlastframe',
+    })
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('Workflow profile: first_last_frame.')
+    expect(promptText).not.toContain('four continuous motion stages')
+    expect(promptText).not.toContain('must include explicit GLOBAL: and LOCAL: sections')
+    expect(result.prompt).toContain('camera slowly pans')
+  })
+
   it('falls back to the original prompt and still preserves the exact linked line when model output is invalid', async () => {
     aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
       text: 'not-json',
