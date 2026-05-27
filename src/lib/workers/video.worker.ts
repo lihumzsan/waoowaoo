@@ -775,21 +775,6 @@ async function generateVideoForPanel(
   const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
   const audioDrivenDuration = await resolveAudioDrivenDurationOverride(panel, durationBinding, model, linkedVoiceLines)
   if (audioDrivenDuration && !audioDrivenDuration.canGenerate) {
-    if (generationMode === 'normal' && audioDrivenDuration.splitPlan) {
-      return await generateSplitVideoForPanel({
-        job,
-        panel,
-        model,
-        splitPlan: audioDrivenDuration.splitPlan,
-        sourceImageBase64,
-        basePrompt,
-        promptEditedByUser,
-        projectVideoRatio,
-        projectArtStyle,
-        generationOptions,
-        requestedGenerateAudio,
-      })
-    }
     throwBlockedAudioTiming(audioDrivenDuration)
   }
   const effectiveGenerationOptions = withStableLtx23SingleShotTiming({

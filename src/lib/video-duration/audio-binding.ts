@@ -1,3 +1,5 @@
+import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+
 export type VideoDurationMode = 'manual' | 'match_audio'
 
 export type VideoDurationBinding = {
@@ -359,6 +361,14 @@ export function getVideoTimingProfile(
   modelKey: string | null | undefined,
   durationOptions?: readonly number[] | null,
 ): VideoTimingProfile {
+  const workflowProfile = getLtx23WorkflowProfile(modelKey)
+  if (workflowProfile) {
+    return {
+      fps: workflowProfile.fps,
+      maxDurationSeconds: workflowProfile.maxDurationSeconds,
+    }
+  }
+
   const normalized = typeof modelKey === 'string' ? modelKey.trim().toLowerCase() : ''
   const configuredDurations = normalizeDurationOptions(durationOptions)
   const configuredMaxDuration = configuredDurations.length > 0

@@ -82,7 +82,13 @@ const ltxPromptEnhanceMock = vi.hoisted(() => ({
     enhanced: false,
     textModel: null,
   })),
-  isLtx23VideoModel: vi.fn((modelKey: string | null | undefined) => String(modelKey || '').toLowerCase().includes('ltx2.3')),
+  isLtx23VideoModel: vi.fn((modelKey: string | null | undefined) => {
+    const normalized = String(modelKey || '').toLowerCase()
+    return normalized.includes('ltx2.3')
+      || normalized.includes('ltx-2.3')
+      || normalized.includes('/ltx')
+      || normalized.includes('ltxv')
+  }),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -227,7 +233,13 @@ describe('worker video processor behavior', () => {
       enhanced: false,
       textModel: null,
     }))
-    ltxPromptEnhanceMock.isLtx23VideoModel.mockImplementation((modelKey: string | null | undefined) => String(modelKey || '').toLowerCase().includes('ltx2.3'))
+    ltxPromptEnhanceMock.isLtx23VideoModel.mockImplementation((modelKey: string | null | undefined) => {
+      const normalized = String(modelKey || '').toLowerCase()
+      return normalized.includes('ltx2.3')
+        || normalized.includes('ltx-2.3')
+        || normalized.includes('/ltx')
+        || normalized.includes('ltxv')
+    })
 
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValue(buildPanel())
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(buildPanel())
@@ -430,7 +442,7 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: auto-splits long linked audio into continuous video segments', async () => {
+  it('VIDEO_PANEL: sends long linked audio to selected long-video workflow without split segments', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -442,19 +454,11 @@ describe('worker video processor behavior', () => {
         audioDuration: 23_700,
       },
     ])
-    utilsMock.resolveVideoSourceFromGeneration
-      .mockResolvedValueOnce({ url: 'https://provider.example/segment-1.mp4' })
-      .mockResolvedValueOnce({ url: 'https://provider.example/segment-2.mp4' })
-    utilsMock.uploadVideoSourceToCos.mockImplementation(async (_source: unknown, keyPrefix: string, targetId: string) => {
-      if (keyPrefix === 'panel-video-segment') return `video/${targetId}.mp4`
-      if (keyPrefix === 'panel-video') return 'video/panel-1-merged.mp4'
-      return 'video/other.mp4'
-    })
 
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
         videoDurationBinding: {
           mode: 'match_audio',
           voiceLineIds: ['line-1'],
@@ -470,99 +474,31 @@ describe('worker video processor behavior', () => {
 
     expect(result).toEqual({
       panelId: 'panel-1',
-      videoUrl: 'video/panel-1-merged.mp4',
+      videoUrl: 'cos/lip-sync/video.mp4',
     })
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(2)
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenNthCalledWith(
-      1,
-      expect.anything(),
-      expect.objectContaining({
-        imageUrl: 'https://signed.example/cos/panel-image.png',
-        options: expect.objectContaining({
-          duration: 11.85,
-          generationMode: 'normal',
-        }),
-      }),
-    )
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenNthCalledWith(
-      2,
-      expect.anything(),
-      expect.objectContaining({
-        imageUrl: 'https://signed.example/images/panel-1-segment-0-last-frame.jpg',
-        options: expect.objectContaining({
-          duration: 11.85,
-          generationMode: 'normal',
-        }),
-      }),
-    )
-    expect(ffmpegMock.extractVideoLastFrame).toHaveBeenCalledTimes(2)
-    expect(ffmpegMock.concatVideos).toHaveBeenCalledWith([
-      'https://signed.example/video/panel-1-segment-0.mp4',
-      'https://signed.example/video/panel-1-segment-1.mp4',
-    ])
-    expect(prismaMock.novelPromotionPanelVideoSegment.upsert).toHaveBeenCalledTimes(2)
-    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
-      where: { id: 'panel-1' },
-      data: expect.objectContaining({
-        videoUrl: 'video/panel-1-merged.mp4',
-        videoGenerationMode: 'split',
-      }),
-    })
-  })
-
-  it('VIDEO_PANEL: resumes split generation from completed segment records', async () => {
-    const processor = workerState.processor
-    expect(processor).toBeTruthy()
-
-    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
-      {
-        id: 'line-1',
-        speaker: 'Doctor',
-        content: 'We need to review every symptom carefully before giving the next instruction.',
-        audioDuration: 23_700,
-      },
-    ])
-    prismaMock.novelPromotionPanelVideoSegment.findMany.mockResolvedValueOnce([
-      {
-        segmentIndex: 0,
-        status: 'completed',
-        videoUrl: 'video/existing-segment-0.mp4',
-        tailFrameImageUrl: 'images/existing-tail-0.jpg',
-      },
-    ])
-    utilsMock.resolveVideoSourceFromGeneration.mockResolvedValueOnce({
-      url: 'https://provider.example/segment-2.mp4',
-    })
-    utilsMock.uploadVideoSourceToCos.mockImplementation(async (_source: unknown, keyPrefix: string, targetId: string) => {
-      if (keyPrefix === 'panel-video-segment') return `video/${targetId}.mp4`
-      if (keyPrefix === 'panel-video') return 'video/panel-1-merged.mp4'
-      return 'video/other.mp4'
-    })
-
-    const job = buildJob({
-      type: TASK_TYPE.VIDEO_PANEL,
-      payload: {
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
-        videoDurationBinding: {
-          mode: 'match_audio',
-          voiceLineIds: ['line-1'],
-        },
-      },
-    })
-
-    await processor!(job)
-
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(1)
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        imageUrl: 'https://signed.example/images/existing-tail-0.jpg',
+        imageUrl: 'https://signed.example/cos/panel-image.png',
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 23.7,
+          fps: 25,
+          generationMode: 'normal',
+        }),
       }),
     )
-    expect(ffmpegMock.concatVideos).toHaveBeenCalledWith([
-      'https://signed.example/video/existing-segment-0.mp4',
-      'https://signed.example/video/panel-1-segment-1.mp4',
-    ])
+    expect(prismaMock.novelPromotionPanelVideoSegment.upsert).not.toHaveBeenCalled()
+    expect(ffmpegMock.extractVideoLastFrame).not.toHaveBeenCalled()
+    expect(ffmpegMock.concatVideos).not.toHaveBeenCalled()
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        videoUrl: 'cos/lip-sync/video.mp4',
+        videoGenerationMode: 'normal',
+      }),
+    })
   })
 
   it('VIDEO_PANEL: ignores stale structured multi-shot prompts when saved prompt was not user edited', async () => {

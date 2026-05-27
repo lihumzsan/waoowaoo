@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   COMFYUI_LTX23_DEFAULT_FPS,
   COMFYUI_LTX23_MAX_DURATION_SECONDS,
+  getVideoTimingProfile,
   normalizeVideoDurationBinding,
   parseVideoDurationBinding,
   resolveAudioDrivenVideoSplitPlan,
@@ -145,6 +146,12 @@ describe('video audio duration binding', () => {
     expect(timing?.targetFrameCount).toBe(285)
     expect(timing?.canGenerate).toBe(true)
     expect(timing?.blockedReason).toBeUndefined()
+  })
+
+  it('uses ltx23 profile max duration instead of the product 12 second cap', () => {
+    const timing = getVideoTimingProfile('comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video')
+
+    expect(timing).toEqual({ fps: 25, maxDurationSeconds: 30 })
   })
 
   it('builds a split plan when linked audio exceeds the workflow max duration', () => {
