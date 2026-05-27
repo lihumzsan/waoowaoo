@@ -159,7 +159,7 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'basevideo/图生视频/Wan2.2Remix图生视频', name: 'ComfyUI · Wan 2.2 Remix 图生视频', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/首尾帧/ltx2.3首尾帧', name: 'ComfyUI · LTX 2.3 首尾帧', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1', name: 'ComfyUI · LTX 2.3 多镜头 VBVR', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）', name: 'ComfyUI · LTX 2.3 多镜头 自动拆分 VBVR', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）', name: 'ComfyUI · LTX 2.3 多镜头 PromptRelay+VBVR', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/多镜头/Ltx2.3多镜头精准时间控制PromptRelay（KJ版）', name: 'ComfyUI · LTX 2.3 多镜头 精准时间', type: 'video', provider: 'comfyui' },
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },

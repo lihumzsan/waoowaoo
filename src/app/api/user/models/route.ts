@@ -86,7 +86,7 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
   {
     modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）',
     modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay+VBVR（KJ版）',
-    name: 'ComfyUI · LTX 2.3 多镜头 自动拆分 VBVR',
+    name: 'ComfyUI · LTX 2.3 多镜头 PromptRelay+VBVR',
     type: 'video',
     provider: 'comfyui',
   },
