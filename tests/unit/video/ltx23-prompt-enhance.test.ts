@@ -255,6 +255,58 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt.split('Source-frame continuity lock:')[0]).not.toMatch(/\b(orbiting|parallax)\b/i)
   })
 
+  it('preserves continuous camera movement for the large-motion workflow profile', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'The doctor steadies his hand as the camera slowly pushes in across the desk.',
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
+      originalPrompt: 'doctor sits at the desk',
+      panel: {
+        description: 'doctor sits at the desk',
+        characters: 'Doctor',
+      },
+      generationMode: 'normal',
+    })
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('Workflow profile: large_motion_single_image.')
+    expect(promptText).toContain('four continuous motion stages')
+    expect(result.prompt).toContain('camera slowly pushes in')
+    expect(result.prompt.split('Source-frame continuity lock:')[0]).not.toContain('locked-off static camera')
+  })
+
+  it('keeps micro-detail prompts locked off and removes pan wording before continuity constraints', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'The doctor glances down as the camera slowly pans across his glasses.',
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
+      originalPrompt: 'doctor makes a tiny expression',
+      panel: {
+        description: 'doctor makes a tiny expression',
+        characters: 'Doctor',
+      },
+      generationMode: 'normal',
+    })
+
+    const beforeContinuityLock = result.prompt.split('Source-frame continuity lock:')[0]
+    expect(result.prompt).toContain('locked-off static camera')
+    expect(beforeContinuityLock).not.toMatch(/\b(?:pan|panning|pans)\b/i)
+  })
+
   it('falls back to the original prompt and still preserves the exact linked line when model output is invalid', async () => {
     aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
       text: 'not-json',

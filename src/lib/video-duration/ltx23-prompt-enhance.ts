@@ -6,6 +6,7 @@ import { safeParseJsonObject } from '@/lib/json-repair'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { prisma } from '@/lib/prisma'
 import type { PanelContinuityPacket } from '@/lib/novel-promotion/panel-continuity'
+import { getLtx23WorkflowProfile, type Ltx23PromptPolicy } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import type { ResolvedAudioDrivenVideoTiming } from '@/lib/video-duration/audio-binding'
 import { parseProfileData } from '@/types/character-profile'
 
@@ -115,6 +116,14 @@ export function isLtx23VideoModel(modelKey: string | null | undefined): boolean 
     || normalized.includes('ltx-2.3')
     || normalized.includes('/ltx')
     || normalized.includes('ltxv')
+}
+
+function resolveLtx23PromptPolicy(modelKey: string | null | undefined): Ltx23PromptPolicy {
+  return getLtx23WorkflowProfile(modelKey)?.promptPolicy ?? 'stable_single_image'
+}
+
+function allowsCameraMovement(policy: Ltx23PromptPolicy): boolean {
+  return policy === 'large_motion_single_image' || policy === 'long_promptrelay' || policy === 'first_last_frame'
 }
 
 async function resolveLtx23PromptTextModel(userId: string, projectId: string): Promise<string | null> {
@@ -363,6 +372,20 @@ function buildAudioContextText(
 }
 
 function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string {
+  const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
+  const cameraPolicyLines = allowsCameraMovement(promptPolicy)
+    ? [
+        `Workflow profile: ${promptPolicy}.`,
+        'Use four continuous motion stages when the shot needs a larger progression, while keeping one uninterrupted shot.',
+        'Camera movement is allowed as continuous push-in, pull-back, pan, track, or similar smooth movement, but do not add scene cuts, time jumps, new people, unrelated locations, or camera angle jumps.',
+        'For PromptRelay output, GLOBAL must describe only the visible environment and visible subjects; LOCAL may describe visible-subject motion plus continuous camera movement without scene changes.',
+      ]
+    : [
+        `Workflow profile: ${promptPolicy}.`,
+        'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
+        'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
+        'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
+      ]
   const allowedSubjects = input.continuity?.characters?.length
     ? input.continuity.characters.map((character) => character.name).filter(Boolean)
     : parseNameList(input.panel.characters)
@@ -381,9 +404,7 @@ function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string
     'The source frame and current panel are authoritative. If story context, neighboring shots, or global plot conflict with the source frame, ignore them.',
     allowedSubjectText,
     'Do not introduce new people, extra bodies, crowds, props, locations, plot events, scene cuts, jump cuts, or camera angle changes not already implied by the source frame.',
-    'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
-    'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
-    'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
+    ...cameraPolicyLines,
     'This is a short single-shot video. Avoid scene cuts, jump cuts, time skips, and multi-part action beats.',
     input.generationMode === 'firstlastframe'
       ? 'Generation mode: first-to-last-frame continuity. Motion should bridge naturally from the starting frame to the ending frame.'
@@ -400,19 +421,22 @@ function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string
   return lines.join('\n')
 }
 
-function buildVisualContinuityConstraint(input: EnhanceLtx23VideoPromptInput): string {
+function buildVisualContinuityConstraint(input: EnhanceLtx23VideoPromptInput, policy: Ltx23PromptPolicy): string {
   const allowedSubjects = input.continuity?.characters?.length
     ? input.continuity.characters.map((character) => character.name).filter(Boolean)
     : parseNameList(input.panel.characters)
   const subjectText = allowedSubjects.length > 0
     ? `Allowed visible subjects: ${allowedSubjects.join(', ')}.`
     : 'Allowed visible subjects: only the people already visible in the source frame.'
+  const cameraConstraint = allowsCameraMovement(policy)
+    ? 'Keep one continuous shot. Camera movement is allowed, but do not add scene cuts, time jumps, new people, or unrelated locations.'
+    : 'Use a locked-off static camera; do not orbit, pan, zoom, track, travel, or use parallax.'
 
   return [
     'Source-frame continuity lock:',
     subjectText,
     'Do not add new people, extra bodies, crowds, new props, new locations, scene cuts, time jumps, or unrelated plot actions.',
-    'Use a locked-off static camera; do not orbit, pan, zoom, track, travel, or use parallax.',
+    cameraConstraint,
     'Animate only the visible subject posture, face, mouth, and hands from the current frame.',
     'Do not turn reflections, background shapes, shadows, or blurred details into new characters.',
     'Keep the final frame close to the source image with the same visible character count and same room layout.',
@@ -468,8 +492,8 @@ function appendDialogueConstraint(basePrompt: string, constraint: string, locale
   return `${trimmedBase}${separator}${trimmedConstraint}`
 }
 
-function stabilizeNormalSingleShotPrompt(basePrompt: string, input: EnhanceLtx23VideoPromptInput): string {
-  if (input.generationMode === 'firstlastframe') return basePrompt
+function stabilizeNormalSingleShotPrompt(basePrompt: string, input: EnhanceLtx23VideoPromptInput, policy: Ltx23PromptPolicy): string {
+  if (input.generationMode === 'firstlastframe' || allowsCameraMovement(policy)) return basePrompt
 
   return basePrompt
     .replace(/\b(?:tiny\s+within-frame\s+)?(?:parallax|camera\s+parallax)(?:\s+simulating\s+[^,.]+)?/gi, 'locked-off static camera')
@@ -481,9 +505,10 @@ function appendLtx23SafetyConstraints(
   dialogueConstraint: string,
   input: EnhanceLtx23VideoPromptInput,
 ): string {
-  const stabilizedPrompt = stabilizeNormalSingleShotPrompt(basePrompt, input)
+  const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
+  const stabilizedPrompt = stabilizeNormalSingleShotPrompt(basePrompt, input, promptPolicy)
   const withDialogue = appendDialogueConstraint(stabilizedPrompt, dialogueConstraint, input.locale)
-  const visualConstraint = buildVisualContinuityConstraint(input)
+  const visualConstraint = buildVisualContinuityConstraint(input, promptPolicy)
   return appendDialogueConstraint(withDialogue, visualConstraint, 'en')
 }
 
