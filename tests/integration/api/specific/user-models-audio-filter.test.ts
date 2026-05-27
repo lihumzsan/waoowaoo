@@ -68,9 +68,21 @@ describe('api specific - user models audio filter', () => {
     const res = await mod.GET(req, routeContext)
 
     expect(res.status).toBe(200)
-    const body = await res.json() as { audio: Array<{ value: string }> }
+    const body = await res.json() as {
+      audio: Array<{ value: string }>
+      video: Array<{ value: string }>
+    }
     expect(body.audio.map((item) => item.value)).toEqual([
       'bailian::qwen3-tts-vd-2026-01-26',
+    ])
+    expect(body.video.map((item) => item.value)).toEqual([
+      'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
+      'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
+      'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
+      'comfyui::basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
+      'comfyui::basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
     ])
   })
 })

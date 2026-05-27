@@ -170,9 +170,9 @@ describe('useProviders provider order merge', () => {
           enabled: false,
         },
         {
-          modelId: 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
-          modelKey: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
-          name: 'ComfyUI · LTX 2.3 multi-shot video',
+          modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+          modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+          name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
           type: 'video',
           provider: 'comfyui',
           price: 0,
@@ -206,7 +206,7 @@ describe('useProviders provider order merge', () => {
       locationModel: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
       storyboardModel: 'comfyui::baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
       editModel: 'comfyui::baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
-      videoModel: 'comfyui::basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       voiceDesignModel: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
     })
