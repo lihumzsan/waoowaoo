@@ -651,7 +651,70 @@ describe('api contract - direct submit routes (behavior)', () => {
     })
   }
 
-  it('blocks single generate-video submission when linked audio exceeds the selected LTX workflow max', async () => {
+  it('ignores stale nested relation voice lines and queries relation lines from the panel episode', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'panel prompt',
+      videoPromptEditedByUser: false,
+      description: 'panel description',
+      srtSegment: 'short dialogue',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [
+        {
+          id: 'stale-line-1',
+          content: 'This stale nested relation belongs to another episode.',
+          audioDuration: 23_700,
+        },
+      ],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 12,
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        episodeId: 'episode-1',
+        matchedPanelId: 'panel-1',
+      },
+    }))
+    expect(res.status).toBe(200)
+    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: TASK_TYPE.VIDEO_PANEL,
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+    }))
+  })
+
+  it('blocks single generate-video submission when episode-filtered relation audio exceeds the selected LTX workflow max', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -672,14 +735,19 @@ describe('api contract - direct submit routes (behavior)', () => {
           content: 'office conversation',
         },
       },
-      matchedVoiceLines: [
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([
         {
           id: 'line-1',
+          speaker: 'Narrator',
           content: 'This long line cannot fit the short workflow.',
           audioDuration: 23_884,
         },
-      ],
-    })
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
 
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
@@ -701,6 +769,12 @@ describe('api contract - direct submit routes (behavior)', () => {
       expectedProjectId: 'project-1',
     })
 
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        episodeId: 'episode-1',
+        matchedPanelId: 'panel-1',
+      },
+    }))
     expect(res.status).toBe(400)
     expect(submitTaskMock).not.toHaveBeenCalled()
     await expect(res.json()).resolves.toMatchObject({
@@ -745,14 +819,17 @@ describe('api contract - direct submit routes (behavior)', () => {
         audioDuration: number
       }>,
     })
-    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValueOnce([
-      {
-        id: 'fallback-line-1',
-        speaker: 'Narrator',
-        content: 'This fallback line cannot fit the short workflow.',
-        audioDuration: 23_700,
-      },
-    ])
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'fallback-line-1',
+          speaker: 'Narrator',
+          content: 'This fallback line cannot fit the short workflow.',
+          audioDuration: 23_700,
+        },
+      ])
+      .mockResolvedValueOnce([])
 
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
@@ -828,6 +905,7 @@ describe('api contract - direct submit routes (behavior)', () => {
       }>,
     })
     prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {

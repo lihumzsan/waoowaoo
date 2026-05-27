@@ -254,15 +254,32 @@ async function loadExplicitSelectedVoiceLines(
   })
 }
 
+async function loadRelationVoiceLines(
+  panel: PanelReadinessInput,
+): Promise<VideoReadinessVoiceLine[]> {
+  const episodeId = panel.storyboard?.episodeId
+  if (!episodeId) return []
+
+  return await prisma.novelPromotionVoiceLine.findMany({
+    where: {
+      episodeId,
+      matchedPanelId: panel.id,
+    },
+    orderBy: { lineIndex: 'asc' },
+    select: {
+      id: true,
+      content: true,
+      audioDuration: true,
+    },
+  })
+}
+
 async function loadFallbackPanelVoiceLines(
   panel: PanelReadinessInput,
-  episodeId?: unknown,
 ): Promise<VideoReadinessVoiceLine[]> {
-  const effectiveEpisodeId = typeof episodeId === 'string' && episodeId
-    ? episodeId
-    : panel.storyboard?.episodeId
+  const episodeId = panel.storyboard?.episodeId
   if (
-    !effectiveEpisodeId
+    !episodeId
     || !panel.storyboardId
     || typeof panel.panelIndex !== 'number'
   ) {
@@ -271,7 +288,7 @@ async function loadFallbackPanelVoiceLines(
 
   return await prisma.novelPromotionVoiceLine.findMany({
     where: {
-      episodeId: effectiveEpisodeId,
+      episodeId,
       matchedPanelId: null,
       matchedStoryboardId: panel.storyboardId,
       matchedPanelIndex: panel.panelIndex,
@@ -287,18 +304,18 @@ async function loadFallbackPanelVoiceLines(
 
 async function resolvePanelReadinessInput(
   panel: PanelReadinessInput,
-  episodeId?: unknown,
   payload?: unknown,
 ): Promise<PanelReadinessInput> {
-  const [fallbackVoiceLines, explicitSelectedVoiceLines] = await Promise.all([
-    loadFallbackPanelVoiceLines(panel, episodeId),
+  const [relationVoiceLines, fallbackVoiceLines, explicitSelectedVoiceLines] = await Promise.all([
+    loadRelationVoiceLines(panel),
+    loadFallbackPanelVoiceLines(panel),
     loadExplicitSelectedVoiceLines(panel, payload),
   ])
 
   return {
     ...panel,
     matchedVoiceLines: mergeVoiceLinesById(
-      panel.matchedVoiceLines,
+      relationVoiceLines,
       fallbackVoiceLines,
       explicitSelectedVoiceLines,
     ),
@@ -368,17 +385,10 @@ export const POST = apiHandler(async (
             },
           },
         },
-        matchedVoiceLines: {
-          select: {
-            id: true,
-            content: true,
-            audioDuration: true,
-          },
-        },
       },
     })
     const panelsForReadiness = await Promise.all(
-      panels.map((panel) => resolvePanelReadinessInput(panel, episodeId, body)),
+      panels.map((panel) => resolvePanelReadinessInput(panel, body)),
     )
     const readiness = panelsForReadiness.map((panel) => ({
       panel,
@@ -461,13 +471,6 @@ export const POST = apiHandler(async (
           },
         },
       },
-      matchedVoiceLines: {
-        select: {
-          id: true,
-          content: true,
-          audioDuration: true,
-        },
-      },
     },
   })
 
@@ -479,7 +482,7 @@ export const POST = apiHandler(async (
   const singleCapabilities = singleModelKey
     ? resolveBuiltinCapabilitiesByModelKey('video', singleModelKey)
     : undefined
-  const panelForReadiness = await resolvePanelReadinessInput(panel, undefined, body)
+  const panelForReadiness = await resolvePanelReadinessInput(panel, body)
   const readinessIssue = resolvePanelVideoReadinessIssue(panelForReadiness, {
     payload: body,
     modelKey: singleModelKey,
