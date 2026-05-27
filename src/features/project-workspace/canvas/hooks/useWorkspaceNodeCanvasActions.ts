@@ -181,8 +181,8 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_edit_storyboard_coordinates') {
-      await runtime.onGenerateEditStoryboardCoordinates(action.editScriptId)
+    if (action.type === 'generate_edit_storyboard_spatial_blocking') {
+      await runtime.onGenerateEditStoryboardSpatialBlocking(action.editScriptId)
     }
   }, [runtime])
 }

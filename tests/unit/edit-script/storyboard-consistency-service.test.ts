@@ -103,13 +103,13 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
 }
 
 describe('storyboard consistency service prechecks', () => {
-  it('does not block floor-plan suitability analysis before the model can return empty plans', () => {
+  it('does not block spatial blocking preparation when only character assets are present', () => {
     expect(() => assertRequiredLocationPreviews({
       sourceSnapshot: buildSourceSnapshot(),
     })).not.toThrow()
   })
 
-  it('allows floor-plan suitability analysis when the matching scene reference image exists', () => {
+  it('allows spatial blocking preparation when the matching scene reference image exists', () => {
     expect(() => assertRequiredLocationPreviews({
       sourceSnapshot: buildSourceSnapshot({
         assets: [

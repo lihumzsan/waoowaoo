@@ -60,14 +60,14 @@ describe('workspace node rendering', () => {
     expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
   })
 
-  it('hides space consistency shot coordinate rows while generation is running', () => {
+  it('shows space consistency profile stats while generation is running', () => {
     const html = renderNode({
       kind: 'spaceConsistency',
       layoutNodeType: 'spaceConsistency',
       targetType: 'storyboard',
       targetId: 'storyboard-1',
       title: 'Space consistency',
-      eyebrow: 'Coordinate Blocking',
+      eyebrow: 'Text Blocking',
       body: 'generation body',
       meta: 'meta',
       statusLabel: 'Processing',
@@ -76,39 +76,27 @@ describe('workspace node rendering', () => {
       height: 620,
       spaceConsistencyDetails: {
         storyboardId: 'storyboard-1',
-        stage: 'grid_analyze_ready',
-        floorPlanCount: 1,
-        overlayCount: 1,
+        stage: 'spatial_profile_ready',
+        spatialProfileCount: 1,
         cameraPlanCount: 0,
-        artifacts: [],
-        blocks: [],
-        shotCoordinates: [{
-          shotNumber: 1,
-          sourceVideoBlockId: 'edit-1:videoBlock:1',
-          classification: null,
-          skipped: null,
-          reason: null,
-          cinematicTranslation: null,
-          coordinates: [],
-        }],
+        spatialProfiles: [],
         cameraPlans: [],
       },
     })
 
     expect(html).toContain('spaceConsistencyStats')
     expect(html).toContain('Processing')
-    expect(html).not.toContain('emptyCoordinates')
-    expect(html).not.toContain('edit-1:videoBlock:1')
+    expect(html).not.toContain('spatialProfiles')
   })
 
-  it('shows space consistency shot coordinate rows after grid analysis succeeds', () => {
+  it('shows space consistency spatial profile rows after profile analysis succeeds', () => {
     const html = renderNode({
       kind: 'spaceConsistency',
       layoutNodeType: 'spaceConsistency',
       targetType: 'storyboard',
       targetId: 'storyboard-1',
       title: 'Space consistency',
-      eyebrow: 'Coordinate Blocking',
+      eyebrow: 'Text Blocking',
       body: 'generation body',
       meta: 'meta',
       statusLabel: 'Ready',
@@ -117,27 +105,23 @@ describe('workspace node rendering', () => {
       height: 620,
       spaceConsistencyDetails: {
         storyboardId: 'storyboard-1',
-        stage: 'grid_analyze_ready',
-        floorPlanCount: 1,
-        overlayCount: 1,
+        stage: 'spatial_profile_ready',
+        spatialProfileCount: 1,
         cameraPlanCount: 0,
-        artifacts: [],
-        blocks: [],
-        shotCoordinates: [{
-          shotNumber: 1,
-          sourceVideoBlockId: 'edit-1:videoBlock:1',
-          classification: null,
-          skipped: null,
-          reason: null,
-          cinematicTranslation: null,
-          coordinates: [],
+        spatialProfiles: [{
+          requirementId: 'loc-1',
+          targetId: 'location-1',
+          name: 'Temple courtyard',
+          shotNumbers: [1],
+          sceneSummary: 'Wood door at left rear, incense burner in midground.',
+          placementZones: ['Left rear wall beside the wood door'],
         }],
         cameraPlans: [],
       },
     })
 
-    expect(html).toContain('emptyCoordinates')
-    expect(html).toContain('edit-1:videoBlock:1')
+    expect(html).toContain('Temple courtyard')
+    expect(html).toContain('Left rear wall beside the wood door')
   })
 
   it('renders story input controls inline without opening a detail action', () => {
@@ -385,7 +369,6 @@ describe('workspace node rendering', () => {
     expect(html).toContain('Robot / Default')
     expect(html).toContain('Street')
     expect(html).toContain('screenplay raw')
-    expect(html).toContain('expandDetails')
     expect(html).not.toContain('EXT · Street · Night')
     expect(html).not.toContain('original source text')
     expect(html).not.toContain('hello')
@@ -796,8 +779,8 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('>1</div>')
     expect(html).toContain('>2</div>')
-    expect(html).toContain('generateStoryboardReferenceVideo')
-    expect(html).toContain('disabled=""')
+    expect(html).toContain('videoPlanPrompt')
+    expect(html).toContain('editable arrangement prompt')
   })
 
   it('renders required asset prompt below an image placeholder and keeps it editable', () => {

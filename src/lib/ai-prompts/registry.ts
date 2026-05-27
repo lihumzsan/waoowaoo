@@ -244,36 +244,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'location_assets_json',
     ],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_GRID_FLOOR_PLAN]: {
-    pathStem: 'edit-script/storyboard-grid-floor-plan',
-    variableKeys: [
-      'source_snapshot_json',
-      'block_classification_draft_json',
-      'scene_floor_plan_groups_json',
-      'grid_density_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_GRID_VISION]: {
-    pathStem: 'edit-script/storyboard-grid-vision',
-    variableKeys: [
-      'source_snapshot_json',
-      'floor_plan_artifacts_json',
-      'panel_contract_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: {
-    pathStem: 'edit-script/storyboard-camera-plan',
-    variableKeys: [
-      'source_snapshot_json',
-      'coordinate_strategy_output_json',
-      'panel_contract_json',
-    ],
-  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE]: {
     pathStem: 'edit-script/storyboard-camera-style-bible',
     variableKeys: [
       'source_snapshot_json',
-      'coordinate_strategy_output_json',
+      'spatial_profile_strategy_output_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_BLOCK]: {
@@ -281,7 +256,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: [
       'source_snapshot_json',
       'camera_style_bible_json',
-      'coordinate_strategy_output_json',
+      'spatial_profile_strategy_output_json',
       'video_block_json',
       'block_shots_json',
       'adjacent_blocks_json',

@@ -5,7 +5,7 @@ import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
 
-interface SubmitCoordinateStoryboardInput {
+interface SubmitSpatialBlockingStoryboardInput {
   readonly projectId: string
   readonly episodeId: string
   readonly editScriptId?: string
@@ -38,7 +38,7 @@ function spatialProfileReady(stage: string | null): boolean {
   return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
 }
 
-async function resolveEditScriptId(input: Pick<SubmitCoordinateStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
+async function resolveEditScriptId(input: Pick<SubmitSpatialBlockingStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
   if (input.editScriptId) return input.editScriptId
   const editScript = await prisma.projectEditScript.findFirst({
     where: {
@@ -58,7 +58,7 @@ export function assertRequiredLocationPreviews(input: {
   if (input.sourceSnapshot.schemaVersion !== 1) throw new Error('EDIT_SCRIPT_STORYBOARD_SOURCE_SNAPSHOT_INVALID')
 }
 
-export async function submitEditScriptCoordinateStoryboard(input: SubmitCoordinateStoryboardInput) {
+export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpatialBlockingStoryboardInput) {
   const editScriptId = await resolveEditScriptId(input)
   const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({
     projectId: input.projectId,
@@ -88,7 +88,7 @@ export async function submitEditScriptCoordinateStoryboard(input: SubmitCoordina
   })
 }
 
-export async function submitEditScriptStoryboardPanels(input: SubmitCoordinateStoryboardInput) {
+export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlockingStoryboardInput) {
   const editScriptId = await resolveEditScriptId(input)
   const storyboards = await prisma.projectStoryboard.findMany({
     where: {

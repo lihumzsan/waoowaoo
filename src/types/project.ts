@@ -220,7 +220,7 @@ export interface ProjectStoryboard {
 export interface ProjectStoryboardBlockingArtifact {
   id: string
   storyboardId: string
-  kind: 'grid_floor_plan' | 'grid_coordinate_overlay' | string
+  kind: string
   sourceVideoBlockId: string | null
   groupIndex: number | null
   prompt: string | null

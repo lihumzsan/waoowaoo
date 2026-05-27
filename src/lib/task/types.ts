@@ -46,8 +46,6 @@ export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]
 export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
   EDIT_SCRIPT_STORYBOARD_PREPARE: 'edit_script_storyboard_prepare',
-  EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_IMAGE: 'edit_script_storyboard_floor_plan_image',
-  EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE: 'edit_script_storyboard_grid_analyze',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',

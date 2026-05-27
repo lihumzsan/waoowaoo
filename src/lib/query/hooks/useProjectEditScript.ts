@@ -238,18 +238,18 @@ export function useGenerateProjectEditScriptStoryboard(projectId: string | null)
   })
 }
 
-export function useGenerateProjectEditScriptStoryboardCoordinates(projectId: string | null) {
+export function useGenerateProjectEditScriptStoryboardSpatialBlocking(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (input: GenerateEditScriptStoryboardInput) => {
       if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/coordinates/generate`, {
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/spatial-blocking/generate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
       })
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate storyboard coordinate maps')
+        throw await readJsonError(response, 'Failed to generate storyboard spatial blocking')
       }
       return await response.json() as GenerateEditScriptStoryboardResponse
     },

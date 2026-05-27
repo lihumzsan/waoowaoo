@@ -356,7 +356,7 @@ describe('worker panel-image-task-handler behavior', () => {
     }))
   })
 
-  it('uses spatial profile and shotBlocking without collecting coordinate overlay references', async () => {
+  it('uses spatial profile and shotBlocking as text context', async () => {
     prismaMock.projectPanel.findUnique.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',

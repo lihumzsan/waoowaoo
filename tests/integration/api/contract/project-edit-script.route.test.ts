@@ -167,7 +167,7 @@ const videoBlockArrangementMock = vi.hoisted(() => ({
 }))
 
 const storyboardConsistencyServiceMock = vi.hoisted(() => ({
-  submitEditScriptCoordinateStoryboard: vi.fn(async () => ({
+  submitEditScriptSpatialBlockingStoryboard: vi.fn(async () => ({
     success: true,
     async: true,
     taskId: 'task-storyboard-1',
@@ -236,8 +236,8 @@ import {
   POST as editScriptStoryboardGeneratePost,
 } from '@/app/api/projects/[projectId]/edit-script/storyboard/generate/route'
 import {
-  POST as editScriptStoryboardCoordinatesGeneratePost,
-} from '@/app/api/projects/[projectId]/edit-script/storyboard/coordinates/generate/route'
+  POST as editScriptStoryboardSpatialBlockingGeneratePost,
+} from '@/app/api/projects/[projectId]/edit-script/storyboard/spatial-blocking/generate/route'
 
 describe('project edit script route', () => {
   beforeEach(() => {
@@ -336,9 +336,9 @@ describe('project edit script route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/edit-script/storyboard/coordinates/generate -> submits coordinate storyboard preparation', async () => {
+  it('POST /api/projects/[projectId]/edit-script/storyboard/spatial-blocking/generate -> submits spatial blocking storyboard preparation', async () => {
     const request = buildMockRequest({
-      path: '/api/projects/project-1/edit-script/storyboard/coordinates/generate',
+      path: '/api/projects/project-1/edit-script/storyboard/spatial-blocking/generate',
       method: 'POST',
       headers: { 'accept-language': 'zh' },
       body: {
@@ -347,7 +347,7 @@ describe('project edit script route', () => {
       },
     })
 
-    const response = await editScriptStoryboardCoordinatesGeneratePost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const response = await editScriptStoryboardSpatialBlockingGeneratePost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
     const payload = await response.json()
 
     expect(response.status).toBe(200)
@@ -359,7 +359,7 @@ describe('project edit script route', () => {
       status: 'queued',
       deduped: false,
     })
-    expect(storyboardConsistencyServiceMock.submitEditScriptCoordinateStoryboard).toHaveBeenCalledWith(expect.objectContaining({
+    expect(storyboardConsistencyServiceMock.submitEditScriptSpatialBlockingStoryboard).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
       editScriptId: 'edit-1',

@@ -45,7 +45,7 @@ const serviceMock = vi.hoisted(() => ({
 vi.mock('@/lib/edit-script/service', () => serviceMock)
 
 const storyboardConsistencyServiceMock = vi.hoisted(() => ({
-  submitEditScriptCoordinateStoryboard: vi.fn(async () => ({
+  submitEditScriptSpatialBlockingStoryboard: vi.fn(async () => ({
     success: true,
     async: true,
     taskId: 'task-storyboard-1',

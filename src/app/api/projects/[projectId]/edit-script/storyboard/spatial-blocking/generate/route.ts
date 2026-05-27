@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { submitEditScriptCoordinateStoryboard } from '@/lib/edit-script/storyboard-consistency/service'
+import { submitEditScriptSpatialBlockingStoryboard } from '@/lib/edit-script/storyboard-consistency/service'
 import { generateEditStoryboardRequestSchema } from '@/lib/edit-script/types'
 
 export const POST = apiHandler(async (
@@ -19,7 +19,7 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const result = await submitEditScriptCoordinateStoryboard({
+  const result = await submitEditScriptSpatialBlockingStoryboard({
     projectId,
     episodeId: parsed.data.episodeId,
     editScriptId: parsed.data.editScriptId,

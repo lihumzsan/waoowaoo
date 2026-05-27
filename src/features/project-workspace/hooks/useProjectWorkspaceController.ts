@@ -24,7 +24,7 @@ import {
   useCreateProjectEditScript,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
-  useGenerateProjectEditScriptStoryboardCoordinates,
+  useGenerateProjectEditScriptStoryboardSpatialBlocking,
   useArrangeProjectEditScriptVideoBlocks,
   useRegenerateProjectStoryboardText,
   useUpdateProjectEditScriptAssetRequirementDescription,
@@ -124,7 +124,7 @@ export function useProjectWorkspaceController({
   const regenerateStoryboardText = useRegenerateProjectStoryboardText(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
-  const generateEditStoryboardCoordinates = useGenerateProjectEditScriptStoryboardCoordinates(projectId)
+  const generateEditStoryboardSpatialBlocking = useGenerateProjectEditScriptStoryboardSpatialBlocking(projectId)
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
   const updateVideoPlanPrompt = useUpdateProjectEditScriptVideoBlockPrompt(projectId)
@@ -163,9 +163,9 @@ export function useProjectWorkspaceController({
     await generateEditStoryboard.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
-  const handleGenerateEditStoryboardCoordinates = async (editScriptId: string) => {
+  const handleGenerateEditStoryboardSpatialBlocking = async (editScriptId: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await generateEditStoryboardCoordinates.mutateAsync({ episodeId, editScriptId })
+    await generateEditStoryboardSpatialBlocking.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
   const handleUpdateVideoPlanPrompt = async (editScriptId: string, blockIndex: number, prompt: string) => {
@@ -217,7 +217,7 @@ export function useProjectWorkspaceController({
     handleGenerateEditAssets,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleGenerateEditStoryboardCoordinates,
+    handleGenerateEditStoryboardSpatialBlocking,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateVideoPlanPrompt,
     handleArrangeVideoBlocks,

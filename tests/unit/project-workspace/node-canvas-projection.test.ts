@@ -1763,20 +1763,20 @@ describe('workspace node canvas projection', () => {
 
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-ready')
     expect(editNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_coordinates',
+      type: 'generate_edit_storyboard_spatial_blocking',
       editScriptId: 'edit-ready',
     })
     expect(editNode?.data.actionDisabled).toBe(true)
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-ready:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-ready')
     expect(consistencyNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_coordinates',
+      type: 'generate_edit_storyboard_spatial_blocking',
       editScriptId: 'edit-ready',
     })
-    expect(consistencyNode?.data.actionLabel).toBe('actions.generateSpaceCoordinates')
+    expect(consistencyNode?.data.actionLabel).toBe('actions.generateSpatialBlocking')
   })
 
-  it('blocks coordinate storyboard generation until a scene asset image is ready', () => {
+  it('blocks spatial blocking generation until a scene asset image is ready', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
@@ -1827,77 +1827,42 @@ describe('workspace node canvas projection', () => {
     expect(consistencyNode?.data.actionDisabled).toBe(false)
   })
 
-  it('projects coordinate storyboard artifacts as a space consistency node before panels', () => {
+  it('projects spatial blocking details as a space consistency node before panels', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
       clips: [],
       storyboards: [
         createStoryboard({
-          id: 'storyboard-grid',
-          clipId: 'clip-grid',
+          id: 'storyboard-spatial',
+          clipId: 'clip-spatial',
           panels: [
-            createPanel({ id: 'panel-grid-1', storyboardId: 'storyboard-grid', panelIndex: 0, panelNumber: 1 }),
+            createPanel({ id: 'panel-spatial-1', storyboardId: 'storyboard-spatial', panelIndex: 0, panelNumber: 1 }),
           ],
           photographyPlan: JSON.stringify({
-            consistencyMode: 'grid_coordinates',
+            consistencyMode: 'spatial_text_blocking',
             currentStage: 'panel_prompts_ready',
-            sourceSnapshot: {
-              schemaVersion: 1,
-              projectId: 'project-1',
-              episodeId: 'episode-1',
-              sourceEditScriptId: 'edit-grid',
-              project: {
-                videoRatio: '16:9',
-                artStyle: null,
-              },
-              editScript: {
-                id: 'edit-grid',
-                title: 'Temple Lesson',
-                logline: null,
-                durationSec: 8,
-                shotCount: 1,
-                userPrompt: 'temple lesson',
-                screenplayText: null,
-              },
-              shots: [{
-                shotNumber: 1,
-                durationSec: 8,
-                visualAction: 'Old monk teaches the young disciple.',
-                charactersAndScene: 'Temple courtyard',
-                camera: 'medium shot',
-                videoPrompt: 'Temple lesson.',
-                sound: 'wind',
-              }],
-              videoBlocks: [{
-                kind: 'single',
-                shotNumbers: [1],
-                reason: 'Fixed courtyard blocking.',
-                prompt: 'Temple lesson.',
-                blockIndex: 0,
-                sourceVideoBlockId: 'edit-grid:videoBlock:1',
-              }],
-              assets: [],
-            },
             strategyOutput: {
-              blocks: [{
-                sourceVideoBlockId: 'edit-grid:videoBlock:1',
-                classification: 'fixed_space_strong',
-                skipped: false,
-                reason: 'Two-person dialogue in a fixed courtyard.',
-                cinematicTranslation: 'Old monk screen left, young disciple screen right, flower bed between them.',
-                coordinates: [
-                  { name: 'Old monk', kind: 'character', x: 6.5, y: 6.5, facing: 'east' },
-                  { name: 'Young disciple', kind: 'character', x: 8.5, y: 6.5, facing: 'west' },
-                ],
+              strategy: 'spatial_text_blocking',
+              locations: [{
+                requirementId: 'loc-1',
+                targetId: 'location-1',
+                name: 'Temple courtyard',
+                shotNumbers: [1],
+                spatialProfile: {
+                  sceneSummary: 'Wood door at left rear, incense burner in midground.',
+                  placementZones: [
+                    { label: 'Left rear wall beside the wood door' },
+                  ],
+                },
               }],
             },
             cameraPlanOutput: {
-              strategy: 'camera_plan',
+              strategy: 'spatial_text_blocking',
               panels: [{
                 panelIndex: 0,
                 sourceShotNumber: 1,
-                sourceVideoBlockId: 'edit-grid:videoBlock:1',
+                sourceVideoBlockId: 'edit-spatial:videoBlock:1',
                 shotScale: 'medium shot',
                 cameraPosition: 'over the disciple shoulder',
                 cameraHeight: 'eye-level',
@@ -1909,47 +1874,20 @@ describe('workspace node canvas projection', () => {
                 aestheticIntent: 'quiet balanced teaching composition',
                 emotionalEffect: 'calm attention',
                 continuityNote: 'preserve eyeline',
+                shotBlocking: {
+                  absolutePosition: 'middle ground near incense burner',
+                  relativePosition: 'old monk beside young disciple',
+                  screenPosition: 'center-left',
+                },
               }],
             },
           }),
-          blockingArtifacts: [
-            {
-              id: 'artifact-floor',
-              storyboardId: 'storyboard-grid',
-              kind: 'grid_floor_plan',
-              sourceVideoBlockId: 'edit-grid:videoBlock:1',
-              groupIndex: 0,
-              prompt: 'Top-down temple courtyard floor plan.',
-              imageUrl: 'https://example.com/floor.png',
-              imageMediaId: null,
-              media: null,
-              candidateImages: null,
-              metadataJson: {},
-              status: 'ready',
-              errorMessage: null,
-            },
-            {
-              id: 'artifact-overlay',
-              storyboardId: 'storyboard-grid',
-              kind: 'grid_coordinate_overlay',
-              sourceVideoBlockId: 'edit-grid:videoBlock:1',
-              groupIndex: 0,
-              prompt: null,
-              imageUrl: 'https://example.com/overlay.png',
-              imageMediaId: null,
-              media: null,
-              candidateImages: null,
-              metadataJson: {},
-              status: 'ready',
-              errorMessage: null,
-            },
-          ],
         }),
       ],
       savedLayouts: [],
       translate: t,
       editScript: {
-        id: 'edit-grid',
+        id: 'edit-spatial',
         projectId: 'project-1',
         episodeId: 'episode-1',
         userPrompt: 'temple lesson',
@@ -1981,14 +1919,14 @@ describe('workspace node canvas projection', () => {
       },
     })
 
-    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-grid')
-    const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-grid')
-    const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-grid-1')
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial')
+    const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-spatial')
+    const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-spatial-1')
     expect(spaceNode?.data.kind).toBe('spaceConsistency')
-    expect(spaceNode?.data.previewImageUrl).toBe('https://example.com/overlay.png')
+    expect(spaceNode?.data.previewImageUrl).toBeNull()
     expect(spaceNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_coordinates',
-      editScriptId: 'edit-grid',
+      type: 'generate_edit_storyboard_spatial_blocking',
+      editScriptId: 'edit-spatial',
     })
     expect(spaceNode && editNode ? spaceNode.position.x : 0).toBeGreaterThan(
       editNode ? editNode.position.x + editNode.data.width : 0,
@@ -2001,169 +1939,30 @@ describe('workspace node canvas projection', () => {
       spaceNode ? spaceNode.position.x + spaceNode.data.width : 0,
     )
     expect(spaceNode?.data.spaceConsistencyDetails).toMatchObject({
-      floorPlanCount: 1,
-      overlayCount: 1,
+      spatialProfileCount: 1,
       cameraPlanCount: 1,
+      spatialProfiles: [
+        {
+          name: 'Temple courtyard',
+          placementZones: ['Left rear wall beside the wood door'],
+        },
+      ],
       cameraPlans: [
         {
           sourceShotNumber: 1,
           shotScale: 'medium shot',
           cameraMovement: 'slow push-in',
           aestheticIntent: 'quiet balanced teaching composition',
-        },
-      ],
-      blocks: [
-        {
-          sourceVideoBlockId: 'edit-grid:videoBlock:1',
-          cinematicTranslation: 'Old monk screen left, young disciple screen right, flower bed between them.',
-          coordinates: [
-            { name: 'Old monk', x: 6.5, y: 6.5 },
-            { name: 'Young disciple', x: 8.5, y: 6.5 },
-          ],
-        },
-      ],
-      shotCoordinates: [
-        {
-          shotNumber: 1,
-          sourceVideoBlockId: 'edit-grid:videoBlock:1',
-          cinematicTranslation: 'Old monk screen left, young disciple screen right, flower bed between them.',
-          coordinates: [
-            { name: 'Old monk', x: 6.5, y: 6.5 },
-            { name: 'Young disciple', x: 8.5, y: 6.5 },
-          ],
+          shotBlocking: {
+            absolutePosition: 'middle ground near incense burner',
+            relativePosition: 'old monk beside young disciple',
+            screenPosition: 'center-left',
+          },
         },
       ],
     })
-    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-source:storyboard-grid')).toBe(true)
-    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-shot:storyboard-grid')).toBe(true)
-  })
-
-  it('projects space consistency coordinates by shot and preserves empty shot rows', () => {
-    const projection = buildWorkspaceNodeCanvasProjection({
-      episodeId: 'episode-1',
-      storyText: '',
-      clips: [],
-      storyboards: [
-        createStoryboard({
-          id: 'storyboard-grid-empty',
-          clipId: 'clip-grid',
-          panels: [
-            createPanel({ id: 'panel-grid-empty-1', storyboardId: 'storyboard-grid-empty', panelIndex: 0, panelNumber: 1 }),
-            createPanel({ id: 'panel-grid-empty-2', storyboardId: 'storyboard-grid-empty', panelIndex: 1, panelNumber: 2 }),
-            createPanel({ id: 'panel-grid-empty-3', storyboardId: 'storyboard-grid-empty', panelIndex: 2, panelNumber: 3 }),
-          ],
-          photographyPlan: JSON.stringify({
-            consistencyMode: 'grid_coordinates',
-            currentStage: 'panel_prompts_ready',
-            sourceSnapshot: {
-              schemaVersion: 1,
-              projectId: 'project-1',
-              episodeId: 'episode-1',
-              sourceEditScriptId: 'edit-grid-empty',
-              project: {
-                videoRatio: '16:9',
-                artStyle: null,
-              },
-              editScript: {
-                id: 'edit-grid-empty',
-                title: 'Temple Lesson',
-                logline: null,
-                durationSec: 12,
-                shotCount: 3,
-                userPrompt: 'temple lesson',
-                screenplayText: null,
-              },
-              shots: [
-                {
-                  shotNumber: 1,
-                  durationSec: 4,
-                  visualAction: 'Old monk enters.',
-                  charactersAndScene: 'Temple courtyard',
-                  camera: 'wide shot',
-                  videoPrompt: 'Monk enters.',
-                  sound: 'wind',
-                },
-                {
-                  shotNumber: 2,
-                  durationSec: 4,
-                  visualAction: 'Young disciple listens.',
-                  charactersAndScene: 'Temple courtyard',
-                  camera: 'medium shot',
-                  videoPrompt: 'Disciple listens.',
-                  sound: 'wind',
-                },
-                {
-                  shotNumber: 3,
-                  durationSec: 4,
-                  visualAction: 'Cut to incense smoke.',
-                  charactersAndScene: 'Incense detail',
-                  camera: 'close-up',
-                  videoPrompt: 'Incense smoke.',
-                  sound: 'bell',
-                },
-              ],
-              videoBlocks: [
-                {
-                  kind: 'group',
-                  shotNumbers: [1, 2],
-                  reason: 'Shared courtyard blocking.',
-                  prompt: 'Temple dialogue.',
-                  blockIndex: 0,
-                  sourceVideoBlockId: 'edit-grid-empty:videoBlock:1',
-                },
-                {
-                  kind: 'single',
-                  shotNumbers: [3],
-                  reason: 'Insert detail has no shared floor blocking.',
-                  prompt: 'Incense insert.',
-                  blockIndex: 1,
-                  sourceVideoBlockId: 'edit-grid-empty:videoBlock:2',
-                },
-              ],
-              assets: [],
-            },
-            strategyOutput: {
-              blocks: [{
-                sourceVideoBlockId: 'edit-grid-empty:videoBlock:1',
-                classification: 'fixed_space_strong',
-                skipped: false,
-                reason: 'Two shots share a courtyard layout.',
-                cinematicTranslation: 'Old monk screen left, young disciple screen right.',
-                coordinates: [
-                  { name: 'Old monk', kind: 'character', x: 6.5, y: 6.5, facing: 'east' },
-                ],
-              }],
-            },
-          }),
-        }),
-      ],
-      savedLayouts: [],
-      translate: t,
-    })
-
-    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-grid-empty')
-    expect(spaceNode?.data.meta).toBe('nodes.spaceConsistency.meta:{"floorPlans":0,"overlays":0,"shots":3}')
-    expect(spaceNode?.data.spaceConsistencyDetails?.shotCoordinates).toEqual([
-      expect.objectContaining({
-        shotNumber: 1,
-        sourceVideoBlockId: 'edit-grid-empty:videoBlock:1',
-        coordinates: [
-          { name: 'Old monk', kind: 'character', x: 6.5, y: 6.5, facing: 'east' },
-        ],
-      }),
-      expect.objectContaining({
-        shotNumber: 2,
-        sourceVideoBlockId: 'edit-grid-empty:videoBlock:1',
-        coordinates: [
-          { name: 'Old monk', kind: 'character', x: 6.5, y: 6.5, facing: 'east' },
-        ],
-      }),
-      expect.objectContaining({
-        shotNumber: 3,
-        sourceVideoBlockId: 'edit-grid-empty:videoBlock:2',
-        coordinates: [],
-      }),
-    ])
+    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-source:storyboard-spatial')).toBe(true)
+    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-shot:storyboard-spatial')).toBe(true)
   })
 
   it('does not treat persisted space consistency stages as live running task state', () => {
@@ -2173,14 +1972,15 @@ describe('workspace node canvas projection', () => {
       clips: [],
       storyboards: [
         createStoryboard({
-          id: 'storyboard-grid-processing',
-          clipId: 'clip-grid',
+          id: 'storyboard-spatial-processing',
+          clipId: 'clip-spatial',
           panels: [],
           photographyPlan: JSON.stringify({
-            consistencyMode: 'grid_coordinates',
-            currentStage: 'grid_analyze_ready',
+            consistencyMode: 'spatial_text_blocking',
+            currentStage: 'spatial_profile_ready',
             strategyOutput: {
-              blocks: [],
+              strategy: 'spatial_text_blocking',
+              locations: [],
             },
           }),
         }),
@@ -2189,29 +1989,30 @@ describe('workspace node canvas projection', () => {
       translate: t,
     })
 
-    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-grid-processing')
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial-processing')
     expect(spaceNode?.data.isRunning).toBe(false)
     expect(spaceNode?.data.statusLabel).toBe('status.ready')
   })
 
-  it('offers storyboard generation from a ready coordinate node before panels exist', () => {
+  it('offers storyboard generation from a ready spatial blocking node before panels exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
       clips: [],
       storyboards: [
         createStoryboard({
-          id: 'storyboard-grid-ready',
-          clipId: 'clip-grid',
+          id: 'storyboard-spatial-ready',
+          clipId: 'clip-spatial',
           panels: [],
           photographyPlan: JSON.stringify({
-            consistencyMode: 'grid_coordinates',
-            currentStage: 'grid_analyze_ready',
+            consistencyMode: 'spatial_text_blocking',
+            currentStage: 'spatial_profile_ready',
             sourceSnapshot: {
-              sourceEditScriptId: 'edit-grid-ready',
+              sourceEditScriptId: 'edit-spatial-ready',
             },
             strategyOutput: {
-              blocks: [],
+              strategy: 'spatial_text_blocking',
+              locations: [],
             },
           }),
         }),
@@ -2219,22 +2020,22 @@ describe('workspace node canvas projection', () => {
       savedLayouts: [],
       translate: t,
       editScript: createSingleVideoEditScript({
-        id: 'edit-grid-ready',
+        id: 'edit-spatial-ready',
         status: 'ready',
         requirements: [],
       }),
     })
 
-    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-grid-ready')
-    expect(spaceNode?.data.actionLabel).toBe('actions.regenerateSpaceCoordinates')
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial-ready')
+    expect(spaceNode?.data.actionLabel).toBe('actions.regenerateSpatialBlocking')
     expect(spaceNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_coordinates',
-      editScriptId: 'edit-grid-ready',
+      type: 'generate_edit_storyboard_spatial_blocking',
+      editScriptId: 'edit-spatial-ready',
     })
     expect(spaceNode?.data.secondaryActionLabel).toBe('actions.generateStoryboard')
     expect(spaceNode?.data.secondaryAction).toEqual({
       type: 'generate_edit_storyboard',
-      editScriptId: 'edit-grid-ready',
+      editScriptId: 'edit-spatial-ready',
     })
   })
 })

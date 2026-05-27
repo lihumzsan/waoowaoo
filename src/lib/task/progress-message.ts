@@ -3,8 +3,6 @@ import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.IMAGE_PANEL]: 'progress.taskType.imagePanel',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE]: 'progress.taskType.editScriptStoryboardPrepare',
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_IMAGE]: 'progress.taskType.editScriptStoryboardFloorPlanImage',
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE]: 'progress.taskType.editScriptStoryboardGridAnalyze',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'progress.taskType.editScriptStoryboardCameraPlan',
   [TASK_TYPE.IMAGE_CHARACTER]: 'progress.taskType.imageCharacter',
   [TASK_TYPE.IMAGE_LOCATION]: 'progress.taskType.imageLocation',
@@ -54,9 +52,6 @@ const STAGE_LABELS: Record<string, string> = {
   generate_location_image: 'progress.stage.generateLocationImage',
   generate_panel_candidate: 'progress.stage.generatePanelCandidate',
   edit_script_storyboard_prepare: 'progress.stage.editScriptStoryboardPrepare',
-  edit_script_storyboard_floor_plan: 'progress.stage.editScriptStoryboardFloorPlan',
-  edit_script_storyboard_floor_plan_overlay: 'progress.stage.editScriptStoryboardFloorPlanOverlay',
-  edit_script_storyboard_grid_analyze: 'progress.stage.editScriptStoryboardGridAnalyze',
   edit_script_storyboard_camera_plan: 'progress.stage.editScriptStoryboardCameraPlan',
   generate_panel_video: 'progress.stage.generatePanelVideo',
   video_group_prepare: 'progress.stage.videoGroupPrepare',

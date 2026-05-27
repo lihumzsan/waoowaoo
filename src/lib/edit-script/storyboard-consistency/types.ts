@@ -3,18 +3,6 @@ import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import { locationSpatialProfileSchema, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import type { EditAssetRequirement, EditScriptPayload, EditScriptShot, EditScriptStyleBible, EditScriptVideoBlock } from '@/lib/edit-script/types'
 
-export const STORYBOARD_BLOCKING_ARTIFACT_KINDS = [
-  'grid_floor_plan',
-  'grid_coordinate_overlay',
-] as const
-
-export type StoryboardBlockingArtifactKind = (typeof STORYBOARD_BLOCKING_ARTIFACT_KINDS)[number]
-
-export const STORYBOARD_BLOCKING_STATUSES = ['pending', 'generating', 'ready', 'failed'] as const
-export type StoryboardBlockingStatus = (typeof STORYBOARD_BLOCKING_STATUSES)[number]
-
-export type FixedSpaceClassification = 'fixed_space_strong' | 'fixed_space_weak' | 'no_fixed_space'
-
 export interface StoryboardConsistencyModelConfigSnapshot {
   readonly analysisModel: string
   readonly storyboardModel: string
@@ -49,36 +37,6 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly shots: readonly EditScriptShot[]
   readonly videoBlocks: readonly StoryboardConsistencySourceVideoBlock[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
-}
-
-export interface StoryboardBlockClassification {
-  readonly sourceVideoBlockId: string
-  readonly blockIndex: number
-  readonly classification: FixedSpaceClassification
-  readonly reason: string
-  readonly participantNames: readonly string[]
-  readonly locationNames: readonly string[]
-  readonly excludedByMotionOrAbstraction: boolean
-}
-
-export interface StoryboardFloorPlanSceneGroup {
-  readonly groupIndex: number
-  readonly locationRequirementId: string
-  readonly locationTargetId: string
-  readonly locationName: string
-  readonly locationDescription: string
-  readonly sourceVideoBlockIds: readonly string[]
-  readonly sourceShotNumbers: readonly number[]
-  readonly classification: FixedSpaceClassification
-  readonly participants: readonly string[]
-  readonly reason: string
-}
-
-export interface GridDensity {
-  readonly columns: number
-  readonly rows: number
-  readonly ratio: string
-  readonly shortSideUnits: 9
 }
 
 export interface StoryboardPanelPromptDraft {
@@ -143,43 +101,12 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
   assets: z.array(sourceAssetSchema),
 })
 
-export const gridFloorPlanModelOutputSchema = z.object({
-  strategy: z.literal('grid_coordinates'),
-  grid: z.object({
-    columns: z.number().int().positive(),
-    rows: z.number().int().positive(),
-    ratio: z.string().trim().min(1),
-    shortSideUnits: z.literal(9),
-  }),
-  floorPlans: z.array(z.object({
-    sourceVideoBlockIds: z.array(z.string().trim().min(1)).min(1),
-    groupIndex: z.number().int().min(0),
-    classification: z.enum(['fixed_space_strong', 'fixed_space_weak', 'no_fixed_space']),
-    location: z.string().nullable(),
-    participants: z.array(z.string()),
-    anchors: z.array(z.string()),
-    skipped: z.boolean(),
-    reason: z.string().trim().min(1),
-    prompt: z.string().nullable(),
-  })),
-})
-
-export type GridFloorPlanModelOutput = z.infer<typeof gridFloorPlanModelOutputSchema>
-
 export const generatedPanelPromptSchema = z.object({
   panelIndex: z.number().int().min(0),
   sourceShotNumber: z.number().int().positive(),
   sourceVideoBlockId: z.string().trim().min(1),
   prompt: z.string().trim().min(20),
 })
-
-export const gridCoordinateAnalysisModelOutputSchema = z.object({
-  strategyOutput: z.object({
-    strategy: z.literal('grid_coordinates'),
-  }).passthrough(),
-})
-
-export type GridCoordinateAnalysisModelOutput = z.infer<typeof gridCoordinateAnalysisModelOutputSchema>
 
 const characterPlacementSchema = z.object({
   characterName: z.string().trim().min(1),

@@ -69,27 +69,6 @@ function buildJob(): Job<TaskJobData> {
   } as unknown as Job<TaskJobData>
 }
 
-function buildGridAnalyzeJob(): Job<TaskJobData> {
-  return {
-    data: {
-      taskId: 'task-grid-analyze-1',
-      type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE,
-      locale: 'zh',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      targetType: 'ProjectStoryboard',
-      targetId: 'storyboard-1',
-      payload: {
-        storyboardId: 'storyboard-1',
-      },
-      userId: 'user-1',
-      trace: {
-        requestId: 'request-1',
-      },
-    },
-  } as unknown as Job<TaskJobData>
-}
-
 function buildSourceSnapshot() {
   return {
     schemaVersion: 1,
@@ -160,7 +139,7 @@ describe('edit script storyboard camera plan handler', () => {
     prismaMock.projectStoryboard.findFirst.mockResolvedValue({
       id: 'storyboard-1',
       photographyPlan: JSON.stringify({
-        currentStage: 'grid_analyze_ready',
+        currentStage: 'spatial_profile_ready',
         sourceSnapshot,
         modelConfigSnapshot: {
           analysisModel: 'analysis-model-1',
@@ -296,17 +275,6 @@ describe('edit script storyboard camera plan handler', () => {
     })
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalPanelPrompt')
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('blocks')
-    expect(submitterMock.submitTask).not.toHaveBeenCalled()
-  })
-
-  it('disables the old grid analysis task instead of enqueueing storyboard panels', async () => {
-    const { handleEditScriptStoryboardGridAnalyzeTask } = await import(
-      '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
-    )
-
-    await expect(handleEditScriptStoryboardGridAnalyzeTask(buildGridAnalyzeJob())).rejects.toThrow(
-      'EDIT_SCRIPT_STORYBOARD_GRID_COORDINATES_DISABLED',
-    )
     expect(submitterMock.submitTask).not.toHaveBeenCalled()
   })
 })

@@ -1,98 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildAiPrompt } from '@/lib/ai-prompts'
-import { executeAiTextStep, executeAiVisionStep } from '@/lib/ai-exec/engine'
-import {
-  analyzeGridCoordinates,
-  generateCameraPlan,
-  generateGridFloorPlan,
-} from '@/lib/edit-script/storyboard-consistency/model-generation'
-import {
-  buildFloorPlanSceneGroups,
-  classifyStoryboardConsistencyBlocks,
-  resolveAspectRatioFromDimensions,
-  resolveGridDensity,
-  resolveGridDensityFromDimensions,
-} from '@/lib/edit-script/storyboard-consistency/strategies'
+import { generateCameraPlan } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
+
+const promptMock = vi.hoisted(() => ({
+  buildAiPrompt: vi.fn((input: { promptId: string; variables: Record<string, string> }) => JSON.stringify(input)),
+}))
+
+const aiExecMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(),
+}))
 
 vi.mock('@/lib/ai-prompts', () => ({
   AI_PROMPT_IDS: {
-    EDIT_SCRIPT_STORYBOARD_GRID_FLOOR_PLAN: 'edit-script-storyboard-grid-floor-plan',
-    EDIT_SCRIPT_STORYBOARD_GRID_VISION: 'edit-script-storyboard-grid-vision',
-    EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit-script-storyboard-camera-plan',
     EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
     EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_BLOCK: 'edit-script-storyboard-camera-plan-block',
   },
-  buildAiPrompt: vi.fn((input: { readonly promptId: string }) => `prompt:${input.promptId}`),
+  buildAiPrompt: promptMock.buildAiPrompt,
 }))
 
-vi.mock('@/lib/ai-exec/engine', () => ({
-  executeAiTextStep: vi.fn(),
-  executeAiVisionStep: vi.fn(),
-}))
+vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
 
-const textStepMock = vi.mocked(executeAiTextStep)
-const visionStepMock = vi.mocked(executeAiVisionStep)
-const buildAiPromptMock = vi.mocked(buildAiPrompt)
-
-function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
-  return {
-    strategy: 'style_bible',
-    rawUserStyle: 'temple lesson',
-    styleSummary: 'Restrained naturalistic temple visual style.',
-    stylePolicy: {
-      visual: {
-        negativePrompt: 'No subtitles, no logos, no commercial gloss.',
-        imageFilterPrompt: 'soft natural light, low contrast, quiet temple textures',
-        lightingPrompt: 'Soft diffused daylight.',
-        colorPrompt: 'Muted stone, wood, and gray green.',
-        texturePrompt: 'Stone, wood, linen, and fine film grain.',
-        compositionPrompt: 'Stable balanced composition.',
-      },
-      camera: {
-        movementPrompt: 'Locked camera and slow push-in.',
-        lensAndDepthPrompt: '35mm lens, natural depth.',
-        videoRhythmPrompt: 'Slow rhythm. Restrained pacing.',
-      },
-      sound: {
-        soundFilterPrompt: 'soft natural low dynamic sound',
-      },
-      hardBans: ['No subtitles.', 'No watermark.', 'No logo.'],
-    },
-  }
-}
-
-function mockTextCompletion(text: string): Awaited<ReturnType<typeof executeAiTextStep>> {
-  return {
-    text,
-    reasoning: '',
-    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    completion: {
-      id: 'completion-1',
-      object: 'chat.completion',
-      created: 0,
-      model: 'analysis-model',
-      choices: [],
-    } as Awaited<ReturnType<typeof executeAiTextStep>>['completion'],
-  }
-}
-
-function mockVisionCompletion(text: string): Awaited<ReturnType<typeof executeAiVisionStep>> {
-  return {
-    text,
-    reasoning: '',
-    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    completion: {
-      id: 'completion-1',
-      object: 'chat.completion',
-      created: 0,
-      model: 'analysis-model',
-      choices: [],
-    } as Awaited<ReturnType<typeof executeAiVisionStep>>['completion'],
-  }
-}
-
-function buildSnapshot(overrides: Partial<StoryboardConsistencySourceSnapshot> = {}): StoryboardConsistencySourceSnapshot {
+function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
   return {
     schemaVersion: 1,
     projectId: 'project-1',
@@ -104,578 +32,178 @@ function buildSnapshot(overrides: Partial<StoryboardConsistencySourceSnapshot> =
     editScript: {
       id: 'edit-1',
       title: 'Temple Lesson',
-      logline: 'A monk teaches a young disciple.',
-      durationSec: 10,
-      shotCount: 2,
+      logline: 'A monk teaches a disciple.',
+      durationSec: 8,
+      shotCount: 1,
       userPrompt: 'temple lesson',
       screenplayText: null,
     },
-    styleBible: buildStyleBible(),
-    shots: [
-      {
-        shotNumber: 1,
-        durationSec: 5,
-        visualAction: 'Old monk speaks beside the flower bed.',
-        charactersAndScene: 'Old monk and young disciple in the same temple courtyard.',
-        camera: 'medium close-up',
-        videoPrompt: 'Dialogue over the flower bed.',
-        sound: 'quiet wind',
+    styleBible: {
+      strategy: 'style_bible',
+      rawUserStyle: 'temple lesson',
+      styleSummary: 'Restrained naturalistic temple visual style.',
+      stylePolicy: {
+        visual: {
+          negativePrompt: 'No subtitles.',
+          imageFilterPrompt: 'soft natural light',
+          lightingPrompt: 'soft daylight',
+          colorPrompt: 'muted stone and wood',
+          texturePrompt: 'stone, wood, linen',
+          compositionPrompt: 'balanced composition',
+        },
+        camera: {
+          movementPrompt: 'locked camera',
+          lensAndDepthPrompt: '35mm natural depth',
+          videoRhythmPrompt: 'slow rhythm',
+        },
+        sound: {
+          soundFilterPrompt: 'quiet wind',
+        },
+        hardBans: ['No subtitles.'],
       },
-      {
-        shotNumber: 2,
-        durationSec: 5,
-        visualAction: 'Young disciple listens and answers.',
-        charactersAndScene: 'Young disciple and old monk remain in the temple courtyard.',
-        camera: 'reverse medium close-up',
-        videoPrompt: 'Reverse dialogue over the flower bed.',
-        sound: 'soft reply',
+    },
+    shots: [{
+      shotNumber: 1,
+      durationSec: 8,
+      visualAction: 'Old monk teaches the young disciple.',
+      charactersAndScene: 'Temple courtyard',
+      camera: 'medium shot',
+      videoPrompt: 'Temple lesson.',
+      sound: 'wind',
+    }],
+    videoBlocks: [{
+      kind: 'single',
+      shotNumbers: [1],
+      reason: 'Fixed courtyard blocking.',
+      prompt: 'Temple lesson.',
+      blockIndex: 0,
+      sourceVideoBlockId: 'edit-1:videoBlock:1',
+    }],
+    assets: [{
+      requirementId: 'loc-1',
+      kind: 'location',
+      name: '寺院庭院',
+      description: '有木门、石阶和香炉的庭院',
+      shotNumbers: [1],
+      targetId: 'location-1',
+      previewImageUrl: 'https://cdn.example.com/temple.png',
+      spatialProfile: {
+        schemaVersion: 1,
+        sceneSummary: '最终场景图是一处寺院庭院，木门在画面左后方，香炉在中景中央。',
+        anchors: [{
+          id: 'anchor_left_door',
+          label: '左侧木门',
+          screenArea: '画面左后方',
+          depthLayer: '背景',
+          spatialRelations: ['木门右侧是石阶', '木门前方有可站空地'],
+        }],
+        placementZones: [{
+          id: 'zone_left_door_inside',
+          label: '左侧木门内侧靠墙的位置',
+          absolutePosition: '画面左后方靠墙',
+          nearAnchors: ['左侧木门'],
+          depthLayer: '背景',
+          visibility: '适合半身或全身出现',
+          spatialRelations: ['位于香炉左后方', '距离石阶较近'],
+        }],
+        depthLayout: {
+          foreground: '前景为空地',
+          midground: '中景有香炉',
+          background: '背景有木门和石墙',
+        },
+        lightingDirection: '光线从画面右上方进入',
       },
-    ],
-    videoBlocks: [
-      {
-        kind: 'group',
-        shotNumbers: [1, 2],
-        reason: 'two-person dialogue in one fixed courtyard',
-        prompt: 'A two-person dialogue around one flower bed.',
-        blockIndex: 0,
-        sourceVideoBlockId: 'edit-1:videoBlock:1',
-      },
-    ],
-    assets: [
-      {
-        requirementId: 'char-1',
-        kind: 'character',
-        name: 'Old monk',
-        description: 'elderly monk',
-        shotNumbers: [1, 2],
-        targetId: 'character-1',
-        previewImageUrl: 'https://cdn.example.com/old-monk.png',
-      },
-      {
-        requirementId: 'char-2',
-        kind: 'character',
-        name: 'Young disciple',
-        description: 'young disciple',
-        shotNumbers: [1, 2],
-        targetId: 'character-2',
-        previewImageUrl: 'https://cdn.example.com/disciple.png',
-      },
-      {
-        requirementId: 'loc-1',
-        kind: 'location',
-        name: 'Temple courtyard',
-        description: 'courtyard with a central flower bed',
-        shotNumbers: [1, 2],
-        targetId: 'location-1',
-        previewImageUrl: 'https://cdn.example.com/courtyard.png',
-      },
-    ],
-    ...overrides,
+    }],
   }
 }
 
-describe('edit-script storyboard coordinate consistency', () => {
+const cameraPanel = {
+  panelIndex: 0,
+  sourceShotNumber: 1,
+  sourceVideoBlockId: 'edit-1:videoBlock:1',
+  shotScale: '中景',
+  cameraPosition: '庭院正前方偏右',
+  cameraHeight: '视线高度',
+  cameraAngle: '平拍',
+  composition: '人物位于画面中景中央，左后方木门保持可见',
+  cameraMovement: '固定镜头',
+  lensAndDepth: '35mm，自然景深',
+  screenDirection: '弟子从画面右侧看向左侧师父',
+  aestheticIntent: '保持安静克制的教学氛围',
+  emotionalEffect: '沉静',
+  continuityNote: '持续使用左后方木门和中景香炉作为空间锚点',
+  shotBlocking: {
+    locationName: '寺院庭院',
+    absolutePosition: '人物站在中景香炉前方的空地',
+    relativePosition: '老和尚在弟子左侧半步',
+    screenPosition: '画面中部偏左',
+    characterPlacements: [{
+      characterName: '老和尚',
+      absolutePosition: '中景香炉前方偏左',
+      relativePosition: '弟子左侧半步',
+      screenPosition: '画面中部偏左',
+      facing: '面向弟子',
+      eyeline: '看向弟子眼睛',
+    }],
+    cameraPlacement: '庭院正前方偏右，面向木门方向',
+    composition: '左后方木门作为背景锚点',
+    continuityNote: '不使用任何网格坐标',
+  },
+  finalPanelPrompt: '严格按照中文空间档案和人物站位生成寺院庭院教学分镜画面，保持木门与香炉空间关系。',
+}
+
+describe('edit-script storyboard spatial text blocking generation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('derives grid density from the project video ratio', () => {
-    expect(resolveGridDensity('16:9')).toEqual({ columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 })
-    expect(resolveGridDensity('9:16')).toEqual({ columns: 9, rows: 16, ratio: '9:16', shortSideUnits: 9 })
-    expect(resolveGridDensity('21:9')).toEqual({ columns: 21, rows: 9, ratio: '21:9', shortSideUnits: 9 })
-    expect(resolveGridDensity('1:1')).toEqual({ columns: 9, rows: 9, ratio: '1:1', shortSideUnits: 9 })
-  })
-
-  it('derives floor-plan grid density from actual image dimensions without forcing project ratio', () => {
-    expect(resolveAspectRatioFromDimensions(1024, 1024)).toBe('1:1')
-    expect(resolveGridDensityFromDimensions(1024, 1024)).toEqual({ columns: 9, rows: 9, ratio: '1:1', shortSideUnits: 9 })
-    expect(resolveAspectRatioFromDimensions(1536, 864)).toBe('16:9')
-    expect(resolveGridDensityFromDimensions(1536, 864)).toEqual({ columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 })
-  })
-
-  it('classifies repeated two-person locations as fixed-space and skips chase or montage language', () => {
-    const [dialogue] = classifyStoryboardConsistencyBlocks(buildSnapshot())
-    expect(dialogue).toMatchObject({
-      classification: 'fixed_space_strong',
-      participantNames: ['Old monk', 'Young disciple'],
-      locationNames: ['Temple courtyard'],
-    })
-
-    const [singleCharacterFixedLocation] = classifyStoryboardConsistencyBlocks(buildSnapshot({
-      assets: buildSnapshot().assets.filter((asset) => asset.name !== 'Young disciple'),
-      shots: buildSnapshot().shots.map((shot) => ({
-        ...shot,
-        charactersAndScene: 'Old monk remains in the same temple courtyard.',
-        visualAction: 'Old monk crosses the same temple courtyard.',
-      })),
-      videoBlocks: [{
-        ...buildSnapshot().videoBlocks[0],
-        prompt: 'A monk repeatedly moves through the same temple courtyard.',
-      }],
-    }))
-    expect(singleCharacterFixedLocation).toMatchObject({
-      classification: 'fixed_space_weak',
-      participantNames: ['Old monk'],
-      locationNames: ['Temple courtyard'],
-    })
-
-    const [chase] = classifyStoryboardConsistencyBlocks(buildSnapshot({
-      videoBlocks: [{
-        ...buildSnapshot().videoBlocks[0],
-        prompt: 'A fast chase montage through the courtyard.',
-      }],
-    }))
-    expect(chase?.classification).toBe('no_fixed_space')
-    expect(chase?.excludedByMotionOrAbstraction).toBe(true)
-  })
-
-  it('uses the LLM to prepare floor-plan prompts and does not invent coordinates in prepare', async () => {
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-        strategyOutput: {
-          strategy: 'grid_coordinates',
-          grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-          floorPlans: [{
-            sourceVideoBlockIds: ['edit-1:videoBlock:1'],
-            groupIndex: 0,
-            classification: 'fixed_space_strong',
-            location: 'Temple courtyard',
-            participants: ['Old monk', 'Young disciple'],
-            anchors: ['flower bed'],
-            skipped: false,
-            reason: 'Fixed two-person dialogue around one anchor.',
-            prompt: 'Top-down 2D floor plan of a temple courtyard with a central flower bed.',
-          }],
-        },
-      })))
-
-    const output = await generateGridFloorPlan({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot: buildSnapshot(),
-    })
-
-    expect(textStepMock).toHaveBeenCalledTimes(1)
-    expect(output.floorPlans[0]).toMatchObject({
-      sourceVideoBlockIds: ['edit-1:videoBlock:1'],
-      prompt: 'Top-down 2D floor plan of a temple courtyard with a central flower bed.',
-    })
-    expect('coordinates' in output.floorPlans[0]).toBe(false)
-  })
-
-  it('groups one floor plan per unique scene asset across multiple videoBlocks', async () => {
-    const snapshot = buildSnapshot({
-      videoBlocks: [
-        buildSnapshot().videoBlocks[0],
-        {
-          ...buildSnapshot().videoBlocks[0],
-          sourceVideoBlockId: 'edit-1:videoBlock:2',
-          blockIndex: 1,
-          shotNumbers: [1, 2],
-          prompt: 'The same temple courtyard later in the story.',
-        },
-      ],
-    })
-    const groups = buildFloorPlanSceneGroups(snapshot)
-    expect(groups).toHaveLength(1)
-    expect(groups[0]).toMatchObject({
-      locationTargetId: 'location-1',
-      sourceVideoBlockIds: ['edit-1:videoBlock:1', 'edit-1:videoBlock:2'],
-      locationName: 'Temple courtyard',
-    })
-
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      strategyOutput: {
-        strategy: 'grid_coordinates',
-        grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-        floorPlans: [
-          {
-            sourceVideoBlockIds: ['edit-1:videoBlock:1'],
-            groupIndex: 0,
-            classification: 'fixed_space_strong',
-            location: 'Temple courtyard',
-            participants: ['Old monk', 'Young disciple'],
-            anchors: ['flower bed'],
-            skipped: false,
-            reason: 'First block in same courtyard.',
-            prompt: 'Top-down 2D floor plan of the temple courtyard.',
+    aiExecMock.executeAiTextStep
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          cameraStyleBible: {
+            strategy: 'camera_style_bible',
+            imageFilterPrompt: '安静自然光，保持寺院庭院空间真实',
           },
-          {
-            sourceVideoBlockIds: ['edit-1:videoBlock:2'],
-            groupIndex: 1,
-            classification: 'fixed_space_strong',
-            location: 'Temple courtyard',
-            participants: ['Old monk', 'Young disciple'],
-            anchors: ['flower bed'],
-            skipped: false,
-            reason: 'Second block in same courtyard.',
-            prompt: 'Duplicate top-down 2D floor plan of the temple courtyard.',
-          },
-        ],
-      },
-    })))
-
-    const output = await generateGridFloorPlan({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot,
-    })
-
-    expect(output.floorPlans).toHaveLength(1)
-    expect(output.floorPlans[0]).toMatchObject({
-      sourceVideoBlockIds: ['edit-1:videoBlock:1', 'edit-1:videoBlock:2'],
-      location: 'Temple courtyard',
-    })
-  })
-
-  it('matches floor plans by location when multiple scene groups share videoBlocks', async () => {
-    const snapshot = buildSnapshot({
-      assets: [
-        ...buildSnapshot().assets,
-        {
-          requirementId: 'loc-2',
-          kind: 'location',
-          name: 'Training hall',
-          description: 'interior hall with a wooden doorway and stone wall',
-          shotNumbers: [1, 2],
-          targetId: 'location-2',
-          previewImageUrl: 'https://cdn.example.com/training-hall.png',
-        },
-      ],
-    })
-    const groups = buildFloorPlanSceneGroups(snapshot)
-    expect(groups).toHaveLength(2)
-    expect(groups.map((group) => group.sourceVideoBlockIds)).toEqual([
-      ['edit-1:videoBlock:1'],
-      ['edit-1:videoBlock:1'],
-    ])
-
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      strategyOutput: {
-        strategy: 'grid_coordinates',
-        grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-        floorPlans: [
-          {
-            sourceVideoBlockIds: ['edit-1:videoBlock:1'],
-            groupIndex: 0,
-            classification: 'fixed_space_strong',
-            location: 'Temple courtyard',
-            participants: ['Old monk', 'Young disciple'],
-            anchors: ['flower bed'],
-            skipped: false,
-            reason: 'Courtyard blocking needs a stable plan.',
-            prompt: 'Top-down 2D floor plan of the temple courtyard.',
-          },
-          {
-            sourceVideoBlockIds: ['edit-1:videoBlock:1'],
-            groupIndex: 1,
-            classification: 'fixed_space_strong',
-            location: 'Training hall',
-            participants: ['Old monk', 'Young disciple'],
-            anchors: ['wooden doorway', 'stone wall'],
-            skipped: false,
-            reason: 'Training hall blocking needs a separate stable plan.',
-            prompt: 'Top-down 2D floor plan of the training hall.',
-          },
-        ],
-      },
-    })))
-
-    const output = await generateGridFloorPlan({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot,
-    })
-
-    expect(output.floorPlans).toHaveLength(2)
-    expect(output.floorPlans.map((plan) => plan.location)).toEqual(['Temple courtyard', 'Training hall'])
-  })
-
-  it('accepts empty floor plans when the model decides scene groups are unsuitable for coordinates', async () => {
-    expect(buildFloorPlanSceneGroups(buildSnapshot())).toHaveLength(1)
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      strategyOutput: {
-        strategy: 'grid_coordinates',
-        grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-        floorPlans: [],
-      },
-    })))
-
-    const output = await generateGridFloorPlan({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot: buildSnapshot(),
-    })
-
-    expect(output.floorPlans).toEqual([])
-  })
-
-  it('returns no floor plans when no fixed-space scene groups exist', async () => {
-    const snapshot = buildSnapshot({
-      videoBlocks: [{
-        ...buildSnapshot().videoBlocks[0],
-        prompt: 'A fast chase montage through the courtyard.',
-      }],
-    })
-    expect(buildFloorPlanSceneGroups(snapshot)).toEqual([])
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      strategyOutput: {
-        strategy: 'grid_coordinates',
-        grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-        floorPlans: [],
-      },
-    })))
-
-    const output = await generateGridFloorPlan({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot,
-    })
-
-    expect(output.floorPlans).toEqual([])
-  })
-
-  it('requires overlay images for coordinate analysis and does not generate final panel prompts', async () => {
-    await expect(analyzeGridCoordinates({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot: buildSnapshot(),
-      floorPlanArtifacts: [],
-      overlayImageUrls: [],
-    })).rejects.toThrow('EDIT_SCRIPT_STORYBOARD_GRID_OVERLAY_IMAGE_REQUIRED')
-
-    visionStepMock.mockResolvedValueOnce(mockVisionCompletion(JSON.stringify({
-        strategyOutput: {
-          strategy: 'grid_coordinates',
-          blocks: [{
+        }),
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          cameraPlanBlockOutput: {
             sourceVideoBlockId: 'edit-1:videoBlock:1',
-            classification: 'fixed_space_strong',
-            grid: { columns: 16, rows: 9, ratio: '16:9', shortSideUnits: 9 },
-            coordinates: [
-              { name: 'Old monk', kind: 'character', x: 6, y: 5, facing: 'east' },
-              { name: 'Young disciple', kind: 'character', x: 9, y: 5, facing: 'west' },
-            ],
-            cinematicTranslation: 'Old monk stays screen left, disciple stays screen right, with the flower bed between them.',
-            skipped: false,
-            reason: 'Fixed dialogue blocking.',
-          }],
-        },
-      })))
-
-    const result = await analyzeGridCoordinates({
-      userId: 'user-1',
-      projectId: 'project-1',
-      model: 'analysis-model',
-      locale: 'zh',
-      snapshot: buildSnapshot(),
-      floorPlanArtifacts: [{ id: 'artifact-1', kind: 'grid_coordinate_overlay' }],
-      overlayImageUrls: ['https://cdn.example.com/overlay.png'],
-    })
-
-    expect(visionStepMock).toHaveBeenCalledWith(expect.objectContaining({
-      imageUrls: ['https://cdn.example.com/overlay.png'],
-    }))
-    expect(result.strategyOutput).toMatchObject({
-      blocks: [expect.objectContaining({
-        cinematicTranslation: expect.stringContaining('screen left'),
-      })],
-    })
-    expect('panels' in result).toBe(false)
+            panels: [cameraPanel],
+          },
+        }),
+      })
   })
 
-  it('uses a separate LLM camera plan to generate film-aesthetic panel prompts', async () => {
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      cameraStyleBible: {
-        strategy: 'camera_style_bible',
-        userDirectedCameraStyle: 'quiet restrained temple camera',
-        inferredCameraStyle: 'observational natural light',
-        cameraPhilosophy: 'restrained and relationship-focused',
-        imageFilterPrompt: 'soft natural light, low contrast, subtle film grain',
-        shotScaleProgression: 'medium close-up reverses preserve intimacy',
-        compositionRules: ['use the flower bed as anchor'],
-        movementRules: ['move only for emotional emphasis'],
-        lensAndDepthRules: ['use mild telephoto shallow depth'],
-        continuityRules: ['preserve eyeline and screen direction'],
-        aestheticTone: 'calm intimacy',
-        hardBans: ['no text'],
-      },
-    })))
-    textStepMock.mockResolvedValueOnce(mockTextCompletion(JSON.stringify({
-      cameraPlanBlockOutput: {
-        sourceVideoBlockId: 'edit-1:videoBlock:1',
-        panels: [
-          {
-            panelIndex: 0,
-            sourceShotNumber: 1,
-            sourceVideoBlockId: 'edit-1:videoBlock:1',
-            shotScale: 'medium close-up',
-            cameraPosition: 'over the disciple shoulder toward the old monk',
-            cameraHeight: 'eye-level',
-            cameraAngle: 'three-quarter frontal',
-            composition: 'foreground shoulder frames the old monk, flower bed anchors the lower third',
-            cameraMovement: 'slow push-in motivated by the old monk speaking gently',
-            lensAndDepth: 'mild telephoto with shallow depth of field',
-            screenDirection: 'old monk remains screen left, disciple remains screen right',
-            aestheticIntent: 'quiet balanced composition emphasizes patient teaching',
-            emotionalEffect: 'calm intimacy',
-            continuityNote: 'preserve the dialogue axis and eyeline across the reverse shot',
-            shotBlocking: {
-              locationName: 'Temple courtyard',
-              absolutePosition: 'old monk stands beside the central flower bed',
-              relativePosition: 'disciple remains across the flower bed from the old monk',
-              screenPosition: 'old monk screen left, disciple foreground right',
-              characterPlacements: [
-                {
-                  characterName: 'Old monk',
-                  absolutePosition: 'beside the central flower bed',
-                  relativePosition: 'opposite the disciple',
-                  screenPosition: 'screen left',
-                  facing: 'toward the disciple',
-                  eyeline: 'toward the disciple',
-                },
-              ],
-              cameraPlacement: 'over the disciple shoulder toward the old monk',
-              composition: 'flower bed anchors the lower third',
-              continuityNote: 'preserve the dialogue axis and eyeline across the reverse shot',
-            },
-            finalPanelPrompt: 'Medium close-up storyboard frame, soft natural light, low contrast, subtle film grain. Old monk speaks beside the flower bed, over the disciple shoulder, old monk screen left and disciple blurred foreground right, eye-level three-quarter frontal camera, balanced lower-third flower bed composition, slow push-in feeling, mild telephoto shallow depth of field, preserve eyeline and left-right continuity, no text, no watermarks.',
-          },
-          {
-            panelIndex: 1,
-            sourceShotNumber: 2,
-            sourceVideoBlockId: 'edit-1:videoBlock:1',
-            shotScale: 'reverse medium close-up',
-            cameraPosition: 'over the old monk shoulder toward the young disciple',
-            cameraHeight: 'eye-level',
-            cameraAngle: 'three-quarter reverse',
-            composition: 'old monk shoulder soft on left edge, disciple placed right of center',
-            cameraMovement: 'static camera motivated by listening',
-            lensAndDepth: 'mild telephoto with soft foreground shoulder',
-            screenDirection: 'disciple remains screen right, old monk remains screen left',
-            aestheticIntent: 'reverse composition keeps the teaching relationship stable',
-            emotionalEffect: 'attentive humility',
-            continuityNote: 'maintain the same axis and flower bed anchor',
-            shotBlocking: {
-              locationName: 'Temple courtyard',
-              absolutePosition: 'young disciple stands across the central flower bed',
-              relativePosition: 'disciple remains opposite the old monk',
-              screenPosition: 'disciple right of center',
-              characterPlacements: [
-                {
-                  characterName: 'Young disciple',
-                  absolutePosition: 'across the central flower bed',
-                  relativePosition: 'opposite the old monk',
-                  screenPosition: 'right of center',
-                  facing: 'toward the old monk',
-                  eyeline: 'toward the old monk',
-                },
-              ],
-              cameraPlacement: 'over the old monk shoulder toward the young disciple',
-              composition: 'old monk shoulder soft on left edge, disciple placed right of center',
-              continuityNote: 'maintain the same axis and flower bed anchor',
-            },
-            finalPanelPrompt: 'Reverse medium close-up storyboard frame, soft natural light, low contrast, subtle film grain. Young disciple listens and answers across the flower bed, old monk soft foreground shoulder on the left edge, disciple right of center, eye-level three-quarter reverse angle, static camera, mild telephoto shallow depth of field, preserve eyeline and left-right continuity, no text, no watermarks.',
-          },
-        ],
-      },
-    })))
+  it('plans camera blocking from spatial profiles without x/y coordinate inputs', async () => {
+    const spatialProfileStrategyOutput = {
+      strategy: 'spatial_text_blocking',
+      locations: [{
+        requirementId: 'loc-1',
+        targetId: 'location-1',
+        name: '寺院庭院',
+        shotNumbers: [1],
+        spatialProfile: buildSourceSnapshot().assets[0]?.spatialProfile,
+      }],
+    }
 
     const result = await generateCameraPlan({
       userId: 'user-1',
       projectId: 'project-1',
-      model: 'analysis-model',
+      model: 'analysis-model-1',
       locale: 'zh',
-      snapshot: buildSnapshot(),
-      coordinateStrategyOutput: {
-        strategy: 'spatial_text_blocking',
-        locations: [
-          {
-            requirementId: 'loc-1',
-            targetId: 'location-1',
-            name: 'Temple courtyard',
-            description: 'courtyard with a central flower bed',
-            shotNumbers: [1, 2],
-            spatialProfile: {
-              schemaVersion: 1,
-              sceneSummary: 'Courtyard with central flower bed and open paths around it.',
-              anchors: [{
-                id: 'anchor_flower_bed',
-                label: 'central flower bed',
-                screenArea: 'center of frame',
-                depthLayer: 'midground',
-                spatialRelations: ['open standing space around both sides'],
-              }],
-              placementZones: [{
-                id: 'zone_flower_left',
-                label: 'left side of the flower bed',
-                absolutePosition: 'midground left of the flower bed',
-                nearAnchors: ['central flower bed'],
-                depthLayer: 'midground',
-                visibility: 'suitable for half-body dialogue',
-                spatialRelations: ['opposite the right-side standing area'],
-              }],
-              depthLayout: {
-                foreground: 'stone path foreground',
-                midground: 'flower bed and standing areas',
-                background: 'temple wall',
-              },
-              lightingDirection: 'soft daylight from above right',
-            },
-          },
-        ],
-      },
+      snapshot: buildSourceSnapshot(),
+      spatialProfileStrategyOutput,
     })
 
-    expect(textStepMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      action: 'edit-script-storyboard-camera-style-bible',
-    }))
-    expect(textStepMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      action: 'edit-script-storyboard-camera-plan-block',
-    }))
-    const biblePromptInput = buildAiPromptMock.mock.calls[0]?.[0]
-    const blockPromptInput = buildAiPromptMock.mock.calls[1]?.[0]
-    if (!biblePromptInput?.variables || !blockPromptInput?.variables) throw new Error('PROMPT_INPUT_MISSING')
-    const bibleCoordinateInput = JSON.parse(
-      biblePromptInput.variables.coordinate_strategy_output_json,
-    ) as { readonly locations?: readonly { readonly name?: string }[] }
-    const blockCoordinateInput = JSON.parse(
-      blockPromptInput.variables.coordinate_strategy_output_json,
-    ) as { readonly locations?: readonly { readonly name?: string }[]; readonly sourceVideoBlockId?: string | null }
-    expect(bibleCoordinateInput.locations?.map((location) => location.name)).toEqual(['Temple courtyard'])
-    expect(blockCoordinateInput.locations?.map((location) => location.name)).toEqual(['Temple courtyard'])
-    expect(blockCoordinateInput.sourceVideoBlockId).toBe('edit-1:videoBlock:1')
-    expect(result.cameraStyleBible.userDirectedCameraStyle).toBe('quiet restrained temple camera')
-    expect(result.cameraStyleBible.imageFilterPrompt).toBe('soft natural light, low contrast, subtle film grain')
-    expect(blockPromptInput.variables.camera_style_bible_json).toContain('soft natural light, low contrast, subtle film grain')
-    expect(result.cameraPlanOutput.panels[0]?.shotScale).toBe('medium close-up')
-    expect(result.cameraPlanOutput.cameraStyleBible).toMatchObject({
-      strategy: 'camera_style_bible',
-    })
-    expect(result.cameraPlanOutput.blocks).toHaveLength(1)
-    expect(result.panels).toHaveLength(2)
-    expect(result.panels[0]?.prompt).toContain('soft natural light, low contrast, subtle film grain')
-    expect(result.panels[0]?.prompt).toContain('mild telephoto shallow depth of field')
-    expect(result.panels[0]?.metadata).toMatchObject({
-      source: 'camera_plan',
-      strategy: 'spatial_text_blocking',
-      cameraPlan: expect.objectContaining({
-        composition: expect.stringContaining('flower bed'),
-        aestheticIntent: expect.stringContaining('patient teaching'),
-        shotBlocking: expect.objectContaining({
-          cameraPlacement: 'over the disciple shoulder toward the old monk',
-        }),
-      }),
-    })
+    expect(result.cameraPlanOutput.strategy).toBe('spatial_text_blocking')
+    expect(result.cameraPlanOutput.panels[0]?.shotBlocking.absolutePosition).toBe('人物站在中景香炉前方的空地')
+    expect(result.panels[0]?.metadata).toMatchObject({ source: 'camera_plan', strategy: 'spatial_text_blocking' })
+    const promptCalls = promptMock.buildAiPrompt.mock.calls.map((call) => call[0])
+    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门内侧靠墙的位置')
+    expect(promptCalls[1]?.variables.spatial_profile_strategy_output_json).toContain('edit-1:videoBlock:1')
+    const deprecatedVariableKey = ['coordinate', 'strategy', 'output', 'json'].join('_')
+    expect(promptCalls[0]?.variables).not.toHaveProperty(deprecatedVariableKey)
+    expect(JSON.stringify(result)).not.toContain('"x"')
+    expect(JSON.stringify(result)).not.toContain('"y"')
   })
 })

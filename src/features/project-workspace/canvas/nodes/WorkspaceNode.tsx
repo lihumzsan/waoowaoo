@@ -1467,117 +1467,48 @@ function SpaceConsistencyContent({
 }) {
   const details = data.spaceConsistencyDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const imageArtifacts = details.artifacts.filter((artifact) => artifact.imageUrl)
-  const shouldShowGeneratedDetails = data.isRunning !== true
-    && details.stage !== 'preparing'
-    && details.stage !== 'floor_plan_prompts_ready'
-    && details.stage !== 'floor_plans_generating'
-  const visibleShotCoordinates = shouldShowGeneratedDetails
-    ? expanded ? details.shotCoordinates : details.shotCoordinates.slice(0, 6)
-    : []
-  const visibleBlocks = shouldShowGeneratedDetails
-    ? expanded ? details.blocks : details.blocks.slice(0, 2)
-    : []
+  const visibleProfiles = expanded ? details.spatialProfiles : details.spatialProfiles.slice(0, 2)
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       <MediaPreview data={data} />
       {renderSection(labels('spaceConsistencyStats'), (
         <div className="space-y-1">
           {renderValue(labels('status'), details.stage ?? data.statusLabel)}
-          {renderValue(labels('floorPlanCount'), details.floorPlanCount)}
-          {renderValue(labels('coordinateOverlayCount'), details.overlayCount)}
-          {renderValue(labels('shotCoordinateCount'), details.shotCoordinates.length)}
+          {renderValue(labels('spatialProfileCount'), details.spatialProfileCount)}
           {renderValue(labels('cameraPlanCount'), details.cameraPlanCount)}
         </div>
       ))}
-      {imageArtifacts.length > 0 ? renderSection(labels('coordinateMaps'), (
-        <div className="grid grid-cols-2 gap-2">
-          {imageArtifacts.slice(0, expanded ? imageArtifacts.length : 4).map((artifact) => {
-            const imageUrl = artifact.imageUrl ? toDisplayImageUrl(artifact.imageUrl) ?? artifact.imageUrl : null
-            return imageUrl ? (
-              <div key={artifact.id} className="overflow-hidden rounded-[12px] bg-white ring-1 ring-slate-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrl} alt={artifact.kind} className="h-28 w-full object-contain" />
-                <div className="border-t border-slate-100 px-2 py-1">
-                  <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>
-                    {artifact.kind}
-                  </p>
-                </div>
-              </div>
-            ) : null
-          })}
-        </div>
-      )) : null}
-      {visibleShotCoordinates.length > 0 ? (
+      {visibleProfiles.length > 0 ? renderSection(labels('spatialProfiles'), (
         <div className="space-y-2">
-          {visibleShotCoordinates.map((shot) => (
-            <section key={`shot-coordinate:${shot.shotNumber}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
+          {visibleProfiles.map((profile, index) => (
+            <section key={`${profile.targetId ?? profile.requirementId ?? 'profile'}:${index}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
               <div className="flex items-center justify-between gap-2">
                 <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>
-                  {labels('shotCoordinate', { shot: shot.shotNumber })}
+                  {profile.name ?? labels('location')}
                 </p>
                 <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200`}>
-                  {shot.classification ?? labels('emptyCoordinates')}
+                  {profile.shotNumbers.length > 0 ? profile.shotNumbers.join(', ') : labels('unknown')}
                 </span>
               </div>
-              {shot.sourceVideoBlockId ? renderTextBlock(shot.sourceVideoBlockId) : null}
-              {shot.cinematicTranslation ? renderTextBlock(shot.cinematicTranslation) : null}
-              {shot.coordinates.length > 0 ? (
+              {profile.sceneSummary ? renderTextBlock(profile.sceneSummary) : null}
+              {profile.placementZones.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {shot.coordinates.slice(0, expanded ? shot.coordinates.length : 6).map((coordinate, coordinateIndex) => (
-                    <span key={`${shot.shotNumber}:${coordinate.name ?? coordinate.kind ?? 'coordinate'}:${coordinateIndex}`} className={`${SELECTABLE_TEXT_CLASS} inline-flex rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
-                      {coordinate.name ?? coordinate.kind ?? labels('coordinate')}
-                      {typeof coordinate.x === 'number' && typeof coordinate.y === 'number' ? ` [${coordinate.x}, ${coordinate.y}]` : ''}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-                  {labels('emptyCoordinates')}
-                </p>
-              )}
-              {expanded && shot.reason ? renderTextBlock(shot.reason) : null}
-            </section>
-          ))}
-          {!expanded && details.shotCoordinates.length > visibleShotCoordinates.length ? (
-            <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-              {labels('moreItems', { count: details.shotCoordinates.length - visibleShotCoordinates.length })}
-            </p>
-          ) : null}
-        </div>
-      ) : visibleBlocks.length > 0 ? (
-        <div className="space-y-2">
-          {visibleBlocks.map((block, index) => (
-            <section key={`${block.sourceVideoBlockId ?? 'block'}:${index}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
-              <div className="flex items-center justify-between gap-2">
-                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>
-                  {block.sourceVideoBlockId ?? labels('blockingBlock')}
-                </p>
-                <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200`}>
-                  {block.classification ?? labels('unknown')}
-                </span>
-              </div>
-              {block.cinematicTranslation ? renderTextBlock(block.cinematicTranslation) : null}
-              {block.coordinates.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {block.coordinates.slice(0, expanded ? block.coordinates.length : 6).map((coordinate, coordinateIndex) => (
-                    <span key={`${coordinate.name ?? coordinate.kind ?? 'coordinate'}:${coordinateIndex}`} className={`${SELECTABLE_TEXT_CLASS} inline-flex rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
-                      {coordinate.name ?? coordinate.kind ?? labels('coordinate')}
-                      {typeof coordinate.x === 'number' && typeof coordinate.y === 'number' ? ` [${coordinate.x}, ${coordinate.y}]` : ''}
+                  {profile.placementZones.slice(0, expanded ? profile.placementZones.length : 6).map((zone, zoneIndex) => (
+                    <span key={`${profile.targetId ?? profile.name ?? 'zone'}:${zone}:${zoneIndex}`} className={`${SELECTABLE_TEXT_CLASS} inline-flex rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
+                      {zone}
                     </span>
                   ))}
                 </div>
               ) : null}
-              {expanded && block.reason ? renderTextBlock(block.reason) : null}
             </section>
           ))}
-          {!expanded && details.blocks.length > visibleBlocks.length ? (
+          {!expanded && details.spatialProfiles.length > visibleProfiles.length ? (
             <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-              {labels('moreItems', { count: details.blocks.length - visibleBlocks.length })}
+              {labels('moreItems', { count: details.spatialProfiles.length - visibleProfiles.length })}
             </p>
           ) : null}
         </div>
-      ) : renderTextSection(labels('reason'), data.body)}
+      )) : renderTextSection(labels('reason'), data.body)}
       {details.cameraPlans.length > 0 ? renderSection(labels('cameraPlans'), (
         <div className="space-y-2">
           {details.cameraPlans.slice(0, expanded ? details.cameraPlans.length : 2).map((plan, index) => (
@@ -1592,6 +1523,7 @@ function SpaceConsistencyContent({
                 plan.cameraAngle,
               ].filter(Boolean).join(' · ')) : null}
               {plan.composition ? renderTextBlock(plan.composition) : null}
+              {expanded && plan.shotBlocking ? renderSection(labels('shotBlocking'), renderTextBlock(JSON.stringify(plan.shotBlocking, null, 2))) : null}
               {expanded && plan.lensAndDepth ? renderTextBlock(plan.lensAndDepth) : null}
               {expanded && plan.aestheticIntent ? renderTextBlock(plan.aestheticIntent) : null}
             </section>
@@ -1603,15 +1535,6 @@ function SpaceConsistencyContent({
           ) : null}
         </div>
       )) : null}
-      {expanded ? (
-        <div className="space-y-2">
-          {details.artifacts.filter((artifact) => artifact.prompt).slice(0, 3).map((artifact) => (
-            <React.Fragment key={artifact.id}>
-              {renderSection(labels('floorPlanPrompt'), renderSummaryText(artifact.prompt, 5))}
-            </React.Fragment>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -260,10 +260,10 @@
         "aiEditing": "AI剪辑中",
         "generateEditAssets": "全部生成",
         "generateEditAsset": "生成图片",
-        "generateSpaceCoordinates": "生成空间坐标图",
-        "regenerateSpaceCoordinates": "重新生成空间坐标图",
+        "generateSpatialBlocking": "生成空间定位",
+        "regenerateSpatialBlocking": "重新生成空间定位",
         "generateSceneAssetImagesFirst": "请先生成场景资产图片",
-        "generateSpaceCoordinatesFirst": "请先生成空间坐标图"
+        "generateSpatialBlockingFirst": "请先生成空间定位"
       },
       "status": {
         "empty": "待输入",
@@ -401,20 +401,14 @@
         "videoPlanMeta": "片段信息",
         "videoPlanPrompt": "最终视频提示词",
         "spaceConsistencyStats": "空间一致性",
-        "floorPlanCount": "平面图",
-        "coordinateOverlayCount": "坐标图",
-        "blockingBlockCount": "空间块",
-        "shotCoordinateCount": "镜头坐标",
+        "spatialProfileCount": "空间档案",
+        "placementZones": "可站位",
         "cameraPlanCount": "镜头方案",
         "cameraPlans": "镜头语言",
-        "coordinateMaps": "坐标图",
-        "blockingBlock": "空间块",
-        "shotCoordinate": "镜头 #{shot}",
-        "coordinate": "坐标",
-        "emptyCoordinates": "无坐标",
+        "spatialProfiles": "场景空间档案",
         "unknown": "未知",
-        "floorPlanPrompt": "平面图提示词",
         "cameraPlan": "镜头方案",
+        "shotBlocking": "人物站位",
         "editStepTimeline": "时间安排",
         "editStepVisualAction": "可见动作",
         "editStepCamera": "镜头设计",
@@ -752,11 +746,11 @@
         },
         "spaceConsistency": {
           "title": "空间一致性",
-          "eyebrow": "坐标调度",
-          "body": "正式分镜提示词使用的 2D 平面图、坐标覆盖图和 Vision 空间调度结果。",
-          "locationImageRequired": "请先生成场景资产图片：{assets}。没有场景参考图时，无法生成可定位的 2D 平面图和坐标。",
-          "locationReferenceRequired": "请先生成场景资产图片。没有场景参考图时，无法生成可定位的 2D 平面图和坐标。",
-          "meta": "{floorPlans} 张平面图 · {overlays} 张坐标图 · {shots} 个镜头"
+          "eyebrow": "文字定位",
+          "body": "基于最终场景资产图分析出的中文空间档案，用于后续分镜人物站位、相对位置、画面位置和机位控制。",
+          "locationImageRequired": "请先生成场景资产图片：{assets}。没有最终场景图时，无法分析真实空间档案。",
+          "locationReferenceRequired": "请先生成场景资产图片。没有最终场景图时，无法分析真实空间档案。",
+          "meta": "{profiles} 份空间档案 · {cameraPlans} 个镜头方案"
         },
         "editAsset": {
           "meta": "关联镜头：{shots}"

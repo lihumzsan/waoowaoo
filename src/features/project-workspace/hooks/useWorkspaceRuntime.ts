@@ -58,7 +58,7 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
   handleRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
-  handleGenerateEditStoryboardCoordinates: (editScriptId: string) => Promise<void>
+  handleGenerateEditStoryboardSpatialBlocking: (editScriptId: string) => Promise<void>
   handleUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,
@@ -104,7 +104,7 @@ export function useWorkspaceRuntime({
   handleGenerateEditAssets,
   handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
-  handleGenerateEditStoryboardCoordinates,
+  handleGenerateEditStoryboardSpatialBlocking,
   handleUpdateVideoPrompt,
   handleUpdateVideoPlanPrompt,
   handleArrangeVideoBlocks,
@@ -156,7 +156,7 @@ export function useWorkspaceRuntime({
     onGenerateEditAssets: handleGenerateEditAssets,
     onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
-    onGenerateEditStoryboardCoordinates: handleGenerateEditStoryboardCoordinates,
+    onGenerateEditStoryboardSpatialBlocking: handleGenerateEditStoryboardSpatialBlocking,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateVideoPlanPrompt: handleUpdateVideoPlanPrompt,
     onArrangeVideoBlocks: handleArrangeVideoBlocks,
@@ -174,7 +174,7 @@ export function useWorkspaceRuntime({
     handleGenerateEditAssets,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleGenerateEditStoryboardCoordinates,
+    handleGenerateEditStoryboardSpatialBlocking,
     handleGeneratePanelImage,
     handleSelectPanelCandidate,
     handleCancelPanelCandidate,

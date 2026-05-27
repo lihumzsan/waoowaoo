@@ -36,7 +36,6 @@ import { handleShotAITask } from './handlers/shot-ai-tasks'
 import { handleEditScriptGenerateTask } from './handlers/edit-script-generate'
 import {
   handleEditScriptStoryboardCameraPlanTask,
-  handleEditScriptStoryboardGridAnalyzeTask,
   handleEditScriptStoryboardPrepareTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
 import { canonicalizeStoryboardPanels } from '@/lib/storyboard-character-bindings'
@@ -660,8 +659,6 @@ async function processTextTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE:
       return await handleEditScriptStoryboardPrepareTask(job)
-    case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE:
-      return await handleEditScriptStoryboardGridAnalyzeTask(job)
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
     case TASK_TYPE.VOICE_ANALYZE:

@@ -14,7 +14,6 @@ import {
   handlePanelImageTask,
   handlePanelVariantTask,
 } from './handlers/image-task-handlers'
-import { handleEditScriptStoryboardFloorPlanImageTask } from './handlers/edit-script-storyboard-consistency-task-handler'
 
 type AnyObj = Record<string, unknown>
 
@@ -41,8 +40,6 @@ async function processImageTask(job: Job<TaskJobData>) {
       return await handleAssetHubModifyTask(job)
     case TASK_TYPE.IMAGE_PANEL:
       return await handlePanelImageTask(job)
-    case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_IMAGE:
-      return await handleEditScriptStoryboardFloorPlanImageTask(job)
     case TASK_TYPE.PANEL_VARIANT:
       return await handlePanelVariantTask(job)
     default:

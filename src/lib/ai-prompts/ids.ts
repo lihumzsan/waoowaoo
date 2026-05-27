@@ -37,9 +37,6 @@ export const AI_PROMPT_IDS = {
   EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT: 'edit-script-video-block-arrangement',
   EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'edit-script-video-block-merge',
   EDIT_SCRIPT_STORYBOARD_PANEL: 'edit-script-storyboard-panel',
-  EDIT_SCRIPT_STORYBOARD_GRID_FLOOR_PLAN: 'edit-script-storyboard-grid-floor-plan',
-  EDIT_SCRIPT_STORYBOARD_GRID_VISION: 'edit-script-storyboard-grid-vision',
-  EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit-script-storyboard-camera-plan',
   EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_BLOCK: 'edit-script-storyboard-camera-plan-block',
 } as const

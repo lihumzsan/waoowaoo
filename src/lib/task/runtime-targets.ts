@@ -134,8 +134,6 @@ export const TASK_RUNTIME_TARGETS = {
   },
   projectStoryboardConsistency(storyboardId: string | null | undefined) {
     return target('ProjectStoryboard', storyboardId, [
-      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_IMAGE,
-      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE,
       TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
     ])
   },

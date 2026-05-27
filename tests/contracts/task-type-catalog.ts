@@ -11,8 +11,6 @@ export type TaskTypeCoverageEntry = {
 const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.IMAGE_PANEL]: 'tests/unit/worker/panel-image-task-handler.test.ts',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE]: 'tests/unit/worker/edit-script-storyboard-consistency.test.ts',
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_FLOOR_PLAN_IMAGE]: 'tests/unit/worker/edit-script-storyboard-consistency.test.ts',
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_GRID_ANALYZE]: 'tests/unit/worker/edit-script-storyboard-consistency.test.ts',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'tests/unit/worker/edit-script-storyboard-consistency.test.ts',
   [TASK_TYPE.IMAGE_CHARACTER]: 'tests/unit/worker/character-image-task-handler.test.ts',
   [TASK_TYPE.IMAGE_LOCATION]: 'tests/unit/worker/location-image-task-handler.test.ts',

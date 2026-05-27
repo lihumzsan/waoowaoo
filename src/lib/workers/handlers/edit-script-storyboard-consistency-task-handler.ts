@@ -276,16 +276,6 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
   }
 }
 
-export async function handleEditScriptStoryboardFloorPlanImageTask(job: Job<TaskJobData>) {
-  void job
-  throw new Error('EDIT_SCRIPT_STORYBOARD_GRID_COORDINATES_DISABLED')
-}
-
-export async function handleEditScriptStoryboardGridAnalyzeTask(job: Job<TaskJobData>) {
-  void job
-  throw new Error('EDIT_SCRIPT_STORYBOARD_GRID_COORDINATES_DISABLED')
-}
-
 export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobData>) {
   const payload = readRecord(job.data.payload)
   const storyboardId = readString(payload.storyboardId) || job.data.targetId
@@ -307,7 +297,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
       model: modelConfig.analysisModel,
       locale: job.data.locale,
       snapshot,
-      coordinateStrategyOutput: strategyOutput,
+      spatialProfileStrategyOutput: strategyOutput,
     })
     const panels = await persistGeneratedPanels({
       locale: job.data.locale,

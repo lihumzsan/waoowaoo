@@ -26,7 +26,7 @@ source_snapshot_json:
 {source_snapshot_json}
 
 spatial_profile_strategy_output_json:
-{coordinate_strategy_output_json}
+{spatial_profile_strategy_output_json}
 
 只返回 JSON，不要 markdown，不要解释。Schema:
 {

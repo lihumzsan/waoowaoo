@@ -128,7 +128,7 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
   | { readonly type: 'generate_edit_storyboard'; readonly editScriptId: string }
-  | { readonly type: 'generate_edit_storyboard_coordinates'; readonly editScriptId: string }
+  | { readonly type: 'generate_edit_storyboard_spatial_blocking'; readonly editScriptId: string }
 
 export type WorkspaceCanvasNodeActionHandler = (
   action: WorkspaceCanvasNodeAction,
@@ -368,47 +368,15 @@ export interface WorkspaceCanvasEditAssetDetails {
 export interface WorkspaceCanvasSpaceConsistencyDetails {
   readonly storyboardId: string
   readonly stage?: string | null
-  readonly floorPlanCount: number
-  readonly overlayCount: number
+  readonly spatialProfileCount: number
   readonly cameraPlanCount: number
-  readonly artifacts: readonly {
-    readonly id: string
-    readonly kind: string
-    readonly sourceVideoBlockId?: string | null
-    readonly groupIndex?: number | null
-    readonly prompt?: string | null
-    readonly imageUrl?: string | null
-    readonly status?: string | null
-    readonly errorMessage?: string | null
-  }[]
-  readonly blocks: readonly {
-    readonly sourceVideoBlockId?: string | null
-    readonly classification?: string | null
-    readonly skipped?: boolean | null
-    readonly reason?: string | null
-    readonly cinematicTranslation?: string | null
-    readonly coordinates: readonly {
-      readonly name?: string | null
-      readonly kind?: string | null
-      readonly x?: number | null
-      readonly y?: number | null
-      readonly facing?: string | null
-    }[]
-  }[]
-  readonly shotCoordinates: readonly {
-    readonly shotNumber: number
-    readonly sourceVideoBlockId?: string | null
-    readonly classification?: string | null
-    readonly skipped?: boolean | null
-    readonly reason?: string | null
-    readonly cinematicTranslation?: string | null
-    readonly coordinates: readonly {
-      readonly name?: string | null
-      readonly kind?: string | null
-      readonly x?: number | null
-      readonly y?: number | null
-      readonly facing?: string | null
-    }[]
+  readonly spatialProfiles: readonly {
+    readonly requirementId?: string | null
+    readonly targetId?: string | null
+    readonly name?: string | null
+    readonly shotNumbers: readonly number[]
+    readonly sceneSummary?: string | null
+    readonly placementZones: readonly string[]
   }[]
   readonly cameraPlans: readonly {
     readonly panelIndex?: number | null
@@ -425,6 +393,7 @@ export interface WorkspaceCanvasSpaceConsistencyDetails {
     readonly aestheticIntent?: string | null
     readonly emotionalEffect?: string | null
     readonly continuityNote?: string | null
+    readonly shotBlocking?: Record<string, unknown> | null
   }[]
 }
 

@@ -19,7 +19,7 @@ export function buildLocationImagePromptCore(params: {
     : '必须使用宽广完整的场景全景构图，清楚展示主要结构、前景/中景/背景和空间边界。禁止生成局部裁切、锚点缺失、空间关系模糊的泛化背景。'
 
   const noMarkConstraints = params.locale === 'en'
-    ? 'Do not add non-diegetic overlays such as subtitles, captions, explanatory text, watermarks, annotation labels, arrows, guide lines, marking lines, outline placeholders, UI markers, map labels, or floor-plan/blueprint graphics. Natural in-world text on plausible scene objects such as shop signs, street signs, door numbers, posters, packaging, or screens is allowed only when it belongs to the described environment; keep it secondary and do not turn it into random gibberish or intrusive floating text.'
+    ? 'Do not add non-diegetic overlays such as subtitles, captions, explanatory text, watermarks, annotation labels, arrows, guide lines, marking lines, outline placeholders, UI markers, map labels, or blueprint graphics. Natural in-world text on plausible scene objects such as shop signs, street signs, door numbers, posters, packaging, or screens is allowed only when it belongs to the described environment; keep it secondary and do not turn it into random gibberish or intrusive floating text.'
     : '不要添加非场景内的叠加元素，例如字幕、说明文字、水印、注释标签、箭头、引导线、标注线、轮廓占位、UI标记、地图标签、平面图或蓝图式图形。场景世界里自然存在的文字可以保留，例如招牌、路标、门牌、海报、包装、屏幕文字，但必须属于当前环境，保持次要且自然，不要变成随机乱码或突兀漂浮文字。'
 
   if (slots.length === 0) {

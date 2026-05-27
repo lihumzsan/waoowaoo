@@ -260,10 +260,10 @@
         "aiEditing": "AI Editing",
         "generateEditAssets": "Generate All",
         "generateEditAsset": "Generate Image",
-        "generateSpaceCoordinates": "Generate Coordinate Map",
-        "regenerateSpaceCoordinates": "Regenerate Coordinate Map",
+        "generateSpatialBlocking": "Generate Spatial Blocking",
+        "regenerateSpatialBlocking": "Regenerate Spatial Blocking",
         "generateSceneAssetImagesFirst": "Generate Scene Asset Images First",
-        "generateSpaceCoordinatesFirst": "Generate Coordinate Map First"
+        "generateSpatialBlockingFirst": "Generate Spatial Blocking First"
       },
       "status": {
         "empty": "Empty",
@@ -401,20 +401,14 @@
         "videoPlanMeta": "Segment Info",
         "videoPlanPrompt": "Final Video Prompt",
         "spaceConsistencyStats": "Space Consistency",
-        "floorPlanCount": "Floor Plans",
-        "coordinateOverlayCount": "Coordinate Maps",
-        "blockingBlockCount": "Blocks",
-        "shotCoordinateCount": "Shot Coordinates",
+        "spatialProfileCount": "Spatial Profiles",
+        "placementZones": "Placement Zones",
         "cameraPlanCount": "Camera Plans",
         "cameraPlans": "Camera Language",
-        "coordinateMaps": "Coordinate Maps",
-        "blockingBlock": "Blocking Block",
-        "shotCoordinate": "Shot #{shot}",
-        "coordinate": "Coordinate",
-        "emptyCoordinates": "No coordinates",
+        "spatialProfiles": "Scene Spatial Profiles",
         "unknown": "Unknown",
-        "floorPlanPrompt": "Floor Plan Prompt",
         "cameraPlan": "Camera Plan",
+        "shotBlocking": "Character Blocking",
         "editStepTimeline": "Timing Plan",
         "editStepVisualAction": "Visible Action",
         "editStepCamera": "Camera Design",
@@ -752,11 +746,11 @@
         },
         "spaceConsistency": {
           "title": "Space Consistency",
-          "eyebrow": "Coordinate Blocking",
-          "body": "2D floor plans, coordinate overlays, and Vision blocking used by the production storyboard prompts.",
-          "locationImageRequired": "Generate scene asset images first: {assets}. A scene reference image is required to produce a locatable 2D floor plan and coordinate map.",
-          "locationReferenceRequired": "Generate scene asset images first. A scene reference image is required to produce a locatable 2D floor plan and coordinate map.",
-          "meta": "{floorPlans} floor plan(s) · {overlays} coordinate map(s) · {shots} shot(s)"
+          "eyebrow": "Text Blocking",
+          "body": "Chinese spatial profiles analyzed from final scene asset images, used to control character placement, relative position, screen position, and camera placement.",
+          "locationImageRequired": "Generate scene asset images first: {assets}. A final scene image is required before analyzing the real spatial profile.",
+          "locationReferenceRequired": "Generate scene asset images first. A final scene image is required before analyzing the real spatial profile.",
+          "meta": "{profiles} spatial profile(s) · {cameraPlans} camera plan(s)"
         },
         "editAsset": {
           "meta": "Linked shots: {shots}"

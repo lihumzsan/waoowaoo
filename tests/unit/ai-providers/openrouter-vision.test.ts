@@ -10,7 +10,7 @@ const completionCreateMock = vi.hoisted(() => vi.fn(async () => ({
     index: 0,
     finish_reason: 'stop',
     logprobs: null,
-    message: { role: 'assistant', content: 'coordinate analysis', refusal: null },
+    message: { role: 'assistant', content: 'vision analysis', refusal: null },
   }],
   usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24 },
 } as OpenAI.Chat.Completions.ChatCompletion)))
@@ -64,7 +64,7 @@ describe('OpenRouter vision adapter', () => {
         apiKey: 'sk-openrouter',
         baseUrl: 'https://openrouter.example/v1',
       },
-      textPrompt: 'Analyze this coordinate overlay.',
+      textPrompt: 'Analyze this scene image.',
       imageUrls: ['/m/media-overlay'],
       temperature: 0.2,
       reasoning: true,
@@ -79,14 +79,14 @@ describe('OpenRouter vision adapter', () => {
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: 'Analyze this coordinate overlay.' },
+          { type: 'text', text: 'Analyze this scene image.' },
           { type: 'image_url', image_url: { url: 'data:image/png;base64,bWVkaWEtb3ZlcmxheQ==' } },
         ],
       }],
       temperature: 0.2,
     })
     expect(normalizeToBase64ForGenerationMock).toHaveBeenCalledWith('/m/media-overlay')
-    expect(result.text).toBe('coordinate analysis')
+    expect(result.text).toBe('vision analysis')
     expect(result.logProvider).toBe('openrouter')
   })
 
@@ -105,7 +105,7 @@ describe('OpenRouter vision adapter', () => {
         name: 'OpenRouter',
         apiKey: 'sk-openrouter',
       },
-      textPrompt: 'Analyze this coordinate overlay.',
+      textPrompt: 'Analyze this scene image.',
       imageUrls: ['https://example.com/overlay.png'],
       temperature: 0.2,
       reasoning: true,

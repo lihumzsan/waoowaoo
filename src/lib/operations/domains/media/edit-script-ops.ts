@@ -252,13 +252,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_script_storyboard: defineOperation({
       id: 'generate_edit_script_storyboard',
-      summary: 'Generate storyboard panels from ready coordinate analysis, the current completed edit-first table, and required assets.',
+      summary: 'Generate storyboard panels from ready spatial profiles, the current completed edit-first table, and required assets.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
         required: true,
-        summary: '将根据已完成的空间坐标图、剪辑先行表和资产生成正式分镜面板提示词（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将根据已完成的空间档案、剪辑先行表和资产生成正式分镜面板提示词（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEditScriptStoryboardInputSchema,
       outputSchema: editScriptTaskSubmitOutputSchema,

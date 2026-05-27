@@ -115,7 +115,7 @@ function requireModelConfig(config: Awaited<ReturnType<typeof getProjectModelCon
   if (!config.analysisModel || !config.storyboardModel) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCRIPT_STORYBOARD_MODELS_NOT_CONFIGURED',
-      message: 'Analysis model and storyboard image model are required before generating coordinate storyboard panels',
+      message: 'Analysis model and storyboard image model are required before generating spatial blocking storyboard panels',
     })
   }
   return {
@@ -190,7 +190,7 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   if (requirements.length === 0) {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_ASSETS_REQUIRED',
-      message: 'Completed edit-script assets are required before coordinate storyboard generation',
+      message: 'Completed edit-script assets are required before spatial blocking storyboard generation',
     })
   }
   const snapshots = await Promise.all(requirements.map(async (requirement) => {
@@ -223,7 +223,7 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   if (notReady.length > 0) {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
-      message: `Edit script assets must be completed before coordinate storyboard generation: ${notReady.map((item) => item.name).join(', ')}`,
+      message: `Edit script assets must be completed before spatial blocking storyboard generation: ${notReady.map((item) => item.name).join(', ')}`,
     })
   }
   const staleRequirementIds = snapshots
