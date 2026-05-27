@@ -197,6 +197,13 @@ type PanelReadinessInput = VideoReadinessPanelLike & {
   }) | null
 }
 
+type LoadedReadinessVoiceLine = VideoReadinessVoiceLine & {
+  lineIndex?: number | null
+  matchedPanelId?: string | null
+  matchedStoryboardId?: string | null
+  matchedPanelIndex?: number | null
+}
+
 function mergeVoiceLinesById(
   ...lineGroups: Array<VideoReadinessVoiceLine[] | null | undefined>
 ): VideoReadinessVoiceLine[] {
@@ -230,6 +237,18 @@ function resolveSelectedVoiceLineIds(input: {
     return savedVoiceLineIds
   }
   return []
+}
+
+function sortLoadedVoiceLines(lines: LoadedReadinessVoiceLine[]): LoadedReadinessVoiceLine[] {
+  return lines.slice().sort((left, right) => (left.lineIndex ?? 0) - (right.lineIndex ?? 0))
+}
+
+function stripLoadedVoiceLine(line: LoadedReadinessVoiceLine): VideoReadinessVoiceLine {
+  return {
+    id: line.id,
+    content: line.content,
+    audioDuration: line.audioDuration,
+  }
 }
 
 async function loadExplicitSelectedVoiceLines(
@@ -299,6 +318,127 @@ async function loadFallbackPanelVoiceLines(
       content: true,
       audioDuration: true,
     },
+  })
+}
+
+async function resolvePanelsReadinessInputs(
+  panels: PanelReadinessInput[],
+  payload?: unknown,
+): Promise<PanelReadinessInput[]> {
+  if (panels.length === 0) return []
+
+  const panelIds = panels.map((panel) => panel.id).filter(Boolean)
+  const episodeIds = Array.from(new Set(
+    panels
+      .map((panel) => panel.storyboard?.episodeId)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+  ))
+  if (episodeIds.length === 0 || panelIds.length === 0) {
+    return await Promise.all(panels.map((panel) => resolvePanelReadinessInput(panel, payload)))
+  }
+
+  const selectedIdsByPanelId = new Map<string, string[]>()
+  const explicitSelectedIds = new Set<string>()
+  for (const panel of panels) {
+    const selectedIds = resolveSelectedVoiceLineIds({ payload, panel })
+    selectedIdsByPanelId.set(panel.id, selectedIds)
+    for (const id of selectedIds) explicitSelectedIds.add(id)
+  }
+
+  const fallbackPanelFilters = panels
+    .filter((panel) => panel.storyboardId && typeof panel.panelIndex === 'number')
+    .map((panel) => ({
+      matchedStoryboardId: panel.storyboardId!,
+      matchedPanelIndex: panel.panelIndex!,
+    }))
+
+  const [relationLines, fallbackLines, explicitLines] = await Promise.all([
+    prisma.novelPromotionVoiceLine.findMany({
+      where: {
+        episodeId: { in: episodeIds },
+        matchedPanelId: { in: panelIds },
+      },
+      orderBy: { lineIndex: 'asc' },
+      select: {
+        id: true,
+        content: true,
+        audioDuration: true,
+        lineIndex: true,
+        matchedPanelId: true,
+      },
+    }),
+    fallbackPanelFilters.length > 0
+      ? prisma.novelPromotionVoiceLine.findMany({
+          where: {
+            episodeId: { in: episodeIds },
+            matchedPanelId: null,
+            OR: fallbackPanelFilters,
+          },
+          orderBy: { lineIndex: 'asc' },
+          select: {
+            id: true,
+            content: true,
+            audioDuration: true,
+            lineIndex: true,
+            matchedStoryboardId: true,
+            matchedPanelIndex: true,
+          },
+        })
+      : Promise.resolve([] as LoadedReadinessVoiceLine[]),
+    explicitSelectedIds.size > 0
+      ? prisma.novelPromotionVoiceLine.findMany({
+          where: {
+            id: { in: Array.from(explicitSelectedIds) },
+            episodeId: { in: episodeIds },
+          },
+          orderBy: { lineIndex: 'asc' },
+          select: {
+            id: true,
+            content: true,
+            audioDuration: true,
+            lineIndex: true,
+          },
+        })
+      : Promise.resolve([] as LoadedReadinessVoiceLine[]),
+  ])
+
+  const relationByPanelId = new Map<string, LoadedReadinessVoiceLine[]>()
+  for (const line of relationLines) {
+    if (!line.matchedPanelId) continue
+    const lines = relationByPanelId.get(line.matchedPanelId) || []
+    lines.push(line)
+    relationByPanelId.set(line.matchedPanelId, lines)
+  }
+
+  const fallbackByPanelKey = new Map<string, LoadedReadinessVoiceLine[]>()
+  for (const line of fallbackLines) {
+    if (!line.matchedStoryboardId || typeof line.matchedPanelIndex !== 'number') continue
+    const key = `${line.matchedStoryboardId}:${line.matchedPanelIndex}`
+    const lines = fallbackByPanelKey.get(key) || []
+    lines.push(line)
+    fallbackByPanelKey.set(key, lines)
+  }
+
+  const explicitById = new Map(explicitLines.map((line) => [line.id, line]))
+
+  return panels.map((panel) => {
+    const selectedIds = selectedIdsByPanelId.get(panel.id) || []
+    const explicitSelectedVoiceLines = selectedIds
+      .map((id) => explicitById.get(id))
+      .filter((line): line is LoadedReadinessVoiceLine => !!line)
+      .map(stripLoadedVoiceLine)
+    const fallbackKey = panel.storyboardId && typeof panel.panelIndex === 'number'
+      ? `${panel.storyboardId}:${panel.panelIndex}`
+      : ''
+
+    return {
+      ...panel,
+      matchedVoiceLines: mergeVoiceLinesById(
+        sortLoadedVoiceLines(relationByPanelId.get(panel.id) || []).map(stripLoadedVoiceLine),
+        sortLoadedVoiceLines(fallbackByPanelKey.get(fallbackKey) || []).map(stripLoadedVoiceLine),
+        explicitSelectedVoiceLines,
+      ),
+    }
   })
 }
 
@@ -387,9 +527,7 @@ export const POST = apiHandler(async (
         },
       },
     })
-    const panelsForReadiness = await Promise.all(
-      panels.map((panel) => resolvePanelReadinessInput(panel, body)),
-    )
+    const panelsForReadiness = await resolvePanelsReadinessInputs(panels, body)
     const readiness = panelsForReadiness.map((panel) => ({
       panel,
       issue: resolvePanelVideoReadinessIssue(panel, {

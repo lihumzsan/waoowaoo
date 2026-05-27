@@ -5,7 +5,6 @@ import {
   getVideoTimingProfile,
   normalizeVideoDurationBinding,
   parseVideoDurationBinding,
-  resolveAudioDrivenVideoSplitPlan,
   resolveAudioDrivenVideoTiming,
 } from '@/lib/video-duration/audio-binding'
 
@@ -154,55 +153,7 @@ describe('video audio duration binding', () => {
     expect(timing).toEqual({ fps: 25, maxDurationSeconds: 30 })
   })
 
-  it('builds a split plan when linked audio exceeds the workflow max duration', () => {
-    const plan = resolveAudioDrivenVideoSplitPlan({
-      binding: {
-        mode: 'match_audio',
-        voiceLineIds: ['line-1'],
-      },
-      candidates: [
-        {
-          id: 'line-1',
-          speaker: 'Doctor',
-          content: 'We need to review the symptoms carefully, then decide whether this treatment can continue.',
-          audioDuration: 23_700,
-        },
-      ],
-      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
-      durationOptions: [4, 5, 6, 8, 10, 12],
-    })
-
-    expect(plan).not.toBeNull()
-    expect(plan?.segments).toHaveLength(2)
-    expect(plan?.totalAudioDurationSeconds).toBe(23.7)
-    expect(plan?.segments.every((segment) => segment.targetDurationSeconds <= 12)).toBe(true)
-    expect(plan?.segments.map((segment) => segment.targetFrameCount)).toEqual([296, 296])
-    expect(plan?.segments[0]?.voiceLines[0]?.content).not.toEqual(plan?.segments[1]?.voiceLines[0]?.content)
-  })
-
-  it('prefers voice-line boundaries when splitting multiple linked lines', () => {
-    const plan = resolveAudioDrivenVideoSplitPlan({
-      binding: {
-        mode: 'match_audio',
-        voiceLineIds: ['a', 'b', 'c'],
-      },
-      candidates: [
-        { id: 'a', speaker: 'A', content: 'first line', audioDuration: 7_000 },
-        { id: 'b', speaker: 'B', content: 'second line', audioDuration: 4_500 },
-        { id: 'c', speaker: 'A', content: 'third line', audioDuration: 8_000 },
-      ],
-      modelKey: 'comfyui::basevideo/demo/LTX2.3-fast',
-      durationOptions: [4, 6, 8, 12],
-    })
-
-    expect(plan?.segments).toHaveLength(2)
-    expect(plan?.segments[0]?.voiceLineIds).toEqual(['a', 'b'])
-    expect(plan?.segments[1]?.voiceLineIds).toEqual(['c'])
-    expect(plan?.segments[0]?.audioDurationSeconds).toBe(11.5)
-    expect(plan?.segments[1]?.audioDurationSeconds).toBe(8)
-  })
-
-  it('attaches a split plan to blocked timing for diagnostics or explicit split flows', () => {
+  it('blocks overlong linked audio without advertising an unimplemented split flow', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {
         mode: 'match_audio',
@@ -222,6 +173,6 @@ describe('video audio duration binding', () => {
 
     expect(timing?.canGenerate).toBe(false)
     expect(timing?.blockedReason).toBe('audio_exceeds_max_duration')
-    expect(timing?.splitPlan?.segments).toHaveLength(2)
+    expect(timing).not.toHaveProperty('splitPlan')
   })
 })

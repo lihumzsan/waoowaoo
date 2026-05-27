@@ -1078,6 +1078,20 @@ function buildPanelImageGenerationPacket(params: {
   referenceImages: string[]
 }): PanelImageGenerationPacket {
   const characters = parsePanelCharacterReferences(params.panel.characters)
+
+  const summarizeReference = (url: string): string => {
+    const trimmed = url.trim()
+    const dataUrlMatch = /^data:([^;,]+)?;base64,(.*)$/i.exec(trimmed)
+    if (dataUrlMatch) {
+      const mimeType = dataUrlMatch[1] || 'application/octet-stream'
+      const base64Length = dataUrlMatch[2]?.length || 0
+      const approxBytes = Math.floor(base64Length * 0.75)
+      return `data:${mimeType};base64,<${approxBytes} bytes>`
+    }
+    if (trimmed.length <= 320) return trimmed
+    return `${trimmed.slice(0, 220)}...${trimmed.slice(-48)}`
+  }
+
   return {
     panelId: params.panel.id,
     sourceText: params.panel.srtSegment || null,
@@ -1108,7 +1122,7 @@ function buildPanelImageGenerationPacket(params: {
     requestedModelKey: params.requestedModelKey,
     resolvedModelKey: params.resolvedModelKey,
     modelRoutingReason: params.modelRoutingReason,
-    references: params.referenceImages.map((url, index) => ({ index, url })),
+    references: params.referenceImages.map((url, index) => ({ index, url: summarizeReference(url) })),
   }
 }
 

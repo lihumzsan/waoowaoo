@@ -113,7 +113,7 @@ const prismaMock = vi.hoisted(() => ({
         audioDuration: number
       }>,
     })),
-    findMany: vi.fn(async () => []),
+    findMany: vi.fn<(...args: unknown[]) => Promise<Array<Record<string, unknown>>>>(async () => []),
     findUnique: vi.fn(async ({ where }: { where?: { id?: string } }) => {
       const id = where?.id || 'panel-1'
       if (id === 'panel-src') {
@@ -182,7 +182,7 @@ const prismaMock = vi.hoisted(() => ({
     })),
   },
   novelPromotionVoiceLine: {
-    findMany: vi.fn(async () => [
+    findMany: vi.fn<(...args: unknown[]) => Promise<Array<Record<string, unknown>>>>(async () => [
       { id: 'line-1', speaker: 'Narrator', content: 'hello world voice line', audioDuration: null as number | null },
     ]),
     findFirst: vi.fn(async () => ({
@@ -712,6 +712,125 @@ describe('api contract - direct submit routes (behavior)', () => {
       targetId: 'panel-1',
       episodeId: 'episode-1',
     }))
+  })
+
+  it('batch generate-video resolves readiness voice lines with batched relation/fallback/explicit queries', async () => {
+    prismaMock.novelPromotionPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-a',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        imageUrl: 'cos/panel-a.png',
+        videoPrompt: 'panel a prompt',
+        videoPromptEditedByUser: false,
+        description: 'panel a description',
+        srtSegment: 'short dialogue a',
+        videoDurationBinding: null,
+        shotType: 'medium',
+        cameraMove: 'static',
+        sceneType: 'dialogue',
+        storyboard: {
+          episodeId: 'episode-1',
+          clip: {
+            content: 'office conversation',
+          },
+        },
+      },
+      {
+        id: 'panel-b',
+        storyboardId: 'storyboard-1',
+        panelIndex: 1,
+        imageUrl: 'cos/panel-b.png',
+        videoPrompt: 'panel b prompt',
+        videoPromptEditedByUser: false,
+        description: 'panel b description',
+        srtSegment: 'short dialogue b',
+        videoDurationBinding: null,
+        shotType: 'medium',
+        cameraMove: 'static',
+        sceneType: 'dialogue',
+        storyboard: {
+          episodeId: 'episode-1',
+          clip: {
+            content: 'office conversation',
+          },
+        },
+      },
+    ])
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'relation-line-a',
+          content: 'short relation line',
+          audioDuration: 1200,
+          lineIndex: 0,
+          matchedPanelId: 'panel-a',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'fallback-line-b',
+          content: 'short fallback line',
+          audioDuration: 1300,
+          lineIndex: 1,
+          matchedStoryboardId: 'storyboard-1',
+          matchedPanelIndex: 1,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'explicit-line-1',
+          content: 'short explicit line',
+          audioDuration: 900,
+          lineIndex: 2,
+        },
+      ])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        all: true,
+        episodeId: 'episode-1',
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['explicit-line-1'],
+        },
+        generationOptions: {
+          duration: 12,
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenCalledTimes(3)
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: {
+        episodeId: { in: ['episode-1'] },
+        matchedPanelId: { in: ['panel-a', 'panel-b'] },
+      },
+    }))
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: {
+        episodeId: { in: ['episode-1'] },
+        matchedPanelId: null,
+        OR: [
+          { matchedStoryboardId: 'storyboard-1', matchedPanelIndex: 0 },
+          { matchedStoryboardId: 'storyboard-1', matchedPanelIndex: 1 },
+        ],
+      },
+    }))
+    expect(prismaMock.novelPromotionVoiceLine.findMany).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      where: {
+        id: { in: ['explicit-line-1'] },
+        episodeId: { in: ['episode-1'] },
+      },
+    }))
+    expect(submitTaskMock).toHaveBeenCalledTimes(2)
   })
 
   it('blocks single generate-video submission when episode-filtered relation audio exceeds the selected LTX workflow max', async () => {

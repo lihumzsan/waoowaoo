@@ -177,7 +177,7 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
   })
-  it('shows blocking guidance and disables generation when long audio only fits by auto-split', () => {
+  it('shows long-video guidance and disables generation when linked audio is too long for the selected workflow', () => {
     const markup = renderToStaticMarkup(
       React.createElement(VideoPanelCardBody, {
         runtime: createRuntime({
@@ -221,9 +221,6 @@ describe('VideoPanelCardBody', () => {
               canGenerate: false,
               audioDurationSeconds: 23.7,
               maxDurationSeconds: 12,
-              splitPlan: {
-                segments: [{ segmentIndex: 0 }, { segmentIndex: 1 }],
-              },
             },
           },
         } as unknown as Partial<VideoPanelRuntime>),

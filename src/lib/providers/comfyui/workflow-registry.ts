@@ -2,7 +2,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
   COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+  COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
+  getLtx23WorkflowProfile,
+  normalizeLtx23WorkflowKey,
 } from './ltx23-workflow-profiles'
 
 export const COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID = 'baseimage/图片生成/Flux2Klein文生图'
@@ -611,6 +614,30 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
       }
     }
 
+    if (classType === 'PrimitiveNode' && Array.isArray(rawNode.outputs)) {
+      for (const rawOutputDef of rawNode.outputs) {
+        if (!isRecord(rawOutputDef)) continue
+        const outputDef = rawOutputDef as UiWorkflowInput
+        if (!outputDef.widget) continue
+
+        const outputName = readTrimmedString(outputDef.name)
+        const widgetName = readUiWidgetName(outputDef, outputName || 'value')
+        if (!widgetName || Object.prototype.hasOwnProperty.call(inputs, widgetName)) continue
+
+        const currentValue = readUiWidgetValue(widgetValuesArray, widgetValuesRecord, widgetIndex, outputDef, widgetName)
+        if (currentValue !== undefined) {
+          inputs[widgetName] = JSON.parse(JSON.stringify(currentValue)) as unknown
+        }
+
+        if (widgetValuesArray) {
+          widgetIndex += 1
+          if (shouldSkipSeedControlValue(outputDef, widgetValuesArray[widgetIndex])) {
+            widgetIndex += 1
+          }
+        }
+      }
+    }
+
     graph[nodeId] = {
       class_type: classType,
       inputs,
@@ -745,7 +772,7 @@ function isTextEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
 }
 
 function isPromptRelayEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
-  return node.class_type.trim().toLowerCase() === 'promptrelayencode'
+  return node.class_type.trim().toLowerCase().includes('promptrelay')
 }
 
 function isAudioTranscriptionNode(node: ComfyUiWorkflowGraphNode): boolean {
@@ -1096,8 +1123,6 @@ function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: strin
     const filename = filenames[index] || fallbackFilename
     if (filename) {
       node.inputs.audio = filename
-    } else {
-      delete node.inputs.audio
     }
     delete node.inputs.audioUI
     delete node.inputs.audioui
@@ -1124,7 +1149,7 @@ function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
 function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: number): boolean {
   if (!node || !isRecord(node.inputs)) return false
 
-  for (const field of ['value', 'a', 'number']) {
+  for (const field of ['value', 'length', 'a', 'number']) {
     if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
     if (isConnectionValue(node.inputs[field])) continue
     node.inputs[field] = value
@@ -1159,7 +1184,7 @@ function applyTemporalHeuristics(
   if (nextFps === null && nextFrames === null && nextDurationSteps === null) return
 
   const fpsFields = new Set(['frame_rate', 'fps'])
-  const frameCountFields = new Set(['frames_number', 'frame_count', 'frames', 'length'])
+  const frameCountFields = new Set(['frames_number', 'frame_count', 'frames', 'length', 'max_frames'])
 
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -1199,6 +1224,177 @@ function applyTemporalHeuristics(
       }
     }
   }
+}
+
+type Ltx23WorkflowNodeContract = {
+  durationNodeIds?: string[]
+  fpsNodeIds?: string[]
+  frameCountNodeIds?: string[]
+  promptRelaySegmentCount?: number
+}
+
+const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> = {
+  [COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion]: {
+    frameCountNodeIds: ['1372'],
+    fpsNodeIds: ['1375'],
+    promptRelaySegmentCount: 4,
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s]: {
+    durationNodeIds: ['164'],
+    fpsNodeIds: ['142'],
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay]: {
+    durationNodeIds: ['361'],
+    fpsNodeIds: ['405'],
+    promptRelaySegmentCount: 5,
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2]: {
+    durationNodeIds: ['472'],
+    fpsNodeIds: ['474'],
+    promptRelaySegmentCount: 3,
+  },
+}
+
+function setNumericNodeValue(graph: ComfyUiWorkflowGraph, nodeId: string, value: number): void {
+  const node = graph[nodeId]
+  if (!node || !isRecord(node.inputs)) return
+  if (setNumericValueOnNode(node, value)) return
+  node.inputs.value = value
+}
+
+function splitFramesEvenly(totalFrames: number, segmentCount: number): number[] {
+  const safeTotal = Math.max(1, Math.round(totalFrames))
+  const safeCount = Math.max(1, Math.round(segmentCount))
+  const base = Math.floor(safeTotal / safeCount)
+  let remainder = safeTotal - (base * safeCount)
+  return Array.from({ length: safeCount }, () => {
+    const value = base + (remainder > 0 ? 1 : 0)
+    remainder -= 1
+    return Math.max(1, value)
+  })
+}
+
+function parsePromptRelaySegmentCount(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null
+  const count = raw
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0)
+    .length
+  return count > 0 ? count : null
+}
+
+const PROMPT_RELAY_COLORS = ['#4f8edc', '#e07b3a', '#5cb85c', '#d9534f', '#9b6cd6', '#5bc0de']
+const LARGE_MOTION_STAGE_SUFFIXES = [
+  'Stage 1: start from the source frame, prepare the motion, keep subject identity, clothing, and environment consistent.',
+  'Stage 2: expand the visible action with continuous body movement or smooth camera movement, no cuts.',
+  'Stage 3: reach the largest motion beat, allow the strongest continuous movement while preserving the same subject and scene.',
+  'Stage 4: settle into the new motion state, keep continuity and stabilize the final frame.',
+]
+
+function buildPromptRelaySegmentPrompts(prompt: string, segmentCount: number, largeMotionStages: boolean): string[] {
+  const localPrompt = derivePromptRelayInput(prompt, 'local_prompts')
+  const fallbackPrompt = localPrompt || derivePromptRelayInput(prompt, 'global_prompt') || prompt
+  if (!largeMotionStages) {
+    return Array.from({ length: segmentCount }, () => fallbackPrompt)
+  }
+
+  return Array.from({ length: segmentCount }, (_, index) => {
+    const suffix = LARGE_MOTION_STAGE_SUFFIXES[index] || LARGE_MOTION_STAGE_SUFFIXES[LARGE_MOTION_STAGE_SUFFIXES.length - 1]
+    return `${fallbackPrompt}\n${suffix}`
+  })
+}
+
+function buildPromptRelayTimelineData(segmentPrompts: string[], lengths: number[]): string {
+  return JSON.stringify({
+    segments: lengths.map((length, index) => ({
+      prompt: segmentPrompts[index] || segmentPrompts[segmentPrompts.length - 1] || '',
+      length,
+      color: PROMPT_RELAY_COLORS[index % PROMPT_RELAY_COLORS.length],
+    })),
+  })
+}
+
+function applyPromptRelayTimelineControls(
+  graph: ComfyUiWorkflowGraph,
+  params: {
+    prompt: string
+    fps: number | null
+    targetFrameCount: number | null
+    segmentCount?: number
+    largeMotionStages?: boolean
+  },
+): void {
+  if (!params.prompt || params.targetFrameCount === null) return
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node)) continue
+
+    const segmentCount = params.segmentCount
+      || parsePromptRelaySegmentCount(node.inputs.segment_lengths)
+      || 1
+    const lengths = splitFramesEvenly(params.targetFrameCount, segmentCount)
+    const segmentPrompts = buildPromptRelaySegmentPrompts(params.prompt, lengths.length, params.largeMotionStages === true)
+
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
+      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+    }
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'local_prompts')) {
+      assignStringInputValue(graph, node, 'local_prompts', segmentPrompts.join(' | '))
+    }
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'segment_lengths')) {
+      node.inputs.segment_lengths = lengths.join(', ')
+    }
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'timeline_data')) {
+      node.inputs.timeline_data = buildPromptRelayTimelineData(segmentPrompts, lengths)
+    }
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'max_frames')) {
+      const currentValue = node.inputs.max_frames
+      if (isConnectionValue(currentValue)) {
+        const sourceNodeId = normalizeNodeId(currentValue[0])
+        if (sourceNodeId) setNumericNodeValue(graph, sourceNodeId, params.targetFrameCount)
+      } else {
+        node.inputs.max_frames = params.targetFrameCount
+      }
+    }
+    if (params.fps !== null && Object.prototype.hasOwnProperty.call(node.inputs, 'fps')) {
+      node.inputs.fps = params.fps
+    }
+  }
+}
+
+function applyLtx23WorkflowProfileControls(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  inject: ComfyUiWorkflowInject,
+): void {
+  const profile = getLtx23WorkflowProfile(workflowKey)
+  if (!profile) return
+
+  const normalizedKey = normalizeLtx23WorkflowKey(workflowKey)
+  const contract = LTX23_WORKFLOW_NODE_CONTRACTS[normalizedKey]
+  const fps = clampPositiveFloat(inject.fps) ?? profile.fps
+  const durationSeconds = clampPositiveFloat(inject.durationSeconds) ?? profile.defaultDurationSeconds
+  const targetFrameCount = clampPositiveInteger(inject.targetFrameCount)
+    ?? Math.max(1, Math.round(durationSeconds * fps))
+
+  for (const nodeId of contract?.durationNodeIds || []) {
+    setNumericNodeValue(graph, nodeId, durationSeconds)
+  }
+  for (const nodeId of contract?.fpsNodeIds || []) {
+    setNumericNodeValue(graph, nodeId, fps)
+  }
+  for (const nodeId of contract?.frameCountNodeIds || []) {
+    setNumericNodeValue(graph, nodeId, targetFrameCount)
+  }
+
+  applyPromptRelayTimelineControls(graph, {
+    prompt: readTrimmedString(inject.prompt),
+    fps,
+    targetFrameCount,
+    segmentCount: contract?.promptRelaySegmentCount,
+    largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+  })
 }
 
 function formatDateSegment(date: Date): string {
@@ -1451,6 +1647,7 @@ export function validateResolvedWorkflowPreflight(
   inject: ComfyUiWorkflowInject = {},
   _options: { expect?: 'image' | 'video' | 'audio' } = {},
 ): ComfyUiWorkflowPreflightResult {
+  void _options
   const contract = getComfyUiWorkflowParameterContract(workflowKey)
   if (!contract) {
     return {
@@ -1488,6 +1685,7 @@ export function resolveComfyUiWorkflow(
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
+  applyLtx23WorkflowProfileControls(graph, workflowKey, inject)
   applySaveOutputHeuristics(graph)
   removePreviewImageOutputsFromVideoGraphs(graph)
   assignRandomSeedValues(graph)

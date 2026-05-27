@@ -3,6 +3,10 @@ import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  COMFYUI_LTX23_WORKFLOW_KEYS,
+  getLtx23WorkflowProfiles,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import {
   comfyUiWorkflowRequiresLlmApi,
   getComfyUiWorkflowParameterContract,
   getComfyUiWorkflowImageInputCount,
@@ -13,6 +17,14 @@ import {
 
 function getLoadImageNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
   return Object.values(workflow).filter((node) => node.class_type.toLowerCase().includes('loadimage'))
+}
+
+function getLoadAudioNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
+  return Object.values(workflow).filter((node) => node.class_type.toLowerCase().includes('loadaudio'))
+}
+
+function getPromptRelayNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
+  return Object.values(workflow).filter((node) => node.class_type.toLowerCase().includes('promptrelay'))
 }
 
 describe('comfyui workflow registry', () => {
@@ -235,5 +247,75 @@ describe('comfyui workflow registry', () => {
     expect(workflow['33']?.inputs.text).toBe('[中年男声][冷静] 可以。')
     expect(workflow['37']?.class_type).toBe('Apply Whisper')
     expect(workflow['37']?.inputs.prompt).toBe('')
+  })
+
+  it('locks LTX2.3 profile duration and PromptRelay controls into resolved workflows', () => {
+    const largeMotion = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: 'GLOBAL: office\nLOCAL: doctor speaks',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 16,
+      targetFrameCount: 400,
+    })
+    expect(largeMotion['1372']?.inputs.length).toBe(400)
+    const largeMotionRelay = getPromptRelayNodes(largeMotion)[0]
+    expect(largeMotionRelay?.inputs.global_prompt).toBe('office')
+    expect(String(largeMotionRelay?.inputs.local_prompts)).toContain('doctor speaks')
+    expect(String(largeMotionRelay?.inputs.local_prompts)).toContain('Stage 4')
+    expect(largeMotionRelay?.inputs.segment_lengths).toBe('100, 100, 100, 100')
+    const largeMotionTimeline = JSON.parse(String(largeMotionRelay?.inputs.timeline_data)) as {
+      segments: Array<{ prompt: string; length: number }>
+    }
+    expect(largeMotionTimeline.segments.map((segment) => segment.length)).toEqual([100, 100, 100, 100])
+    expect(largeMotionTimeline.segments[0]?.prompt).toContain('Stage 1')
+    expect(largeMotionTimeline.segments[3]?.prompt).toContain('Stage 4')
+    expect(JSON.stringify(largeMotionTimeline)).not.toContain('年轻的女人')
+
+    const damaicha30s = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s, {
+      prompt: 'GLOBAL: office\nLOCAL: doctor speaks',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 20,
+      targetFrameCount: 500,
+    })
+    expect(damaicha30s['164']?.inputs.value).toBe(20)
+
+    const damaichaPromptRelay = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay, {
+      prompt: 'GLOBAL: office\nLOCAL: doctor speaks',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 20,
+      targetFrameCount: 500,
+    })
+    expect(damaichaPromptRelay['361']?.inputs.value).toBe(20)
+    const damaichaRelay = getPromptRelayNodes(damaichaPromptRelay)[0]
+    expect(damaichaRelay?.inputs.segment_lengths).toBe('100, 100, 100, 100, 100')
+    expect(String(damaichaRelay?.inputs.timeline_data)).not.toContain('年轻女性身穿浅灰色针织衫')
+
+    const aio = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2, {
+      prompt: 'GLOBAL: office\nLOCAL: doctor speaks',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 8,
+      targetFrameCount: 200,
+    })
+    expect(aio['472']?.inputs.value).toBe(8)
+    expect(getPromptRelayNodes(aio)[0]?.inputs.segment_lengths).toBe('67, 67, 66')
+  })
+
+  it('keeps bundled LoadAudio placeholders for LTX2.3 workflows when no audio is injected', () => {
+    for (const profile of getLtx23WorkflowProfiles()) {
+      const workflow = resolveComfyUiWorkflow(profile.workflowKey, {
+        prompt: 'quiet shot',
+        imageFilenames: ['source.png'],
+        fps: profile.fps,
+        durationSeconds: profile.defaultDurationSeconds,
+      })
+      const loadAudioNodes = getLoadAudioNodes(workflow)
+      for (const node of loadAudioNodes) {
+        expect(node.inputs.audio).toEqual(expect.any(String))
+        expect(String(node.inputs.audio).trim().length).toBeGreaterThan(0)
+      }
+    }
   })
 })

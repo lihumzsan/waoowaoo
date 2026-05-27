@@ -134,15 +134,12 @@ describe('VideoPanelCardHeader', () => {
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
   })
 
-  it('disables the regenerate overlay action even when blocked timing has a split plan', () => {
+  it('disables the regenerate overlay action when blocked timing is present', () => {
     const runtime = createRuntime()
     runtime.durationBinding = {
       ...runtime.durationBinding,
       timing: {
         canGenerate: false,
-        splitPlan: {
-          segments: [{ segmentIndex: 0 }, { segmentIndex: 1 }],
-        },
       },
     } as unknown as VideoPanelRuntime['durationBinding']
 

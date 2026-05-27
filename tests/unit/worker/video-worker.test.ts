@@ -59,10 +59,6 @@ const utilsMock = vi.hoisted(() => ({
     async () => 'cos/lip-sync/video.mp4',
   ),
 }))
-const ffmpegMock = vi.hoisted(() => ({
-  extractVideoLastFrame: vi.fn(async () => Buffer.from('tail-frame')),
-  concatVideos: vi.fn(async () => Buffer.from('merged-video')),
-}))
 const configServiceMock = vi.hoisted(() => ({
   getUserWorkflowConcurrencyConfig: vi.fn(async () => ({
     analysis: 5,
@@ -109,17 +105,6 @@ const prismaMock = vi.hoisted(() => ({
       audioDuration?: number | null
     }>> => []),
   },
-  novelPromotionPanelVideoSegment: {
-    findMany: vi.fn<(...args: unknown[]) => Promise<Array<{
-      segmentIndex: number
-      status?: string | null
-      videoUrl?: string | null
-      tailFrameImageUrl?: string | null
-    }>>>(async () => []),
-    upsert: vi.fn(async (args: unknown) => args),
-    update: vi.fn(async (args: unknown) => args),
-    deleteMany: vi.fn(async () => ({ count: 0 })),
-  },
 }))
 
 vi.mock('bullmq', () => ({
@@ -151,7 +136,6 @@ vi.mock('@/lib/workers/shared', () => ({
 }))
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/video-processing/ffmpeg', () => ffmpegMock)
 vi.mock('@/lib/media/outbound-image', () => ({
   normalizeToBase64ForGeneration: vi.fn(async (input: string) => input),
 }))
@@ -229,8 +213,6 @@ describe('worker video processor behavior', () => {
     utilsMock.toSignedUrlIfCos.mockImplementation((url: string | null) => (url ? `https://signed.example/${url}` : null))
     utilsMock.uploadImageSourceToCos.mockImplementation(async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`)
     utilsMock.uploadVideoSourceToCos.mockImplementation(async () => 'cos/lip-sync/video.mp4')
-    ffmpegMock.extractVideoLastFrame.mockResolvedValue(Buffer.from('tail-frame'))
-    ffmpegMock.concatVideos.mockResolvedValue(Buffer.from('merged-video'))
     ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mockImplementation(async (input: { originalPrompt: string }) => ({
       prompt: input.originalPrompt,
       enhanced: false,
@@ -252,10 +234,6 @@ describe('worker video processor behavior', () => {
       audioDuration: 1200,
     })
     prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([])
-    prismaMock.novelPromotionPanelVideoSegment.findMany.mockResolvedValue([])
-    prismaMock.novelPromotionPanelVideoSegment.upsert.mockImplementation(async (args: unknown) => args)
-    prismaMock.novelPromotionPanelVideoSegment.update.mockImplementation(async (args: unknown) => args)
-    prismaMock.novelPromotionPanelVideoSegment.deleteMany.mockResolvedValue({ count: 0 })
 
     const mod = await import('@/lib/workers/video.worker')
     mod.createVideoWorker()
@@ -492,9 +470,6 @@ describe('worker video processor behavior', () => {
         }),
       }),
     )
-    expect(prismaMock.novelPromotionPanelVideoSegment.upsert).not.toHaveBeenCalled()
-    expect(ffmpegMock.extractVideoLastFrame).not.toHaveBeenCalled()
-    expect(ffmpegMock.concatVideos).not.toHaveBeenCalled()
     expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
       where: { id: 'panel-1' },
       data: expect.objectContaining({

@@ -54,12 +54,12 @@ describe('video readiness', () => {
     })
   })
 
-  it('blocks batch readiness when long LTX audio only fits by auto-split in normal mode', () => {
+  it('blocks batch readiness when long LTX audio exceeds the normal workflow duration', () => {
     const issue = resolvePanelVideoReadinessIssue(buildPanel({
       matchedVoiceLines: [
         {
           id: 'line-1',
-          content: 'This long line should be split into continuous video segments automatically.',
+          content: 'This long line should use a dedicated long video workflow.',
           audioDuration: 23_884,
         },
       ],
