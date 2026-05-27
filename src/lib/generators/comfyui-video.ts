@@ -1,11 +1,15 @@
 import { getProviderConfig } from '@/lib/api-config'
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
-import { COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/workflow-registry'
+import {
+  COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+  COMFYUI_LTX23_WORKFLOW_KEYS,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
 const COMFYUI_MULTI_SHOT_VBVR_WORKFLOW_ID = 'basevideo/多镜头/Ltx2.3多镜头时间+逻辑控制PromptRelay和VBVR（KJ版）1'
 const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX = 'basevideo/多镜头/'
+const COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX = 'basevideo/ltx23-profiles/'
 
 const COMFYUI_SINGLE_SHOT_LTX23_WORKFLOW_ID = 'basevideo/\u56fe\u751f\u89c6\u9891/ltx2.3-\u56fe\u751f\u89c6\u9891-\u6ca1\u5b57\u5e55\u7248'
 const COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE = 'basevideo/\u591a\u955c\u5934/'
@@ -50,6 +54,22 @@ function isMultiShotWorkflowKey(workflowKey: string): boolean {
     || workflowKey.startsWith(COMFYUI_MULTI_SHOT_WORKFLOW_PREFIX_UNICODE)
 }
 
+function isLtx23ProfileWorkflowKey(workflowKey: string): boolean {
+  return workflowKey.startsWith(COMFYUI_LTX23_PROFILE_WORKFLOW_PREFIX)
+    || Object.values(COMFYUI_LTX23_WORKFLOW_KEYS).includes(
+      workflowKey as typeof COMFYUI_LTX23_WORKFLOW_KEYS[keyof typeof COMFYUI_LTX23_WORKFLOW_KEYS],
+    )
+}
+
+function normalizeComfyUiReferenceImageUrls(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const urls = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+  return urls.length > 0 ? urls : undefined
+}
+
 function normalizeComfyUiProviderError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (
@@ -74,6 +94,9 @@ export function selectComfyUiVideoWorkflowKey(
   if (!normalizedWorkflowKey) {
     return normalizedWorkflowKey
   }
+  if (isLtx23ProfileWorkflowKey(normalizedWorkflowKey)) {
+    return normalizedWorkflowKey
+  }
   const generationMode = options?.generationMode === 'firstlastframe' ? 'firstlastframe' : 'normal'
   const allowMultiShot = options?.multiShotRange === true
   if (generationMode === 'normal' && !allowMultiShot && isMultiShotWorkflowKey(normalizedWorkflowKey)) {
@@ -83,7 +106,7 @@ export function selectComfyUiVideoWorkflowKey(
     return normalizedWorkflowKey
   }
   if (
-    normalizedWorkflowKey === COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
+    normalizedWorkflowKey === COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
     && hasStructuredPromptRelayPrompt(prompt)
     && allowMultiShot
   ) {
@@ -120,7 +143,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
 
     const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
       ? options.modelId.trim()
-      : COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
+      : COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
     const selectedWorkflowKey = selectComfyUiVideoWorkflowKey(workflowKey, prompt || '', {
       generationMode: options.generationMode,
       multiShotRange: options.multiShotRange,
@@ -143,6 +166,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         workflowKey: selectedWorkflowKey,
         prompt: prompt || '',
         firstFrameImageUrl: imageUrl,
+        referenceImageUrls: normalizeComfyUiReferenceImageUrls(options.referenceImageUrls),
         lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
         width: targetSize?.w,
         height: targetSize?.h,
