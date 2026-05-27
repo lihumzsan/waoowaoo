@@ -18,6 +18,7 @@ import {
 } from '@/lib/model-config-contract'
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/model-pricing/catalog'
+import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
 
 type StoredModelType = UnifiedModelType | string
@@ -244,6 +245,8 @@ function hasStoredProviderConnection(provider: StoredProvider): boolean {
 }
 
 function isUserSelectableModel(model: StoredModel): boolean {
+  const modelKey = toModelKey(model)
+  if (model.type === 'video' && isRemovedLegacyLtx23WorkflowKey(modelKey)) return false
   if (model.type !== 'audio') return true
   const modelId = toModelId(model)
   return !AUDIO_MODEL_EXCLUDED_IDS.has(modelId)

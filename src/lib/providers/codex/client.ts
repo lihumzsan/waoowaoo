@@ -178,7 +178,6 @@ function spawnCodex(
     let stderr = ''
     let timedOut = false
     let settled = false
-    let timer: NodeJS.Timeout
     let killTimer: NodeJS.Timeout | null = null
     let forceRejectTimer: NodeJS.Timeout | null = null
 
@@ -249,7 +248,7 @@ function spawnCodex(
       if (typeof killTimer.unref === 'function') killTimer.unref()
     }
 
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       timedOut = true
       requestTermination()
       forceRejectTimer = setTimeout(

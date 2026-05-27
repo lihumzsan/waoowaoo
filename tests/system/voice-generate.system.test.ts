@@ -4,7 +4,7 @@ import { installAuthMocks, mockAuthenticated, resetAuthMockState } from '../help
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
-import { expectLifecycleEvents, listTaskEventTypes, waitForTaskTerminalState } from './helpers/tasks'
+import { expectLifecycleEvents, waitForTaskEventType, waitForTaskTerminalState } from './helpers/tasks'
 import { startSystemWorkers, stopSystemWorkers, type SystemWorkers } from './helpers/workers'
 
 const voiceState = vi.hoisted(() => ({
@@ -102,7 +102,7 @@ describe('system - voice generate', () => {
       audioDuration: voiceState.audioDuration,
     })
 
-    const eventTypes = await listTaskEventTypes(json.taskId)
+    const eventTypes = await waitForTaskEventType(json.taskId, 'task.completed')
     expectLifecycleEvents(eventTypes, 'completed')
   })
 })

@@ -110,6 +110,18 @@ describe('video readiness', () => {
     expect(issue?.code).toBe('short_dialogue_audio_too_long')
   })
 
+  it('allows borderline compact Chinese dialogue around 4.5 seconds', () => {
+    const issue = resolvePanelVideoReadinessIssue(buildPanel({
+      matchedVoiceLines: [
+        { id: 'line-1', content: '影响治疗效果。', audioDuration: 4_534 },
+      ],
+    }), {
+      durationOptions: [2, 4, 6, 8, 12],
+    })
+
+    expect(issue).toBeNull()
+  })
+
   it('allows short dialogue when the audio duration remains compact', () => {
     const issue = resolvePanelVideoReadinessIssue(buildPanel({
       matchedVoiceLines: [

@@ -662,6 +662,27 @@ describe('api contract - direct submit routes (behavior)', () => {
     })
   }
 
+  it('blocks removed legacy LTX2.3 generate-video model keys', async () => {
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        locale: 'zh',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error?.details?.code || json.error?.code || json.code).toBe('LEGACY_LTX23_WORKFLOW_REMOVED')
+    expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
   it('ignores stale nested relation voice lines and queries relation lines from the panel episode', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
@@ -698,7 +719,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         generationOptions: {
@@ -802,7 +823,7 @@ describe('api contract - direct submit routes (behavior)', () => {
       body: {
         all: true,
         episodeId: 'episode-1',
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         videoDurationBinding: {
           mode: 'match_audio',
           voiceLineIds: ['explicit-line-1'],
@@ -1087,7 +1108,8 @@ describe('api contract - direct submit routes (behavior)', () => {
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        ltx23WorkflowSelection: 'manual',
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         videoDurationBinding: {
@@ -1170,7 +1192,8 @@ describe('api contract - direct submit routes (behavior)', () => {
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
         episodeId: 'stale-episode',
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        ltx23WorkflowSelection: 'manual',
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         videoDurationBinding: {
@@ -1255,7 +1278,8 @@ describe('api contract - direct submit routes (behavior)', () => {
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
         episodeId: 'stale-episode',
-        videoModel: 'comfyui::basevideo/demo/LTX2.3-fast',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        ltx23WorkflowSelection: 'manual',
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         videoDurationBinding: {

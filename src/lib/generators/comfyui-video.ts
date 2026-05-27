@@ -1,5 +1,6 @@
 import { getProviderConfig } from '@/lib/api-config'
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
+import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
 import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
@@ -106,6 +107,16 @@ function parseWxH(size: string | undefined): { w: number; h: number } | null {
 export class ComfyUIVideoGenerator extends BaseVideoGenerator {
   protected async doGenerate(params: VideoGenerateParams): Promise<GenerateResult> {
     const { userId, imageUrl, prompt, options = {} } = params
+    const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
+    if (isRemovedLegacyLtx23WorkflowKey(workflowKey)) {
+      return {
+        success: false,
+        error: `LEGACY_LTX23_WORKFLOW_REMOVED: ${workflowKey}`,
+      }
+    }
+
     const providerId = typeof options.provider === 'string' ? options.provider : 'comfyui'
     const { baseUrl } = await getProviderConfig(userId, providerId)
 
@@ -116,9 +127,6 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
       }
     }
 
-    const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
-      ? options.modelId.trim()
-      : COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
     const selectedWorkflow = resolveComfyUiVideoWorkflowSelection(workflowKey, prompt || '', {
       generationMode: options.generationMode,
       multiShotRange: options.multiShotRange,

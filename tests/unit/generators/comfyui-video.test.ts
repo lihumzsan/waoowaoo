@@ -107,4 +107,28 @@ describe('ComfyUI video generator', () => {
       ],
     }))
   })
+
+  it('rejects removed legacy LTX2.3 workflow keys instead of routing them', async () => {
+    const generator = new ComfyUIVideoGenerator()
+    getProviderConfigMock.mockResolvedValueOnce({
+      id: 'comfyui',
+      name: 'ComfyUI',
+      apiKey: '',
+      baseUrl: '',
+    })
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'legacy qshan prompt',
+      options: {
+        modelId: 'basevideo/demo/LTX2.3-fast',
+      },
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('LEGACY_LTX23_WORKFLOW_REMOVED')
+    expect(getProviderConfigMock).not.toHaveBeenCalled()
+    expect(runComfyUiVideoWorkflowMock).not.toHaveBeenCalled()
+  })
 })

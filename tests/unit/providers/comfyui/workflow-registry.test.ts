@@ -1254,6 +1254,445 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['30']?.inputs?.frame_rate).toEqual(['1', 0])
   })
 
+  it('bypasses Reroute editor nodes before prompt submission', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-reroute-bypass', {
+      nodes: [
+        {
+          id: 1,
+          type: 'VAELoader',
+          inputs: [
+            { name: 'vae_name', type: 'COMBO', widget: { name: 'vae_name' }, link: null },
+          ],
+          outputs: [{ name: 'VAE', type: 'VAE', links: [10] }],
+          widgets_values: ['ltxvae.safetensors'],
+        },
+        {
+          id: 2,
+          type: 'Reroute',
+          inputs: [{ name: '', type: '*', link: 10 }],
+          outputs: [{ name: '', type: 'VAE', links: [11] }],
+          widgets_values: [],
+        },
+        {
+          id: 3,
+          type: 'VAEDecode',
+          inputs: [
+            { name: 'samples', type: 'LATENT', link: null },
+            { name: 'vae', type: 'VAE', link: 11 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, '*'],
+        [11, 2, 0, 3, 1, 'VAE'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-reroute-bypass')
+
+    expect(graph['2']).toBeUndefined()
+    expect(graph['3']?.inputs?.vae).toEqual(['1', 0])
+  })
+
+  it('inlines PrimitiveNode scalar values into downstream inputs', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-primitive-node-inline', {
+      nodes: [
+        {
+          id: 1,
+          type: 'PrimitiveNode',
+          title: 'FRAMES',
+          inputs: [],
+          outputs: [
+            {
+              name: 'INT',
+              type: 'INT',
+              widget: { name: 'length' },
+              links: [10],
+            },
+          ],
+          widgets_values: [123],
+        },
+        {
+          id: 2,
+          type: 'EmptyLTXVLatentVideo',
+          inputs: [
+            { name: 'length', type: 'INT', link: 10 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, 'INT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-primitive-node-inline')
+
+    expect(graph['1']).toBeUndefined()
+    expect(graph['2']?.inputs?.length).toBe(123)
+  })
+
+  it('inlines TextInput helper nodes after prompt injection', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-text-input-inline', {
+      nodes: [
+        {
+          id: 1,
+          type: 'TextInput_',
+          inputs: [
+            { name: 'text', type: 'STRING', widget: { name: 'text' }, link: null },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [10] }],
+          widgets_values: ['old text'],
+        },
+        {
+          id: 2,
+          type: 'CLIPTextEncode',
+          inputs: [
+            { name: 'text', type: 'STRING', link: 10 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, 'STRING'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-text-input-inline', {
+      prompt: 'fresh qshan prompt',
+    })
+
+    expect(graph['1']).toBeUndefined()
+    expect(graph['2']?.inputs?.text).toBe('fresh qshan prompt')
+  })
+
+  it('precomputes BatchTextReplace and PreviewAny text helper chains', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-batch-text-replace-inline', {
+      nodes: [
+        {
+          id: 1,
+          type: 'PrimitiveStringMultiline',
+          inputs: [
+            { name: 'value', type: 'STRING', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [10] }],
+          widgets_values: ['make XX seconds with ZZ shots'],
+        },
+        {
+          id: 2,
+          type: 'ImpactInt',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [11] }],
+          widgets_values: [20],
+        },
+        {
+          id: 3,
+          type: 'IntToString',
+          inputs: [
+            { name: 'value', type: 'INT', link: 11 },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [12] }],
+          widgets_values: [],
+        },
+        {
+          id: 4,
+          type: 'BatchTextReplace',
+          inputs: [
+            { name: '输入文本', type: 'STRING', link: 10 },
+            { name: '查找文本1', type: 'STRING', widget: { name: '查找文本1' }, link: null },
+            { name: '替换为1', type: 'STRING', link: 12 },
+            { name: '查找文本2', type: 'STRING', widget: { name: '查找文本2' }, link: null },
+            { name: '替换为2', type: 'STRING', widget: { name: '替换为2' }, link: null },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [13] }],
+          widgets_values: ['XX', 'ZZ', '5'],
+        },
+        {
+          id: 5,
+          type: 'PreviewAny',
+          inputs: [
+            { name: 'source', type: '*', link: 13 },
+          ],
+          outputs: [{ name: '*', type: '*', links: [14] }],
+          widgets_values: [],
+        },
+        {
+          id: 6,
+          type: 'llama_cpp_instruct_adv',
+          inputs: [
+            { name: 'system_prompt', type: 'STRING', link: 14 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 4, 0, 'STRING'],
+        [11, 2, 0, 3, 0, 'INT'],
+        [12, 3, 0, 4, 2, 'STRING'],
+        [13, 4, 0, 5, 0, 'STRING'],
+        [14, 5, 0, 6, 0, 'STRING'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-batch-text-replace-inline')
+
+    expect(graph['4']).toBeUndefined()
+    expect(graph['5']).toBeUndefined()
+    expect(graph['6']?.inputs?.system_prompt).toBe('make 20 seconds with 5 shots')
+  })
+
+  it('precomputes ComfyMathExpression helper chains without submitting helper nodes', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-comfy-math-expression-inline', {
+      nodes: [
+        {
+          id: 1,
+          type: 'ImpactInt',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [10] }],
+          widgets_values: [9],
+        },
+        {
+          id: 2,
+          type: 'ImpactInt',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [11] }],
+          widgets_values: [4],
+        },
+        {
+          id: 3,
+          type: 'ComfyMathExpression',
+          inputs: [
+            { name: 'values.a', type: 'INT', link: 10 },
+            { name: 'values.b', type: 'INT', link: 11 },
+            { name: 'expression', type: 'STRING', widget: { name: 'expression' }, link: null },
+          ],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [12] }],
+          widgets_values: ['floor(a / b) + max(a, b)'],
+        },
+        {
+          id: 4,
+          type: 'PreviewAny',
+          inputs: [
+            { name: 'source', type: '*', link: 12 },
+          ],
+          outputs: [{ name: '*', type: '*', links: [13] }],
+          widgets_values: [],
+        },
+        {
+          id: 5,
+          type: 'SomeNumberConsumer',
+          inputs: [
+            { name: 'value', type: 'FLOAT', link: 13 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 3, 0, 'INT'],
+        [11, 2, 0, 3, 1, 'INT'],
+        [12, 3, 0, 4, 0, 'FLOAT'],
+        [13, 4, 0, 5, 0, 'FLOAT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-comfy-math-expression-inline')
+
+    expect(graph['3']).toBeUndefined()
+    expect(graph['4']).toBeUndefined()
+    expect(graph['5']?.inputs?.value).toBe(11)
+  })
+
+  it('does not evaluate global JavaScript identifiers in static numeric expressions', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-math-expression-no-global-js', {
+      nodes: [
+        {
+          id: 1,
+          type: 'MathExpression|pysssss',
+          inputs: [
+            { name: 'expression', type: 'STRING', widget: { name: 'expression' }, link: null },
+          ],
+          outputs: [{ name: 'FLOAT', type: 'FLOAT', links: [10] }],
+          widgets_values: ['Number.MAX_SAFE_INTEGER'],
+        },
+        {
+          id: 2,
+          type: 'PreviewAny',
+          inputs: [
+            { name: 'source', type: '*', link: 10 },
+          ],
+          outputs: [{ name: '*', type: '*', links: [11] }],
+          widgets_values: [],
+        },
+        {
+          id: 3,
+          type: 'SomeNumberConsumer',
+          inputs: [
+            { name: 'value', type: 'FLOAT', link: 11 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, 'FLOAT'],
+        [11, 2, 0, 3, 0, 'FLOAT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-math-expression-no-global-js')
+
+    expect(graph['1']?.class_type).toBe('MathExpression|pysssss')
+    expect(graph['2']).toBeUndefined()
+    expect(graph['3']?.inputs?.value).toEqual(['1', 0])
+  })
+
+  it('precomputes MathExpression pysssss direct input variables', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-pysssss-math-direct-inputs', {
+      nodes: [
+        {
+          id: 1,
+          type: 'ImpactInt',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [10] }],
+          widgets_values: [12],
+        },
+        {
+          id: 2,
+          type: 'ImpactInt',
+          inputs: [
+            { name: 'value', type: 'INT', widget: { name: 'value' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [11] }],
+          widgets_values: [2],
+        },
+        {
+          id: 3,
+          type: 'MathExpression|pysssss',
+          inputs: [
+            { name: 'a', type: 'INT', link: 10 },
+            { name: 'b', type: 'INT', link: 11 },
+            { name: 'expression', type: 'STRING', widget: { name: 'expression' }, link: null },
+          ],
+          outputs: [{ name: 'INT', type: 'INT', links: [12] }],
+          widgets_values: ['floor(a*b/8)*8+1'],
+        },
+        {
+          id: 4,
+          type: 'PreviewAny',
+          inputs: [
+            { name: 'source', type: '*', link: 12 },
+          ],
+          outputs: [{ name: '*', type: '*', links: [13] }],
+          widgets_values: [],
+        },
+        {
+          id: 5,
+          type: 'SomeNumberConsumer',
+          inputs: [
+            { name: 'value', type: 'INT', link: 13 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 3, 0, 'INT'],
+        [11, 2, 0, 3, 1, 'INT'],
+        [12, 3, 0, 4, 0, 'INT'],
+        [13, 4, 0, 5, 0, 'INT'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-pysssss-math-direct-inputs')
+
+    expect(graph['3']).toBeUndefined()
+    expect(graph['4']).toBeUndefined()
+    expect(graph['5']?.inputs?.value).toBe(25)
+  })
+
+  it('prunes non-media terminal display branches from video workflows', () => {
+    workflowRoot = createWorkflowRoot()
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+
+    writeWorkflow(workflowRoot, 'basevideo/prompt/test-prune-display-branch', {
+      nodes: [
+        {
+          id: 1,
+          type: 'LoadImage',
+          inputs: [
+            { name: 'image', type: 'COMBO', widget: { name: 'image' }, link: null },
+          ],
+          outputs: [{ name: 'IMAGE', type: 'IMAGE', links: [10] }],
+          widgets_values: ['source.png'],
+        },
+        {
+          id: 2,
+          type: 'VHS_VideoCombine',
+          inputs: [
+            { name: 'images', type: 'IMAGE', link: 10 },
+          ],
+          widgets_values: [],
+        },
+        {
+          id: 3,
+          type: 'BatchTextReplace',
+          inputs: [
+            { name: '输入文本', type: 'STRING', widget: { name: '输入文本' }, link: null },
+          ],
+          outputs: [{ name: 'STRING', type: 'STRING', links: [11] }],
+          widgets_values: ['debug text'],
+        },
+        {
+          id: 4,
+          type: 'PreviewAny',
+          inputs: [
+            { name: 'source', type: '*', link: 11 },
+          ],
+          widgets_values: [],
+        },
+      ],
+      links: [
+        [10, 1, 0, 2, 0, 'IMAGE'],
+        [11, 3, 0, 4, 0, 'STRING'],
+      ],
+    })
+
+    const graph = resolveComfyUiWorkflow('basevideo/prompt/test-prune-display-branch')
+
+    expect(graph['1']?.class_type).toBe('LoadImage')
+    expect(graph['2']?.class_type).toBe('VHS_VideoCombine')
+    expect(graph['3']).toBeUndefined()
+    expect(graph['4']).toBeUndefined()
+  })
+
   it('moves KJ lanczos resize nodes to cpu when the workflow requests gpu execution', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot

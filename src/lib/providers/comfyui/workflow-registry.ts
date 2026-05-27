@@ -27,16 +27,24 @@ const UI_DECORATION_NODE_TYPES = new Set([
 ])
 const DISPLAY_ONLY_OUTPUT_NODE_TYPES = new Set([
   'easyshowanything',
+  'previewany',
   'shellagentpluginoutputtext',
+  'showanythingmie',
 ])
 const PASSTHROUGH_OUTPUT_NODE_TYPES = new Set([
   ...DISPLAY_ONLY_OUTPUT_NODE_TYPES,
   'layerutilitypurgevramv2',
+  'reroute',
 ])
 const VIDEO_OUTPUT_NODE_TYPES = new Set([
   'vhsvideocombine',
   'saveanimatedwebp',
   'savevideo',
+])
+const MEDIA_OUTPUT_NODE_TYPES = new Set([
+  ...VIDEO_OUTPUT_NODE_TYPES,
+  'saveimage',
+  'saveaudio',
 ])
 const PREVIEW_OUTPUT_NODE_TYPES = new Set([
   'previewimage',
@@ -591,7 +599,8 @@ function convertUiWorkflowToApiGraph(raw: UiWorkflow): ComfyUiWorkflowGraph {
     let widgetIndex = 0
 
     for (const inputDef of inputDefs) {
-      const inputName = readTrimmedString(inputDef.name)
+      const rawInputName = readTrimmedString(inputDef.name)
+      const inputName = rawInputName || (classType === 'Reroute' ? '*' : '')
       if (!inputName) continue
 
       const hasWidgetValue = !!inputDef.widget
@@ -744,6 +753,416 @@ function bypassOptionalModelNodes(graph: ComfyUiWorkflowGraph): void {
     }
 
     delete graph[nodeId]
+  }
+}
+
+function readStaticInputValue(
+  graph: ComfyUiWorkflowGraph,
+  value: unknown,
+  seen: Set<string>,
+): unknown {
+  if (!isConnectionValue(value)) return value
+  const sourceNodeId = normalizeNodeId(value[0])
+  if (!sourceNodeId) return undefined
+  return resolveStaticNodeValue(graph, sourceNodeId, seen)
+}
+
+function readStaticInputByName(
+  graph: ComfyUiWorkflowGraph,
+  node: ComfyUiWorkflowGraphNode,
+  inputNames: string[],
+  seen: Set<string>,
+): unknown {
+  for (const inputName of inputNames) {
+    if (!Object.prototype.hasOwnProperty.call(node.inputs, inputName)) continue
+    const value = readStaticInputValue(graph, node.inputs[inputName], seen)
+    if (value !== undefined) return value
+  }
+  return undefined
+}
+
+function toStaticString(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return null
+}
+
+function toStaticNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim())
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+type StaticNumericToken =
+  | { type: 'number'; value: number }
+  | { type: 'identifier'; value: string }
+  | { type: 'operator'; value: '+' | '-' | '*' | '/' }
+  | { type: 'leftParen' }
+  | { type: 'rightParen' }
+  | { type: 'comma' }
+  | { type: 'eof' }
+
+const STATIC_NUMERIC_FUNCTIONS: Record<string, (values: number[]) => number | null> = {
+  floor: (values) => values.length === 1 ? Math.floor(values[0] ?? 0) : null,
+  ceil: (values) => values.length === 1 ? Math.ceil(values[0] ?? 0) : null,
+  round: (values) => values.length === 1 ? Math.round(values[0] ?? 0) : null,
+  min: (values) => values.length > 0 ? Math.min(...values) : null,
+  max: (values) => values.length > 0 ? Math.max(...values) : null,
+}
+
+function isIdentifierStart(char: string): boolean {
+  return /[a-zA-Z_]/.test(char)
+}
+
+function isIdentifierPart(char: string): boolean {
+  return /[a-zA-Z0-9_]/.test(char)
+}
+
+function tokenizeStaticNumericExpression(expression: string): StaticNumericToken[] | null {
+  const tokens: StaticNumericToken[] = []
+  let index = 0
+
+  while (index < expression.length) {
+    const char = expression[index] ?? ''
+    if (/\s/.test(char)) {
+      index += 1
+      continue
+    }
+
+    if (char === '+' || char === '-' || char === '*' || char === '/') {
+      tokens.push({ type: 'operator', value: char })
+      index += 1
+      continue
+    }
+    if (char === '(') {
+      tokens.push({ type: 'leftParen' })
+      index += 1
+      continue
+    }
+    if (char === ')') {
+      tokens.push({ type: 'rightParen' })
+      index += 1
+      continue
+    }
+    if (char === ',') {
+      tokens.push({ type: 'comma' })
+      index += 1
+      continue
+    }
+
+    if (isIdentifierStart(char)) {
+      const start = index
+      index += 1
+      while (index < expression.length && isIdentifierPart(expression[index] ?? '')) {
+        index += 1
+      }
+      tokens.push({ type: 'identifier', value: expression.slice(start, index) })
+      continue
+    }
+
+    if (/\d/.test(char) || (char === '.' && /\d/.test(expression[index + 1] ?? ''))) {
+      const start = index
+      if (char === '.') {
+        index += 1
+        while (index < expression.length && /\d/.test(expression[index] ?? '')) index += 1
+      } else {
+        while (index < expression.length && /\d/.test(expression[index] ?? '')) index += 1
+        if (expression[index] === '.') {
+          index += 1
+          while (index < expression.length && /\d/.test(expression[index] ?? '')) index += 1
+        }
+      }
+      if ((expression[index] === 'e' || expression[index] === 'E') && /[\d+-]/.test(expression[index + 1] ?? '')) {
+        const exponentStart = index
+        index += 1
+        if (expression[index] === '+' || expression[index] === '-') index += 1
+        const digitsStart = index
+        while (index < expression.length && /\d/.test(expression[index] ?? '')) index += 1
+        if (digitsStart === index) index = exponentStart
+      }
+      const value = Number(expression.slice(start, index))
+      if (!Number.isFinite(value)) return null
+      tokens.push({ type: 'number', value })
+      continue
+    }
+
+    return null
+  }
+
+  tokens.push({ type: 'eof' })
+  return tokens
+}
+
+function evaluateStaticNumericExpression(
+  expression: string,
+  variables: Record<string, number>,
+): number | null {
+  const tokens = tokenizeStaticNumericExpression(expression.trim())
+  if (!tokens) return null
+  let cursor = 0
+  const peek = () => tokens[cursor] ?? { type: 'eof' as const }
+  const consume = () => tokens[cursor++] ?? { type: 'eof' as const }
+
+  const parseExpression = (): number | null => parseAdditive()
+
+  const parsePrimary = (): number | null => {
+    const token = consume()
+    if (token.type === 'number') return token.value
+    if (token.type === 'leftParen') {
+      const value = parseExpression()
+      if (value === null || peek().type !== 'rightParen') return null
+      consume()
+      return value
+    }
+    if (token.type !== 'identifier') return null
+
+    if (peek().type === 'leftParen') {
+      consume()
+      const args: number[] = []
+      if (peek().type !== 'rightParen') {
+        while (true) {
+          const arg = parseExpression()
+          if (arg === null) return null
+          args.push(arg)
+          if (peek().type !== 'comma') break
+          consume()
+        }
+      }
+      if (peek().type !== 'rightParen') return null
+      consume()
+
+      const fn = STATIC_NUMERIC_FUNCTIONS[token.value]
+      if (!fn) return null
+      const result = fn(args)
+      return result !== null && Number.isFinite(result) ? result : null
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(variables, token.value)) return null
+    const value = variables[token.value]
+    return Number.isFinite(value) ? value : null
+  }
+
+  const parseUnary = (): number | null => {
+    const token = peek()
+    if (token.type === 'operator' && (token.value === '+' || token.value === '-')) {
+      consume()
+      const value = parseUnary()
+      if (value === null) return null
+      return token.value === '-' ? -value : value
+    }
+    return parsePrimary()
+  }
+
+  const parseMultiplicative = (): number | null => {
+    let value = parseUnary()
+    if (value === null) return null
+
+    while (true) {
+      const token = peek()
+      if (token.type !== 'operator' || (token.value !== '*' && token.value !== '/')) break
+      consume()
+      const right = parseUnary()
+      if (right === null) return null
+      value = token.value === '*' ? value * right : value / right
+      if (!Number.isFinite(value)) return null
+    }
+
+    return value
+  }
+
+  function parseAdditive(): number | null {
+    let value = parseMultiplicative()
+    if (value === null) return null
+
+    while (true) {
+      const token = peek()
+      if (token.type !== 'operator' || (token.value !== '+' && token.value !== '-')) break
+      consume()
+      const right = parseMultiplicative()
+      if (right === null) return null
+      value = token.value === '+' ? value + right : value - right
+      if (!Number.isFinite(value)) return null
+    }
+
+    return value
+  }
+
+  const result = parseExpression()
+  return result !== null && peek().type === 'eof' && Number.isFinite(result) ? result : null
+}
+
+function resolveStaticNodeValue(
+  graph: ComfyUiWorkflowGraph,
+  nodeId: string,
+  seen: Set<string>,
+): unknown {
+  if (seen.has(nodeId)) return undefined
+  const node = graph[nodeId]
+  if (!node) return undefined
+  seen.add(nodeId)
+
+  const normalizedClassType = normalizeUiDecorationNodeType(node.class_type)
+  if (
+    normalizedClassType === 'textinput'
+    || normalizedClassType === 'primitivestringmultiline'
+    || normalizedClassType === 'primitivestring'
+    || normalizedClassType === 'jjktext'
+  ) {
+    return readStaticInputByName(graph, node, ['text', 'value', 'input_string', 'prompt'], seen)
+  }
+  if (
+    normalizedClassType === 'impactint'
+    || normalizedClassType === 'primitiveint'
+    || normalizedClassType === 'int'
+    || normalizedClassType === 'intconstant'
+    || normalizedClassType === 'integer'
+    || normalizedClassType === 'floatconstant'
+    || normalizedClassType === 'float'
+  ) {
+    return readStaticInputByName(graph, node, ['value'], seen)
+  }
+  if (normalizedClassType === 'primitivenode') {
+    for (const value of Object.values(node.inputs)) {
+      const resolved = readStaticInputValue(graph, value, seen)
+      if (resolved !== undefined && !isConnectionValue(resolved)) return resolved
+    }
+    return undefined
+  }
+  if (normalizedClassType === 'toint') {
+    const value = toStaticNumber(readStaticInputByName(graph, node, ['any', 'value'], seen))
+    if (value === null) return undefined
+    const roundMethod = toStaticString(node.inputs.round_method)?.trim().toLowerCase()
+    if (roundMethod === 'floor') return Math.floor(value)
+    if (roundMethod === 'ceil') return Math.ceil(value)
+    return Math.round(value)
+  }
+  if (normalizedClassType === 'inttostring') {
+    const value = toStaticNumber(readStaticInputByName(graph, node, ['value', 'int'], seen))
+    return value === null ? undefined : String(Math.trunc(value))
+  }
+  if (normalizedClassType === 'numberclamp') {
+    const value = toStaticNumber(readStaticInputByName(graph, node, ['value'], seen))
+    if (value === null) return undefined
+    const min = toStaticNumber(readStaticInputByName(graph, node, ['min_value', 'min'], seen))
+    const max = toStaticNumber(readStaticInputByName(graph, node, ['max_value', 'max'], seen))
+    return Math.min(max ?? value, Math.max(min ?? value, value))
+  }
+  if (
+    normalizedClassType === 'comfymathexpression'
+    || normalizedClassType === 'commymathexpression'
+    || normalizedClassType === 'mathexpressionpysssss'
+  ) {
+    const expression = toStaticString(readStaticInputByName(graph, node, ['expression'], seen))
+    if (!expression) return undefined
+    const variables: Record<string, number> = {}
+    for (const [field, rawValue] of Object.entries(node.inputs)) {
+      if (field === 'expression') continue
+      const variableName = field.startsWith('values.')
+        ? field.slice('values.'.length).trim()
+        : field.trim()
+      if (!/^[a-zA-Z_]\w*$/.test(variableName)) continue
+      const value = toStaticNumber(readStaticInputValue(graph, rawValue, seen))
+      if (value !== null) variables[variableName] = value
+    }
+    const result = evaluateStaticNumericExpression(expression, variables)
+    return result === null ? undefined : result
+  }
+  if (normalizedClassType === 'batchtextreplace') {
+    const source = toStaticString(readStaticInputByName(graph, node, ['输入文本', 'input', 'text', 'source'], seen))
+    if (source === null) return undefined
+    let output = source
+    for (let index = 1; index <= 20; index += 1) {
+      const search = toStaticString(readStaticInputByName(graph, node, [`查找文本${index}`, `find${index}`, `search${index}`], seen))
+      if (!search) continue
+      const replacement = toStaticString(readStaticInputByName(graph, node, [`替换为${index}`, `replace${index}`, `replacement${index}`], seen)) ?? ''
+      output = output.split(search).join(replacement)
+    }
+    return output
+  }
+  if (
+    normalizedClassType === 'previewany'
+    || normalizedClassType === 'showanythingmie'
+    || normalizedClassType === 'easyshowanything'
+  ) {
+    return readStaticInputByName(graph, node, ['source', 'anything', '*', 'text', 'value'], seen)
+  }
+
+  return undefined
+}
+
+function inlineValueHelperNodes(graph: ComfyUiWorkflowGraph): void {
+  const inlineNodeTypes = new Set([
+    'batchtextreplace',
+    'comfymathexpression',
+    'easyshowanything',
+    'inttostring',
+    'mathexpressionpysssss',
+    'numberclamp',
+    'previewany',
+    'primitivenode',
+    'showanythingmie',
+    'textinput',
+    'toint',
+  ])
+  let changed = true
+  while (changed) {
+    changed = false
+    const inlineNodeIds = Object.entries(graph)
+      .filter(([, node]) => inlineNodeTypes.has(normalizeUiDecorationNodeType(node.class_type)))
+      .map(([nodeId]) => nodeId)
+      .sort(compareNodeIds)
+
+    for (const nodeId of inlineNodeIds) {
+      const node = graph[nodeId]
+      if (!node) continue
+
+      const replacement = resolveStaticNodeValue(graph, nodeId, new Set())
+      if (replacement === undefined || isConnectionValue(replacement)) continue
+
+      replaceConsumers(graph, nodeId, replacement)
+      delete graph[nodeId]
+      changed = true
+    }
+  }
+}
+
+function collectMediaOutputNodeIds(graph: ComfyUiWorkflowGraph): string[] {
+  return Object.entries(graph)
+    .filter(([, node]) => MEDIA_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type)))
+    .map(([nodeId]) => nodeId)
+    .sort(compareNodeIds)
+}
+
+function collectInputConnectionNodeIds(node: ComfyUiWorkflowGraphNode): string[] {
+  if (!isRecord(node.inputs)) return []
+  return Object.values(node.inputs)
+    .filter(isConnectionValue)
+    .map((value) => normalizeNodeId(value[0]))
+    .filter((nodeId): nodeId is string => !!nodeId)
+}
+
+function pruneUnreachableFromMediaOutputs(graph: ComfyUiWorkflowGraph): void {
+  const mediaOutputNodeIds = collectMediaOutputNodeIds(graph)
+  if (mediaOutputNodeIds.length === 0) return
+
+  const reachableNodeIds = new Set<string>()
+  const stack = [...mediaOutputNodeIds]
+  while (stack.length > 0) {
+    const nodeId = stack.pop()
+    if (!nodeId || reachableNodeIds.has(nodeId)) continue
+    const node = graph[nodeId]
+    if (!node) continue
+    reachableNodeIds.add(nodeId)
+    stack.push(...collectInputConnectionNodeIds(node))
+  }
+
+  for (const nodeId of Object.keys(graph)) {
+    if (!reachableNodeIds.has(nodeId)) {
+      delete graph[nodeId]
+    }
   }
 }
 
@@ -1687,7 +2106,10 @@ export function resolveComfyUiWorkflow(
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
   applyLtx23WorkflowProfileControls(graph, workflowKey, inject)
   applySaveOutputHeuristics(graph)
+  inlineValueHelperNodes(graph)
+  bypassPassthroughOutputNodes(graph)
   removePreviewImageOutputsFromVideoGraphs(graph)
+  pruneUnreachableFromMediaOutputs(graph)
   assignRandomSeedValues(graph)
   return graph
 }

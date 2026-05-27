@@ -36,7 +36,7 @@ export type VideoReadinessPanelLike = PanelContinuityPanelLike & {
 }
 
 const SHORT_DIALOGUE_CHARACTER_LIMIT = 6
-const SHORT_DIALOGUE_LONG_AUDIO_MS = 4_500
+const SHORT_DIALOGUE_LONG_AUDIO_MS = 5_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)

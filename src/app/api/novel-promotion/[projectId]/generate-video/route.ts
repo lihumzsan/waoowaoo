@@ -26,6 +26,7 @@ import {
   resolveLtx23WorkflowRoute,
   type Ltx23WorkflowRoutingResult,
 } from '@/lib/providers/comfyui/ltx23-workflow-router'
+import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -58,12 +59,23 @@ function isSeedance2Model(modelKey: string): boolean {
     )
 }
 
+function rejectRemovedLegacyLtx23ModelKey(modelKey: string | null | undefined) {
+  if (!isRemovedLegacyLtx23WorkflowKey(modelKey)) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_LTX23_WORKFLOW_REMOVED',
+    field: 'videoModel',
+    details: { model: modelKey },
+  })
+}
+
 function resolveVideoModelKeyFromPayload(payload: Record<string, unknown>): string | null {
   const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
   if (firstLast && typeof firstLast.flModel === 'string' && parseModelKeyStrict(firstLast.flModel)) {
+    rejectRemovedLegacyLtx23ModelKey(firstLast.flModel)
     return firstLast.flModel
   }
   if (typeof payload.videoModel === 'string' && parseModelKeyStrict(payload.videoModel)) {
+    rejectRemovedLegacyLtx23ModelKey(payload.videoModel)
     return payload.videoModel
   }
   return null
@@ -76,6 +88,7 @@ function requireVideoModelKeyFromPayload(payload: unknown): string {
       field: 'videoModel',
     })
   }
+  rejectRemovedLegacyLtx23ModelKey(payload.videoModel)
   return payload.videoModel
 }
 
