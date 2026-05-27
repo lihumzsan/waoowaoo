@@ -17,6 +17,7 @@ import type {
   ProjectPanel,
   ProjectShot,
   ProjectStoryboard,
+  ProjectStoryboardBlockingArtifact,
   ProjectVideoGroup,
 } from '@/types/project'
 import type {
@@ -787,6 +788,22 @@ function spatialProfilesFromStrategyOutput(
   })
 }
 
+function spatialProfileStrategyOutputFromArtifacts(
+  artifacts: readonly ProjectStoryboardBlockingArtifact[] | null | undefined,
+): Record<string, unknown> {
+  const locations = (artifacts ?? [])
+    .filter((artifact) => artifact.kind === 'spatial_profile')
+    .sort((left, right) => (left.groupIndex ?? 0) - (right.groupIndex ?? 0))
+    .flatMap((artifact) => {
+      const metadata = readJsonRecord(artifact.metadataJson)
+      return Object.keys(metadata).length > 0 ? [metadata] : []
+    })
+  return {
+    strategy: 'spatial_text_blocking',
+    locations,
+  }
+}
+
 function selectedLocationImage(
   locations: readonly Location[],
   locationId: string | null | undefined,
@@ -829,7 +846,7 @@ function cameraPlansFromValue(cameraPlanOutput: unknown): NonNullable<WorkspaceC
 function createSpaceConsistencyDetails(storyboard: ProjectStoryboard): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']> {
   const plan = readJsonRecord(parseJson(storyboard.photographyPlan))
   const cameraPlans = cameraPlansFromValue(plan.cameraPlanOutput)
-  const spatialProfiles = spatialProfilesFromStrategyOutput(plan.strategyOutput)
+  const spatialProfiles = spatialProfilesFromStrategyOutput(spatialProfileStrategyOutputFromArtifacts(storyboard.blockingArtifacts))
   return {
     storyboardId: storyboard.id,
     stage: stringValue(plan.currentStage),

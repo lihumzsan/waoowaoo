@@ -105,18 +105,23 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
   })
   const matchingStoryboards = storyboards.flatMap((storyboard) => {
     const plan = parseJsonRecord(storyboard.photographyPlan)
-    const sourceSnapshot = readRecord(plan.sourceSnapshot)
-    const sourceEditScriptId = readString(sourceSnapshot.sourceEditScriptId)
+    const sourceEditScriptId = readString(plan.sourceEditScriptId)
     if (sourceEditScriptId !== editScriptId) return []
     return [{ storyboardId: storyboard.id, plan }]
   })
   const ready = matchingStoryboards.find((item) => spatialProfileReady(readString(item.plan.currentStage)))
-  if (!ready || !ready.plan.strategyOutput || typeof ready.plan.strategyOutput !== 'object' || Array.isArray(ready.plan.strategyOutput)) {
+  if (!ready) {
     throw new ApiError('CONFLICT', {
       code: 'LOCATION_SPATIAL_PROFILE_REQUIRED',
       message: 'Ready location spatial profiles are required before generating storyboard panels',
     })
   }
+  const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    editScriptId,
+    userId: input.userId,
+  })
   return await submitTask({
     userId: input.userId,
     locale: input.locale,
@@ -129,7 +134,10 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     operationSource: 'project-ui',
     requestId: input.requestId || null,
     payload: {
+      editScriptId,
       storyboardId: ready.storyboardId,
+      sourceSnapshot,
+      modelConfigSnapshot,
     },
     dedupeKey: `edit_script_storyboard_camera_plan:${ready.storyboardId}`,
   })

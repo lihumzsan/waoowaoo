@@ -8,6 +8,8 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => ({})),
   },
   projectStoryboardBlockingArtifact: {
+    deleteMany: vi.fn(async () => ({})),
+    createMany: vi.fn(async () => ({})),
     update: vi.fn(async () => ({})),
   },
   $transaction: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock('@/lib/edit-script/storyboard-consistency/model-generation', () => model
 vi.mock('@/lib/edit-script/storyboard-consistency/persistence', () => persistenceMock)
 
 function buildJob(): Job<TaskJobData> {
+  const sourceSnapshot = buildSourceSnapshotWithLocation()
   return {
     data: {
       taskId: 'task-camera-plan-1',
@@ -59,7 +62,13 @@ function buildJob(): Job<TaskJobData> {
       targetType: 'ProjectStoryboard',
       targetId: 'storyboard-1',
       payload: {
+        editScriptId: 'edit-script-1',
         storyboardId: 'storyboard-1',
+        sourceSnapshot,
+        modelConfigSnapshot: {
+          analysisModel: 'analysis-model-1',
+          storyboardModel: 'storyboard-model-1',
+        },
       },
       userId: 'user-1',
       trace: {
@@ -132,22 +141,60 @@ function buildSourceSnapshot() {
   }
 }
 
+function buildSourceSnapshotWithLocation() {
+  return {
+    ...buildSourceSnapshot(),
+    assets: [{
+      requirementId: 'loc-1',
+      kind: 'location',
+      name: 'Temple courtyard',
+      description: 'courtyard with a flower bed',
+      shotNumbers: [1],
+      targetId: 'location-1',
+      previewImageUrl: 'https://cdn.example.com/courtyard.png',
+      spatialProfile: {
+        schemaVersion: 1,
+        sceneSummary: '左后方是木门，中景有香炉。',
+        anchors: [{
+          id: 'anchor_left_door',
+          label: '左侧木门',
+          screenArea: '画面左后方',
+          depthLayer: '背景',
+          spatialRelations: ['木门右侧是长桌'],
+        }],
+        placementZones: [{
+          id: 'zone_left_door',
+          label: '左侧木门内侧靠墙的位置',
+          absolutePosition: '画面左后方靠墙',
+          nearAnchors: ['左侧木门'],
+          depthLayer: '背景',
+          visibility: '适合全身出现',
+          spatialRelations: ['位于香炉后方'],
+        }],
+        depthLayout: {
+          foreground: '石板地面',
+          midground: '香炉',
+          background: '木门和墙面',
+        },
+        lightingDirection: '光线从右上方进入',
+      },
+    }],
+  }
+}
+
 describe('edit script storyboard camera plan handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    const sourceSnapshot = buildSourceSnapshot()
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) => callback(prismaMock))
+    const sourceSnapshot = buildSourceSnapshotWithLocation()
     prismaMock.projectStoryboard.findFirst.mockResolvedValue({
       id: 'storyboard-1',
       photographyPlan: JSON.stringify({
         currentStage: 'spatial_profile_ready',
-        sourceSnapshot,
+        sourceEditScriptId: sourceSnapshot.sourceEditScriptId,
         modelConfigSnapshot: {
           analysisModel: 'analysis-model-1',
           storyboardModel: 'storyboard-model-1',
-        },
-        strategyOutput: {
-          strategy: 'spatial_text_blocking',
-          locations: [],
         },
       }),
       blockingArtifacts: [],
@@ -211,6 +258,74 @@ describe('edit script storyboard camera plan handler', () => {
       { id: 'panel-1', panelIndex: 0 },
     ])
     workerUtilsMock.toSignedUrlIfCos.mockReturnValue('https://cdn.example.com/overlay-signed.png')
+  })
+
+  it('keeps large spatial profile data out of photographyPlan during prepare', async () => {
+    const { handleEditScriptStoryboardPrepareTask } = await import(
+      '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
+    )
+    const sourceSnapshot = buildSourceSnapshotWithLocation()
+    persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
+      id: 'storyboard-prepare-1',
+    })
+    submitterMock.submitTask.mockResolvedValue({
+      taskId: 'camera-plan-task-1',
+    })
+    const job = {
+      data: {
+        ...buildJob().data,
+        type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+        targetType: 'ProjectEditScript',
+        targetId: 'edit-script-1',
+        payload: {
+          editScriptId: 'edit-script-1',
+          sourceSnapshot,
+          modelConfigSnapshot: {
+            analysisModel: 'analysis-model-1',
+            storyboardModel: 'storyboard-model-1',
+          },
+        },
+      },
+    } as unknown as Job<TaskJobData>
+
+    const result = await handleEditScriptStoryboardPrepareTask(job)
+
+    expect(result).toEqual({
+      storyboardId: 'storyboard-prepare-1',
+      spatialProfileCount: 1,
+      nextTaskId: 'camera-plan-task-1',
+    })
+    expect(prismaMock.projectStoryboardBlockingArtifact.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
+        storyboardId: 'storyboard-prepare-1',
+        kind: 'spatial_profile',
+        metadataJson: expect.objectContaining({
+          name: 'Temple courtyard',
+          spatialProfile: expect.objectContaining({
+            sceneSummary: '左后方是木门，中景有香炉。',
+          }),
+        }),
+      })],
+    })
+    const shellPlan = persistenceMock.upsertEditScriptStoryboardShell.mock.calls[0]?.[0]?.photographyPlan as Record<string, unknown>
+    expect(shellPlan).toMatchObject({
+      currentStage: 'preparing',
+      sourceEditScriptId: 'edit-script-1',
+    })
+    expect(shellPlan).not.toHaveProperty('sourceSnapshot')
+    expect(shellPlan).not.toHaveProperty('strategyOutput')
+    const updateCalls = prismaMock.projectStoryboard.update.mock.calls as unknown as Array<[{
+      readonly data?: {
+        readonly photographyPlan?: string
+      }
+    }]>
+    const updatePlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan)) as Record<string, unknown>
+    expect(updatePlan).toMatchObject({
+      currentStage: 'spatial_profile_ready',
+      sourceEditScriptId: 'edit-script-1',
+    })
+    expect(updatePlan).not.toHaveProperty('sourceSnapshot')
+    expect(updatePlan).not.toHaveProperty('strategyOutput')
   })
 
   it('persists panel prompts without enqueueing panel image tasks', async () => {

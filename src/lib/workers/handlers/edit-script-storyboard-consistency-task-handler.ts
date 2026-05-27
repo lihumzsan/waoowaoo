@@ -1,4 +1,5 @@
 import { type Job } from 'bullmq'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
@@ -64,23 +65,6 @@ function parsePayload(job: Job<TaskJobData>): ParsedPayload {
   }
 }
 
-function parseSnapshotFromStoryboard(storyboard: StoryboardWithArtifacts): StoryboardConsistencySourceSnapshot {
-  const plan = readRecord(parseJson(storyboard.photographyPlan))
-  const sourceSnapshot = storyboardConsistencySourceSnapshotSchema.safeParse(plan.sourceSnapshot)
-  if (!sourceSnapshot.success) throw new Error('EDIT_SCRIPT_STORYBOARD_SOURCE_SNAPSHOT_INVALID')
-  return sourceSnapshot.data
-}
-
-function parseModelConfigFromStoryboard(storyboard: StoryboardWithArtifacts): StoryboardConsistencyModelConfigSnapshot {
-  const plan = readRecord(parseJson(storyboard.photographyPlan))
-  const modelConfig = readRecord(plan.modelConfigSnapshot)
-  const analysisModel = readString(modelConfig.analysisModel)
-  const storyboardModel = readString(modelConfig.storyboardModel)
-  if (!analysisModel) throw new Error('EDIT_SCRIPT_STORYBOARD_ANALYSIS_MODEL_REQUIRED')
-  if (!storyboardModel) throw new Error('EDIT_SCRIPT_STORYBOARD_MODEL_REQUIRED')
-  return { analysisModel, storyboardModel }
-}
-
 function parseJson(value: string | null): unknown {
   if (!value) return {}
   try {
@@ -94,7 +78,6 @@ function buildPhotographyPlan(input: {
   readonly stage: string
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
-  readonly strategyOutput?: unknown
   readonly cameraPlanOutput?: unknown
   readonly errorMessage?: string | null
 }) {
@@ -103,9 +86,8 @@ function buildPhotographyPlan(input: {
     sourceType: 'editScriptStoryboard',
     consistencyMode: 'spatial_text_blocking',
     currentStage: input.stage,
-    sourceSnapshot: input.sourceSnapshot,
+    sourceEditScriptId: input.sourceSnapshot.sourceEditScriptId,
     modelConfigSnapshot: input.modelConfigSnapshot,
-    strategyOutput: input.strategyOutput ?? null,
     cameraPlanOutput: input.cameraPlanOutput ?? null,
     errorMessage: input.errorMessage ?? null,
   }
@@ -132,6 +114,32 @@ function buildSpatialProfileStrategyOutput(snapshot: StoryboardConsistencySource
     strategy: 'spatial_text_blocking',
     locations,
   }
+}
+
+function toPrismaJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
+
+function buildSpatialProfileArtifactRows(input: {
+  readonly storyboardId: string
+  readonly strategyOutput: Record<string, unknown>
+}): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] {
+  const locations = Array.isArray(input.strategyOutput.locations) ? input.strategyOutput.locations : []
+  return locations.flatMap((location, index): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] => {
+    if (!location || typeof location !== 'object' || Array.isArray(location)) return []
+    return [{
+      storyboardId: input.storyboardId,
+      kind: 'spatial_profile',
+      sourceVideoBlockId: null,
+      groupIndex: index,
+      prompt: null,
+      imageUrl: null,
+      candidateImages: null,
+      metadataJson: toPrismaJson(location),
+      status: 'completed',
+      errorMessage: null,
+    }]
+  })
 }
 
 function compactCameraPlanPanelForStorage(value: unknown): Record<string, unknown> | null {
@@ -222,8 +230,15 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
     })
     storyboardId = storyboard.id
     const strategyOutput = buildSpatialProfileStrategyOutput(parsed.sourceSnapshot)
+    const spatialProfileArtifactRows = buildSpatialProfileArtifactRows({
+      storyboardId: storyboard.id,
+      strategyOutput,
+    })
     await prisma.$transaction(async (tx) => {
       await tx.projectStoryboardBlockingArtifact.deleteMany({ where: { storyboardId: storyboard.id } })
+      if (spatialProfileArtifactRows.length > 0) {
+        await tx.projectStoryboardBlockingArtifact.createMany({ data: spatialProfileArtifactRows })
+      }
       await tx.projectStoryboard.update({
         where: { id: storyboard.id },
         data: {
@@ -231,7 +246,6 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
             stage: 'spatial_profile_ready',
             sourceSnapshot: parsed.sourceSnapshot,
             modelConfigSnapshot: parsed.modelConfigSnapshot,
-            strategyOutput,
           })),
         },
       })
@@ -282,13 +296,11 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
   if (!storyboardId) throw new Error('EDIT_SCRIPT_STORYBOARD_ID_REQUIRED')
   const storyboard = await loadStoryboardWithArtifacts(storyboardId, job.data.projectId)
   if (!storyboard) throw new Error('EDIT_SCRIPT_STORYBOARD_NOT_FOUND')
-  const snapshot = parseSnapshotFromStoryboard(storyboard)
-  const modelConfig = parseModelConfigFromStoryboard(storyboard)
+  const parsed = parsePayload(job)
+  const snapshot = parsed.sourceSnapshot
+  const modelConfig = parsed.modelConfigSnapshot
   const plan = readRecord(parseJson(storyboard.photographyPlan))
-  const strategyOutput = plan.strategyOutput
-  if (!strategyOutput || typeof strategyOutput !== 'object' || Array.isArray(strategyOutput)) {
-    throw new Error('LOCATION_SPATIAL_PROFILE_REQUIRED')
-  }
+  const strategyOutput = buildSpatialProfileStrategyOutput(snapshot)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_camera_plan' })
   try {
     const generated = await generateCameraPlan({
