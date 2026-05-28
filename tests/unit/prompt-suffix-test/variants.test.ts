@@ -46,15 +46,39 @@ describe('prompt suffix test variants', () => {
     expect(build('medium_structured').length).toBeGreaterThan(build('json_minimal').length)
   })
 
-  it('builds complete final prompts around the same storyboard json input', () => {
+  it('builds the full baseline around the raw storyboard json input', () => {
     const current = build('current_full')
-    const short = build('short_structured')
 
     expect(current).toContain('【分镜数据】')
     expect(current).toContain(DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON.zh)
     expect(current).toContain('系统 Style Bible 视觉要求')
-    expect(short).toContain(DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON.zh)
-    expect(short).toContain('严格按完整 JSON 执行')
+  })
+
+  it('removes non-image fields from compressed variants instead of resending the full json', () => {
+    const short = build('short_structured')
+    const direct = build('json_direct')
+
+    expect(short).toContain('严格按裁剪 JSON 执行')
+    expect(short).toContain('"image_prompt"')
+    expect(short).toContain('"shot_blocking"')
+    expect(short).toContain('"spatial_profile"')
+    expect(short).not.toContain('"video_prompt"')
+    expect(short).not.toContain('"photography_rules"')
+    expect(short).not.toContain(DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON.zh)
+    expect(direct).toContain('"image_prompt"')
+    expect(direct).toContain('"shot_blocking"')
+    expect(direct).not.toContain('"spatial_profile"')
+    expect(direct).not.toContain('系统 Style Bible 视觉要求')
+  })
+
+  it('uses only panel image_prompt for the minimal variant', () => {
+    const minimal = build('json_minimal')
+
+    expect(minimal).toContain('单张电影分镜图，写实东方自然主义')
+    expect(minimal).toContain('禁止文字，禁止字幕，禁止编号，禁止水印，禁止logo。')
+    expect(minimal).not.toContain('{')
+    expect(minimal).not.toContain('shot_blocking')
+    expect(minimal).not.toContain('系统 Style Bible 视觉要求')
   })
 
   it('fails explicitly when storyboard json is empty', () => {

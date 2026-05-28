@@ -47,8 +47,8 @@ export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
       en: 'Medium Structured Version',
     },
     description: {
-      zh: '保留完整 JSON 和关键优先级，合并参考图、摄影和风格规则。',
-      en: 'Keeps full JSON and key priorities, while merging reference, camera, and style rules.',
+      zh: '裁掉 video_prompt 和大段 photography_rules，只保留图片生成需要的主要分镜、blocking、空间和参考信息。',
+      en: 'Removes video_prompt and large photography_rules blocks, keeping only core image, blocking, spatial, and reference data.',
     },
   },
   {
@@ -58,8 +58,8 @@ export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
       en: 'Short Rules Version',
     },
     description: {
-      zh: '完整 JSON 不变，只保留单张图、无文字、blocking、空间档案、风格四类规则。',
-      en: 'Keeps the full JSON, with only single-frame, no-text, blocking, spatial-profile, and style rules.',
+      zh: '进一步裁剪 JSON，只保留最终图片提示词、镜头定位、场景空间档案和角色外观。',
+      en: 'Further trims JSON to final image prompt, shot blocking, spatial profile, and character appearance.',
     },
   },
   {
@@ -69,8 +69,8 @@ export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
       en: 'JSON Direct Version',
     },
     description: {
-      zh: '把 JSON 作为主要指令，只在前后加极短执行规则。',
-      en: 'Uses JSON as the main instruction, with very short execution rules before and after it.',
+      zh: '极短 JSON，只保留最终图片提示词和本镜头定位数据。',
+      en: 'Very short JSON with only the final image prompt and this shot blocking data.',
     },
   },
   {
@@ -80,8 +80,8 @@ export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
       en: 'Minimal JSON Version',
     },
     description: {
-      zh: '只发送任务、画幅、完整 JSON 和必要禁用项，用作极限对照。',
-      en: 'Only sends task, aspect ratio, full JSON, and required bans as an extreme control.',
+      zh: '只发送 panel.image_prompt，也就是图片模型实际最需要执行的最终提示词。',
+      en: 'Sends only panel.image_prompt, the final prompt the image model most directly needs.',
     },
   },
 ]
@@ -91,6 +91,134 @@ function compactLines(lines: ReadonlyArray<string | null | undefined>): string {
     .map((line) => (typeof line === 'string' ? line.trim() : ''))
     .filter(Boolean)
     .join('\n\n')
+}
+
+type JsonObject = Record<string, unknown>
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseStoryboardJson(value: string): JsonObject {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`PROMPT_SUFFIX_TEST_STORYBOARD_JSON_INVALID:${message}`)
+  }
+  if (!isJsonObject(parsed)) throw new Error('PROMPT_SUFFIX_TEST_STORYBOARD_JSON_OBJECT_REQUIRED')
+  return parsed
+}
+
+function readObject(source: JsonObject, key: string): JsonObject | null {
+  const value = source[key]
+  return isJsonObject(value) ? value : null
+}
+
+function readString(source: JsonObject, key: string): string | null {
+  const value = source[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readArray(source: JsonObject, key: string): readonly unknown[] | null {
+  const value = source[key]
+  return Array.isArray(value) ? value : null
+}
+
+function copyString(target: JsonObject, source: JsonObject, key: string): void {
+  const value = readString(source, key)
+  if (value) target[key] = value
+}
+
+function copyArray(target: JsonObject, source: JsonObject, key: string): void {
+  const value = readArray(source, key)
+  if (value) target[key] = value
+}
+
+function copyObject(target: JsonObject, source: JsonObject, key: string): void {
+  const value = readObject(source, key)
+  if (value) target[key] = value
+}
+
+function readPanel(parsed: JsonObject): JsonObject {
+  const panel = readObject(parsed, 'panel')
+  if (!panel) throw new Error('PROMPT_SUFFIX_TEST_PANEL_REQUIRED')
+  return panel
+}
+
+function readContext(parsed: JsonObject): JsonObject | null {
+  return readObject(parsed, 'context')
+}
+
+function readFinalImagePrompt(parsed: JsonObject): string {
+  const imagePrompt = readString(readPanel(parsed), 'image_prompt')
+  if (!imagePrompt) throw new Error('PROMPT_SUFFIX_TEST_IMAGE_PROMPT_REQUIRED')
+  return imagePrompt
+}
+
+function stringifyPromptJson(value: JsonObject): string {
+  return JSON.stringify(value, null, 2)
+}
+
+function buildMediumStoryboardJson(rawJson: string): string {
+  const parsed = parseStoryboardJson(rawJson)
+  const panel = readPanel(parsed)
+  const context = readContext(parsed)
+  const reducedPanel: JsonObject = {}
+  copyString(reducedPanel, panel, 'panel_id')
+  copyString(reducedPanel, panel, 'shot_type')
+  copyString(reducedPanel, panel, 'camera_move')
+  copyString(reducedPanel, panel, 'description')
+  copyString(reducedPanel, panel, 'image_prompt')
+  copyString(reducedPanel, panel, 'location')
+  copyArray(reducedPanel, panel, 'characters')
+  copyString(reducedPanel, panel, 'source_text')
+  copyObject(reducedPanel, panel, 'shot_blocking')
+
+  const reduced: JsonObject = { panel: reducedPanel }
+  if (context) {
+    const reducedContext: JsonObject = {}
+    copyArray(reducedContext, context, 'character_appearances')
+    copyObject(reducedContext, context, 'location_reference')
+    copyArray(reducedContext, context, 'reference_images')
+    reduced.context = reducedContext
+  }
+  return stringifyPromptJson(reduced)
+}
+
+function buildShortStoryboardJson(rawJson: string): string {
+  const parsed = parseStoryboardJson(rawJson)
+  const panel = readPanel(parsed)
+  const context = readContext(parsed)
+  const reducedPanel: JsonObject = {}
+  copyString(reducedPanel, panel, 'image_prompt')
+  copyObject(reducedPanel, panel, 'shot_blocking')
+
+  const reduced: JsonObject = { panel: reducedPanel }
+  if (context) {
+    const reducedContext: JsonObject = {}
+    copyArray(reducedContext, context, 'character_appearances')
+    const locationReference = readObject(context, 'location_reference')
+    if (locationReference) {
+      const reducedLocation: JsonObject = {}
+      copyString(reducedLocation, locationReference, 'name')
+      copyObject(reducedLocation, locationReference, 'spatial_profile')
+      reducedContext.location_reference = reducedLocation
+    }
+    reduced.context = reducedContext
+  }
+  return stringifyPromptJson(reduced)
+}
+
+function buildDirectStoryboardJson(rawJson: string): string {
+  const parsed = parseStoryboardJson(rawJson)
+  const panel = readPanel(parsed)
+  const reducedPanel: JsonObject = {
+    image_prompt: readFinalImagePrompt(parsed),
+  }
+  copyObject(reducedPanel, panel, 'shot_blocking')
+  return stringifyPromptJson({ panel: reducedPanel })
 }
 
 function renderCurrentFull(input: PromptLengthInput, locale: Locale): string {
@@ -130,8 +258,8 @@ function renderMediumStructured(input: PromptLengthInput, locale: Locale): strin
   if (locale === 'en') {
     return compactLines([
       `Generate one cinematic storyboard image, aspect ratio ${input.aspectRatio}. No text, subtitles, labels, numbers, watermark, logo, collage, or multi-frame output.`,
-      'Use the JSON as the binding instruction. Prioritize panel.shot_blocking for character placement, relative position, eyeline, camera placement, and composition. Use context.location_reference.spatial_profile as factual spatial evidence. Use reference images only for identity, appearance, layout, anchors, and object form.',
-      `Storyboard JSON:\n${input.storyboardJson}`,
+      'Use this reduced JSON as the binding instruction. Prioritize image_prompt and shot_blocking. Use spatial_profile only as factual scene-space evidence.',
+      `Reduced storyboard JSON:\n${buildMediumStoryboardJson(input.storyboardJson)}`,
       `Source text priority:\n${input.sourceText}`,
       `Style:\n${input.styleText}`,
       input.styleBibleText,
@@ -139,8 +267,8 @@ function renderMediumStructured(input: PromptLengthInput, locale: Locale): strin
   }
   return compactLines([
     `生成一张电影分镜图，画幅 ${input.aspectRatio}。禁止文字、字幕、标签、编号、水印、logo、拼图和多格图。`,
-    '以下 JSON 是约束性指令。优先执行 panel.shot_blocking 中的人物位置、相对关系、视线、机位和构图；context.location_reference.spatial_profile 是场景空间事实依据。参考图只用于身份、外观、空间布局、锚点和物体形态。',
-    `分镜 JSON：\n${input.storyboardJson}`,
+    '以下是裁剪后的约束性 JSON。优先执行 image_prompt 和 shot_blocking；spatial_profile 只作为场景空间事实依据。',
+    `裁剪分镜 JSON：\n${buildMediumStoryboardJson(input.storyboardJson)}`,
     `镜头原文优先：\n${input.sourceText}`,
     `风格：\n${input.styleText}`,
     input.styleBibleText,
@@ -151,8 +279,8 @@ function renderShortStructured(input: PromptLengthInput, locale: Locale): string
   if (locale === 'en') {
     return compactLines([
       `One storyboard image only, ${input.aspectRatio}. No text/subtitles/numbers/watermark/logo.`,
-      'Follow the full JSON. Execute shot_blocking first. Use spatial_profile anchors/depth/lighting for scene space. Keep source text action order. Apply style without adding new people, props, buildings, weather, costumes, or plot.',
-      input.storyboardJson,
+      'Follow this trimmed JSON. Execute image_prompt and shot_blocking first. Use spatial_profile for scene space only. Do not add new people, props, buildings, weather, costumes, or plot.',
+      buildShortStoryboardJson(input.storyboardJson),
       `Source: ${input.sourceText}`,
       `Style: ${input.styleText}`,
       input.styleBibleText,
@@ -160,8 +288,8 @@ function renderShortStructured(input: PromptLengthInput, locale: Locale): string
   }
   return compactLines([
     `只生成一张分镜图，${input.aspectRatio}。禁止文字、字幕、编号、水印、logo。`,
-    '严格按完整 JSON 执行。优先执行 shot_blocking；用 spatial_profile 的锚点、纵深、光线控制场景空间；动作顺序以原文为准；风格只改变画面表现，不能新增人物、道具、建筑、天气、服装或剧情。',
-    input.storyboardJson,
+    '严格按裁剪 JSON 执行。优先执行 image_prompt 和 shot_blocking；spatial_profile 只用于场景空间；风格只改变画面表现，不能新增人物、道具、建筑、天气、服装或剧情。',
+    buildShortStoryboardJson(input.storyboardJson),
     `原文：${input.sourceText}`,
     `风格：${input.styleText}`,
     input.styleBibleText,
@@ -171,32 +299,26 @@ function renderShortStructured(input: PromptLengthInput, locale: Locale): string
 function renderJsonDirect(input: PromptLengthInput, locale: Locale): string {
   if (locale === 'en') {
     return compactLines([
-      `Create exactly one image at ${input.aspectRatio}. The JSON below is the full storyboard instruction; obey shot_blocking, photography_rules, spatial_profile, references, source text, and style inside it.`,
-      input.storyboardJson,
-      `No text, subtitles, numbers, watermark, logo, collage, or multi-frame output. Style: ${input.styleText}. Source: ${input.sourceText}.`,
-      input.styleBibleText,
+      `Create exactly one image at ${input.aspectRatio}. Obey this minimal JSON only.`,
+      buildDirectStoryboardJson(input.storyboardJson),
+      'No text, subtitles, numbers, watermark, logo, collage, or multi-frame output.',
     ])
   }
   return compactLines([
-    `按 ${input.aspectRatio} 生成单张图片。下面 JSON 是完整分镜指令；必须执行其中的 shot_blocking、photography_rules、spatial_profile、参考图、原文和风格。`,
-    input.storyboardJson,
-    `禁止文字、字幕、编号、水印、logo、拼图、多格图。风格：${input.styleText}。原文：${input.sourceText}。`,
-    input.styleBibleText,
+    `按 ${input.aspectRatio} 生成单张图片。只执行下面这个极简 JSON。`,
+    buildDirectStoryboardJson(input.storyboardJson),
+    '禁止文字、字幕、编号、水印、logo、拼图、多格图。',
   ])
 }
 
 function renderJsonMinimal(input: PromptLengthInput, locale: Locale): string {
   if (locale === 'en') {
     return compactLines([
-      `One ${input.aspectRatio} storyboard image. Obey this JSON completely.`,
-      input.storyboardJson,
-      `No text/subtitles/numbers/watermark/logo. Style: ${input.styleText}. Source: ${input.sourceText}.`,
+      readFinalImagePrompt(parseStoryboardJson(input.storyboardJson)),
     ])
   }
   return compactLines([
-    `生成一张 ${input.aspectRatio} 分镜图，完整遵守以下 JSON。`,
-    input.storyboardJson,
-    `禁止文字、字幕、编号、水印、logo。风格：${input.styleText}。原文：${input.sourceText}。`,
+    readFinalImagePrompt(parseStoryboardJson(input.storyboardJson)),
   ])
 }
 
