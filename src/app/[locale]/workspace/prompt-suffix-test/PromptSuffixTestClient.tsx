@@ -13,6 +13,7 @@ import {
   DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT,
   PROMPT_SUFFIX_TEST_VARIANTS,
   buildPromptLengthTestPrompt,
+  buildPromptLengthStoryboardJsonFromFinalPrompt,
   type PromptSuffixVariantId,
 } from '@/lib/prompt-suffix-test/variants'
 
@@ -57,6 +58,8 @@ export function PromptSuffixTestClient() {
   const [sourceText, setSourceText] = useState(DEFAULT_PROMPT_LENGTH_TEST_SOURCE_TEXT[locale])
   const [styleText, setStyleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT[locale])
   const [styleBibleText, setStyleBibleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_BIBLE_TEXT[locale])
+  const [manualFinalPrompt, setManualFinalPrompt] = useState('')
+  const [manualPromptError, setManualPromptError] = useState('')
   const [activeVariantId, setActiveVariantId] = useState<PromptSuffixVariantId>('current_full')
   const [selectedVariantIds, setSelectedVariantIds] = useState<PromptSuffixVariantId[]>([
     'current_full',
@@ -113,6 +116,21 @@ export function PromptSuffixTestClient() {
       if (current.includes(variantId)) return current.filter((id) => id !== variantId)
       return [...current, variantId]
     })
+  }
+
+  const applyManualFinalPrompt = () => {
+    try {
+      const nextStoryboardJson = buildPromptLengthStoryboardJsonFromFinalPrompt({
+        finalPrompt: manualFinalPrompt,
+        sourceText: manualFinalPrompt,
+      })
+      setStoryboardJson(nextStoryboardJson)
+      setSourceText(manualFinalPrompt.trim())
+      setManualPromptError('')
+      setResults({})
+    } catch (error) {
+      setManualPromptError(errorMessage(error))
+    }
   }
 
   const generateOne = async (variantId: PromptSuffixVariantId) => {
@@ -197,6 +215,31 @@ export function PromptSuffixTestClient() {
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-4">
+            <div className="rounded-md border border-zinc-200 bg-white p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0">
+                  <label className="text-sm font-semibold" htmlFor="manualFinalPrompt">{t('manualFinalPrompt.label')}</label>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">{t('manualFinalPrompt.description')}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={applyManualFinalPrompt}
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold"
+                >
+                  <FileJson2 className="h-4 w-4" />
+                  {t('actions.expandFinalPrompt')}
+                </button>
+              </div>
+              <textarea
+                id="manualFinalPrompt"
+                value={manualFinalPrompt}
+                onChange={(event) => setManualFinalPrompt(event.target.value)}
+                placeholder={t('manualFinalPrompt.placeholder')}
+                className="mt-3 min-h-[150px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
+              />
+              {manualPromptError ? <p className="mt-2 text-xs leading-5 text-red-600">{manualPromptError}</p> : null}
+            </div>
+
             <div className="rounded-md border border-zinc-200 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-sm font-semibold" htmlFor="storyboardJson">{t('storyboardJson.label')}</label>

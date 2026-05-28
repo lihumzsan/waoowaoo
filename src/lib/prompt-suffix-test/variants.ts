@@ -28,6 +28,11 @@ export interface PromptLengthInput {
   readonly styleBibleText: string
 }
 
+export interface PromptLengthManualStoryboardInput {
+  readonly finalPrompt: string
+  readonly sourceText?: string
+}
+
 export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
   {
     id: 'current_full',
@@ -159,6 +164,22 @@ function readFinalImagePrompt(parsed: JsonObject): string {
 
 function stringifyPromptJson(value: JsonObject): string {
   return JSON.stringify(value, null, 2)
+}
+
+export function buildPromptLengthStoryboardJsonFromFinalPrompt(
+  input: PromptLengthManualStoryboardInput,
+): string {
+  const finalPrompt = input.finalPrompt.trim()
+  if (!finalPrompt) throw new Error('PROMPT_SUFFIX_TEST_IMAGE_PROMPT_REQUIRED')
+  const sourceText = input.sourceText?.trim() || finalPrompt
+  return stringifyPromptJson({
+    panel: {
+      panel_id: 'manual_prompt',
+      description: sourceText,
+      image_prompt: finalPrompt,
+      source_text: sourceText,
+    },
+  })
 }
 
 function buildMediumStoryboardJson(rawJson: string): string {

@@ -20,6 +20,11 @@
     "model": {
       "empty": "没有可用图片模型"
     },
+    "manualFinalPrompt": {
+      "label": "输入最终图片提示词",
+      "description": "粘贴任意场景的最终图片提示词，一键生成干净的测试分镜 JSON，下面 5 个版本会基于它重新计算。",
+      "placeholder": "在这里粘贴一条完整最终图片提示词..."
+    },
     "storyboardJson": {
       "label": "分镜数据 JSON"
     },
@@ -41,6 +46,7 @@
     "actions": {
       "generate": "生成所选版本",
       "generateOne": "生成",
+      "expandFinalPrompt": "生成测试 JSON",
       "copyFinalPrompt": "复制完整 prompt"
     },
     "metrics": {

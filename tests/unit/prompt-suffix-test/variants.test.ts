@@ -6,6 +6,7 @@ import {
   DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT,
   PROMPT_SUFFIX_TEST_VARIANTS,
   buildPromptLengthTestPrompt,
+  buildPromptLengthStoryboardJsonFromFinalPrompt,
   getPromptSuffixVariant,
 } from '@/lib/prompt-suffix-test/variants'
 import type { PromptSuffixVariantId } from '@/lib/prompt-suffix-test/variants'
@@ -79,6 +80,27 @@ describe('prompt suffix test variants', () => {
     expect(minimal).not.toContain('{')
     expect(minimal).not.toContain('shot_blocking')
     expect(minimal).not.toContain('系统 Style Bible 视觉要求')
+  })
+
+  it('builds a clean manual storyboard json from an arbitrary final image prompt', () => {
+    const storyboardJson = buildPromptLengthStoryboardJsonFromFinalPrompt({
+      finalPrompt: '单张电影分镜图，夜晚雨巷，红伞女子回头。',
+    })
+    const minimal = buildPromptLengthTestPrompt({
+      variantId: 'json_minimal',
+      locale: 'zh',
+      promptInput: {
+        ...promptInput,
+        storyboardJson,
+        sourceText: '单张电影分镜图，夜晚雨巷，红伞女子回头。',
+      },
+    })
+
+    expect(storyboardJson).toContain('"panel_id": "manual_prompt"')
+    expect(storyboardJson).toContain('"image_prompt": "单张电影分镜图，夜晚雨巷，红伞女子回头。"')
+    expect(storyboardJson).not.toContain('茶室')
+    expect(storyboardJson).not.toContain('spatial_profile')
+    expect(minimal).toBe('单张电影分镜图，夜晚雨巷，红伞女子回头。')
   })
 
   it('fails explicitly when storyboard json is empty', () => {

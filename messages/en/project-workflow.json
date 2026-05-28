@@ -20,6 +20,11 @@
     "model": {
       "empty": "No image model available"
     },
+    "manualFinalPrompt": {
+      "label": "Input Final Image Prompt",
+      "description": "Paste any scene's final image prompt to create clean test storyboard JSON. The five versions below will recalculate from it.",
+      "placeholder": "Paste a complete final image prompt here..."
+    },
     "storyboardJson": {
       "label": "Storyboard Data JSON"
     },
@@ -41,6 +46,7 @@
     "actions": {
       "generate": "Generate Selected",
       "generateOne": "Generate",
+      "expandFinalPrompt": "Build Test JSON",
       "copyFinalPrompt": "Copy Full Prompt"
     },
     "metrics": {
