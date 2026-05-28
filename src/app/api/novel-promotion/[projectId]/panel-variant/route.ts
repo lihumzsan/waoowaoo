@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { getProjectModelConfig, buildImageBillingPayload } from '@/lib/config-service'
+import { getProjectModelConfig, buildImageTaskPayload } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
@@ -124,9 +123,9 @@ export const POST = apiHandler(async (
   const imageModel = projectModelConfig.storyboardModel
   const createdPanelId = createPanelVariantId()
 
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = await buildImageBillingPayload({
+    taskPayload = await buildImageTaskPayload({
       projectId,
       userId: session.user.id,
       imageModel,
@@ -200,9 +199,8 @@ export const POST = apiHandler(async (
       type: TASK_TYPE.PANEL_VARIANT,
       targetType: 'NovelPromotionPanel',
       targetId: createdPanel.id,
-      payload: billingPayload,
+      payload: taskPayload,
       dedupeKey: `panel_variant:${storyboardId}:${insertAfterPanelId}:${sourcePanelId}`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.PANEL_VARIANT, billingPayload),
     })
   } catch (error) {
     await rollbackCreatedVariantPanel({

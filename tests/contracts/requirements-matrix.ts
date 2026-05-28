@@ -130,9 +130,9 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     priority: 'P0',
     tests: [
       'tests/integration/task/create-task-dedupe.integration.test.ts',
-      'tests/integration/billing/submitter.integration.test.ts',
+      'tests/integration/task/submitter-no-billing.integration.test.ts',
       'tests/regression/task-dedupe-recovery.test.ts',
-      'tests/regression/task-enqueue-billing-rollback.test.ts',
+      'tests/regression/task-enqueue-failure-no-billing.test.ts',
       'tests/unit/worker/user-concurrency-gate.test.ts',
     ],
   },

@@ -4,7 +4,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { getProjectModelConfig } from '@/lib/config-service'
@@ -64,7 +63,7 @@ export const POST = apiHandler(async (
     userId: session.user.id,
     modelType: 'image',
     modelKey: selectedImageModel})
-  const billingPayload = {
+  const taskPayload = {
     ...body,
     candidateCount,
     imageModel: selectedImageModel,
@@ -80,11 +79,10 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.IMAGE_PANEL,
     targetType: 'NovelPromotionPanel',
     targetId: panelId,
-    payload: withTaskUiPayload(billingPayload, {
+    payload: withTaskUiPayload(taskPayload, {
       intent: 'regenerate',
       hasOutputAtStart}),
-    dedupeKey: `image_panel:${panelId}:${candidateCount}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload)})
+    dedupeKey: `image_panel:${panelId}:${candidateCount}`})
 
   return NextResponse.json(result)
 })

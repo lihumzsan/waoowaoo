@@ -12,7 +12,6 @@ import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import { TASK_STATUS, TASK_EVENT_TYPE } from './types'
 import { publishTaskEvent } from './publisher'
-import { rollbackTaskBillingForTask } from './service'
 import {
     imageQueue,
     videoQueue,
@@ -93,20 +92,9 @@ async function failOrphanedTask(
         type: string
         targetType: string
         targetId: string
-        billingInfo: unknown
     },
     reason: string,
 ): Promise<boolean> {
-    const rollbackResult = await rollbackTaskBillingForTask({
-        taskId: task.id,
-        billingInfo: task.billingInfo,
-    })
-    const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-    const errorCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'RECONCILE_ORPHAN'
-    const errorMessage = compensationFailed
-        ? `${reason}; billing rollback failed`
-        : reason
-
     const result = await prisma.task.updateMany({
         where: {
             id: task.id,
@@ -114,8 +102,8 @@ async function failOrphanedTask(
         },
         data: {
             status: TASK_STATUS.FAILED,
-            errorCode,
-            errorMessage,
+            errorCode: 'RECONCILE_ORPHAN',
+            errorMessage: reason,
             finishedAt: new Date(),
             heartbeatAt: null,
             dedupeKey: null,
@@ -136,8 +124,7 @@ async function failOrphanedTask(
             payload: {
                 stage: 'reconciled',
                 stageLabel: '任务已自动恢复',
-                message: errorMessage,
-                compensationFailed,
+                message: reason,
             },
             persist: false,
         })
@@ -166,7 +153,6 @@ export async function reconcileActiveTasks(): Promise<string[]> {
             type: true,
             targetType: true,
             targetId: true,
-            billingInfo: true,
             updatedAt: true,
         },
         orderBy: { createdAt: 'asc' },
@@ -247,7 +233,6 @@ export function startTaskWatchdog() {
                         stageLabel: '任务超时已终止',
                         message: task.errorMessage,
                         errorCode: task.errorCode,
-                        compensationFailed: task.errorCode === 'BILLING_COMPENSATION_FAILED',
                     },
                     persist: false,
                 })

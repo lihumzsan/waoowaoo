@@ -53,9 +53,6 @@ vi.mock('@/lib/api-errors', async () => {
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))
-vi.mock('@/lib/billing', () => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
-}))
 vi.mock('@/lib/task/has-output', () => ({
   hasPanelImageOutput: vi.fn(async () => false),
 }))

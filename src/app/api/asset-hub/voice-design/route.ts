@@ -5,7 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { validatePreviewText, validateVoicePrompt } from '@/lib/providers/bailian/voice-design'
 
 /**
@@ -58,8 +57,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     targetType: 'GlobalAssetHubVoiceDesign',
     targetId: session.user.id,
     payload,
-    dedupeKey: `${TASK_TYPE.ASSET_HUB_VOICE_DESIGN}:${digest}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_VOICE_DESIGN, payload)})
+    dedupeKey: `${TASK_TYPE.ASSET_HUB_VOICE_DESIGN}:${digest}`})
 
   return NextResponse.json(result)
 })

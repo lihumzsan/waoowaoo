@@ -591,12 +591,12 @@ model BalanceTransaction {
 model Task {
   id               String    @id @default(uuid())
   userId           String
-  projectId        String
+  projectId        String    @db.VarChar(64)
   episodeId        String?
-  type             String
-  targetType       String
-  targetId         String
-  status           String    @default("queued")
+  type             String    @db.VarChar(64)
+  targetType       String    @db.VarChar(64)
+  targetId         String    @db.VarChar(128)
+  status           String    @default("queued") @db.VarChar(32)
   progress         Int       @default(0)
   attempt          Int       @default(0)
   maxAttempts      Int       @default(5)

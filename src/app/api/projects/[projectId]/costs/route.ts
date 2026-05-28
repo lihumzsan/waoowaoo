@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProjectCostDetails } from '@/lib/billing'
-import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { prisma } from '@/lib/prisma'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+
+const CURRENCY = 'CNY'
 
 /**
  * GET /api/projects/[projectId]/costs
@@ -34,13 +34,13 @@ export const GET = apiHandler(async (
     throw new ApiError('FORBIDDEN')
   }
 
-  // 获取费用详情
-  const costDetails = await getProjectCostDetails(projectId)
-
   return NextResponse.json({
     projectId,
     projectName: project.name,
-    currency: BILLING_CURRENCY,
-    ...costDetails
+    currency: CURRENCY,
+    total: 0,
+    byType: [],
+    byAction: [],
+    recentRecords: []
   })
 })

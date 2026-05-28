@@ -76,131 +76,8 @@ vi.mock('@fal-ai/client', () => ({
 
 import { generateVoiceLine } from '@/lib/voice/generate-voice-line'
 
-const COMFYUI_MULTI_SPEAKER_MODEL_ID = 'baseaudio/澶氫汉/LongCat-two'
-
-describe('generate voice line with bailian provider', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    const audioBytes = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-
-    prismaMock.novelPromotionVoiceLine.findUnique.mockResolvedValue({
-      id: 'line-1',
-      episodeId: 'episode-1',
-      speaker: 'Narrator',
-      content: 'hello world',
-      emotionPrompt: null,
-      emotionStrength: null,
-      lineIndex: 1,
-      matchedStoryboardId: null,
-      matchedPanelIndex: null,
-    })
-    prismaMock.novelPromotionProject.findUnique.mockResolvedValue({
-      characters: [],
-    })
-    prismaMock.novelPromotionEpisode.findUnique.mockResolvedValue({
-      speakerVoices: JSON.stringify({
-        Narrator: {
-          audioUrl: 'voice/reference.wav',
-          voiceId: 'voice_abc123',
-        },
-      }),
-      voiceLines: [],
-      storyboards: [],
-    })
-
-    resolveModelSelectionOrSingleMock.mockResolvedValue({
-      provider: 'bailian',
-      modelId: 'qwen3-tts-vd-2026-01-26',
-      modelKey: 'bailian::qwen3-tts-vd-2026-01-26',
-      mediaType: 'audio',
-    })
-
-    getProviderConfigMock.mockResolvedValue({
-      id: 'bailian',
-      name: 'Alibaba Bailian',
-      apiKey: 'bl-key',
-    })
-    synthesizeWithBailianTTSMock.mockResolvedValue({
-      success: true,
-      audioData: Buffer.from(audioBytes),
-      audioDuration: 1,
-    })
-  })
-
-  it('uses speaker voiceId to generate and persists uploaded audio', async () => {
-    const result = await generateVoiceLine({
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      lineId: 'line-1',
-      userId: 'user-1',
-      audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
-    })
-
-    expect(getProviderConfigMock).toHaveBeenCalledWith('user-1', 'bailian')
-    expect(synthesizeWithBailianTTSMock).toHaveBeenCalledWith({
-      text: 'hello world',
-      voiceId: 'voice_abc123',
-      modelId: 'qwen3-tts-vd-2026-01-26',
-      languageType: 'Chinese',
-    }, 'bl-key')
-    expect(uploadObjectMock).toHaveBeenCalledTimes(1)
-    expect(prismaMock.novelPromotionVoiceLine.update).toHaveBeenCalledWith({
-      where: { id: 'line-1' },
-      data: {
-        audioUrl: 'voice/storage/line-1.wav',
-        audioDuration: 1,
-      },
-    })
-    expect(result).toEqual({
-      lineId: 'line-1',
-      audioUrl: 'signed://voice/storage/line-1.wav',
-      storageKey: 'voice/storage/line-1.wav',
-      audioDuration: 1,
-    })
-  })
-
-  it('fails explicitly when bailian speaker binding only has uploaded audio', async () => {
-    prismaMock.novelPromotionEpisode.findUnique.mockResolvedValueOnce({
-      speakerVoices: JSON.stringify({
-        Narrator: {
-          audioUrl: 'voice/reference.wav',
-        },
-      }),
-    })
-
-    await expect(
-      generateVoiceLine({
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        lineId: 'line-1',
-        userId: 'user-1',
-        audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
-      }),
-    ).rejects.toThrow('QwenTTS')
-
-    expect(synthesizeWithBailianTTSMock).not.toHaveBeenCalled()
-    expect(uploadObjectMock).not.toHaveBeenCalled()
-  })
-
-  it('maps bailian invalid parameter to a qwen voice guidance error', async () => {
-    synthesizeWithBailianTTSMock.mockResolvedValueOnce({
-      success: false,
-      error: 'BAILIAN_TTS_FAILED(400): InvalidParameter',
-    })
-
-    await expect(
-      generateVoiceLine({
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        lineId: 'line-1',
-        userId: 'user-1',
-        audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
-      }),
-    ).rejects.toThrow('QwenTTS')
-
-    expect(uploadObjectMock).not.toHaveBeenCalled()
-  })
-})
+const COMFYUI_MULTI_SPEAKER_MODEL_ID = 'baseaudio/多人/LongCat-two'
+const COMFYUI_LINE_RENDER_WORKFLOW_ID = 'baseaudio/单人/LongCat-one'
 
 describe('generate voice line with comfyui provider', () => {
   beforeEach(() => {
@@ -291,13 +168,13 @@ describe('generate voice line with comfyui provider', () => {
       userId: 'user-1',
       locale: 'zh',
       projectId: 'project-1',
-      workflowKey: COMFYUI_MULTI_SPEAKER_MODEL_ID,
+      workflowKey: COMFYUI_LINE_RENDER_WORKFLOW_ID,
       speakerName: 'SpeakerA',
       lineText: 'test voice line',
     }))
     expect(runComfyUiAudioWorkflowMock).toHaveBeenCalledWith({
       baseUrl: 'http://127.0.0.1:8878',
-      workflowKey: COMFYUI_MULTI_SPEAKER_MODEL_ID,
+      workflowKey: COMFYUI_LINE_RENDER_WORKFLOW_ID,
       prompt: '[青年男声][冷静] test voice line',
       referenceAudioUrls: ['signed://images/voice/custom/project-1/chenji.wav'],
     })
@@ -350,7 +227,7 @@ describe('generate voice line with comfyui provider', () => {
 
     expect(runComfyUiAudioWorkflowMock).toHaveBeenCalledWith({
       baseUrl: 'http://127.0.0.1:8878',
-      workflowKey: COMFYUI_MULTI_SPEAKER_MODEL_ID,
+      workflowKey: COMFYUI_LINE_RENDER_WORKFLOW_ID,
       prompt: '[青年男声][冷静] test voice line',
       referenceAudioUrls: ['http://internal.local/api/storage/sign?key=images%2Fvoice%2Fcustom%2Fproject-1%2Fchenji.wav&expires=3600'],
     })

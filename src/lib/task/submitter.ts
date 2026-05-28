@@ -7,18 +7,9 @@ import {
   markTaskEnqueueFailed,
   markTaskEnqueued,
   markTaskFailed,
-  rollbackTaskBillingForTask,
-  updateTaskBillingInfo,
   updateTaskPayload,
 } from './service'
-import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskType } from './types'
-import {
-  buildDefaultTaskBillingInfo,
-  getBillingMode,
-  InsufficientBalanceError,
-  isBillableTaskType,
-  prepareTaskBilling,
-} from '@/lib/billing'
+import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskType } from './types'
 import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
@@ -119,7 +110,6 @@ export async function submitTask(params: {
   dedupeKey?: string | null
   priority?: number
   maxAttempts?: number
-  billingInfo?: TaskBillingInfo | null
   requestId?: string | null
 }) {
   const logger = createScopedLogger({
@@ -139,10 +129,6 @@ export async function submitTask(params: {
       locale: params.locale,
     },
   }
-  const computedBillingInfo = isBillableTaskType(params.type)
-    ? buildDefaultTaskBillingInfo(params.type, normalizedPayload)
-    : null
-  const resolvedBillingInfo = computedBillingInfo || params.billingInfo || null
   const runCentricTask = isRunCentricTaskType(params.type)
   const workflowType = workflowTypeFromTaskType(params.type)
   const reusableRun = runCentricTask
@@ -180,7 +166,6 @@ export async function submitTask(params: {
     dedupeKey: runCentricTask ? null : (params.dedupeKey || null),
     priority: params.priority,
     maxAttempts: params.maxAttempts,
-    billingInfo: resolvedBillingInfo || null,
   })
   const reusableRunId = reusableRun && shouldAttachNewTaskToReusableRun(reusableRunTask?.status)
     ? (reusableRun?.id || null)
@@ -222,51 +207,6 @@ export async function submitTask(params: {
     await attachTaskToRun(run.id, task.id)
   }
 
-  let preparedBillingInfo = (task.billingInfo || resolvedBillingInfo || null) as TaskBillingInfo | null
-  if (!deduped && isBillableTaskType(params.type) && preparedBillingInfo?.billable !== true) {
-    const billingMode = await getBillingMode()
-    if (billingMode === 'ENFORCE') {
-      await markTaskFailed(task.id, 'INVALID_PARAMS', `missing server-generated billingInfo for billable task type: ${params.type}`)
-      throw new ApiError('INVALID_PARAMS', {
-        message: `missing server-generated billingInfo for billable task type: ${params.type}`,
-      })
-    }
-    logger.warn({
-      action: 'task.submit.billing_info_missing_non_enforce',
-      message: `missing billingInfo ignored in ${billingMode} mode`,
-      taskId: task.id,
-      details: {
-        type: params.type,
-        billingMode,
-      },
-    })
-  }
-
-  if (!deduped && preparedBillingInfo) {
-    try {
-      preparedBillingInfo = (await prepareTaskBilling({
-        id: task.id,
-        userId: params.userId,
-        projectId: params.projectId,
-        billingInfo: preparedBillingInfo,
-      })) as TaskBillingInfo | null
-      if (preparedBillingInfo) {
-        await updateTaskBillingInfo(task.id, preparedBillingInfo)
-      }
-    } catch (error) {
-      if (error instanceof InsufficientBalanceError) {
-        await markTaskFailed(task.id, 'INSUFFICIENT_BALANCE', error.message)
-        throw new ApiError('INSUFFICIENT_BALANCE', {
-          message: error.message,
-          required: error.required,
-          available: error.available,
-        })
-      }
-      await markTaskFailed(task.id, 'INTERNAL_ERROR', error instanceof Error ? error.message : String(error))
-      throw error
-    }
-  }
-
   if (!deduped) {
     const payloadForEvent = runId
       ? {
@@ -289,7 +229,6 @@ export async function submitTask(params: {
       episodeId: params.episodeId || null,
       payload: {
         ...payloadForEvent,
-        billing: preparedBillingInfo || null,
         trace: {
           requestId: params.requestId || null,
         },
@@ -327,7 +266,6 @@ export async function submitTask(params: {
               },
             }
           : normalizedPayload,
-        billingInfo: preparedBillingInfo || null,
         userId: params.userId,
         trace: {
           requestId: params.requestId || null,
@@ -344,15 +282,8 @@ export async function submitTask(params: {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       await markTaskEnqueueFailed(task.id, message || 'queue.add failed')
-      const rollbackResult = await rollbackTaskBillingForTask({
-        taskId: task.id,
-        billingInfo: preparedBillingInfo,
-      })
-      const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-      const failedCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'ENQUEUE_FAILED'
-      const failedMessage = compensationFailed
-        ? `${message || 'queue add failed'}; billing rollback failed`
-        : (message || 'queue add failed')
+      const failedCode = 'ENQUEUE_FAILED'
+      const failedMessage = message || 'queue add failed'
       await markTaskFailed(task.id, failedCode, failedMessage)
       await publishTaskEvent({
         taskId: task.id,
@@ -365,10 +296,9 @@ export async function submitTask(params: {
         episodeId: params.episodeId || null,
         payload: {
           stage: 'enqueue_failed',
-          stageLabel: 'progress.stage.enqueueFailed',
-          message: failedMessage,
-          compensationFailed,
-          errorCode: failedCode,
+            stageLabel: 'progress.stage.enqueueFailed',
+            message: failedMessage,
+            errorCode: failedCode,
         },
         persist: false,
       })
@@ -376,11 +306,8 @@ export async function submitTask(params: {
         action: 'task.submit.enqueue_failed',
         message: failedMessage,
         taskId: task.id,
-        errorCode: compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR',
+        errorCode: 'EXTERNAL_ERROR',
         retryable: false,
-        details: {
-          compensationFailed,
-        },
         error:
           error instanceof Error
             ? {
@@ -392,7 +319,7 @@ export async function submitTask(params: {
                 message: String(error),
               },
       })
-      throw new ApiError(compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR', {
+      throw new ApiError('EXTERNAL_ERROR', {
         message: failedMessage,
         taskId: task.id,
       })

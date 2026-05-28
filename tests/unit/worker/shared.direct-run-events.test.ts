@@ -36,13 +36,11 @@ vi.mock('@/lib/logging/core', () => ({
 }))
 
 vi.mock('@/lib/task/service', () => ({
-  rollbackTaskBillingForTask: vi.fn(async () => ({ attempted: false, rolledBack: false, billingInfo: null })),
   touchTaskHeartbeat: vi.fn(async () => undefined),
   tryMarkTaskCompleted: vi.fn(async () => true),
   tryMarkTaskFailed: vi.fn(async () => true),
   tryMarkTaskProcessing: vi.fn(async () => true),
   tryUpdateTaskProgress: tryUpdateTaskProgressMock,
-  updateTaskBillingInfo: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/task/publisher', () => ({
@@ -61,18 +59,6 @@ vi.mock('@/lib/errors/normalize', () => ({
     message: error.message,
     retryable: false,
     provider: null,
-  })),
-}))
-
-vi.mock('@/lib/billing', () => ({
-  rollbackTaskBilling: vi.fn(async () => null),
-  settleTaskBilling: vi.fn(async () => null),
-}))
-
-vi.mock('@/lib/billing/runtime-usage', () => ({
-  withTextUsageCollection: vi.fn(async (fn: () => Promise<unknown>) => ({
-    result: await fn(),
-    textUsage: null,
   })),
 }))
 

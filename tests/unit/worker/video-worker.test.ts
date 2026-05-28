@@ -298,7 +298,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'ark::doubao-seedance-2-0-260128',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         generationOptions: {
           duration: 5,
           resolution: '720p',

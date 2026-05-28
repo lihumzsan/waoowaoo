@@ -310,13 +310,12 @@ export function getMissingConfigError(missingFields: string[]): string {
 }
 
 /**
- * 为图片类任务统一构建 billingPayload（项目级，async）
+ * 为图片类任务统一构建 taskPayload（项目级，async）
  *
  * 生图和修图统一使用严格模式：用户必须已在项目设置中配置好 resolution。
- * resolution 会同时注入到 billingPayload.generationOptions（计费用）
- * 和 task payload（worker 读取后传给 API 的 imageSize 参数）。
+ * resolution 会注入到 taskPayload.generationOptions，worker 读取后传给 API 的 imageSize 参数。
  */
-export async function buildImageBillingPayload(input: {
+export async function buildImageTaskPayload(input: {
   projectId: string
   userId: string
   imageModel: string | null
@@ -346,11 +345,11 @@ export async function buildImageBillingPayload(input: {
 }
 
 /**
- * 为图片类任务统一构建 billingPayload（用户级，sync）
+ * 为图片类任务统一构建 taskPayload（用户级，sync）
  *
  * 适用于 asset-hub 等无 projectId 场景，使用已取出的 userModelConfig。
  */
-export function buildImageBillingPayloadFromUserConfig(input: {
+export function buildImageTaskPayloadFromUserConfig(input: {
   userModelConfig: UserModelConfig
   imageModel: string | null
   basePayload: Record<string, unknown>

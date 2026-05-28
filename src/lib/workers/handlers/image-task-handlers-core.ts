@@ -61,7 +61,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
   const editModel = projectModels.editModel
   if (!editModel) throw new Error('Edit model not configured')
 
-  // 从 payload.generationOptions 读取 resolution（由 route 层 buildImageBillingPayload 注入）
+  // 从 payload.generationOptions 读取 resolution（由 route 层 buildImageTaskPayload 注入）
   // 与老版本 getModelResolution 等价，但数据来源改为 capabilityDefaults/capabilityOverrides 体系
   const generationOptions = payload.generationOptions as Record<string, unknown> | undefined
   const resolution = typeof generationOptions?.resolution === 'string'

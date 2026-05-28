@@ -117,6 +117,7 @@ const ROUTE_FILES = [
   'src/app/api/novel-promotion/[projectId]/regenerate-panel-image/route.ts',
   'src/app/api/novel-promotion/[projectId]/regenerate-single-image/route.ts',
   'src/app/api/novel-promotion/[projectId]/regenerate-storyboard-text/route.ts',
+  'src/app/api/novel-promotion/[projectId]/restore-video/route.ts',
   'src/app/api/novel-promotion/[projectId]/route.ts',
   'src/app/api/novel-promotion/[projectId]/screenplay-conversion/route.ts',
   'src/app/api/novel-promotion/[projectId]/script-to-storyboard-stream/route.ts',

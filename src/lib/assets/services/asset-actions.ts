@@ -4,8 +4,7 @@ import { ApiError, getRequestId } from '@/lib/api-errors'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { getProjectModelConfig, getUserModelConfig, buildImageBillingPayload, buildImageBillingPayloadFromUserConfig } from '@/lib/config-service'
+import { getProjectModelConfig, getUserModelConfig, buildImageTaskPayload, buildImageTaskPayloadFromUserConfig } from '@/lib/config-service'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { ensureGlobalLocationImageSlots, ensureProjectLocationImageSlots } from '@/lib/image-generation/location-slots'
@@ -221,9 +220,9 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     ? userModelConfig.characterModel
     : userModelConfig.locationModel
 
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = buildImageBillingPayloadFromUserConfig({
+    taskPayload = buildImageTaskPayloadFromUserConfig({
       userModelConfig,
       imageModel,
       basePayload: payloadBase,
@@ -241,9 +240,8 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     type: TASK_TYPE.ASSET_HUB_IMAGE,
     targetType,
     targetId: input.assetId,
-    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+    payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
     dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${input.assetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${toNumber(input.body.imageIndex) === null ? count : `single:${toNumber(input.body.imageIndex)}`}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_IMAGE, billingPayload),
   })
 }
 
@@ -313,9 +311,9 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     ? { ...input.body, type: input.kind, id: input.assetId, artStyle, count }
     : { ...input.body, type: input.kind, id: input.assetId, count }
 
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = await buildImageBillingPayload({
+    taskPayload = await buildImageTaskPayload({
       projectId,
       userId: input.access.userId,
       imageModel,
@@ -334,9 +332,8 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     type: taskType,
     targetType,
     targetId,
-    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+    payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
     dedupeKey: `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}`,
-    billingInfo: buildDefaultTaskBillingInfo(taskType, billingPayload),
   })
 }
 
@@ -429,9 +426,9 @@ async function submitGlobalAssetModifyTask(input: AssetModifyInput) {
   }
   const userModelConfig = await getUserModelConfig(input.access.userId)
   const imageModel = userModelConfig.editModel
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = buildImageBillingPayloadFromUserConfig({
+    taskPayload = buildImageTaskPayloadFromUserConfig({
       userModelConfig,
       imageModel,
       basePayload: payload,
@@ -448,9 +445,8 @@ async function submitGlobalAssetModifyTask(input: AssetModifyInput) {
     type: TASK_TYPE.ASSET_HUB_MODIFY,
     targetType,
     targetId,
-    payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
+    payload: withTaskUiPayload(taskPayload, { intent: 'modify', hasOutputAtStart }),
     dedupeKey: `${TASK_TYPE.ASSET_HUB_MODIFY}:${targetId}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_MODIFY, billingPayload),
   })
 }
 
@@ -500,9 +496,9 @@ async function submitProjectAssetModifyTask(input: AssetModifyInput) {
     },
   }
   const projectModelConfig = await getProjectModelConfig(projectId, input.access.userId)
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = await buildImageBillingPayload({
+    taskPayload = await buildImageTaskPayload({
       projectId,
       userId: input.access.userId,
       imageModel: projectModelConfig.editModel,
@@ -520,9 +516,8 @@ async function submitProjectAssetModifyTask(input: AssetModifyInput) {
     type: TASK_TYPE.MODIFY_ASSET_IMAGE,
     targetType,
     targetId,
-    payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
+    payload: withTaskUiPayload(taskPayload, { intent: 'modify', hasOutputAtStart }),
     dedupeKey: `modify_asset_image:${targetType}:${targetId}:${input.body.imageIndex ?? 'na'}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.MODIFY_ASSET_IMAGE, billingPayload),
   })
 }
 

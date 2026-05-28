@@ -167,7 +167,7 @@ describe('comfyui workflow registry', () => {
     expect(workflow['105']?.class_type).toBe('SaveImage')
   })
 
-  it('rejects Qwen storyboard workflows when internal LLM rewrite drives final conditioning', () => {
+  it('rejects Qwen storyboard workflows when final conditioning is not locked', () => {
     const workflowKey = listComfyUiWorkflowKeys().find((key) =>
       key.includes('baseimage/')
       && key.includes('Qwen')
@@ -198,7 +198,7 @@ describe('comfyui workflow registry', () => {
         apiKey: 'or-test-key',
         model: 'openrouter/test-model',
       },
-    }, { expect: 'image' })).toThrow('COMFYUI_PREFLIGHT_LLM_REWRITE_LEAK')
+    }, { expect: 'image' })).toThrow('COMFYUI_PREFLIGHT_PROMPT_NOT_LOCKED')
   })
 
   it('duplicates the last provided reference into every remaining LoadImage slot', () => {
@@ -257,7 +257,7 @@ describe('comfyui workflow registry', () => {
       durationSeconds: 16,
       targetFrameCount: 400,
     })
-    expect(largeMotion['1372']?.inputs.length).toBe(400)
+    expect(largeMotion['1332']?.inputs.length).toBe(400)
     const largeMotionRelay = getPromptRelayNodes(largeMotion)[0]
     expect(largeMotionRelay?.inputs.global_prompt).toBe('office')
     expect(String(largeMotionRelay?.inputs.local_prompts)).toContain('doctor speaks')
@@ -278,7 +278,7 @@ describe('comfyui workflow registry', () => {
       durationSeconds: 20,
       targetFrameCount: 500,
     })
-    expect(damaicha30s['164']?.inputs.value).toBe(20)
+    expect(damaicha30s['158']?.inputs.a).toBe(20)
 
     const damaichaPromptRelay = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay, {
       prompt: 'GLOBAL: office\nLOCAL: doctor speaks',

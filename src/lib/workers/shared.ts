@@ -4,21 +4,17 @@ import { createScopedLogger } from '@/lib/logging/core'
 import type { LLMStreamChunk } from '@/lib/llm-observe/types'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import {
-  rollbackTaskBillingForTask,
   touchTaskHeartbeat,
   tryMarkTaskCompleted,
   tryMarkTaskFailed,
   tryMarkTaskProcessing,
   tryMarkTaskQueuedForRetry,
   tryUpdateTaskProgress,
-  updateTaskBillingInfo,
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, type SSEEvent, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, type SSEEvent, type TaskJobData } from '@/lib/task/types'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
-import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import type { NormalizedError } from '@/lib/errors/types'
 import { mapTaskSSEEventToRunEvents } from '@/lib/run-runtime/task-bridge'
@@ -322,7 +318,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
   const taskId = data.taskId
   const logger = buildWorkerLogger(data, job.queueName)
   const startedAt = Date.now()
-  let billingInfo = (data.billingInfo || null) as TaskBillingInfo | null
 
   // Register project name for per-project log file routing
   void resolveProjectNameForLogging(data.projectId)
@@ -345,20 +340,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     })
     const markedProcessing = await tryMarkTaskProcessing(taskId)
     if (!markedProcessing) {
-      const rollbackResult = await rollbackTaskBillingForTask({
-        taskId,
-        billingInfo,
-      })
-      if (rollbackResult.billingInfo) {
-        billingInfo = rollbackResult.billingInfo
-      }
-      if (rollbackResult.attempted && !rollbackResult.rolledBack) {
-        logger.error({
-          action: 'worker.skip.terminated.rollback_failed',
-          message: 'task is terminal and billing rollback failed',
-          errorCode: 'BILLING_COMPENSATION_FAILED',
-        })
-      }
       logger.info({
         action: 'worker.skip.terminated',
         message: 'task is not active, skip worker execution',
@@ -412,19 +393,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       },
     })
 
-    const { result, textUsage } = await withTextUsageCollection(async () => await handler(job))
-    if (billingInfo?.billable) {
-      billingInfo = (await settleTaskBilling({
-        id: taskId,
-        projectId: data.projectId,
-        userId: data.userId,
-        billingInfo,
-      }, {
-        result: (result || undefined) as Record<string, unknown> | void,
-        textUsage,
-      })) as TaskBillingInfo
-      await updateTaskBillingInfo(taskId, billingInfo)
-    }
+    const result = await handler(job)
     const markedCompleted = await tryMarkTaskCompleted(taskId, result || null)
     if (!markedCompleted) {
       logger.info({
@@ -467,13 +436,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     })
   } catch (error: unknown) {
     if (error instanceof TaskTerminatedError) {
-      if (billingInfo?.billable) {
-        billingInfo = (await rollbackTaskBilling({
-          id: taskId,
-          billingInfo,
-        })) as TaskBillingInfo
-        await updateTaskBillingInfo(taskId, billingInfo)
-      }
       logger.info({
         action: 'worker.terminated',
         message: error.message,
@@ -618,13 +580,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       throw (error instanceof Error ? error : new Error(normalizedError.message || 'Task failed'))
     }
 
-    if (billingInfo?.billable) {
-      billingInfo = (await rollbackTaskBilling({
-        id: taskId,
-        billingInfo,
-      })) as TaskBillingInfo
-      await updateTaskBillingInfo(taskId, billingInfo)
-    }
     const markedFailed = await tryMarkTaskFailed(taskId, normalizedError.code, normalizedError.message)
     if (!markedFailed) {
       logger.info({

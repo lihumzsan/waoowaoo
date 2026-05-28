@@ -44,7 +44,7 @@ const configServiceMock = vi.hoisted(() => ({
     locationModel: 'img::location',
     editModel: 'img::edit',
   })),
-  buildImageBillingPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown> }) => ({
+  buildImageTaskPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
     generationOptions: { resolution: '1024x1024' },
   })),
@@ -55,7 +55,7 @@ const configServiceMock = vi.hoisted(() => ({
     storyboardModel: 'img::storyboard',
     analysisModel: 'llm::analysis',
   })),
-  buildImageBillingPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
+  buildImageTaskPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
     generationOptions: { resolution: '1024x1024' },
   })),
@@ -274,9 +274,6 @@ vi.mock('@/lib/task/resolve-locale', () => ({
 }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/has-output', () => hasOutputMock)
-vi.mock('@/lib/billing', () => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
-}))
 vi.mock('@/lib/providers/bailian/voice-design', () => ({
   validateVoicePrompt: vi.fn(() => ({ valid: true })),
   validatePreviewText: vi.fn(() => ({ valid: true })),
@@ -306,7 +303,7 @@ vi.mock('@/lib/api-config', () => ({
   resolveModelSelectionOrSingle: vi.fn(async (_userId: string, model: string | null | undefined) => {
     const modelKey = typeof model === 'string' && model.trim().length > 0
       ? model.trim()
-      : 'fal::audio-model'
+      : 'comfyui::baseaudio/单人/LongCat-one'
     const separator = modelKey.indexOf('::')
     const provider = separator === -1 ? modelKey : modelKey.slice(0, separator)
     const modelId = separator === -1 ? modelKey : modelKey.slice(separator + 2)
@@ -448,7 +445,7 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
     body: {
       episodeId: 'stale-episode',
-      videoModel: 'ark::doubao-seedance-2-0-260128',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
       storyboardId: 'storyboard-1',
       panelIndex: 0,
       generationOptions: {
@@ -456,7 +453,7 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
         duration: 5,
       },
       firstLastFrame: {
-        flModel: 'ark::doubao-seedance-2-0-260128',
+        flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
       },
     },
     params: { projectId: 'project-1' },
@@ -465,13 +462,13 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
     expectedSubmitEpisodeId: 'episode-1',
     expectedPayloadSubset: {
-      videoModel: 'ark::doubao-seedance-2-0-260128',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
       generationOptions: {
         resolution: '720p',
         duration: 5,
       },
       firstLastFrame: {
-        flModel: 'ark::doubao-seedance-2-0-260128',
+        flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
       },
     },
   },
@@ -584,7 +581,7 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
   },
   {
     routeFile: 'src/app/api/novel-promotion/[projectId]/voice-generate/route.ts',
-    body: { episodeId: 'episode-1', lineId: 'line-1', audioModel: 'fal::audio-model' },
+    body: { episodeId: 'episode-1', lineId: 'line-1', audioModel: 'comfyui::baseaudio/单人/LongCat-one' },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.VOICE_LINE,
     expectedTargetType: 'NovelPromotionVoiceLine',
@@ -1054,7 +1051,7 @@ describe('api contract - direct submit routes (behavior)', () => {
       body: {
         all: true,
         episodeId: 'episode-1',
-        videoModel: 'ark::doubao-seedance-2-0-260128',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         generationOptions: {
           duration: 5,
           resolution: '720p',

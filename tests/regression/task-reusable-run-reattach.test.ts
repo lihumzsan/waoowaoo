@@ -4,7 +4,7 @@ import { submitTask } from '@/lib/task/submitter'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../helpers/prisma'
 import { resetBillingState } from '../helpers/db-reset'
-import { createTestUser } from '../helpers/billing-fixtures'
+import { createTestUser } from '../helpers/task-fixtures'
 
 const addTaskJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'mock-job' })))
 const publishTaskEventMock = vi.hoisted(() => vi.fn(async () => ({})))

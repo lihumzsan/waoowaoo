@@ -4,7 +4,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { getProjectModelConfig } from '@/lib/config-service'
 
 export const POST = apiHandler(async (
@@ -26,7 +25,7 @@ export const POST = apiHandler(async (
   }
 
   const projectModelConfig = await getProjectModelConfig(projectId, session.user.id)
-  const billingPayload = { ...body, ...(projectModelConfig.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}) }
+  const taskPayload = { ...body, ...(projectModelConfig.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}) }
 
   const result = await submitTask({
     userId: session.user.id,
@@ -36,9 +35,8 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
     targetType: 'NovelPromotionStoryboard',
     targetId: storyboardId,
-    payload: billingPayload,
-    dedupeKey: `regenerate_storyboard_text:${storyboardId}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.REGENERATE_STORYBOARD_TEXT, billingPayload)
+    payload: taskPayload,
+    dedupeKey: `regenerate_storyboard_text:${storyboardId}`
   })
 
   return NextResponse.json(result)

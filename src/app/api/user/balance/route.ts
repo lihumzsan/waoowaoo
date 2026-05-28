@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getBalance } from '@/lib/billing'
-import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler } from '@/lib/api-errors'
+
+const CURRENCY = 'CNY'
 
 /**
  * GET /api/user/balance
@@ -12,15 +12,12 @@ export const GET = apiHandler(async () => {
     // 🔐 统一权限验证
     const authResult = await requireUserAuth()
     if (isErrorResponse(authResult)) return authResult
-    const { session } = authResult
-
-    const balance = await getBalance(session.user.id)
 
     return NextResponse.json({
         success: true,
-        currency: BILLING_CURRENCY,
-        balance: balance.balance,
-        frozenAmount: balance.frozenAmount,
-        totalSpent: balance.totalSpent
+        currency: CURRENCY,
+        balance: 0,
+        frozenAmount: 0,
+        totalSpent: 0
     })
 })

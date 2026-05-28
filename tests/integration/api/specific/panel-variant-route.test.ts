@@ -45,7 +45,7 @@ const configServiceMock = vi.hoisted(() => ({
   getProjectModelConfig: vi.fn(async () => ({
     storyboardModel: 'img::storyboard',
   })),
-  buildImageBillingPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
+  buildImageTaskPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
     generationOptions: { resolution: '1024x1024' },
   })),
@@ -147,9 +147,6 @@ vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/billing', () => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
-}))
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))
@@ -232,8 +229,8 @@ describe('api specific - panel variant route', () => {
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
-  it('does not create panel when image billing payload validation fails', async () => {
-    configServiceMock.buildImageBillingPayload.mockRejectedValueOnce(new Error('missing capability'))
+  it('does not create panel when image task payload validation fails', async () => {
+    configServiceMock.buildImageTaskPayload.mockRejectedValueOnce(new Error('missing capability'))
 
     const res = await invokeRoute({
       storyboardId: 'storyboard-1',

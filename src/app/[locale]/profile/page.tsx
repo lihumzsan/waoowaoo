@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
@@ -13,9 +13,6 @@ export default function ProfilePage() {
   const t = useTranslations('profile')
   const tc = useTranslations('common')
 
-  // 主要分区：扣费记录 / API配置
-  const [activeSection, setActiveSection] = useState<'billing' | 'apiConfig'>('apiConfig')
-
   useEffect(() => {
     if (status === 'loading') return
     if (!session) { router.push({ pathname: '/auth/signin' }); return }
@@ -28,8 +25,6 @@ export default function ProfilePage() {
       </div>
     )
   }
-
-  const noBillingText = t('openSourceNoBilling')
 
   return (
     <div className="glass-page min-h-screen">
@@ -49,36 +44,14 @@ export default function ProfilePage() {
                   <p className="text-xs text-[var(--glass-text-tertiary)]">{t('personalAccount')}</p>
                 </div>
 
-                {/* 余额卡片 */}
-                <div className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-4">
-                  <div className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('availableBalance')}</div>
-                  <div className="mt-2 text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</div>
-                </div>
               </div>
 
               {/* 导航菜单 */}
               <nav className="flex-1 space-y-2">
-                <button
-                  onClick={() => setActiveSection('apiConfig')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all cursor-pointer ${activeSection === 'apiConfig'
-                    ? 'glass-btn-base glass-btn-tone-info'
-                    : 'text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-muted)]'
-                    }`}
-                >
+                <div className="glass-btn-base glass-btn-tone-info flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left">
                   <AppIcon name="settingsHexAlt" className="w-5 h-5" />
                   <span className="font-medium">{t('apiConfig')}</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveSection('billing')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all cursor-pointer ${activeSection === 'billing'
-                    ? 'glass-btn-base glass-btn-tone-info'
-                    : 'text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-muted)]'
-                    }`}
-                >
-                  <AppIcon name="receipt" className="w-5 h-5" />
-                  <span className="font-medium">{t('billingRecords')}</span>
-                </button>
+                </div>
               </nav>
               {/* 退出登录 */}
               <button
@@ -95,14 +68,7 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="glass-surface-elevated h-full flex flex-col">
 
-              {activeSection === 'apiConfig' ? (
-                <ApiConfigTab />
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                  <AppIcon name="receipt" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
-                  <p className="text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</p>
-                </div>
-              )}
+              <ApiConfigTab />
             </div>
           </div>
         </div>

@@ -4,9 +4,8 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
-import { getProjectModelConfig, buildImageBillingPayload } from '@/lib/config-service'
+import { getProjectModelConfig, buildImageTaskPayload } from '@/lib/config-service'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { ensureProjectLocationImageSlots } from '@/lib/image-generation/location-slots'
 import { prisma } from '@/lib/prisma'
@@ -76,9 +75,9 @@ export const POST = apiHandler(async (
     ? projectModelConfig.characterModel
     : projectModelConfig.locationModel
 
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = await buildImageBillingPayload({
+    taskPayload = await buildImageTaskPayload({
       projectId,
       userId: session.user.id,
       imageModel,
@@ -96,12 +95,11 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.REGENERATE_GROUP,
     targetType,
     targetId,
-    payload: withTaskUiPayload(billingPayload, {
+    payload: withTaskUiPayload(taskPayload, {
       intent: 'regenerate',
       hasOutputAtStart
     }),
-    dedupeKey: `regenerate_group:${targetType}:${targetId}:${count}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.REGENERATE_GROUP, billingPayload)
+    dedupeKey: `regenerate_group:${targetType}:${targetId}:${count}`
   })
 
   return NextResponse.json(result)

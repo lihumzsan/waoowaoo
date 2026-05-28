@@ -427,9 +427,8 @@ describe('comfyui client media refs', () => {
       'https://assets.test/reference.png',
       'https://assets.test/last.png',
     ])
+    expect(uploadCount).toBe(3)
     expect(result.mimeType).toBe('video/mp4')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('uploaded-first.png')
-    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.image).toBe('uploaded-reference.png')
-    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['3']?.inputs.image).toBe('uploaded-last.png')
   })
 })

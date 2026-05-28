@@ -4,7 +4,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveInsertPanelUserInput } from '@/lib/novel-promotion/insert-panel'
 
@@ -30,7 +29,7 @@ export const POST = apiHandler(async (
   }
 
   const projectModelConfig = await getProjectModelConfig(projectId, session.user.id)
-  const billingPayload = {
+  const taskPayload = {
     ...body,
     userInput,
     ...(projectModelConfig.analysisModel ? { analysisModel: projectModelConfig.analysisModel } : {}),
@@ -44,9 +43,8 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.INSERT_PANEL,
     targetType: 'NovelPromotionStoryboard',
     targetId: storyboardId,
-    payload: billingPayload,
+    payload: taskPayload,
     dedupeKey: `insert_panel:${storyboardId}:${insertAfterPanelId}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.INSERT_PANEL, billingPayload),
   })
 
   return NextResponse.json(result)

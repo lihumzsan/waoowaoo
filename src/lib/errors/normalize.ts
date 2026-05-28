@@ -1,4 +1,3 @@
-import { InsufficientBalanceError } from '@/lib/billing/errors'
 import { getPrismaErrorCode, isLikelyPrismaDisconnectError, isPrismaRetryableCode } from '@/lib/prisma-error'
 import { DEFAULT_ERROR_CODE, getErrorSpec, isKnownErrorCode, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
 import type { ErrorContext, NormalizedError, NormalizedErrorDetails } from './types'
@@ -230,14 +229,6 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
       options.details,
       provider,
     )
-  }
-
-  if (input instanceof InsufficientBalanceError) {
-    return buildNormalizedError('INSUFFICIENT_BALANCE', message || input.message, {
-      required: input.required,
-      available: input.available,
-      ...(options.details || {}),
-    })
   }
 
   const resolvedCode = resolveUnifiedErrorCode(errorLike.code)

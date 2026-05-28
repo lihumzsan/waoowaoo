@@ -3,7 +3,7 @@ import { locales } from '@/i18n/routing'
 import { createScopedLogger } from '@/lib/logging/core'
 import { addTaskJob } from './queues'
 import { taskUsesComfyUiProvider } from './service'
-import { TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskJobData, type TaskType } from './types'
+import { TASK_STATUS, TASK_TYPE, type TaskJobData, type TaskType } from './types'
 
 const STARTUP_ABORT_CODE = 'APP_RESTARTED_LOCAL_COMFYUI_TASK_ABORTED'
 const TASK_TYPE_SET: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
@@ -27,13 +27,6 @@ function toTaskType(value: unknown): TaskType | null {
 function toTaskPayload(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
-}
-
-function toTaskBillingInfo(value: unknown): TaskBillingInfo | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const billing = value as Record<string, unknown>
-  if (billing.billable !== true && billing.billable !== false) return null
-  return billing as TaskBillingInfo
 }
 
 function resolveTaskLocaleFromPayload(payload: unknown): TaskJobData['locale'] | null {
@@ -217,7 +210,6 @@ export async function recoverTasksOnWorkerStartup() {
         targetType: task.targetType,
         targetId: task.targetId,
         payload: toTaskPayload(task.payload),
-        billingInfo: toTaskBillingInfo(task.billingInfo),
         userId: task.userId,
         trace: null,
       }

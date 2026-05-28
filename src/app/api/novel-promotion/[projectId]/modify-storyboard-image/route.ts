@@ -5,10 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
-import { getProjectModelConfig, buildImageBillingPayload } from '@/lib/config-service'
+import { getProjectModelConfig, buildImageTaskPayload } from '@/lib/config-service'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
 
 function toObject(value: unknown): Record<string, unknown> {
@@ -100,9 +99,9 @@ export const POST = apiHandler(async (
   const projectModelConfig = await getProjectModelConfig(projectId, session.user.id)
   const imageModel = projectModelConfig.editModel
 
-  let billingPayload: Record<string, unknown>
+  let taskPayload: Record<string, unknown>
   try {
-    billingPayload = await buildImageBillingPayload({
+    taskPayload = await buildImageTaskPayload({
       projectId,
       userId: session.user.id,
       imageModel,
@@ -120,12 +119,11 @@ export const POST = apiHandler(async (
     type: TASK_TYPE.MODIFY_ASSET_IMAGE,
     targetType: 'NovelPromotionPanel',
     targetId: panel.id,
-    payload: withTaskUiPayload(billingPayload, {
+    payload: withTaskUiPayload(taskPayload, {
       intent: 'modify',
       hasOutputAtStart
     }),
-    dedupeKey: `modify_storyboard_image:${panel.id}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.MODIFY_ASSET_IMAGE, billingPayload)
+    dedupeKey: `modify_storyboard_image:${panel.id}`
   })
 
   return NextResponse.json(result)

@@ -4,7 +4,7 @@ import { RUN_STATUS, RUN_STEP_STATUS } from '@/lib/run-runtime/types'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
-import { createTestUser } from '../../helpers/billing-fixtures'
+import { createTestUser } from '../../helpers/task-fixtures'
 
 describe('run runtime reconcileActiveRunsFromTasks', () => {
   beforeEach(async () => {

@@ -17,9 +17,9 @@ vi.mock('@/lib/api-config', async () => {
   return {
     ...actual,
     resolveModelSelectionOrSingle: vi.fn(async () => ({
-      provider: 'fal',
-      modelId: 'fal-audio-model',
-      modelKey: 'fal::audio-model',
+      provider: 'comfyui',
+      modelId: 'baseaudio/单人/LongCat-one',
+      modelKey: 'comfyui::baseaudio/单人/LongCat-one',
       mediaType: 'audio',
     })),
     getProviderKey: vi.fn((providerId: string) => providerId),
@@ -81,7 +81,7 @@ describe('system - voice generate', () => {
         locale: 'zh',
         episodeId: seeded.episode.id,
         lineId: seeded.voiceLine.id,
-        audioModel: 'fal::audio-model',
+        audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       },
       { params: { projectId: seeded.project.id } },
     )

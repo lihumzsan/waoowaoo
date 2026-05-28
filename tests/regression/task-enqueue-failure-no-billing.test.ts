@@ -3,7 +3,7 @@ import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../helpers/prisma'
 import { resetBillingState } from '../helpers/db-reset'
-import { createTestUser, seedBalance } from '../helpers/billing-fixtures'
+import { createTestUser } from '../helpers/task-fixtures'
 
 const queueState = vi.hoisted(() => ({
   message: 'queue add failed',
@@ -19,7 +19,7 @@ vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: vi.fn(async () => ({})),
 }))
 
-describe('regression - enqueue compensation', () => {
+describe('regression - enqueue failure without billing', () => {
   beforeEach(async () => {
     await resetBillingState()
     vi.clearAllMocks()
@@ -27,9 +27,8 @@ describe('regression - enqueue compensation', () => {
     queueState.message = 'queue unavailable'
   })
 
-  it('rolls back frozen balance when queue submission fails', async () => {
+  it('marks queue failure without creating balance freeze records', async () => {
     const user = await createTestUser()
-    await seedBalance(user.id, 10)
 
     await expect(
       submitTask({
@@ -50,19 +49,14 @@ describe('regression - enqueue compensation', () => {
       },
       orderBy: { createdAt: 'desc' },
     })
-    const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
-    const freeze = await prisma.balanceFreeze.findFirst({ orderBy: { createdAt: 'desc' } })
 
     expect(task).toMatchObject({
       status: 'failed',
       errorCode: 'ENQUEUE_FAILED',
+      billingInfo: null,
     })
-    expect(task?.billingInfo).toMatchObject({
-      billable: true,
-      status: 'rolled_back',
-    })
-    expect(balance?.balance).toBeCloseTo(10, 8)
-    expect(balance?.frozenAmount).toBeCloseTo(0, 8)
-    expect(freeze?.status).toBe('rolled_back')
+    expect(await prisma.balanceFreeze.count()).toBe(0)
+    expect(await prisma.balanceTransaction.count()).toBe(0)
+    expect(await prisma.usageCost.count()).toBe(0)
   })
 })

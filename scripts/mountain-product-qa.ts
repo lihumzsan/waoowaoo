@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { buildImageBillingPayload, getProjectModelConfig, resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
+import { buildImageTaskPayload, getProjectModelConfig, resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/model-capabilities/lookup'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { imageQueue, textQueue, videoQueue, voiceQueue } from '@/lib/task/queues'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
@@ -202,7 +201,6 @@ async function submitTextTask(params: {
     payload,
     dedupeKey: params.dedupeKey,
     priority: params.priority,
-    billingInfo: buildDefaultTaskBillingInfo(params.type, payload),
   })
   return submitted.taskId
 }
@@ -296,7 +294,7 @@ async function submitAssetImages(projectId: string, userId: string, timeoutMs: n
         appearanceId: appearance.id,
         count: 1,
       }
-      const payload = await buildImageBillingPayload({
+      const payload = await buildImageTaskPayload({
         projectId,
         userId,
         imageModel: config.characterModel,
@@ -311,7 +309,6 @@ async function submitAssetImages(projectId: string, userId: string, timeoutMs: n
         targetId: appearance.id,
         payload,
         dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:${appearance.id}:1`,
-        billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, payload),
       })
       tasks.push({ taskId: submitted.taskId, type: TASK_TYPE.IMAGE_CHARACTER, targetId: appearance.id })
     }
@@ -324,7 +321,7 @@ async function submitAssetImages(projectId: string, userId: string, timeoutMs: n
       type: location.assetKind === 'prop' ? 'prop' : 'location',
       count: 1,
     }
-    const payload = await buildImageBillingPayload({
+    const payload = await buildImageTaskPayload({
       projectId,
       userId,
       imageModel: config.locationModel,
@@ -339,7 +336,6 @@ async function submitAssetImages(projectId: string, userId: string, timeoutMs: n
       targetId: location.id,
       payload,
       dedupeKey: `${TASK_TYPE.IMAGE_LOCATION}:${location.id}:1`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_LOCATION, payload),
     })
     tasks.push({ taskId: submitted.taskId, type: TASK_TYPE.IMAGE_LOCATION, targetId: location.id })
   }
@@ -411,7 +407,6 @@ async function submitPanelImages(
       targetId: panel.id,
       payload,
       dedupeKey: `image_panel:${panel.id}:1`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, payload),
     })
     tasks.push({ taskId: submitted.taskId, type: TASK_TYPE.IMAGE_PANEL, targetId: panel.id })
   }
@@ -495,7 +490,6 @@ async function ensureSpeakerVoiceReferences(
       targetId: projectId,
       payload,
       dedupeKey: `${TASK_TYPE.VOICE_DESIGN}:mountain:${episodeId}:${speaker}`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_DESIGN, payload),
     })
     write('voice_reference_task_submitted', { speaker, characterId: character.id, taskId: submitted.taskId })
     const task = await waitForTask(submitted.taskId, timeoutMs)
@@ -557,7 +551,6 @@ async function submitVoiceLines(
       targetId: line.id,
       payload,
       dedupeKey: `voice_line:${line.id}`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, payload),
     })
     tasks.push({ taskId: submitted.taskId, type: TASK_TYPE.VOICE_LINE, targetId: line.id })
   }
@@ -616,7 +609,6 @@ async function submitPanelVideos(
       targetId: panel.id,
       payload,
       dedupeKey: `video_panel:${panel.id}`,
-      billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, payload),
     })
     tasks.push({ taskId: submitted.taskId, type: TASK_TYPE.VIDEO_PANEL, targetId: panel.id })
   }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { toMoneyNumber } from '@/lib/billing/money'
 import { isArtStyleValue } from '@/lib/constants'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
@@ -80,60 +79,46 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // 获取项目 ID 列表
   const projectIds = projects.map(p => p.id)
 
-  // ⚡ 并行获取：费用 + 项目统计（章节数、图片数、视频数）
-  const [costsByProject, novelProjects] = await Promise.all([
-    // 一次性获取所有项目的费用（代替 N+1 查询）
-    prisma.usageCost.groupBy({
-      by: ['projectId'],
-      where: { projectId: { in: projectIds } },
-      _sum: { cost: true }
-    }),
-    // 一次性获取所有项目的统计数据
-    prisma.novelPromotionProject.findMany({
-      where: { projectId: { in: projectIds } },
-      select: {
-        projectId: true,
-        _count: {
-          select: {
-            episodes: true,
-            characters: true,
-            locations: true
-          }
-        },
-        episodes: {
-          orderBy: { episodeNumber: 'asc' },
-          select: {
-            episodeNumber: true,
-            novelText: true,
-            storyboards: {
-              select: {
-                _count: {
-                  select: { panels: true }
+  // 一次性获取所有项目的统计数据
+  const novelProjects = await prisma.novelPromotionProject.findMany({
+    where: { projectId: { in: projectIds } },
+    select: {
+      projectId: true,
+      _count: {
+        select: {
+          episodes: true,
+          characters: true,
+          locations: true
+        }
+      },
+      episodes: {
+        orderBy: { episodeNumber: 'asc' },
+        select: {
+          episodeNumber: true,
+          novelText: true,
+          storyboards: {
+            select: {
+              _count: {
+                select: { panels: true }
+              },
+              panels: {
+                where: {
+                  OR: [
+                    { imageUrl: { not: null } },
+                    { videoUrl: { not: null } },
+                  ]
                 },
-                panels: {
-                  where: {
-                    OR: [
-                      { imageUrl: { not: null } },
-                      { videoUrl: { not: null } },
-                    ]
-                  },
-                  select: {
-                    imageUrl: true,
-                    videoUrl: true
-                  }
+                select: {
+                  imageUrl: true,
+                  videoUrl: true
                 }
               }
             }
           }
         }
       }
-    })
-  ])
-
-  // 构建费用映射表
-  const costMap = new Map(
-    costsByProject.map(item => [item.projectId, toMoneyNumber(item._sum.cost)])
-  )
+    }
+  })
 
   // 构建统计映射表 + 第一集预览
   const statsMap = new Map<string, { episodes: number; images: number; videos: number; panels: number; firstEpisodePreview: string | null }>(
@@ -166,7 +151,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // 合并项目、费用与统计
   const projectsWithStats = projects.map(project => ({
     ...project,
-    totalCost: costMap.get(project.id) ?? 0,
+    totalCost: 0,
     stats: statsMap.get(project.id) ?? { episodes: 0, images: 0, videos: 0, panels: 0, firstEpisodePreview: null }
   }))
 

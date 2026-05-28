@@ -21,28 +21,17 @@ describe('api config filters', () => {
     vi.clearAllMocks()
   })
 
-  it('merges audio providers into modelProviders and keeps regular audio defaults only', () => {
+  it('uses ComfyUI as the audio provider and keeps regular audio defaults only', () => {
     const providers: Provider[] = [
-      { id: 'fal', name: 'FAL', hasApiKey: true, apiKey: 'k-fal' },
-      { id: 'bailian', name: 'Alibaba Bailian', hasApiKey: true, apiKey: 'k-bl' },
       { id: 'comfyui', name: 'ComfyUI', hasApiKey: false, baseUrl: 'http://127.0.0.1:8188' },
     ]
     const models: CustomModel[] = [
       {
-        modelId: 'fal-ai/index-tts-2/text-to-speech',
-        modelKey: 'fal::fal-ai/index-tts-2/text-to-speech',
-        name: 'IndexTTS 2',
+        modelId: 'baseaudio/单人/LongCat-one',
+        modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+        name: 'ComfyUI · LongCat 单人',
         type: 'audio',
-        provider: 'fal',
-        price: 0,
-        enabled: true,
-      },
-      {
-        modelId: 'qwen3-tts-vd-2026-01-26',
-        modelKey: 'bailian::qwen3-tts-vd-2026-01-26',
-        name: 'Qwen3 TTS',
-        type: 'audio',
-        provider: 'bailian',
+        provider: 'comfyui',
         price: 0,
         enabled: true,
       },
@@ -56,11 +45,11 @@ describe('api config filters', () => {
         enabled: true,
       },
       {
-        modelId: 'qwen3.5-flash',
-        modelKey: 'bailian::qwen3.5-flash',
-        name: 'Qwen 3.5 Flash',
-        type: 'llm',
-        provider: 'bailian',
+        modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
+        type: 'video',
+        provider: 'comfyui',
         price: 0,
         enabled: true,
       },
@@ -70,10 +59,9 @@ describe('api config filters', () => {
     const providerIds = result.modelProviders.map((provider) => provider.id)
     const audioDefaultIds = result.getEnabledModelsByType('audio').map((model) => model.modelId)
 
-    expect(providerIds).toEqual(['fal', 'bailian', 'comfyui'])
+    expect(providerIds).toEqual(['comfyui'])
     expect(audioDefaultIds).toEqual(expect.arrayContaining([
-      'fal-ai/index-tts-2/text-to-speech',
-      'qwen3-tts-vd-2026-01-26',
+      'baseaudio/单人/LongCat-one',
     ]))
     expect(audioDefaultIds).not.toContain('baseaudio/\u97f3\u8272/s2-se')
     expect(Object.prototype.hasOwnProperty.call(result, 'audioProviders')).toBe(false)
@@ -188,7 +176,6 @@ describe('api config filters', () => {
   it('treats the comfyui s2 workflow as a voice-design candidate when baseUrl is present', () => {
     const providers: Provider[] = [
       { id: 'comfyui', name: 'ComfyUI', hasApiKey: false, baseUrl: 'http://127.0.0.1:8188' },
-      { id: 'bailian', name: 'Alibaba Bailian', hasApiKey: true, apiKey: 'k-bl' },
     ]
     const models: CustomModel[] = [
       {
@@ -200,22 +187,11 @@ describe('api config filters', () => {
         price: 0,
         enabled: true,
       },
-      {
-        modelId: 'qwen3-tts-vd-2026-01-26',
-        modelKey: 'bailian::qwen3-tts-vd-2026-01-26',
-        name: 'Qwen3 TTS',
-        type: 'audio',
-        provider: 'bailian',
-        price: 0,
-        enabled: true,
-      },
     ]
 
     const result = useApiConfigFilters({ providers, models })
 
-    expect(result.getEnabledModelsByType('audio').map((model) => model.modelId)).toEqual([
-      'qwen3-tts-vd-2026-01-26',
-    ])
+    expect(result.getEnabledModelsByType('audio')).toEqual([])
     expect(result.getEnabledModelsByType('voicedesign').map((model) => model.modelId)).toEqual([
       'baseaudio/\u97f3\u8272/s2-se',
     ])

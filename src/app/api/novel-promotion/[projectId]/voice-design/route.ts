@@ -5,7 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { validatePreviewText, validateVoicePrompt } from '@/lib/providers/bailian/voice-design'
 
 /**
@@ -63,8 +62,7 @@ export const POST = apiHandler(async (
     targetType: 'NovelPromotionProject',
     targetId: projectId,
     payload,
-    dedupeKey: `${TASK_TYPE.VOICE_DESIGN}:${digest}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_DESIGN, payload)})
+    dedupeKey: `${TASK_TYPE.VOICE_DESIGN}:${digest}`})
 
   return NextResponse.json(result)
 })

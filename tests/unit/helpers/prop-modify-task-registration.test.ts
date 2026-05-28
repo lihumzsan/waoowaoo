@@ -9,14 +9,14 @@ describe('prop modify task registration', () => {
   it('registers project prop modify tasks across task metadata helpers', () => {
     expect(resolveTaskIntent(TASK_TYPE.AI_MODIFY_PROP)).toBe('modify')
     expect(getTaskTypeLabel(TASK_TYPE.AI_MODIFY_PROP)).toBe('progress.taskType.aiModifyProp')
-    expect(isBillableTaskType(TASK_TYPE.AI_MODIFY_PROP)).toBe(true)
+    expect(isBillableTaskType(TASK_TYPE.AI_MODIFY_PROP)).toBe(false)
     expect(getLLMTaskPolicy(TASK_TYPE.AI_MODIFY_PROP).consoleEnabled).toBe(true)
   })
 
   it('registers asset-hub prop modify tasks across task metadata helpers', () => {
     expect(resolveTaskIntent(TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP)).toBe('modify')
     expect(getTaskTypeLabel(TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP)).toBe('progress.taskType.assetHubAiModifyProp')
-    expect(isBillableTaskType(TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP)).toBe(true)
+    expect(isBillableTaskType(TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP)).toBe(false)
     expect(getLLMTaskPolicy(TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP).consoleEnabled).toBe(true)
   })
 })

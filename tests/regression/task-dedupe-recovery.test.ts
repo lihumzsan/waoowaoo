@@ -3,7 +3,7 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createTask, tryUpdateTaskProgress } from '@/lib/task/service'
 import { prisma } from '../helpers/prisma'
 import { resetBillingState } from '../helpers/db-reset'
-import { createTestProject, createTestUser } from '../helpers/billing-fixtures'
+import { createTestProject, createTestUser } from '../helpers/task-fixtures'
 
 const reconcileMock = vi.hoisted(() => ({
   isJobAlive: vi.fn(async () => true),

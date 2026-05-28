@@ -26,6 +26,21 @@ const prismaMock = vi.hoisted(() => ({
     })),
   },
   userPreference: {
+    findUnique: vi.fn(async () => ({
+      customProviders: JSON.stringify([
+        { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
+      ]),
+      customModels: JSON.stringify([
+        {
+          type: 'audio',
+          provider: 'comfyui',
+          modelId: 'baseaudio/单人/LongCat-one',
+          modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+          name: 'ComfyUI · LongCat 单人',
+          enabled: true,
+        },
+      ]),
+    })),
     upsert: vi.fn(async () => ({ userId: 'user-1', artStyle: 'realistic' })),
   },
 }))
@@ -39,7 +54,13 @@ const logMock = vi.hoisted(() => ({
 }))
 
 const modelConfigContractMock = vi.hoisted(() => ({
-  parseModelKeyStrict: vi.fn(() => ({ provider: 'mock', modelId: 'mock-model' })),
+  parseModelKeyStrict: vi.fn((modelKey: string) => {
+    const separator = modelKey.indexOf('::')
+    return separator >= 0
+      ? { provider: modelKey.slice(0, separator), modelId: modelKey.slice(separator + 2), modelKey }
+      : { provider: 'mock', modelId: modelKey, modelKey: `mock::${modelKey}` }
+  }),
+  composeModelKey: vi.fn((provider: string, modelId: string) => `${provider}::${modelId}`),
 }))
 
 const capabilityLookupMock = vi.hoisted(() => ({
@@ -104,7 +125,7 @@ describe('api specific - novel promotion project art style validation', () => {
       path: '/api/novel-promotion/project-1',
       method: 'PATCH',
       body: {
-        audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
+        audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       },
     })
 
@@ -113,7 +134,7 @@ describe('api specific - novel promotion project art style validation', () => {
     expect(prismaMock.novelPromotionProject.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
+          audioModel: 'comfyui::baseaudio/单人/LongCat-one',
         }),
       }),
     )

@@ -3,7 +3,7 @@ import { callRoute } from '../integration/api/helpers/call-route'
 import { installAuthMocks, mockAuthenticated, resetAuthMockState } from '../helpers/auth'
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
-import { seedMinimalDomainState } from './helpers/seed'
+import { seedAnalysisModelConfig, seedMinimalDomainState } from './helpers/seed'
 import { expectLifecycleEvents, waitForTaskEventType, waitForTaskTerminalState } from './helpers/tasks'
 import { startSystemWorkers, stopSystemWorkers, type SystemWorkers } from './helpers/workers'
 import { createFixtureEpisode, createFixtureNovelProject, createFixtureProject, createFixtureUser } from '../helpers/fixtures'
@@ -152,6 +152,7 @@ vi.mock('@/lib/workers/handlers/llm-stream', () => ({
 
 async function seedScriptToStoryboardState() {
   const user = await createFixtureUser()
+  await seedAnalysisModelConfig(user.id)
   const project = await createFixtureProject(user.id)
   const novelProject = await createFixtureNovelProject(project.id)
   const episode = await createFixtureEpisode(novelProject.id)

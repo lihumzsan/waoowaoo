@@ -1,8 +1,7 @@
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { executeAiTextStep } from '@/lib/ai-runtime'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
+import { buildImageTaskPayload, getProjectModelConfig } from '@/lib/config-service'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { validateProfileData, stringifyProfileData } from '@/types/character-profile'
@@ -65,7 +64,7 @@ async function maybeSubmitCharacterImageTask(
       locale: job.data.locale,
     },
   }
-  const billingPayload = await buildImageBillingPayload({
+  const taskPayload = await buildImageTaskPayload({
     projectId: job.data.projectId,
     userId: job.data.userId,
     imageModel: projectModelConfig.characterModel,
@@ -80,9 +79,8 @@ async function maybeSubmitCharacterImageTask(
     type: TASK_TYPE.IMAGE_CHARACTER,
     targetType: 'CharacterAppearance',
     targetId: primaryAppearance.id,
-    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+    payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
     dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:${primaryAppearance.id}:${count}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, billingPayload),
   })
 }
 

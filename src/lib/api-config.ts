@@ -37,7 +37,7 @@ export interface CustomModel {
   compatMediaTemplate?: OpenAICompatMediaTemplate
   compatMediaTemplateCheckedAt?: string
   compatMediaTemplateSource?: OpenAICompatMediaTemplateSource
-  // Non-authoritative display field; billing uses unified server pricing catalog.
+  // Non-authoritative display field used only for UI presentation.
   price: number
 }
 

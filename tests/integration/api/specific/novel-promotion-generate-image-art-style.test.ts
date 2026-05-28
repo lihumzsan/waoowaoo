@@ -35,7 +35,7 @@ const configServiceMock = vi.hoisted(() => ({
     capabilityDefaults: {},
     capabilityOverrides: {},
   })),
-  buildImageBillingPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
+  buildImageTaskPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
   })),
 }))
@@ -45,15 +45,10 @@ const hasOutputMock = vi.hoisted(() => ({
   hasLocationImageOutput: vi.fn(async () => false),
 }))
 
-const billingMock = vi.hoisted(() => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ billable: false })),
-}))
-
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/has-output', () => hasOutputMock)
-vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))

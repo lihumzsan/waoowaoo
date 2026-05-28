@@ -5,7 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { hasPanelLipSyncOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
@@ -141,7 +140,6 @@ export const POST = apiHandler(async (
       hasOutputAtStart: await hasPanelLipSyncOutput(panel.id),
     }),
     dedupeKey: `lip_sync:${panel.id}:${voiceLineId}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.LIP_SYNC, payload),
   })
 
   return NextResponse.json(result)

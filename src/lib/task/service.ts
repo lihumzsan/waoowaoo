@@ -1,7 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { withPrismaRetry } from '@/lib/prisma-retry'
-import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
@@ -75,7 +74,7 @@ function hasTaskLocale(payload: unknown): boolean {
   return locale !== null
 }
 
-function toNullableJson(value?: Prisma.InputJsonValue | Record<string, unknown> | TaskBillingInfo | null) {
+function toNullableJson(value?: Prisma.InputJsonValue | Record<string, unknown> | null) {
   if (value === undefined) return undefined
   if (value === null) return Prisma.JsonNull
   return value as Prisma.InputJsonValue
@@ -148,97 +147,20 @@ export function taskUsesComfyUiProvider(input: {
   return extractTaskModelKeys(input).some((modelKey) => parseModelKeyStrict(modelKey)?.provider === 'comfyui')
 }
 
-function needsRollback(info: TaskBillingInfo | null): info is Extract<TaskBillingInfo, { billable: true }> {
-  if (!info || !info.billable) return false
-  if (!info.freezeId) return false
-  if (info.modeSnapshot === 'OFF' || info.modeSnapshot === 'SHADOW') return false
-  if (info.status === 'settled' || info.status === 'rolled_back') return false
-  return true
-}
-
-type TaskBillingRollbackResult = {
-  attempted: boolean
-  rolledBack: boolean
-  billingInfo: TaskBillingInfo | null
-}
-
-function resolveCompensationFailure(
-  rollback: TaskBillingRollbackResult,
-  fallbackCode: string,
-  fallbackMessage: string,
-) {
-  if (!rollback.attempted || rollback.rolledBack) {
-    return {
-      errorCode: fallbackCode,
-      errorMessage: fallbackMessage,
-    }
-  }
-  return {
-    errorCode: 'BILLING_COMPENSATION_FAILED',
-    errorMessage: `${fallbackMessage}; billing rollback failed`,
-  }
-}
-
 async function failTaskWithMissingLocale(task: {
   id: string
-  billingInfo: unknown
 }) {
-  const rollbackResult = await rollbackTaskBillingForTask({
-    taskId: task.id,
-    billingInfo: task.billingInfo,
-  })
-  const failure = resolveCompensationFailure(
-    rollbackResult,
-    'TASK_LOCALE_REQUIRED',
-    'task locale is missing',
-  )
-
   await taskModel.update({
     where: { id: task.id },
     data: {
       status: TASK_STATUS.FAILED,
-      errorCode: failure.errorCode,
-      errorMessage: failure.errorMessage,
+      errorCode: 'TASK_LOCALE_REQUIRED',
+      errorMessage: 'task locale is missing',
       finishedAt: new Date(),
       heartbeatAt: null,
       dedupeKey: null,
     },
   })
-}
-
-export async function rollbackTaskBillingForTask(params: {
-  taskId: string
-  billingInfo?: unknown
-}): Promise<TaskBillingRollbackResult> {
-  const current =
-    params.billingInfo === undefined
-      ? await taskModel.findUnique({
-        where: { id: params.taskId },
-        select: { billingInfo: true },
-      })
-      : { billingInfo: params.billingInfo }
-
-  const billingInfo = parseTaskBillingInfo(current?.billingInfo ?? null)
-  if (!needsRollback(billingInfo)) {
-    return {
-      attempted: false,
-      rolledBack: true,
-      billingInfo,
-    }
-  }
-
-  const nextInfo = (await rollbackTaskBilling({
-    id: params.taskId,
-    billingInfo,
-  })) as TaskBillingInfo
-
-  await updateTaskBillingInfo(params.taskId, nextInfo)
-
-  return {
-    attempted: true,
-    rolledBack: nextInfo.billable ? nextInfo.status === 'rolled_back' : true,
-    billingInfo: nextInfo,
-  }
 }
 
 export async function createTask(input: CreateTaskInput) {
@@ -263,23 +185,13 @@ export async function createTask(input: CreateTaskInput) {
             return { task: existing, deduped: true as const }
           }
 
-          const rollbackResult = await rollbackTaskBillingForTask({
-            taskId: existing.id,
-            billingInfo: existing.billingInfo,
-          })
-          const failure = resolveCompensationFailure(
-            rollbackResult,
-            'RECONCILE_ORPHAN',
-            'Queue job lost, replaced by new task',
-          )
-
           // Job 已死（terminal / missing）→ 终止孤儿任务，释放 dedupeKey，继续创建新任务
           await model.update({
             where: { id: existing.id },
             data: {
               status: TASK_STATUS.FAILED,
-              errorCode: failure.errorCode,
-              errorMessage: failure.errorMessage,
+              errorCode: 'RECONCILE_ORPHAN',
+              errorMessage: 'Queue job lost, replaced by new task',
               finishedAt: new Date(),
               heartbeatAt: null,
               dedupeKey: null,
@@ -310,7 +222,7 @@ export async function createTask(input: CreateTaskInput) {
     priority: input.priority ?? 0,
     dedupeKey: input.dedupeKey || null,
     payload: toNullableJson(input.payload ?? null),
-    billingInfo: toNullableJson(input.billingInfo ?? null),
+    billingInfo: Prisma.JsonNull,
     queuedAt: new Date(),
   }
 
@@ -335,22 +247,12 @@ export async function createTask(input: CreateTaskInput) {
               return { task: collided, deduped: true as const }
             }
 
-            const rollbackResult = await rollbackTaskBillingForTask({
-              taskId: collided.id,
-              billingInfo: collided.billingInfo,
-            })
-            const failure = resolveCompensationFailure(
-              rollbackResult,
-              'RECONCILE_ORPHAN',
-              'Queue job lost, replaced by new task',
-            )
-
             await model.update({
               where: { id: collided.id },
               data: {
                 status: TASK_STATUS.FAILED,
-                errorCode: failure.errorCode,
-                errorMessage: failure.errorMessage,
+                errorCode: 'RECONCILE_ORPHAN',
+                errorMessage: 'Queue job lost, replaced by new task',
                 finishedAt: new Date(),
                 heartbeatAt: null,
                 dedupeKey: null,
@@ -430,15 +332,6 @@ export async function markTaskEnqueued(taskId: string) {
     data: {
       enqueuedAt: new Date(),
       lastEnqueueError: null,
-    },
-  })
-}
-
-export async function updateTaskBillingInfo(taskId: string, billingInfo: TaskBillingInfo | null) {
-  return await taskModel.update({
-    where: { id: taskId },
-    data: {
-      billingInfo: toNullableJson(billingInfo as unknown as Prisma.InputJsonValue),
     },
   })
 }
@@ -638,7 +531,6 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
     select: {
       id: true,
       status: true,
-      billingInfo: true,
     },
   })
   if (!snapshot) {
@@ -648,20 +540,9 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
     }
   }
 
-  const active = isActiveStatus(snapshot.status)
-  const rollbackResult = active
-    ? await rollbackTaskBillingForTask({
-      taskId: taskId,
-      billingInfo: snapshot.billingInfo,
-    })
-    : {
-      attempted: false,
-      rolledBack: true,
-      billingInfo: parseTaskBillingInfo(snapshot.billingInfo),
-    }
-
-  const failure = resolveCompensationFailure(rollbackResult, 'TASK_CANCELLED', reason)
-  const cancelled = await tryMarkTaskCanceled(taskId, failure.errorCode, failure.errorMessage)
+  const cancelled = isActiveStatus(snapshot.status)
+    ? await tryMarkTaskCanceled(taskId, 'TASK_CANCELLED', reason)
+    : false
   const task = await taskModel.findUnique({ where: { id: taskId } })
   return {
     task,
@@ -702,7 +583,6 @@ export async function sweepStaleTasks(params: {
       type: true,
       targetType: true,
       targetId: true,
-      billingInfo: true,
     },
   })
 
@@ -714,16 +594,6 @@ export async function sweepStaleTasks(params: {
     errorMessage: string
   }> = []
   for (const task of staleProcessing) {
-    const rollbackResult = await rollbackTaskBillingForTask({
-      taskId: task.id,
-      billingInfo: task.billingInfo,
-    })
-    const failure = resolveCompensationFailure(
-      rollbackResult,
-      'WATCHDOG_TIMEOUT',
-      'Task heartbeat timeout',
-    )
-
     const updated = await taskModel.updateMany({
       where: {
         id: task.id,
@@ -731,8 +601,8 @@ export async function sweepStaleTasks(params: {
       },
       data: {
         status: TASK_STATUS.FAILED,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
+        errorCode: 'WATCHDOG_TIMEOUT',
+        errorMessage: 'Task heartbeat timeout',
         finishedAt,
         heartbeatAt: null,
       },
@@ -740,8 +610,8 @@ export async function sweepStaleTasks(params: {
     if (updated.count > 0) {
       timedOut.push({
         ...task,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
+        errorCode: 'WATCHDOG_TIMEOUT',
+        errorMessage: 'Task heartbeat timeout',
       })
     }
   }

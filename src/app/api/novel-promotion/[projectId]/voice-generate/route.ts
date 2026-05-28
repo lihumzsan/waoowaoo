@@ -5,7 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { estimateVoiceLineMaxSeconds } from '@/lib/voice/generate-voice-line'
 import { hasVoiceLineAudioOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
@@ -267,8 +266,7 @@ export const POST = apiHandler(async (
         targetId: line.id,
         payload: withTaskUiPayload(payload, {
           hasOutputAtStart: await hasVoiceLineAudioOutput(line.id)}),
-        dedupeKey: `voice_line:${line.id}`,
-        billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, payload)})
+        dedupeKey: `voice_line:${line.id}`})
 
       return {
         lineId: line.id,

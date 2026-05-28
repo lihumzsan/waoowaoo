@@ -147,7 +147,7 @@ describe('chain contract - voice queue behavior', () => {
       payload: {
         lineId: 'line-1',
         episodeId: 'episode-1',
-        audioModel: 'fal::voice-model',
+        audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       },
       userId: 'user-1',
     })
@@ -166,7 +166,8 @@ describe('chain contract - voice queue behavior', () => {
       episodeId: 'episode-1',
       lineId: 'line-1',
       userId: 'user-1',
-      audioModel: 'fal::voice-model',
+      locale: 'zh',
+      audioModel: 'comfyui::baseaudio/单人/LongCat-one',
     })
   })
 })

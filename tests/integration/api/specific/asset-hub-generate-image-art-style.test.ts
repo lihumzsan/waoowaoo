@@ -32,7 +32,7 @@ const configServiceMock = vi.hoisted(() => ({
     videoModel: null,
     capabilityDefaults: {},
   })),
-  buildImageBillingPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown> }) => ({
+  buildImageTaskPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
   })),
 }))
@@ -40,10 +40,6 @@ const configServiceMock = vi.hoisted(() => ({
 const hasOutputMock = vi.hoisted(() => ({
   hasGlobalCharacterOutput: vi.fn(async () => false),
   hasGlobalLocationOutput: vi.fn(async () => false),
-}))
-
-const billingMock = vi.hoisted(() => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ billable: false })),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -64,7 +60,6 @@ vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/has-output', () => hasOutputMock)
-vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),

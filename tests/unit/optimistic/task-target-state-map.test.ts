@@ -117,7 +117,7 @@ describe('task target state map behavior', () => {
     }
   })
 
-  it('enables polling while queued/processing and merges overlay only when rules match', async () => {
+  it('does not use interval polling and merges overlay only when rules match', async () => {
     const { useTaskTargetStateMap } = await import('@/lib/query/hooks/useTaskTargetStateMap')
 
     const result = useTaskTargetStateMap('project-1', [
@@ -126,11 +126,7 @@ describe('task target state map behavior', () => {
     ])
 
     const firstCall = runtime.useQueryCalls[0]
-    expect(typeof firstCall?.refetchInterval).toBe('function')
-    const interval = (firstCall?.refetchInterval as ((state: { state: { data?: TaskTargetState[] } }) => number | false))({
-      state: { data: runtime.apiStates },
-    })
-    expect(interval).toBe(2000)
+    expect(firstCall?.refetchInterval).toBe(false)
 
     const appearance = result.getState('CharacterAppearance', 'appearance-1')
     expect(appearance?.phase).toBe('processing')
@@ -190,7 +186,7 @@ describe('task target state map behavior', () => {
     expect(state?.runningTaskType).toBe('VIDEO_PANEL')
   })
 
-  it('allows active overlay to override completed state even with timestamp skew', async () => {
+  it('keeps newer completed server state over a stale active overlay', async () => {
     runtime.apiStates = [
       {
         targetType: 'NovelPromotionPanel',
@@ -232,9 +228,9 @@ describe('task target state map behavior', () => {
     ])
 
     const state = result.getState('NovelPromotionPanel', 'panel-3')
-    expect(state?.phase).toBe('queued')
-    expect(state?.runningTaskId).toBe('task-overlay-old')
-    expect(state?.runningTaskType).toBe('VIDEO_PANEL')
+    expect(state?.phase).toBe('completed')
+    expect(state?.runningTaskId).toBeNull()
+    expect(state?.runningTaskType).toBeNull()
   })
 
   it('matches task type whitelist case-insensitively', async () => {

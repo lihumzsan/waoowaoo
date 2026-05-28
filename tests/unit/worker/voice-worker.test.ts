@@ -123,7 +123,7 @@ describe('worker voice processor behavior', () => {
       payload: {
         lineId: 'line-9',
         episodeId: 'episode-9',
-        audioModel: 'fal::voice-model',
+        audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       },
     })
 
@@ -135,7 +135,7 @@ describe('worker voice processor behavior', () => {
       lineId: 'line-9',
       userId: 'user-1',
       locale: 'zh',
-      audioModel: 'fal::voice-model',
+      audioModel: 'comfyui::baseaudio/单人/LongCat-one',
     })
   })
 

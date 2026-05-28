@@ -120,7 +120,6 @@ export type TaskJobData = {
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
-  billingInfo?: TaskBillingInfo | null
   userId: string
   trace?: {
     requestId?: string | null
@@ -154,5 +153,4 @@ export type CreateTaskInput = {
   dedupeKey?: string | null
   priority?: number
   maxAttempts?: number
-  billingInfo?: TaskBillingInfo | null
 }

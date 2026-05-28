@@ -6,9 +6,9 @@ export interface ChatCompletionOptions {
     reasoning?: boolean
     reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
     maxRetries?: number
-    // 💰 计费相关
-    projectId?: string   // 用于计费（如果不传，使用 'system' 作为默认值）
-    action?: string      // 计费操作名称
+    // 调用上下文，用于日志、任务控制台和错误归因
+    projectId?: string
+    action?: string
     // 流式步骤元信息（用于任务控制台按步骤展示）
     streamStepId?: string
     streamStepAttempt?: number

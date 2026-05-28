@@ -11,8 +11,44 @@ function nextSuffix() {
   return randomUUID().slice(0, 8)
 }
 
+const TEST_ANALYSIS_MODEL_KEY = 'openrouter::anthropic/claude-sonnet-4'
+
+export async function seedAnalysisModelConfig(userId: string) {
+  await prisma.userPreference.upsert({
+    where: { userId },
+    update: {
+      analysisModel: TEST_ANALYSIS_MODEL_KEY,
+      customModels: JSON.stringify([
+        {
+          modelId: 'anthropic/claude-sonnet-4',
+          modelKey: TEST_ANALYSIS_MODEL_KEY,
+          name: 'Claude Sonnet 4',
+          type: 'llm',
+          provider: 'openrouter',
+          price: 0,
+        },
+      ]),
+    },
+    create: {
+      userId,
+      analysisModel: TEST_ANALYSIS_MODEL_KEY,
+      customModels: JSON.stringify([
+        {
+          modelId: 'anthropic/claude-sonnet-4',
+          modelKey: TEST_ANALYSIS_MODEL_KEY,
+          name: 'Claude Sonnet 4',
+          type: 'llm',
+          provider: 'openrouter',
+          price: 0,
+        },
+      ]),
+    },
+  })
+}
+
 export async function seedMinimalDomainState() {
   const user = await createFixtureUser()
+  await seedAnalysisModelConfig(user.id)
   const project = await createFixtureProject(user.id)
   const novelProject = await createFixtureNovelProject(project.id)
   const episode = await createFixtureEpisode(novelProject.id)

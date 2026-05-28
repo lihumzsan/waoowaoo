@@ -13,11 +13,11 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(async () => ({
       customModels: JSON.stringify([
         {
-          modelId: 'qwen3-tts-vd-2026-01-26',
-          modelKey: 'bailian::qwen3-tts-vd-2026-01-26',
-          name: 'Qwen3 TTS',
+          modelId: 'baseaudio/单人/LongCat-one',
+          modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+          name: 'ComfyUI · LongCat 单人',
           type: 'audio',
-          provider: 'bailian',
+          provider: 'comfyui',
         },
         {
           modelId: 'baseaudio/\u97f3\u8272/s2-se',
@@ -28,11 +28,6 @@ const prismaMock = vi.hoisted(() => ({
         },
       ]),
       customProviders: JSON.stringify([
-        {
-          id: 'bailian',
-          name: 'Alibaba Bailian',
-          apiKey: 'k-bailian',
-        },
         {
           id: 'comfyui',
           name: 'ComfyUI (Local)',
@@ -73,7 +68,7 @@ describe('api specific - user models audio filter', () => {
       video: Array<{ value: string }>
     }
     expect(body.audio.map((item) => item.value)).toEqual([
-      'bailian::qwen3-tts-vd-2026-01-26',
+      'comfyui::baseaudio/单人/LongCat-one',
     ])
     expect(body.video.map((item) => item.value)).toEqual([
       'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',

@@ -5,7 +5,6 @@ import { logError as _ulogError } from '@/lib/logging/core'
  */
 
 import { executeAiTextStep } from '@/lib/ai-runtime'
-import { withTextBilling } from '@/lib/billing'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import {
     type LocationAvailableSlot,
@@ -22,9 +21,9 @@ export interface AIDesignOptions {
     analysisModel: string
     userInstruction: string
     assetType: AssetType
-    /** 用于计费的上下文：'asset-hub' 或实际的 projectId */
+    /** 执行上下文：'asset-hub' 或实际的 projectId */
     projectId?: string
-    /** 任务 worker 内执行时使用，避免和任务计费重复 */
+    /** @deprecated 计费逻辑已移除，保留字段兼容旧调用方 */
     skipBilling?: boolean
 }
 
@@ -47,7 +46,6 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
         userInstruction,
         assetType,
         projectId = 'asset-hub',
-        skipBilling = false,
     } = options
 
     if (!userInstruction?.trim()) {
@@ -82,8 +80,6 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
 
     // 调用 LLM
     const action = assetType === 'character' ? 'ai_design_character' : 'ai_design_location'
-    const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
-    const maxOutputTokens = 1200
     const runCompletion = async () =>
         await executeAiTextStep({
             userId,
@@ -99,16 +95,7 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
                 stepTotal: 1,
             },
         })
-    const completion = skipBilling
-        ? await runCompletion()
-        : await withTextBilling(
-            userId,
-            analysisModel,
-            maxInputTokens,
-            maxOutputTokens,
-            { projectId, action, metadata: { assetType } },
-            runCompletion,
-        )
+    const completion = await runCompletion()
 
     const aiResponse = completion.text
 

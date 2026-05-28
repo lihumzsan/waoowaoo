@@ -3,7 +3,7 @@ import { retryFailedStep } from '@/lib/run-runtime/service'
 import { RUN_STATUS, RUN_STEP_STATUS } from '@/lib/run-runtime/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
-import { createTestUser } from '../../helpers/billing-fixtures'
+import { createTestUser } from '../../helpers/task-fixtures'
 
 describe('run runtime retryFailedStep invalidation', () => {
   beforeEach(async () => {

@@ -42,7 +42,6 @@ const prismaMock = vi.hoisted(() => ({
 
 const encryptApiKeyMock = vi.hoisted(() => vi.fn((value: string) => `enc:${value}`))
 const decryptApiKeyMock = vi.hoisted(() => vi.fn((value: string) => value.replace(/^enc:/, '')))
-const getBillingModeMock = vi.hoisted(() => vi.fn(async () => 'OFF'))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
@@ -51,10 +50,6 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/crypto-utils', () => ({
   encryptApiKey: encryptApiKeyMock,
   decryptApiKey: decryptApiKeyMock,
-}))
-
-vi.mock('@/lib/billing/mode', () => ({
-  getBillingMode: getBillingModeMock,
 }))
 
 const routeContext = { params: Promise.resolve({}) }
@@ -108,7 +103,6 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
       customModels: null,
     })
     prismaMock.userPreference.upsert.mockResolvedValue({ id: 'pref-1' })
-    getBillingModeMock.mockResolvedValue('OFF')
   })
 
   it('allows multiple providers with the same api type when provider ids differ', async () => {
@@ -600,15 +594,15 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
       method: 'PUT',
       body: {
         providers: [
-          { id: 'ark', name: 'Volcengine Ark', apiKey: 'ark-key' },
+          { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
         ],
         models: [
           {
             type: 'video',
-            provider: 'ark',
-            modelId: 'doubao-seedance-1-0-pro-fast-251015',
-            modelKey: 'ark::doubao-seedance-1-0-pro-fast-251015',
-            name: 'Ark Video',
+            provider: 'comfyui',
+            modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+            modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+            name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
             customPricing: {
               video: {
                 basePrice: 0.5,
@@ -868,10 +862,9 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     expect(prismaMock.userPreference.upsert).not.toHaveBeenCalled()
   })
 
-  it('allows bailian default model in ENFORCE mode without built-in pricing entry', async () => {
+  it('allows enabled default model without requiring billing pricing entries', async () => {
     installAuthMocks()
     mockAuthenticated('user-1')
-    getBillingModeMock.mockResolvedValue('ENFORCE')
     const route = await import('@/app/api/user/api-config/route')
 
     const req = buildMockRequest({
@@ -904,10 +897,9 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     expect(firstCall?.update?.analysisModel).toBe('bailian::qwen3.5-flash')
   })
 
-  it('allows bailian lipsync model in ENFORCE mode', async () => {
+  it('allows enabled lipsync model after billing pricing validation is removed', async () => {
     installAuthMocks()
     mockAuthenticated('user-1')
-    getBillingModeMock.mockResolvedValue('ENFORCE')
     const route = await import('@/app/api/user/api-config/route')
 
     const req = buildMockRequest({
@@ -940,9 +932,23 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     expect(firstCall?.update?.lipSyncModel).toBe('bailian::videoretalk')
   })
 
-  it('saves default audio model in user preference', async () => {
+  it('saves ComfyUI default audio workflow in user preference', async () => {
     installAuthMocks()
     mockAuthenticated('user-1')
+    prismaMock.userPreference.findUnique.mockResolvedValueOnce({
+      customProviders: JSON.stringify([
+        { id: 'comfyui', name: 'ComfyUI (Local)', baseUrl: 'http://127.0.0.1:8188' },
+      ]),
+      customModels: JSON.stringify([
+        {
+          type: 'audio',
+          provider: 'comfyui',
+          modelId: 'baseaudio/单人/LongCat-one',
+          modelKey: 'comfyui::baseaudio/单人/LongCat-one',
+          name: 'ComfyUI · LongCat 单人',
+        },
+      ]),
+    })
     const route = await import('@/app/api/user/api-config/route')
 
     const req = buildMockRequest({
@@ -950,7 +956,7 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
       method: 'PUT',
       body: {
         defaultModels: {
-          audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
+          audioModel: 'comfyui::baseaudio/单人/LongCat-one',
         },
       },
     })
@@ -960,13 +966,12 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     const firstCall = prismaMock.userPreference.upsert.mock.calls[0]?.[0] as {
       update?: { audioModel?: unknown }
     }
-    expect(firstCall?.update?.audioModel).toBe('bailian::qwen3-tts-vd-2026-01-26')
+    expect(firstCall?.update?.audioModel).toBe('comfyui::baseaudio/单人/LongCat-one')
   })
 
-  it('keeps bailian model and default model in GET sanitize flow under ENFORCE mode', async () => {
+  it('keeps stored model and default model in GET flow without billing sanitization', async () => {
     installAuthMocks()
     mockAuthenticated('user-1')
-    getBillingModeMock.mockResolvedValue('ENFORCE')
     prismaMock.userPreference.findUnique.mockResolvedValue({
       customProviders: JSON.stringify([
         { id: 'bailian', name: 'Alibaba Bailian', apiKey: 'enc:bl-key', gatewayRoute: 'official' },

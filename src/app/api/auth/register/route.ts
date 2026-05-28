@@ -49,27 +49,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // 哈希密码
   const hashedPassword = await bcrypt.hash(password, 12)
 
-  // 创建用户（事务）
-  const user = await prisma.$transaction(async (tx) => {
-    // 创建用户
-    const newUser = await tx.user.create({
-      data: {
-        name,
-        password: hashedPassword
-      }
-    })
-
-    // 💰 创建用户余额记录（初始余额为0）
-    await tx.userBalance.create({
-      data: {
-        userId: newUser.id,
-        balance: 0,
-        frozenAmount: 0,
-        totalSpent: 0
-      }
-    })
-
-    return newUser
+  const user = await prisma.user.create({
+    data: {
+      name,
+      password: hashedPassword
+    }
   })
 
   logAuthAction('REGISTER', name, { userId: user.id, success: true })

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { extractTaskModelKeys, taskUsesComfyUiProvider } from '@/lib/task/service'
 
 describe('task service model detection', () => {
-  it('detects ComfyUI tasks from billing model keys', () => {
+  it('detects ComfyUI tasks from legacy task metadata model keys', () => {
     expect(taskUsesComfyUiProvider({
       billingInfo: {
         billable: true,
@@ -21,13 +21,13 @@ describe('task service model detection', () => {
   it('detects first-last-frame ComfyUI tasks from nested payload model keys', () => {
     expect(extractTaskModelKeys({
       payload: {
-        videoModel: 'ark::doubao-seedance-2-0-fast-260128',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         firstLastFrame: {
           flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
         },
       },
     })).toEqual([
-      'ark::doubao-seedance-2-0-fast-260128',
+      'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
     ])
   })
@@ -59,7 +59,7 @@ describe('task service model detection', () => {
         source: 'task',
         taskType: 'voice_design',
         apiType: 'voice-design',
-        model: 'bailian-voice-design',
+        model: 'comfyui::baseaudio/音色/s2-se',
         quantity: 1,
         unit: 'call',
         maxFrozenCost: 0,

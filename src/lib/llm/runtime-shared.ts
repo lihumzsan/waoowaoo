@@ -1,7 +1,6 @@
 import OpenAI from 'openai'
 import { createScopedLogger } from '@/lib/logging/core'
 import { resolveModelSelection } from '../api-config'
-import { recordTextUsage as recordBillingTextUsage } from '@/lib/billing/runtime-usage'
 
 export const llmLogger = createScopedLogger({
   module: 'llm.client',
@@ -127,14 +126,8 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 export function recordCompletionUsage(model: string, completion: OpenAI.Chat.Completions.ChatCompletion) {
-  const summary = completionUsageSummary(completion)
-  if (!summary) return
-
-  recordBillingTextUsage({
-    model,
-    inputTokens: summary.promptTokens,
-    outputTokens: summary.completionTokens,
-  })
+  void model
+  void completion
 }
 
 export interface ResolvedLlmRuntimeModel {

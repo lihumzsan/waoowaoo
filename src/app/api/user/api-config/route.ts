@@ -24,11 +24,9 @@ import {
 } from '@/lib/model-capabilities/lookup'
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
 import {
-  findBuiltinPricingCatalogEntry,
   listBuiltinPricingCatalog,
   type PricingApiType,
 } from '@/lib/model-pricing/catalog'
-import { getBillingMode } from '@/lib/billing/mode'
 import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,
@@ -97,7 +95,7 @@ interface StoredModel {
   compatMediaTemplate?: OpenAICompatMediaTemplate
   compatMediaTemplateCheckedAt?: string
   compatMediaTemplateSource?: OpenAICompatMediaTemplateSource
-  // Non-authoritative display field; billing always uses server pricing catalog.
+  // Non-authoritative display field used only for UI presentation.
   price: number
   priceMin?: number
   priceMax?: number
@@ -162,24 +160,6 @@ const CAPABILITY_MODEL_TYPES: readonly UnifiedModelType[] = [
   'audio',
   'lipsync',
 ]
-const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<UnifiedModelType, PricingApiType | null>> = {
-  llm: 'text',
-  image: 'image',
-  video: 'video',
-  audio: 'voice',
-  lipsync: 'lip-sync',
-}
-const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'text' | 'image' | 'video' | 'voice' | 'lip-sync'>> = {
-  analysisModel: 'text',
-  characterModel: 'image',
-  locationModel: 'image',
-  storyboardModel: 'image',
-  editModel: 'image',
-  videoModel: 'video',
-  audioModel: 'voice',
-  lipSyncModel: 'lip-sync',
-  voiceDesignModel: 'voice',
-}
 /**
  * Provider keys that share pricing/capability catalogs with a canonical provider.
  * gemini-compatible uses the same models/pricing as google.
@@ -187,14 +167,6 @@ const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'tex
 const PRICING_PROVIDER_ALIASES: Readonly<Record<string, string>> = {
   'gemini-compatible': 'google',
 }
-const OPTIONAL_PRICING_PROVIDER_KEYS = new Set([
-  'openai-compatible',
-  'gemini-compatible',
-  'bailian',
-  'siliconflow',
-  'comfyui',
-  CODEX_PROVIDER_KEY,
-])
 const OFFICIAL_ONLY_PROVIDER_KEYS = new Set(['bailian', 'siliconflow'])
 const RETIRED_PROVIDER_KEYS = new Set(['qwen'])
 const MINIMAX_OFFICIAL_BASE_URL = 'https://api.minimaxi.com/v1'
@@ -1263,57 +1235,6 @@ function validateCustomPricingCapabilityMappings(models: StoredModel[]) {
 
 
 
-function hasBuiltinPricingForModel(apiType: PricingApiType, provider: string, modelId: string): boolean {
-  // findBuiltinPricingCatalogEntry handles providerKey stripping and alias fallback internally
-  return !!findBuiltinPricingCatalogEntry(apiType, provider, modelId)
-}
-
-function hasCustomPricingForType(model: StoredModel): boolean {
-  if (!model.customPricing) return false
-  if (model.type === 'llm') {
-    return (
-      typeof model.customPricing.llm?.inputPerMillion === 'number'
-      && typeof model.customPricing.llm?.outputPerMillion === 'number'
-    )
-  }
-  if (model.type === 'image') {
-    const imagePricing = model.customPricing.image
-    return (
-      typeof imagePricing?.basePrice === 'number'
-      || (isRecord(imagePricing?.optionPrices) && Object.keys(imagePricing.optionPrices).length > 0)
-    )
-  }
-  if (model.type === 'video') {
-    const videoPricing = model.customPricing.video
-    return (
-      typeof videoPricing?.basePrice === 'number'
-      || (isRecord(videoPricing?.optionPrices) && Object.keys(videoPricing.optionPrices).length > 0)
-    )
-  }
-  return false
-}
-
-function validateBillableModelPricing(models: StoredModel[]) {
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index]
-    const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
-    if (!apiType) continue
-
-    // Skip validation if user provided custom pricing
-    if (hasCustomPricingForType(model)) continue
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(model.provider))) continue
-
-    if (!hasBuiltinPricingForModel(apiType, model.provider, model.modelId)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_PRICING_NOT_CONFIGURED',
-        field: `models[${index}].modelId`,
-        modelKey: model.modelKey,
-        apiType,
-      })
-    }
-  }
-}
-
 function validateDefaultModelKey(field: DefaultModelField, value: unknown): string | null {
   // Contract anchor: default model key must be provider::modelId
   if (value === undefined) return null
@@ -1402,70 +1323,6 @@ function normalizeWorkflowConcurrencyInput(rawWorkflowConcurrency: unknown): Wor
   }
 
   return normalized
-}
-
-function validateDefaultModelPricing(defaultModels: DefaultModelsPayload) {
-  for (const field of DEFAULT_MODEL_FIELDS) {
-    const modelKey = defaultModels[field]
-    if (!modelKey) continue
-
-    const parsed = parseModelKeyStrict(modelKey)
-    if (!parsed) continue
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(parsed.provider))) continue
-    const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-
-    if (!hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'DEFAULT_MODEL_PRICING_NOT_CONFIGURED',
-        field: `defaultModels.${field}`,
-        modelKey: parsed.modelKey,
-        apiType,
-      })
-    }
-  }
-}
-
-function isModelPricedForBilling(model: StoredModel): boolean {
-  const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
-  if (!apiType) return true
-  if (hasCustomPricingForType(model)) return true
-  if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(model.provider))) return true
-  return hasBuiltinPricingForModel(apiType, model.provider, model.modelId)
-}
-
-function sanitizeModelsForBilling(models: StoredModel[]): StoredModel[] {
-  return models.filter((model) => isModelPricedForBilling(model))
-}
-
-function sanitizeDefaultModelsForBilling(defaultModels: DefaultModelsPayload): DefaultModelsPayload {
-  const sanitized: DefaultModelsPayload = {}
-
-  for (const field of DEFAULT_MODEL_FIELDS) {
-    const rawModelKey = defaultModels[field]
-    if (rawModelKey === undefined) continue
-    const modelKey = readTrimmedString(rawModelKey)
-    if (!modelKey) {
-      sanitized[field] = ''
-      continue
-    }
-
-    const parsed = parseModelKeyStrict(modelKey)
-    if (!parsed) {
-      sanitized[field] = ''
-      continue
-    }
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(parsed.provider))) {
-      sanitized[field] = parsed.modelKey
-      continue
-    }
-
-    const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-    sanitized[field] = hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)
-      ? parsed.modelKey
-      : ''
-  }
-
-  return sanitized
 }
 
 function parseStoredProviders(rawProviders: string | null | undefined): StoredProvider[] {
@@ -1761,9 +1618,8 @@ export const GET = apiHandler(async () => {
     apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
   }))
 
-  const billingMode = await getBillingMode()
   const parsedModels = parseStoredModels(pref?.customModels)
-  const models = billingMode === 'OFF' ? parsedModels : sanitizeModelsForBilling(parsedModels)
+  const models = parsedModels
   const pricingDisplay = buildPricingDisplayMap()
   const pricedModels = models.map((model) => withDisplayPricing(model, pricingDisplay))
 
@@ -1818,9 +1674,7 @@ export const GET = apiHandler(async () => {
     lipSyncModel: resolveConnectedDefaultModelKey(pref?.lipSyncModel, 'lipsync', models, providers),
     voiceDesignModel: pref?.voiceDesignModel || '',
   }
-  const defaultModels = billingMode === 'OFF'
-    ? rawDefaults
-    : sanitizeDefaultModelsForBilling(rawDefaults)
+  const defaultModels = rawDefaults
   const capabilityDefaults = sanitizeCapabilitySelectionsAgainstModels(
     parseStoredCapabilitySelections(pref?.capabilityDefaults, 'capabilityDefaults'),
     [...models, ...disabledPresets],
@@ -1865,8 +1719,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const normalizedWorkflowConcurrency = body.workflowConcurrency === undefined
     ? undefined
     : normalizeWorkflowConcurrencyInput(body.workflowConcurrency)
-  const billingMode = await getBillingMode()
-
   const updateData: Record<string, unknown> = {}
   const existingPref = await prisma.userPreference.findUnique({
     where: { userId },
@@ -1886,9 +1738,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     validateModelProviderConsistency(normalizedModels, providerSourceForValidation)
     validateModelProviderTypeSupport(normalizedModels, providerSourceForValidation)
     validateCustomPricingCapabilityMappings(normalizedModels)
-    if (billingMode !== 'OFF') {
-      validateBillableModelPricing(normalizedModels)
-    }
   }
 
   if (normalizedModels !== undefined) {
@@ -1929,9 +1778,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
       normalizedModels ?? existingModels,
       providerSourceForValidation,
     )
-    if (billingMode !== 'OFF') {
-      validateDefaultModelPricing(normalizedDefaults)
-    }
     if (normalizedDefaults.analysisModel !== undefined) {
       updateData.analysisModel = normalizedDefaults.analysisModel || null
     }

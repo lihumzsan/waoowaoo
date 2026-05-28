@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
-import { TASK_TYPE, type TaskType } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
+import type { TaskType } from '@/lib/task/types'
 import { LLM_OBSERVE_DEFAULT_MODE, LLM_OBSERVE_ENABLED } from './config'
 import type { LLMObserveDisplayMode } from './config'
 import { getLLMTaskPolicy } from './task-policy'
 import { getTaskFlowMeta } from './stage-pipeline'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -95,30 +93,6 @@ export async function maybeSubmitLLMTask(params: {
       ? payload.flowStageTitle.trim()
       : defaultFlowMeta.flowStageTitle
 
-  // 确保 payload 中包含真实的 analysisModel，用于精确计费
-  // 根据 worker 实际使用的 model 来源选择对应的配置
-  const hasModel = typeof payload.analysisModel === 'string' && payload.analysisModel.trim()
-    || typeof payload.model === 'string' && payload.model.trim()
-  if (!hasModel && isBillableTaskType(params.type)) {
-    const useUserLevelConfig = params.type === TASK_TYPE.EPISODE_SPLIT_LLM
-      || params.type === TASK_TYPE.REFERENCE_TO_CHARACTER
-    if (useUserLevelConfig) {
-      const userConfig = await getUserModelConfig(params.userId)
-      if (userConfig.analysisModel) {
-        payload.analysisModel = userConfig.analysisModel
-      }
-    } else {
-      const modelConfig = await getProjectModelConfig(params.projectId, params.userId)
-      if (modelConfig.analysisModel) {
-        payload.analysisModel = modelConfig.analysisModel
-      }
-    }
-  }
-
-  const billingInfo = isBillableTaskType(params.type)
-    ? buildDefaultTaskBillingInfo(params.type, payload)
-    : null
-
   const taskResult = await submitTask({
     userId: params.userId,
     locale,
@@ -149,7 +123,6 @@ export async function maybeSubmitLLMTask(params: {
     },
     dedupeKey: params.dedupeKey || null,
     priority,
-    billingInfo,
   })
 
   return NextResponse.json(taskResult)

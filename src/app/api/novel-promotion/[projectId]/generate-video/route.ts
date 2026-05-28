@@ -5,8 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { submitTask } from '@/lib/task/submitter'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { BillingOperationError } from '@/lib/billing/errors'
 import { hasPanelVideoOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { parseModelKeyStrict, type CapabilityValue } from '@/lib/model-config-contract'
@@ -174,34 +172,6 @@ async function validateVideoCapabilityCombination(input: {
         selections: resolvedOptions,
       },
     })
-  }
-}
-
-function buildVideoPanelBillingInfoOrThrow(payload: unknown) {
-  try {
-    return buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, isRecord(payload) ? payload : null)
-  } catch (error) {
-    if (
-      error instanceof BillingOperationError
-      && (
-        error.code === 'BILLING_UNKNOWN_VIDEO_CAPABILITY_COMBINATION'
-        || error.code === 'BILLING_UNKNOWN_VIDEO_RESOLUTION'
-      )
-    ) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_CAPABILITY_COMBINATION_UNSUPPORTED',
-        field: 'generationOptions',
-      })
-    }
-    // Model not in built-in pricing catalog — allow task to proceed;
-    // actual billing will be resolved downstream where billing mode is checked.
-    if (
-      error instanceof BillingOperationError
-      && error.code === 'BILLING_UNKNOWN_MODEL'
-    ) {
-      return null
-    }
-    throw error
   }
 }
 
@@ -704,14 +674,13 @@ export const POST = apiHandler(async (
         return {
           panel,
           payload,
-          billingInfo: buildVideoPanelBillingInfoOrThrow(payload),
           hasOutputAtStart: await hasPanelVideoOutput(panel.id),
         }
       }),
     )
 
     const results = await Promise.all(
-      preparedSubmissions.map(async ({ panel, payload, billingInfo, hasOutputAtStart }) => {
+      preparedSubmissions.map(async ({ panel, payload, hasOutputAtStart }) => {
         return await submitTask({
           userId: session.user.id,
           locale,
@@ -725,7 +694,6 @@ export const POST = apiHandler(async (
             hasOutputAtStart,
           }),
           dedupeKey: `video_panel:${panel.id}`,
-          billingInfo,
         })
       }),
     )
@@ -815,7 +783,6 @@ export const POST = apiHandler(async (
       hasOutputAtStart: await hasPanelVideoOutput(panel.id),
     }),
     dedupeKey: `video_panel:${panel.id}`,
-    billingInfo: buildVideoPanelBillingInfoOrThrow(routedPanel.payload),
   })
 
   return NextResponse.json(result)

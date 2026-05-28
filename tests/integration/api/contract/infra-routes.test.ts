@@ -202,6 +202,6 @@ describe('api contract - infra routes (behavior)', () => {
     expect(res.status).toBe(200)
     expect(text).toBe('hello local file')
     expect(res.headers.get('content-type')).toBe('text/plain')
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000')
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   })
 })

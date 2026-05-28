@@ -52,7 +52,7 @@ const configServiceMock = vi.hoisted(() => ({
     capabilityDefaults: {},
     capabilityOverrides: {},
   })),
-  buildImageBillingPayload: vi.fn(async (input: {
+  buildImageTaskPayload: vi.fn(async (input: {
     basePayload: Record<string, unknown>
     imageModel: string | null
   }) => ({
@@ -73,13 +73,8 @@ const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
   deduped: false,
 })))
 
-const billingMock = vi.hoisted(() => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ billable: false })),
-}))
-
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/ai-runtime', () => aiRuntimeMock)
-vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/types/character-profile', () => ({
   validateProfileData: vi.fn(() => true),
@@ -256,7 +251,7 @@ describe('worker character-profile behavior', () => {
 
     const result = await handleCharacterProfileTask(job)
 
-    expect(configServiceMock.buildImageBillingPayload).toHaveBeenCalledWith({
+    expect(configServiceMock.buildImageTaskPayload).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       imageModel: 'image::character-1',
