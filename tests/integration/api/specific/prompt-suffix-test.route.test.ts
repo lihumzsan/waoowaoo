@@ -68,9 +68,8 @@ describe('api specific - prompt suffix test route', () => {
       method: 'POST',
       body: {
         modelKey: 'provider::image-model',
-        variantId: 'compact_style',
-        basePrompt: '主体提示词',
-        suffix: '短后缀',
+        variantId: 'medium_structured',
+        finalPrompt: '完整最终提示词',
         aspectRatio: '16:9',
       },
     })
@@ -85,16 +84,16 @@ describe('api specific - prompt suffix test route', () => {
       promptLength: number
     }
     expect(body).toMatchObject({
-      variantId: 'compact_style',
+      variantId: 'medium_structured',
       modelKey: 'provider::image-model',
       displayUrl: '/api/storage/sign?key=images%2Fprompt-suffix-test%2Fgenerated.jpg',
-      finalPrompt: '主体提示词\n\n短后缀',
-      promptLength: '主体提示词\n\n短后缀'.length,
+      finalPrompt: '完整最终提示词',
+      promptLength: '完整最终提示词'.length,
     })
     expect(engineMock.generateImage).toHaveBeenCalledWith(
       'user-1',
       'provider::image-model',
-      '主体提示词\n\n短后缀',
+      '完整最终提示词',
       {
         aspectRatio: '16:9',
         quality: 'standard',
@@ -114,9 +113,8 @@ describe('api specific - prompt suffix test route', () => {
       method: 'POST',
       body: {
         modelKey: 'provider::missing',
-        variantId: 'compact_style',
-        basePrompt: '主体提示词',
-        suffix: '短后缀',
+        variantId: 'medium_structured',
+        finalPrompt: '完整最终提示词',
         aspectRatio: '16:9',
       },
     })

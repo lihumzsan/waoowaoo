@@ -1,14 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Copy, ImageIcon, Loader2, RotateCcw, WandSparkles } from 'lucide-react'
+import { Copy, FileJson2, ImageIcon, Loader2, WandSparkles } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import type { Locale } from '@/i18n/routing'
 import { apiFetch } from '@/lib/api-fetch'
 import { useUserModels } from '@/lib/query/hooks'
 import {
+  DEFAULT_PROMPT_LENGTH_TEST_SOURCE_TEXT,
+  DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON,
+  DEFAULT_PROMPT_LENGTH_TEST_STYLE_BIBLE_TEXT,
+  DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT,
   PROMPT_SUFFIX_TEST_VARIANTS,
-  buildPromptSuffixTestPrompt,
+  buildPromptLengthTestPrompt,
   type PromptSuffixVariantId,
 } from '@/lib/prompt-suffix-test/variants'
 
@@ -17,7 +21,7 @@ interface PromptSuffixTestResult {
   readonly modelKey: string
   readonly modelName: string
   readonly imageUrl: string
-  readonly displayUrl: string
+  readonly displayUrl: string | null
   readonly finalPrompt: string
   readonly promptLength: number
   readonly externalId?: string
@@ -37,6 +41,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function countLines(value: string): number {
+  if (!value.trim()) return 0
+  return value.split(/\r?\n/).length
+}
+
 export function PromptSuffixTestClient() {
   const t = useTranslations('projectWorkflow.promptSuffixTest')
   const locale = useLocale() as Locale
@@ -44,15 +53,17 @@ export function PromptSuffixTestClient() {
   const imageModels = userModelsQuery.data?.image ?? []
   const [modelKey, setModelKey] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
-  const [basePrompt, setBasePrompt] = useState(t('defaults.basePrompt'))
+  const [storyboardJson, setStoryboardJson] = useState(DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON[locale])
+  const [sourceText, setSourceText] = useState(DEFAULT_PROMPT_LENGTH_TEST_SOURCE_TEXT[locale])
+  const [styleText, setStyleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT[locale])
+  const [styleBibleText, setStyleBibleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_BIBLE_TEXT[locale])
   const [activeVariantId, setActiveVariantId] = useState<PromptSuffixVariantId>('current_full')
   const [selectedVariantIds, setSelectedVariantIds] = useState<PromptSuffixVariantId[]>([
     'current_full',
-    'compact_style',
-    'visual_quality',
-    'negative_only',
+    'medium_structured',
+    'short_structured',
+    'json_direct',
   ])
-  const [suffixOverrides, setSuffixOverrides] = useState<Record<string, string>>({})
   const [results, setResults] = useState<Record<string, ResultState>>({})
 
   useEffect(() => {
@@ -65,14 +76,37 @@ export function PromptSuffixTestClient() {
     () => PROMPT_SUFFIX_TEST_VARIANTS.find((variant) => variant.id === activeVariantId) ?? PROMPT_SUFFIX_TEST_VARIANTS[0],
     [activeVariantId],
   )
-  const activeSuffix = suffixOverrides[activeVariant.id] ?? localized(locale, activeVariant.suffix)
+
+  const buildFinalPrompt = (variantId: PromptSuffixVariantId): string => buildPromptLengthTestPrompt({
+    variantId,
+    locale,
+    promptInput: {
+      aspectRatio,
+      storyboardJson,
+      sourceText,
+      styleText,
+      styleBibleText,
+    },
+  })
+
   const activeFinalPrompt = useMemo(() => {
     try {
-      return buildPromptSuffixTestPrompt({ basePrompt, suffix: activeSuffix })
+      return buildFinalPrompt(activeVariant.id)
     } catch {
       return ''
     }
-  }, [activeSuffix, basePrompt])
+  }, [activeVariant.id, aspectRatio, locale, sourceText, storyboardJson, styleBibleText, styleText])
+
+  const variantPromptLengths = useMemo(() => {
+    return Object.fromEntries(PROMPT_SUFFIX_TEST_VARIANTS.map((variant) => {
+      try {
+        const prompt = buildFinalPrompt(variant.id)
+        return [variant.id, prompt.length]
+      } catch {
+        return [variant.id, 0]
+      }
+    })) as Record<PromptSuffixVariantId, number>
+  }, [aspectRatio, locale, sourceText, storyboardJson, styleBibleText, styleText])
 
   const toggleVariant = (variantId: PromptSuffixVariantId) => {
     setSelectedVariantIds((current) => {
@@ -81,28 +115,17 @@ export function PromptSuffixTestClient() {
     })
   }
 
-  const resetSuffix = () => {
-    setSuffixOverrides((current) => {
-      const next = { ...current }
-      delete next[activeVariant.id]
-      return next
-    })
-  }
-
   const generateOne = async (variantId: PromptSuffixVariantId) => {
-    const variant = PROMPT_SUFFIX_TEST_VARIANTS.find((item) => item.id === variantId)
-    if (!variant) return
     if (!modelKey) throw new Error(t('errors.modelRequired'))
-    const suffix = suffixOverrides[variant.id] ?? localized(locale, variant.suffix)
-    setResults((current) => ({ ...current, [variant.id]: { status: 'running' } }))
+    const finalPrompt = buildFinalPrompt(variantId)
+    setResults((current) => ({ ...current, [variantId]: { status: 'running' } }))
     const response = await apiFetch('/api/user/prompt-suffix-test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         modelKey,
-        variantId: variant.id,
-        basePrompt,
-        suffix,
+        variantId,
+        finalPrompt,
         aspectRatio,
       }),
     })
@@ -111,7 +134,7 @@ export function PromptSuffixTestClient() {
       throw new Error(body.message || t('errors.generateFailed'))
     }
     const result = await response.json() as PromptSuffixTestResult
-    setResults((current) => ({ ...current, [variant.id]: { status: 'ready', result } }))
+    setResults((current) => ({ ...current, [variantId]: { status: 'ready', result } }))
   }
 
   const generateSelected = async () => {
@@ -172,42 +195,93 @@ export function PromptSuffixTestClient() {
           </div>
         </header>
 
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-4">
             <div className="rounded-md border border-zinc-200 bg-white p-4">
-              <label className="text-sm font-semibold" htmlFor="basePrompt">{t('basePrompt.label')}</label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-semibold" htmlFor="storyboardJson">{t('storyboardJson.label')}</label>
+                <span className="text-xs text-zinc-500">{t('metrics.lines', { count: countLines(storyboardJson) })}</span>
+              </div>
               <textarea
-                id="basePrompt"
-                value={basePrompt}
-                onChange={(event) => setBasePrompt(event.target.value)}
-                className="mt-3 min-h-[220px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
+                id="storyboardJson"
+                value={storyboardJson}
+                onChange={(event) => setStoryboardJson(event.target.value)}
+                className="mt-3 min-h-[420px] w-full resize-y rounded-md border border-zinc-300 p-3 font-mono text-xs leading-5 outline-none focus:border-zinc-500"
+                spellCheck={false}
               />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-md border border-zinc-200 bg-white p-4">
+                <label className="text-sm font-semibold" htmlFor="sourceText">{t('sourceText.label')}</label>
+                <textarea
+                  id="sourceText"
+                  value={sourceText}
+                  onChange={(event) => setSourceText(event.target.value)}
+                  className="mt-3 min-h-[112px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
+                />
+              </div>
+              <div className="rounded-md border border-zinc-200 bg-white p-4">
+                <label className="text-sm font-semibold" htmlFor="styleText">{t('styleText.label')}</label>
+                <textarea
+                  id="styleText"
+                  value={styleText}
+                  onChange={(event) => setStyleText(event.target.value)}
+                  className="mt-3 min-h-[112px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-zinc-200 bg-white p-4">
+              <label className="text-sm font-semibold" htmlFor="styleBibleText">{t('styleBibleText.label')}</label>
+              <textarea
+                id="styleBibleText"
+                value={styleBibleText}
+                onChange={(event) => setStyleBibleText(event.target.value)}
+                className="mt-3 min-h-[180px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
+              />
+            </div>
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-md border border-zinc-200 bg-white p-4">
+              <p className="text-sm font-semibold">{t('variants.title')}</p>
+              <div className="mt-3 space-y-2">
+                {PROMPT_SUFFIX_TEST_VARIANTS.map((variant) => {
+                  const selected = selectedVariantIds.includes(variant.id)
+                  return (
+                    <label key={variant.id} className="flex cursor-pointer gap-3 rounded-md border border-zinc-200 p-3">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleVariant(variant.id)}
+                        className="mt-1 h-4 w-4"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{localized(locale, variant.title)}</span>
+                        <span className="mt-1 block text-xs leading-5 text-zinc-500">{localized(locale, variant.description)}</span>
+                        <span className="mt-1 block text-xs text-zinc-400">{t('metrics.finalLength', { count: variantPromptLengths[variant.id] })}</span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="rounded-md border border-zinc-200 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold">{t('suffix.label')}</p>
+                  <p className="text-sm font-semibold">{t('finalPromptPreview.title')}</p>
                   <p className="mt-1 text-xs text-zinc-500">{localized(locale, activeVariant.description)}</p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={resetSuffix}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    {t('actions.reset')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyFinalPrompt()}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold"
-                  >
-                    <Copy className="h-4 w-4" />
-                    {t('actions.copyFinalPrompt')}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => void copyFinalPrompt()}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold"
+                >
+                  <Copy className="h-4 w-4" />
+                  {t('actions.copyFinalPrompt')}
+                </button>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {PROMPT_SUFFIX_TEST_VARIANTS.map((variant) => (
@@ -221,48 +295,16 @@ export function PromptSuffixTestClient() {
                   </button>
                 ))}
               </div>
-              <textarea
-                value={activeSuffix}
-                onChange={(event) => setSuffixOverrides((current) => ({ ...current, [activeVariant.id]: event.target.value }))}
-                className="mt-3 min-h-[180px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
-              />
-              <div className="mt-3 grid gap-3 text-xs text-zinc-500 md:grid-cols-3">
-                <span>{t('metrics.baseLength', { count: basePrompt.trim().length })}</span>
-                <span>{t('metrics.suffixLength', { count: activeSuffix.trim().length })}</span>
-                <span>{t('metrics.finalLength', { count: activeFinalPrompt.length })}</span>
+              <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+                <FileJson2 className="h-4 w-4" />
+                {t('metrics.finalLength', { count: activeFinalPrompt.length })}
               </div>
-            </div>
-          </div>
-
-          <aside className="space-y-3">
-            <div className="rounded-md border border-zinc-200 bg-white p-4">
-              <p className="text-sm font-semibold">{t('variants.title')}</p>
-              <div className="mt-3 space-y-2">
-                {PROMPT_SUFFIX_TEST_VARIANTS.map((variant) => {
-                  const selected = selectedVariantIds.includes(variant.id)
-                  const suffix = suffixOverrides[variant.id] ?? localized(locale, variant.suffix)
-                  return (
-                    <label key={variant.id} className="flex cursor-pointer gap-3 rounded-md border border-zinc-200 p-3">
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={() => toggleVariant(variant.id)}
-                        className="mt-1 h-4 w-4"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold">{localized(locale, variant.title)}</span>
-                        <span className="mt-1 block text-xs leading-5 text-zinc-500">{localized(locale, variant.description)}</span>
-                        <span className="mt-1 block text-xs text-zinc-400">{t('metrics.suffixLength', { count: suffix.trim().length })}</span>
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              <pre className="mt-3 max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">{activeFinalPrompt}</pre>
             </div>
           </aside>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {PROMPT_SUFFIX_TEST_VARIANTS.map((variant) => {
             const state = results[variant.id] ?? { status: 'idle' }
             return (
@@ -282,11 +324,12 @@ export function PromptSuffixTestClient() {
                       {t('actions.generateOne')}
                     </button>
                   </div>
+                  <p className="mt-1 text-xs text-zinc-500">{t('metrics.finalLength', { count: variantPromptLengths[variant.id] })}</p>
                 </div>
                 <div className="flex aspect-video items-center justify-center bg-zinc-100">
                   {state.status === 'running' ? (
                     <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-                  ) : state.status === 'ready' ? (
+                  ) : state.status === 'ready' && state.result.displayUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={state.result.displayUrl} alt={localized(locale, variant.title)} className="h-full w-full object-contain" />
                   ) : (
@@ -295,13 +338,10 @@ export function PromptSuffixTestClient() {
                 </div>
                 <div className="space-y-2 p-3">
                   {state.status === 'ready' ? (
-                    <>
-                      <p className="text-xs text-zinc-500">{t('metrics.finalLength', { count: state.result.promptLength })}</p>
-                      <details>
-                        <summary className="cursor-pointer text-xs font-semibold text-zinc-700">{t('result.finalPrompt')}</summary>
-                        <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-50 p-2 text-xs leading-5 text-zinc-600">{state.result.finalPrompt}</pre>
-                      </details>
-                    </>
+                    <details>
+                      <summary className="cursor-pointer text-xs font-semibold text-zinc-700">{t('result.finalPrompt')}</summary>
+                      <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-50 p-2 text-xs leading-5 text-zinc-600">{state.result.finalPrompt}</pre>
+                    </details>
                   ) : null}
                   {state.status === 'failed' ? <p className="text-xs leading-5 text-red-600">{state.error}</p> : null}
                 </div>

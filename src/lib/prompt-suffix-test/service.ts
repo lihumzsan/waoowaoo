@@ -7,15 +7,12 @@ import {
   getUserModelConfig,
   resolveModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
-import { buildPromptSuffixTestPrompt } from './variants'
-
 export interface RunPromptSuffixImageTestInput {
   readonly userId: string
   readonly modelKey: string
   readonly variantId: string
-  readonly basePrompt: string
-  readonly suffix: string
-  readonly aspectRatio: string
+  readonly finalPrompt: string
+  readonly aspectRatio?: string
 }
 
 export interface PromptSuffixImageTestResult {
@@ -113,16 +110,13 @@ export async function runPromptSuffixImageTest(
   if (!model) {
     throw new Error(`PROMPT_SUFFIX_TEST_IMAGE_MODEL_INVALID:${input.modelKey}`)
   }
-
-  const finalPrompt = buildPromptSuffixTestPrompt({
-    basePrompt: input.basePrompt,
-    suffix: input.suffix,
-  })
+  const finalPrompt = input.finalPrompt.trim()
+  if (!finalPrompt) throw new Error('PROMPT_SUFFIX_TEST_FINAL_PROMPT_REQUIRED')
   const generated = await generateImageSource({
     userId: input.userId,
     modelKey: model.modelKey,
     prompt: finalPrompt,
-    aspectRatio: input.aspectRatio,
+    aspectRatio: input.aspectRatio?.trim() || '16:9',
   })
   const storageKey = await processMediaResult({
     source: generated.source,

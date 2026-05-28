@@ -7,8 +7,7 @@ import { runPromptSuffixImageTest } from '@/lib/prompt-suffix-test/service'
 const requestSchema = z.object({
   modelKey: z.string().trim().min(1),
   variantId: z.string().trim().min(1).max(80),
-  basePrompt: z.string().trim().min(1).max(16000),
-  suffix: z.string().max(12000),
+  finalPrompt: z.string().trim().min(1).max(48000),
   aspectRatio: z.string().trim().min(1).max(32),
 })
 
@@ -29,8 +28,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       userId: session.user.id,
       modelKey: parsed.data.modelKey,
       variantId: parsed.data.variantId,
-      basePrompt: parsed.data.basePrompt,
-      suffix: parsed.data.suffix,
+      finalPrompt: parsed.data.finalPrompt,
       aspectRatio: parsed.data.aspectRatio,
     })
     return NextResponse.json(result)

@@ -1,129 +1,227 @@
 import type { Locale } from '@/i18n/routing'
 
+export {
+  DEFAULT_PROMPT_LENGTH_TEST_SOURCE_TEXT,
+  DEFAULT_PROMPT_LENGTH_TEST_STORYBOARD_JSON,
+  DEFAULT_PROMPT_LENGTH_TEST_STYLE_BIBLE_TEXT,
+  DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT,
+} from './defaults'
+
 export type PromptSuffixVariantId =
   | 'current_full'
-  | 'compact_style'
-  | 'visual_quality'
-  | 'negative_only'
-  | 'no_suffix'
+  | 'medium_structured'
+  | 'short_structured'
+  | 'json_direct'
+  | 'json_minimal'
 
-export interface PromptSuffixVariant {
+export interface PromptLengthVariant {
   readonly id: PromptSuffixVariantId
   readonly title: Record<Locale, string>
   readonly description: Record<Locale, string>
-  readonly suffix: Record<Locale, string>
 }
 
-export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptSuffixVariant[] = [
+export interface PromptLengthInput {
+  readonly aspectRatio: string
+  readonly storyboardJson: string
+  readonly sourceText: string
+  readonly styleText: string
+  readonly styleBibleText: string
+}
+
+export const PROMPT_SUFFIX_TEST_VARIANTS: readonly PromptLengthVariant[] = [
   {
     id: 'current_full',
     title: {
-      zh: '当前完整后缀',
-      en: 'Current Full Suffix',
+      zh: '当前完整版本',
+      en: 'Current Full Version',
     },
     description: {
-      zh: '模拟当前 Style Bible 固定追加结构，信息最完整，也最长。',
-      en: 'Mirrors the current fixed Style Bible append structure. Most complete and longest.',
-    },
-    suffix: {
-      zh: [
-        '系统 Style Bible 视觉要求（固定追加，必须遵守）：',
-        '用途：分镜图生成。将这些视觉与镜头规则应用到整张画面。',
-        '画面滤镜：自然电影质感，真实摄影曝光，低饱和温润影调，轻微空气透视，克制高光。',
-        '光线：遵循画面中已有光源方向，使用自然漫射光或柔和侧光，保留真实阴影层次。',
-        '色彩：避免过度鲜艳，保留场景固有材质色，整体低饱和、自然、统一。',
-        '构图：保持单张电影分镜图，前景/中景/背景清晰，留白克制，主体关系明确。',
-        '负向约束：禁止文字，禁止字幕，禁止编号，禁止水印，禁止logo，禁止拼图，禁止多格漫画。',
-        '硬禁用项：禁止过度锐化，禁止HDR感，禁止塑料皮肤，禁止AI数码壁纸感。',
-        '运镜：静帧分镜只体现机位和构图，不要表现成连续运动轨迹。',
-        '镜头与景深：35mm电影镜头质感，自然景深，背景按镜头需要轻微虚化。',
-      ].join('\n'),
-      en: [
-        'System Style Bible requirements, fixed append, must follow:',
-        'Usage: storyboard image generation. Apply these visual and camera rules to the whole frame.',
-        'Image filter: natural cinematic realism, photographic exposure, low-saturation warm tones, slight aerial perspective, restrained highlights.',
-        'Lighting: follow existing light direction in the frame, use natural diffused light or soft side light, preserve realistic shadow layers.',
-        'Color: avoid excessive saturation, preserve material colors, keep the palette natural and unified.',
-        'Composition: keep one cinematic storyboard image with clear foreground, midground, background, restrained negative space, and clear subject relations.',
-        'Negative constraints: no text, no subtitles, no numbering, no watermark, no logo, no collage, no multi-panel comic.',
-        'Hard bans: no oversharpening, no HDR look, no plastic skin, no AI wallpaper look.',
-        'Camera movement: as a still storyboard frame, express camera placement and composition only, not motion trails.',
-        'Lens and depth: 35mm cinematic lens feel, natural depth of field, softly defocused background when needed.',
-      ].join('\n'),
+      zh: '接近当前分镜生图发送格式，规则最完整，文本最长。',
+      en: 'Close to the current storyboard image prompt format. Most complete and longest.',
     },
   },
   {
-    id: 'compact_style',
+    id: 'medium_structured',
     title: {
-      zh: '压缩风格后缀',
-      en: 'Compact Style Suffix',
+      zh: '中等压缩版本',
+      en: 'Medium Structured Version',
     },
     description: {
-      zh: '保留风格、光线、构图和负向约束，但去掉字段式结构。',
-      en: 'Keeps style, light, composition, and bans while removing field-like structure.',
-    },
-    suffix: {
-      zh: '自然电影写实质感，真实摄影曝光，低饱和统一色调，柔和但有方向的光线，材质保持真实，前景/中景/背景层次清楚，构图克制。禁止文字、字幕、编号、水印、logo、拼图、多格漫画、过度锐化、HDR感、塑料皮肤和AI壁纸感。',
-      en: 'Natural cinematic realism, photographic exposure, unified low-saturation color, soft but directional light, realistic materials, clear foreground/midground/background layers, restrained composition. No text, subtitles, numbering, watermark, logo, collage, multi-panel comic, oversharpening, HDR look, plastic skin, or AI wallpaper look.',
+      zh: '保留完整 JSON 和关键优先级，合并参考图、摄影和风格规则。',
+      en: 'Keeps full JSON and key priorities, while merging reference, camera, and style rules.',
     },
   },
   {
-    id: 'visual_quality',
+    id: 'short_structured',
     title: {
-      zh: '画质控制后缀',
-      en: 'Visual Quality Suffix',
+      zh: '短规则版本',
+      en: 'Short Rules Version',
     },
     description: {
-      zh: '只控制真实摄影质感和常见坏味道，尽量不干预镜头内容。',
-      en: 'Controls photographic quality and common artifacts with minimal content interference.',
-    },
-    suffix: {
-      zh: '真实摄影质感，自然曝光，边缘不过度锐化，暗部有层次和轻微颗粒，皮肤与材质不过度平滑，画面干净但不塑料。禁止文字、字幕、水印、logo。',
-      en: 'Photographic realism, natural exposure, no oversharpened edges, layered shadows with subtle grain, no overly smoothed skin or materials, clean but not plastic. No text, subtitles, watermark, or logo.',
+      zh: '完整 JSON 不变，只保留单张图、无文字、blocking、空间档案、风格四类规则。',
+      en: 'Keeps the full JSON, with only single-frame, no-text, blocking, spatial-profile, and style rules.',
     },
   },
   {
-    id: 'negative_only',
+    id: 'json_direct',
     title: {
-      zh: '仅负向约束',
-      en: 'Negative Only',
+      zh: 'JSON 直给版本',
+      en: 'JSON Direct Version',
     },
     description: {
-      zh: '只保留必须禁止项，用来观察主体提示词自身的表现。',
-      en: 'Keeps only required bans to observe the base prompt by itself.',
-    },
-    suffix: {
-      zh: '禁止文字，禁止字幕，禁止编号，禁止水印，禁止logo，禁止拼图，禁止多格漫画。',
-      en: 'No text, no subtitles, no numbering, no watermark, no logo, no collage, no multi-panel comic.',
+      zh: '把 JSON 作为主要指令，只在前后加极短执行规则。',
+      en: 'Uses JSON as the main instruction, with very short execution rules before and after it.',
     },
   },
   {
-    id: 'no_suffix',
+    id: 'json_minimal',
     title: {
-      zh: '无后缀',
-      en: 'No Suffix',
+      zh: '最短 JSON 版本',
+      en: 'Minimal JSON Version',
     },
     description: {
-      zh: '完全不追加后缀，作为对照组。',
-      en: 'Appends nothing. This is the control group.',
-    },
-    suffix: {
-      zh: '',
-      en: '',
+      zh: '只发送任务、画幅、完整 JSON 和必要禁用项，用作极限对照。',
+      en: 'Only sends task, aspect ratio, full JSON, and required bans as an extreme control.',
     },
   },
 ]
 
-export function getPromptSuffixVariant(id: string): PromptSuffixVariant | null {
+function compactLines(lines: ReadonlyArray<string | null | undefined>): string {
+  return lines
+    .map((line) => (typeof line === 'string' ? line.trim() : ''))
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function renderCurrentFull(input: PromptLengthInput, locale: Locale): string {
+  if (locale === 'en') {
+    return compactLines([
+      'You are a professional storyboard image artist. Generate exactly one high-quality image for one panel.',
+      'Absolute constraints: no text, no subtitles, no labels, no numbers, no watermark, no logo, no collage, no multi-frame output.',
+      `Aspect ratio: ${input.aspectRatio}.`,
+      'Reference image rules: character references lock identity, face, hairstyle, outfit, and body type; location references guide spatial layout, anchors, entrances/exits, and object relations; do not copy old composition or style; repaint the background for the current shot angle and scale.',
+      'If panel.shot_blocking exists, follow character positions, relative relations, eyelines, camera placement, and composition first. If context.location_reference.spatial_profile exists, treat it as factual scene-space evidence.',
+      'Photography rules: obey text blocking, character placement, relative positions, screen positions, camera placement, composition, depth of field, and color tone in photography_rules.',
+      'Storyboard content: design the frame from the panel data, keep screen direction consistent, avoid axis jumps, and keep characters in correct positions. Unless explicitly requested, characters must not stare directly at the camera.',
+      'Source priority: when storyboard data conflicts with source text, follow source text for spatial relations, character positions, and action order.',
+      `Storyboard panel data:\n${input.storyboardJson}`,
+      `Source text:\n${input.sourceText}`,
+      `Style requirement:\nImage style: ${input.styleText}\nFollow the current project visual style. Character references are for identity and primary appearance. Location references are for spatial layout and anchors. Do not import old reference-image style.`,
+      input.styleBibleText,
+    ])
+  }
+  return compactLines([
+    '你是一位专业的分镜画师。请根据以下分镜数据生成单张高质量的镜头图片。',
+    '【绝对禁止 - 图像中不得出现任何文字 - 最高优先级】\n生成的图像中绝对禁止出现任何文字：禁止镜头类型标签、镜头运动文字、数字、画面编号、中文或英文文字、水印、注释或符号。每个图片只能有一张镜头，禁止拼图，禁止多张图。',
+    `【画面比例】\n本次生成的画面比例为：${input.aspectRatio}`,
+    '【参考图使用规则】\n角色参考图用于锁定角色身份、脸型、发型、服装、体型；场景参考图用于参考空间布局、关键锚点、入口出口、家具/物体相对位置。不要直接照搬参考图构图或旧画风。不要把图号、资产名、编号画进画面。背景必须根据当前镜头角度和景别重新绘制。',
+    '如果分镜数据包含 panel.shot_blocking，必须优先执行其中的人物位置、相对关系、视线、机位和构图。如果场景数据包含 context.location_reference.spatial_profile，必须作为场景空间事实依据。',
+    '【摄影规则】\n如果分镜数据中包含 photography_rules，必须严格遵守文字 blocking、人物站位、相对位置、画面位置、机位、构图、景深和色调。',
+    '【分镜内容要求】\n根据分镜数据设计画面，确保镜头方向一致，不跳轴，角色位置正确。除非明确要求，角色不要直视镜头。',
+    '【原文优先原则】\n当分镜与原文冲突时，按原文的空间关系、角色位置、动作顺序。',
+    `【分镜数据】\n${input.storyboardJson}`,
+    `【镜头原文】\n${input.sourceText}`,
+    `【风格要求】\n画面风格：${input.styleText}\n- 必须严格遵循项目当前视觉风格\n- 角色参考图只用于身份和主要外观一致\n- 场景参考图只用于空间布局和关键锚点一致\n- 禁止把参考图中的旧画风带入最终画面`,
+    input.styleBibleText,
+  ])
+}
+
+function renderMediumStructured(input: PromptLengthInput, locale: Locale): string {
+  if (locale === 'en') {
+    return compactLines([
+      `Generate one cinematic storyboard image, aspect ratio ${input.aspectRatio}. No text, subtitles, labels, numbers, watermark, logo, collage, or multi-frame output.`,
+      'Use the JSON as the binding instruction. Prioritize panel.shot_blocking for character placement, relative position, eyeline, camera placement, and composition. Use context.location_reference.spatial_profile as factual spatial evidence. Use reference images only for identity, appearance, layout, anchors, and object form.',
+      `Storyboard JSON:\n${input.storyboardJson}`,
+      `Source text priority:\n${input.sourceText}`,
+      `Style:\n${input.styleText}`,
+      input.styleBibleText,
+    ])
+  }
+  return compactLines([
+    `生成一张电影分镜图，画幅 ${input.aspectRatio}。禁止文字、字幕、标签、编号、水印、logo、拼图和多格图。`,
+    '以下 JSON 是约束性指令。优先执行 panel.shot_blocking 中的人物位置、相对关系、视线、机位和构图；context.location_reference.spatial_profile 是场景空间事实依据。参考图只用于身份、外观、空间布局、锚点和物体形态。',
+    `分镜 JSON：\n${input.storyboardJson}`,
+    `镜头原文优先：\n${input.sourceText}`,
+    `风格：\n${input.styleText}`,
+    input.styleBibleText,
+  ])
+}
+
+function renderShortStructured(input: PromptLengthInput, locale: Locale): string {
+  if (locale === 'en') {
+    return compactLines([
+      `One storyboard image only, ${input.aspectRatio}. No text/subtitles/numbers/watermark/logo.`,
+      'Follow the full JSON. Execute shot_blocking first. Use spatial_profile anchors/depth/lighting for scene space. Keep source text action order. Apply style without adding new people, props, buildings, weather, costumes, or plot.',
+      input.storyboardJson,
+      `Source: ${input.sourceText}`,
+      `Style: ${input.styleText}`,
+      input.styleBibleText,
+    ])
+  }
+  return compactLines([
+    `只生成一张分镜图，${input.aspectRatio}。禁止文字、字幕、编号、水印、logo。`,
+    '严格按完整 JSON 执行。优先执行 shot_blocking；用 spatial_profile 的锚点、纵深、光线控制场景空间；动作顺序以原文为准；风格只改变画面表现，不能新增人物、道具、建筑、天气、服装或剧情。',
+    input.storyboardJson,
+    `原文：${input.sourceText}`,
+    `风格：${input.styleText}`,
+    input.styleBibleText,
+  ])
+}
+
+function renderJsonDirect(input: PromptLengthInput, locale: Locale): string {
+  if (locale === 'en') {
+    return compactLines([
+      `Create exactly one image at ${input.aspectRatio}. The JSON below is the full storyboard instruction; obey shot_blocking, photography_rules, spatial_profile, references, source text, and style inside it.`,
+      input.storyboardJson,
+      `No text, subtitles, numbers, watermark, logo, collage, or multi-frame output. Style: ${input.styleText}. Source: ${input.sourceText}.`,
+      input.styleBibleText,
+    ])
+  }
+  return compactLines([
+    `按 ${input.aspectRatio} 生成单张图片。下面 JSON 是完整分镜指令；必须执行其中的 shot_blocking、photography_rules、spatial_profile、参考图、原文和风格。`,
+    input.storyboardJson,
+    `禁止文字、字幕、编号、水印、logo、拼图、多格图。风格：${input.styleText}。原文：${input.sourceText}。`,
+    input.styleBibleText,
+  ])
+}
+
+function renderJsonMinimal(input: PromptLengthInput, locale: Locale): string {
+  if (locale === 'en') {
+    return compactLines([
+      `One ${input.aspectRatio} storyboard image. Obey this JSON completely.`,
+      input.storyboardJson,
+      `No text/subtitles/numbers/watermark/logo. Style: ${input.styleText}. Source: ${input.sourceText}.`,
+    ])
+  }
+  return compactLines([
+    `生成一张 ${input.aspectRatio} 分镜图，完整遵守以下 JSON。`,
+    input.storyboardJson,
+    `禁止文字、字幕、编号、水印、logo。风格：${input.styleText}。原文：${input.sourceText}。`,
+  ])
+}
+
+export function getPromptSuffixVariant(id: string): PromptLengthVariant | null {
   return PROMPT_SUFFIX_TEST_VARIANTS.find((variant) => variant.id === id) ?? null
 }
 
-export function buildPromptSuffixTestPrompt(input: {
-  readonly basePrompt: string
-  readonly suffix: string
+export function buildPromptLengthTestPrompt(input: {
+  readonly variantId: PromptSuffixVariantId
+  readonly locale: Locale
+  readonly promptInput: PromptLengthInput
 }): string {
-  const basePrompt = input.basePrompt.trim()
-  const suffix = input.suffix.trim()
-  if (!basePrompt) throw new Error('PROMPT_SUFFIX_TEST_BASE_PROMPT_REQUIRED')
-  return suffix ? `${basePrompt}\n\n${suffix}` : basePrompt
+  const promptInput = {
+    ...input.promptInput,
+    aspectRatio: input.promptInput.aspectRatio.trim(),
+    storyboardJson: input.promptInput.storyboardJson.trim(),
+    sourceText: input.promptInput.sourceText.trim(),
+    styleText: input.promptInput.styleText.trim(),
+    styleBibleText: input.promptInput.styleBibleText.trim(),
+  }
+  if (!promptInput.storyboardJson) throw new Error('PROMPT_SUFFIX_TEST_STORYBOARD_JSON_REQUIRED')
+  if (input.variantId === 'current_full') return renderCurrentFull(promptInput, input.locale)
+  if (input.variantId === 'medium_structured') return renderMediumStructured(promptInput, input.locale)
+  if (input.variantId === 'short_structured') return renderShortStructured(promptInput, input.locale)
+  if (input.variantId === 'json_direct') return renderJsonDirect(promptInput, input.locale)
+  if (input.variantId === 'json_minimal') return renderJsonMinimal(promptInput, input.locale)
+  throw new Error(`PROMPT_SUFFIX_TEST_VARIANT_UNKNOWN:${input.variantId}`)
 }

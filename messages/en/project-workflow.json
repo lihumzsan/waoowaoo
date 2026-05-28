@@ -16,32 +16,36 @@
   },
   "promptSuffixTest": {
     "eyebrow": "Internal Test Tool",
-    "title": "Image Prompt Suffix Test",
-    "defaults": {
-      "basePrompt": "Single cinematic storyboard image, realistic Eastern Zen aesthetics, 16:9. Early morning mist fills an ancient temple courtyard. On a wooden corridor near a round coarse-linen cushion, an eight-year-old shaved young monk in a low-saturation dark ochre coarse monk robe sits cross-legged. He suddenly opens one eye and brushes a yellow fallen leaf from his knee, his body slightly wobbling. Medium shot, eye-level, 35mm humanistic focal length. Foreground shows wood floorboards and mossy leaf-covered soil, midground holds the young monk and corridor receding into depth, background shows an old stone-brick temple wall."
-    },
+    "title": "Full Image Prompt Length Test",
     "model": {
       "empty": "No image model available"
     },
-    "basePrompt": {
-      "label": "Base Image Prompt"
+    "storyboardJson": {
+      "label": "Storyboard Data JSON"
     },
-    "suffix": {
-      "label": "Active Suffix Version"
+    "sourceText": {
+      "label": "Shot Source Text"
+    },
+    "styleText": {
+      "label": "Style Requirement"
+    },
+    "styleBibleText": {
+      "label": "Fixed Style Bible Append Text"
     },
     "variants": {
-      "title": "Suffixes To Compare"
+      "title": "Full Prompt Versions To Compare"
+    },
+    "finalPromptPreview": {
+      "title": "Current Full Final Prompt"
     },
     "actions": {
       "generate": "Generate Selected",
       "generateOne": "Generate",
-      "reset": "Reset",
-      "copyFinalPrompt": "Copy Final Prompt"
+      "copyFinalPrompt": "Copy Full Prompt"
     },
     "metrics": {
-      "baseLength": "Base {count} chars",
-      "suffixLength": "Suffix {count} chars",
-      "finalLength": "Final {count} chars"
+      "finalLength": "Final {count} chars",
+      "lines": "{count} lines"
     },
     "result": {
       "empty": "Not generated yet",
