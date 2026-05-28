@@ -4,10 +4,8 @@ import type { TaskJobData } from '@/lib/task/types'
 import { getProjectModels } from '@/lib/workers/utils'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import {
-  resolveEditScriptStyleBibleForTask,
-} from '@/lib/edit-script/style-bible-prompt'
-import {
   buildCharacterStyleTestPrompt,
+  buildCharacterStyleTestStyleSummary,
   CHARACTER_STYLE_TEST_ASPECT_RATIO,
 } from '@/lib/character-style-test/prompt'
 import { generateCleanImageToStorage } from './image-task-handler-shared'
@@ -22,30 +20,24 @@ function readRequiredString(value: unknown, field: string): string {
 export async function handleCharacterStyleTestTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const characterRequest = readRequiredString(payload.characterRequest, 'characterRequest')
-  const episodeId = readRequiredString(payload.episodeId ?? job.data.episodeId, 'episodeId')
   const models = await getProjectModels(job.data.projectId, job.data.userId)
   const modelId = models.characterModel
   if (!modelId) throw new Error('Character model not configured')
 
-  const styleBible = await resolveEditScriptStyleBibleForTask({
-    projectId: job.data.projectId,
-    episodeId,
-  })
-  if (!styleBible) {
-    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
-  }
-
   const prompt = buildCharacterStyleTestPrompt({
     characterRequest,
-    styleBible,
+    locale: job.data.locale,
+  })
+  const styleSummary = buildCharacterStyleTestStyleSummary({
+    characterRequest,
     locale: job.data.locale,
   })
 
   await reportTaskProgress(job, 20, {
     stage: 'character_style_test_prepare',
     stageLabel: job.data.locale === 'en'
-      ? 'Preparing Style Bible character asset prompt'
-      : '准备 Style Bible 角色资产提示词',
+      ? 'Preparing input-derived character asset prompt'
+      : '准备基于输入归纳的角色资产提示词',
     displayMode: 'detail',
   })
 
@@ -74,6 +66,6 @@ export async function handleCharacterStyleTestTask(job: Job<TaskJobData>) {
     imageKey,
     prompt,
     aspectRatio: CHARACTER_STYLE_TEST_ASPECT_RATIO,
-    styleSummary: styleBible.styleSummary,
+    styleSummary,
   }
 }

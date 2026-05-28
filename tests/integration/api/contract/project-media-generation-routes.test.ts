@@ -42,7 +42,7 @@ describe('api contract - project media generation routes (operation adapter)', (
     vi.clearAllMocks()
   })
 
-  it('POST /api/projects/[projectId]/character-style-test -> submits Style Bible character test operation', async () => {
+  it('POST /api/projects/[projectId]/character-style-test -> submits input-derived character style test operation', async () => {
     apiAdapterMock.executeProjectAgentOperationFromApi.mockResolvedValueOnce({ success: true })
 
     const res = await characterStyleTestPost(
@@ -50,8 +50,7 @@ describe('api contract - project media generation routes (operation adapter)', (
         path: '/api/projects/project-1/character-style-test',
         method: 'POST',
         body: {
-          episodeId: 'episode-1',
-          characterRequest: '冷峻黑客，黑色风衣，窄框墨镜',
+          characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -61,13 +60,10 @@ describe('api contract - project media generation routes (operation adapter)', (
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
       operationId: 'character_style_test',
       input: {
-        episodeId: 'episode-1',
-        characterRequest: '冷峻黑客，黑色风衣，窄框墨镜',
+        characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光',
         confirmed: true,
       },
-      context: {
-        episodeId: 'episode-1',
-      },
+      context: {},
     }))
   })
 

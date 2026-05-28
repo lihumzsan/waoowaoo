@@ -21,9 +21,8 @@ export const POST = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = toObject(await request.json().catch(() => ({})))
-  const episodeId = normalizeString(body.episodeId)
   const characterRequest = normalizeString(body.characterRequest)
-  if (!episodeId || !characterRequest) {
+  if (!characterRequest) {
     throw new ApiError('INVALID_PARAMS')
   }
 
@@ -32,11 +31,8 @@ export const POST = apiHandler(async (
     operationId: 'character_style_test',
     projectId,
     userId: authResult.session.user.id,
-    context: {
-      episodeId,
-    },
+    context: {},
     input: {
-      episodeId,
       characterRequest,
       confirmed: true,
     },

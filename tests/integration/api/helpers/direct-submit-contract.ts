@@ -89,7 +89,7 @@ function inferTaskContractFromOperation(params: {
       return {
         type: TASK_TYPE.CHARACTER_STYLE_TEST,
         targetType: 'CharacterStyleTest',
-        targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
+        targetId: params.projectId,
       }
     case 'generate_location_image':
       return {
@@ -529,7 +529,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   },
   {
     routeFile: 'src/app/api/projects/[projectId]/character-style-test/route.ts',
-    body: { episodeId: 'episode-1', characterRequest: 'cold hacker in a black coat' },
+    body: { characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light' },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.CHARACTER_STYLE_TEST,
     expectedTargetType: 'CharacterStyleTest',

@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
-import { resolveEditScriptStyleBibleForTask } from '@/lib/edit-script/style-bible-prompt'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { taskSubmitOperationOutputSchema } from '@/lib/operations/output-schemas'
@@ -15,7 +14,7 @@ export function createCharacterStyleTestOperations(): ProjectAgentOperationRegis
   return {
     character_style_test: defineOperation({
       id: 'character_style_test',
-      summary: 'Submit a Style Bible based character asset reference image test.',
+      summary: 'Submit an input-derived character asset reference image style test.',
       intent: 'act',
       effects: {
         writes: true,
@@ -32,23 +31,11 @@ export function createCharacterStyleTestOperations(): ProjectAgentOperationRegis
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),
-        episodeId: z.string().min(1),
         characterRequest: z.string().min(1).max(2000),
       }).passthrough(),
       outputSchema: taskSubmitOperationOutputSchema,
       execute: async (ctx, input) => {
         const characterRequest = input.characterRequest.trim()
-        const episodeId = input.episodeId.trim()
-        const styleBible = await resolveEditScriptStyleBibleForTask({
-          projectId: ctx.projectId,
-          episodeId,
-        })
-        if (!styleBible) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'EDIT_SCRIPT_STYLE_BIBLE_REQUIRED',
-            message: 'Style Bible is required before character style testing',
-          })
-        }
 
         const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
         let billingPayload: Record<string, unknown>
@@ -59,7 +46,6 @@ export function createCharacterStyleTestOperations(): ProjectAgentOperationRegis
             imageModel: projectModelConfig.characterModel,
             basePayload: {
               characterRequest,
-              episodeId,
               count: 1,
             },
           })
@@ -75,10 +61,9 @@ export function createCharacterStyleTestOperations(): ProjectAgentOperationRegis
           userId: ctx.userId,
           locale,
           projectId: ctx.projectId,
-          episodeId,
           type: TASK_TYPE.CHARACTER_STYLE_TEST,
           targetType: 'CharacterStyleTest',
-          targetId: episodeId,
+          targetId: ctx.projectId,
           operationId: 'character_style_test',
           source: ctx.source,
           confirmed: input.confirmed === true,

@@ -1,22 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import { useProjectData } from '@/lib/query/hooks'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { Link } from '@/i18n/navigation'
 import type { TaskPresentationPhase } from '@/lib/task/presentation'
-
-type EpisodeOption = {
-  id: string
-  name: string
-  episodeNumber?: number | null
-}
 
 type SubmitResponse = {
   taskId?: string
@@ -88,27 +81,11 @@ export default function CharacterStyleTestPage() {
 
   const projectId = params.projectId
   const t = useTranslations('workspaceDetail.characterStyleTest')
-  const { data: project, isLoading } = useProjectData(projectId)
-  const episodes = useMemo<EpisodeOption[]>(() => (
-    (project?.episodes ?? []).map((episode) => ({
-      id: episode.id,
-      name: episode.name,
-      episodeNumber: typeof episode.episodeNumber === 'number' ? episode.episodeNumber : null,
-    }))
-  ), [project?.episodes])
-
-  const [episodeId, setEpisodeId] = useState('')
   const [characterRequest, setCharacterRequest] = useState('')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [task, setTask] = useState<TaskDetail | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!episodeId && episodes[0]?.id) {
-      setEpisodeId(episodes[0].id)
-    }
-  }, [episodeId, episodes])
 
   const pollTask = useCallback(async (id: string) => {
     const response = await apiFetch(`/api/tasks/${id}`)
@@ -148,7 +125,7 @@ export default function CharacterStyleTestPage() {
 
   const handleSubmit = useCallback(async () => {
     const trimmedRequest = characterRequest.trim()
-    if (!episodeId || !trimmedRequest) {
+    if (!trimmedRequest) {
       setError(t('needInput'))
       return
     }
@@ -162,7 +139,6 @@ export default function CharacterStyleTestPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          episodeId,
           characterRequest: trimmedRequest,
         }),
       })
@@ -179,7 +155,7 @@ export default function CharacterStyleTestPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [characterRequest, episodeId, projectId, t])
+  }, [characterRequest, projectId, t])
 
   const result = task?.result ?? null
   const taskPresentation = resolveTaskPresentationState({
@@ -227,23 +203,6 @@ export default function CharacterStyleTestPage() {
           <div className="rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-4">
             <div className="flex flex-col gap-4">
               <label className="flex flex-col gap-2">
-                <span className="text-sm font-medium">{t('episodeLabel')}</span>
-                <select
-                  value={episodeId}
-                  onChange={(event) => setEpisodeId(event.target.value)}
-                  disabled={isLoading || episodes.length === 0 || submitting}
-                  className="rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--glass-stroke-focus)]"
-                >
-                  <option value="">{isLoading ? t('loadingProject') : t('episodePlaceholder')}</option>
-                  {episodes.map((episode) => (
-                    <option key={episode.id} value={episode.id}>
-                      {episode.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-2">
                 <span className="text-sm font-medium">{t('requestLabel')}</span>
                 <textarea
                   value={characterRequest}
@@ -255,9 +214,6 @@ export default function CharacterStyleTestPage() {
                 />
               </label>
 
-              {episodes.length === 0 && !isLoading && (
-                <p className="text-sm leading-6 text-[var(--glass-text-secondary)]">{t('noEpisodes')}</p>
-              )}
               {error && (
                 <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>
               )}
@@ -265,7 +221,7 @@ export default function CharacterStyleTestPage() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={submitting || !episodeId || !characterRequest.trim()}
+                disabled={submitting || !characterRequest.trim()}
                 className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? t('submitting') : t('submit')}
