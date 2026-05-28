@@ -573,6 +573,8 @@ function ShotContent({
       {renderChips(labels('props'), details.props)}
       {renderTextSection(labels('description'), data.body)}
       {renderTextSection(labels('srtSegment'), details.srtSegment)}
+      {details.shotBlocking ? renderSection(labels('shotBlocking'), renderJsonBlock(details.shotBlocking)) : null}
+      {renderTextSection(labels('fullFinalPrompt'), details.imagePrompt)}
       <EditablePromptSection
         title={labels('imagePrompt')}
         value={details.imagePrompt}
@@ -1534,29 +1536,6 @@ function SpaceConsistencyContent({
                       {renderValue(labels('screenArea'), anchor.screenArea)}
                       {renderValue(labels('depthLayer'), anchor.depthLayer)}
                       {anchor.spatialRelations.length > 0 ? renderChips(labels('spatialRelations'), anchor.spatialRelations) : null}
-                    </div>
-                  ))}
-                </div>
-              )) : null}
-              {profile.placementZones.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.placementZones.slice(0, expanded ? profile.placementZones.length : 6).map((zone, zoneIndex) => (
-                    <span key={`${profile.targetId ?? profile.name ?? 'zone'}:${zone}:${zoneIndex}`} className={`${SELECTABLE_TEXT_CLASS} inline-flex rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
-                      {zone}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {expanded && profile.placementZoneDetails.length > 0 ? renderSubsection(labels('placementZoneDetails'), (
-                <div className="space-y-1.5">
-                  {profile.placementZoneDetails.map((zone, zoneIndex) => (
-                    <div key={`${profile.targetId ?? profile.name ?? 'zone'}:${zone.label ?? zoneIndex}`} className="space-y-1 rounded-[10px] bg-white p-2 ring-1 ring-slate-100">
-                      {renderValue(labels('placementZone'), zone.label)}
-                      {renderValue(labels('absolutePosition'), zone.absolutePosition)}
-                      {renderValue(labels('depthLayer'), zone.depthLayer)}
-                      {renderValue(labels('visibility'), zone.visibility)}
-                      {zone.nearAnchors.length > 0 ? renderChips(labels('nearAnchors'), zone.nearAnchors) : null}
-                      {zone.spatialRelations.length > 0 ? renderChips(labels('spatialRelations'), zone.spatialRelations) : null}
                     </div>
                   ))}
                 </div>

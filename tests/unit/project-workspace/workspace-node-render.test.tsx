@@ -146,9 +146,12 @@ describe('workspace node rendering', () => {
           name: 'Temple courtyard',
           shotNumbers: [1],
           sceneSummary: 'Wood door at left rear, incense burner in midground.',
-          placementZones: ['Left rear wall beside the wood door'],
-          anchors: [],
-          placementZoneDetails: [],
+          anchors: [{
+            label: 'Left wood door',
+            screenArea: 'left rear',
+            depthLayer: 'background',
+            spatialRelations: [],
+          }],
           depthLayout: null,
           lightingDirection: null,
           rawProfile: null,
@@ -158,7 +161,7 @@ describe('workspace node rendering', () => {
     })
 
     expect(html).toContain('Temple courtyard')
-    expect(html).toContain('Left rear wall beside the wood door')
+    expect(html).toContain('Wood door at left rear')
   })
 
   it('renders expanded spatial profile details in space consistency nodes', () => {
@@ -187,20 +190,11 @@ describe('workspace node rendering', () => {
           name: 'Temple courtyard',
           shotNumbers: [1],
           sceneSummary: 'Wood door at left rear, incense burner in midground.',
-          placementZones: ['Left rear wall beside the wood door'],
           anchors: [{
             label: 'Left wood door',
             screenArea: 'left rear',
             depthLayer: 'background',
             spatialRelations: ['Long table sits to the right of the door'],
-          }],
-          placementZoneDetails: [{
-            label: 'Left rear wall beside the wood door',
-            absolutePosition: 'left rear wall',
-            nearAnchors: ['Left wood door'],
-            depthLayer: 'background',
-            visibility: 'full body',
-            spatialRelations: ['behind the incense burner'],
           }],
           depthLayout: {
             foreground: 'stone path',
@@ -217,7 +211,6 @@ describe('workspace node rendering', () => {
     })
 
     expect(html).toContain('Left wood door')
-    expect(html).toContain('left rear wall')
     expect(html).toContain('stone path')
     expect(html).toContain('soft light from upper right')
   })
@@ -312,7 +305,7 @@ describe('workspace node rendering', () => {
         spatialProfileAnalyzedAt: '2026-05-27T08:00:00.000Z',
         spatialProfileJson: {
           sceneSummary: 'Wood door at left rear',
-          placementZones: [{ label: 'Left door wall' }],
+          anchors: [{ label: 'Left wood door' }],
         },
       },
     })
@@ -776,6 +769,10 @@ describe('workspace node rendering', () => {
         props: [],
         imagePrompt: 'editable image prompt',
         videoPrompt: 'editable video prompt',
+        shotBlocking: {
+          absolutePosition: 'Street midground near the lamp',
+          screenPosition: 'left third',
+        },
       },
     })
     const videoPlanHtml = renderNode({
@@ -818,6 +815,10 @@ describe('workspace node rendering', () => {
     })
 
     expect(shotHtml.match(/aria-label="editPrompt"/g)).toHaveLength(2)
+    expect(shotHtml).toContain('shotBlocking')
+    expect(shotHtml).toContain('Street midground near the lamp')
+    expect(shotHtml).toContain('fullFinalPrompt')
+    expect(shotHtml).toContain('editable image prompt')
     expect(videoPlanHtml.match(/aria-label="editPrompt"/g)).toHaveLength(1)
     expect(`${shotHtml}${videoPlanHtml}`).toContain('data-icon="edit"')
     expect(`${shotHtml}${videoPlanHtml}`).not.toContain('<textarea')

@@ -164,7 +164,7 @@
         "referencePromptHint": "生成时会按已选顺序传入参考图，并把右侧说明写入分镜 prompt。",
         "referenceDefaultStoryboard": "这是此前分镜「{label}」，用于保持镜头连续性、人物落位和场景空间关系；不要照搬构图，按当前分镜重新绘制。",
         "referenceDefaultCharacter": "这是资产库角色「{label}」，用于锁定身份、脸型、发型、服装、体型和主要外观特征。",
-        "referenceDefaultLocation": "这是资产库场景「{label}」，用于参考空间布局、关键锚点、入口出口和可站区域；不要直接贴图。",
+        "referenceDefaultLocation": "这是资产库场景「{label}」，用于参考空间布局、关键锚点、入口出口和物体相对位置；不要直接贴图。",
         "referenceDefaultProp": "这是资产库道具「{label}」，用于参考道具形态、材质和关键细节。",
         "referenceDefaultCustom": "这是自定义参考图「{label}」，仅按这里填写的说明提取必要视觉信息。",
         "referenceSource": {

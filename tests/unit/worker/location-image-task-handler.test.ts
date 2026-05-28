@@ -43,15 +43,6 @@ const spatialProfileServiceMock = vi.hoisted(() => ({
       depthLayer: '中景',
       spatialRelations: ['墙面右侧是街道'],
     }],
-    placementZones: [{
-      id: 'zone_wall',
-      label: '左侧墙边站位',
-      absolutePosition: '画面左侧靠墙',
-      nearAnchors: ['左侧墙面'],
-      depthLayer: '中景',
-      visibility: '适合全身出现',
-      spatialRelations: ['位于街道左侧'],
-    }],
     depthLayout: {
       foreground: '街道前景',
       midground: '墙边和路面',

@@ -30,9 +30,6 @@ import {
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image'
 import {
-  parseLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForStoryboardTask,
 } from '@/lib/edit-script/style-bible-prompt'
@@ -154,7 +151,6 @@ function buildPanelPromptContext(params: {
     return {
       name: matchedLocation.name,
       description: selectedImage?.description || null,
-      available_slots: parseLocationAvailableSlots(selectedImage?.availableSlots),
       spatial_profile: selectedImage && 'spatialProfileJson' in selectedImage ? selectedImage.spatialProfileJson ?? null : null,
     }
   })()

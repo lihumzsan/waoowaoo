@@ -16,7 +16,7 @@ Storyboard panel data:
 Reference image usage:
 If `context.additional_reference_images` is present in the storyboard data, treat each entry as paired image-plus-text guidance. Previous storyboard images are for continuity, staging, character placement, and spatial relationships. Asset-library character images are for identity and appearance. Asset-library location/prop images are for layout, anchors, and object form. Custom images should be used only for the user-described purpose. The text guidance defines how each reference image should affect the output; do not copy composition, old style, or unrelated content by default.
 If `panel.shot_blocking` is present, it is the primary placement instruction. Follow its character absolute positions, relative positions, facing, eyelines, screen positions, camera placement, and composition.
-If `context.location_reference.spatial_profile` is present, treat it as the factual scene-space basis. Use its anchors, placementZones, depthLayout, and lightingDirection to preserve spatial relationships.
+If `context.location_reference.spatial_profile` is present, treat it as the factual scene-space basis. Use its anchors, depthLayout, and lightingDirection to preserve spatial relationships.
 
 Source text:
 {source_text}
@@ -26,11 +26,11 @@ Style requirement:
 
 Execution rules:
 1. Respect panel composition, character placement, and action logic.
-2. If location data contains `available_slots`, treat them as display-friendly typical anchors; consistency must follow `spatial_profile` and `shot_blocking`.
+2. Use `spatial_profile` anchors and `shot_blocking` as the placement basis.
 3. When `photography_rules.cameraPlan.shotBlocking` exists, follow its character placement, relative positions, screen positions, camera placement, and composition.
-4. When the panel description, source text, action flow, or scene nature implies movement, entry/exit, path traversal, transition space, temporary space, empty space, or abstract/non-literal space, do not force the character to remain inside an existing slot.
+4. When the panel description, source text, action flow, or scene nature implies movement, entry/exit, path traversal, transition space, temporary space, empty space, or abstract/non-literal space, use the spatial anchors and shot blocking to place characters naturally.
 5. Use character reference images for identity, face shape, hairstyle, outfit, body type, and primary appearance consistency. Do not replace the main appearance of asset-library characters.
-6. Use location reference images for spatial layout, key anchors, entrances/exits, relative object positions, and usable placement areas.
+6. Use location reference images for spatial layout, key anchors, entrances/exits, and relative object positions.
 7. `context.reference_images` is the ordered map for the actual uploaded reference images. Use it to identify which image number belongs to each character, location, source panel, sketch, or extra reference.
 8. Match names in the user-editable prompt, storyboard description, and source text to reference images through `context.reference_images`.
 9. The order of names in user text does not define reference image order. Only `context.reference_images` defines the image order.

@@ -6,7 +6,6 @@ import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-imag
 import { prisma } from '@/lib/prisma'
 import type { Locale } from '@/i18n/routing'
 import {
-  deriveAvailableSlotsFromSpatialProfile,
   parseLocationSpatialProfile,
   type LocationSpatialProfile,
 } from './types'
@@ -38,10 +37,6 @@ interface AnalyzeGlobalLocationImageInput {
 
 function profileToJson(profile: LocationSpatialProfile): Prisma.InputJsonValue {
   return profile as unknown as Prisma.InputJsonObject
-}
-
-function profileAvailableSlotsJson(profile: LocationSpatialProfile): string {
-  return JSON.stringify(deriveAvailableSlotsFromSpatialProfile(profile))
 }
 
 function errorMessage(error: unknown): string {
@@ -139,7 +134,6 @@ export async function analyzeAndPersistProjectLocationImageSpatialProfile(
         spatialProfileError: null,
         spatialProfileAnalyzedAt: new Date(),
         spatialProfileModel: input.model,
-        availableSlots: profileAvailableSlotsJson(profile),
       },
     })
     return profile
@@ -199,7 +193,6 @@ export async function analyzeAndPersistGlobalLocationImageSpatialProfile(
         spatialProfileError: null,
         spatialProfileAnalyzedAt: new Date(),
         spatialProfileModel: input.model,
-        availableSlots: profileAvailableSlotsJson(profile),
       },
     })
     return profile

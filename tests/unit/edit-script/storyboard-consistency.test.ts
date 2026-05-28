@@ -95,16 +95,7 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
           label: '左侧木门',
           screenArea: '画面左后方',
           depthLayer: '背景',
-          spatialRelations: ['木门右侧是石阶', '木门前方有可站空地'],
-        }],
-        placementZones: [{
-          id: 'zone_left_door_inside',
-          label: '左侧木门内侧靠墙的位置',
-          absolutePosition: '画面左后方靠墙',
-          nearAnchors: ['左侧木门'],
-          depthLayer: '背景',
-          visibility: '适合半身或全身出现',
-          spatialRelations: ['位于香炉左后方', '距离石阶较近'],
+          spatialRelations: ['木门右侧是石阶', '木门位于香炉左后方'],
         }],
         depthLayout: {
           foreground: '前景为空地',
@@ -199,7 +190,8 @@ describe('edit-script storyboard spatial text blocking generation', () => {
     expect(result.cameraPlanOutput.panels[0]?.shotBlocking.absolutePosition).toBe('人物站在中景香炉前方的空地')
     expect(result.panels[0]?.metadata).toMatchObject({ source: 'camera_plan', strategy: 'spatial_text_blocking' })
     const promptCalls = promptMock.buildAiPrompt.mock.calls.map((call) => call[0])
-    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门内侧靠墙的位置')
+    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门')
+    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).not.toContain('placementZones')
     expect(promptCalls[1]?.variables.spatial_profile_strategy_output_json).toContain('edit-1:videoBlock:1')
     const deprecatedVariableKey = ['coordinate', 'strategy', 'output', 'json'].join('_')
     expect(promptCalls[0]?.variables).not.toHaveProperty(deprecatedVariableKey)

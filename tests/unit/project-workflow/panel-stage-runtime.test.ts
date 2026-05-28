@@ -4,7 +4,7 @@ import { resolveInsertPanelUserInput } from '@/lib/project-workflow/insert-panel
 import { usePanelTaskStatus } from '@/features/project-workspace/components/video/panel-card/runtime/hooks/usePanelTaskStatus'
 
 describe('insert panel prompt context', () => {
-  it('injects available slots for related selected location images', () => {
+  it('injects related selected location image descriptions without placement slots', () => {
     const text = buildInsertPanelLocationsDescription(
       [
         {
@@ -13,9 +13,6 @@ describe('insert panel prompt context', () => {
             {
               isSelected: true,
               description: '长方形饭桌位于画面中央',
-              availableSlots: JSON.stringify([
-                '饭桌左侧靠桌边的位置',
-              ]),
             },
           ],
         },
@@ -28,8 +25,7 @@ describe('insert panel prompt context', () => {
     )
 
     expect(text).toContain('餐厅: 长方形饭桌位于画面中央')
-    expect(text).toContain('可站位置：')
-    expect(text).toContain('饭桌左侧靠桌边的位置')
+    expect(text).not.toContain('可站位置：')
     expect(text).not.toContain('客厅')
   })
 })

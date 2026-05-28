@@ -1149,7 +1149,14 @@ describe('workspace node canvas projection', () => {
       lipSyncVideoUrl: 'https://example.com/lip.mp4',
       videoModel: 'video-model',
       linkedToNextPanel: true,
-      photographyRules: 'photo rules',
+      photographyRules: JSON.stringify({
+        cameraPlan: {
+          shotBlocking: {
+            absolutePosition: '中景靠近左侧墙面',
+            screenPosition: '画面左三分之一',
+          },
+        },
+      }),
       actingNotes: 'acting notes',
       imageErrorMessage: 'image failed',
       videoErrorMessage: 'video failed',
@@ -1203,7 +1210,18 @@ describe('workspace node canvas projection', () => {
       srtSegment: '小女孩说话',
       imagePrompt: 'rich image prompt',
       videoPrompt: 'rich video prompt',
-      photographyRules: 'photo rules',
+      photographyRules: JSON.stringify({
+        cameraPlan: {
+          shotBlocking: {
+            absolutePosition: '中景靠近左侧墙面',
+            screenPosition: '画面左三分之一',
+          },
+        },
+      }),
+      shotBlocking: {
+        absolutePosition: '中景靠近左侧墙面',
+        screenPosition: '画面左三分之一',
+      },
       actingNotes: 'acting notes',
       storyboardTextJson: 'storyboard json',
       photographyPlan: 'photography plan',
@@ -1318,14 +1336,11 @@ describe('workspace node canvas projection', () => {
             spatialProfileJson: {
               schemaVersion: 1,
               sceneSummary: 'Docking bay left airlock and central platform.',
-              anchors: [],
-              placementZones: [{
-                id: 'zone-platform',
+              anchors: [{
+                id: 'anchor-platform',
                 label: 'central platform',
-                absolutePosition: 'middle of the bay',
-                nearAnchors: ['airlock'],
+                screenArea: 'middle of the bay',
                 depthLayer: 'midground',
-                visibility: 'full body',
                 spatialRelations: ['beside the warning light'],
               }],
               depthLayout: {
@@ -1917,17 +1932,6 @@ describe('workspace node canvas projection', () => {
                     depthLayer: 'background',
                     spatialRelations: ['Long table sits to the right of the door'],
                   }],
-                  placementZones: [
-                    {
-                      id: 'zone-left-door',
-                      label: 'Left rear wall beside the wood door',
-                      absolutePosition: 'left rear wall',
-                      nearAnchors: ['Left wood door'],
-                      depthLayer: 'background',
-                      visibility: 'full body',
-                      spatialRelations: ['behind the incense burner'],
-                    },
-                  ],
                   depthLayout: {
                     foreground: 'stone path',
                     midground: 'incense burner',
@@ -2001,20 +2005,11 @@ describe('workspace node canvas projection', () => {
       spatialProfiles: [
         {
           name: 'Temple courtyard',
-          placementZones: ['Left rear wall beside the wood door'],
           anchors: [{
             label: 'Left wood door',
             screenArea: 'left rear',
             depthLayer: 'background',
             spatialRelations: ['Long table sits to the right of the door'],
-          }],
-          placementZoneDetails: [{
-            label: 'Left rear wall beside the wood door',
-            absolutePosition: 'left rear wall',
-            nearAnchors: ['Left wood door'],
-            depthLayer: 'background',
-            visibility: 'full body',
-            spatialRelations: ['behind the incense burner'],
           }],
           depthLayout: {
             foreground: 'stone path',

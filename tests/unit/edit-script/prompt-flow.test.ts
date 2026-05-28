@@ -163,7 +163,7 @@ describe('edit script block-first prompt flow', () => {
     expect(panelFinalPromptBlock).toContain('严禁因为风格添加原 shot、videoPrompt、资产图或空间档案里没有的人物、道具、建筑、天气、时代元素、服装、符号或剧情动作')
     expect(panelFinalPromptBlock).toContain('不要只在末尾堆成“风格：……”')
     expect(panelFinalPromptBlock).toContain('完整输出示例仅用于学习字段完整度和通用风格融合写法')
-    expect(panelFinalPromptBlock).toContain('人物A / 人物B / 当前场景 / 主要锚点 / 可站区域')
+    expect(panelFinalPromptBlock).toContain('人物A / 人物B / 当前场景 / 主要锚点 / 空间层次')
     expect(panelFinalPromptBlock).toContain('"shotScale": "中景"')
     expect(panelFinalPromptBlock).toContain('"shotScale": "近景"')
     expect(panelFinalPromptBlock).toContain('"shotScale": "全景"')

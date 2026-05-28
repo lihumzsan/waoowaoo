@@ -87,15 +87,6 @@ const sharedMock = vi.hoisted(() => ({
                 depthLayer: '中景',
                 spatialRelations: ['墙面右侧是街道'],
               }],
-              placementZones: [{
-                id: 'zone_wall',
-                label: '街道左侧靠墙的留白位置',
-                absolutePosition: '画面左侧靠墙',
-                nearAnchors: ['左侧墙面'],
-                depthLayer: '中景',
-                visibility: '适合半身出现',
-                spatialRelations: ['位于路灯前方'],
-              }],
               depthLayout: {
                 foreground: '街道前景',
                 midground: '墙边位置',
@@ -103,9 +94,6 @@ const sharedMock = vi.hoisted(() => ({
               },
               lightingDirection: '路灯从右侧照入',
             },
-            availableSlots: JSON.stringify([
-              '街道左侧靠墙的留白位置',
-            ]),
           },
         ],
       },
@@ -247,7 +235,7 @@ describe('worker panel-image-task-handler behavior', () => {
     }))
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
-        storyboard_text_json_input: expect.stringContaining('"available_slots"'),
+        storyboard_text_json_input: expect.not.stringContaining('"available_slots"'),
       }),
     }))
     const promptCalls = promptMock.buildPrompt.mock.calls as unknown as Array<[unknown]>
@@ -408,12 +396,12 @@ describe('worker panel-image-task-handler behavior', () => {
     const context = JSON.parse(contextJson) as {
       panel?: { shot_blocking?: { cameraPlacement?: string } }
       context?: {
-        location_reference?: { spatial_profile?: { placementZones?: Array<{ label: string }> } }
+        location_reference?: { spatial_profile?: { anchors?: Array<{ label: string }> } }
         reference_images?: Array<{ image_no: string; role: string; name: string }>
       }
     }
     expect(context.panel?.shot_blocking?.cameraPlacement).toBe('从街道中线偏右拍向左侧墙面')
-    expect(context.context?.location_reference?.spatial_profile?.placementZones?.[0]?.label).toBe('街道左侧靠墙的留白位置')
+    expect(context.context?.location_reference?.spatial_profile?.anchors?.[0]?.label).toBe('左侧墙面')
     expect(context.context?.reference_images?.map((item) => item.role)).toEqual(['sketch', 'character', 'location'])
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),

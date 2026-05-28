@@ -15,7 +15,7 @@ Priority:
 finalPanelPrompt requirements:
 - It must be a complete natural-language prompt directly usable by an image model, not a field summary.
 - Include the original shot visualAction, camera, and videoPrompt intent.
-- Use placementZones, anchors, depthLayout, and lightingDirection from spatial_profile_strategy_output_json.locations[].spatialProfile.
+- Use anchors, depthLayout, and lightingDirection from spatial_profile_strategy_output_json.locations[].spatialProfile.
 - Specify character absolute position, relative position, facing, eyeline, screen position, camera placement, shot scale, composition, lens, and depth.
 - Weave the Camera Style Bible into this shot's lighting, color, materials, spatial layers, depth of field, and composition. Do not dump it as a trailing "style: ..." phrase.
 - Specify foreground/midground/background, focus relationship, eyeline, left/right relation, and axis continuity.
@@ -28,7 +28,7 @@ Style integration rules:
 - If style conflicts with the spatial profile, obey the spatial profile and shotBlocking. Style changes treatment only, not scene structure.
 - If a style instruction would introduce new content, translate it into treatment that adds no content. For example, "neon feeling" must not add neon signs or screens; it can become cooler edge highlights, low-saturation cyan-purple reflections, and harder highlight control on existing surfaces. If the scene has no reflective material, do not invent one.
 
-The following complete output example is only for field completeness and generic style-integration technique. Do not copy its scene, characters, or actions. It uses generic labels such as Character A, Character B, current location, main anchor, and placement zone. Actual output must replace them with the real characters, scene, and spatial profile from the input:
+The following complete output example is only for field completeness and generic style-integration technique. Do not copy its scene, characters, or actions. It uses generic labels such as Character A, Character B, current location, main anchor, and spatial layer. Actual output must replace them with the real characters, scene, and spatial profile from the input:
 {
   "panelFinalPromptBlockOutput": {
     "sourceVideoBlockId": "example:block:1",
@@ -38,7 +38,7 @@ The following complete output example is only for field completeness and generic
         "sourceShotNumber": 1,
         "sourceVideoBlockId": "example:block:1",
         "shotScale": "medium shot",
-        "cameraPosition": "slightly right of the placement zone in the current location, facing Character A and the main anchor",
+        "cameraPosition": "a mid-distance observation position slightly right in the current location, facing Character A and the main anchor",
         "cameraHeight": "eye-level, close to Character A's eye height",
         "cameraAngle": "straight-on with a slight side-observer angle",
         "composition": "Character A sits or stands slightly right of center, the main anchor remains visible in the background, and the left side keeps moderate negative space",
@@ -47,27 +47,27 @@ The following complete output example is only for field completeness and generic
         "screenDirection": "Character A faces toward the front-left of frame and looks toward the current action target",
         "aestheticIntent": "use natural restrained treatment to emphasize the character action without changing scene structure",
         "emotionalEffect": "quiet, restrained, and realistic",
-        "continuityNote": "preserve the foreground/midground/background relation among the main anchor, placement zone, and Character A",
+        "continuityNote": "preserve the foreground/midground/background relation among the main anchor, spatial layers, and Character A",
         "shotBlocking": {
           "locationName": "current location",
-          "absolutePosition": "Character A stands or sits inside the spatial profile placement zone, slightly right of center in the midground",
+          "absolutePosition": "Character A stands or sits in the midground-right position implied by the spatial profile anchor relations",
           "relativePosition": "Character A is in front of the main anchor with a clear foreground-background relation",
           "screenPosition": "Character A is slightly right of center, main anchor behind them",
           "characterPlacements": [
             {
               "characterName": "Character A",
-              "absolutePosition": "midground placement zone in the current location",
+              "absolutePosition": "midground-right position in the current location",
               "relativePosition": "in front of the main anchor, with room left near the frame edge",
               "screenPosition": "slightly right of center",
               "facing": "body turned toward the front-left of frame",
               "eyeline": "looking toward the current action target or counterpart"
             }
           ],
-          "cameraPlacement": "medium-distance camera slightly right of the placement zone, eye-level, facing Character A and the main anchor",
+          "cameraPlacement": "medium-distance camera slightly right in the scene, eye-level, facing Character A and the main anchor",
           "composition": "foreground keeps existing floor or edge detail, midground anchors Character A, background preserves the main anchor",
           "continuityNote": "preserve Character A's left/right and foreground/background relationship to the main anchor"
         },
-        "finalPanelPrompt": "Single cinematic storyboard image, natural restrained realism, 16:9. Use only the existing floor, wall, main anchor, and Character A from the current location; do not add people, props, architecture, weather, or costumes. Soft diffused light follows the spatial profile's lighting direction and falls across Character A, the floor, and the background anchor. The palette stays low-saturation, materials remain realistic, shadows are soft, and highlights are restrained. Character A is inside the spatial profile placement zone, slightly right of center in the midground, facing toward the front-left of frame and looking toward the current action target; the main anchor remains recognizable behind them. Medium shot, eye-level, 35mm, natural shallow depth, Character A sharp and the rear anchor gently softened. Foreground preserves existing floor or edge detail, midground holds Character A, background holds the main anchor and rear space. The composition has moderate negative space and feels quiet and realistic. No text, no subtitles, no numbers, no watermark, no logo."
+        "finalPanelPrompt": "Single cinematic storyboard image, natural restrained realism, 16:9. Use only the existing floor, wall, main anchor, and Character A from the current location; do not add people, props, architecture, weather, or costumes. Soft diffused light follows the spatial profile's lighting direction and falls across Character A, the floor, and the background anchor. The palette stays low-saturation, materials remain realistic, shadows are soft, and highlights are restrained. Character A is in the midground-right position implied by the spatial profile anchor relations, facing toward the front-left of frame and looking toward the current action target; the main anchor remains recognizable behind them. Medium shot, eye-level, 35mm, natural shallow depth, Character A sharp and the rear anchor gently softened. Foreground preserves existing floor or edge detail, midground holds Character A, background holds the main anchor and rear space. The composition has moderate negative space and feels quiet and realistic. No text, no subtitles, no numbers, no watermark, no logo."
       },
       {
         "panelIndex": 1,
@@ -122,13 +122,13 @@ The following complete output example is only for field completeness and generic
         "continuityNote": "preserve the axis among entrance, spatial depth, Character C, and rear anchor",
         "shotBlocking": {
           "locationName": "current location",
-          "absolutePosition": "Character C stands in a distant placement zone from the spatial profile, slightly left of center",
+          "absolutePosition": "Character C stands in the distant position implied by the spatial profile anchor relations, slightly left of center",
           "relativePosition": "Character C is among existing walls, edge lines, or rear anchors, far from camera",
           "screenPosition": "distant position slightly left of center",
           "characterPlacements": [
             {
               "characterName": "Character C",
-              "absolutePosition": "distant placement zone in the current location",
+              "absolutePosition": "distant position in the current location",
               "relativePosition": "between existing structure lines, in front of the rear anchor",
               "screenPosition": "distant and slightly left of center",
               "facing": "toward spatial depth or an off-screen target",
@@ -139,7 +139,7 @@ The following complete output example is only for field completeness and generic
           "composition": "existing walls, edge lines, or structure lines converge toward Character C",
           "continuityNote": "preserve the entrance-to-depth axis and keep Character C far from camera"
         },
-        "finalPanelPrompt": "Single cinematic storyboard image, cold hard-surface realism, 16:9. Use only the current location's existing walls, edge lines, rear anchor, and Character C; do not add screens, neon lights, machines, extra props, or new light sources. Existing hard surfaces carry narrow cold highlights; the palette compresses into low-saturation cool gray, silver-gray, or existing cool materials in the scene. Top or side light cuts a clean rim on Character C, the space stays sparse and restrained, and the lens feels crisp without excessive bloom. Character C stands in the distant placement zone, slightly left of center, facing deeper into the space or toward an off-screen target. Wide shot, low camera, slight low angle, 28mm wide lens, deep depth. Existing walls, edge lines, or structure lines create depth convergence, placing Character C near the distant center and creating a calm detached distance. No text, no subtitles, no numbers, no watermark, no logo."
+        "finalPanelPrompt": "Single cinematic storyboard image, cold hard-surface realism, 16:9. Use only the current location's existing walls, edge lines, rear anchor, and Character C; do not add screens, neon lights, machines, extra props, or new light sources. Existing hard surfaces carry narrow cold highlights; the palette compresses into low-saturation cool gray, silver-gray, or existing cool materials in the scene. Top or side light cuts a clean rim on Character C, the space stays sparse and restrained, and the lens feels crisp without excessive bloom. Character C stands in the distant position implied by the spatial profile anchor relations, slightly left of center, facing deeper into the space or toward an off-screen target. Wide shot, low camera, slight low angle, 28mm wide lens, deep depth. Existing walls, edge lines, or structure lines create depth convergence, placing Character C near the distant center and creating a calm detached distance. No text, no subtitles, no numbers, no watermark, no logo."
       }
     ]
   }

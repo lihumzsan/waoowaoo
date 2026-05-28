@@ -12,7 +12,16 @@ export const LOCATION_SPATIAL_PROFILE_STATUSES = [
 
 export type LocationSpatialProfileStatus = (typeof LOCATION_SPATIAL_PROFILE_STATUSES)[number]
 
-const FORBIDDEN_FIELD_NAMES = new Set(['x', 'y', 'blockedZones', 'cameraVantages', 'profileSource'])
+const FORBIDDEN_FIELD_NAMES = new Set([
+  'x',
+  'y',
+  'blockedZones',
+  'cameraVantages',
+  'profileSource',
+  'placementZones',
+  'availableSlots',
+  'available_slots',
+])
 const COORDINATE_PATTERN = /\b(?:x|y)\s*[:=]\s*-?\d+(?:\.\d+)?\b|坐标|coordinate|coordinates/i
 
 function assertNoForbiddenSpatialFields(value: unknown, path: readonly string[], ctx: z.RefinementCtx): void {
@@ -59,21 +68,10 @@ const anchorSchema = z.object({
   spatialRelations: z.array(z.string().min(1)).min(1),
 }).strict()
 
-const placementZoneSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  absolutePosition: z.string().min(1),
-  nearAnchors: z.array(z.string().min(1)).min(1),
-  depthLayer: z.string().min(1),
-  visibility: z.string().min(1),
-  spatialRelations: z.array(z.string().min(1)).min(1),
-}).strict()
-
 export const locationSpatialProfileSchema = z.object({
   schemaVersion: z.literal(LOCATION_SPATIAL_PROFILE_SCHEMA_VERSION),
   sceneSummary: z.string().min(1),
   anchors: z.array(anchorSchema).min(1),
-  placementZones: z.array(placementZoneSchema).min(1),
   depthLayout: z.object({
     foreground: z.string().min(1),
     midground: z.string().min(1),
@@ -90,31 +88,14 @@ export function parseLocationSpatialProfile(value: unknown): LocationSpatialProf
   return locationSpatialProfileSchema.parse(value)
 }
 
-export function deriveAvailableSlotsFromSpatialProfile(profile: LocationSpatialProfile): string[] {
-  const labels = profile.placementZones.map((zone) => zone.label.trim()).filter(Boolean)
-  return Array.from(new Set(labels))
-}
-
 export function formatLocationSpatialProfileForPrompt(profile: LocationSpatialProfile): string {
   const anchors = profile.anchors
     .map((anchor) => `- ${anchor.label}：${anchor.screenArea}，${anchor.depthLayer}；${anchor.spatialRelations.join('；')}`)
-    .join('\n')
-  const zones = profile.placementZones
-    .map((zone) => [
-      `- ${zone.label}`,
-      `绝对位置：${zone.absolutePosition}`,
-      `邻近锚点：${zone.nearAnchors.join('、')}`,
-      `景深层次：${zone.depthLayer}`,
-      `可见性：${zone.visibility}`,
-      `空间关系：${zone.spatialRelations.join('；')}`,
-    ].join('；'))
     .join('\n')
   return [
     `场景空间总结：${profile.sceneSummary}`,
     '空间锚点：',
     anchors,
-    '人物可站位：',
-    zones,
     `景深布局：前景：${profile.depthLayout.foreground}；中景：${profile.depthLayout.midground}；背景：${profile.depthLayout.background}`,
     `光线方向：${profile.lightingDirection}`,
   ].join('\n')

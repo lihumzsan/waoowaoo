@@ -162,15 +162,6 @@ function buildSourceSnapshotWithLocation() {
           depthLayer: '背景',
           spatialRelations: ['木门右侧是长桌'],
         }],
-        placementZones: [{
-          id: 'zone_left_door',
-          label: '左侧木门内侧靠墙的位置',
-          absolutePosition: '画面左后方靠墙',
-          nearAnchors: ['左侧木门'],
-          depthLayer: '背景',
-          visibility: '适合全身出现',
-          spatialRelations: ['位于香炉后方'],
-        }],
         depthLayout: {
           foreground: '石板地面',
           midground: '香炉',

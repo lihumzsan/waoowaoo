@@ -179,6 +179,7 @@ export interface WorkspaceCanvasShotDetails {
   readonly imagePrompt?: string | null
   readonly videoPrompt?: string | null
   readonly photographyRules?: string | null
+  readonly shotBlocking?: Record<string, unknown> | null
   readonly actingNotes?: string | null
   readonly storyboardTextJson?: string | null
   readonly photographyPlan?: string | null
@@ -382,19 +383,10 @@ export interface WorkspaceCanvasSpaceConsistencyDetails {
     readonly name?: string | null
     readonly shotNumbers: readonly number[]
     readonly sceneSummary?: string | null
-    readonly placementZones: readonly string[]
     readonly anchors: readonly {
       readonly label?: string | null
       readonly screenArea?: string | null
       readonly depthLayer?: string | null
-      readonly spatialRelations: readonly string[]
-    }[]
-    readonly placementZoneDetails: readonly {
-      readonly label?: string | null
-      readonly absolutePosition?: string | null
-      readonly nearAnchors: readonly string[]
-      readonly depthLayer?: string | null
-      readonly visibility?: string | null
       readonly spatialRelations: readonly string[]
     }[]
     readonly depthLayout?: {

@@ -1,9 +1,5 @@
 import { buildCharactersIntroduction } from '@/lib/constants'
 import {
-  formatLocationAvailableSlotsText,
-  parseLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   formatLocationSpatialProfileForPrompt,
   parseLocationSpatialProfile,
 } from '@/lib/location-spatial-profile/types'
@@ -33,7 +29,6 @@ export type PromptLocationAsset = {
   images?: Array<{
     isSelected?: boolean
     description?: string | null
-    availableSlots?: string | null
     spatialProfileJson?: unknown
   }>
 }
@@ -156,17 +151,12 @@ export function buildPromptAssetContext(input: PromptAssetContextInput): PromptA
     : null
   const selectedImage = matchedLocation?.images?.find((image) => image.isSelected) ?? matchedLocation?.images?.[0]
   const locationDescription = selectedImage?.description || '无'
-  const locationSlotsText = formatLocationAvailableSlotsText(
-    parseLocationAvailableSlots(selectedImage?.availableSlots),
-    input.locale ?? 'zh',
-  )
   const spatialProfileText = selectedImage?.spatialProfileJson
     ? formatLocationSpatialProfileForPrompt(parseLocationSpatialProfile(selectedImage.spatialProfileJson))
     : ''
   const locationDescriptionText = [
     locationDescription,
     spatialProfileText,
-    locationSlotsText,
   ].filter(Boolean).join('\n\n')
 
   return {

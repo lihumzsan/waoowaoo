@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deriveAvailableSlotsFromSpatialProfile,
   locationSpatialProfileSchema,
 } from '@/lib/location-spatial-profile/types'
 
@@ -12,16 +11,7 @@ const validProfile = {
     label: '左侧木门',
     screenArea: '画面左后方',
     depthLayer: '背景',
-    spatialRelations: ['木门右侧是石径', '木门前方有可站空地'],
-  }],
-  placementZones: [{
-    id: 'zone_left_door_inside',
-    label: '左侧木门内侧靠墙的位置',
-    absolutePosition: '画面左后方靠墙',
-    nearAnchors: ['左侧木门'],
-    depthLayer: '背景',
-    visibility: '适合半身或全身出现',
-    spatialRelations: ['位于石径左后方', '距离长凳较远'],
+    spatialRelations: ['木门右侧是石径', '木门位于庭院左后方'],
   }],
   depthLayout: {
     foreground: '前景是石径入口',
@@ -32,17 +22,20 @@ const validProfile = {
 }
 
 describe('LocationSpatialProfile schema', () => {
-  it('accepts Chinese natural-language spatial facts and derives display slots', () => {
+  it('accepts Chinese natural-language spatial facts with anchors only', () => {
     const profile = locationSpatialProfileSchema.parse(validProfile)
 
     expect(profile.sceneSummary).toBe('寺院庭院中央有石径，左侧有木门，右侧有长凳。')
-    expect(deriveAvailableSlotsFromSpatialProfile(profile)).toEqual(['左侧木门内侧靠墙的位置'])
+    expect(profile.anchors[0]?.label).toBe('左侧木门')
   })
 
-  it('rejects empty placementZones because downstream blocking needs explicit standing areas', () => {
+  it('rejects placementZones because spatial profiles use anchors only', () => {
     expect(() => locationSpatialProfileSchema.parse({
       ...validProfile,
-      placementZones: [],
+      placementZones: [{
+        id: 'zone_left_door_inside',
+        label: '左侧木门内侧靠墙的位置',
+      }],
     })).toThrow()
   })
 
@@ -64,9 +57,9 @@ describe('LocationSpatialProfile schema', () => {
 
     expect(() => locationSpatialProfileSchema.parse({
       ...validProfile,
-      placementZones: [{
-        ...validProfile.placementZones[0],
-        spatialRelations: ['站在 x:3, y:4 的网格点'],
+      anchors: [{
+        ...validProfile.anchors[0],
+        spatialRelations: ['锚点位于 x:3, y:4 的网格点'],
       }],
     })).toThrow('LOCATION_SPATIAL_PROFILE_COORDINATES_FORBIDDEN')
   })

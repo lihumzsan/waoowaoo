@@ -437,6 +437,18 @@ function findPromptShot(panel: ProjectPanel, shots: readonly ProjectShot[]): Pro
   )) ?? null
 }
 
+function shotBlockingFromPhotographyRules(photographyRules: string | null | undefined): Record<string, unknown> | null {
+  const rules = readJsonRecord(parseJson(photographyRules))
+  const consistencyMetadata = readJsonRecord(rules.consistencyMetadata)
+  const directCameraPlan = readJsonRecord(rules.cameraPlan)
+  const metadataCameraPlan = readJsonRecord(consistencyMetadata.cameraPlan)
+  const directShotBlocking = directCameraPlan.shotBlocking
+  if (isRecord(directShotBlocking)) return directShotBlocking
+  const metadataShotBlocking = metadataCameraPlan.shotBlocking
+  if (isRecord(metadataShotBlocking)) return metadataShotBlocking
+  return isRecord(rules.shotBlocking) ? rules.shotBlocking : null
+}
+
 function createShotDetails(
   panel: ProjectPanel,
   storyboard: ProjectStoryboard,
@@ -455,6 +467,7 @@ function createShotDetails(
     imagePrompt: panel.imagePrompt,
     videoPrompt: panel.videoPrompt,
     photographyRules: panel.photographyRules,
+    shotBlocking: shotBlockingFromPhotographyRules(panel.photographyRules),
     actingNotes: panel.actingNotes,
     storyboardTextJson: storyboard.storyboardTextJson,
     photographyPlan: storyboard.photographyPlan,
@@ -729,7 +742,6 @@ function spatialProfilesFromStrategyOutput(
   return locations.flatMap((location) => {
     if (!isRecord(location)) return []
     const spatialProfile = readJsonRecord(location.spatialProfile)
-    const placementZones = spatialProfile.placementZones
     const anchors = spatialProfile.anchors
     const depthLayout = readJsonRecord(spatialProfile.depthLayout)
     const shotNumbers = location.shotNumbers
@@ -744,13 +756,6 @@ function spatialProfilesFromStrategyOutput(
           })
         : [],
       sceneSummary: stringValue(spatialProfile.sceneSummary),
-      placementZones: Array.isArray(placementZones)
-        ? placementZones.flatMap((zone) => {
-            if (!isRecord(zone)) return []
-            const label = stringValue(zone.label)
-            return label ? [label] : []
-          })
-        : [],
       anchors: Array.isArray(anchors)
         ? anchors.flatMap((anchor) => {
             if (!isRecord(anchor)) return []
@@ -759,19 +764,6 @@ function spatialProfilesFromStrategyOutput(
               screenArea: stringValue(anchor.screenArea),
               depthLayer: stringValue(anchor.depthLayer),
               spatialRelations: readStringArray(anchor.spatialRelations),
-            }]
-          })
-        : [],
-      placementZoneDetails: Array.isArray(placementZones)
-        ? placementZones.flatMap((zone) => {
-            if (!isRecord(zone)) return []
-            return [{
-              label: stringValue(zone.label),
-              absolutePosition: stringValue(zone.absolutePosition),
-              nearAnchors: readStringArray(zone.nearAnchors),
-              depthLayer: stringValue(zone.depthLayer),
-              visibility: stringValue(zone.visibility),
-              spatialRelations: readStringArray(zone.spatialRelations),
             }]
           })
         : [],
