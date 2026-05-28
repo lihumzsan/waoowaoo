@@ -4,6 +4,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.IMAGE_PANEL]: 'progress.taskType.imagePanel',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE]: 'progress.taskType.editScriptStoryboardPrepare',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'progress.taskType.editScriptStoryboardCameraPlan',
+  [TASK_TYPE.CHARACTER_STYLE_TEST]: 'progress.taskType.characterStyleTest',
   [TASK_TYPE.IMAGE_CHARACTER]: 'progress.taskType.imageCharacter',
   [TASK_TYPE.IMAGE_LOCATION]: 'progress.taskType.imageLocation',
   [TASK_TYPE.MUSIC_GENERATE]: 'progress.taskType.musicGenerate',

@@ -8,6 +8,7 @@ import { withUserConcurrencyGate } from './user-concurrency-gate'
 import {
   handleAssetHubImageTask,
   handleAssetHubModifyTask,
+  handleCharacterStyleTestTask,
   handleCharacterImageTask,
   handleLocationImageTask,
   handleModifyAssetImageTask,
@@ -23,6 +24,8 @@ async function processImageTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.IMAGE_CHARACTER:
       return await handleCharacterImageTask(job)
+    case TASK_TYPE.CHARACTER_STYLE_TEST:
+      return await handleCharacterStyleTestTask(job)
     case TASK_TYPE.IMAGE_LOCATION:
       return await handleLocationImageTask(job)
     case TASK_TYPE.REGENERATE_GROUP: {

@@ -44,6 +44,34 @@ const locationSlotsMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/image-generation/location-slots', () => locationSlotsMock)
 
+const styleBibleMock = vi.hoisted(() => ({
+  resolveEditScriptStyleBibleForTask: vi.fn(async () => ({
+    strategy: 'style_bible',
+    rawUserStyle: 'noir',
+    styleSummary: '冷峻黑色电影',
+    stylePolicy: {
+      visual: {
+        imageFilterPrompt: '低饱和冷光',
+        lightingPrompt: '硬质侧逆光',
+        colorPrompt: '深灰与绿色点光',
+        texturePrompt: '皮革与水泥质感',
+        compositionPrompt: '克制构图',
+        negativePrompt: '避免商业广告感',
+      },
+      camera: {
+        cameraMovementPrompt: '稳定镜头',
+        lensDepthPrompt: '35mm',
+        rhythmPrompt: '冷静节奏',
+      },
+      sound: {
+        soundFilterPrompt: '低频电子声',
+      },
+      hardBans: ['水印'],
+    },
+  })),
+}))
+vi.mock('@/lib/edit-script/style-bible-prompt', () => styleBibleMock)
+
 const prismaMock = vi.hoisted(() => ({
   project: {
     findUnique: vi.fn(async () => ({
@@ -104,6 +132,26 @@ describe('media operations', () => {
       operationSource: 'assistant-panel',
       operationConfirmed: false,
       operationRequestId: undefined,
+    }))
+  })
+
+  it('character_style_test -> requires Style Bible and submits CHARACTER_STYLE_TEST task', async () => {
+    const ops = createMediaOperations()
+    const ctx = buildCtx()
+    await ops.character_style_test.execute(ctx as never, {
+      episodeId: 'episode-1',
+      characterRequest: '冷峻黑客，黑色风衣，窄框墨镜',
+    })
+
+    expect(styleBibleMock.resolveEditScriptStyleBibleForTask).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+    })
+    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: TASK_TYPE.CHARACTER_STYLE_TEST,
+      targetType: 'CharacterStyleTest',
+      targetId: 'episode-1',
+      operationId: 'character_style_test',
     }))
   })
 

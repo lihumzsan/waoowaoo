@@ -34,11 +34,41 @@ import { POST as voiceGeneratePost } from '@/app/api/projects/[projectId]/voice-
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
+import { POST as characterStyleTestPost } from '@/app/api/projects/[projectId]/character-style-test/route'
 
 describe('api contract - project media generation routes (operation adapter)', () => {
   beforeEach(() => {
     authState.authenticated = true
     vi.clearAllMocks()
+  })
+
+  it('POST /api/projects/[projectId]/character-style-test -> submits Style Bible character test operation', async () => {
+    apiAdapterMock.executeProjectAgentOperationFromApi.mockResolvedValueOnce({ success: true })
+
+    const res = await characterStyleTestPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/character-style-test',
+        method: 'POST',
+        body: {
+          episodeId: 'episode-1',
+          characterRequest: '冷峻黑客，黑色风衣，窄框墨镜',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(res.status).toBe(200)
+    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'character_style_test',
+      input: {
+        episodeId: 'episode-1',
+        characterRequest: '冷峻黑客，黑色风衣，窄框墨镜',
+        confirmed: true,
+      },
+      context: {
+        episodeId: 'episode-1',
+      },
+    }))
   })
 
   it('POST /api/projects/[projectId]/modify-asset-image -> routes character/location to explicit operations', async () => {

@@ -74,6 +74,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/canvas-layout/route.ts',
   'src/app/api/projects/[projectId]/character-voice/route.ts',
+  'src/app/api/projects/[projectId]/character-style-test/route.ts',
   'src/app/api/projects/[projectId]/character/appearance/route.ts',
   'src/app/api/projects/[projectId]/character/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/character/route.ts',
@@ -210,6 +211,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   }
   if (
     routeFile.endsWith('/generate-image/route.ts')
+    || routeFile.endsWith('/character-style-test/route.ts')
     || routeFile.endsWith('/generate-bgm/route.ts')
     || routeFile.endsWith('/generate-music/route.ts')
     || routeFile.endsWith('/generate-video/route.ts')
