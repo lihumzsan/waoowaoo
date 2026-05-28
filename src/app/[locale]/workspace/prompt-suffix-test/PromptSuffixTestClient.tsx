@@ -13,7 +13,6 @@ import {
   DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT,
   PROMPT_SUFFIX_TEST_VARIANTS,
   buildPromptLengthTestPrompt,
-  buildPromptLengthStoryboardJsonFromFinalPrompt,
   type PromptSuffixVariantId,
 } from '@/lib/prompt-suffix-test/variants'
 
@@ -26,6 +25,14 @@ interface PromptSuffixTestResult {
   readonly finalPrompt: string
   readonly promptLength: number
   readonly externalId?: string
+}
+
+interface PromptSuffixExpandResult {
+  readonly analysisModel: string
+  readonly sourceText: string
+  readonly styleText: string
+  readonly storyboardJson: string
+  readonly finalImagePrompt: string
 }
 
 type ResultState =
@@ -58,8 +65,9 @@ export function PromptSuffixTestClient() {
   const [sourceText, setSourceText] = useState(DEFAULT_PROMPT_LENGTH_TEST_SOURCE_TEXT[locale])
   const [styleText, setStyleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_TEXT[locale])
   const [styleBibleText, setStyleBibleText] = useState(DEFAULT_PROMPT_LENGTH_TEST_STYLE_BIBLE_TEXT[locale])
-  const [manualFinalPrompt, setManualFinalPrompt] = useState('')
-  const [manualPromptError, setManualPromptError] = useState('')
+  const [ideaText, setIdeaText] = useState('')
+  const [ideaExpandError, setIdeaExpandError] = useState('')
+  const [ideaExpanding, setIdeaExpanding] = useState(false)
   const [activeVariantId, setActiveVariantId] = useState<PromptSuffixVariantId>('current_full')
   const [selectedVariantIds, setSelectedVariantIds] = useState<PromptSuffixVariantId[]>([
     'current_full',
@@ -118,18 +126,35 @@ export function PromptSuffixTestClient() {
     })
   }
 
-  const applyManualFinalPrompt = () => {
+  const expandIdeaText = async () => {
+    setIdeaExpanding(true)
+    setIdeaExpandError('')
     try {
-      const nextStoryboardJson = buildPromptLengthStoryboardJsonFromFinalPrompt({
-        finalPrompt: manualFinalPrompt,
-        sourceText: manualFinalPrompt,
+      const response = await apiFetch('/api/user/prompt-suffix-test/expand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idea: ideaText,
+          locale,
+          aspectRatio,
+          styleText,
+          styleBibleText,
+        }),
       })
-      setStoryboardJson(nextStoryboardJson)
-      setSourceText(manualFinalPrompt.trim())
-      setManualPromptError('')
+      if (!response.ok) {
+        const body = await response.json().catch((): { message?: string } => ({}))
+        throw new Error(body.message || t('errors.expandFailed'))
+      }
+      const result = await response.json() as PromptSuffixExpandResult
+      setStoryboardJson(result.storyboardJson)
+      setSourceText(result.sourceText)
+      setStyleText(result.styleText)
+      setActiveVariantId('current_full')
       setResults({})
     } catch (error) {
-      setManualPromptError(errorMessage(error))
+      setIdeaExpandError(errorMessage(error))
+    } finally {
+      setIdeaExpanding(false)
     }
   }
 
@@ -218,26 +243,27 @@ export function PromptSuffixTestClient() {
             <div className="rounded-md border border-zinc-200 bg-white p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
-                  <label className="text-sm font-semibold" htmlFor="manualFinalPrompt">{t('manualFinalPrompt.label')}</label>
-                  <p className="mt-1 text-xs leading-5 text-zinc-500">{t('manualFinalPrompt.description')}</p>
+                  <label className="text-sm font-semibold" htmlFor="ideaText">{t('ideaInput.label')}</label>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">{t('ideaInput.description')}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={applyManualFinalPrompt}
-                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold"
+                  onClick={() => void expandIdeaText()}
+                  disabled={ideaExpanding || !ideaText.trim()}
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FileJson2 className="h-4 w-4" />
-                  {t('actions.expandFinalPrompt')}
+                  {ideaExpanding ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileJson2 className="h-4 w-4" />}
+                  {t('actions.expandIdea')}
                 </button>
               </div>
               <textarea
-                id="manualFinalPrompt"
-                value={manualFinalPrompt}
-                onChange={(event) => setManualFinalPrompt(event.target.value)}
-                placeholder={t('manualFinalPrompt.placeholder')}
+                id="ideaText"
+                value={ideaText}
+                onChange={(event) => setIdeaText(event.target.value)}
+                placeholder={t('ideaInput.placeholder')}
                 className="mt-3 min-h-[150px] w-full resize-y rounded-md border border-zinc-300 p-3 text-sm leading-6 outline-none focus:border-zinc-500"
               />
-              {manualPromptError ? <p className="mt-2 text-xs leading-5 text-red-600">{manualPromptError}</p> : null}
+              {ideaExpandError ? <p className="mt-2 text-xs leading-5 text-red-600">{ideaExpandError}</p> : null}
             </div>
 
             <div className="rounded-md border border-zinc-200 bg-white p-4">

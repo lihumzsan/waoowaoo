@@ -20,10 +20,10 @@
     "model": {
       "empty": "No image model available"
     },
-    "manualFinalPrompt": {
-      "label": "Input Final Image Prompt",
-      "description": "Paste any scene's final image prompt to create clean test storyboard JSON. The five versions below will recalculate from it.",
-      "placeholder": "Paste a complete final image prompt here..."
+    "ideaInput": {
+      "label": "Input Scene Idea",
+      "description": "Enter any visual idea. AI will expand it into test storyboard JSON and a final image prompt using the current storyboard image rules.",
+      "placeholder": "Example: cyberpunk rainy street, a detective in a transparent raincoat under neon lights..."
     },
     "storyboardJson": {
       "label": "Storyboard Data JSON"
@@ -46,7 +46,7 @@
     "actions": {
       "generate": "Generate Selected",
       "generateOne": "Generate",
-      "expandFinalPrompt": "Build Test JSON",
+      "expandIdea": "AI Build Test JSON",
       "copyFinalPrompt": "Copy Full Prompt"
     },
     "metrics": {
@@ -60,6 +60,7 @@
     },
     "errors": {
       "modelRequired": "Select an image model",
+      "expandFailed": "Expansion failed",
       "generateFailed": "Generation failed"
     }
   },

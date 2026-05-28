@@ -20,10 +20,10 @@
     "model": {
       "empty": "没有可用图片模型"
     },
-    "manualFinalPrompt": {
-      "label": "输入最终图片提示词",
-      "description": "粘贴任意场景的最终图片提示词，一键生成干净的测试分镜 JSON，下面 5 个版本会基于它重新计算。",
-      "placeholder": "在这里粘贴一条完整最终图片提示词..."
+    "ideaInput": {
+      "label": "输入场景想法",
+      "description": "输入任意画面想法，AI 会按当前分镜生图规则扩展成测试分镜 JSON 和最终图片提示词。",
+      "placeholder": "例如：赛博朋克雨夜街头，一个穿透明雨衣的侦探站在霓虹灯下..."
     },
     "storyboardJson": {
       "label": "分镜数据 JSON"
@@ -46,7 +46,7 @@
     "actions": {
       "generate": "生成所选版本",
       "generateOne": "生成",
-      "expandFinalPrompt": "生成测试 JSON",
+      "expandIdea": "AI 扩展测试 JSON",
       "copyFinalPrompt": "复制完整 prompt"
     },
     "metrics": {
@@ -60,6 +60,7 @@
     },
     "errors": {
       "modelRequired": "请选择图片模型",
+      "expandFailed": "扩展失败",
       "generateFailed": "生成失败"
     }
   },
