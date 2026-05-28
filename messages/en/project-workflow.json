@@ -14,56 +14,6 @@
     "refreshData": "Refresh Data",
     "enterVideoGeneration": "Enter Video Generation →"
   },
-  "promptSuffixTest": {
-    "eyebrow": "Internal Test Tool",
-    "title": "Full Image Prompt Length Test",
-    "model": {
-      "empty": "No image model available"
-    },
-    "ideaInput": {
-      "label": "Input Scene Idea",
-      "description": "Enter any visual idea. AI will expand it into test storyboard JSON and a final image prompt using the current storyboard image rules.",
-      "placeholder": "Example: cyberpunk rainy street, a detective in a transparent raincoat under neon lights..."
-    },
-    "storyboardJson": {
-      "label": "Storyboard Data JSON"
-    },
-    "sourceText": {
-      "label": "Shot Source Text"
-    },
-    "styleText": {
-      "label": "Style Requirement"
-    },
-    "styleBibleText": {
-      "label": "Fixed Style Bible Append Text"
-    },
-    "variants": {
-      "title": "Full Prompt Versions To Compare"
-    },
-    "finalPromptPreview": {
-      "title": "Current Full Final Prompt"
-    },
-    "actions": {
-      "generate": "Generate Selected",
-      "generateOne": "Generate",
-      "expandIdea": "AI Build Test JSON",
-      "copyFinalPrompt": "Copy Full Prompt"
-    },
-    "metrics": {
-      "finalLength": "Final {count} chars",
-      "lines": "{count} lines"
-    },
-    "result": {
-      "empty": "Not generated yet",
-      "failed": "Generation failed",
-      "finalPrompt": "Full Final Prompt"
-    },
-    "errors": {
-      "modelRequired": "Select an image model",
-      "expandFailed": "Expansion failed",
-      "generateFailed": "Generation failed"
-    }
-  },
   "smartImport": {
     "title": "Start Your Creative Journey",
     "subtitle": "First, choose your creation method",
