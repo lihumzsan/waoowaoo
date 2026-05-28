@@ -14,6 +14,45 @@
     "refreshData": "Refresh Data",
     "enterVideoGeneration": "Enter Video Generation →"
   },
+  "promptSuffixTest": {
+    "eyebrow": "Internal Test Tool",
+    "title": "Image Prompt Suffix Test",
+    "defaults": {
+      "basePrompt": "Single cinematic storyboard image, realistic Eastern Zen aesthetics, 16:9. Early morning mist fills an ancient temple courtyard. On a wooden corridor near a round coarse-linen cushion, an eight-year-old shaved young monk in a low-saturation dark ochre coarse monk robe sits cross-legged. He suddenly opens one eye and brushes a yellow fallen leaf from his knee, his body slightly wobbling. Medium shot, eye-level, 35mm humanistic focal length. Foreground shows wood floorboards and mossy leaf-covered soil, midground holds the young monk and corridor receding into depth, background shows an old stone-brick temple wall."
+    },
+    "model": {
+      "empty": "No image model available"
+    },
+    "basePrompt": {
+      "label": "Base Image Prompt"
+    },
+    "suffix": {
+      "label": "Active Suffix Version"
+    },
+    "variants": {
+      "title": "Suffixes To Compare"
+    },
+    "actions": {
+      "generate": "Generate Selected",
+      "generateOne": "Generate",
+      "reset": "Reset",
+      "copyFinalPrompt": "Copy Final Prompt"
+    },
+    "metrics": {
+      "baseLength": "Base {count} chars",
+      "suffixLength": "Suffix {count} chars",
+      "finalLength": "Final {count} chars"
+    },
+    "result": {
+      "empty": "Not generated yet",
+      "failed": "Generation failed",
+      "finalPrompt": "Full Final Prompt"
+    },
+    "errors": {
+      "modelRequired": "Select an image model",
+      "generateFailed": "Generation failed"
+    }
+  },
   "smartImport": {
     "title": "Start Your Creative Journey",
     "subtitle": "First, choose your creation method",

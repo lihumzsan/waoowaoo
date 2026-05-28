@@ -14,6 +14,45 @@
     "refreshData": "刷新项目数据",
     "enterVideoGeneration": "进入视频生成 →"
   },
+  "promptSuffixTest": {
+    "eyebrow": "内部测试工具",
+    "title": "图片提示词后缀测试",
+    "defaults": {
+      "basePrompt": "单张电影分镜图，写实东方禅意美学，16:9画幅。清晨薄雾弥漫，古寺庭院的木制长廊上，约八岁、剃度光头的小和尚身穿低饱和度暗沉赭石色粗麻僧袍，盘腿坐在圆形粗麻蒲团上。他猛地睁开一只眼，伸手拂去落在膝盖上的一片枯黄树叶，身体微微摇晃。中景机位，平视，35mm人文焦段。前景为长廊木地板与青苔落叶泥地，中景为小和尚及向深处延伸的长廊，背景为古旧石砖大殿外墙。"
+    },
+    "model": {
+      "empty": "没有可用图片模型"
+    },
+    "basePrompt": {
+      "label": "主体图片提示词"
+    },
+    "suffix": {
+      "label": "当前后缀版本"
+    },
+    "variants": {
+      "title": "参与对比的后缀"
+    },
+    "actions": {
+      "generate": "生成所选版本",
+      "generateOne": "生成",
+      "reset": "重置",
+      "copyFinalPrompt": "复制最终提示词"
+    },
+    "metrics": {
+      "baseLength": "主体 {count} 字",
+      "suffixLength": "后缀 {count} 字",
+      "finalLength": "最终 {count} 字"
+    },
+    "result": {
+      "empty": "尚未生成",
+      "failed": "生成失败",
+      "finalPrompt": "完整最终提示词"
+    },
+    "errors": {
+      "modelRequired": "请选择图片模型",
+      "generateFailed": "生成失败"
+    }
+  },
   "smartImport": {
     "title": "开启你的创作之旅",
     "subtitle": "首先，选择你的创作方式",
