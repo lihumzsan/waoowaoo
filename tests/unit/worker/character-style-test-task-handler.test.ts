@@ -57,7 +57,7 @@ describe('worker character-style-test-task-handler', () => {
 
   it('success path -> generates a stylized multi-view asset prompt from user input only', async () => {
     const result = await handleCharacterStyleTestTask(buildJob({
-      characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光，胶片颗粒',
+      characterRequest: '和尚',
       imageModel: 'character-model-1',
       generationOptions: { resolution: '1024x1024', quality: 'high' },
     }))
@@ -67,7 +67,7 @@ describe('worker character-style-test-task-handler', () => {
       imageKey: 'cos/character-style-test.jpg',
       prompt: expect.any(String),
       aspectRatio: CHARACTER_STYLE_TEST_ASPECT_RATIO,
-      styleSummary: '本次临时资产风格来源：冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光，胶片颗粒',
+      styleSummary: '本次临时资产风格来源：和尚',
     })
 
     const generationInput = handlerSharedMock.generateCleanImageToStorage.mock.calls[0]?.[0] as GenerationInput | undefined
@@ -83,7 +83,10 @@ describe('worker character-style-test-task-handler', () => {
       },
     }))
     expect(generationInput?.prompt).toContain('用户输入（本次人物与风格的唯一来源）')
-    expect(generationInput?.prompt).toContain('先根据用户输入在内部归纳一份“本次角色资产风格规范”')
+    expect(generationInput?.prompt).toContain('本次角色资产风格规范（必须显性执行，不要只在脑中概括）')
+    expect(generationInput?.prompt).toContain('短输入规则：如果用户只输入一个身份或名词')
+    expect(generationInput?.prompt).toContain('必须主动选择鲜明、统一、可继承的视觉方向')
+    expect(generationInput?.prompt).toContain('整张图像像一张完整资产设定板，而不是四张孤立证件照')
     expect(generationInput?.prompt).toContain('左侧约 1/3 宽度为角色大头正面身份特写')
     expect(generationInput?.prompt).toContain('右侧约 2/3 宽度横向排列同一角色的正面全身、侧面全身、背面全身')
     expect(generationInput?.prompt).toContain('资产图不能使用纯白底')
