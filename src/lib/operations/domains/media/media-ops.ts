@@ -15,7 +15,6 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { taskSubmitOperationOutputSchema } from '@/lib/operations/output-schemas'
-import { createCharacterStyleTestOperations } from './character-style-test-ops'
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -33,7 +32,6 @@ function toNumberOrNull(value: unknown): number | null {
 
 export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    ...createCharacterStyleTestOperations(),
     regenerate_group: defineOperation({
       id: 'regenerate_group',
       summary: 'Regenerate a group of asset images (character/location) by submitting an async task.',

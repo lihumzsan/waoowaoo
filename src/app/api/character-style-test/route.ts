@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
-import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
+import { submitCharacterStyleTestTask } from '@/lib/character-style-test/submit'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -12,12 +12,8 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export const POST = apiHandler(async (
-  request: NextRequest,
-  context: { params: Promise<{ projectId: string }> },
-) => {
-  const { projectId } = await context.params
-  const authResult = await requireProjectAuthLight(projectId)
+export const POST = apiHandler(async (request: NextRequest) => {
+  const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
 
   const body = toObject(await request.json().catch(() => ({})))
@@ -26,17 +22,10 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const result = await executeProjectAgentOperationFromApi({
+  const result = await submitCharacterStyleTestTask({
     request,
-    operationId: 'character_style_test',
-    projectId,
     userId: authResult.session.user.id,
-    context: {},
-    input: {
-      characterRequest,
-      confirmed: true,
-    },
-    source: 'project-ui',
+    characterRequest,
   })
 
   return NextResponse.json(result)

@@ -10,7 +10,7 @@
   "characterStyleTest": {
     "title": "Character Style Asset Test",
     "subtitle": "Start from your input, derive a temporary character asset style, and generate one multi-view character asset image with background, lighting, filter, and texture.",
-    "back": "Back to project",
+    "back": "Back to workspace",
     "requestLabel": "Character and style request",
     "requestPlaceholder": "Example: a cold twenty-eight-year-old hacker, long black coat, narrow sunglasses, black leather gloves; wet neon noir style, cold green rim light, subtle film grain, abstract city-light background rather than a specific location.",
     "submit": "Generate test image",

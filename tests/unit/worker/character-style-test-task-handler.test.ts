@@ -3,10 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHARACTER_STYLE_TEST_ASPECT_RATIO } from '@/lib/character-style-test/prompt'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
-const utilsMock = vi.hoisted(() => ({
-  getProjectModels: vi.fn(async () => ({ characterModel: 'character-model-1' })),
-}))
-
 const sharedMock = vi.hoisted(() => ({
   reportTaskProgress: vi.fn(async () => undefined),
 }))
@@ -19,7 +15,6 @@ const storageMock = vi.hoisted(() => ({
   getSignedUrl: vi.fn((key: string) => `https://signed.example/${key}`),
 }))
 
-vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/workers/shared', () => sharedMock)
 vi.mock('@/lib/storage', () => storageMock)
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => handlerSharedMock)
@@ -35,6 +30,8 @@ type GenerationInput = {
   targetId: string
   options: {
     aspectRatio: string
+    resolution?: string
+    quality?: string
   }
 }
 
@@ -44,9 +41,9 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
       taskId: 'task-character-style-test-1',
       type: TASK_TYPE.CHARACTER_STYLE_TEST,
       locale: 'zh',
-      projectId: 'project-1',
+      projectId: 'system',
       targetType: 'CharacterStyleTest',
-      targetId: 'project-1',
+      targetId: 'character-style-test',
       payload,
       userId: 'user-1',
     },
@@ -56,12 +53,13 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
 describe('worker character-style-test-task-handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    utilsMock.getProjectModels.mockResolvedValue({ characterModel: 'character-model-1' })
   })
 
   it('success path -> generates a stylized multi-view asset prompt from user input only', async () => {
     const result = await handleCharacterStyleTestTask(buildJob({
       characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光，胶片颗粒',
+      imageModel: 'character-model-1',
+      generationOptions: { resolution: '1024x1024', quality: 'high' },
     }))
 
     expect(result).toEqual({
@@ -80,6 +78,8 @@ describe('worker character-style-test-task-handler', () => {
       targetId: 'task-character-style-test-1',
       options: {
         aspectRatio: CHARACTER_STYLE_TEST_ASPECT_RATIO,
+        resolution: '1024x1024',
+        quality: 'high',
       },
     }))
     expect(generationInput?.prompt).toContain('用户输入（本次人物与风格的唯一来源）')
@@ -90,11 +90,10 @@ describe('worker character-style-test-task-handler', () => {
     expect(generationInput?.prompt).toContain('不要引用项目 Style Bible')
   })
 
-  it('missing character model -> explicit error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '' })
-
+  it('missing image model -> explicit error before image generation', async () => {
     await expect(handleCharacterStyleTestTask(buildJob({
       characterRequest: '冷峻黑客',
-    }))).rejects.toThrow('Character model not configured')
+    }))).rejects.toThrow('imageModel is required')
+    expect(handlerSharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
   })
 })

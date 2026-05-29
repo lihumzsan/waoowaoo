@@ -1,7 +1,6 @@
 import type { Job } from 'bullmq'
 import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
-import { getProjectModels } from '@/lib/workers/utils'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import {
   buildCharacterStyleTestPrompt,
@@ -17,12 +16,24 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
+function readGenerationOptions(value: unknown): { resolution?: string; quality?: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const record = value as Record<string, unknown>
+  return {
+    ...(typeof record.resolution === 'string' && record.resolution.trim()
+      ? { resolution: record.resolution.trim() }
+      : {}),
+    ...(typeof record.quality === 'string' && record.quality.trim()
+      ? { quality: record.quality.trim() }
+      : {}),
+  }
+}
+
 export async function handleCharacterStyleTestTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const characterRequest = readRequiredString(payload.characterRequest, 'characterRequest')
-  const models = await getProjectModels(job.data.projectId, job.data.userId)
-  const modelId = models.characterModel
-  if (!modelId) throw new Error('Character model not configured')
+  const modelId = readRequiredString(payload.imageModel, 'imageModel')
+  const generationOptions = readGenerationOptions(payload.generationOptions)
 
   const prompt = buildCharacterStyleTestPrompt({
     characterRequest,
@@ -41,6 +52,11 @@ export async function handleCharacterStyleTestTask(job: Job<TaskJobData>) {
     displayMode: 'detail',
   })
 
+  const imageOptions = {
+    aspectRatio: CHARACTER_STYLE_TEST_ASPECT_RATIO,
+    ...generationOptions,
+  }
+
   const imageKey = await generateCleanImageToStorage({
     job,
     userId: job.data.userId,
@@ -48,9 +64,7 @@ export async function handleCharacterStyleTestTask(job: Job<TaskJobData>) {
     prompt,
     targetId: job.data.taskId,
     keyPrefix: 'character-style-test',
-    options: {
-      aspectRatio: CHARACTER_STYLE_TEST_ASPECT_RATIO,
-    },
+    options: imageOptions,
   })
 
   await reportTaskProgress(job, 95, {

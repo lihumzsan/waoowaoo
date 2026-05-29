@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
@@ -74,12 +73,6 @@ function parseTaskDetail(value: unknown): TaskDetail | null {
 }
 
 export default function CharacterStyleTestPage() {
-  const params = useParams<{ projectId?: string }>()
-  if (!params?.projectId) {
-    throw new Error('CharacterStyleTestPage requires projectId route param')
-  }
-
-  const projectId = params.projectId
   const t = useTranslations('workspaceDetail.characterStyleTest')
   const [characterRequest, setCharacterRequest] = useState('')
   const [taskId, setTaskId] = useState<string | null>(null)
@@ -135,7 +128,7 @@ export default function CharacterStyleTestPage() {
     setTask(null)
     setTaskId(null)
     try {
-      const response = await apiFetch(`/api/projects/${projectId}/character-style-test`, {
+      const response = await apiFetch('/api/character-style-test', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -155,7 +148,7 @@ export default function CharacterStyleTestPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [characterRequest, projectId, t])
+  }, [characterRequest, t])
 
   const result = task?.result ?? null
   const taskPresentation = resolveTaskPresentationState({
@@ -183,7 +176,7 @@ export default function CharacterStyleTestPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link
-              href={{ pathname: `/workspace/${projectId}` }}
+              href={{ pathname: '/workspace' }}
               className="text-sm text-[var(--glass-text-secondary)] transition-colors hover:text-[var(--glass-text-primary)]"
             >
               {t('back')}

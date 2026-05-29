@@ -85,12 +85,6 @@ function inferTaskContractFromOperation(params: {
         targetType: 'CharacterAppearance',
         targetId: typeof input.characterId === 'string' ? input.characterId : 'character-1',
       }
-    case 'character_style_test':
-      return {
-        type: TASK_TYPE.CHARACTER_STYLE_TEST,
-        targetType: 'CharacterStyleTest',
-        targetId: params.projectId,
-      }
     case 'generate_location_image':
       return {
         type: TASK_TYPE.IMAGE_LOCATION,
@@ -206,8 +200,12 @@ export const configServiceMock = {
     locationModel: 'img::location',
     editModel: 'img::edit',
   })),
-  buildImageBillingPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown> }) => ({
+  buildImageBillingPayloadFromUserConfig: vi.fn((input: {
+    imageModel: string | null
+    basePayload: Record<string, unknown>
+  }) => ({
     ...input.basePayload,
+    imageModel: input.imageModel,
     generationOptions: { resolution: '1024x1024' },
   })),
   getProjectModelConfig: vi.fn(async () => ({
@@ -528,12 +526,16 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/character-style-test/route.ts',
+    routeFile: 'src/app/api/character-style-test/route.ts',
     body: { characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light' },
-    params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.CHARACTER_STYLE_TEST,
     expectedTargetType: 'CharacterStyleTest',
-    expectedProjectId: 'project-1',
+    expectedProjectId: 'system',
+    expectedPayloadSubset: {
+      characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light',
+      imageModel: 'img::character',
+      count: 1,
+    },
   },
   {
     routeFile: 'src/app/api/projects/[projectId]/generate-video/route.ts',

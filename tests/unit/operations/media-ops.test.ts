@@ -107,25 +107,6 @@ describe('media operations', () => {
     }))
   })
 
-  it('character_style_test -> submits CHARACTER_STYLE_TEST task from user-provided style input', async () => {
-    const ops = createMediaOperations()
-    const ctx = buildCtx()
-    await ops.character_style_test.execute(ctx as never, {
-      characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光',
-    })
-
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.CHARACTER_STYLE_TEST,
-      targetType: 'CharacterStyleTest',
-      targetId: 'project-1',
-      operationId: 'character_style_test',
-      payload: expect.objectContaining({
-        characterRequest: '冷峻黑客，黑色风衣，窄框墨镜，霓虹黑色电影，冷绿色边缘光',
-        count: 1,
-      }),
-    }))
-  })
-
   it('regenerate_single_image -> submits IMAGE_CHARACTER task', async () => {
     const ops = createMediaOperations()
     const ctx = buildCtx()
