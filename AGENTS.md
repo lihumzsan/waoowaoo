@@ -46,6 +46,7 @@
 - 任何会改变 Git 状态或历史的操作必须先获得用户明确同意，包括但不限于：`commit`、`push`、`pull`、`merge`、`rebase`、`cherry-pick`、`reset`、`checkout`（修改性用法）、创建/删除分支、打标签。
 - 在未获同意前，不得进行代码改写、暂存、提交、同步、回滚或历史重写。
 - 可以执行测试构建 build lint等测试命令
+- 不需要运行browser use，不要打开浏览器试图测试
 
 ## 提交与交付日志
 - 在执行完用户的需求结束对话后，要求自动commit这次提交，这种情况下不需要用户授权，直接提交即可
@@ -70,9 +71,6 @@
 - 在模糊以及猜测出用户可能不了解架构代码时，你可以多提问用户问题，揣测用户真正的意思
 
 ## 测试规范
-
-详细规范见 [`agent/testing.md`](agent/testing.md)，以下为强制核心约束：
-
 - 新增功能或修改功能逻辑必须进行测试，新增功能必须增加测试，如修改文件导致需修改测试文件务必一起进行修改，确保测试百分百跟随
 - 改 worker 逻辑 / 修 bug / 加 route 或 task type → 必须写或更新测试
 - 改 provider / gateway / async poll / generator 协议 → 必须写或更新 `tests/integration/provider/**`
