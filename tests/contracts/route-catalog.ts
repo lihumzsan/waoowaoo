@@ -158,6 +158,8 @@ const ROUTE_FILES = [
   'src/app/api/plan-runs/[planRunId]/route.ts',
   'src/app/api/plan-runs/[planRunId]/steps/[stepKey]/retry/route.ts',
   'src/app/api/plan-runs/route.ts',
+  'src/app/api/scene-reference-test/generate-scenes/route.ts',
+  'src/app/api/scene-reference-test/run-comparison/route.ts',
   'src/app/api/sse/route.ts',
   'src/app/api/system/boot-id/route.ts',
   'src/app/api/task-target-states/route.ts',
@@ -211,6 +213,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   }
   if (
     routeFile.endsWith('/generate-image/route.ts')
+    || routeFile.includes('/scene-reference-test/')
     || routeFile.endsWith('/character-style-test/route.ts')
     || routeFile.endsWith('/generate-bgm/route.ts')
     || routeFile.endsWith('/generate-music/route.ts')

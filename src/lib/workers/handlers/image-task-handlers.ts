@@ -6,3 +6,7 @@ export { handleAssetHubImageTask } from './asset-hub-image-task-handler'
 export { handleAssetHubModifyTask } from './asset-hub-modify-task-handler'
 export { handlePanelVariantTask } from './panel-variant-task-handler'
 export { handleCharacterStyleTestTask } from './character-style-test-task-handler'
+export {
+  handleSceneReferenceComparisonTask,
+  handleSceneReferenceTask,
+} from './scene-reference-test-task-handler'

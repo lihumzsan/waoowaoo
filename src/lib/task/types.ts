@@ -48,6 +48,8 @@ export const TASK_TYPE = {
   EDIT_SCRIPT_STORYBOARD_PREPARE: 'edit_script_storyboard_prepare',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
   CHARACTER_STYLE_TEST: 'character_style_test',
+  SCENE_REFERENCE_TEST: 'scene_reference_test',
+  SCENE_REFERENCE_COMPARISON_TEST: 'scene_reference_comparison_test',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
   MUSIC_GENERATE: 'music_generate',

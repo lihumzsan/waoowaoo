@@ -14,6 +14,8 @@ import {
   handleModifyAssetImageTask,
   handlePanelImageTask,
   handlePanelVariantTask,
+  handleSceneReferenceComparisonTask,
+  handleSceneReferenceTask,
 } from './handlers/image-task-handlers'
 
 type AnyObj = Record<string, unknown>
@@ -26,6 +28,10 @@ async function processImageTask(job: Job<TaskJobData>) {
       return await handleCharacterImageTask(job)
     case TASK_TYPE.CHARACTER_STYLE_TEST:
       return await handleCharacterStyleTestTask(job)
+    case TASK_TYPE.SCENE_REFERENCE_TEST:
+      return await handleSceneReferenceTask(job)
+    case TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST:
+      return await handleSceneReferenceComparisonTask(job)
     case TASK_TYPE.IMAGE_LOCATION:
       return await handleLocationImageTask(job)
     case TASK_TYPE.REGENERATE_GROUP: {

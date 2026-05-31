@@ -198,6 +198,7 @@ export const configServiceMock = {
   getUserModelConfig: vi.fn(async () => ({
     characterModel: 'img::character',
     locationModel: 'img::location',
+    storyboardModel: 'img::storyboard',
     editModel: 'img::edit',
   })),
   buildImageBillingPayloadFromUserConfig: vi.fn((input: {
@@ -535,6 +536,41 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light',
       imageModel: 'img::character',
       count: 1,
+    },
+  },
+  {
+    routeFile: 'src/app/api/scene-reference-test/generate-scenes/route.ts',
+    body: {
+      sceneDescription: 'rainy temple backyard',
+      styleRequest: 'low saturation wuxia film',
+      layouts: ['three_view', 'four_view_board'],
+    },
+    expectedTaskType: TASK_TYPE.SCENE_REFERENCE_TEST,
+    expectedTargetType: 'SceneReferenceTest',
+    expectedProjectId: 'system',
+    expectedPayloadSubset: {
+      sceneDescription: 'rainy temple backyard',
+      imageModel: 'img::location',
+      count: 3,
+    },
+  },
+  {
+    routeFile: 'src/app/api/scene-reference-test/run-comparison/route.ts',
+    body: {
+      characterImageUrl: 'https://example.com/character.png',
+      singleSceneImageUrl: 'https://example.com/single.png',
+      storyboardPrompt: 'monk standing in a rainy temple backyard',
+      aspectRatio: '16:9',
+      pairCount: 2,
+      variants: [{ id: 'three_view', label: 'Three-view scene board', imageUrl: 'https://example.com/multi.png' }],
+    },
+    expectedTaskType: TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST,
+    expectedTargetType: 'SceneReferenceComparisonTest',
+    expectedProjectId: 'system',
+    expectedPayloadSubset: {
+      characterImageUrl: 'https://example.com/character.png',
+      imageModel: 'img::storyboard',
+      count: 4,
     },
   },
   {
