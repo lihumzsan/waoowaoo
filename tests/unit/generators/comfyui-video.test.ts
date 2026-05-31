@@ -108,6 +108,34 @@ describe('ComfyUI video generator', () => {
     }))
   })
 
+  it('forwards non-empty reference audio urls to the ComfyUI video workflow', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'doctor speaks to the selected line',
+      options: {
+        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+        referenceAudioUrls: [
+          'https://example.com/line-1.wav',
+          123,
+          ' ',
+          'https://example.com/line-2.mp3',
+          null,
+        ] as unknown as string[],
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      referenceAudioUrls: [
+        'https://example.com/line-1.wav',
+        'https://example.com/line-2.mp3',
+      ],
+    }))
+  })
+
   it('rejects removed legacy LTX2.3 workflow keys instead of routing them', async () => {
     const generator = new ComfyUIVideoGenerator()
     getProviderConfigMock.mockResolvedValueOnce({

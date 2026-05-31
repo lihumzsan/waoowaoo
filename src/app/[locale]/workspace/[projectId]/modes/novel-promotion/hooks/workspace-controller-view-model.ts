@@ -115,6 +115,7 @@ interface BuildWorkspaceControllerViewModelParams {
       generationOptions?: VideoGenerationOptions,
       panelId?: string,
       videoDurationBinding?: VideoDurationBinding,
+      customPrompt?: string,
     ) => Promise<void>
     handleGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
     handleUpdateVideoPrompt: (

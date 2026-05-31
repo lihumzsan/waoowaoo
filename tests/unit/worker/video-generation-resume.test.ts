@@ -28,15 +28,21 @@ const configServiceMock = vi.hoisted(() => ({
   resolveProjectModelCapabilityGenerationOptions: vi.fn(),
 }))
 
+const storageMock = vi.hoisted(() => ({
+  getSignedUrl: vi.fn((value: string) => value),
+  toFetchableUrl: vi.fn((value: string) => (
+    value.startsWith('/api/storage/sign')
+      ? `http://internal.test${value}`
+      : value
+  )),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/service', () => taskServiceMock)
 vi.mock('@/lib/async-poll', () => asyncPollMock)
 vi.mock('@/lib/generator-api', () => generatorApiMock)
 vi.mock('@/lib/lipsync', () => ({ generateLipSync: vi.fn() }))
-vi.mock('@/lib/storage', () => ({
-  getSignedUrl: vi.fn((value: string) => value),
-  toFetchableUrl: vi.fn((value: string) => value),
-}))
+vi.mock('@/lib/storage', () => storageMock)
 vi.mock('@/lib/fonts', () => ({ initializeFonts: vi.fn(), createLabelSVG: vi.fn() }))
 vi.mock('@/lib/media-process', () => ({ processMediaResult: vi.fn() }))
 vi.mock('@/lib/config-service', () => configServiceMock)
@@ -167,6 +173,34 @@ describe('worker utils video generation resume', () => {
         duration: 11.43,
         resolution: '720p',
         prompt: 'animate this frame',
+      }),
+    )
+  })
+
+  it('normalizes relative signed reference audio URLs before provider submission', async () => {
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/audio-driven.mp4',
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      imageUrl: 'data:image/png;base64,QQ==',
+      options: {
+        prompt: 'doctor speaks with matched voice timing',
+        referenceAudioUrls: ['/api/storage/sign?key=voice%2Fline-1.flac&expires=7200'],
+      },
+    })
+
+    expect(result).toEqual({ url: 'https://comfy.test/audio-driven.mp4' })
+    expect(storageMock.toFetchableUrl).toHaveBeenCalledWith('/api/storage/sign?key=voice%2Fline-1.flac&expires=7200')
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      'data:image/png;base64,QQ==',
+      expect.objectContaining({
+        referenceAudioUrls: ['http://internal.test/api/storage/sign?key=voice%2Fline-1.flac&expires=7200'],
       }),
     )
   })

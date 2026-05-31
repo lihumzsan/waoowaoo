@@ -318,6 +318,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         videoModel.generationOptions,
                         panel.panelId,
                         durationBinding.localBinding,
+                        promptEditor.localPrompt,
                       )}
                     disabled={
                       taskStatus.isVideoTaskRunning

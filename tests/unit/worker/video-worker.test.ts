@@ -52,6 +52,8 @@ const utilsMock = vi.hoisted(() => ({
     vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(
       async () => ({ url: 'https://provider.example/video.mp4' }),
   ),
+  renderStaticCameraMotionVideo:
+    vi.fn<(...args: unknown[]) => Promise<Buffer>>(async () => Buffer.from('static-camera-video')),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
   uploadImageSourceToCos: vi.fn<(...args: [unknown, string, string]) => Promise<string>>(
     async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`,
@@ -103,6 +105,7 @@ const prismaMock = vi.hoisted(() => ({
       id: string
       speaker?: string | null
       content?: string | null
+      audioUrl?: string | null
       audioDuration?: number | null
     }>> => []),
   },
@@ -167,7 +170,7 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
     firstLastFramePromptEditedByUser: false,
     duration: 5,
     shotType: '近景',
-    cameraMove: '缓慢推进',
+    cameraMove: '固定机位',
     location: '办公室',
     characters: '中年医生',
     props: '办公桌',
@@ -210,6 +213,7 @@ describe('worker video processor behavior', () => {
     workerState.processor = null
     utilsMock.getProjectModels.mockResolvedValue({ videoRatio: '16:9' })
     utilsMock.resolveVideoSourceFromGeneration.mockResolvedValue({ url: 'https://provider.example/video.mp4' })
+    utilsMock.renderStaticCameraMotionVideo.mockResolvedValue(Buffer.from('static-camera-video'))
     utilsMock.resolveLipSyncVideoSource.mockResolvedValue('https://provider.example/lipsync.mp4')
     utilsMock.toSignedUrlIfCos.mockImplementation((url: string | null) => (url ? `https://signed.example/${url}` : null))
     utilsMock.uploadImageSourceToCos.mockImplementation(async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`)
@@ -471,6 +475,65 @@ describe('worker video processor behavior', () => {
     )
   })
 
+  it('VIDEO_PANEL: submits slow stable camera routed shots to the video generator', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 0,
+        },
+        ltx23WorkflowRouting: {
+          selectedModelKey: LTX23_FIRST_LAST_MODEL,
+          category: 'first_last_frame',
+          reasons: ['slow_stable_camera_movement'],
+          durationSeconds: 12,
+          fps: 25,
+        },
+        generationOptions: {
+          duration: 12,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.renderStaticCameraMotionVideo).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        imageUrl: 'https://signed.example/cos/panel-image.png',
+        modelId: LTX23_FIRST_LAST_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 12,
+          fps: 25,
+          generationMode: 'firstlastframe',
+          lastFrameImageUrl: 'https://signed.example/cos/panel-image.png',
+        }),
+      }),
+    )
+    expect(utilsMock.uploadVideoSourceToCos).toHaveBeenCalledWith(
+      'https://provider.example/video.mp4',
+      'panel-video',
+      'panel-1',
+      undefined,
+    )
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        videoUrl: 'cos/lip-sync/video.mp4',
+        videoGenerationMode: 'firstlastframe',
+      }),
+    })
+  })
+
   it('VIDEO_PANEL: allows exact audio-driven LTX2.3 duration to bypass enum duration options downstream', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
@@ -480,6 +543,7 @@ describe('worker video processor behavior', () => {
         id: 'line-1',
         speaker: '中年医生',
         content: '陈迹你好，我现在需要问你一些问题。',
+        audioUrl: 'cos/line-1.mp3',
         audioDuration: 11_430,
       },
     ])
@@ -509,6 +573,7 @@ describe('worker video processor behavior', () => {
           duration: 11.43,
           fps: 25,
           generationMode: 'normal',
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
         }),
       }),
     )

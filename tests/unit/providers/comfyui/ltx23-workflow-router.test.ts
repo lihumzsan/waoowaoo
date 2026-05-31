@@ -48,6 +48,23 @@ describe('ltx23 workflow router', () => {
     expect(result?.reasons).toContain('large_motion_or_camera_movement')
   })
 
+  it('keeps slow Chinese push-in camera prompts on the single-image profile for 12s', () => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: DEFAULT_MODEL,
+      selectionMode: 'auto',
+      requestedDurationSeconds: 4,
+      panel: {
+        videoPrompt: '\u60e8\u767d\u767d\u70bd\u706f\u5782\u5728\u591c\u95f4\u529e\u516c\u5ba4\u4e2d\u592e\uff0c\u4e2d\u5e74\u7537\u5b50\u5750\u5728\u4e66\u684c\u540e\u4fa7\u9760\u5899\u7684\u6905\u5b50\u4e0a\u5fae\u5fae\u524d\u503e\uff0c\u5e74\u8f7b\u7537\u5b50\u5750\u5728\u4e66\u684c\u524d\u4fa7\u9762\u5411\u4e66\u684c\u7684\u6905\u5b50\u4e0a\u62ac\u773c\u5bf9\u89c6\uff0c\u56db\u5468\u7a7a\u5899\u548c\u6697\u89d2\u538b\u4f4f\u7a7a\u95f4\uff0c\u955c\u5934\u7f13\u6162\u63a8\u8fdb\u4fef\u62cd',
+        shotType: '\u4fef\u62cd\u8fdc\u666f',
+        cameraMove: '\u7f13\u6162\u63a8\u8fdb',
+      },
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise)
+    expect(result?.durationSeconds).toBe(12)
+    expect(result?.reasons).toContain('slow_stable_camera_movement')
+  })
+
   it('keeps in-range long large-motion requests on the four-stage profile', () => {
     const result = resolveLtx23WorkflowRoute({
       modelKey: DEFAULT_MODEL,
@@ -71,6 +88,20 @@ describe('ltx23 workflow router', () => {
 
     expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame)
     expect(result?.confidence).toBe(1)
+  })
+
+  it('falls back from a first-last-frame-only model when the request is normal generation', () => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: `comfyui::${COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame}`,
+      generationMode: 'normal',
+      requestedDurationSeconds: 6,
+      panel: { description: 'two people sit still in an office' },
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise)
+    expect(result?.selectionMode).toBe('auto')
+    expect(result?.routed).toBe(true)
+    expect(result?.reasons).toContain('first_last_frame_model_in_normal_mode')
   })
 
   it('routes over-24-second videos to the Damaicha 30s profile', () => {

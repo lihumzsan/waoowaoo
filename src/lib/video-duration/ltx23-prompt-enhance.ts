@@ -15,6 +15,7 @@ export interface Ltx23PromptEnhancementVoiceLine {
   speaker: string
   content: string
   audioDuration?: number | null
+  audioUrl?: string | null
 }
 
 export interface Ltx23PromptEnhancementPanel {
@@ -126,21 +127,59 @@ function allowsCameraMovement(policy: Ltx23PromptPolicy): boolean {
   return policy === 'large_motion_single_image' || policy === 'long_promptrelay' || policy === 'first_last_frame'
 }
 
-function buildCameraPolicyLines(policy: Ltx23PromptPolicy): string[] {
+const ENGLISH_CAMERA_MOTION_PATTERN = /\b(?:camera\s+)?(?:push(?:es|ing)?\s*in|push-in|pull(?:s|ing)?\s*(?:back|out)|pan(?:s|ning)?|track(?:s|ing)?|doll(?:y|ies|ying)|zoom(?:s|ing)?|orbit(?:s|ing)?|circl(?:e|es|ing)|spin(?:s|ning)?|rotat(?:e|es|ing|ion)|travel(?:s|ing|ling)?)\b/i
+const ENGLISH_ORBIT_CAMERA_PATTERN = /\b(?:camera\s+)?(?:orbit(?:s|ing)?|circl(?:e|es|ing)|spin(?:s|ning)?|rotat(?:e|es|ing|ion)|360(?:[-\s]?degree)?)\b/i
+const CHINESE_CAMERA_MOTION_PATTERN = /(?:\u955c\u5934|\u6444\u5f71\u673a|\u76f8\u673a)?[^。！？；，,.!?]{0,16}(?:\u63a8\u8fd1|\u63a8\u5165|\u62c9\u8fdc|\u62c9\u5f00|\u5e73\u79fb|\u8ddf\u968f|\u8ddf\u62cd|\u73af\u7ed5|\u56f4\u7ed5|\u7ed5\u7740|\u7ed5\u884c|\u7ed5\u5708|\u8f6c\u5708|\u65cb\u8f6c)/u
+const CHINESE_ORBIT_CAMERA_PATTERN = /(?:\u955c\u5934|\u6444\u5f71\u673a|\u76f8\u673a)?[^。！？；，,.!?]{0,16}(?:\u73af\u7ed5|\u56f4\u7ed5|\u7ed5\u7740|\u7ed5\u884c|\u7ed5\u5708|\u8f6c\u5708|\u65cb\u8f6c)/u
+const CAMERA_NEGATION_PATTERN = /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|no|avoid|never)\b|\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d/iu
+
+function stripNegatedCameraMotionClauses(value: string): string {
+  const text = readTrimmedString(value)
+  if (!text) return ''
+  return text
+    .split(/(?<=[.!?。！？])\s+|\n/u)
+    .filter((clause) => {
+      const hasCameraMotion = ENGLISH_CAMERA_MOTION_PATTERN.test(clause) || CHINESE_CAMERA_MOTION_PATTERN.test(clause)
+      return !(hasCameraMotion && CAMERA_NEGATION_PATTERN.test(clause))
+    })
+    .join('\n')
+}
+
+function hasExplicitCameraMovementIntent(value: string | null | undefined): boolean {
+  const text = stripNegatedCameraMotionClauses(value ?? '')
+  if (!text) return false
+  return ENGLISH_CAMERA_MOTION_PATTERN.test(text) || CHINESE_CAMERA_MOTION_PATTERN.test(text)
+}
+
+function hasExplicitOrbitCameraMotionIntent(value: string | null | undefined): boolean {
+  const text = stripNegatedCameraMotionClauses(value ?? '')
+  if (!text) return false
+  return ENGLISH_ORBIT_CAMERA_PATTERN.test(text) || CHINESE_ORBIT_CAMERA_PATTERN.test(text)
+}
+
+function addsUnrequestedOrbitCameraMotion(originalPrompt: string, candidatePrompt: string): boolean {
+  return hasExplicitOrbitCameraMotionIntent(candidatePrompt) && !hasExplicitOrbitCameraMotionIntent(originalPrompt)
+}
+
+function buildCameraPolicyLines(policy: Ltx23PromptPolicy, originalPrompt: string): string[] {
   switch (policy) {
     case 'large_motion_single_image':
       return [
         `Workflow profile: ${policy}.`,
+        'VBVR / PromptRelay structured format is required for enhanced_prompt.',
+        'Use exactly this section shape: GLOBAL: one stable source-frame anchor; LOCAL 1: preparation; LOCAL 2: continuous progression; LOCAL 3: strongest continuous motion beat; LOCAL 4: settling motion state.',
         'Use four continuous motion stages when the shot needs a larger progression, while keeping one uninterrupted shot.',
         'Camera movement is allowed as continuous push-in, pull-back, pan, track, or similar smooth movement, but do not add scene cuts, time jumps, new people, unrelated locations, or camera angle jumps.',
       ]
     case 'long_promptrelay':
       return [
         `Workflow profile: ${policy}.`,
+        'VBVR / PromptRelay structured format is required for enhanced_prompt.',
         'Single-image long PromptRelay mode: keep one continuous shot and allow gradual continuous movement for the longer duration.',
-        'The enhanced_prompt must include explicit GLOBAL: and LOCAL: sections.',
+        'The enhanced_prompt must include explicit GLOBAL: and numbered LOCAL sections.',
         'GLOBAL: describe only the visible environment and visible subjects from the source frame.',
-        'LOCAL: describe continuous visible-subject action and continuous camera movement only; do not add scene changes, time jumps, new people, unrelated locations, or camera angle jumps.',
+        'LOCAL 1:, LOCAL 2:, and LOCAL 3: must each describe one small continuous time progression; use LOCAL 4: and LOCAL 5: when the longer workflow needs more segments.',
+        'Each LOCAL n: section must describe continuous visible-subject action and continuous allowed camera movement only; do not add scene changes, time jumps, new people, unrelated locations, or camera angle jumps.',
       ]
     case 'first_last_frame':
       return [
@@ -148,12 +187,32 @@ function buildCameraPolicyLines(policy: Ltx23PromptPolicy): string[] {
         'First-to-last-frame bridge mode: connect the start frame to the end frame with natural continuous motion.',
         'Continuous camera movement is allowed when it helps bridge the two frames, but do not add new people, new locations, scene cuts, time jumps, or camera angle jumps.',
       ]
-    default:
+    case 'micro_detail':
       return [
         `Workflow profile: ${policy}.`,
+        'VBVR / PromptRelay structured format is required for enhanced_prompt.',
+        'Use exactly this section shape: GLOBAL: fixed visible source-frame subject, room, lighting, identity, and composition; LOCAL: micro motion only.',
+        'LOCAL: may describe eyes, gaze, blinking, mouth or lip motion, breathing, tiny facial expression, and small finger or hand motion only.',
+        'Keep the camera fixed to the source-frame composition; do not introduce large body movement, new people, new locations, or scene cuts.',
+      ]
+    default:
+      if (hasExplicitCameraMovementIntent(originalPrompt)) {
+        return [
+          `Workflow profile: ${policy}.`,
+          'VBVR / PromptRelay structured format is required for enhanced_prompt.',
+          'Use exactly this section shape: GLOBAL: fixed visible source-frame subject, room, lighting, identity, and composition; LOCAL: one continuous visible action.',
+          'Preserve only the camera movement explicitly requested in the original prompt, keeping the source-frame composition and visible subjects stable.',
+          'Do not invent any additional camera path, angle change, parallax, or extra camera travel beyond the original prompt.',
+          'GLOBAL: describe only the fixed visible environment and visible subjects; LOCAL: describe only the requested continuous subject motion, lip movement, micro-expression, and explicitly requested camera movement.',
+        ]
+      }
+      return [
+        `Workflow profile: ${policy}.`,
+        'VBVR / PromptRelay structured format is required for enhanced_prompt.',
+        'Use exactly this section shape: GLOBAL: fixed visible source-frame subject, room, lighting, identity, and composition; LOCAL: one continuous visible action.',
         'Keep the source-frame composition locked. For normal single-shot mode, use a locked-off static camera only.',
-        'The final enhanced_prompt must not include orbit, circle, circling, pan, tracking, dolly, zoom, travel, or parallax.',
-        'For PromptRelay output, GLOBAL must describe only the fixed visible environment and visible subjects; LOCAL must describe only visible-subject motion, lip movement, micro-expression, and no camera travel.',
+        'The final enhanced_prompt must keep a fixed camera path and source-frame framing.',
+        'GLOBAL: describe only the fixed visible environment and visible subjects; LOCAL: describe only visible-subject motion, lip movement, and micro-expression inside the source-frame composition.',
       ]
   }
 }
@@ -405,7 +464,7 @@ function buildAudioContextText(
 
 function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string {
   const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
-  const cameraPolicyLines = buildCameraPolicyLines(promptPolicy)
+  const cameraPolicyLines = buildCameraPolicyLines(promptPolicy, input.originalPrompt)
   const allowedSubjects = input.continuity?.characters?.length
     ? input.continuity.characters.map((character) => character.name).filter(Boolean)
     : parseNameList(input.panel.characters)
@@ -448,14 +507,22 @@ function buildVisualContinuityConstraint(input: EnhanceLtx23VideoPromptInput, po
   const subjectText = allowedSubjects.length > 0
     ? `Allowed visible subjects: ${allowedSubjects.join(', ')}.`
     : 'Allowed visible subjects: only the people already visible in the source frame.'
+  const originalPromptHasCameraMovement = hasExplicitCameraMovementIntent(input.originalPrompt)
+  const originalPromptHasOrbit = hasExplicitOrbitCameraMotionIntent(input.originalPrompt)
   const cameraConstraint = allowsCameraMovement(policy)
     ? 'Keep one continuous shot. Camera movement is allowed, but do not add scene cuts, time jumps, new people, or unrelated locations.'
-    : 'Use a locked-off static camera; do not orbit, pan, zoom, track, travel, or use parallax.'
+    : originalPromptHasCameraMovement
+      ? originalPromptHasOrbit
+        ? 'Preserve only the original prompt\'s explicitly requested orbit or rotation camera movement; keep it continuous and do not add extra camera travel, scene cuts, time jumps, new people, or unrelated locations.'
+        : 'Preserve only the original prompt\'s explicitly requested camera movement. Keep the same frontal angle, source-frame composition, and visible subject count without any additional camera path.'
+      : 'Use a locked-off static camera with fixed source-frame composition.'
 
   return [
     'Source-frame continuity lock:',
     subjectText,
     'Do not add new people, extra bodies, crowds, new props, new locations, scene cuts, time jumps, or unrelated plot actions.',
+    'Do not add subtitles, captions, text overlays, watermarks, Chinese characters, signs, UI text, or any readable text inside the image.',
+    'Every frame must stay in the same source-image room with the same visible subject only; never cut to another room, hallway, crowd, uniformed people, guards, police, or background extras.',
     cameraConstraint,
     'Animate only the visible subject posture, face, mouth, and hands from the current frame.',
     'Do not turn reflections, background shapes, shadows, or blurred details into new characters.',
@@ -465,6 +532,95 @@ function buildVisualContinuityConstraint(input: EnhanceLtx23VideoPromptInput, po
 
 function readEnhancedPromptField(parsed: Record<string, unknown>): string {
   return readTrimmedString(parsed.enhanced_prompt)
+}
+
+const PROMPT_RELAY_GLOBAL_MARKER_PATTERN = /\bGLOBAL\s*[:\uFF1A]/i
+const PROMPT_RELAY_LOCAL_MARKER_PATTERN = /\bLOCAL(?:\s+\d+)?\s*[:\uFF1A]/i
+const PROMPT_RELAY_NUMBERED_LOCAL_MARKER_PATTERN = /\bLOCAL\s+\d+\s*[:\uFF1A]/gi
+
+function ltx23PromptPolicyRequiresStructuredOutput(policy: Ltx23PromptPolicy): boolean {
+  return policy === 'stable_single_image'
+    || policy === 'micro_detail'
+    || policy === 'large_motion_single_image'
+    || policy === 'long_promptrelay'
+}
+
+function getMinimumNumberedLocalSectionCount(policy: Ltx23PromptPolicy): number {
+  if (policy === 'large_motion_single_image') return 4
+  if (policy === 'long_promptrelay') return 3
+  return 0
+}
+
+function countNumberedLocalSections(prompt: string): number {
+  return Array.from(prompt.matchAll(PROMPT_RELAY_NUMBERED_LOCAL_MARKER_PATTERN)).length
+}
+
+function hasRequiredPromptRelayStructure(prompt: string, policy: Ltx23PromptPolicy): boolean {
+  if (!ltx23PromptPolicyRequiresStructuredOutput(policy)) return true
+  if (!PROMPT_RELAY_GLOBAL_MARKER_PATTERN.test(prompt)) return false
+  if (!PROMPT_RELAY_LOCAL_MARKER_PATTERN.test(prompt)) return false
+
+  const minimumNumberedLocalSections = getMinimumNumberedLocalSectionCount(policy)
+  if (minimumNumberedLocalSections === 0) return true
+
+  return countNumberedLocalSections(prompt) >= minimumNumberedLocalSections
+}
+
+const PROMPT_ANCHOR_STOPWORDS = new Set([
+  'the',
+  'and',
+  'with',
+  'while',
+  'into',
+  'from',
+  'that',
+  'this',
+  'shot',
+  'action',
+  'prompt',
+  'intent',
+  'creator',
+  'current',
+  'source',
+  'frame',
+  'panel',
+  'global',
+  'local',
+  'scene',
+  'video',
+])
+
+function collectPromptAnchors(value: string): string[] {
+  const normalized = value.toLowerCase()
+  const anchors = new Set<string>()
+
+  for (const match of normalized.matchAll(/[\p{Script=Han}]{2,}/gu)) {
+    const sequence = match[0] || ''
+    if (sequence.length <= 4) {
+      anchors.add(sequence)
+      continue
+    }
+    for (let index = 0; index < sequence.length - 1; index += 1) {
+      anchors.add(sequence.slice(index, index + 2))
+    }
+  }
+
+  for (const match of normalized.matchAll(/[a-z0-9][a-z0-9-]{2,}/g)) {
+    const token = match[0] || ''
+    if (!PROMPT_ANCHOR_STOPWORDS.has(token)) {
+      anchors.add(token)
+    }
+  }
+
+  return Array.from(anchors)
+}
+
+function isEnhancedPromptAnchoredToOriginal(originalPrompt: string, enhancedPrompt: string): boolean {
+  const anchors = collectPromptAnchors(originalPrompt)
+  if (anchors.length === 0) return true
+
+  const normalizedEnhanced = enhancedPrompt.toLowerCase()
+  return anchors.some((anchor) => normalizedEnhanced.includes(anchor))
 }
 
 function buildVerbatimDialogueConstraint(
@@ -514,6 +670,8 @@ function appendDialogueConstraint(basePrompt: string, constraint: string, locale
 
 function stabilizeNormalSingleShotPrompt(basePrompt: string, input: EnhanceLtx23VideoPromptInput, policy: Ltx23PromptPolicy): string {
   if (input.generationMode === 'firstlastframe' || allowsCameraMovement(policy)) return basePrompt
+  if (addsUnrequestedOrbitCameraMotion(input.originalPrompt, basePrompt)) return input.originalPrompt
+  if (hasExplicitCameraMovementIntent(input.originalPrompt)) return basePrompt
 
   return basePrompt
     .replace(/\b(?:tiny\s+within-frame\s+)?(?:parallax|camera\s+parallax)(?:\s+simulating\s+[^,.]+)?/gi, 'locked-off static camera')
@@ -602,11 +760,33 @@ export async function enhanceLtx23VideoPrompt(
     const parsed = safeParseJsonObject(completion.text)
     const enhancedPrompt = readEnhancedPromptField(parsed)
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+    const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
     if (!enhancedPrompt) {
       return {
         prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel,
+      }
+    }
+    if (!hasRequiredPromptRelayStructure(enhancedPrompt, promptPolicy)) {
+      return {
+        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        enhanced: false,
+        textModel,
+      }
+    }
+    if (!isEnhancedPromptAnchoredToOriginal(originalPrompt, enhancedPrompt)) {
+      return {
+        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        enhanced: false,
+        textModel: null,
+      }
+    }
+    if (addsUnrequestedOrbitCameraMotion(originalPrompt, enhancedPrompt)) {
+      return {
+        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        enhanced: false,
+        textModel: null,
       }
     }
 

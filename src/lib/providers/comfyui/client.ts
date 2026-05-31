@@ -1,8 +1,10 @@
 import { basename, extname } from 'path'
+import { toFetchableUrl } from '@/lib/storage/utils'
 import {
   COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
   COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
   comfyUiWorkflowRequiresLlmApi,
+  getComfyUiWorkflowAudioInputCount,
   getComfyUiWorkflowImageInputCount,
   resolveComfyUiWorkflow,
   validateResolvedWorkflowPreflight,
@@ -57,6 +59,9 @@ type ComfyPromptQueuePhase = 'pending' | 'running' | 'absent' | 'unknown'
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|bmp)$/i
 const VIDEO_EXTENSIONS = /\.(mp4|webm|gif|mov|mkv|avi)$/i
 const AUDIO_EXTENSIONS = /\.(wav|mp3|ogg|m4a|flac|aac)$/i
+const MODEL_FILE_EXTENSIONS = /\.(safetensors|ckpt|pt|pth|bin)$/i
+const NEUTRAL_AUDIO_SAMPLE_RATE = 16_000
+const MAX_NEUTRAL_AUDIO_SECONDS = 60
 
 function guessMimeFromFilename(filename: string): string {
   const lower = filename.toLowerCase()
@@ -81,6 +86,46 @@ function guessMimeFromFilename(filename: string): string {
 
 function isMediaFilename(filename: string): boolean {
   return IMAGE_EXTENSIONS.test(filename) || VIDEO_EXTENSIONS.test(filename) || AUDIO_EXTENSIONS.test(filename)
+}
+
+function normalizeModelPath(value: string): string {
+  return value.trim().replace(/\\/g, '/').toLowerCase()
+}
+
+function modelBasename(value: string): string {
+  const normalized = normalizeModelPath(value)
+  return normalized.split('/').filter(Boolean).pop() || normalized
+}
+
+function buildSilentWavDataUrl(durationSeconds: number | undefined): string {
+  const safeDuration = Math.max(
+    0.1,
+    Math.min(
+      MAX_NEUTRAL_AUDIO_SECONDS,
+      typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+        ? durationSeconds
+        : 1,
+    ),
+  )
+  const sampleCount = Math.max(1, Math.ceil(NEUTRAL_AUDIO_SAMPLE_RATE * safeDuration))
+  const dataSize = sampleCount * 2
+  const buffer = Buffer.alloc(44 + dataSize)
+
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + dataSize, 4)
+  buffer.write('WAVE', 8)
+  buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20)
+  buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(NEUTRAL_AUDIO_SAMPLE_RATE, 24)
+  buffer.writeUInt32LE(NEUTRAL_AUDIO_SAMPLE_RATE * 2, 28)
+  buffer.writeUInt16LE(2, 32)
+  buffer.writeUInt16LE(16, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(dataSize, 40)
+
+  return `data:audio/wav;base64,${buffer.toString('base64')}`
 }
 
 function parseMediaRefFromPathLike(raw: string): MediaRef | null {
@@ -270,6 +315,16 @@ function readTimeoutOverride(value: string | undefined, fallbackMs: number): num
   return Math.round(parsed)
 }
 
+function readEnabledEnvFlag(value: string | undefined): boolean {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
+function shouldDumpComfyUiVideoPrompt(): boolean {
+  return readEnabledEnvFlag(process.env.COMFYUI_VIDEO_PROMPT_DUMP)
+}
+
 function getComfyUiQueueTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
   if (expect === 'video') {
     return readTimeoutOverride(process.env.COMFYUI_VIDEO_QUEUE_TIMEOUT_MS, 7_200_000)
@@ -278,6 +333,16 @@ function getComfyUiQueueTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
     return readTimeoutOverride(process.env.COMFYUI_AUDIO_QUEUE_TIMEOUT_MS, 2_700_000)
   }
   return readTimeoutOverride(process.env.COMFYUI_IMAGE_QUEUE_TIMEOUT_MS, 1_800_000)
+}
+
+function getComfyUiPendingTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
+  if (expect === 'video') {
+    return readTimeoutOverride(process.env.COMFYUI_VIDEO_PENDING_TIMEOUT_MS, 43_200_000)
+  }
+  if (expect === 'audio') {
+    return readTimeoutOverride(process.env.COMFYUI_AUDIO_PENDING_TIMEOUT_MS, 7_200_000)
+  }
+  return readTimeoutOverride(process.env.COMFYUI_IMAGE_PENDING_TIMEOUT_MS, 3_600_000)
 }
 
 function getComfyUiExecutionTimeoutMs(expect: 'image' | 'video' | 'audio'): number {
@@ -370,7 +435,8 @@ async function loadBinarySource(source: string): Promise<{ buffer: Buffer; mimeT
   const dataUrl = parseDataUrl(source)
   if (dataUrl) return dataUrl
 
-  const response = await fetch(source, { signal: AbortSignal.timeout(120_000) })
+  const fetchUrl = toFetchableUrl(source)
+  const response = await fetch(fetchUrl, { signal: AbortSignal.timeout(120_000) })
   if (!response.ok) {
     const detail = await response.text().catch(() => '')
     throw new Error(`COMFYUI_SOURCE_FETCH_FAILED: ${response.status} ${detail.slice(0, 200)}`)
@@ -531,16 +597,168 @@ async function runSerializedComfyUiAudioWorkflow<T>(operation: () => Promise<T>)
   }
 }
 
+function readObjectInfoOptionList(payload: unknown, classType: string, field: string): string[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+  const root = payload as Record<string, unknown>
+  const rawClassInfo = root[classType]
+  if (!rawClassInfo || typeof rawClassInfo !== 'object' || Array.isArray(rawClassInfo)) return []
+  const classInfo = rawClassInfo as Record<string, unknown>
+  const input = classInfo.input
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return []
+
+  for (const sectionName of ['required', 'optional']) {
+    const section = (input as Record<string, unknown>)[sectionName]
+    if (!section || typeof section !== 'object' || Array.isArray(section)) continue
+    const rawField = (section as Record<string, unknown>)[field]
+    if (!Array.isArray(rawField)) continue
+    const first = rawField[0]
+    if (!Array.isArray(first)) continue
+    return first.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+
+  return []
+}
+
+function resolveServerModelOption(currentValue: string, allowedValues: string[]): string | null {
+  if (allowedValues.includes(currentValue)) return null
+
+  const currentBasename = modelBasename(currentValue)
+  const basenameMatch = allowedValues.find((candidate) => modelBasename(candidate) === currentBasename)
+  return basenameMatch || null
+}
+
+function normalizeComfyNodeClass(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function readWorkflowConnectionNodeId(value: unknown): string | null {
+  if (!Array.isArray(value) || value.length < 1) return null
+  const nodeId = value[0]
+  if (typeof nodeId === 'string') return nodeId.trim() || null
+  if (typeof nodeId === 'number' && Number.isFinite(nodeId)) return String(Math.trunc(nodeId))
+  return null
+}
+
+function readWorkflowInputString(
+  workflow: ComfyUiWorkflowGraph,
+  value: unknown,
+  visited = new Set<string>(),
+): string | null {
+  if (typeof value === 'string') return value
+  const nodeId = readWorkflowConnectionNodeId(value)
+  if (!nodeId || visited.has(nodeId)) return null
+  visited.add(nodeId)
+
+  const node = workflow[nodeId]
+  if (!node || !node.inputs || typeof node.inputs !== 'object') return null
+  for (const field of ['prompt', 'text', 'value', 'string', 'input_string']) {
+    if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
+    const text = readWorkflowInputString(workflow, node.inputs[field], visited)
+    if (text !== null) return text
+  }
+
+  return null
+}
+
+function appendPromptDumpField(
+  lines: string[],
+  label: string,
+  value: string | null,
+): void {
+  if (value === null) return
+  lines.push(`${label}:`)
+  lines.push(value)
+}
+
+function dumpComfyUiVideoPrompt(params: {
+  workflowKey: string
+  prompt?: string
+  workflow: ComfyUiWorkflowGraph
+  fps?: number
+  durationSeconds?: number
+  targetFrameCount?: number
+}): void {
+  if (!shouldDumpComfyUiVideoPrompt()) return
+
+  const lines = [
+    '[COMFYUI_VIDEO_PROMPT_DUMP]',
+    `workflowKey: ${params.workflowKey}`,
+  ]
+  if (params.durationSeconds !== undefined) lines.push(`durationSeconds: ${params.durationSeconds}`)
+  if (params.fps !== undefined) lines.push(`fps: ${params.fps}`)
+  if (params.targetFrameCount !== undefined) lines.push(`targetFrameCount: ${params.targetFrameCount}`)
+  appendPromptDumpField(lines, 'input_prompt', params.prompt || '')
+
+  for (const [nodeId, node] of Object.entries(params.workflow).sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))) {
+    const classType = normalizeComfyNodeClass(node.class_type)
+    if (!classType.includes('promptrelay')) continue
+
+    const prefix = classType.includes('promptrelaysmart')
+      ? `promptrelay_smart: ${nodeId}`
+      : `promptrelay: ${nodeId}`
+    lines.push(prefix)
+    appendPromptDumpField(lines, 'global_prompt', readWorkflowInputString(params.workflow, node.inputs.global_prompt))
+    appendPromptDumpField(lines, 'smart_prompt', readWorkflowInputString(params.workflow, node.inputs.smart_prompt))
+    appendPromptDumpField(lines, 'local_prompts', readWorkflowInputString(params.workflow, node.inputs.local_prompts))
+    appendPromptDumpField(lines, 'timeline_data', readWorkflowInputString(params.workflow, node.inputs.timeline_data))
+  }
+
+  lines.push('[/COMFYUI_VIDEO_PROMPT_DUMP]')
+  try {
+    process.stdout.write(`${lines.join('\n')}\n`)
+  } catch {
+    // Debug-only output must never break generation.
+  }
+}
+
+async function fetchComfyUiObjectInfo(base: string, classType: string): Promise<unknown | null> {
+  try {
+    const response = await fetch(`${base}/object_info/${encodeURIComponent(classType)}`, {
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) return null
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
+async function normalizeWorkflowModelInputsForServer(
+  base: string,
+  workflow: ComfyUiWorkflowGraph,
+): Promise<ComfyUiWorkflowGraph> {
+  const objectInfoByClass = new Map<string, unknown | null>()
+
+  for (const node of Object.values(workflow)) {
+    if (!node.inputs || typeof node.inputs !== 'object') continue
+    for (const [field, rawValue] of Object.entries(node.inputs)) {
+      if (typeof rawValue !== 'string' || !MODEL_FILE_EXTENSIONS.test(rawValue)) continue
+      if (!objectInfoByClass.has(node.class_type)) {
+        objectInfoByClass.set(node.class_type, await fetchComfyUiObjectInfo(base, node.class_type))
+      }
+      const objectInfo = objectInfoByClass.get(node.class_type)
+      const allowedValues = readObjectInfoOptionList(objectInfo, node.class_type, field)
+      const replacement = resolveServerModelOption(rawValue, allowedValues)
+      if (replacement) {
+        node.inputs[field] = replacement
+      }
+    }
+  }
+
+  return workflow
+}
+
 export async function runComfyUiWorkflow(params: {
   baseUrl: string
   workflow: ComfyUiWorkflowGraph
   expect: 'image' | 'video' | 'audio'
 }): Promise<{ dataBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
+  const workflow = await normalizeWorkflowModelInputsForServer(base, params.workflow)
   const promptResponse = await fetch(`${base}/prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: params.workflow, client_id: 'waoowaoo' }),
+    body: JSON.stringify({ prompt: workflow, client_id: 'waoowaoo' }),
     signal: AbortSignal.timeout(params.expect === 'video' ? 600_000 : 180_000),
   })
 
@@ -561,6 +779,7 @@ export async function runComfyUiWorkflow(params: {
 
   const submittedAt = Date.now()
   const queueTimeoutMs = getComfyUiQueueTimeoutMs(params.expect)
+  const pendingTimeoutMs = getComfyUiPendingTimeoutMs(params.expect)
   const executionTimeoutMs = getComfyUiExecutionTimeoutMs(params.expect)
   const historyGraceMs = getComfyUiHistoryGraceMs(params.expect)
   const queuePollIntervalMs = getComfyUiQueuePollIntervalMs(params.expect)
@@ -568,6 +787,7 @@ export async function runComfyUiWorkflow(params: {
   let executionStartedAt: number | null = null
   let leftQueueWithoutHistoryAt: number | null = null
   let hasEverAppearedInQueue = false
+  let firstSeenInQueueAt: number | null = null
   let lastQueuePollAt = 0
   let lastKnownQueuePhase: ComfyPromptQueuePhase = 'unknown'
 
@@ -582,7 +802,7 @@ export async function runComfyUiWorkflow(params: {
       const history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
       const entry = history[promptId]
       if (entry) {
-        mediaRef = pickPreferredMediaRefFromOutputs(entry.outputs, params.expect, params.workflow)
+        mediaRef = pickPreferredMediaRefFromOutputs(entry.outputs, params.expect, workflow)
         if (mediaRef) break
 
         if (executionStartedAt === null) {
@@ -603,9 +823,11 @@ export async function runComfyUiWorkflow(params: {
 
         if (queuePhase === 'pending') {
           hasEverAppearedInQueue = true
+          firstSeenInQueueAt ??= now
           leftQueueWithoutHistoryAt = null
         } else if (queuePhase === 'running') {
           hasEverAppearedInQueue = true
+          firstSeenInQueueAt ??= now
           executionStartedAt ??= now
           leftQueueWithoutHistoryAt = null
         } else if (queuePhase === 'absent' && hasEverAppearedInQueue) {
@@ -616,8 +838,13 @@ export async function runComfyUiWorkflow(params: {
     }
 
     if (executionStartedAt === null) {
-      if (now - submittedAt > queueTimeoutMs) {
-        throw new Error(`COMFYUI_QUEUE_TIMEOUT: prompt stayed queued too long without starting ${params.expect} generation`)
+      const queueWaitStartedAt = firstSeenInQueueAt ?? submittedAt
+      const queueWaitTimeoutMs = firstSeenInQueueAt === null ? queueTimeoutMs : pendingTimeoutMs
+      if (now - queueWaitStartedAt > queueWaitTimeoutMs) {
+        const timeoutReason = firstSeenInQueueAt === null
+          ? 'prompt stayed queued too long without starting'
+          : 'prompt stayed pending in ComfyUI queue too long without starting'
+        throw new Error(`COMFYUI_QUEUE_TIMEOUT: ${timeoutReason} ${params.expect} generation`)
       }
       continue
     }
@@ -716,6 +943,7 @@ export async function runComfyUiVideoWorkflow(params: {
   prompt?: string
   firstFrameImageUrl: string
   referenceImageUrls?: string[]
+  referenceAudioUrls?: string[]
   lastFrameImageUrl?: string
   width?: number
   height?: number
@@ -724,6 +952,7 @@ export async function runComfyUiVideoWorkflow(params: {
   llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
+  const workflowKey = params.workflowKey?.trim() || COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
   const imageFilenames = await uploadComfyUiImages(
     base,
     [
@@ -741,11 +970,23 @@ export async function runComfyUiVideoWorkflow(params: {
   const targetFrameCount = fps && durationSeconds
     ? Math.max(1, Math.round(fps * durationSeconds))
     : undefined
+  const audioInputCount = getComfyUiWorkflowAudioInputCount(workflowKey)
+  const referenceAudioUrls = (params.referenceAudioUrls || [])
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+  const audioFilenames = audioInputCount > 0
+    ? await uploadComfyUiAudios(
+        base,
+        referenceAudioUrls.length > 0
+          ? referenceAudioUrls
+          : [buildSilentWavDataUrl(durationSeconds)],
+      )
+    : []
   const workflow = resolveComfyUiWorkflow(
-    params.workflowKey?.trim() || COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
+    workflowKey,
     {
       prompt: params.prompt,
       imageFilenames,
+      audioFilenames,
       width: params.width,
       height: params.height,
       fps,
@@ -754,6 +995,14 @@ export async function runComfyUiVideoWorkflow(params: {
       llmApi: params.llmApi,
     },
   )
+  dumpComfyUiVideoPrompt({
+    workflowKey,
+    prompt: params.prompt,
+    workflow,
+    fps,
+    durationSeconds,
+    targetFrameCount,
+  })
 
   const { dataBase64, mimeType } = await runComfyUiWorkflow({
     baseUrl: base,

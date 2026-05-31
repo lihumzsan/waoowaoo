@@ -9,6 +9,7 @@ import {
   runComfyUiVideoWorkflow,
   runComfyUiWorkflow,
 } from '@/lib/providers/comfyui/client'
+import { COMFYUI_LTX23_WORKFLOW_KEYS } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 function writeWorkflow(root: string, workflowKey: string, workflow: unknown) {
   const filePath = join(root, `${workflowKey}.json`)
@@ -23,6 +24,10 @@ describe('comfyui client media refs', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     delete process.env.COMFYUI_WORKFLOW_ROOT
+    delete process.env.COMFYUI_VIDEO_QUEUE_TIMEOUT_MS
+    delete process.env.COMFYUI_VIDEO_PENDING_TIMEOUT_MS
+    delete process.env.COMFYUI_VIDEO_PROMPT_DUMP
+    delete process.env.INTERNAL_APP_URL
     if (workflowRoot) {
       rmSync(workflowRoot, { recursive: true, force: true })
       workflowRoot = null
@@ -165,6 +170,80 @@ describe('comfyui client media refs', () => {
     expect(result.mimeType).toBe('video/mp4')
     expect(result.dataBase64).toBe(Buffer.from([1, 2, 3]).toString('base64'))
     expect(fetchMock).toHaveBeenCalled()
+  })
+
+  it('does not abandon a prompt that is still pending in the ComfyUI queue after queue timeout', async () => {
+    vi.useFakeTimers()
+    process.env.COMFYUI_VIDEO_QUEUE_TIMEOUT_MS = '2000'
+    let historyPollCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-long-pending' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-long-pending')) {
+        historyPollCount += 1
+        if (historyPollCount < 5) {
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        return new Response(JSON.stringify({
+          'prompt-long-pending': {
+            outputs: {
+              '41': {
+                video_url: '/view?filename=long-pending.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/queue')) {
+        return new Response(JSON.stringify({
+          queue_running: [],
+          queue_pending: [[3, 'prompt-long-pending', {}]],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=long-pending.mp4')) {
+        return new Response(new Uint8Array([13, 14, 15]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflow: { '1': { class_type: 'Dummy', inputs: {} } },
+      expect: 'video',
+    })
+
+    await vi.advanceTimersByTimeAsync(5_500)
+    const result = await resultPromise
+
+    expect(result.mimeType).toBe('video/mp4')
+    expect(result.dataBase64).toBe(Buffer.from([13, 14, 15]).toString('base64'))
   })
 
   it('prefers the decoded final image over preview concat outputs', async () => {
@@ -430,5 +509,473 @@ describe('comfyui client media refs', () => {
     expect(uploadCount).toBe(3)
     expect(result.mimeType).toBe('video/mp4')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('uploaded-first.png')
+  })
+
+  it('injects a neutral audio upload into video workflows that contain LoadAudio placeholders', async () => {
+    vi.useFakeTimers()
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'basevideo/client/neutral-audio', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'LoadAudio', inputs: { audio: 'missing-placeholder.wav', upload: 'audio' } },
+      '3': { class_type: 'VHS_VideoCombine', inputs: { images: ['1', 0], audio: ['2', 0] } },
+    })
+
+    const uploadFilenames = ['uploaded-first.png', 'uploaded-neutral.wav']
+    let uploadCount = 0
+    let submittedWorkflow: unknown = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        const name = uploadFilenames[uploadCount]
+        uploadCount += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-neutral-audio' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-neutral-audio')) {
+        return new Response(JSON.stringify({
+          'prompt-neutral-audio': {
+            outputs: {
+              '3': {
+                video_url: '/view?filename=neutral-audio.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=neutral-audio.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'basevideo/client/neutral-audio',
+      prompt: 'video prompt',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+      durationSeconds: 2,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(uploadCount).toBe(2)
+    expect(result.mimeType).toBe('video/mp4')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.audio).toBe('uploaded-neutral.wav')
+  })
+
+  it('uses provided reference audio for video workflows before falling back to neutral audio', async () => {
+    vi.useFakeTimers()
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'basevideo/client/reference-audio', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'LoadAudio', inputs: { audio: 'missing-placeholder.wav', upload: 'audio' } },
+      '3': { class_type: 'VHS_VideoCombine', inputs: { images: ['1', 0], audio: ['2', 0] } },
+    })
+
+    const sourceFetches: string[] = []
+    const uploadFilenames = ['uploaded-first.png', 'uploaded-reference.wav']
+    let uploadCount = 0
+    let submittedWorkflow: unknown = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        sourceFetches.push(url)
+        const contentType = url.endsWith('.wav') ? 'audio/wav' : 'image/png'
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': contentType },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        const name = uploadFilenames[uploadCount]
+        uploadCount += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-reference-audio' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-reference-audio')) {
+        return new Response(JSON.stringify({
+          'prompt-reference-audio': {
+            outputs: {
+              '3': {
+                video_url: '/view?filename=reference-audio.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=reference-audio.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const params = {
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'basevideo/client/reference-audio',
+      prompt: 'video prompt',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+      referenceAudioUrls: ['https://assets.test/line-1.wav'],
+      durationSeconds: 2,
+    } as Parameters<typeof runComfyUiVideoWorkflow>[0] & { referenceAudioUrls: string[] }
+    const resultPromise = runComfyUiVideoWorkflow(params)
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(sourceFetches).toEqual([
+      'https://assets.test/first.png',
+      'https://assets.test/line-1.wav',
+    ])
+    expect(uploadCount).toBe(2)
+    expect(result.mimeType).toBe('video/mp4')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.audio).toBe('uploaded-reference.wav')
+  })
+
+  it('fetches relative signed reference audio URLs through the internal app base URL', async () => {
+    vi.useFakeTimers()
+    process.env.INTERNAL_APP_URL = 'http://internal.test'
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'basevideo/client/relative-reference-audio', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'LoadAudio', inputs: { audio: 'missing-placeholder.wav', upload: 'audio' } },
+      '3': { class_type: 'VHS_VideoCombine', inputs: { images: ['1', 0], audio: ['2', 0] } },
+    })
+
+    const sourceFetches: string[] = []
+    const uploadFilenames = ['uploaded-first.png', 'uploaded-reference.flac']
+    let uploadCount = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url === 'https://assets.test/first.png' || url.startsWith('http://internal.test/api/storage/sign')) {
+        sourceFetches.push(url)
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': url.endsWith('.png') ? 'image/png' : 'audio/flac' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        const name = uploadFilenames[uploadCount]
+        uploadCount += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-relative-reference-audio' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-relative-reference-audio')) {
+        return new Response(JSON.stringify({
+          'prompt-relative-reference-audio': {
+            outputs: {
+              '3': {
+                video_url: '/view?filename=relative-reference-audio.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=relative-reference-audio.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'basevideo/client/relative-reference-audio',
+      prompt: 'video prompt',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+      referenceAudioUrls: ['/api/storage/sign?key=voice%2Fline-1.flac&expires=7200'],
+      durationSeconds: 2,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(result.mimeType).toBe('video/mp4')
+    expect(uploadCount).toBe(2)
+    expect(sourceFetches).toEqual([
+      'https://assets.test/first.png',
+      'http://internal.test/api/storage/sign?key=voice%2Fline-1.flac&expires=7200',
+    ])
+  })
+
+  it('normalizes model filename inputs to server object_info aliases before prompt submit', async () => {
+    vi.useFakeTimers()
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, 'basevideo/client/model-alias', {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'VAELoaderKJ', inputs: { vae_name: 'LTX23_audio_vae_bf16.safetensors' } },
+      '3': { class_type: 'VHS_VideoCombine', inputs: { images: ['1', 0], vae: ['2', 0] } },
+    })
+
+    let submittedWorkflow: unknown = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        return new Response(JSON.stringify({ name: 'uploaded-first.png' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/object_info/VAELoaderKJ')) {
+        return new Response(JSON.stringify({
+          VAELoaderKJ: {
+            input: {
+              required: {
+                vae_name: [[
+                  'flux\\flux2-vae.safetensors',
+                  'ltx\\LTX23_audio_vae_bf16.safetensors',
+                ]],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-model-alias' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-model-alias')) {
+        return new Response(JSON.stringify({
+          'prompt-model-alias': {
+            outputs: {
+              '3': {
+                video_url: '/view?filename=model-alias.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=model-alias.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: 'basevideo/client/model-alias',
+      prompt: 'video prompt',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(result.mimeType).toBe('video/mp4')
+    expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.vae_name).toBe('ltx\\LTX23_audio_vae_bf16.safetensors')
+  })
+
+  it('dumps resolved ComfyUI video prompts to stdout when prompt dump is enabled', async () => {
+    vi.useFakeTimers()
+    process.env.COMFYUI_VIDEO_PROMPT_DUMP = '1'
+    workflowRoot = mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-client-'))
+    process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
+    writeWorkflow(workflowRoot, COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
+      '2': { class_type: 'PrimitiveString', inputs: { prompt: 'old global prompt' } },
+      '3': { class_type: 'PrimitiveString', inputs: { prompt: 'old smart prompt' } },
+      '4': {
+        class_type: 'PromptRelaySmartEncode',
+        inputs: {
+          global_prompt: ['2', 0],
+          smart_prompt: ['3', 0],
+        },
+      },
+      '5': { class_type: 'VHS_VideoCombine', inputs: { images: ['1', 0], prompt: ['4', 0] } },
+    })
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        return new Response(JSON.stringify({ name: 'uploaded-first.png' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-dump' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-dump')) {
+        return new Response(JSON.stringify({
+          'prompt-dump': {
+            outputs: {
+              '5': {
+                video_url: '/view?filename=prompt-dump.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=prompt-dump.mp4')) {
+        return new Response(new Uint8Array([10, 11, 12]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      prompt: 'GLOBAL: qshan office\nLOCAL: doctor pushes glasses, static camera',
+      firstFrameImageUrl: 'https://assets.test/first.png',
+      fps: 25,
+      durationSeconds: 6,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(result.mimeType).toBe('video/mp4')
+    const output = stdoutWrite.mock.calls.map((call) => String(call[0])).join('')
+    expect(output).toContain('[COMFYUI_VIDEO_PROMPT_DUMP]')
+    expect(output).toContain(`workflowKey: ${COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise}`)
+    expect(output).toContain('input_prompt:')
+    expect(output).toContain('GLOBAL: qshan office')
+    expect(output).toContain('promptrelay_smart:')
+    expect(output).toContain('global_prompt:')
+    expect(output).toContain('qshan office')
+    expect(output).toContain('smart_prompt:')
+    expect(output).toContain('doctor pushes glasses, static camera [0-38]')
   })
 })

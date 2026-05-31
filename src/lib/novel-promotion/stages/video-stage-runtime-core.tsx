@@ -345,6 +345,7 @@ export function useVideoStageRuntime({
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
+    customPrompt?: string,
   ) => {
     if (isSubmittingVideoBatch) return
 
@@ -375,6 +376,7 @@ export function useVideoStageRuntime({
         generationOptions,
         panelId,
         videoDurationBinding,
+        customPrompt,
       )
     } catch (error) {
       setSubmittingVideoPanelKeys((previous) => {

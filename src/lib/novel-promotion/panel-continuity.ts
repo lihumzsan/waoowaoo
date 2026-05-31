@@ -66,6 +66,34 @@ function compactText(value: unknown, maxLength: number): string {
   return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`
 }
 
+const ENGLISH_CAMERA_MOTION_PATTERN = /\b(?:camera\s+)?(?:push(?:es|ing)?\s*in|push-in|pull(?:s|ing)?\s*(?:back|out)|pan(?:s|ning)?|track(?:s|ing)?|doll(?:y|ies|ying)|zoom(?:s|ing)?|orbit(?:s|ing)?|circl(?:e|es|ing)|spin(?:s|ning)?|rotat(?:e|es|ing|ion)|travel(?:s|ing|ling)?)\b/i
+const ENGLISH_ORBIT_CAMERA_PATTERN = /\b(?:camera\s+)?(?:orbit(?:s|ing)?|circl(?:e|es|ing)|spin(?:s|ning)?|rotat(?:e|es|ing|ion)|360(?:[-\s]?degree)?)\b/i
+const CHINESE_CAMERA_MOTION_PATTERN = /(?:\u955c\u5934|\u6444\u5f71\u673a|\u76f8\u673a)?[^。！？；，,.!?]{0,16}(?:\u63a8\u8fd1|\u63a8\u5165|\u62c9\u8fdc|\u62c9\u5f00|\u5e73\u79fb|\u8ddf\u968f|\u8ddf\u62cd|\u73af\u7ed5|\u56f4\u7ed5|\u7ed5\u7740|\u7ed5\u884c|\u7ed5\u5708|\u8f6c\u5708|\u65cb\u8f6c)/u
+const CHINESE_ORBIT_CAMERA_PATTERN = /(?:\u955c\u5934|\u6444\u5f71\u673a|\u76f8\u673a)?[^。！？；，,.!?]{0,16}(?:\u73af\u7ed5|\u56f4\u7ed5|\u7ed5\u7740|\u7ed5\u884c|\u7ed5\u5708|\u8f6c\u5708|\u65cb\u8f6c)/u
+
+function hasExplicitCameraMovementIntent(value: string | null | undefined): boolean {
+  const text = readTrimmedString(value)
+  if (!text) return false
+  return ENGLISH_CAMERA_MOTION_PATTERN.test(text) || CHINESE_CAMERA_MOTION_PATTERN.test(text)
+}
+
+function hasExplicitOrbitCameraMotionIntent(value: string | null | undefined): boolean {
+  const text = readTrimmedString(value)
+  if (!text) return false
+  return ENGLISH_ORBIT_CAMERA_PATTERN.test(text) || CHINESE_ORBIT_CAMERA_PATTERN.test(text)
+}
+
+function buildCameraContinuityConstraint(packet: PanelContinuityPacket, basePrompt: string): string {
+  const intentText = [basePrompt, packet.currentAction, packet.cameraMove].filter(Boolean).join(' ')
+  if (hasExplicitCameraMovementIntent(intentText)) {
+    if (hasExplicitOrbitCameraMotionIntent(intentText)) {
+      return 'Preserve only the explicitly requested orbit or rotation camera movement, keeping it continuous and constrained to the source image composition; do not add extra camera travel into unseen areas.'
+    }
+    return 'Preserve only the explicitly requested camera movement, keeping it subtle, continuous, and constrained to the source image composition. Keep the final framing close to the source frame with the same frontal angle and visible subject count; avoid extreme close-ups, side profiles, face-only crops, and any extra camera travel into unseen areas.'
+  }
+  return 'Keep the same composition from the source image with a locked camera and no travel into unseen areas.'
+}
+
 export function isStructuredMultiShotPrompt(value: unknown): boolean {
   const text = readTrimmedString(value)
   if (!text) return false
@@ -274,6 +302,15 @@ export function renderPanelContinuityPrompt(params: {
   const duration = packet.targetDurationSeconds
     ? `${packet.targetDurationSeconds.toFixed(2)} seconds`
     : 'keep the single shot short and stable without adding story beats'
+  const neighborContextLines = params.generationMode === 'firstlastframe'
+    ? [
+        formatNeighbor('Previous shot context', packet.previous),
+        formatNeighbor('Next shot context', packet.next),
+      ]
+    : [
+        'Previous shot context: continuity reference only; do not animate previous shot action.',
+        'Next shot context: continuity reference only; do not animate next shot action.',
+      ]
 
   return [
     'Panel continuity packet:',
@@ -284,8 +321,7 @@ export function renderPanelContinuityPrompt(params: {
     `Location lock: ${packet.location || 'same as source image'}.`,
     `Shot/camera lock: ${[packet.shotType, packet.cameraMove].filter(Boolean).join(', ') || 'preserve source framing'}.`,
     `Props lock: ${packet.props || 'no new props'}.`,
-    formatNeighbor('Previous shot context', packet.previous),
-    formatNeighbor('Next shot context', packet.next),
+    ...neighborContextLines,
     `Dialogue lines: ${dialogue}`,
     `Target duration: ${duration}.`,
     `Creator prompt intent: ${basePrompt || packet.currentAction || packet.sourceText}`,
@@ -294,8 +330,11 @@ export function renderPanelContinuityPrompt(params: {
     'Use the source image as the visual authority.',
     'Animate only the current shot action. Do not import actions from previous or next shots except as continuity context.',
     'Do not add new characters, extra people, new props, new locations, new plot events, scene cuts, time jumps, or unrelated actions.',
+    'Do not add subtitles, captions, text overlays, watermarks, Chinese characters, signs, UI text, or any readable text inside the image.',
+    'Every frame must stay in the same source-image room with the same visible subject only; never cut to another room, hallway, crowd, uniformed people, guards, police, or background extras.',
     'Keep character identity, position, clothing, lighting, location, and camera framing consistent with the source image.',
-    'Keep the same composition from the source image; do not orbit, pan, zoom, or travel into unseen areas even if the panel camera label suggests movement.',
+    buildCameraContinuityConstraint(packet, basePrompt),
+    'Do not add unrequested hand-to-face gestures, glasses adjustment, head turns, profile turns, or body repositioning.',
     'The final frame must still contain the same visible character count, same location, same lighting, and no newly visible people.',
     'If dialogue is listed, mouth movement and timing must match the exact listed dialogue.',
     params.userEdited

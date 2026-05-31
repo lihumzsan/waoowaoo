@@ -1,0 +1,45 @@
+{
+  "panelId": "8bed91b9-43d6-493c-9c0f-f90d02530944",
+  "projectId": "66f5d23f-b0cc-4fe9-b6fd-0cd669c886b3",
+  "userId": "8756f9d0-982e-4672-8be8-29f197171720",
+  "workflowKey": "basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2",
+  "customPrompt": "中年男子坐在书桌后侧靠墙的椅子上微微抬头看向前方，嘴唇开合，正在说话，镜头缓缓推近，惨白白炽灯照着他的眼镜和脸",
+  "enhanced": {
+    "prompt": "Panel continuity packet:\nMode: single-shot image-to-video.\nSource text: 陈迹你好，我现在需要问你一些问题。你回答后，\nCurrent shot action: 中年男子坐在书桌后侧靠墙的椅子上微微抬头看向前方，嘴唇开合，正在说话，镜头缓缓推近，惨白白炽灯照着他的眼镜和脸\nVisible characters: 中年医生 (appearance=初始形象; slot=书桌后侧靠墙的椅子).\nLocation lock: 办公室_夜间.\nShot/camera lock: 主观近景, 缓缓推近.\nProps lock: no new props.\nPrevious shot context: 近景：中年医生抬手把鼻梁上的眼镜向上推，镜片反出头顶白光，书桌边缘横在画面下方 | action=中年男子坐在书桌后侧靠墙的椅子上抬手把鼻梁上的眼镜向上推，镜片反出头顶白光，书桌边缘压在前景下方，镜头缓缓推近 | location=办公室_夜间 | characters=中年医生 (appearance=初始形象; slot=书桌后侧靠墙的椅子)\nNext shot context: 近景：陈迹坐在书桌前侧面向书桌的椅子上，视线朝向画外左侧的中年医生，背后的椅背贴在肩后 | action=年轻男子坐在书桌前侧面向书桌的椅子上轻轻转头看向左侧，肩后贴着椅背，呼吸压得很轻，镜头缓慢推进，夜间办公室的白光落在他脸上 | location=办公室_夜间 | characters=陈迹 (appearance=初始形象; slot=书桌前侧面向书桌的椅子)\nDialogue lines: 1. 中年医生: 陈迹你好，我现在需要问你一些问题。 (11.43s audio)\nTarget duration: 12.00 seconds.\nCreator prompt intent: 中年男子坐在书桌后侧靠墙的椅子上微微抬头看向前方，嘴唇开合，正在说话，镜头缓缓推近，惨白白炽灯照着他的眼镜和脸\nHard constraints:\nUse the source image as the visual authority.\nAnimate only the current shot action. Do not import actions from previous or next shots except as continuity context.\nDo not add new characters, extra people, new props, new locations, new plot events, scene cuts, time jumps, or unrelated actions.\nKeep character identity, position, clothing, lighting, location, and camera framing consistent with the source image.\nPreserve only the explicitly requested camera movement, keeping it continuous and constrained to the source image composition. Do not add orbit, circling, spinning, rotation, 360-degree movement, or extra camera travel into unseen areas.\nThe final frame must still contain the same visible character count, same location, same lighting, and no newly visible people.\nIf dialogue is listed, mouth movement and timing must match the exact listed dialogue.\nThe creator prompt is an intent layer only; the hard continuity constraints above override conflicting creative wording. 对白必须严格说出“陈迹你好，我现在需要问你一些问题。”，口型、停顿与节奏贴合这句台词，不得改写、翻译或替换。 Source-frame continuity lock: Allowed visible subjects: 中年医生. Do not add new people, extra bodies, crowds, new props, new locations, scene cuts, time jumps, or unrelated plot actions. Preserve only the original prompt's explicitly requested orbit or rotation camera movement; keep it continuous and do not add extra camera travel, scene cuts, time jumps, new people, or unrelated locations. Animate only the visible subject posture, face, mouth, and hands from the current frame. Do not turn reflections, background shapes, shadows, or blurred details into new characters. Keep the final frame close to the source image with the same visible character count and same room layout.",
+    "enhanced": false,
+    "textModel": null
+  },
+  "audioTiming": {
+    "mode": "match_audio",
+    "selectedVoiceLineIds": [
+      "8ceacf41-32f7-448d-a147-1d0bf0843599"
+    ],
+    "matchedVoiceLineIds": [
+      "8ceacf41-32f7-448d-a147-1d0bf0843599"
+    ],
+    "sourceDurationMs": 11432,
+    "audioDurationSeconds": 11.43,
+    "targetDurationSeconds": 12,
+    "targetFrameCount": 300,
+    "fps": 25,
+    "maxDurationSeconds": 12,
+    "preRollSeconds": 0.27,
+    "postRollSeconds": 0.3,
+    "dialogueStartSeconds": 0.27,
+    "dialogueEndSeconds": 11.7,
+    "timingStrategy": "context_aware_audio",
+    "reason": "context-aware audio timing; added establishing pre-roll; added facial/emotional hold",
+    "capped": false,
+    "canGenerate": true
+  },
+  "voiceLines": [
+    {
+      "id": "8ceacf41-32f7-448d-a147-1d0bf0843599",
+      "speaker": "中年医生",
+      "content": "陈迹你好，我现在需要问你一些问题。",
+      "audioDuration": 11432,
+      "audioUrl": "voice/66f5d23f-b0cc-4fe9-b6fd-0cd669c886b3/14f25b45-e2ca-44ac-bbbf-8a560b04d595/8ceacf41-32f7-448d-a147-1d0bf0843599.flac"
+    }
+  ],
+  "imageUrl": "images/panel-candidate-8bed91b9-43d6-493c-9c0f-f90d02530944-0-1778775809791-knkp1i.png"
+}

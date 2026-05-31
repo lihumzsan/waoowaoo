@@ -1136,6 +1136,46 @@ function collectMediaOutputNodeIds(graph: ComfyUiWorkflowGraph): string[] {
     .sort(compareNodeIds)
 }
 
+function hasAnyInput(node: ComfyUiWorkflowGraphNode, inputNames: string[]): boolean {
+  if (!isRecord(node.inputs)) return false
+  return inputNames.some((inputName) => Object.prototype.hasOwnProperty.call(node.inputs, inputName))
+}
+
+function hasRequiredVideoOutputInput(node: ComfyUiWorkflowGraphNode): boolean {
+  const normalizedClassType = normalizeUiDecorationNodeType(node.class_type)
+  if (normalizedClassType === 'vhsvideocombine' || normalizedClassType === 'saveanimatedwebp') {
+    return hasAnyInput(node, ['images'])
+  }
+  if (normalizedClassType === 'savevideo') {
+    return hasAnyInput(node, ['images', 'video', 'frames'])
+  }
+  return true
+}
+
+function removeDanglingVideoOutputNodes(graph: ComfyUiWorkflowGraph): void {
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!VIDEO_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))) continue
+    if (hasRequiredVideoOutputInput(node)) continue
+    delete graph[nodeId]
+  }
+}
+
+function removeDisabledVideoOutputNodes(graph: ComfyUiWorkflowGraph): void {
+  const videoOutputEntries = Object.entries(graph).filter(([, node]) =>
+    VIDEO_OUTPUT_NODE_TYPES.has(normalizeUiDecorationNodeType(node.class_type))
+  )
+  const hasActiveVideoOutput = videoOutputEntries.some(([, node]) =>
+    hasRequiredVideoOutputInput(node) && node.inputs.save_output !== false
+  )
+  if (!hasActiveVideoOutput) return
+
+  for (const [nodeId, node] of videoOutputEntries) {
+    if (node.inputs.save_output !== false) continue
+    if (graphHasConsumers(graph, nodeId)) continue
+    delete graph[nodeId]
+  }
+}
+
 function collectInputConnectionNodeIds(node: ComfyUiWorkflowGraphNode): string[] {
   if (!isRecord(node.inputs)) return []
   return Object.values(node.inputs)
@@ -1194,6 +1234,10 @@ function isPromptRelayEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
   return node.class_type.trim().toLowerCase().includes('promptrelay')
 }
 
+function isPromptRelaySmartEncodeNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return normalizeUiDecorationNodeType(node.class_type).includes('promptrelaysmart')
+}
+
 function isAudioTranscriptionNode(node: ComfyUiWorkflowGraphNode): boolean {
   const classType = node.class_type.toLowerCase()
   const title = readTrimmedString(node._meta?.title).toLowerCase()
@@ -1205,12 +1249,57 @@ function isAudioTranscriptionNode(node: ComfyUiWorkflowGraphNode): boolean {
     || title.includes('识别')
 }
 
+type PromptRelaySectionName = 'GLOBAL' | 'LOCAL' | 'LENGTHS'
+
+function normalizePromptRelaySectionName(value: string): PromptRelaySectionName | null {
+  const normalized = value.trim().toUpperCase()
+  if (normalized === 'GLOBAL') return 'GLOBAL'
+  if (normalized === 'LENGTHS') return 'LENGTHS'
+  if (/^LOCAL(?:\s+\d+)?$/.test(normalized)) return 'LOCAL'
+  return null
+}
+
+function collectPromptRelaySectionMarkers(text: string): Array<{
+  section: PromptRelaySectionName
+  markerStart: number
+  valueStart: number
+}> {
+  const markers: Array<{
+    section: PromptRelaySectionName
+    markerStart: number
+    valueStart: number
+  }> = []
+  const pattern = /\b(GLOBAL|LOCAL(?:\s+\d+)?|LENGTHS)\s*[:\uFF1A]/gi
+
+  for (const match of text.matchAll(pattern)) {
+    const markerStart = match.index ?? -1
+    if (markerStart < 0) continue
+    const previous = markerStart > 0 ? text[markerStart - 1] : ''
+    if (previous && /[A-Za-z0-9_]/.test(previous)) continue
+
+    const section = normalizePromptRelaySectionName(match[1] || '')
+    if (!section) continue
+    markers.push({
+      section,
+      markerStart,
+      valueStart: markerStart + match[0].length,
+    })
+  }
+
+  return markers
+}
+
 function extractPromptRelaySection(text: string, section: 'GLOBAL' | 'LOCAL'): string {
-  const nextSectionPattern = section === 'GLOBAL'
-    ? String.raw`\s*(?:LOCAL|LENGTHS)\s*[:：]`
-    : String.raw`\s*LENGTHS\s*[:：]`
-  const pattern = new RegExp(String.raw`(?:^|\n)\s*${section}\s*[:：]\s*([\s\S]*?)(?:\n+${nextSectionPattern}|$)`, 'i')
-  return pattern.exec(text)?.[1]?.trim() || ''
+  const markers = collectPromptRelaySectionMarkers(text)
+  const markerIndex = markers.findIndex((marker) => marker.section === section)
+  if (markerIndex < 0) return ''
+
+  const endSections = section === 'GLOBAL'
+    ? new Set<PromptRelaySectionName>(['LOCAL', 'LENGTHS'])
+    : new Set<PromptRelaySectionName>(['GLOBAL', 'LENGTHS'])
+  const nextMarker = markers.slice(markerIndex + 1).find((marker) => endSections.has(marker.section))
+  const marker = markers[markerIndex]
+  return text.slice(marker.valueStart, nextMarker?.markerStart ?? text.length).trim()
 }
 
 function derivePromptRelayInput(prompt: string, field: 'global_prompt' | 'local_prompts'): string {
@@ -1650,9 +1739,16 @@ type Ltx23WorkflowNodeContract = {
   fpsNodeIds?: string[]
   frameCountNodeIds?: string[]
   promptRelaySegmentCount?: number
+  promptRelaySmartSegmentCount?: number
 }
 
 const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> = {
+  [COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise]: {
+    promptRelaySmartSegmentCount: 4,
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.microDetail]: {
+    promptRelaySmartSegmentCount: 4,
+  },
   [COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion]: {
     frameCountNodeIds: ['1372'],
     fpsNodeIds: ['1375'],
@@ -1703,6 +1799,12 @@ function parsePromptRelaySegmentCount(raw: unknown): number | null {
   return count > 0 ? count : null
 }
 
+function parsePromptRelaySmartSegmentCount(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null
+  const count = Array.from(raw.matchAll(/\[\s*\d+\s*-\s*\d+\s*\]/g)).length
+  return count > 0 ? count : null
+}
+
 const PROMPT_RELAY_COLORS = ['#4f8edc', '#e07b3a', '#5cb85c', '#d9534f', '#9b6cd6', '#5bc0de']
 const LARGE_MOTION_STAGE_SUFFIXES = [
   'Stage 1: start from the source frame, prepare the motion, keep subject identity, clothing, and environment consistent.',
@@ -1710,6 +1812,31 @@ const LARGE_MOTION_STAGE_SUFFIXES = [
   'Stage 3: reach the largest motion beat, allow the strongest continuous movement while preserving the same subject and scene.',
   'Stage 4: settle into the new motion state, keep continuity and stabilize the final frame.',
 ]
+const SLOW_CAMERA_MOTION_PATTERNS = [
+  /\u6781\u8f7b\u5fae.{0,12}\u7f13(?:\u6162|\u7f13).{0,12}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u6781\u8f7b\u5fae.{0,18}(?:\u7a33\u5b9a|\u5185\u538b|\u8282\u594f)/u,
+  /\u7f13(?:\u6162|\u7f13).{0,8}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u7f13(?:\u6162|\u7f13).{0,16}\u538b\u8fd1/u,
+  /\u8fde\u7eed.{0,8}\u63a8\u8fdb/u,
+  /\u63a8\u8fdb.{0,12}(?:\u7a33\u5b9a|\u7d27\u5f20\u611f|\u8282\u594f)/u,
+  /(?:\u7f13\u6162|\u7ec6\u5fae|\u6781\u8f7b|\u51e0\u4e4e\u4e0d\u53ef\u5bdf\u89c9).{0,120}(?:\u538b\u8fd1|\u63a8\u8fdb|\u63a8\u8fd1|\u7a33\u5b9a|\u6784\u56fe)/u,
+  /\u7a33\u5b9a\u6784\u56fe.{0,140}(?:\u514b\u5236|\u8f7b\u5fae|\u7ec6\u5fae|\u6781\u7ec6\u5c0f)/u,
+  /\u53ea\u4fdd\u7559.{0,80}(?:\u514b\u5236|\u8f7b\u5fae|\u7ec6\u5fae|\u6781\u7ec6\u5c0f)/u,
+  /\b(?:very\s+)?subtle\s+(?:slow\s+)?(?:push[-\s]?in|dolly|zoom)\b/i,
+  /\b(?:continuous|steady)\s+push[-\s]?in\b/i,
+  /\bslow\s+(?:push[-\s]?in|dolly|zoom)\b/i,
+  /\bstable\s+composition\b.{0,220}\b(?:subtle|tiny|restrained|minimal)\b/i,
+]
+const SLOW_CAMERA_STAGE_SUFFIXES = [
+  'Stage 1: hold the source-frame composition; keep subject identity, clothing, lighting, and room layout fixed.',
+  'Stage 2: continue an extremely slow, almost imperceptible camera push-in; no composition jump or new action.',
+  'Stage 3: maintain the same slow restrained push-in speed; do not increase motion intensity or reframe the subjects.',
+  'Stage 4: gently settle while keeping the final frame close to the source composition and visible subject count.',
+]
+
+function shouldUseSlowCameraStages(prompt: string): boolean {
+  return SLOW_CAMERA_MOTION_PATTERNS.some((pattern) => pattern.test(prompt))
+}
 
 function buildPromptRelaySegmentPrompts(prompt: string, segmentCount: number, largeMotionStages: boolean): string[] {
   const localPrompt = derivePromptRelayInput(prompt, 'local_prompts')
@@ -1718,8 +1845,12 @@ function buildPromptRelaySegmentPrompts(prompt: string, segmentCount: number, la
     return Array.from({ length: segmentCount }, () => fallbackPrompt)
   }
 
+  const stageSuffixes = shouldUseSlowCameraStages(fallbackPrompt)
+    ? SLOW_CAMERA_STAGE_SUFFIXES
+    : LARGE_MOTION_STAGE_SUFFIXES
+
   return Array.from({ length: segmentCount }, (_, index) => {
-    const suffix = LARGE_MOTION_STAGE_SUFFIXES[index] || LARGE_MOTION_STAGE_SUFFIXES[LARGE_MOTION_STAGE_SUFFIXES.length - 1]
+    const suffix = stageSuffixes[index] || stageSuffixes[stageSuffixes.length - 1]
     return `${fallbackPrompt}\n${suffix}`
   })
 }
@@ -1732,6 +1863,25 @@ function buildPromptRelayTimelineData(segmentPrompts: string[], lengths: number[
       color: PROMPT_RELAY_COLORS[index % PROMPT_RELAY_COLORS.length],
     })),
   })
+}
+
+function buildPromptRelaySmartPrompt(
+  prompt: string,
+  targetFrameCount: number,
+  segmentCount: number,
+  largeMotionStages: boolean,
+): string {
+  const lengths = splitFramesEvenly(targetFrameCount, segmentCount)
+  const segmentPrompts = buildPromptRelaySegmentPrompts(prompt, lengths.length, largeMotionStages)
+  let startFrame = 0
+
+  return lengths.map((length, index) => {
+    const endFrame = startFrame + length
+    const text = segmentPrompts[index] || segmentPrompts[segmentPrompts.length - 1] || prompt
+    const segment = `${text} [${startFrame}-${endFrame}]`
+    startFrame = endFrame
+    return segment
+  }).join(' | ')
 }
 
 function applyPromptRelayTimelineControls(
@@ -1782,6 +1932,44 @@ function applyPromptRelayTimelineControls(
   }
 }
 
+function applyPromptRelaySmartControls(
+  graph: ComfyUiWorkflowGraph,
+  params: {
+    prompt: string
+    targetFrameCount: number | null
+    segmentCount?: number
+    largeMotionStages?: boolean
+  },
+): void {
+  if (!params.prompt || params.targetFrameCount === null) return
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs) || !isPromptRelaySmartEncodeNode(node)) continue
+
+    const currentSmartPrompt = readStaticInputValue(graph, node.inputs.smart_prompt, new Set())
+    const segmentCount = params.segmentCount
+      || parsePromptRelaySmartSegmentCount(currentSmartPrompt)
+      || 1
+
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
+      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+    }
+    if (Object.prototype.hasOwnProperty.call(node.inputs, 'smart_prompt')) {
+      assignStringInputValue(
+        graph,
+        node,
+        'smart_prompt',
+        buildPromptRelaySmartPrompt(
+          params.prompt,
+          params.targetFrameCount,
+          segmentCount,
+          params.largeMotionStages === true,
+        ),
+      )
+    }
+  }
+}
+
 function applyLtx23WorkflowProfileControls(
   graph: ComfyUiWorkflowGraph,
   workflowKey: string,
@@ -1812,6 +2000,12 @@ function applyLtx23WorkflowProfileControls(
     fps,
     targetFrameCount,
     segmentCount: contract?.promptRelaySegmentCount,
+    largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+  })
+  applyPromptRelaySmartControls(graph, {
+    prompt: readTrimmedString(inject.prompt),
+    targetFrameCount,
+    segmentCount: contract?.promptRelaySmartSegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
   })
 }
@@ -2109,6 +2303,8 @@ export function resolveComfyUiWorkflow(
   inlineValueHelperNodes(graph)
   bypassPassthroughOutputNodes(graph)
   removePreviewImageOutputsFromVideoGraphs(graph)
+  removeDanglingVideoOutputNodes(graph)
+  removeDisabledVideoOutputNodes(graph)
   pruneUnreachableFromMediaOutputs(graph)
   assignRandomSeedValues(graph)
   return graph
@@ -2126,6 +2322,15 @@ export function getComfyUiWorkflowImageInputCount(workflowKey: string): number {
 
   return Object.values(readWorkflowGraphFromFile(filePath))
     .filter((node) => node.class_type.toLowerCase().includes('loadimage'))
+    .length
+}
+
+export function getComfyUiWorkflowAudioInputCount(workflowKey: string): number {
+  const filePath = resolveWorkflowFilePath(workflowKey)
+  if (!filePath) return 0
+
+  return Object.values(readWorkflowGraphFromFile(filePath))
+    .filter((node) => node.class_type.toLowerCase().includes('loadaudio'))
     .length
 }
 

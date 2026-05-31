@@ -40,6 +40,7 @@ interface VideoRenderPanelProps {
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
+    customPrompt?: string,
   ) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => Promise<void>

@@ -30,6 +30,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized ? normalized : null
+}
+
 function toVideoRuntimeSelections(value: unknown): Record<string, CapabilityValue> {
   if (!isRecord(value)) return {}
   const selections: Record<string, CapabilityValue> = {}
@@ -337,6 +343,7 @@ function resolvePanelLtx23RoutedPayload(
   panel: PanelReadinessInput,
 ): RoutedPanelPayload {
   const modelKey = resolveVideoModelKeyFromPayload(payload)
+  const customPrompt = readNonEmptyString(payload.customPrompt)
   const route = modelKey
     ? resolveLtx23WorkflowRoute({
         modelKey,
@@ -345,7 +352,7 @@ function resolvePanelLtx23RoutedPayload(
         requestedDurationSeconds: readRequestedDurationSeconds(payload),
         audioDurationSeconds: estimateSelectedAudioDurationSeconds(panel, payload),
         panel: {
-          videoPrompt: panel.videoPrompt,
+          videoPrompt: customPrompt || panel.videoPrompt,
           description: panel.description,
           shotType: panel.shotType,
           cameraMove: panel.cameraMove,

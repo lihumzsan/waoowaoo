@@ -69,7 +69,57 @@ const MICRO_DETAIL_PATTERNS = [
   /\blip(?:s)?\b/i,
 ]
 
+const SLOW_STABLE_CAMERA_PATTERNS = [
+  /\u955c\u5934.{0,12}\u7f13(?:\u6162|\u7f13).{0,12}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u7f13(?:\u6162|\u7f13).{0,12}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /(?:\u7f13\u6162|\u7ec6\u5fae|\u6781\u8f7b|\u6781\u8f7b\u5fae|\u51e0\u4e4e\u4e0d\u53ef\u5bdf\u89c9).{0,80}(?:\u538b\u8fd1|\u63a8\u8fdb|\u63a8\u8fd1|\u7a33\u5b9a|\u6784\u56fe)/u,
+  /\u7a33\u5b9a\u6784\u56fe.{0,120}(?:\u514b\u5236|\u8f7b\u5fae|\u7ec6\u5fae|\u6781\u7ec6\u5c0f)/u,
+  /\u4fdd\u6301.{0,80}(?:\u6e90\u56fe|\u6784\u56fe|\u673a\u4f4d).{0,80}(?:\u7f13\u6162|\u7a33\u5b9a|\u63a8\u8fdb|\u538b\u8fd1)/u,
+  /\b(?:very\s+)?subtle\s+(?:slow\s+)?(?:push[-\s]?in|dolly|zoom)\b/i,
+  /\bslow\s+(?:push[-\s]?in|dolly|zoom)\b/i,
+  /\bstable\s+composition\b.{0,160}\b(?:subtle|tiny|restrained|minimal|slow)\b/i,
+]
+
+const HIGH_MOTION_ACTION_PATTERNS = [
+  /\u7a81\u7136/u,
+  /\u5feb\u901f/u,
+  /\u5927\u5e45/u,
+  /\u5267\u70c8/u,
+  /\u660e\u663e\u53d8\u5316/u,
+  /\u5954\u8dd1/u,
+  /\u8dd1/u,
+  /\u51b2/u,
+  /\u8f6c\u8eab/u,
+  /\u8d77\u8eab/u,
+  /\u7ad9\u8d77/u,
+  /\u8d70\u8fd1/u,
+  /\u8d70\u5411/u,
+  /\u9760\u8fd1/u,
+  /\u79bb\u5f00/u,
+  /\u8dcc\u5012/u,
+  /\u6454\u5012/u,
+  /\u6253\u6597/u,
+  /\u6325\u62f3/u,
+  /\u8df3/u,
+  /\brun(?:s|ning)?\b/i,
+  /\bsprint(?:s|ing)?\b/i,
+  /\bchase(?:s|d|ing)?\b/i,
+  /\bturn(?:s|ed|ing)?\b/i,
+  /\bstand(?:s|ing)?\s+up\b/i,
+  /\bwalk(?:s|ing)?\s+(?:toward|forward|away)\b/i,
+  /\bapproach(?:es|ed|ing)?\b/i,
+  /\bleav(?:es|ing|e)\b/i,
+  /\bfall(?:s|en|ing)?\b/i,
+  /\bfight(?:s|ing)?\b/i,
+  /\bjump(?:s|ing)?\b/i,
+]
+
 const LARGE_MOTION_PATTERNS = [
+  /\u955c\u5934.{0,12}\u7f13(?:\u6162|\u7f13).{0,8}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u7f13(?:\u6162|\u7f13).{0,8}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u955c\u5934.{0,8}\u63a8(?:\u8fdb|\u8fd1)/u,
+  /\u63a8\u8fdb/u,
+  /\u63a8\u8fd1/u,
   /大幅/u,
   /剧烈/u,
   /明显变化/u,
@@ -230,41 +280,77 @@ export function resolveLtx23WorkflowRoute(
   const currentProfile = getLtx23WorkflowProfile(normalizedWorkflowKey)
   if (!currentProfile) return null
 
-  const selectionMode = normalizeSelectionMode(input.selectionMode, normalizedWorkflowKey)
   const targetDurationSeconds = resolveTargetDurationSeconds(input)
+  const generationMode = normalizeGenerationMode(input.generationMode)
+  const firstLastFrameModelInNormalMode =
+    generationMode === 'normal' && currentProfile.category === 'first_last_frame'
+  const routingProfile = firstLastFrameModelInNormalMode
+    ? getLtx23WorkflowProfile(COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID)
+    : currentProfile
+  if (!routingProfile) return null
+
+  const selectionMode: Ltx23WorkflowSelectionMode = firstLastFrameModelInNormalMode
+    ? 'auto'
+    : normalizeSelectionMode(input.selectionMode, normalizedWorkflowKey)
+  const routingReasonPrefix = firstLastFrameModelInNormalMode
+    ? ['first_last_frame_model_in_normal_mode']
+    : []
+
   if (selectionMode === 'manual') {
     return buildResult({
-      workflowKey: currentProfile.workflowKey,
+      workflowKey: routingProfile.workflowKey,
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: 1,
-      reasons: ['manual_selection'],
+      reasons: [...routingReasonPrefix, 'manual_selection'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
 
-  const generationMode = normalizeGenerationMode(input.generationMode)
   if (generationMode === 'firstlastframe') {
     return buildResult({
       workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: 1,
-      reasons: ['first_last_frame_generation'],
+      reasons: [...routingReasonPrefix, 'first_last_frame_generation'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
 
   const text = joinPanelText(input.panel)
   const microScore = countMatches(text, MICRO_DETAIL_PATTERNS)
+  const slowStableCameraScore = countMatches(text, SLOW_STABLE_CAMERA_PATTERNS)
+  const highMotionActionScore = countMatches(text, HIGH_MOTION_ACTION_PATTERNS)
   const largeMotionScore = countMatches(text, LARGE_MOTION_PATTERNS)
   const promptRelayScore = countMatches(text, PROMPT_RELAY_PATTERNS)
   const fallbackScore = countMatches(text, COMPLEX_FALLBACK_PATTERNS)
+  const slowStableDurationSeconds = Math.max(targetDurationSeconds ?? 0, 12)
   const largeMotionDurationSeconds = Math.max(targetDurationSeconds ?? 0, 12)
+  const slowStableProfile = getLtx23WorkflowProfile(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise)
   const largeMotionProfile = getLtx23WorkflowProfile(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion)
   const hasLongPromptRelayStructure = targetDurationSeconds !== null
     && targetDurationSeconds > 12
     && promptRelayScore >= 2
+
+  if (
+    slowStableCameraScore > 0
+    && highMotionActionScore === 0
+    && !hasLongPromptRelayStructure
+    && (
+      slowStableProfile?.maxDurationSeconds === null
+      || slowStableDurationSeconds <= (slowStableProfile?.maxDurationSeconds ?? 0)
+    )
+  ) {
+    return buildResult({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      previousWorkflowKey: normalizedWorkflowKey,
+      selectionMode,
+      confidence: slowStableCameraScore >= 2 ? 0.92 : 0.86,
+      reasons: [...routingReasonPrefix, 'slow_stable_camera_movement'],
+      requestedDurationSeconds: slowStableDurationSeconds,
+    })
+  }
 
   if (
     largeMotionScore > 0
@@ -279,7 +365,7 @@ export function resolveLtx23WorkflowRoute(
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: largeMotionScore >= 2 ? 0.9 : 0.82,
-      reasons: ['large_motion_or_camera_movement'],
+      reasons: [...routingReasonPrefix, 'large_motion_or_camera_movement'],
       requestedDurationSeconds: largeMotionDurationSeconds,
     })
   }
@@ -290,7 +376,7 @@ export function resolveLtx23WorkflowRoute(
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: 0.98,
-      reasons: ['duration_over_24s'],
+      reasons: [...routingReasonPrefix, 'duration_over_24s'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
@@ -305,8 +391,8 @@ export function resolveLtx23WorkflowRoute(
       selectionMode,
       confidence: promptRelayScore > 0 ? 0.94 : 0.92,
       reasons: promptRelayScore > 0
-        ? ['duration_over_12s', 'promptrelay_or_multi_stage']
-        : ['duration_over_12s'],
+        ? [...routingReasonPrefix, 'duration_over_12s', 'promptrelay_or_multi_stage']
+        : [...routingReasonPrefix, 'duration_over_12s'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
@@ -317,7 +403,7 @@ export function resolveLtx23WorkflowRoute(
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: microScore >= 2 ? 0.88 : 0.78,
-      reasons: ['micro_detail_or_expression'],
+      reasons: [...routingReasonPrefix, 'micro_detail_or_expression'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
@@ -328,7 +414,7 @@ export function resolveLtx23WorkflowRoute(
       previousWorkflowKey: normalizedWorkflowKey,
       selectionMode,
       confidence: 0.62,
-      reasons: ['complex_low_confidence_fallback'],
+      reasons: [...routingReasonPrefix, 'complex_low_confidence_fallback'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
@@ -338,7 +424,7 @@ export function resolveLtx23WorkflowRoute(
     previousWorkflowKey: normalizedWorkflowKey,
     selectionMode,
     confidence: 0.7,
-    reasons: ['default_single_image_precise'],
+    reasons: [...routingReasonPrefix, 'default_single_image_precise'],
     requestedDurationSeconds: targetDurationSeconds,
   })
 }

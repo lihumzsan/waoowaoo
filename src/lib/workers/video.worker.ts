@@ -272,11 +272,28 @@ async function loadAudioDrivenVoiceLines(
       speaker: true,
       content: true,
       audioDuration: true,
+      audioUrl: true,
     },
   })
 
   const order = new Map(selectedVoiceLineIds.map((id, index) => [id, index]))
   return voiceLines.sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0))
+}
+
+function resolveReferenceAudioUrls(voiceLines: Ltx23PromptEnhancementVoiceLine[]): string[] {
+  const urls: string[] = []
+  const seen = new Set<string>()
+  for (const line of voiceLines) {
+    const audioUrl = readNonEmptyString(line.audioUrl)
+    if (!audioUrl) continue
+
+    const signedUrl = toSignedUrlIfCos(audioUrl, 7200)
+    if (!signedUrl || seen.has(signedUrl)) continue
+
+    seen.add(signedUrl)
+    urls.push(signedUrl)
+  }
+  return urls
 }
 
 async function resolveAudioDrivenDurationOverride(
@@ -443,6 +460,7 @@ async function generateVideoForPanel(
 
   const durationBinding = await resolveEffectiveVideoDurationBinding(panel, payload)
   const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
+  const referenceAudioUrls = resolveReferenceAudioUrls(linkedVoiceLines)
   let routedGenerationOptions = generationOptions
   const serializedRouteDurationSeconds = readSerializedLtx23RoutingDurationSeconds(payload, model)
   const workflowRoute = resolveLtx23WorkflowRoute({
@@ -547,6 +565,7 @@ async function generateVideoForPanel(
       generationMode,
       ...(typeof requestedGenerateAudio === 'boolean' ? { generateAudio: requestedGenerateAudio } : {}),
       ...(lastFrameImageBase64 ? { lastFrameImageUrl: lastFrameImageBase64 } : {}),
+      ...(referenceAudioUrls.length > 0 ? { referenceAudioUrls } : {}),
     },
   })
 

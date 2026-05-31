@@ -42,6 +42,15 @@ function normalizeComfyUiReferenceImageUrls(value: unknown): string[] | undefine
   return urls.length > 0 ? urls : undefined
 }
 
+function normalizeComfyUiReferenceAudioUrls(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const urls = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+  return urls.length > 0 ? urls : undefined
+}
+
 function normalizeComfyUiProviderError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (
@@ -153,6 +162,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         prompt: prompt || '',
         firstFrameImageUrl: imageUrl,
         referenceImageUrls: normalizeComfyUiReferenceImageUrls(options.referenceImageUrls),
+        referenceAudioUrls: normalizeComfyUiReferenceAudioUrls(options.referenceAudioUrls),
         lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
         width: targetSize?.w,
         height: targetSize?.h,

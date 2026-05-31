@@ -21,6 +21,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
     taskStatus,
     videoModel,
     durationBinding,
+    promptEditor,
     player,
     actions,
   } = runtime
@@ -186,6 +187,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
               videoModel.generationOptions,
               panel.panelId,
               durationBinding.localBinding,
+              promptEditor.localPrompt,
             )
           }}
           disabled={

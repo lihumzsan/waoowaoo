@@ -85,15 +85,14 @@ describe('panel continuity prompt inputs', () => {
     expect(prompt).not.toContain('GLOBAL:')
   })
 
-  it('locks normal video prompts to source-frame composition', () => {
+  it('locks normal video prompts without explicit camera movement to source-frame composition', () => {
     const packet = buildPanelContinuityPacket({
       panel: {
         id: 'panel-1',
         panelIndex: 0,
-        description: 'Two people sit across a desk while the camera slowly orbits the office.',
+        description: 'Two people sit across a desk in a quiet office.',
         characters: JSON.stringify([{ name: 'Doctor' }, { name: 'Patient' }]),
         location: 'office',
-        cameraMove: 'slow orbit',
       },
     })
     const prompt = renderPanelContinuityPrompt({
@@ -102,7 +101,68 @@ describe('panel continuity prompt inputs', () => {
       generationMode: 'normal',
     })
 
-    expect(prompt).toContain('do not orbit, pan, zoom, or travel into unseen areas')
+    expect(prompt).toContain('locked camera and no travel into unseen areas')
     expect(prompt).toContain('The final frame must still contain the same visible character count')
+  })
+
+  it('preserves explicit push-in camera movement from the visible prompt', () => {
+    const packet = buildPanelContinuityPacket({
+      panel: {
+        id: 'panel-2',
+        panelIndex: 2,
+        description: 'The middle-aged doctor sits behind the desk and speaks.',
+        videoPrompt: 'The middle-aged doctor sits behind the desk, speaks, and the camera slowly pushes in.',
+        characters: JSON.stringify([{ name: 'Doctor' }]),
+        location: 'office',
+        cameraMove: 'slow push-in',
+      },
+    })
+    const prompt = renderPanelContinuityPrompt({
+      packet,
+      basePrompt: packet.currentAction,
+      generationMode: 'normal',
+    })
+
+    expect(prompt).toContain('Preserve only the explicitly requested camera movement')
+    expect(prompt).toContain('camera slowly pushes in')
+    expect(prompt).toContain('avoid extreme close-ups, side profiles, face-only crops')
+    expect(prompt).toContain('Do not add unrequested hand-to-face gestures')
+    expect(prompt).toContain('Do not add subtitles, captions, text overlays')
+    expect(prompt).toContain('never cut to another room, hallway, crowd, uniformed people')
+    expect(prompt).not.toContain('do not orbit, pan, zoom')
+  })
+
+  it('omits neighboring shot action details from normal single-shot prompts', () => {
+    const packet = buildPanelContinuityPacket({
+      panel: {
+        id: 'panel-2',
+        panelIndex: 2,
+        videoPrompt: 'The doctor sits behind the desk, looks forward, and speaks.',
+        characters: JSON.stringify([{ name: 'Doctor' }]),
+        location: 'office',
+      },
+      previousPanel: {
+        panelIndex: 1,
+        videoPrompt: 'The doctor raises his hand and pushes his glasses.',
+        characters: JSON.stringify([{ name: 'Doctor' }]),
+        location: 'office',
+      },
+      nextPanel: {
+        panelIndex: 3,
+        videoPrompt: 'The young man turns his head to the left.',
+        characters: JSON.stringify([{ name: 'Young man' }]),
+        location: 'office',
+      },
+    })
+    const prompt = renderPanelContinuityPrompt({
+      packet,
+      basePrompt: packet.currentAction,
+      generationMode: 'normal',
+    })
+
+    expect(prompt).toContain('Previous shot context: continuity reference only; do not animate previous shot action.')
+    expect(prompt).toContain('Next shot context: continuity reference only; do not animate next shot action.')
+    expect(prompt).not.toContain('pushes his glasses')
+    expect(prompt).not.toContain('turns his head')
   })
 })

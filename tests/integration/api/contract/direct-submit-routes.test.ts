@@ -923,6 +923,131 @@ describe('api contract - direct submit routes (behavior)', () => {
     }))
   })
 
+  it('single generate-video keeps slow locked camera prompts on single-image LTX2.3 payload', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: '\u60e8\u767d\u767d\u70bd\u706f\u5782\u5728\u591c\u95f4\u529e\u516c\u5ba4\u4e2d\u592e\uff0c\u4e2d\u5e74\u7537\u5b50\u5750\u5728\u4e66\u684c\u540e\u4fa7\u9760\u5899\u7684\u6905\u5b50\u4e0a\u5fae\u5fae\u524d\u503e\uff0c\u5e74\u8f7b\u7537\u5b50\u5750\u5728\u4e66\u684c\u524d\u4fa7\u9762\u5411\u4e66\u684c\u7684\u6905\u5b50\u4e0a\u62ac\u773c\u5bf9\u89c6\uff0c\u56db\u5468\u7a7a\u5899\u548c\u6697\u89d2\u538b\u4f4f\u7a7a\u95f4\uff0c\u955c\u5934\u7f13\u6162\u63a8\u8fdb\u4fef\u62cd',
+      videoPromptEditedByUser: false,
+      description: '\u8fdc\u666f\uff1a\u4e24\u4eba\u9694\u7740\u4e66\u684c\u5bf9\u89c6\uff0c\u7a7a\u5899\u548c\u6697\u89d2\u538b\u4f4f\u7a7a\u95f4',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: '\u4fef\u62cd\u8fdc\u666f',
+      cameraMove: '\u7f13\u6162\u63a8\u8fdb',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 4,
+          resolution: '720p',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      generationOptions: expect.objectContaining({
+        duration: 12,
+        resolution: '720p',
+      }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        category: 'single_image_precise',
+        routed: false,
+        reasons: ['slow_stable_camera_movement'],
+      }),
+    }))
+    expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
+  })
+
+  it('single generate-video remaps stale first-last-frame-only LTX2.3 model in normal mode', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'two people sit still in an office',
+      videoPromptEditedByUser: false,
+      description: 'two people sit still in an office',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 6,
+          resolution: '720p',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      generationOptions: expect.objectContaining({
+        duration: 6,
+        resolution: '720p',
+      }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        category: 'single_image_precise',
+        selectionMode: 'auto',
+        routed: true,
+        reasons: expect.arrayContaining(['first_last_frame_model_in_normal_mode']),
+      }),
+    }))
+    expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
+  })
+
   it('single generate-video uses auto-matched voice lines when routing LTX2.3 long audio', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',

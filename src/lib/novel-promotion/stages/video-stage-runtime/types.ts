@@ -53,6 +53,7 @@ export interface VideoStageShellProps {
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
+    customPrompt?: string,
   ) => Promise<void>
   onGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
   onBack: () => void

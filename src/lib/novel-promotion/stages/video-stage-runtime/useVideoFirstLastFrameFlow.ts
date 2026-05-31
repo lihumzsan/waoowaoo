@@ -55,6 +55,7 @@ interface UseVideoFirstLastFrameFlowParams {
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
+    customPrompt?: string,
   ) => Promise<void>
   t: (key: string) => string
 }

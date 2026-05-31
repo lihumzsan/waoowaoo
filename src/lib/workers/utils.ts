@@ -8,6 +8,7 @@ import { pollAsyncTask } from '@/lib/async-poll'
 import { getSignedUrl, toFetchableUrl } from '@/lib/storage'
 import { initializeFonts, createLabelSVG } from '@/lib/fonts'
 import { processMediaResult, processMediaResultWithMetadata } from '@/lib/media-process'
+import { renderStaticCameraMotionVideo } from '@/lib/video/static-camera-motion'
 import {
   getProjectModelConfig,
   getUserModelConfig,
@@ -445,7 +446,9 @@ export async function resolveVideoSourceFromGeneration(
       generateAudio?: boolean
       lastFrameImageUrl?: string
       generationMode?: 'normal' | 'firstlastframe'
-      [key: string]: string | number | boolean | undefined
+      referenceAudioUrls?: string[]
+      referenceImageUrls?: string[]
+      [key: string]: string | number | boolean | string[] | undefined
     }
     allowCustomDuration?: boolean
     pollProgress?: { start?: number; end?: number }
@@ -524,9 +527,19 @@ export async function resolveVideoSourceFromGeneration(
   if (allowCustomDuration) {
     delete providerCapabilityOptions.duration
   }
-  const providerRequestOptions: Record<string, string | number | boolean> = {}
+  const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
     if (key === 'generationMode' || value === undefined) continue
+    if (key === 'referenceAudioUrls' || key === 'referenceImageUrls') {
+      providerRequestOptions[key] = Array.isArray(value)
+        ? value.map((item) => typeof item === 'string' ? toFetchableUrl(item) : item)
+        : value
+      continue
+    }
+    if (key === 'lastFrameImageUrl' && typeof value === 'string') {
+      providerRequestOptions[key] = toFetchableUrl(value)
+      continue
+    }
     providerRequestOptions[key] = value
   }
 
@@ -746,6 +759,8 @@ export async function uploadAudioSourceToCos(source: string | Buffer, keyPrefix:
     targetId,
   })
 }
+
+export { renderStaticCameraMotionVideo }
 
 export function toSignedUrlIfCos(keyOrUrl: string | null | undefined, ttlSeconds = 3600) {
   if (!keyOrUrl) return null

@@ -42,6 +42,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function readPayloadCustomPrompt(payload: unknown): string | null {
+  if (!isRecord(payload) || typeof payload.customPrompt !== 'string') return null
+  const normalized = payload.customPrompt.trim()
+  return normalized ? normalized : null
+}
+
 function readPayloadDurationBinding(payload: unknown): VideoDurationBinding | null {
   if (!isRecord(payload)) return null
   const raw = payload.videoDurationBinding
@@ -103,7 +109,7 @@ export function resolvePanelVideoReadinessIssue(
     }
   }
 
-  const basePrompt = pickPanelContinuityBasePrompt(panel)
+  const basePrompt = readPayloadCustomPrompt(options?.payload) || pickPanelContinuityBasePrompt(panel)
   if (!basePrompt) {
     return {
       code: 'missing_prompt',

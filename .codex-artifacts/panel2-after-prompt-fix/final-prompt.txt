@@ -1,0 +1,22 @@
+Panel continuity packet:
+Mode: single-shot image-to-video.
+Source text: 陈迹你好，我现在需要问你一些问题。你回答后，
+Current shot action: 中年男子坐在书桌后侧靠墙的椅子上微微抬头看向前方，嘴唇开合，正在说话，镜头缓缓推近，惨白白炽灯照着他的眼镜和脸
+Visible characters: 中年医生 (appearance=初始形象; slot=书桌后侧靠墙的椅子).
+Location lock: 办公室_夜间.
+Shot/camera lock: 主观近景, 缓缓推近.
+Props lock: no new props.
+Previous shot context: 近景：中年医生抬手把鼻梁上的眼镜向上推，镜片反出头顶白光，书桌边缘横在画面下方 | action=中年男子坐在书桌后侧靠墙的椅子上抬手把鼻梁上的眼镜向上推，镜片反出头顶白光，书桌边缘压在前景下方，镜头缓缓推近 | location=办公室_夜间 | characters=中年医生 (appearance=初始形象; slot=书桌后侧靠墙的椅子)
+Next shot context: 近景：陈迹坐在书桌前侧面向书桌的椅子上，视线朝向画外左侧的中年医生，背后的椅背贴在肩后 | action=年轻男子坐在书桌前侧面向书桌的椅子上轻轻转头看向左侧，肩后贴着椅背，呼吸压得很轻，镜头缓慢推进，夜间办公室的白光落在他脸上 | location=办公室_夜间 | characters=陈迹 (appearance=初始形象; slot=书桌前侧面向书桌的椅子)
+Dialogue lines: 1. 中年医生: 陈迹你好，我现在需要问你一些问题。 (11.43s audio)
+Target duration: 12.00 seconds.
+Creator prompt intent: 中年男子坐在书桌后侧靠墙的椅子上微微抬头看向前方，嘴唇开合，正在说话，镜头缓缓推近，惨白白炽灯照着他的眼镜和脸
+Hard constraints:
+Use the source image as the visual authority.
+Animate only the current shot action. Do not import actions from previous or next shots except as continuity context.
+Do not add new characters, extra people, new props, new locations, new plot events, scene cuts, time jumps, or unrelated actions.
+Keep character identity, position, clothing, lighting, location, and camera framing consistent with the source image.
+Preserve only the explicitly requested camera movement, keeping it continuous and constrained to the source image composition. Do not add orbit, circling, spinning, rotation, 360-degree movement, or extra camera travel into unseen areas.
+The final frame must still contain the same visible character count, same location, same lighting, and no newly visible people.
+If dialogue is listed, mouth movement and timing must match the exact listed dialogue.
+The creator prompt is an intent layer only; the hard continuity constraints above override conflicting creative wording. 对白必须严格说出“陈迹你好，我现在需要问你一些问题。”，口型、停顿与节奏贴合这句台词，不得改写、翻译或替换。 Source-frame continuity lock: Allowed visible subjects: 中年医生. Do not add new people, extra bodies, crowds, new props, new locations, scene cuts, time jumps, or unrelated plot actions. Preserve only the original prompt's explicitly requested orbit or rotation camera movement; keep it continuous and do not add extra camera travel, scene cuts, time jumps, new people, or unrelated locations. Animate only the visible subject posture, face, mouth, and hands from the current frame. Do not turn reflections, background shapes, shadows, or blurred details into new characters. Keep the final frame close to the source image with the same visible character count and same room layout.

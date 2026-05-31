@@ -271,6 +271,71 @@ describe('comfyui workflow registry', () => {
     expect(largeMotionTimeline.segments[3]?.prompt).toContain('Stage 4')
     expect(JSON.stringify(largeMotionTimeline)).not.toContain('年轻的女人')
 
+    const numberedLocalSections = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: [
+        'GLOBAL: office with the same doctor',
+        'LOCAL 1: doctor inhales',
+        'LOCAL 2: doctor speaks',
+        'LOCAL 3: doctor pauses',
+        'LOCAL 4: doctor settles',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 16,
+      targetFrameCount: 400,
+    })
+    const numberedRelay = getPromptRelayNodes(numberedLocalSections)[0]
+    expect(String(numberedRelay?.inputs.global_prompt)).toContain('office with the same doctor')
+    expect(String(numberedRelay?.inputs.local_prompts)).toContain('doctor inhales')
+    expect(String(numberedRelay?.inputs.local_prompts)).toContain('doctor speaks')
+    expect(String(numberedRelay?.inputs.local_prompts)).toContain('doctor pauses')
+    expect(String(numberedRelay?.inputs.local_prompts)).toContain('doctor settles')
+
+    const slowPushIn = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: 'GLOBAL: office\nLOCAL: \u955c\u5934\u7f13\u6162\u63a8\u8fdb\uff0c\u4fdd\u6301\u4e24\u4eba\u548c\u4e66\u684c\u6784\u56fe\u7a33\u5b9a',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+    const slowPushInRelay = getPromptRelayNodes(slowPushIn)[0]
+    expect(slowPushInRelay?.inputs.segment_lengths).toBe('75, 75, 75, 75')
+    expect(String(slowPushInRelay?.inputs.local_prompts)).toContain('Stage 3: maintain the same slow restrained push-in speed')
+    expect(String(slowPushInRelay?.inputs.local_prompts)).not.toContain('strongest continuous movement')
+
+    const enhancedSlowPushIn = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: 'GLOBAL: office\nLOCAL: 12\u79d2\u5355\u955c\u5934\u8fde\u7eed\u63a8\u8fdb\u7d27\u5f20\u611f\uff0c\u53ea\u4fdd\u7559\u6781\u8f7b\u5fae\u7684\u7a33\u5b9a\u5185\u538b\u8282\u594f',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+    const enhancedSlowPushInRelay = getPromptRelayNodes(enhancedSlowPushIn)[0]
+    expect(String(enhancedSlowPushInRelay?.inputs.local_prompts)).toContain('Stage 3: maintain the same slow restrained push-in speed')
+    expect(String(enhancedSlowPushInRelay?.inputs.local_prompts)).not.toContain('strongest continuous movement')
+
+    const stabilizedEnhancedPrompt = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: 'GLOBAL: office\nLOCAL: \u4fdd\u6301\u6e90\u56fe\u7684\u4fef\u62cd\u8fdc\u666f\u4e0e\u7a33\u5b9a\u6784\u56fe\uff0c12\u79d2\u5355\u955c\u5934\u8fde\u7eed\u52a8\u4f5c\u53ea\u4fdd\u7559\u514b\u5236\u7684\u547c\u5438\u3001\u8f7b\u5fae\u7728\u773c\u548c\u6781\u7ec6\u5c0f\u7684\u59ff\u6001\u53d8\u5316',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+    const stabilizedRelay = getPromptRelayNodes(stabilizedEnhancedPrompt)[0]
+    expect(String(stabilizedRelay?.inputs.local_prompts)).toContain('Stage 3: maintain the same slow restrained push-in speed')
+    expect(String(stabilizedRelay?.inputs.local_prompts)).not.toContain('strongest continuous movement')
+
+    const barelyVisiblePushIn = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion, {
+      prompt: 'GLOBAL: office\nLOCAL: \u955c\u5934\u5168\u7a0b\u7a33\u5b9a\uff0c\u4ec5\u5728\u539f\u6709\u6784\u56fe\u5185\u505a\u51e0\u4e4e\u4e0d\u53ef\u5bdf\u89c9\u7684\u7f13\u6162\u538b\u8fd1\uff0c\u52a8\u4f5c\u81ea\u7136\u8fde\u8d2f',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+    const barelyVisibleRelay = getPromptRelayNodes(barelyVisiblePushIn)[0]
+    expect(String(barelyVisibleRelay?.inputs.local_prompts)).toContain('Stage 3: maintain the same slow restrained push-in speed')
+    expect(String(barelyVisibleRelay?.inputs.local_prompts)).not.toContain('strongest continuous movement')
+
     const damaicha30s = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s, {
       prompt: 'GLOBAL: office\nLOCAL: doctor speaks',
       imageFilenames: ['source.png'],
@@ -317,5 +382,95 @@ describe('comfyui workflow registry', () => {
         expect(String(node.inputs.audio).trim().length).toBeGreaterThan(0)
       }
     }
+  })
+
+  it('drops dangling LTX2.3 video output nodes before ComfyUI validation', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.microDetail, {
+      prompt: 'quiet shot',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 4,
+    })
+
+    const videoOutputs = Object.values(workflow).filter((node) =>
+      node.class_type === 'VHS_VideoCombine'
+    )
+
+    expect(videoOutputs.length).toBeGreaterThan(0)
+    expect(videoOutputs.every((node) => Object.prototype.hasOwnProperty.call(node.inputs, 'images'))).toBe(true)
+  })
+
+  it('locks PromptRelaySmartEncode global and smart prompts for updated single-image workflows', () => {
+    for (const workflowKey of [
+      COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
+    ]) {
+      const workflow = resolveComfyUiWorkflow(workflowKey, {
+        prompt: 'GLOBAL: office scene\nLOCAL: doctor raises glasses',
+        imageFilenames: ['source.png'],
+        audioFilenames: ['silence.wav'],
+        fps: 25,
+        durationSeconds: 6,
+        targetFrameCount: 150,
+      })
+
+      const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+      expect(relay).toBeTruthy()
+
+      const globalPromptSourceId = Array.isArray(relay?.inputs.global_prompt)
+        ? String(relay.inputs.global_prompt[0])
+        : ''
+      const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+        ? String(relay.inputs.smart_prompt[0])
+        : ''
+
+      expect(workflow[globalPromptSourceId]?.inputs.prompt).toBe('office scene')
+      expect(workflow[smartPromptSourceId]?.inputs.prompt).toBe(
+        'doctor raises glasses [0-38] | doctor raises glasses [38-76] | doctor raises glasses [76-113] | doctor raises glasses [113-150]',
+      )
+    }
+  })
+
+  it('splits same-line GLOBAL and LOCAL sections for PromptRelaySmartEncode workflows', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: 'GLOBAL: office scene with two men at a desk. LOCAL: the doctor leans forward and speaks calmly.',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['silence.wav'],
+      fps: 25,
+      durationSeconds: 6,
+      targetFrameCount: 150,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const globalPromptSourceId = Array.isArray(relay?.inputs.global_prompt)
+      ? String(relay.inputs.global_prompt[0])
+      : ''
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+
+    expect(workflow[globalPromptSourceId]?.inputs.prompt).toBe('office scene with two men at a desk.')
+    expect(workflow[smartPromptSourceId]?.inputs.prompt).toBe(
+      'the doctor leans forward and speaks calmly. [0-38] | the doctor leans forward and speaks calmly. [38-76] | the doctor leans forward and speaks calmly. [76-113] | the doctor leans forward and speaks calmly. [113-150]',
+    )
+  })
+
+  it('drops disabled video outputs when an active video output remains', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay, {
+      prompt: 'quiet shot',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['silence.wav'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+
+    const videoOutputs = Object.entries(workflow)
+      .filter(([, node]) => node.class_type === 'VHS_VideoCombine')
+      .map(([nodeId, node]) => ({ nodeId, saveOutput: node.inputs.save_output }))
+
+    expect(videoOutputs).toEqual([{ nodeId: '280', saveOutput: true }])
   })
 })
