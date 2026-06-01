@@ -34,6 +34,7 @@ type GenerationInput = {
   prompt: string
   targetId: string
   keyPrefix: string
+  allowTaskExternalIdResume?: boolean
   options?: {
     aspectRatio?: string
     referenceImages?: string[]
@@ -71,12 +72,16 @@ describe('worker scene-reference-test-task-handler', () => {
     expect(result.singleView.prompt).toContain('单视图空场景参考图')
     expect(result.multiViews).toHaveLength(2)
     expect(result.multiViews[0]?.prompt).toContain('三视图场景板')
+    expect(result.multiViews[0]?.prompt).toContain('禁止生成单个全画幅场景视角')
     expect(result.multiViews[1]?.prompt).toContain('空间关系场景板')
     expect(handlerSharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(3)
     expect(handlerSharedMock.generateCleanImageToStorage.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       modelId: 'location-model-1',
+      allowTaskExternalIdResume: false,
       options: expect.objectContaining({ aspectRatio: '16:9' }),
     }))
+    expect(handlerSharedMock.generateCleanImageToStorage.mock.calls.map((call) => call[0].allowTaskExternalIdResume))
+      .toEqual([false, false, false])
   })
 
   it('comparison task -> keeps prompt identical and changes only the scene reference image', async () => {
@@ -97,6 +102,8 @@ describe('worker scene-reference-test-task-handler', () => {
     const singleCall = handlerSharedMock.generateCleanImageToStorage.mock.calls[0]?.[0] as GenerationInput | undefined
     const multiCall = handlerSharedMock.generateCleanImageToStorage.mock.calls[1]?.[0] as GenerationInput | undefined
     expect(singleCall?.prompt).toBe(multiCall?.prompt)
+    expect(singleCall?.allowTaskExternalIdResume).toBe(false)
+    expect(multiCall?.allowTaskExternalIdResume).toBe(false)
     expect(singleCall?.options?.referenceImages).toEqual([
       'normalized:https://example.com/character.png',
       'normalized:https://example.com/single.png',

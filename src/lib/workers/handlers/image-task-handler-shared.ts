@@ -167,9 +167,12 @@ async function generateImageToStorage(params: {
   prompt: string
   targetId: string
   keyPrefix: string
+  allowTaskExternalIdResume?: boolean
   options?: {
     referenceImages?: string[]
     aspectRatio?: string
+    resolution?: string
+    quality?: string
     size?: string
   }
 }) {
@@ -178,6 +181,7 @@ async function generateImageToStorage(params: {
     modelId: params.modelId,
     prompt: params.prompt,
     options: params.options,
+    allowTaskExternalIdResume: params.allowTaskExternalIdResume,
   })
 
   const cosKey = await uploadImageSourceToCos(source, params.keyPrefix, params.targetId)
@@ -191,9 +195,12 @@ export async function generateCleanImageToStorage(params: {
   prompt: string
   targetId: string
   keyPrefix: string
+  allowTaskExternalIdResume?: boolean
   options?: {
     referenceImages?: string[]
     aspectRatio?: string
+    resolution?: string
+    quality?: string
     size?: string
   }
 }) {

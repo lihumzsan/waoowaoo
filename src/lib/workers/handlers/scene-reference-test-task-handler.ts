@@ -80,6 +80,7 @@ async function generateSceneImage(input: {
     prompt: input.prompt,
     targetId: `${input.job.data.taskId}-${input.targetSuffix}`,
     keyPrefix: 'scene-reference-test',
+    allowTaskExternalIdResume: false,
     options,
   })
   return {
@@ -217,6 +218,7 @@ export async function handleSceneReferenceComparisonTask(job: Job<TaskJobData>) 
         prompt,
         targetId: `${job.data.taskId}-${variant.id}-${index}-single`,
         keyPrefix: 'scene-reference-comparison',
+        allowTaskExternalIdResume: false,
         options: { ...baseOptions, referenceImages: singleReferenceImages },
       })
       const multi = await generateCleanImageToStorage({
@@ -226,6 +228,7 @@ export async function handleSceneReferenceComparisonTask(job: Job<TaskJobData>) 
         prompt,
         targetId: `${job.data.taskId}-${variant.id}-${index}-multi`,
         keyPrefix: 'scene-reference-comparison',
+        allowTaskExternalIdResume: false,
         options: { ...baseOptions, referenceImages: multiReferenceImages },
       })
       pairs.push({
