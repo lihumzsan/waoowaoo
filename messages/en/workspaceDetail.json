@@ -38,13 +38,8 @@
     "scenePlaceholder": "Example: rainy temple backyard at night, stone floor, old wooden door, lanterns under the eaves, bamboo forest in the distance, wet reflections.",
     "styleRequest": "Scene style request",
     "stylePlaceholder": "Example: low-saturation wuxia film mood, humid air, cold cyan moonlight, warm lantern rim light.",
-    "layoutsTitle": "Multi-angle scene image types",
-    "layouts": {
-      "three_view": "Three-view scene board",
-      "four_view_board": "Four-panel scene board",
-      "wide_reverse_side_detail": "Wide main view + reverse/side details",
-      "overhead_spatial_board": "Spatial relationship scene board"
-    },
+    "standardBoardTitle": "Standard three-view scene board",
+    "standardBoardDescription": "Always generates front, reverse/back, and top-down views for A/B testing against the single-view baseline.",
     "generateScenes": "Generate scene references",
     "storyboardPrompt": "Shared storyboard prompt",
     "storyboardPlaceholder": "Example: A monk stands in the center of a rainy temple backyard at night, slightly turned toward the old wooden door, medium shot, quiet restrained emotion.",
@@ -63,7 +58,7 @@
     "emptyScenes": "Scene reference results appear after generation.",
     "emptyComparison": "Storyboard results appear after running A/B comparison.",
     "openImage": "Open image",
-    "needSceneInput": "Enter a scene description and select at least one multi-angle scene image type.",
+    "needSceneInput": "Enter a scene description.",
     "needCompareInput": "Upload a character asset, generate scene references, and enter the shared storyboard prompt.",
     "failed": "Test generation failed",
     "uploadFailed": "Upload failed"

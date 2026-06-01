@@ -543,7 +543,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     body: {
       sceneDescription: 'rainy temple backyard',
       styleRequest: 'low saturation wuxia film',
-      layouts: ['three_view', 'four_view_board'],
     },
     expectedTaskType: TASK_TYPE.SCENE_REFERENCE_TEST,
     expectedTargetType: 'SceneReferenceTest',
@@ -551,7 +550,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedPayloadSubset: {
       sceneDescription: 'rainy temple backyard',
       imageModel: 'img::location',
-      count: 3,
+      count: 2,
     },
   },
   {
@@ -562,7 +561,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       storyboardPrompt: 'monk standing in a rainy temple backyard',
       aspectRatio: '16:9',
       pairCount: 2,
-      variants: [{ id: 'three_view', label: 'Three-view scene board', imageUrl: 'https://example.com/multi.png' }],
+      variants: [{ id: 'three_view', label: 'Standard three-view scene board', imageUrl: 'https://example.com/multi.png' }],
     },
     expectedTaskType: TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST,
     expectedTargetType: 'SceneReferenceComparisonTest',

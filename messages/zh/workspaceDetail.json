@@ -38,13 +38,8 @@
     "scenePlaceholder": "例如：雨夜寺庙后院，青石地面，旧木门，檐下灯笼，远处竹林，地面积水反光。",
     "styleRequest": "场景风格要求",
     "stylePlaceholder": "例如：低饱和武侠电影感，湿润空气，冷青色月光，暖色灯笼边缘光。",
-    "layoutsTitle": "多角度场景图类型",
-    "layouts": {
-      "three_view": "三视图场景板",
-      "four_view_board": "四宫格场景板",
-      "wide_reverse_side_detail": "宽幅主视角+反侧细节",
-      "overhead_spatial_board": "空间关系场景板"
-    },
+    "standardBoardTitle": "标准三视图场景板",
+    "standardBoardDescription": "固定生成正面视图、反面视图、顶面视图，用它和单视图基准做 A/B 对比。",
     "generateScenes": "一键生成场景参考",
     "storyboardPrompt": "统一分镜提示词",
     "storyboardPlaceholder": "例如：和尚站在雨夜寺庙后院中央，微微侧身看向旧木门，镜头中景，情绪安静克制。",
@@ -63,7 +58,7 @@
     "emptyScenes": "生成场景参考图后显示结果。",
     "emptyComparison": "运行 A/B 对比后显示分镜结果。",
     "openImage": "打开图片",
-    "needSceneInput": "请输入场景描述并至少选择一种多角度场景图类型。",
+    "needSceneInput": "请输入场景描述。",
     "needCompareInput": "请上传人物资产、生成场景参考图，并输入统一分镜提示词。",
     "failed": "测试生成失败",
     "uploadFailed": "上传失败"

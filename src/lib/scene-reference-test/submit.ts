@@ -13,7 +13,6 @@ import {
   SCENE_REFERENCE_COMPARISON_TARGET_ID,
   SCENE_REFERENCE_TEST_PROJECT_ID,
   SCENE_REFERENCE_TEST_TARGET_ID,
-  normalizeSceneReferenceLayouts,
 } from './prompts'
 
 function readRequiredString(value: unknown, field: string): string {
@@ -101,7 +100,6 @@ export async function submitSceneReferenceTestTask(input: {
   )
   const sceneDescription = readRequiredString(input.body.sceneDescription, 'sceneDescription')
   const styleRequest = readOptionalString(input.body.styleRequest)
-  const layouts = normalizeSceneReferenceLayouts(input.body.layouts)
 
   return await submitImageTestTask({
     request: input.request,
@@ -112,8 +110,7 @@ export async function submitSceneReferenceTestTask(input: {
     payload: {
       sceneDescription,
       styleRequest,
-      layouts,
-      count: 1 + layouts.length,
+      count: 2,
     },
   })
 }

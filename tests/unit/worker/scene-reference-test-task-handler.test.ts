@@ -61,27 +61,26 @@ describe('worker scene-reference-test-task-handler', () => {
     vi.clearAllMocks()
   })
 
-  it('scene reference task -> generates single baseline and selected multi-angle layouts', async () => {
+  it('scene reference task -> generates single baseline and the standard front reverse top scene board', async () => {
     const result = await handleSceneReferenceTask(buildJob(TASK_TYPE.SCENE_REFERENCE_TEST, {
       imageModel: 'location-model-1',
       sceneDescription: '雨夜寺庙后院，青石地面，旧木门',
       styleRequest: '低饱和武侠电影感',
-      layouts: ['three_view', 'overhead_spatial_board'],
     }))
 
     expect(result.singleView.prompt).toContain('单视图空场景参考图')
-    expect(result.multiViews).toHaveLength(2)
-    expect(result.multiViews[0]?.prompt).toContain('三视图场景板')
+    expect(result.multiViews).toHaveLength(1)
+    expect(result.multiViews[0]?.label).toBe('标准三视图场景板')
+    expect(result.multiViews[0]?.prompt).toContain('正面视图、反面视图、顶面视图')
     expect(result.multiViews[0]?.prompt).toContain('禁止生成单个全画幅场景视角')
-    expect(result.multiViews[1]?.prompt).toContain('空间关系场景板')
-    expect(handlerSharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(3)
+    expect(handlerSharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(2)
     expect(handlerSharedMock.generateCleanImageToStorage.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       modelId: 'location-model-1',
       allowTaskExternalIdResume: false,
       options: expect.objectContaining({ aspectRatio: '16:9' }),
     }))
     expect(handlerSharedMock.generateCleanImageToStorage.mock.calls.map((call) => call[0].allowTaskExternalIdResume))
-      .toEqual([false, false, false])
+      .toEqual([false, false])
   })
 
   it('comparison task -> keeps prompt identical and changes only the scene reference image', async () => {
@@ -92,7 +91,7 @@ describe('worker scene-reference-test-task-handler', () => {
       storyboardPrompt: '和尚站在雨夜寺庙后院中央',
       aspectRatio: '16:9',
       pairCount: 1,
-      variants: [{ id: 'three_view', label: '三视图场景板', imageUrl: 'https://example.com/multi.png' }],
+      variants: [{ id: 'three_view', label: '标准三视图场景板', imageUrl: 'https://example.com/multi.png' }],
     }))
 
     expect(result.prompt).toContain('参考图 1 是人物资产')

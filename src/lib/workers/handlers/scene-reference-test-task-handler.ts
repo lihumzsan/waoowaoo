@@ -5,11 +5,10 @@ import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import {
   SCENE_REFERENCE_TEST_ASPECT_RATIO,
+  STANDARD_SCENE_REFERENCE_LAYOUT,
   buildMultiSceneReferencePrompt,
   buildSceneComparisonPrompt,
   buildSingleSceneReferencePrompt,
-  normalizeSceneReferenceLayouts,
-  type SceneReferenceLayout,
 } from '@/lib/scene-reference-test/prompts'
 import { generateCleanImageToStorage } from './image-task-handler-shared'
 
@@ -94,7 +93,6 @@ export async function handleSceneReferenceTask(job: Job<TaskJobData>) {
   const modelId = readRequiredString(payload.imageModel, 'imageModel')
   const sceneDescription = readRequiredString(payload.sceneDescription, 'sceneDescription')
   const styleRequest = readOptionalString(payload.styleRequest)
-  const layouts = normalizeSceneReferenceLayouts(payload.layouts)
   const imageOptions = readImageOptions(payload.generationOptions)
 
   await reportTaskProgress(job, 15, {
@@ -115,35 +113,24 @@ export async function handleSceneReferenceTask(job: Job<TaskJobData>) {
     imageOptions,
   })
 
-  const multiViews: Array<{
-    id: SceneReferenceLayout
-    label: string
-    prompt: string
-    imageKey: string
-    imageUrl: string
-  }> = []
-
-  for (const [index, layout] of layouts.entries()) {
-    await reportTaskProgress(job, 30 + Math.floor((index / Math.max(layouts.length, 1)) * 55), {
-      stage: 'scene_reference_multi',
-      stageLabel: job.data.locale === 'en' ? 'Generating multi-angle scene' : '生成多角度场景',
-      layout,
-    })
-    const variant = buildMultiSceneReferencePrompt({
-      sceneDescription,
-      styleRequest,
-      layout,
-      locale: job.data.locale,
-    })
-    const image = await generateSceneImage({
-      job,
-      modelId,
-      prompt: variant.prompt,
-      targetSuffix: layout,
-      imageOptions,
-    })
-    multiViews.push({ ...variant, ...image })
-  }
+  await reportTaskProgress(job, 55, {
+    stage: 'scene_reference_multi',
+    stageLabel: job.data.locale === 'en' ? 'Generating standard three-view scene' : '生成标准三视图场景',
+    layout: STANDARD_SCENE_REFERENCE_LAYOUT,
+  })
+  const variant = buildMultiSceneReferencePrompt({
+    sceneDescription,
+    styleRequest,
+    layout: STANDARD_SCENE_REFERENCE_LAYOUT,
+    locale: job.data.locale,
+  })
+  const multiView = await generateSceneImage({
+    job,
+    modelId,
+    prompt: variant.prompt,
+    targetSuffix: STANDARD_SCENE_REFERENCE_LAYOUT,
+    imageOptions,
+  })
 
   await reportTaskProgress(job, 95, {
     stage: 'scene_reference_done',
@@ -155,7 +142,7 @@ export async function handleSceneReferenceTask(job: Job<TaskJobData>) {
       prompt: singlePrompt,
       ...single,
     },
-    multiViews,
+    multiViews: [{ ...variant, ...multiView }],
   }
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
@@ -8,10 +8,6 @@ import { Link } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { resolveTaskPresentationState, type TaskPresentationPhase } from '@/lib/task/presentation'
-
-const LAYOUTS = ['three_view', 'four_view_board', 'wide_reverse_side_detail', 'overhead_spatial_board'] as const
-
-type LayoutId = (typeof LAYOUTS)[number]
 
 type SubmitResponse = {
   taskId?: string
@@ -141,7 +137,6 @@ export default function SceneReferenceTestPage() {
   const [storyboardPrompt, setStoryboardPrompt] = useState('')
   const [pairCount, setPairCount] = useState(2)
   const [aspectRatio, setAspectRatio] = useState('16:9')
-  const [layouts, setLayouts] = useState<LayoutId[]>([...LAYOUTS])
   const [sceneTaskId, setSceneTaskId] = useState<string | null>(null)
   const [compareTaskId, setCompareTaskId] = useState<string | null>(null)
   const [sceneTask, setSceneTask] = useState<TaskDetail<SceneTaskResult> | null>(null)
@@ -151,9 +146,7 @@ export default function SceneReferenceTestPage() {
 
   const sceneResult = sceneTask?.result ?? null
   const compareResult = compareTask?.result ?? null
-  const selectedMultiViews = useMemo(() => (
-    (sceneResult?.multiViews ?? []).filter((item) => item.id && item.label && item.imageUrl)
-  ), [sceneResult?.multiViews])
+  const standardSceneBoard = (sceneResult?.multiViews ?? []).find((item) => item.id && item.label && item.imageUrl)
 
   const pollTask = useCallback(async <T,>(id: string, parseResult: (raw: unknown) => T | null) => {
     const response = await apiFetch(`/api/tasks/${id}`)
@@ -227,7 +220,7 @@ export default function SceneReferenceTestPage() {
   }, [t])
 
   const generateScenes = useCallback(async () => {
-    if (!sceneDescription.trim() || layouts.length === 0) {
+    if (!sceneDescription.trim()) {
       setError(t('needSceneInput'))
       return
     }
@@ -241,7 +234,7 @@ export default function SceneReferenceTestPage() {
       const response = await apiFetch('/api/scene-reference-test/generate-scenes', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sceneDescription, styleRequest, layouts }),
+        body: JSON.stringify({ sceneDescription, styleRequest }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('failed')))
       const parsed = parseSubmitResponse(await response.json())
@@ -252,10 +245,10 @@ export default function SceneReferenceTestPage() {
     } finally {
       setBusy(false)
     }
-  }, [layouts, sceneDescription, styleRequest, t])
+  }, [sceneDescription, styleRequest, t])
 
   const runComparison = useCallback(async () => {
-    if (!characterImageUrl.trim() || !sceneResult?.singleView?.imageUrl || selectedMultiViews.length === 0 || !storyboardPrompt.trim()) {
+    if (!characterImageUrl.trim() || !sceneResult?.singleView?.imageUrl || !standardSceneBoard?.imageUrl || !storyboardPrompt.trim()) {
       setError(t('needCompareInput'))
       return
     }
@@ -273,11 +266,11 @@ export default function SceneReferenceTestPage() {
           storyboardPrompt,
           aspectRatio,
           pairCount,
-          variants: selectedMultiViews.map((item) => ({
-            id: item.id,
-            label: item.label,
-            imageUrl: item.imageUrl,
-          })),
+          variants: [{
+            id: standardSceneBoard.id,
+            label: standardSceneBoard.label,
+            imageUrl: standardSceneBoard.imageUrl,
+          }],
         }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('failed')))
@@ -289,7 +282,7 @@ export default function SceneReferenceTestPage() {
     } finally {
       setBusy(false)
     }
-  }, [aspectRatio, characterImageUrl, pairCount, sceneResult?.singleView?.imageUrl, selectedMultiViews, storyboardPrompt, t])
+  }, [aspectRatio, characterImageUrl, pairCount, sceneResult?.singleView?.imageUrl, standardSceneBoard?.id, standardSceneBoard?.imageUrl, standardSceneBoard?.label, storyboardPrompt, t])
 
   const sceneState = resolveTaskPresentationState({
     phase: taskPhase(sceneTask?.status, Boolean(sceneTaskId)),
@@ -339,20 +332,9 @@ export default function SceneReferenceTestPage() {
               <span className="text-sm font-medium">{t('styleRequest')}</span>
               <textarea value={styleRequest} onChange={(event) => setStyleRequest(event.target.value)} rows={3} placeholder={t('stylePlaceholder')} className="resize-none rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm leading-6 outline-none" />
             </label>
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">{t('layoutsTitle')}</span>
-              {LAYOUTS.map((layout) => (
-                <label key={layout} className="flex items-center gap-2 text-sm text-[var(--glass-text-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={layouts.includes(layout)}
-                    onChange={(event) => setLayouts((current) => (
-                      event.target.checked ? [...current, layout] : current.filter((item) => item !== layout)
-                    ))}
-                  />
-                  {t(`layouts.${layout}`)}
-                </label>
-              ))}
+            <div className="rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm text-[var(--glass-text-secondary)]">
+              <span className="font-medium text-[var(--glass-text-primary)]">{t('standardBoardTitle')}</span>
+              <span className="mt-1 block">{t('standardBoardDescription')}</span>
             </div>
             <button type="button" onClick={generateScenes} disabled={busy || !sceneDescription.trim()} className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {t('generateScenes')}
@@ -372,7 +354,7 @@ export default function SceneReferenceTestPage() {
                 <input value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)} className="rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm outline-none" />
               </label>
             </div>
-            <button type="button" onClick={runComparison} disabled={busy || !sceneResult?.singleView?.imageUrl || selectedMultiViews.length === 0} className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            <button type="button" onClick={runComparison} disabled={busy || !sceneResult?.singleView?.imageUrl || !standardSceneBoard?.imageUrl} className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {t('runComparison')}
             </button>
             {error && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>}

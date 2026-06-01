@@ -4,15 +4,9 @@ export const SCENE_REFERENCE_TEST_PROJECT_ID = 'system'
 export const SCENE_REFERENCE_TEST_ASPECT_RATIO = '16:9'
 export const SCENE_REFERENCE_TEST_TARGET_ID = 'scene-reference-test'
 export const SCENE_REFERENCE_COMPARISON_TARGET_ID = 'scene-reference-comparison-test'
+export const STANDARD_SCENE_REFERENCE_LAYOUT = 'three_view'
 
-export const SCENE_REFERENCE_LAYOUTS = [
-  'three_view',
-  'four_view_board',
-  'wide_reverse_side_detail',
-  'overhead_spatial_board',
-] as const
-
-export type SceneReferenceLayout = (typeof SCENE_REFERENCE_LAYOUTS)[number]
+export type SceneReferenceLayout = typeof STANDARD_SCENE_REFERENCE_LAYOUT
 
 export type SceneReferenceVariant = {
   readonly id: SceneReferenceLayout
@@ -22,14 +16,6 @@ export type SceneReferenceVariant = {
 
 function normalize(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
-}
-
-export function normalizeSceneReferenceLayouts(value: unknown): SceneReferenceLayout[] {
-  if (!Array.isArray(value)) return [...SCENE_REFERENCE_LAYOUTS]
-  const selected = value.filter((item): item is SceneReferenceLayout =>
-    typeof item === 'string' && SCENE_REFERENCE_LAYOUTS.includes(item as SceneReferenceLayout),
-  )
-  return selected.length > 0 ? Array.from(new Set(selected)) : [...SCENE_REFERENCE_LAYOUTS]
 }
 
 function styleLine(styleRequest: string, locale: Locale): string {
@@ -69,38 +55,14 @@ export function buildSingleSceneReferencePrompt(input: {
 function layoutSpec(layout: SceneReferenceLayout, locale: Locale): { label: string; spec: string } {
   const zh: Record<SceneReferenceLayout, { label: string; spec: string }> = {
     three_view: {
-      label: '三视图场景板',
-      spec: '必须清楚分成 3 个并列视角区域：主视角、反向视角、侧向视角。三个区域共享同一空间、同一光源逻辑和同一材质系统。',
-    },
-    four_view_board: {
-      label: '四宫格场景板',
-      spec: '必须清楚分成 2x2 四个区域：主全景、反向视角、侧向视角、关键锚点/材质细节。四个区域必须像同一个场景的参考板。',
-    },
-    wide_reverse_side_detail: {
-      label: '宽幅主视角+反侧细节',
-      spec: '必须清楚分成 4 个区域：主视角占画面约一半，其余区域分别展示反向视角、侧向通道、材质/光源细节，适合测试分镜空间继承。',
-    },
-    overhead_spatial_board: {
-      label: '空间关系场景板',
-      spec: '必须清楚分成 4 个区域：电影主视角、自然俯视空间关系、入口/出口方向、关键锚点细节。俯视区域必须自然美术化，不要画成蓝图或标注图。',
+      label: '标准三视图场景板',
+      spec: '必须清楚分成 3 个区域：正面视图、反面视图、顶面视图。正面视图展示主空间和风格；反面视图从对侧看回同一空间，用于反打镜头；顶面视图是美术化俯视图，用于展示空间边界、入口出口、主要锚点和可站立区域，不要画成工程蓝图。',
     },
   }
   const en: Record<SceneReferenceLayout, { label: string; spec: string }> = {
     three_view: {
-      label: 'Three-view scene board',
-      spec: 'It must be clearly divided into 3 side-by-side view regions: main view, reverse view, and side view. The three areas share the same space, lighting logic, and material system.',
-    },
-    four_view_board: {
-      label: 'Four-panel scene board',
-      spec: 'It must be clearly divided into a 2x2 board: main wide view, reverse view, side view, and key anchor/material detail. The four areas must read as one scene reference board.',
-    },
-    wide_reverse_side_detail: {
-      label: 'Wide main view with reverse/side details',
-      spec: 'It must be clearly divided into 4 regions: the main view takes about half of the image; the remaining areas show reverse view, side passage, and material/light-source details for spatial continuity testing.',
-    },
-    overhead_spatial_board: {
-      label: 'Spatial relationship scene board',
-      spec: 'It must be clearly divided into 4 regions: cinematic main view, natural overhead spatial relationship view, entrance/exit direction, and key anchor detail. The overhead area must be art-directed, not a blueprint or labeled diagram.',
+      label: 'Standard three-view scene board',
+      spec: 'It must be clearly divided into 3 regions: front view, reverse/back view, and top-down view. The front view shows the main space and style; the reverse view looks back at the same space from the opposite side for shot/reverse-shot continuity; the top-down view is an art-directed overhead view showing spatial boundaries, entrances, exits, major anchors, and usable standing areas, not an engineering blueprint.',
     },
   }
   return locale === 'en' ? en[layout] : zh[layout]
@@ -120,7 +82,7 @@ export function buildMultiSceneReferencePrompt(input: {
       `Scene description: ${scene}`,
       styleLine(input.styleRequest, input.locale),
       `Layout: ${label}. ${spec}`,
-      'The output must be one complete image containing visibly different view regions. This must not be a single full-frame scene view repeated or cropped.',
+      'The output must be one complete image containing exactly these three visibly different view regions. This must not be a single full-frame scene view repeated or cropped.',
       'Use clean visual gutters or panel boundaries if needed, but do not include text labels, numbers, arrows, UI marks, blueprint graphics, watermarks, or logo.',
       'Do not include characters. Make fixed anchors, lighting direction, materials, usable floor areas, entrances, exits, and depth relationships easy to inherit in later storyboard images.',
     ].join('\n')
@@ -129,7 +91,7 @@ export function buildMultiSceneReferencePrompt(input: {
       `场景描述：${scene}`,
       styleLine(input.styleRequest, input.locale),
       `版式：${label}。${spec}`,
-      '输出必须是单张完整图片，并且必须能一眼看出多个不同视角区域。禁止生成单个全画幅场景视角，也禁止把同一视角简单重复或裁切。',
+      '输出必须是单张完整图片，并且必须能一眼看出这三个不同视角区域。禁止生成单个全画幅场景视角，也禁止把同一视角简单重复或裁切。',
       '必要时可以使用干净的视觉分隔线或分区边界，但不要出现文字标签、编号、箭头、UI 标记、蓝图图形、水印或 Logo。',
       '不要出现人物。必须让固定锚点、光线方向、材质、可站立地面、入口出口和空间纵深关系便于后续分镜继承。',
     ].join('\n')
