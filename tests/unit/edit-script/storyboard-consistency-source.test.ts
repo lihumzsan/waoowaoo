@@ -32,6 +32,24 @@ interface PrismaMock {
 
 const prismaMock = prisma as unknown as PrismaMock
 
+const readySpatialProfile = {
+  schemaVersion: 1,
+  sceneSummary: 'Ready location interior.',
+  anchors: [{
+    id: 'anchor-1',
+    label: 'main counter',
+    screenArea: 'right side',
+    depthLayer: 'midground',
+    spatialRelations: ['doorway is in front of the counter'],
+  }],
+  depthLayout: {
+    foreground: 'doorway',
+    midground: 'counter',
+    background: 'rear window',
+  },
+  lightingDirection: 'from the rear window',
+}
+
 function requirement(overrides: Partial<EditAssetRequirement>): EditAssetRequirement {
   return {
     id: 'requirement-1',
@@ -60,7 +78,11 @@ describe('storyboard consistency source snapshot assets', () => {
     })
     prismaMock.projectLocation.findUnique.mockResolvedValueOnce({
       images: [{
+        id: 'location-image-1',
         imageUrl: 'images/location-ready.jpg',
+        isSelected: true,
+        spatialProfileJson: readySpatialProfile,
+        spatialProfileStatus: 'ready',
       }],
     })
 
@@ -91,6 +113,7 @@ describe('storyboard consistency source snapshot assets', () => {
         requirementId: 'req-location',
         targetId: 'location-1',
         previewImageUrl: 'images/location-ready.jpg',
+        spatialProfile: readySpatialProfile,
       }),
     ])
     expect(prismaMock.projectEditAssetRequirement.updateMany).toHaveBeenCalledWith({

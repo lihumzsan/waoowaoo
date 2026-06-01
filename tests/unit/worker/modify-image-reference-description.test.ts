@@ -5,7 +5,7 @@ import { TASK_TYPE, type TaskJobData, type TaskType } from '@/lib/task/types'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => {}),
-  getProjectModels: vi.fn(async () => ({ editModel: 'edit-model' })),
+  getProjectModels: vi.fn(async () => ({ editModel: 'edit-model', analysisModel: 'analysis-model' })),
   getUserModels: vi.fn(async () => ({ editModel: 'edit-model', analysisModel: 'analysis-model' })),
   resolveImageSourceFromGeneration: vi.fn(async () => 'generated-image-source'),
   toSignedUrlIfCos: vi.fn(() => 'https://signed/current-image.png'),
@@ -76,6 +76,42 @@ vi.mock('@/lib/logging/core', () => loggingMock)
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
+vi.mock('@/lib/location-spatial-profile/service', () => ({
+  analyzeAndPersistProjectLocationImageSpatialProfile: vi.fn(async () => ({
+    schemaVersion: 1,
+    sceneSummary: 'updated project location',
+    anchors: [{
+      id: 'anchor-1',
+      label: 'project anchor',
+      screenArea: 'center',
+      depthLayer: 'midground',
+      spatialRelations: ['near the entrance'],
+    }],
+    depthLayout: {
+      foreground: 'foreground',
+      midground: 'midground',
+      background: 'background',
+    },
+    lightingDirection: 'from the left',
+  })),
+  analyzeAndPersistGlobalLocationImageSpatialProfile: vi.fn(async () => ({
+    schemaVersion: 1,
+    sceneSummary: 'updated global location',
+    anchors: [{
+      id: 'anchor-1',
+      label: 'global anchor',
+      screenArea: 'center',
+      depthLayer: 'midground',
+      spatialRelations: ['near the entrance'],
+    }],
+    depthLayout: {
+      foreground: 'foreground',
+      midground: 'midground',
+      background: 'background',
+    },
+    lightingDirection: 'from the left',
+  })),
+}))
 
 import { handleModifyAssetImageTask } from '@/lib/workers/handlers/image-task-handlers-core'
 import { handleAssetHubModifyTask } from '@/lib/workers/handlers/asset-hub-modify-task-handler'
@@ -105,6 +141,12 @@ function getUpdateData(callArg: unknown): Record<string, unknown> {
 describe('modify image syncs descriptions after edit', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    aiRuntimeMock.executeAiTextStep.mockReset()
+    aiRuntimeMock.executeAiVisionStep.mockReset()
+    utilsMock.uploadImageSourceToCos.mockReset()
+    aiRuntimeMock.executeAiTextStep.mockResolvedValue({ text: '{"prompt":"TEXT_UPDATED_DESCRIPTION"}' })
+    aiRuntimeMock.executeAiVisionStep.mockResolvedValue({ text: '{"prompt":"VISION_UPDATED_DESCRIPTION"}' })
+    utilsMock.uploadImageSourceToCos.mockResolvedValue('cos/new-image.png')
 
     prismaMock.characterAppearance.findUnique.mockResolvedValue({
       id: 'appearance-1',
@@ -236,6 +278,8 @@ describe('modify image syncs descriptions after edit', () => {
     expect(updateData.previousDescription).toBe('old location description')
     expect(updateData.description).toBe('TEXT_UPDATED_LOCATION')
     expect(updateData.imageUrl).toBe('cos/new-image.png')
+    expect(updateData.spatialProfileStatus).toBe('stale')
+    expect(updateData.spatialProfileError).toBeNull()
   })
 
   it('syncs asset-hub location descriptions for reference-image edits', async () => {
@@ -267,6 +311,8 @@ describe('modify image syncs descriptions after edit', () => {
     expect(updateData.previousDescription).toBe('global location description')
     expect(updateData.description).toBe('VISION_UPDATED_LOCATION')
     expect(updateData.imageUrl).toBe('cos/new-global-location-image.png')
+    expect(updateData.spatialProfileStatus).toBe('stale')
+    expect(updateData.spatialProfileError).toBeNull()
   })
 
   it('syncs project prop descriptions for pure text edits', async () => {

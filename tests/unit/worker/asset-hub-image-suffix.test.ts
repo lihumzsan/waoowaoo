@@ -8,6 +8,7 @@ const workersUtilsMock = vi.hoisted(() => ({
   getUserModels: vi.fn(async () => ({
     characterModel: 'character-model-1',
     locationModel: 'location-model-1',
+    analysisModel: 'analysis-model-1',
   })),
 }))
 
@@ -33,6 +34,25 @@ const sharedMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/workers/utils', () => workersUtilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/location-spatial-profile/service', () => ({
+  analyzeAndPersistGlobalLocationImageSpatialProfile: vi.fn(async () => ({
+    schemaVersion: 1,
+    sceneSummary: 'updated global location',
+    anchors: [{
+      id: 'anchor-1',
+      label: 'main anchor',
+      screenArea: 'center',
+      depthLayer: 'midground',
+      spatialRelations: ['near the entrance'],
+    }],
+    depthLayout: {
+      foreground: 'foreground',
+      midground: 'midground',
+      background: 'background',
+    },
+    lightingDirection: 'from the left',
+  })),
+}))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
     '@/lib/workers/handlers/image-task-handler-shared',
@@ -134,7 +154,11 @@ describe('asset hub character image prompt suffix regression', () => {
     expect(prismaMock.globalLocationImage.update).toHaveBeenCalledTimes(1)
     expect(prismaMock.globalLocationImage.update).toHaveBeenCalledWith({
       where: { id: 'global-location-image-1' },
-      data: { imageUrl: 'cos/generated-character.png' },
+      data: {
+        imageUrl: 'cos/generated-character.png',
+        spatialProfileStatus: 'stale',
+        spatialProfileError: null,
+      },
     })
   })
 

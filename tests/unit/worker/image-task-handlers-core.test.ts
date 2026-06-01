@@ -5,7 +5,7 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => {}),
-  getProjectModels: vi.fn(async () => ({ editModel: 'edit-model' })),
+  getProjectModels: vi.fn(async () => ({ editModel: 'edit-model', analysisModel: 'analysis-model' })),
   getUserModels: vi.fn(async () => ({ editModel: 'edit-model', analysisModel: 'analysis-model' })),
   resolveImageSourceFromGeneration: vi.fn(async () => 'generated-image-source'),
   toSignedUrlIfCos: vi.fn(() => 'https://signed/current-image.png'),
@@ -42,6 +42,25 @@ vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/media/outbound-image', () => outboundImageMock)
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
+}))
+vi.mock('@/lib/location-spatial-profile/service', () => ({
+  analyzeAndPersistProjectLocationImageSpatialProfile: vi.fn(async () => ({
+    schemaVersion: 1,
+    sceneSummary: 'updated location',
+    anchors: [{
+      id: 'anchor-1',
+      label: 'main anchor',
+      screenArea: 'center',
+      depthLayer: 'midground',
+      spatialRelations: ['near the entrance'],
+    }],
+    depthLayout: {
+      foreground: 'foreground',
+      midground: 'midground',
+      background: 'background',
+    },
+    lightingDirection: 'from the left',
+  })),
 }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
