@@ -624,7 +624,9 @@
           "openFinalVideo": "打开成片",
           "downloadVideos": "下载视频",
           "playPreview": "播放预览",
-          "pausePreview": "暂停预览"
+          "pausePreview": "暂停预览",
+          "expandPreviewDetails": "展开提示词",
+          "collapsePreviewDetails": "收起提示词"
         },
         "defaults": {
           "variantTitle": "镜头变体"

@@ -8,6 +8,7 @@ import WorkspaceNode, {
   nodeNeedsActualHeightMeasurement,
   videoElementAspectRatio,
 } from '@/features/project-workspace/canvas/nodes/WorkspaceNode'
+import { previewShotMediaKind } from '@/features/project-workspace/canvas/details/EditScriptPreviewDetail'
 import type { WorkspaceCanvasFlowNode, WorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/node-canvas-types'
 
 vi.mock('@xyflow/react', () => ({
@@ -90,6 +91,29 @@ describe('workspace node rendering', () => {
     expect(videoElementAspectRatio({ videoWidth: 1920, videoHeight: 1080 })).toBeCloseTo(16 / 9)
     expect(videoElementAspectRatio({ videoWidth: 1080, videoHeight: 1920 })).toBeCloseTo(9 / 16)
     expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
+  })
+
+  it('uses shot text as the edit script preview fallback when storyboard media is missing', () => {
+    expect(previewShotMediaKind({
+      videoUrl: 'https://example.com/shot.mp4',
+      imageUrl: 'https://example.com/shot.png',
+      visualAction: 'Shot action text.',
+    })).toBe('video')
+    expect(previewShotMediaKind({
+      videoUrl: null,
+      imageUrl: 'https://example.com/shot.png',
+      visualAction: 'Shot action text.',
+    })).toBe('image')
+    expect(previewShotMediaKind({
+      videoUrl: null,
+      imageUrl: null,
+      visualAction: 'Shot action text.',
+    })).toBe('text')
+    expect(previewShotMediaKind({
+      videoUrl: null,
+      imageUrl: null,
+      visualAction: ' ',
+    })).toBe('empty')
   })
 
   it('shows space consistency profile stats while generation is running', () => {

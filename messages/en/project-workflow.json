@@ -624,7 +624,9 @@
           "openFinalVideo": "Open Final Video",
           "downloadVideos": "Download Videos",
           "playPreview": "Play Preview",
-          "pausePreview": "Pause Preview"
+          "pausePreview": "Pause Preview",
+          "expandPreviewDetails": "Expand Prompts",
+          "collapsePreviewDetails": "Collapse Prompts"
         },
         "defaults": {
           "variantTitle": "Shot Variant"
