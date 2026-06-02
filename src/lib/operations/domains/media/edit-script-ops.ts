@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import {
+  generateProjectEditCinematographyShotPlan,
+  generateProjectEditDirectorDecoupage,
   generateProjectEditScreenplay,
   generateProjectEditScriptAssets,
 } from '@/lib/edit-script/service'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
-import type { EditScriptPayload } from '@/lib/edit-script/types'
+import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -36,10 +38,20 @@ const generateEditScriptInputSchema = z.object({
   videoRatio: editScriptVideoRatioSchema.optional(),
 }).passthrough()
 
+const generateEditDirectorDecoupageInputSchema = z.object({
+  ...confirmedInputFields,
+  screenplayId: z.string().trim().min(1).optional(),
+}).passthrough()
+
 const generateEditScriptAssetsInputSchema = z.object({
   ...confirmedInputFields,
   editScriptId: z.string().trim().min(1).optional(),
   requirementId: z.string().trim().min(1).optional(),
+}).passthrough()
+
+const generateEditCinematographyShotPlanInputSchema = z.object({
+  ...confirmedInputFields,
+  editScriptId: z.string().trim().min(1).optional(),
 }).passthrough()
 
 const generateEditScriptStoryboardInputSchema = z.object({
@@ -48,8 +60,10 @@ const generateEditScriptStoryboardInputSchema = z.object({
 }).passthrough()
 
 type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
+type GenerateEditDirectorDecoupageInput = z.infer<typeof generateEditDirectorDecoupageInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
+type GenerateEditCinematographyShotPlanInput = z.infer<typeof generateEditCinematographyShotPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
 const editScreenplayOutputSchema = z.object({
@@ -84,6 +98,24 @@ const editScriptSummaryOutputSchema = z.object({
 }).passthrough()
 
 type EditScriptSummaryOutput = z.infer<typeof editScriptSummaryOutputSchema>
+
+const editDirectorDecoupageOutputSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  episodeId: z.string().min(1),
+  screenplayId: z.string().min(1),
+  status: z.string().min(1),
+  shotCount: z.number().int().positive(),
+}).passthrough()
+
+const editCinematographyShotPlanOutputSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  episodeId: z.string().min(1),
+  editScriptId: z.string().min(1),
+  status: z.string().min(1),
+  shotCount: z.number().int().positive(),
+}).passthrough()
 
 const EFFECTS_SYNC_AI_WRITE = {
   writes: true,
@@ -141,6 +173,28 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
   }
 }
 
+function summarizeDirectorDecoupagePayload(payload: EditDirectorDecoupagePayload) {
+  return {
+    id: payload.id,
+    projectId: payload.projectId,
+    episodeId: payload.episodeId,
+    screenplayId: payload.screenplayId,
+    status: payload.status,
+    shotCount: payload.shots.length,
+  }
+}
+
+function summarizeCinematographyShotPlanPayload(payload: EditCinematographyShotPlanPayload) {
+  return {
+    id: payload.id,
+    projectId: payload.projectId,
+    episodeId: payload.episodeId,
+    editScriptId: payload.editScriptId,
+    status: payload.status,
+    shotCount: payload.shots.length,
+  }
+}
+
 export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft {
   const editScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
@@ -171,9 +225,32 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
       })),
     }),
+    generate_edit_director_decoupage: defineOperation({
+      id: 'generate_edit_director_decoupage',
+      summary: 'Generate the full-shot director decoupage from a ready edit screenplay and Style Bible before building the executable edit table.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_SYNC_AI_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将基于 ready 剧本生成并覆盖本集导演拆镜（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      inputSchema: generateEditDirectorDecoupageInputSchema,
+      outputSchema: editDirectorDecoupageOutputSchema,
+      execute: async (ctx, input: GenerateEditDirectorDecoupageInput) => editDirectorDecoupageOutputSchema.parse(summarizeDirectorDecoupagePayload(
+        await generateProjectEditDirectorDecoupage({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          locale: resolveLocale(ctx.context.locale),
+          ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+        }),
+      )),
+    }),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
-      summary: 'Generate the edit-first core table from an existing ready screenplay and its persisted Style Bible. Fails if no ready screenplay exists.',
+      summary: 'Build the executable edit-first core table from ready director decoupage. Fails if no ready screenplay or director decoupage exists.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -250,9 +327,32 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         }),
       ),
     }),
+    generate_edit_cinematography_shot_plan: defineOperation({
+      id: 'generate_edit_cinematography_shot_plan',
+      summary: 'Generate the full-shot cinematography plan from the ready edit table, director decoupage, completed assets, and spatial profiles.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_SYNC_AI_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将基于剪辑表、导演拆镜、资产和空间档案生成并覆盖本集摄影 shot plan（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      inputSchema: generateEditCinematographyShotPlanInputSchema,
+      outputSchema: editCinematographyShotPlanOutputSchema,
+      execute: async (ctx, input: GenerateEditCinematographyShotPlanInput) => editCinematographyShotPlanOutputSchema.parse(summarizeCinematographyShotPlanPayload(
+        await generateProjectEditCinematographyShotPlan({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          locale: resolveLocale(ctx.context.locale),
+          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
+        }),
+      )),
+    }),
     generate_edit_script_storyboard: defineOperation({
       id: 'generate_edit_script_storyboard',
-      summary: 'Generate storyboard panels from ready spatial profiles, the current completed edit-first table, and required assets.',
+      summary: 'Generate storyboard panels from ready director decoupage, cinematography shot plan, spatial profiles, edit table, and required assets.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,

@@ -145,7 +145,9 @@ model ProjectEpisode {
   editorProject           VideoEditorProject?
   canvasLayout            ProjectCanvasLayout?
   editScreenplay          ProjectEditScreenplay?
+  editDirectorDecoupage   ProjectEditDirectorDecoupage?
   editScript              ProjectEditScript?
+  editCinematographyShotPlan ProjectEditCinematographyShotPlan?
   editAssetRequirements   ProjectEditAssetRequirement[]
   videoGroups             ProjectVideoGroup[]
 
@@ -167,10 +169,31 @@ model ProjectEditScreenplay {
   updatedAt      DateTime       @default(now()) @updatedAt
   project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  directorDecoupage ProjectEditDirectorDecoupage?
 
   @@index([projectId])
   @@index([episodeId])
   @@map("project_edit_screenplays")
+}
+
+model ProjectEditDirectorDecoupage {
+  id              String                @id @default(uuid())
+  projectId       String
+  episodeId       String                @unique
+  editScreenplayId String                @unique
+  userPrompt      String                @db.LongText
+  decoupageJson   Json
+  status          String                @default("ready")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @default(now()) @updatedAt
+  project         Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode         ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  editScreenplay  ProjectEditScreenplay @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([episodeId])
+  @@index([editScreenplayId])
+  @@map("project_edit_director_decoupages")
 }
 
 model ProjectEditScript {
@@ -191,11 +214,31 @@ model ProjectEditScript {
   updatedAt      DateTime                       @default(now()) @updatedAt
   project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  cinematographyShotPlan ProjectEditCinematographyShotPlan?
   requirements   ProjectEditAssetRequirement[]
 
   @@index([projectId])
   @@index([episodeId])
   @@map("project_edit_scripts")
+}
+
+model ProjectEditCinematographyShotPlan {
+  id            String            @id @default(uuid())
+  projectId     String
+  episodeId     String            @unique
+  editScriptId  String            @unique
+  shotPlanJson  Json
+  status        String            @default("ready")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now()) @updatedAt
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode       ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  editScript    ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([episodeId])
+  @@index([editScriptId])
+  @@map("project_edit_cinematography_shot_plans")
 }
 
 model ProjectEditAssetRequirement {
@@ -725,7 +768,9 @@ model Project {
   savedSkills        SavedSkill[]
   episodes           ProjectEpisode[]
   editScreenplays    ProjectEditScreenplay[]
+  editDirectorDecoupages ProjectEditDirectorDecoupage[]
   editScripts        ProjectEditScript[]
+  editCinematographyShotPlans ProjectEditCinematographyShotPlan[]
   editAssetRequirements ProjectEditAssetRequirement[]
   planRuns           PlanRun[]
   characters         ProjectCharacter[]

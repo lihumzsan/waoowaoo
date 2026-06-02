@@ -1,6 +1,5 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 import type { Locale } from '@/i18n/routing'
 import type {
   StoryboardConsistencyAssetSnapshot,
@@ -38,10 +37,6 @@ interface PanelDraft {
   readonly sourceVideoBlockId: string
 }
 
-function stringifyForPrompt(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
-
 function buildEditStoryboardMarker(editScriptId: string): string {
   return JSON.stringify({
     source: 'edit_script',
@@ -64,6 +59,12 @@ function blockForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber:
   const block = snapshot.videoBlocks.find((item) => item.shotNumbers.includes(shotNumber))
   if (!block) throw new Error(`EDIT_SCRIPT_STORYBOARD_VIDEO_BLOCK_MISSING:${shotNumber}`)
   return block
+}
+
+function cinematographyForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number) {
+  const shot = snapshot.cinematographyShotPlan.shots.find((item) => item.shotNumber === shotNumber)
+  if (!shot) throw new Error(`EDIT_SCRIPT_STORYBOARD_CINEMATOGRAPHY_SHOT_MISSING:${shotNumber}`)
+  return shot
 }
 
 async function buildCharacterRefsByRequirementId(
@@ -215,47 +216,6 @@ export async function upsertEditScriptStoryboardShell(input: {
   })
 }
 
-function buildBasePanelPrompt(input: {
-  readonly snapshot: StoryboardConsistencySourceSnapshot
-  readonly shotNumber: number
-  readonly block: StoryboardConsistencySourceVideoBlock
-  readonly characterRefsByRequirementId: ReadonlyMap<string, StoryboardCharacterRef>
-  readonly locale: Locale
-}) {
-  const shot = input.snapshot.shots.find((item) => item.shotNumber === input.shotNumber)
-  if (!shot) throw new Error(`EDIT_SCRIPT_STORYBOARD_SHOT_MISSING:${input.shotNumber}`)
-  const characterAssets = input.snapshot.assets.filter((asset) => asset.kind === 'character' && asset.shotNumbers.includes(input.shotNumber))
-  const location = locationForShot(input.snapshot, input.shotNumber)
-  return buildAiPrompt({
-    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL,
-    locale: input.locale,
-    variables: {
-      shot_json: stringifyForPrompt(shot),
-      video_block_json: stringifyForPrompt({
-        sourceVideoBlockId: input.block.sourceVideoBlockId,
-        blockIndex: input.block.blockIndex,
-        kind: input.block.kind,
-        shotNumbers: input.block.shotNumbers,
-        gridMode: input.block.gridMode ?? null,
-        reason: input.block.reason,
-        prompt: input.block.prompt,
-      }),
-      character_assets_json: stringifyForPrompt(characterAssets.map((asset) => ({
-        requirementId: asset.requirementId,
-        name: asset.name,
-        description: asset.description,
-        reference: input.characterRefsByRequirementId.get(asset.requirementId) ?? null,
-      }))),
-      location_assets_json: stringifyForPrompt(location ? [{
-        requirementId: location.requirementId,
-        name: location.name,
-        description: location.description,
-        spatialProfile: location.spatialProfile,
-      }] : []),
-    },
-  })
-}
-
 function buildPanelDrafts(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
@@ -275,6 +235,7 @@ function buildPanelDrafts(input: {
     const srtStart = cursor
     const srtEnd = cursor + shot.durationSec
     cursor = srtEnd
+    if (!generated) throw new Error(`EDIT_SCRIPT_STORYBOARD_FINAL_PROMPT_MISSING:${shot.shotNumber}`)
     const source = {
       sourceType: 'editScriptShot',
       editScriptId: input.snapshot.sourceEditScriptId,
@@ -288,24 +249,18 @@ function buildPanelDrafts(input: {
     return {
       panelIndex: index,
       panelNumber: shot.shotNumber,
-      shotType: shot.camera,
-      cameraMove: shot.camera,
-      description: shot.visualAction,
+      shotType: cinematographyForShot(input.snapshot, shot.shotNumber).shotScale,
+      cameraMove: cinematographyForShot(input.snapshot, shot.shotNumber).movement,
+      description: shot.visibleAction,
       location: location?.name ?? null,
       characters: characterRefs.length > 0 ? JSON.stringify(characterRefs) : null,
       props: null,
-      srtSegment: shot.visualAction,
+      srtSegment: shot.visibleAction,
       srtStart,
       srtEnd,
       duration: shot.durationSec,
-      imagePrompt: generated?.prompt ?? buildBasePanelPrompt({
-        snapshot: input.snapshot,
-        shotNumber: shot.shotNumber,
-        block,
-        characterRefsByRequirementId: input.characterRefsByRequirementId,
-        locale: input.locale,
-      }),
-      videoPrompt: shot.videoPrompt,
+      imagePrompt: generated.prompt,
+      videoPrompt: generated.videoPrompt,
       photographyRules: editStoryboardPanelSourceToJson(source),
       actingNotes: null,
       sourceShotNumber: shot.shotNumber,

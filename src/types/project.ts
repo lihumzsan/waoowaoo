@@ -269,10 +269,15 @@ export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'f
 export interface ProjectEditScriptShot {
   shotNumber: number
   durationSec: number
-  visualAction: string
+  dramaticPurpose: string
+  visibleAction: string
+  audienceFocus: string
+  viewpoint: string
+  revealPlan: string
+  performanceBeat: string
+  continuityIn: string
+  continuityOut: string
   charactersAndScene: string
-  camera: string
-  videoPrompt: string
   sound: string
 }
 
@@ -304,6 +309,41 @@ export interface ProjectEditScreenplay {
   styleBible?: unknown
   screenplayText: string
   status: string
+}
+
+export interface ProjectEditDirectorDecoupage {
+  id: string
+  projectId: string
+  episodeId: string
+  screenplayId: string
+  userPrompt: string
+  status: string
+  shots: ProjectEditScriptShot[]
+  hardBans: string[]
+}
+
+export interface ProjectEditCinematographyShotPlan {
+  id: string
+  projectId: string
+  episodeId: string
+  editScriptId: string
+  status: string
+  shots: {
+    shotNumber: number
+    shotScale: string
+    lens: string
+    depthOfField: string
+    cameraPosition: string
+    cameraHeight: string
+    cameraAngle: string
+    movement: string
+    composition: string
+    lighting: string
+    axisAndEyeline: string
+    continuityIn: string
+    continuityOut: string
+  }[]
+  hardBans: string[]
 }
 
 export interface ProjectEditScript {

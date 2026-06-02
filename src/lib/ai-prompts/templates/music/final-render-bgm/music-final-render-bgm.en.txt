@@ -20,7 +20,7 @@ Write a clean final music prompt that designs one coherent background score from
 Reading priority:
 - First understand the complete edit-first core table JSON. videoBlocks is the block-first generation plan, and it defines the musical section structure, continuity, single/group distinction, and edit intent.
 - Read videoBlocks[].kind, shotNumbers, reason, and prompt. Treat each group as one continuous story/motion section; treat each single as an independent cut point.
-- Read every shots[] field: durationSec, visualAction, charactersAndScene, camera, videoPrompt, and sound. Do not rely only on the sound field.
+- Read every shots[] field: durationSec, dramaticPurpose, visibleAction, audienceFocus, viewpoint, revealPlan, performanceBeat, charactersAndScene, and sound. Do not rely only on the sound field.
 - Read the project configuration JSON, including videoRatio, artStyle, artStylePrompt, and visualStylePreset. Translate framing and visual style into musical mood, spatial image, rhythmic density, and instrumentation choices.
 - Use the actual rendered media timeline JSON to keep section lengths aligned to the final renderable media. If the rendered media timeline differs from the edit-first table, follow the rendered media duration while preserving the edit-first narrative intent.
 - The "Shot-by-shot emotional and rhythm map" below is only a convenient summary; it must not replace the complete edit-first table.

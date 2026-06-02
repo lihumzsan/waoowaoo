@@ -16,8 +16,6 @@ import {
   upsertStoryboardPanelsFromPrompts,
 } from '@/lib/edit-script/storyboard-consistency/persistence'
 
-type StoryboardWithArtifacts = NonNullable<Awaited<ReturnType<typeof loadStoryboardWithArtifacts>>>
-
 interface ParsedPayload {
   readonly editScriptId: string
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot

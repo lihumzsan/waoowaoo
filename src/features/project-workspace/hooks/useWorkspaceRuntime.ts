@@ -32,6 +32,7 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
   handleGenerateEditScreenplay: (prompt: string) => Promise<void>
+  handleGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
   handleRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   handleUpdateClip: (clipId: string, updates: Record<string, unknown>) => Promise<void>
@@ -56,6 +57,7 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateBgmScore: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
+  handleGenerateEditCinematographyShotPlan: (editScriptId: string) => Promise<void>
   handleRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
   handleGenerateEditStoryboardSpatialBlocking: (editScriptId: string) => Promise<void>
@@ -90,6 +92,7 @@ export function useWorkspaceRuntime({
   handleUpdateConfig,
   onRequestAssistantPlan,
   handleGenerateEditScreenplay,
+  handleGenerateEditDirectorDecoupage,
   handleGenerateEditScript,
   handleRegenerateStoryboardText,
   handleUpdateClip,
@@ -102,6 +105,7 @@ export function useWorkspaceRuntime({
   handleGenerateBgmScore,
   handleRenderFinalVideo,
   handleGenerateEditAssets,
+  handleGenerateEditCinematographyShotPlan,
   handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
   handleGenerateEditStoryboardSpatialBlocking,
@@ -137,6 +141,7 @@ export function useWorkspaceRuntime({
     onVisualStylePresetChange: (value) => handleUpdateConfig('visualStylePreset', value),
     onRequestAssistantPlan,
     onGenerateEditScreenplay: handleGenerateEditScreenplay,
+    onGenerateEditDirectorDecoupage: handleGenerateEditDirectorDecoupage,
     onGenerateEditScript: handleGenerateEditScript,
     onRegenerateStoryboardText: handleRegenerateStoryboardText,
     onClipUpdate: (clipId, data) => {
@@ -154,6 +159,7 @@ export function useWorkspaceRuntime({
     onGenerateBgmScore: handleGenerateBgmScore,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditAssets: handleGenerateEditAssets,
+    onGenerateEditCinematographyShotPlan: handleGenerateEditCinematographyShotPlan,
     onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
     onGenerateEditStoryboardSpatialBlocking: handleGenerateEditStoryboardSpatialBlocking,
@@ -172,6 +178,7 @@ export function useWorkspaceRuntime({
     handleGenerateBgmScore,
     handleRenderFinalVideo,
     handleGenerateEditAssets,
+    handleGenerateEditCinematographyShotPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleGenerateEditStoryboardSpatialBlocking,
@@ -183,6 +190,7 @@ export function useWorkspaceRuntime({
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditScreenplay,
+    handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
     handleRegenerateStoryboardText,
     handleArrangeVideoBlocks,

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { ProjectClip, ProjectEditScreenplay, ProjectEditScript, ProjectPanel, ProjectShot, ProjectStoryboard } from '@/types/project'
+import type {
+  ProjectClip,
+  ProjectEditCinematographyShotPlan,
+  ProjectEditScreenplay,
+  ProjectEditScript,
+  ProjectPanel,
+  ProjectShot,
+  ProjectStoryboard,
+} from '@/types/project'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
@@ -69,11 +77,11 @@ function createPanel(input: Partial<ProjectPanel> & Pick<ProjectPanel, 'id' | 'p
     srtEnd: input.srtEnd ?? null,
     duration: input.duration ?? null,
     imagePrompt: input.imagePrompt ?? null,
+    videoPrompt: null,
     imageUrl: input.imageUrl ?? null,
     candidateImages: input.candidateImages ?? null,
     media: input.media ?? null,
     imageHistory: input.imageHistory ?? null,
-    videoPrompt: input.videoPrompt ?? null,
     firstLastFramePrompt: input.firstLastFramePrompt ?? null,
     videoUrl: input.videoUrl ?? null,
     videoModel: input.videoModel ?? null,
@@ -140,6 +148,12 @@ function createStyleBible(): Record<string, unknown> {
         lensAndDepthPrompt: '35mm，自然景深。',
         videoRhythmPrompt: '缓慢呼吸感节奏，克制剪辑。',
       },
+      directing: {
+        pointOfViewPrompt: 'restricted protagonist viewpoint',
+        performancePrompt: 'restrained performance through small gestures',
+        informationReleasePrompt: 'reveal information through reaction before event truth',
+        rhythmPrompt: 'hold suspense pauses before faster turns',
+      },
       sound: {
         soundFilterPrompt: '清澈低噪。',
       },
@@ -176,10 +190,15 @@ function createSingleVideoEditScript(input?: Partial<ProjectEditScript>): Projec
       {
         shotNumber: 1,
         durationSec: 2,
-        visualAction: 'A camera watches the room.',
+        dramaticPurpose: 'test dramatic purpose',
+        visibleAction: 'A camera watches the room.',
+        audienceFocus: 'test audience focus',
+        viewpoint: 'test viewpoint',
+        revealPlan: 'test reveal plan',
+        performanceBeat: 'test performance beat',
+        continuityIn: 'test continuity in',
+        continuityOut: 'test continuity out',
         charactersAndScene: 'Empty room',
-        camera: 'locked wide shot',
-        videoPrompt: 'A quiet room.',
         sound: 'low room tone',
       },
     ],
@@ -192,6 +211,36 @@ function createSingleVideoEditScript(input?: Partial<ProjectEditScript>): Projec
       },
     ],
     requirements: input?.requirements ?? [],
+  }
+}
+
+function createCinematographyShotPlan(
+  input?: Partial<ProjectEditCinematographyShotPlan>,
+): ProjectEditCinematographyShotPlan {
+  return {
+    id: input?.id ?? 'cinematography-1',
+    projectId: input?.projectId ?? 'project-1',
+    episodeId: input?.episodeId ?? 'episode-1',
+    editScriptId: input?.editScriptId ?? 'edit-1',
+    status: input?.status ?? 'ready',
+    shots: input?.shots ?? [
+      {
+        shotNumber: 1,
+        shotScale: 'medium shot',
+        lens: '35mm',
+        depthOfField: 'natural depth',
+        cameraPosition: 'front of the scene',
+        cameraHeight: 'eye level',
+        cameraAngle: 'neutral',
+        movement: 'static',
+        composition: 'balanced composition',
+        lighting: 'soft motivated light',
+        axisAndEyeline: 'consistent screen direction',
+        continuityIn: 'continue from previous beat',
+        continuityOut: 'lead into next beat',
+      },
+    ],
+    hardBans: input?.hardBans ?? [],
   }
 }
 
@@ -311,7 +360,7 @@ describe('workspace node canvas projection', () => {
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'edit-screenplay:screenplay-1',
       'edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:visualAction',
+      'edit-pipeline:edit-video:visibleAction',
       'edit-pipeline:edit-video:camera',
       'edit-pipeline:edit-video:audio',
       'edit-pipeline:edit-video:primaryTable',
@@ -320,8 +369,8 @@ describe('workspace node canvas projection', () => {
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visualAction',
-      'edit-pipeline:edit-video:visualAction->edit-pipeline:edit-video:camera',
+      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visibleAction',
+      'edit-pipeline:edit-video:visibleAction->edit-pipeline:edit-video:camera',
       'edit-pipeline:edit-video:camera->edit-pipeline:edit-video:audio',
       'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
@@ -368,9 +417,9 @@ describe('workspace node canvas projection', () => {
     })
 
     const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
-    expect(screenplayNode?.data.actionLabel).toBe('actions.generateEditScript')
+    expect(screenplayNode?.data.actionLabel).toBe('actions.generateEditDirectorDecoupage')
     expect(screenplayNode?.data.action).toEqual({
-      type: 'generate_edit_script',
+      type: 'generate_edit_director_decoupage',
       screenplayId: 'screenplay-1',
     })
   })
@@ -394,7 +443,7 @@ describe('workspace node canvas projection', () => {
       'edit-screenplay:screenplay-1',
       'edit-style-bible:screenplay-1',
       'edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:visualAction',
+      'edit-pipeline:edit-video:visibleAction',
       'edit-pipeline:edit-video:camera',
       'edit-pipeline:edit-video:audio',
       'edit-pipeline:edit-video:primaryTable',
@@ -404,8 +453,8 @@ describe('workspace node canvas projection', () => {
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-style-bible:screenplay-1',
       'edit-style-bible:screenplay-1->edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visualAction',
-      'edit-pipeline:edit-video:visualAction->edit-pipeline:edit-video:camera',
+      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visibleAction',
+      'edit-pipeline:edit-video:visibleAction->edit-pipeline:edit-video:camera',
       'edit-pipeline:edit-video:camera->edit-pipeline:edit-video:audio',
       'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
@@ -568,7 +617,7 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.map((item) => item.id)).toEqual([
       'edit-pipeline:edit-generating:timeline',
-      'edit-pipeline:edit-generating:visualAction',
+      'edit-pipeline:edit-generating:visibleAction',
       'edit-pipeline:edit-generating:camera',
       'edit-pipeline:edit-generating:audio',
       'edit-pipeline:edit-generating:primaryTable',
@@ -610,10 +659,15 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 3,
-            visualAction: 'A station corridor flickers awake.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A station corridor flickers awake.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Station corridor',
-            camera: '',
-            videoPrompt: '',
             sound: '',
           },
         ],
@@ -623,17 +677,17 @@ describe('workspace node canvas projection', () => {
     })
 
     const timelineStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:timeline')
-    const visualStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:visualAction')
+    const visualStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:visibleAction')
     const cameraStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:camera')
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-partial')
 
     expect(timelineStep?.data.statusLabel).toBe('status.ready')
     expect(visualStep?.data.statusLabel).toBe('status.ready')
-    expect(cameraStep?.data.statusLabel).toBe('status.processing')
-    expect(cameraStep?.data.isRunning).toBe(true)
+    expect(cameraStep?.data.statusLabel).toBe('status.ready')
+    expect(cameraStep?.data.isRunning).toBe(false)
     expect(editNode?.data.title).toBe('Sci-Fi Short')
     expect(editNode?.data.editScriptDetails?.shots).toHaveLength(1)
-    expect(editNode?.data.editScriptDetails?.shots[0]?.visualAction).toBe('A station corridor flickers awake.')
+    expect(editNode?.data.editScriptDetails?.shots[0]?.visibleAction).toBe('A station corridor flickers awake.')
   })
 
   it('shows final render failures on the final timeline node', () => {
@@ -1073,10 +1127,15 @@ describe('workspace node canvas projection', () => {
         shots: videoBlocks.map((block, index) => ({
           shotNumber: index + 1,
           durationSec: 4,
-          visualAction: `Shot ${index + 1}`,
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: `Shot ${index + 1}`,
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Room',
-          camera: 'locked',
-          videoPrompt: block.prompt,
           sound: 'room tone',
         })),
         videoBlocks,
@@ -1137,7 +1196,7 @@ describe('workspace node canvas projection', () => {
       srtEnd: 4,
       duration: 2,
       imagePrompt: 'rich image prompt',
-      videoPrompt: 'rich video prompt',
+      videoPrompt: null,
       candidateImages: JSON.stringify(['https://example.com/a.png', 'PENDING:1']),
       imageHistory: 'image history json',
       sketchImageUrl: 'https://example.com/sketch.png',
@@ -1209,7 +1268,7 @@ describe('workspace node canvas projection', () => {
       location: '城市街道_雨夜',
       srtSegment: '小女孩说话',
       imagePrompt: 'rich image prompt',
-      videoPrompt: 'rich video prompt',
+      videoPrompt: null,
       photographyRules: JSON.stringify({
         cameraPlan: {
           shotBlocking: {
@@ -1283,19 +1342,29 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 30,
-            visualAction: 'Pilot crosses the docking bay.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Pilot crosses the docking bay.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / Docking Bay',
-            camera: 'locked wide shot',
-            videoPrompt: 'Pilot crosses a sterile docking bay.',
             sound: 'air hum',
           },
           {
             shotNumber: 2,
             durationSec: 30,
-            visualAction: 'A red machine eye opens.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A red machine eye opens.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / AI Chamber',
-            camera: 'slow push in',
-            videoPrompt: 'A red machine eye opens in a chamber.',
             sound: 'sub bass pulse',
           },
         ],
@@ -1357,7 +1426,7 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'edit-pipeline:edit-1:timeline',
-      'edit-pipeline:edit-1:visualAction',
+      'edit-pipeline:edit-1:visibleAction',
       'edit-pipeline:edit-1:camera',
       'edit-pipeline:edit-1:audio',
       'edit-pipeline:edit-1:primaryTable',
@@ -1365,7 +1434,6 @@ describe('workspace node canvas projection', () => {
       'edit-script:edit-1',
       'edit-asset:req-character',
       'edit-asset:req-location',
-      'space-consistency:edit-script:edit-1',
     ])
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-1')
     expect(editNode?.data.kind).toBe('editScript')
@@ -1374,7 +1442,7 @@ describe('workspace node canvas projection', () => {
     expect(editNode?.data.width).toBeGreaterThan(1000)
     expect(editNode?.data.height).toBeGreaterThan(400)
 
-    const visualStepNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-1:visualAction')
+    const visualStepNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-1:visibleAction')
     expect(visualStepNode?.data.editPipelineStepDetails?.items[0]).toMatchObject({
       title: 'nodeFields.shotIndex:{"index":1}',
       fields: [{ label: 'nodeFields.charactersAndScene', value: 'Pilot / Docking Bay' }],
@@ -1385,11 +1453,7 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-1:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-1')
-    expect(consistencyNode?.data.kind).toBe('spaceConsistency')
-    expect(consistencyNode?.data.action).toEqual({ type: 'generate_edit_assets', editScriptId: 'edit-1' })
-    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain(
-      'edit-script:edit-1->space-consistency:edit-script:edit-1',
-    )
+    expect(consistencyNode).toBeUndefined()
 
     const pendingAssetNode = projection.nodes.find((node) => node.id === 'edit-asset:req-character')
     expect(pendingAssetNode?.data.action).toEqual({
@@ -1466,19 +1530,29 @@ describe('workspace node canvas projection', () => {
         {
           shotNumber: 1,
           durationSec: 3,
-          visualAction: 'Pilot crosses the docking bay.',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'Pilot crosses the docking bay.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Pilot / Docking Bay',
-          camera: 'locked wide shot',
-          videoPrompt: 'Core edit table video prompt for shot one.',
           sound: 'air hum',
         },
         {
           shotNumber: 2,
           durationSec: 3,
-          visualAction: 'A red machine eye opens.',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A red machine eye opens.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Pilot / AI Chamber',
-          camera: 'slow push in',
-          videoPrompt: 'Core edit table video prompt for shot two.',
           sound: 'sub bass pulse',
         },
       ],
@@ -1507,6 +1581,7 @@ describe('workspace node canvas projection', () => {
               panelIndex: 0,
               panelNumber: 1,
               imagePrompt: 'Storyboard image prompt for shot one.',
+              videoPrompt: null,
               imageUrl: 'https://example.com/shot-one.png',
               videoUrl: 'https://example.com/shot-one.mp4',
             }),
@@ -1516,6 +1591,7 @@ describe('workspace node canvas projection', () => {
               panelIndex: 1,
               panelNumber: 2,
               imagePrompt: 'Storyboard image prompt for shot two.',
+              videoPrompt: null,
               imageUrl: 'https://example.com/shot-two.png',
               videoUrl: null,
             }),
@@ -1533,14 +1609,12 @@ describe('workspace node canvas projection', () => {
       imagePrompt: 'Storyboard image prompt for shot one.',
       imageUrl: 'https://example.com/shot-one.png',
       videoUrl: 'https://example.com/shot-one.mp4',
-      videoPrompt: 'Core edit table video prompt for shot one.',
     })
     expect(editNode?.data.editScriptDetails?.shots[1]).toMatchObject({
       shotNumber: 2,
       imagePrompt: 'Storyboard image prompt for shot two.',
       imageUrl: 'https://example.com/shot-two.png',
       videoUrl: null,
-      videoPrompt: 'Core edit table video prompt for shot two.',
     })
   })
 
@@ -1606,19 +1680,29 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 5,
-            visualAction: 'Pilot crosses the docking bay.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Pilot crosses the docking bay.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / Docking Bay',
-            camera: 'locked wide shot',
-            videoPrompt: 'Pilot crosses a sterile docking bay.',
             sound: 'air hum',
           },
           {
             shotNumber: 2,
             durationSec: 4,
-            visualAction: 'A red machine eye opens.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A red machine eye opens.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / AI Chamber',
-            camera: 'slow push in',
-            videoPrompt: 'A red machine eye opens in a chamber.',
             sound: 'sub bass pulse',
           },
         ],
@@ -1726,19 +1810,29 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 5,
-            visualAction: 'Pilot crosses the docking bay.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Pilot crosses the docking bay.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / Docking Bay',
-            camera: 'locked wide shot',
-            videoPrompt: 'Pilot crosses a sterile docking bay.',
             sound: 'air hum',
           },
           {
             shotNumber: 2,
             durationSec: 4,
-            visualAction: 'A red machine eye opens.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A red machine eye opens.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / AI Chamber',
-            camera: 'slow push in',
-            videoPrompt: 'A red machine eye opens in a chamber.',
             sound: 'sub bass pulse',
           },
         ],
@@ -1794,10 +1888,15 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 4,
-            visualAction: 'A door opens slowly.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A door opens slowly.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Empty corridor',
-            camera: 'locked off',
-            videoPrompt: 'A quiet door opens slowly.',
             sound: 'soft hinge',
           },
         ],
@@ -1848,10 +1947,15 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 60,
-            visualAction: 'Pilot watches the station rotate.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Pilot watches the station rotate.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / Station',
-            camera: 'locked symmetrical wide shot',
-            videoPrompt: 'A pilot watches a rotating space station.',
             sound: 'low air hum',
           },
         ],
@@ -1892,17 +1996,13 @@ describe('workspace node canvas projection', () => {
 
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-ready')
     expect(editNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_spatial_blocking',
+      type: 'generate_edit_cinematography_shot_plan',
       editScriptId: 'edit-ready',
     })
-    expect(editNode?.data.actionDisabled).toBe(true)
+    expect(editNode?.data.actionDisabled).toBe(false)
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-ready:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-ready')
-    expect(consistencyNode?.data.action).toEqual({
-      type: 'generate_edit_storyboard_spatial_blocking',
-      editScriptId: 'edit-ready',
-    })
-    expect(consistencyNode?.data.actionLabel).toBe('actions.generateSpatialBlocking')
+    expect(consistencyNode).toBeUndefined()
   })
 
   it('blocks spatial blocking generation until a scene asset image is ready', () => {
@@ -1948,12 +2048,7 @@ describe('workspace node canvas projection', () => {
       editScriptId: 'edit-missing-location-image',
     })
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-missing-location-image')
-    expect(consistencyNode?.data.body).toBe('nodes.spaceConsistency.locationImageRequired:{"assets":"Station"}')
-    expect(consistencyNode?.data.action).toEqual({
-      type: 'generate_edit_assets',
-      editScriptId: 'edit-missing-location-image',
-    })
-    expect(consistencyNode?.data.actionDisabled).toBe(false)
+    expect(consistencyNode).toBeUndefined()
   })
 
   it('projects spatial blocking details as a space consistency node before panels', () => {
@@ -2048,10 +2143,15 @@ describe('workspace node canvas projection', () => {
           {
             shotNumber: 1,
             durationSec: 8,
-            visualAction: 'Old monk teaches the young disciple.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Old monk teaches the young disciple.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Temple courtyard',
-            camera: 'medium shot',
-            videoPrompt: 'Temple lesson.',
             sound: 'wind',
           },
         ],
@@ -2065,6 +2165,10 @@ describe('workspace node canvas projection', () => {
         ],
         requirements: [],
       },
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-spatial',
+        editScriptId: 'edit-spatial',
+      }),
     })
 
     const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial')
@@ -2172,6 +2276,10 @@ describe('workspace node canvas projection', () => {
         id: 'edit-spatial-ready',
         status: 'ready',
         requirements: [],
+      }),
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-spatial-ready',
+        editScriptId: 'edit-spatial-ready',
       }),
     })
 

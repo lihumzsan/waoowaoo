@@ -9,6 +9,8 @@ import {
 } from '@/lib/task/runtime-targets'
 import type {
   ProjectClip,
+  ProjectEditCinematographyShotPlan,
+  ProjectEditDirectorDecoupage,
   ProjectEditAssetRequirement,
   ProjectEditScreenplay,
   ProjectEditScript,
@@ -120,7 +122,7 @@ interface TranslateValues {
 }
 
 type Translate = (key: string, values?: TranslateValues) => string
-type EditPipelineStepKey = 'timeline' | 'visualAction' | 'camera' | 'audio' | 'primaryTable' | 'assetExtract'
+type EditPipelineStepKey = 'timeline' | 'visibleAction' | 'camera' | 'audio' | 'primaryTable' | 'assetExtract'
 type EditPipelineStepState = 'pending' | 'processing' | 'ready' | 'failed'
 
 export interface BuildWorkspaceNodeCanvasProjectionInput {
@@ -133,7 +135,9 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly storyboards: readonly ProjectStoryboard[]
   readonly shots?: readonly ProjectShot[]
   readonly editScreenplay?: ProjectEditScreenplay | null
+  readonly editDirectorDecoupage?: ProjectEditDirectorDecoupage | null
   readonly editScript?: ProjectEditScript | null
+  readonly editCinematographyShotPlan?: ProjectEditCinematographyShotPlan | null
   readonly editScriptPending?: boolean
   readonly finalVideo?: ProjectFinalVideo | null
   readonly videoGroups?: readonly ProjectVideoGroup[]
@@ -574,10 +578,10 @@ function estimateVideoPlanNodeHeight(input: {
 function estimateEditScriptNodeHeight(editScript: ProjectEditScript): number {
   const rowHeightTotal = editScript.shots.reduce((total, shot) => {
     const maxLineCount = Math.max(
-      estimateWrappedLineCount(shot.visualAction, 24),
+      estimateWrappedLineCount(shot.visibleAction, 24),
+      estimateWrappedLineCount(shot.audienceFocus, 18),
+      estimateWrappedLineCount(shot.revealPlan, 18),
       estimateWrappedLineCount(shot.charactersAndScene, 16),
-      estimateWrappedLineCount(shot.camera, 18),
-      estimateWrappedLineCount(shot.videoPrompt, 34),
       estimateWrappedLineCount(shot.sound, 18),
     )
     return total + Math.max(86, 36 + maxLineCount * 22)
@@ -1005,23 +1009,26 @@ function createEditPipelineStepItems(
     }))
   }
 
-  if (stepKey === 'visualAction') {
-    if (!editScript.shots.every((shot) => stringValue(shot.visualAction) && stringValue(shot.charactersAndScene))) return []
+  if (stepKey === 'visibleAction') {
+    if (!editScript.shots.every((shot) => stringValue(shot.visibleAction) && stringValue(shot.charactersAndScene))) return []
     return editScript.shots.map((shot) => ({
       title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
       fields: [
         { label: translate('nodeFields.charactersAndScene'), value: shot.charactersAndScene },
       ],
-      body: shot.visualAction,
+      body: shot.visibleAction,
     }))
   }
 
   if (stepKey === 'camera') {
-    if (!editScript.shots.every((shot) => stringValue(shot.camera))) return []
+    if (!editScript.shots.every((shot) => stringValue(shot.dramaticPurpose) && stringValue(shot.audienceFocus) && stringValue(shot.viewpoint) && stringValue(shot.revealPlan))) return []
     return editScript.shots.map((shot) => ({
       title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
       fields: [
-        { label: translate('nodeFields.cameraMove'), value: shot.camera },
+        { label: translate('nodeFields.dramaticPurpose'), value: shot.dramaticPurpose },
+        { label: translate('nodeFields.audienceFocus'), value: shot.audienceFocus },
+        { label: translate('nodeFields.viewpoint'), value: shot.viewpoint },
+        { label: translate('nodeFields.revealPlan'), value: shot.revealPlan },
       ],
     }))
   }
@@ -1049,13 +1056,7 @@ function createEditPipelineStepItems(
       chips: block.shotNumbers.map((shotNumber) => String(shotNumber)),
     }))
     if (videoBlockItems.length > 0) return videoBlockItems
-    if (!editScript.shots.every((shot) => stringValue(shot.videoPrompt))) return []
-    return editScript.shots.map((shot) => ({
-      title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-      fields: [
-        { label: translate('nodeFields.videoPrompt'), value: shot.videoPrompt },
-      ],
-    }))
+    return []
   }
 
   return editScript.requirements.map((asset) => ({
@@ -1070,10 +1071,10 @@ function createEditPipelineStepItems(
 
 function editPipelineStepReady(editScript: ProjectEditScript, stepKey: EditPipelineStepKey): boolean {
   if (stepKey === 'timeline') return editScript.shots.length > 0 && editScript.shots.every((shot) => shot.durationSec > 0)
-  if (stepKey === 'visualAction') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.visualAction) && stringValue(shot.charactersAndScene))
-  if (stepKey === 'camera') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.camera))
+  if (stepKey === 'visibleAction') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.visibleAction) && stringValue(shot.charactersAndScene))
+  if (stepKey === 'camera') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.dramaticPurpose) && stringValue(shot.audienceFocus) && stringValue(shot.viewpoint) && stringValue(shot.revealPlan))
   if (stepKey === 'audio') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.sound))
-  if (stepKey === 'primaryTable') return editScript.videoBlocks.length > 0 && editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.videoPrompt))
+  if (stepKey === 'primaryTable') return editScript.videoBlocks.length > 0 && editScript.shots.length > 0
   return editScript.requirements.length > 0
 }
 
@@ -1096,7 +1097,9 @@ export function buildWorkspaceNodeCanvasProjection({
   storyboards,
   shots = [],
   editScreenplay,
+  editDirectorDecoupage,
   editScript,
+  editCinematographyShotPlan,
   editScriptPending = false,
   finalVideo,
   videoGroups = [],
@@ -1186,18 +1189,61 @@ export function buildWorkspaceNodeCanvasProjection({
           screenplayText: editScreenplay.screenplayText,
           userPrompt: editScreenplay.userPrompt,
         },
-        actionLabel: editScreenplay.status === 'ready' && !editScript && !editScriptPending
-          ? translate('actions.generateEditScript')
-          : undefined,
-        action: editScreenplay.status === 'ready' && !editScript && !editScriptPending
-          ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
-          : undefined,
+        actionLabel: editScreenplay.status === 'ready' && !editDirectorDecoupage && !editScript && !editScriptPending
+          ? translate('actions.generateEditDirectorDecoupage')
+          : editScreenplay.status === 'ready' && editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
+            ? translate('actions.generateEditScript')
+            : undefined,
+        action: editScreenplay.status === 'ready' && !editDirectorDecoupage && !editScript && !editScriptPending
+          ? { type: 'generate_edit_director_decoupage', screenplayId: editScreenplay.id }
+          : editScreenplay.status === 'ready' && editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
+            ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
+            : undefined,
         onAction,
       },
     }))
     if (hasStory) {
       edges.push(createEdge(`edge:analysis-edit-screenplay:${editScreenplay.id}`, analysisNodeId, `edit-screenplay:${editScreenplay.id}`))
     }
+  }
+
+  if (editDirectorDecoupage && editScreenplay && !editScript) {
+    const nodeId = `edit-director-decoupage:${editDirectorDecoupage.id}`
+    nodes.push(createNode({
+      id: nodeId,
+      fallbackX: STORY_COLUMN_X + EDIT_SCREENPLAY_NODE_WIDTH + 72,
+      fallbackY: editScreenplayFallbackY,
+      zIndex: zIndex++,
+      savedLayoutByKey,
+      ignoreSavedLayout: true,
+      data: {
+        kind: 'editPipelineStep',
+        layoutNodeType: 'editPipelineStep',
+        targetType: 'editPipelineStep',
+        targetId: editDirectorDecoupage.id,
+        title: translate('nodeFields.editStepDirectorIntent'),
+        eyebrow: translate('nodes.editScript.eyebrow'),
+        body: editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
+        meta: translate('nodes.editScript.meta', {
+          shots: editDirectorDecoupage.shots.length,
+          duration: editDirectorDecoupage.shots.reduce((total, shot) => total + shot.durationSec, 0),
+          assets: 0,
+        }),
+        statusLabel: editDirectorDecoupage.status === 'ready' ? translate('status.ready') : translate('status.processing'),
+        isRunning: editDirectorDecoupage.status !== 'ready',
+        width: EDIT_PIPELINE_STEP_NODE_WIDTH,
+        height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
+        indexLabel: 'D',
+        actionLabel: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+          ? translate('actions.generateEditScript')
+          : undefined,
+        action: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+          ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
+          : undefined,
+        onAction,
+      },
+    }))
+    edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupage.id}`, `edit-screenplay:${editScreenplay.id}`, nodeId))
   }
 
   const styleBibleSourceValue = editScreenplay?.styleBible ?? editScript?.styleBible ?? null
@@ -1282,12 +1328,17 @@ export function buildWorkspaceNodeCanvasProjection({
     const hasStoryboardPanels = storyboards.some((storyboard) => (storyboard.panels?.length ?? 0) > 0)
     const locationReferenceReady = hasReadyLocationReference(editScript)
     const spatialBlockingReady = storyboards.some(storyboardSpatialBlockingReady)
+    const cinematographyShotPlanReady = editCinematographyShotPlan?.status === 'ready' && editCinematographyShotPlan.editScriptId === editScript.id
     const editScriptAction = !editScriptIsReady
       ? null
       : assetsToGenerate
       ? { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
       : hasStoryboardPanels
         ? null
+        : !cinematographyShotPlanReady && locationReferenceReady
+          ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
+          : !cinematographyShotPlanReady
+            ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
         : spatialBlockingReady
           ? { label: translate('actions.generateStoryboard'), action: { type: 'generate_edit_storyboard', editScriptId: editScript.id } as const, disabled: false }
           : locationReferenceReady
@@ -1295,8 +1346,8 @@ export function buildWorkspaceNodeCanvasProjection({
             : { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
     const pipelineStepDefinitions = [
       { key: 'timeline', title: translate('nodeFields.editStepTimeline') },
-      { key: 'visualAction', title: translate('nodeFields.editStepVisualAction') },
-      { key: 'camera', title: translate('nodeFields.editStepCamera') },
+      { key: 'visibleAction', title: translate('nodeFields.editStepVisualAction') },
+      { key: 'camera', title: translate('nodeFields.editStepDirectorIntent') },
       { key: 'audio', title: translate('nodeFields.editStepAudio') },
       { key: 'primaryTable', title: translate('nodeFields.editStepPrimaryTable') },
       { key: 'assetExtract', title: translate('nodeFields.editStepAssetExtract') },
@@ -1574,9 +1625,15 @@ export function buildWorkspaceNodeCanvasProjection({
 
   const hasExistingSpaceConsistencyLayer = storyboards.some(storyboardUsesSpatialBlocking)
   const hasVideoBlocks = editScript?.status === 'ready' && Boolean(editScript.videoBlocks?.length)
+  const hasReadyCinematographyShotPlan = Boolean(
+    editScript
+      && editCinematographyShotPlan?.status === 'ready'
+      && editCinematographyShotPlan.editScriptId === editScript.id,
+  )
   const canShowVideoPlanLayer = hasVideoBlocks && hasStoryboardPanels
   const shouldShowPendingSpaceConsistencyLayer = editScript?.status === 'ready'
     && hasVideoBlocks
+    && hasReadyCinematographyShotPlan
     && !hasStoryboardPanels
     && !hasExistingSpaceConsistencyLayer
   const shouldRouteThroughSpaceConsistency = Boolean(editScript && (hasExistingSpaceConsistencyLayer || shouldShowPendingSpaceConsistencyLayer))
@@ -1619,6 +1676,7 @@ export function buildWorkspaceNodeCanvasProjection({
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
     const previewImageUrl = primarySpaceConsistencyImageUrl(storyboard)
     const canGeneratePanelsFromSpatialBlocking = editScript?.status === 'ready'
+      && hasReadyCinematographyShotPlan
       && !hasStoryboardPanels
       && storyboardSpatialBlockingReady(storyboard)
     nodes.push(createNode({
@@ -1657,8 +1715,8 @@ export function buildWorkspaceNodeCanvasProjection({
         previewImageUrl,
         previewAspectRatio: 16 / 9,
         spaceConsistencyDetails: details,
-        actionLabel: editScript?.status === 'ready' ? translate('actions.regenerateSpatialBlocking') : undefined,
-        action: editScript?.status === 'ready'
+        actionLabel: editScript?.status === 'ready' && hasReadyCinematographyShotPlan ? translate('actions.regenerateSpatialBlocking') : undefined,
+        action: editScript?.status === 'ready' && hasReadyCinematographyShotPlan
           ? { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id }
           : undefined,
         secondaryActionLabel: canGeneratePanelsFromSpatialBlocking ? translate('actions.generateStoryboard') : undefined,
@@ -2149,7 +2207,9 @@ export function useWorkspaceNodeCanvasProjection({
   storyboards,
   shots,
   editScreenplay,
+  editDirectorDecoupage,
   editScript,
+  editCinematographyShotPlan,
   editScriptPending,
   finalVideo,
   videoGroups,
@@ -2169,7 +2229,9 @@ export function useWorkspaceNodeCanvasProjection({
       storyboards,
       shots,
       editScreenplay,
+      editDirectorDecoupage,
       editScript,
+      editCinematographyShotPlan,
       editScriptPending,
       finalVideo,
       videoGroups,
@@ -2190,6 +2252,8 @@ export function useWorkspaceNodeCanvasProjection({
       videoGroups,
       savedLayouts,
       shots,
+      editCinematographyShotPlan,
+      editDirectorDecoupage,
       editScreenplay,
       editScript,
       editScriptPending,

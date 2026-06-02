@@ -8,7 +8,6 @@ type PanelRecord = {
   shotType: string
   cameraMove: string
   description: string
-  videoPrompt: string
   location: string
   characters: string
   srtSegment: string
@@ -158,7 +157,6 @@ function buildPanel(id: string, storyboardId: string, panelIndex: number): Panel
     shotType: 'medium',
     cameraMove: 'static',
     description: `description-${id}`,
-    videoPrompt: `prompt-${id}`,
     location: 'Old Town',
     characters: '[]',
     srtSegment: '',

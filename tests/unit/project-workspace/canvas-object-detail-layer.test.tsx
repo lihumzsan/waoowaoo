@@ -114,11 +114,11 @@ function createPanel(): ProjectPanel {
     srtEnd: 3,
     duration: 2,
     imagePrompt: '雨夜街道里的发光路灯',
+    videoPrompt: null,
     imageUrl: 'https://example.com/image.png',
     candidateImages: JSON.stringify(['https://example.com/candidate.png']),
     media: null,
     imageHistory: 'image history',
-    videoPrompt: '镜头缓慢推进到发光路灯',
     firstLastFramePrompt: '首帧路灯，尾帧小女孩回家',
     videoUrl: 'https://example.com/video.mp4',
     videoModel: 'video-model-default',
@@ -247,7 +247,7 @@ describe('canvas object detail layer', () => {
     expect(imageHtml).toContain('雨夜街道里的发光路灯')
     expect(imageHtml).toContain('https://example.com/candidate.png')
     expect(imageHtml).toContain('actions.modifyImage')
-    expect(videoHtml).toContain('镜头缓慢推进到发光路灯')
+    expect(videoHtml).toContain('fields.videoPrompt')
     expect(videoHtml).toContain('首帧路灯，尾帧小女孩回家')
     expect(videoHtml).toContain('Video Default')
     expect(finalHtml).toContain('status.videoReady')

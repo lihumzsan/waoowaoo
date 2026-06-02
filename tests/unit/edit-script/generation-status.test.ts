@@ -35,6 +35,9 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     upsert: vi.fn(),
   },
+  projectEditDirectorDecoupage: {
+    findFirst: vi.fn(),
+  },
   projectCharacter: {
     findMany: vi.fn(),
   },
@@ -106,6 +109,12 @@ const mockStyleBible = {
       lensAndDepthPrompt: '35mm lens with readable corridor depth',
       videoRhythmPrompt: 'slow push-in, restrained pacing',
     },
+    directing: {
+      pointOfViewPrompt: 'restricted protagonist viewpoint',
+      performancePrompt: 'restrained performance through small gestures',
+      informationReleasePrompt: 'reveal information through reaction before event truth',
+      rhythmPrompt: 'hold suspense pauses before faster turns',
+    },
     sound: {
       soundFilterPrompt: 'clean modern sci-fi sound, wide-band clarity, low mechanical hum, restrained spatial reverb',
     },
@@ -124,9 +133,15 @@ function mockSuccessfulAiSteps() {
           {
             shotNumber: 1,
             durationSec: 4,
-            visualAction: 'A station corridor flickers awake.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A station corridor flickers awake.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Station corridor',
-            camera: 'slow push in',
             sound: 'low electrical hum',
           },
         ],
@@ -158,7 +173,6 @@ function mockSuccessfulAiSteps() {
         shots: [
           {
             shotNumber: 1,
-            videoPrompt: 'A cinematic station corridor flickers awake.',
           },
         ],
         videoBlock: {
@@ -172,6 +186,7 @@ function mockSuccessfulAiSteps() {
 describe('edit script generation status persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    aiExecMock.executeAiTextStep.mockReset()
     prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
     prismaMock.project.findFirst.mockResolvedValue({
       id: 'project-1',
@@ -197,6 +212,35 @@ describe('edit script generation status persistence', () => {
       userPrompt: '做一个科幻短片',
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      status: 'ready',
+    })
+    prismaMock.projectEditDirectorDecoupage.findFirst.mockResolvedValue({
+      id: 'director-decoupage-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScreenplayId: 'screenplay-1',
+      userPrompt: '做一个科幻短片',
+      decoupageJson: {
+        strategy: 'director_decoupage',
+        schemaVersion: 1,
+        shots: [
+          {
+            shotNumber: 1,
+            durationSec: 4,
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A station corridor flickers awake.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
+            charactersAndScene: 'Station corridor',
+            sound: 'low electrical hum',
+          },
+        ],
+        hardBans: ['no subtitles'],
+      },
       status: 'ready',
     })
     prismaMock.task.findFirst.mockResolvedValue(null)
@@ -225,10 +269,15 @@ describe('edit script generation status persistence', () => {
         {
           shotNumber: 1,
           durationSec: 4,
-          visualAction: 'A station corridor flickers awake.',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A station corridor flickers awake.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Station corridor',
-          camera: 'slow push in',
-          videoPrompt: 'A cinematic station corridor flickers awake.',
           sound: 'low electrical hum',
         },
       ],
@@ -340,10 +389,15 @@ describe('edit script generation status persistence', () => {
         {
           shotNumber: 1,
           durationSec: 4,
-          visualAction: '旧镜头动作',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: '旧镜头动作',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: '旧场景',
-          camera: '静态',
-          videoPrompt: '旧视频提示词',
           sound: '环境声',
         },
       ],
@@ -372,7 +426,6 @@ describe('edit script generation status persistence', () => {
     }))
     expect(editScript?.shots[0]).toEqual(expect.objectContaining({
       shotNumber: 1,
-      videoPrompt: '旧视频提示词',
     }))
     expect(editScript?.videoBlocks[0]).toEqual(expect.objectContaining({
       prompt: '旧视频块提示词',
@@ -410,10 +463,15 @@ describe('edit script generation status persistence', () => {
         {
           shotNumber: 1,
           durationSec: 4,
-          visualAction: 'A station corridor flickers awake.',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A station corridor flickers awake.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Station corridor',
-          camera: 'slow push in',
-          videoPrompt: 'A cinematic station corridor flickers awake.',
           sound: 'low electrical hum',
         },
       ],
@@ -488,13 +546,13 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert.mock.invocationCallOrder[0]).toBeLessThan(
       aiExecMock.executeAiTextStep.mock.invocationCallOrder[0],
     )
-    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(3)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(2)
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
       meta: expect.objectContaining({
         stepId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
         stepIndex: 1,
-        stepTotal: 3,
+        stepTotal: 2,
       }),
     }))
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(2, expect.objectContaining({
@@ -502,15 +560,7 @@ describe('edit script generation status persistence', () => {
       meta: expect.objectContaining({
         stepId: AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT,
         stepIndex: 2,
-        stepTotal: 3,
-      }),
-    }))
-    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      action: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
-      meta: expect.objectContaining({
-        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
-        stepIndex: 3,
-        stepTotal: 3,
+        stepTotal: 2,
       }),
     }))
     expect(txMock.projectEditScript.upsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -551,9 +601,15 @@ describe('edit script generation status persistence', () => {
         shotsJson: [
           expect.objectContaining({
             shotNumber: 1,
-            visualAction: 'A station corridor flickers awake.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A station corridor flickers awake.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Station corridor',
-            camera: 'slow push in',
             sound: 'low electrical hum',
           }),
         ],

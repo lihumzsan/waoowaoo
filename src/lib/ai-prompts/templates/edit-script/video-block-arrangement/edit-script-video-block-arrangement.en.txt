@@ -7,7 +7,7 @@ Hard rules:
 - The user can only adjust boundaries between adjacent segments; all shotNumbers must stay in the original shotNumber order. Write the prompt in the exact order shown in draft_video_blocks_json.
 - Do not alter screenplay facts, subject identity, scene relationships, action causality, dialogue, voiceover, offscreen voice, or sound-effect facts.
 - Use asset_context_json to preserve character identity, location identity, wardrobe/appearance, spatial anchors, and visual continuity.
-- Use style_bible_json as the only style source, and apply its visual, camera, sound, and hardBans fields as needed inside the new prompt. Write action and acting only from the screenplay, edit structure table, and asset context. Do not create another style from old prompts or project style.
+- Use style_bible_json as the only style source, and apply its visual, camera, directing, sound, and hardBans fields as needed inside the new prompt. Write action and acting only from the screenplay, edit structure table, and asset context. Do not create another style from old prompts or project style.
 
 reason rules:
 - Write one sentence explaining why the manually arranged segment can work as one generation segment.

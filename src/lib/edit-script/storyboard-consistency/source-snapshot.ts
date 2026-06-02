@@ -4,7 +4,7 @@ import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
-import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { editCinematographyShotPlanSchema, editDirectorDecoupageSchema, editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import { parseLocationSpatialProfile, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import type { EditAssetRequirement, EditScriptPayload, EditScriptShot } from '@/lib/edit-script/types'
 import type {
@@ -60,10 +60,15 @@ function parseShotsJson(value: Prisma.JsonValue): EditScriptShot[] {
     return [{
       shotNumber: Number(item.shotNumber),
       durationSec: Number(item.durationSec),
-      visualAction: String(item.visualAction ?? ''),
+      dramaticPurpose: String(item.dramaticPurpose ?? ''),
+      visibleAction: String(item.visibleAction ?? ''),
+      audienceFocus: String(item.audienceFocus ?? ''),
+      viewpoint: String(item.viewpoint ?? ''),
+      revealPlan: String(item.revealPlan ?? ''),
+      performanceBeat: String(item.performanceBeat ?? ''),
+      continuityIn: String(item.continuityIn ?? ''),
+      continuityOut: String(item.continuityOut ?? ''),
       charactersAndScene: String(item.charactersAndScene ?? ''),
-      camera: String(item.camera ?? ''),
-      videoPrompt: String(item.videoPrompt ?? ''),
       sound: String(item.sound ?? ''),
     }]
   })
@@ -250,7 +255,7 @@ export async function buildStoryboardConsistencySource(input: {
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
 }> {
-  const [project, script, config] = await Promise.all([
+  const [project, script, directorDecoupage, cinematographyShotPlan, config] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -273,9 +278,34 @@ export async function buildStoryboardConsistencySource(input: {
         },
       },
     }),
+    prisma.projectEditDirectorDecoupage.findFirst({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+      },
+    }),
+    prisma.projectEditCinematographyShotPlan.findFirst({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        editScriptId: input.editScriptId,
+      },
+    }),
     getProjectModelConfig(input.projectId, input.userId),
   ])
   if (!project || !script) throw new ApiError('NOT_FOUND')
+  if (!directorDecoupage || directorDecoupage.status !== 'ready') {
+    throw new ApiError('CONFLICT', {
+      code: 'EDIT_DIRECTOR_DECOUPAGE_REQUIRED',
+      message: 'Ready director decoupage is required before storyboard generation',
+    })
+  }
+  if (!cinematographyShotPlan || cinematographyShotPlan.status !== 'ready') {
+    throw new ApiError('CONFLICT', {
+      code: 'EDIT_CINEMATOGRAPHY_SHOT_PLAN_REQUIRED',
+      message: 'Ready cinematography shot plan is required before storyboard generation',
+    })
+  }
   const editScript = mapEditScript(script)
   if (editScript.status !== 'ready') {
     throw new ApiError('CONFLICT', {
@@ -292,6 +322,8 @@ export async function buildStoryboardConsistencySource(input: {
     })
   }
   const modelConfigSnapshot = requireModelConfig(config)
+  const parsedDirectorDecoupage = editDirectorDecoupageSchema.parse(directorDecoupage.decoupageJson)
+  const parsedCinematographyShotPlan = editCinematographyShotPlanSchema.parse(cinematographyShotPlan.shotPlanJson)
   const assets = await buildAssetSnapshots(editScript.requirements)
   const videoBlocks: StoryboardConsistencySourceVideoBlock[] = editScript.videoBlocks.map((block, blockIndex) => ({
     ...block,
@@ -319,6 +351,14 @@ export async function buildStoryboardConsistencySource(input: {
       },
       styleBible,
       shots: editScript.shots,
+      directorDecoupage: {
+        shots: parsedDirectorDecoupage.shots,
+        hardBans: parsedDirectorDecoupage.hardBans,
+      },
+      cinematographyShotPlan: {
+        shots: parsedCinematographyShotPlan.shots,
+        hardBans: parsedCinematographyShotPlan.hardBans,
+      },
       videoBlocks,
       assets,
     },

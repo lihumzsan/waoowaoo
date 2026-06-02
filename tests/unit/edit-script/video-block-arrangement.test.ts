@@ -78,6 +78,12 @@ function buildStyleBibleJson() {
         lensAndDepthPrompt: '35mm lens with moderate depth.',
         videoRhythmPrompt: 'Steady visual rhythm with clear continuity pacing.',
       },
+      directing: {
+        pointOfViewPrompt: 'restricted protagonist viewpoint',
+        performancePrompt: 'restrained performance through small gestures',
+        informationReleasePrompt: 'reveal information through reaction before event truth',
+        rhythmPrompt: 'hold suspense pauses before faster turns',
+      },
       sound: {
         soundFilterPrompt: 'Clean room tone.',
       },
@@ -92,10 +98,15 @@ function buildScript(durationOverrides: readonly number[] = [4, 4, 3, 3]) {
     return {
       shotNumber,
       durationSec,
-      visualAction: `Shot ${shotNumber} action`,
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: `Shot ${shotNumber} action`,
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
       charactersAndScene: `Character / Room ${shotNumber}`,
-      camera: `Camera ${shotNumber}`,
-      videoPrompt: `Shot ${shotNumber} prompt`,
       sound: `Sound ${shotNumber}`,
     }
   })

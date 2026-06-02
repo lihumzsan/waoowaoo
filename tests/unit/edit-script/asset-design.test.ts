@@ -16,10 +16,15 @@ const shots: readonly EditScriptShot[] = [
   {
     shotNumber: 1,
     durationSec: 8,
-    visualAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+    dramaticPurpose: 'test dramatic purpose',
+    visibleAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+    audienceFocus: 'test audience focus',
+    viewpoint: 'test viewpoint',
+    revealPlan: 'test reveal plan',
+    performanceBeat: 'test performance beat',
+    continuityIn: 'test continuity in',
+    continuityOut: 'test continuity out',
     charactersAndScene: '冷静研究员 / 环形太空舱中控室',
-    camera: '对称远景，固定镜头',
-    videoPrompt: '冷静研究员站在环形太空舱中控室，对称远景固定镜头。',
     sound: '低频舱体嗡鸣',
   },
 ]
@@ -64,6 +69,12 @@ const styleBible: EditScriptStyleBible = {
       lensAndDepthPrompt: '35mm，自然景深。',
       videoRhythmPrompt: '缓慢、克制，少切换。',
     },
+    directing: {
+      pointOfViewPrompt: 'restricted protagonist viewpoint',
+      performancePrompt: 'restrained performance through small gestures',
+      informationReleasePrompt: 'reveal information through reaction before event truth',
+      rhythmPrompt: 'hold suspense pauses before faster turns',
+    },
     sound: {
       soundFilterPrompt: '干净宽频，低动态，轻微空间混响',
     },
@@ -88,7 +99,7 @@ describe('edit script asset design', () => {
       readonly task: string
       readonly styleBible: EditScriptStyleBible
       readonly asset: { readonly kind: string; readonly name: string; readonly fixedVoiceTimbreText: string | null }
-      readonly linkedShots: ReadonlyArray<{ readonly shotNumber: number; readonly visualAction: string }>
+      readonly linkedShots: ReadonlyArray<{ readonly shotNumber: number; readonly visibleAction: string }>
       readonly constraints: readonly string[]
     }
     expect(parsed.task).toBe('design_edit_first_required_asset_for_image_generation')
@@ -100,7 +111,14 @@ describe('edit script asset design', () => {
     expect(parsed.linkedShots).toEqual([
       expect.objectContaining({
         shotNumber: 1,
-        visualAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+        dramaticPurpose: 'test dramatic purpose',
+        visibleAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+        audienceFocus: 'test audience focus',
+        viewpoint: 'test viewpoint',
+        revealPlan: 'test reveal plan',
+        performanceBeat: 'test performance beat',
+        continuityIn: 'test continuity in',
+        continuityOut: 'test continuity out',
       }),
     ])
   })

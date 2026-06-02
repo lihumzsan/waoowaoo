@@ -4,10 +4,15 @@ export type VideoGridMode = (typeof VIDEO_GRID_MODES)[number]
 export interface VideoGroupShot {
   readonly shotNumber: number
   readonly durationSec: number
-  readonly visualAction: string
+  readonly dramaticPurpose: string
+  readonly visibleAction: string
+  readonly audienceFocus: string
+  readonly viewpoint: string
+  readonly revealPlan: string
+  readonly performanceBeat: string
+  readonly continuityIn: string
+  readonly continuityOut: string
   readonly charactersAndScene?: string | null
-  readonly camera: string
-  readonly videoPrompt: string
   readonly sound: string
 }
 

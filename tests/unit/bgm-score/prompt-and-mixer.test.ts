@@ -13,10 +13,15 @@ describe('bgm score prompt builder', () => {
         shots: [{
           shotNumber: 1,
           durationSec: 12,
-          visualAction: 'The detective enters the room.',
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'The detective enters the room.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
           charactersAndScene: 'Detective in a dark room',
-          camera: 'Slow dolly',
-          videoPrompt: 'Dark room investigation',
           sound: 'room tone and footsteps only, no BGM',
         }],
         videoBlocks: [{

@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ArtStyleValue } from '@/lib/constants'
-import type { ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
+import type { ProjectEditCinematographyShotPlan, ProjectEditDirectorDecoupage, ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
 import { queryKeys } from '../keys'
 
 interface EditScriptResponse {
@@ -14,6 +14,14 @@ interface EditScriptResponse {
 
 interface EditScreenplayResponse {
   screenplay: ProjectEditScreenplay | null
+}
+
+interface EditDirectorDecoupageResponse {
+  directorDecoupage: ProjectEditDirectorDecoupage | null
+}
+
+interface EditCinematographyShotPlanResponse {
+  cinematographyShotPlan: ProjectEditCinematographyShotPlan | null
 }
 
 interface CreateEditScriptInput {
@@ -28,6 +36,16 @@ interface CreateEditScreenplayInput {
   prompt: string
   videoRatio?: EditScriptVideoRatio
   artStyle?: ArtStyleValue
+}
+
+interface CreateEditDirectorDecoupageInput {
+  episodeId: string
+  screenplayId?: string
+}
+
+interface CreateEditCinematographyShotPlanInput {
+  episodeId: string
+  editScriptId?: string
 }
 
 interface GenerateEditScriptAssetsInput {
@@ -124,6 +142,42 @@ export function useProjectEditScreenplay(projectId: string | null, episodeId: st
   })
 }
 
+export function useProjectEditDirectorDecoupage(projectId: string | null, episodeId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.project.editDirectorDecoupage(projectId || '', episodeId || ''),
+    queryFn: async () => {
+      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
+      const search = new URLSearchParams({ episodeId })
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/director-decoupage?${search.toString()}`)
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to load director decoupage')
+      }
+      const data = await response.json() as EditDirectorDecoupageResponse
+      return data.directorDecoupage
+    },
+    enabled: Boolean(projectId && episodeId),
+    staleTime: 5000,
+  })
+}
+
+export function useProjectEditCinematographyShotPlan(projectId: string | null, episodeId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.project.editCinematographyShotPlan(projectId || '', episodeId || ''),
+    queryFn: async () => {
+      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
+      const search = new URLSearchParams({ episodeId })
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/cinematography-shot-plan?${search.toString()}`)
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to load cinematography shot plan')
+      }
+      const data = await response.json() as EditCinematographyShotPlanResponse
+      return data.cinematographyShotPlan
+    },
+    enabled: Boolean(projectId && episodeId),
+    staleTime: 5000,
+  })
+}
+
 export function useCreateProjectEditScript(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -176,6 +230,62 @@ export function useCreateProjectEditScreenplay(projectId: string | null) {
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
+      ])
+    },
+  })
+}
+
+export function useCreateProjectEditDirectorDecoupage(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: CreateEditDirectorDecoupageInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/director-decoupage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to generate director decoupage')
+      }
+      const data = await response.json() as EditDirectorDecoupageResponse
+      if (!data.directorDecoupage) throw new Error('EDIT_DIRECTOR_DECOUPAGE_RESPONSE_EMPTY')
+      return data.directorDecoupage
+    },
+    onSuccess: async (directorDecoupage) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, directorDecoupage.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, directorDecoupage.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+      ])
+    },
+  })
+}
+
+export function useCreateProjectEditCinematographyShotPlan(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: CreateEditCinematographyShotPlanInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/cinematography-shot-plan`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to generate cinematography shot plan')
+      }
+      const data = await response.json() as EditCinematographyShotPlanResponse
+      if (!data.cinematographyShotPlan) throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_RESPONSE_EMPTY')
+      return data.cinematographyShotPlan
+    },
+    onSuccess: async (shotPlan) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editCinematographyShotPlan(projectId, shotPlan.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, shotPlan.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
     },
   })

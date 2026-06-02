@@ -20,6 +20,8 @@ import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
 import {
   useAssetActions,
+  useCreateProjectEditCinematographyShotPlan,
+  useCreateProjectEditDirectorDecoupage,
   useCreateProjectEditScreenplay,
   useCreateProjectEditScript,
   useGenerateProjectEditScriptAssets,
@@ -120,7 +122,9 @@ export function useProjectWorkspaceController({
     episodeId,
   })
   const createEditScreenplay = useCreateProjectEditScreenplay(projectId)
+  const createEditDirectorDecoupage = useCreateProjectEditDirectorDecoupage(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
+  const createEditCinematographyShotPlan = useCreateProjectEditCinematographyShotPlan(projectId)
   const regenerateStoryboardText = useRegenerateProjectStoryboardText(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
@@ -135,11 +139,27 @@ export function useProjectWorkspaceController({
     await createEditScreenplay.mutateAsync({ episodeId, prompt })
     await onRefresh({ mode: 'full' })
   }
+  const handleGenerateEditDirectorDecoupage = async (screenplayId?: string) => {
+    if (!episodeId) throw new Error('Episode ID is required')
+    await createEditDirectorDecoupage.mutateAsync({
+      episodeId,
+      ...(screenplayId ? { screenplayId } : {}),
+    })
+    await onRefresh({ mode: 'full' })
+  }
   const handleGenerateEditScript = async (screenplayId?: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await createEditScript.mutateAsync({
       episodeId,
       ...(screenplayId ? { screenplayId } : {}),
+    })
+    await onRefresh({ mode: 'full' })
+  }
+  const handleGenerateEditCinematographyShotPlan = async (editScriptId: string) => {
+    if (!episodeId) throw new Error('Episode ID is required')
+    await createEditCinematographyShotPlan.mutateAsync({
+      episodeId,
+      editScriptId,
     })
     await onRefresh({ mode: 'full' })
   }
@@ -189,7 +209,7 @@ export function useProjectWorkspaceController({
     isSubmittingTTS: execution.isSubmittingTTS,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isStartingPlan: createEditScreenplay.isPending || createEditScript.isPending,
+    isStartingPlan: createEditScreenplay.isPending || createEditDirectorDecoupage.isPending || createEditScript.isPending || createEditCinematographyShotPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     artStyle: projectSnapshot.artStyle,
     visualStylePresetSource: projectSnapshot.visualStylePresetSource,
@@ -203,6 +223,7 @@ export function useProjectWorkspaceController({
     handleUpdateConfig: configActions.handleUpdateConfig,
     onRequestAssistantPlan: execution.requestAssistantPlan,
     handleGenerateEditScreenplay,
+    handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
     handleRegenerateStoryboardText,
     handleUpdateClip: videoActions.handleUpdateClip,
@@ -215,6 +236,7 @@ export function useProjectWorkspaceController({
     handleGenerateBgmScore: videoActions.handleGenerateBgmScore,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditAssets,
+    handleGenerateEditCinematographyShotPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleGenerateEditStoryboardSpatialBlocking,

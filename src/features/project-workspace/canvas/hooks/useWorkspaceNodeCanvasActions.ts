@@ -28,8 +28,18 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'generate_edit_director_decoupage') {
+      await runtime.onGenerateEditDirectorDecoupage(action.screenplayId)
+      return
+    }
+
     if (action.type === 'generate_edit_script') {
       await runtime.onGenerateEditScript(action.screenplayId)
+      return
+    }
+
+    if (action.type === 'generate_edit_cinematography_shot_plan') {
+      await runtime.onGenerateEditCinematographyShotPlan(action.editScriptId)
       return
     }
 

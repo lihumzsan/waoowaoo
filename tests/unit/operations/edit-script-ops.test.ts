@@ -12,6 +12,17 @@ const serviceMock = vi.hoisted(() => ({
     screenplayText: 'INT. ORBITAL DOCK - NIGHT',
     status: 'ready',
   })),
+  generateProjectEditDirectorDecoupage: vi.fn(async () => ({
+    id: 'decoupage-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    status: 'ready',
+    shots: [
+      { shotNumber: 1 },
+      { shotNumber: 2 },
+    ],
+  })),
   generateProjectEditScript: vi.fn(async () => ({
     id: 'edit-1',
     projectId: 'project-1',
@@ -25,6 +36,17 @@ const serviceMock = vi.hoisted(() => ({
     videoBlocks: [
       { kind: 'group', shotNumbers: [1, 2] },
       { kind: 'single', shotNumbers: [3] },
+    ],
+  })),
+  generateProjectEditCinematographyShotPlan: vi.fn(async () => ({
+    id: 'cinematography-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    editScriptId: 'edit-1',
+    status: 'ready',
+    shots: [
+      { shotNumber: 1 },
+      { shotNumber: 2 },
     ],
   })),
   generateProjectEditScriptAssets: vi.fn(async () => ({
@@ -101,12 +123,14 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
 
     expect(Object.keys(operations).sort()).toEqual([
+      'generate_edit_cinematography_shot_plan',
+      'generate_edit_director_decoupage',
       'generate_edit_screenplay',
       'generate_edit_script',
       'generate_edit_script_assets',
       'generate_edit_script_storyboard',
     ])
-    expect(operations.generate_edit_script?.summary).toContain('Fails if no ready screenplay exists')
+    expect(operations.generate_edit_script?.summary).toContain('director decoupage')
     expect(operations.generate_edit_script?.confirmation?.required).toBe(true)
   })
 
@@ -143,6 +167,26 @@ describe('edit-script operations', () => {
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
+    }))
+  })
+
+  it('passes screenplay id into director decoupage generation', async () => {
+    const operations = createEditScriptOperations()
+    const result = await operations.generate_edit_director_decoupage.execute(buildContext(), {
+      screenplayId: 'screenplay-1',
+      confirmed: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      id: 'decoupage-1',
+      shotCount: 2,
+    }))
+    expect(serviceMock.generateProjectEditDirectorDecoupage).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
     }))
   })
 
@@ -199,6 +243,26 @@ describe('edit-script operations', () => {
       payload: expect.not.objectContaining({
         artStyle: expect.anything(),
       }),
+    }))
+  })
+
+  it('passes edit script id into cinematography shot plan generation', async () => {
+    const operations = createEditScriptOperations()
+    const result = await operations.generate_edit_cinematography_shot_plan.execute(buildContext(), {
+      editScriptId: 'edit-1',
+      confirmed: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      id: 'cinematography-1',
+      shotCount: 2,
+    }))
+    expect(serviceMock.generateProjectEditCinematographyShotPlan).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
     }))
   })
 

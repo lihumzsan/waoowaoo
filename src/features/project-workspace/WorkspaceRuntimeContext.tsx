@@ -39,6 +39,7 @@ export interface WorkspaceRuntimeValue {
   onVisualStylePresetChange: (value: { presetSource: 'system' | 'user'; presetId: string }) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
   onGenerateEditScreenplay: (prompt: string) => Promise<void>
+  onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
   onRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   onClipUpdate: (clipId: string, data: unknown) => Promise<void>
@@ -63,6 +64,7 @@ export interface WorkspaceRuntimeValue {
   onGenerateBgmScore: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
+  onGenerateEditCinematographyShotPlan: (editScriptId: string) => Promise<void>
   onRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   onGenerateEditStoryboard: (editScriptId: string) => Promise<void>
   onGenerateEditStoryboardSpatialBlocking: (editScriptId: string) => Promise<void>

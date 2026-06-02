@@ -13,7 +13,8 @@ Convert the edit-first shot below into one storyboard panel image prompt. Genera
 {location_assets_json}
 
 Image generation requirements:
-- Treat shot.videoPrompt as the core visual intent.
-- Preserve the action, characters, scene, and camera information from shot.visualAction, shot.charactersAndScene, and shot.camera.
+- Treat shot.visibleAction, shot.audienceFocus, shot.viewpoint, shot.revealPlan, and shot.performanceBeat as the core director intent.
+- Preserve the character and scene facts from shot.charactersAndScene, plus sound cues from shot.sound when they affect the chosen image moment.
+- Do not generate lens, camera position, depth of field, axis, or concrete cinematography parameters; those are decided by the later Cinematography Shot Plan.
 - Use the video block only to understand the edit segment, rhythm, and continuous action. Do not let it override the individual shot.
 - This is a cinematic storyboard image. Do not include subtitles, words, numbers, labels, watermarks, or split-screen layouts.

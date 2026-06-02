@@ -25,7 +25,9 @@ export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'pan
 export type WorkspaceCanvasNodeAction =
   | { readonly type: 'update_story'; readonly value: string }
   | { readonly type: 'generate_edit_screenplay'; readonly prompt: string }
+  | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
+  | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }
   | { readonly type: 'regenerate_storyboard_text'; readonly storyboardId: string }
   | { readonly type: 'update_clip'; readonly clipId: string; readonly data: Record<string, unknown> }
   | { readonly type: 'open_asset_library'; readonly characterId?: string | null }
@@ -268,11 +270,16 @@ export interface WorkspaceCanvasEditScriptDetails {
   readonly shots: readonly {
     readonly shotNumber: number
     readonly durationSec: number
-    readonly visualAction: string
+    readonly dramaticPurpose: string
+    readonly visibleAction: string
+    readonly audienceFocus: string
+    readonly viewpoint: string
+    readonly revealPlan: string
+    readonly performanceBeat: string
+    readonly continuityIn: string
+    readonly continuityOut: string
     readonly charactersAndScene: string
-    readonly camera: string
     readonly imagePrompt?: string | null
-    readonly videoPrompt: string
     readonly sound: string
     readonly imageUrl?: string | null
     readonly videoUrl?: string | null

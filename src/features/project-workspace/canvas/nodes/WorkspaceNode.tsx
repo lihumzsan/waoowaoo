@@ -1128,10 +1128,11 @@ function EditScriptContent({
             <tr className="text-[10px] font-semibold uppercase tracking-normal text-[var(--glass-text-tertiary)]">
               <th className="w-16 px-3 py-2">{labels('shotIndexHeader')}</th>
               <th className="w-16 border-l border-slate-100 px-3 py-2">{labels('duration')}</th>
-              <th className="w-[22%] border-l border-slate-100 px-3 py-2">{labels('description')}</th>
-              <th className="w-[14%] border-l border-slate-100 px-3 py-2">{labels('charactersAndScene')}</th>
-              <th className="w-[13%] border-l border-slate-100 px-3 py-2">{labels('cameraMove')}</th>
-              <th className="w-[28%] border-l border-slate-100 px-3 py-2">{labels('videoPrompt')}</th>
+              <th className="w-[20%] border-l border-slate-100 px-3 py-2">{labels('dramaticPurpose')}</th>
+              <th className="w-[24%] border-l border-slate-100 px-3 py-2">{labels('visibleAction')}</th>
+              <th className="w-[16%] border-l border-slate-100 px-3 py-2">{labels('audienceFocus')}</th>
+              <th className="w-[14%] border-l border-slate-100 px-3 py-2">{labels('viewpoint')}</th>
+              <th className="w-[18%] border-l border-slate-100 px-3 py-2">{labels('revealPlan')}</th>
               <th className="w-[14%] border-l border-slate-100 px-3 py-2">{labels('sound')}</th>
             </tr>
           </thead>
@@ -1140,10 +1141,11 @@ function EditScriptContent({
               <tr key={shot.shotNumber} className="border-t border-slate-100">
                 {renderEditScriptCell(labels('shotIndexHeader'), shot.shotNumber, 'font-semibold text-[var(--glass-text-primary)]')}
                 {renderEditScriptCell(labels('duration'), `${shot.durationSec}s`)}
-                {renderEditScriptCell(labels('description'), shot.visualAction)}
-                {renderEditScriptCell(labels('charactersAndScene'), shot.charactersAndScene)}
-                {renderEditScriptCell(labels('cameraMove'), shot.camera)}
-                {renderEditScriptCell(labels('videoPrompt'), shot.videoPrompt)}
+                {renderEditScriptCell(labels('dramaticPurpose'), shot.dramaticPurpose)}
+                {renderEditScriptCell(labels('visibleAction'), shot.visibleAction)}
+                {renderEditScriptCell(labels('audienceFocus'), shot.audienceFocus)}
+                {renderEditScriptCell(labels('viewpoint'), shot.viewpoint)}
+                {renderEditScriptCell(labels('revealPlan'), shot.revealPlan)}
                 {renderEditScriptCell(labels('sound'), shot.sound)}
               </tr>
             ))}

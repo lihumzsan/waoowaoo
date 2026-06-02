@@ -222,8 +222,12 @@ export {
 } from './useProjectData'
 
 export {
+    useProjectEditCinematographyShotPlan,
+    useProjectEditDirectorDecoupage,
     useProjectEditScreenplay,
     useProjectEditScript,
+    useCreateProjectEditCinematographyShotPlan,
+    useCreateProjectEditDirectorDecoupage,
     useCreateProjectEditScreenplay,
     useCreateProjectEditScript,
     useGenerateProjectEditScriptAssets,

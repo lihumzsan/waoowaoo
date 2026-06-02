@@ -112,10 +112,15 @@ function parseShotsJson(value: Prisma.JsonValue): EditScriptShot[] {
     return [{
       shotNumber: Number(item.shotNumber),
       durationSec: Number(item.durationSec),
-      visualAction: String(item.visualAction ?? ''),
+      dramaticPurpose: String(item.dramaticPurpose ?? ''),
+      visibleAction: String(item.visibleAction ?? ''),
+      audienceFocus: String(item.audienceFocus ?? ''),
+      viewpoint: String(item.viewpoint ?? ''),
+      revealPlan: String(item.revealPlan ?? ''),
+      performanceBeat: String(item.performanceBeat ?? ''),
+      continuityIn: String(item.continuityIn ?? ''),
+      continuityOut: String(item.continuityOut ?? ''),
       charactersAndScene: String(item.charactersAndScene ?? ''),
-      camera: String(item.camera ?? ''),
-      videoPrompt: String(item.videoPrompt ?? ''),
       sound: String(item.sound ?? ''),
     }]
   })

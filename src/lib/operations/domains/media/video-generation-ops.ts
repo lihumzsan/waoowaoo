@@ -433,10 +433,15 @@ function parseEditScriptShots(value: unknown): VideoGroupShot[] {
     return {
       shotNumber,
       durationSec,
-      visualAction: normalizeString(item.visualAction),
+      dramaticPurpose: normalizeString(item.dramaticPurpose),
+      visibleAction: normalizeString(item.visibleAction),
+      audienceFocus: normalizeString(item.audienceFocus),
+      viewpoint: normalizeString(item.viewpoint),
+      revealPlan: normalizeString(item.revealPlan),
+      performanceBeat: normalizeString(item.performanceBeat),
+      continuityIn: normalizeString(item.continuityIn),
+      continuityOut: normalizeString(item.continuityOut),
       charactersAndScene: normalizeString(item.charactersAndScene),
-      camera: normalizeString(item.camera),
-      videoPrompt: normalizeString(item.videoPrompt),
       sound: normalizeString(item.sound),
     }
   })

@@ -88,6 +88,8 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/editor/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
+  'src/app/api/projects/[projectId]/edit-script/cinematography-shot-plan/route.ts',
+  'src/app/api/projects/[projectId]/edit-script/director-decoupage/route.ts',
   'src/app/api/projects/[projectId]/edit-script/screenplay/route.ts',
   'src/app/api/projects/[projectId]/edit-script/storyboard/generate/route.ts',
   'src/app/api/projects/[projectId]/edit-script/storyboard/spatial-blocking/generate/route.ts',

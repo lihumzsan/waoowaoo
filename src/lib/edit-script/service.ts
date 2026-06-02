@@ -13,12 +13,14 @@ import { submitAssetGenerateTask } from '@/lib/assets/services/asset-actions'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import type { Locale } from '@/i18n/routing'
 import {
-  applyEditScriptVideoPrompts,
+  normalizeDirectorDecoupage,
   normalizeEditAssetRequirements,
   normalizeEditScriptStructure,
   resolveEditScriptDefaults,
 } from './normalize'
 import type {
+  EditCinematographyShotPlanPayload,
+  EditDirectorDecoupagePayload,
   EditAssetKind,
   EditAssetRequirement,
   EditAssetStatus,
@@ -26,14 +28,14 @@ import type {
   EditScriptPayload,
   EditScriptStyleBible,
   EditScriptShot,
-  EditScriptVideoBlock,
 } from './types'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import {
+  editCinematographyShotPlanSchema,
   editScriptStyleBibleSchema,
-  editScriptVideoPromptBlockSchema,
 } from './types'
 import { designEditAssetRequirements } from './asset-design'
+import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -56,6 +58,24 @@ interface GenerateEditScreenplayInput {
   readonly prompt: string
   readonly videoRatio?: '9:16' | '16:9' | '21:9'
   readonly artStyle?: string
+}
+
+interface GenerateEditDirectorDecoupageInput {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly episodeId: string
+  readonly userId: string
+  readonly locale: Locale
+  readonly screenplayId?: string
+}
+
+interface GenerateEditCinematographyShotPlanInput {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly episodeId: string
+  readonly userId: string
+  readonly locale: Locale
+  readonly editScriptId?: string
 }
 
 interface GenerateEditScriptAssetsInput {
@@ -87,9 +107,11 @@ interface UpdateEditScriptAssetRequirementDescriptionInput {
 type PromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY
+  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK
+  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN
 
 type EditScriptGenerationStage =
   | 'edit_script_prepare'
@@ -149,6 +171,26 @@ interface PersistedEditScreenplay {
   readonly status: string
 }
 
+interface PersistedEditDirectorDecoupage {
+  readonly id: string
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScreenplayId: string
+  readonly userPrompt: string
+  readonly decoupageJson: Prisma.JsonValue
+  readonly status: string
+  readonly editScreenplay?: PersistedEditScreenplay
+}
+
+interface PersistedEditCinematographyShotPlan {
+  readonly id: string
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScriptId: string
+  readonly shotPlanJson: Prisma.JsonValue
+  readonly status: string
+}
+
 interface ExistingAssetRef {
   readonly id: string
   readonly previewImageUrl: string | null
@@ -196,119 +238,34 @@ function parseRequiredStyleBibleJson(value: Prisma.JsonValue | null): EditScript
   return styleBible
 }
 
+function parseDirectorDecoupageJson(value: Prisma.JsonValue): ReturnType<typeof normalizeDirectorDecoupage> {
+  return normalizeDirectorDecoupage(value)
+}
+
+function parseCinematographyShotPlanJson(value: Prisma.JsonValue): Omit<EditCinematographyShotPlanPayload, 'id' | 'projectId' | 'episodeId' | 'editScriptId' | 'status'> {
+  const parsed = editCinematographyShotPlanSchema.parse(value)
+  return {
+    shots: parsed.shots.map((shot) => ({
+      shotNumber: shot.shotNumber,
+      shotScale: shot.shotScale.trim(),
+      lens: shot.lens.trim(),
+      depthOfField: shot.depthOfField.trim(),
+      cameraPosition: shot.cameraPosition.trim(),
+      cameraHeight: shot.cameraHeight.trim(),
+      cameraAngle: shot.cameraAngle.trim(),
+      movement: shot.movement.trim(),
+      composition: shot.composition.trim(),
+      lighting: shot.lighting.trim(),
+      axisAndEyeline: shot.axisAndEyeline.trim(),
+      continuityIn: shot.continuityIn.trim(),
+      continuityOut: shot.continuityOut.trim(),
+    })).sort((left, right) => left.shotNumber - right.shotNumber),
+    hardBans: parsed.hardBans.map((item) => item.trim()),
+  }
+}
+
 function styleBibleToJsonValue(styleBible: EditScriptStyleBible): Prisma.InputJsonValue {
   return styleBible as unknown as Prisma.InputJsonValue
-}
-
-function buildVideoPromptAssetContext(requirements: readonly EditAssetRequirement[]): string {
-  return stringifyForPrompt({
-    assets: requirements.map((requirement) => {
-      const voiceTimbreText = requirement.voiceTimbreText?.trim() ?? null
-      if (requirement.kind === 'character' && !voiceTimbreText) {
-        throw new Error(`EDIT_SCRIPT_CHARACTER_VOICE_TIMBRE_MISSING:${requirement.name}`)
-      }
-      return {
-        kind: requirement.kind,
-        name: requirement.name,
-        description: requirement.description,
-        voiceTimbreText: requirement.kind === 'character' ? voiceTimbreText : null,
-        shotNumbers: requirement.shotNumbers,
-      }
-    }),
-    rules: [
-      'Use these asset descriptions as fixed character and location identity context when writing video prompts.',
-      'For character dialogue, use voiceTimbreText as the fixed voice timbre and write dialogue in the form: character says {exact line} with the fixed voice timbre attached to the speaker.',
-      'Do not invent additional reusable characters or locations beyond the screenplay and edit structure.',
-      'Do not copy asset descriptions verbatim when they would overtake shot action; use them to preserve identity and scene continuity.',
-    ],
-  })
-}
-
-function intersectsShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  const rightSet = new Set(right)
-  return left.some((shotNumber) => rightSet.has(shotNumber))
-}
-
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
-}
-
-function blockShots(structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>, block: EditScriptVideoBlock): readonly EditScriptShot[] {
-  return block.shotNumbers.map((shotNumber) => {
-    const shot = structure.shots.find((item) => item.shotNumber === shotNumber)
-    if (!shot) throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_SHOT_MISSING:${shotNumber}`)
-    return shot
-  })
-}
-
-function adjacentVideoBlocks(structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>, blockIndex: number) {
-  return {
-    previous: blockIndex > 0 ? structure.videoBlocks[blockIndex - 1] ?? null : null,
-    next: blockIndex < structure.videoBlocks.length - 1 ? structure.videoBlocks[blockIndex + 1] ?? null : null,
-  }
-}
-
-function videoPromptBlockContext(input: {
-  readonly structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>
-  readonly block: EditScriptVideoBlock
-  readonly blockIndex: number
-}) {
-  return {
-    sourceVideoBlockIndex: input.blockIndex,
-    videoBlock: input.block,
-    shots: blockShots(input.structure, input.block),
-  }
-}
-
-async function generateEditScriptVideoPromptsByBlock(input: {
-  readonly userId: string
-  readonly projectId: string
-  readonly model: string
-  readonly locale: Locale
-  readonly userPrompt: string
-  readonly screenplayText: string
-  readonly structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>
-  readonly requirements: readonly EditAssetRequirement[]
-  readonly aspectRatio: string
-  readonly styleBible: EditScriptStyleBible
-}): Promise<Omit<EditScriptPayload, 'requirements' | 'styleBible'>> {
-  const blockOutputs = await Promise.all(input.structure.videoBlocks.map(async (block, blockIndex) => {
-    const shotNumbers = block.shotNumbers
-    const blockRequirements = input.requirements.filter((requirement) => intersectsShotNumbers(requirement.shotNumbers, shotNumbers))
-    const raw = await runPromptStep({
-      userId: input.userId,
-      projectId: input.projectId,
-      model: input.model,
-      locale: input.locale,
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
-      variables: {
-        user_request: input.userPrompt,
-        screenplay_text: input.screenplayText,
-        style_bible_json: stringifyForPrompt(input.styleBible),
-        video_block_json: stringifyForPrompt(videoPromptBlockContext({ structure: input.structure, block, blockIndex })),
-        block_shots_json: stringifyForPrompt(blockShots(input.structure, block)),
-        asset_context_json: buildVideoPromptAssetContext(blockRequirements),
-        adjacent_blocks_json: stringifyForPrompt(adjacentVideoBlocks(input.structure, blockIndex)),
-        aspect_ratio: input.aspectRatio,
-      },
-      stepTitle: `Edit video prompts for block ${blockIndex + 1}`,
-      stepIndex: 3,
-      stepTotal: 3,
-    })
-    const parsed = editScriptVideoPromptBlockSchema.parse(raw)
-    if (parsed.sourceVideoBlockIndex !== blockIndex) {
-      throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_INDEX_MISMATCH:${blockIndex}`)
-    }
-    if (!sameShotNumbers(parsed.shotNumbers, block.shotNumbers) || !sameShotNumbers(parsed.videoBlock.shotNumbers, block.shotNumbers)) {
-      throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_SHOTS_MISMATCH:${block.shotNumbers.join(',')}`)
-    }
-    return parsed
-  }))
-  return applyEditScriptVideoPrompts(input.structure, {
-    shots: blockOutputs.flatMap((block) => block.shots),
-    videoBlocks: blockOutputs.map((block) => block.videoBlock),
-  })
 }
 
 function assertLocale(value: Locale): Locale {
@@ -476,10 +433,15 @@ function parseShotsJson(value: Prisma.JsonValue): EditScriptShot[] {
     return [{
       shotNumber: Number(item.shotNumber),
       durationSec: Number(item.durationSec),
-      visualAction: String(item.visualAction ?? ''),
+      dramaticPurpose: String(item.dramaticPurpose ?? ''),
+      visibleAction: String(item.visibleAction ?? ''),
+      audienceFocus: String(item.audienceFocus ?? ''),
+      viewpoint: String(item.viewpoint ?? ''),
+      revealPlan: String(item.revealPlan ?? ''),
+      performanceBeat: String(item.performanceBeat ?? ''),
+      continuityIn: String(item.continuityIn ?? ''),
+      continuityOut: String(item.continuityOut ?? ''),
       charactersAndScene: String(item.charactersAndScene ?? ''),
-      camera: String(item.camera ?? ''),
-      videoPrompt: String(item.videoPrompt ?? ''),
       sound: String(item.sound ?? ''),
     }]
   })
@@ -660,6 +622,38 @@ function mapPersistedEditScreenplay(screenplay: PersistedEditScreenplay): EditSc
   }
 }
 
+function mapPersistedEditDirectorDecoupage(decoupage: PersistedEditDirectorDecoupage): EditDirectorDecoupagePayload {
+  const parsed = parseDirectorDecoupageJson(decoupage.decoupageJson)
+  const styleBible = decoupage.editScreenplay
+    ? parseRequiredStyleBibleJson(decoupage.editScreenplay.styleBibleJson)
+    : parseRequiredStyleBibleJson(null)
+  return {
+    id: decoupage.id,
+    projectId: decoupage.projectId,
+    episodeId: decoupage.episodeId,
+    screenplayId: decoupage.editScreenplayId,
+    userPrompt: decoupage.userPrompt,
+    styleBible,
+    screenplayText: decoupage.editScreenplay?.screenplayText ?? '',
+    status: decoupage.status,
+    shots: parsed.shots,
+    hardBans: parsed.hardBans,
+  }
+}
+
+function mapPersistedEditCinematographyShotPlan(plan: PersistedEditCinematographyShotPlan): EditCinematographyShotPlanPayload {
+  const parsed = parseCinematographyShotPlanJson(plan.shotPlanJson)
+  return {
+    id: plan.id,
+    projectId: plan.projectId,
+    episodeId: plan.episodeId,
+    editScriptId: plan.editScriptId,
+    status: plan.status,
+    shots: parsed.shots,
+    hardBans: parsed.hardBans,
+  }
+}
+
 async function getPersistedEditScript(projectId: string, episodeId: string, editScriptId?: string): Promise<PersistedEditScript | null> {
   return await prisma.projectEditScript.findFirst({
     where: {
@@ -688,6 +682,28 @@ async function getPersistedEditScreenplay(projectId: string, episodeId: string, 
   })
 }
 
+async function getPersistedEditDirectorDecoupage(projectId: string, episodeId: string): Promise<PersistedEditDirectorDecoupage | null> {
+  return await prisma.projectEditDirectorDecoupage.findFirst({
+    where: {
+      projectId,
+      episodeId,
+    },
+    include: {
+      editScreenplay: true,
+    },
+  })
+}
+
+async function getPersistedEditCinematographyShotPlan(projectId: string, episodeId: string, editScriptId?: string): Promise<PersistedEditCinematographyShotPlan | null> {
+  return await prisma.projectEditCinematographyShotPlan.findFirst({
+    where: {
+      projectId,
+      episodeId,
+      ...(editScriptId ? { editScriptId } : {}),
+    },
+  })
+}
+
 async function resolveReadyEditScreenplay(input: {
   readonly projectId: string
   readonly episodeId: string
@@ -699,6 +715,17 @@ async function resolveReadyEditScreenplay(input: {
     throw new Error(`EDIT_SCREENPLAY_NOT_READY:${screenplay.id}`)
   }
   return screenplay
+}
+
+async function resolveReadyEditDirectorDecoupage(input: {
+  readonly projectId: string
+  readonly episodeId: string
+}): Promise<PersistedEditDirectorDecoupage> {
+  const decoupage = await getPersistedEditDirectorDecoupage(input.projectId, input.episodeId)
+  if (!decoupage) throw new Error('EDIT_DIRECTOR_DECOUPAGE_REQUIRED')
+  if (decoupage.status !== 'ready') throw new Error(`EDIT_DIRECTOR_DECOUPAGE_NOT_READY:${decoupage.id}`)
+  parseDirectorDecoupageJson(decoupage.decoupageJson)
+  return decoupage
 }
 
 async function markEditScriptGenerating(input: {
@@ -839,6 +866,22 @@ export async function readProjectEditScreenplay(input: {
 }): Promise<EditScreenplayPayload | null> {
   const screenplay = await getPersistedEditScreenplay(input.projectId, input.episodeId)
   return screenplay ? mapPersistedEditScreenplay(screenplay) : null
+}
+
+export async function readProjectEditDirectorDecoupage(input: {
+  readonly projectId: string
+  readonly episodeId: string
+}): Promise<EditDirectorDecoupagePayload | null> {
+  const decoupage = await getPersistedEditDirectorDecoupage(input.projectId, input.episodeId)
+  return decoupage ? mapPersistedEditDirectorDecoupage(decoupage) : null
+}
+
+export async function readProjectEditCinematographyShotPlan(input: {
+  readonly projectId: string
+  readonly episodeId: string
+}): Promise<EditCinematographyShotPlanPayload | null> {
+  const plan = await getPersistedEditCinematographyShotPlan(input.projectId, input.episodeId)
+  return plan ? mapPersistedEditCinematographyShotPlan(plan) : null
 }
 
 export async function updateProjectEditScriptVideoBlockPrompt(
@@ -988,6 +1031,69 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
   return mapPersistedEditScreenplay(saved)
 }
 
+export async function generateProjectEditDirectorDecoupage(input: GenerateEditDirectorDecoupageInput): Promise<EditDirectorDecoupagePayload> {
+  const locale = assertLocale(input.locale)
+  const [episode, project, config] = await Promise.all([
+    prisma.projectEpisode.findFirst({
+      where: { id: input.episodeId, projectId: input.projectId },
+      select: { id: true },
+    }),
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: { id: true, videoRatio: true },
+    }),
+    getProjectModelConfig(input.projectId, input.userId),
+  ])
+  if (!episode || !project) throw new ApiError('NOT_FOUND')
+  const screenplay = await resolveReadyEditScreenplay({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    screenplayId: input.screenplayId,
+  })
+  const styleBible = parseRequiredStyleBibleJson(screenplay.styleBibleJson)
+  const model = resolveTextModel(config)
+  const defaults = resolveEditScriptDefaults(screenplay.userPrompt)
+  const raw = await runPromptStep({
+    userId: input.userId,
+    projectId: input.projectId,
+    model,
+    locale,
+    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE,
+    variables: {
+      user_request: screenplay.userPrompt,
+      screenplay_text: screenplay.screenplayText,
+      style_bible_json: stringifyForPrompt(styleBible),
+      duration_seconds: String(defaults.durationSeconds),
+      aspect_ratio: project.videoRatio,
+    },
+    stepTitle: 'Edit director decoupage',
+    stepIndex: 1,
+    stepTotal: 1,
+  })
+  const decoupage = normalizeDirectorDecoupage(raw)
+  const saved = await prisma.projectEditDirectorDecoupage.upsert({
+    where: { episodeId: input.episodeId },
+    create: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      editScreenplayId: screenplay.id,
+      userPrompt: screenplay.userPrompt,
+      decoupageJson: decoupage as unknown as Prisma.InputJsonValue,
+      status: 'ready',
+    },
+    update: {
+      editScreenplayId: screenplay.id,
+      userPrompt: screenplay.userPrompt,
+      decoupageJson: decoupage as unknown as Prisma.InputJsonValue,
+      status: 'ready',
+    },
+    include: {
+      editScreenplay: true,
+    },
+  })
+  return mapPersistedEditDirectorDecoupage(saved)
+}
+
 export async function generateProjectEditScript(input: GenerateEditScriptInput): Promise<EditScriptPayload> {
   const locale = assertLocale(input.locale)
   const [episode, project, config] = await Promise.all([
@@ -1007,7 +1113,6 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
   ])
   if (!episode || !project) throw new ApiError('NOT_FOUND')
   const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
-  const effectiveArtStyle = input.artStyle ?? project.artStyle
   if (input.artStyle && !isArtStyleValue(input.artStyle)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'INVALID_ART_STYLE',
@@ -1034,6 +1139,11 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
   const styleBible = parseRequiredStyleBibleJson(screenplay.styleBibleJson)
   const defaults = resolveEditScriptDefaults(userPrompt)
   const screenplayText = screenplay.screenplayText
+  const directorDecoupage = await resolveReadyEditDirectorDecoupage({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+  })
+  const directorDecoupageJson = parseDirectorDecoupageJson(directorDecoupage.decoupageJson)
   await markEditScriptGenerating({
     projectId: input.projectId,
     episodeId: input.episodeId,
@@ -1058,13 +1168,14 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       variables: {
         user_request: userPrompt,
         screenplay_text: screenplayText,
+        director_decoupage_json: stringifyForPrompt(directorDecoupageJson),
         duration_seconds: String(defaults.durationSeconds),
         aspect_ratio: effectiveVideoRatio,
         style_bible_json: stringifyForPrompt(styleBible),
       },
       stepTitle: 'Edit core table',
       stepIndex: 1,
-      stepTotal: 3,
+      stepTotal: 2,
     })
     const structure = normalizeEditScriptStructure(structureRaw)
     await persistEditScriptGenerationStep({
@@ -1095,7 +1206,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       },
       stepTitle: 'Edit required assets',
       stepIndex: 2,
-      stepTotal: 3,
+      stepTotal: 2,
     })
     const requirements = await designEditAssetRequirements({
       userId: input.userId,
@@ -1114,18 +1225,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       progress: 72,
     })
 
-    const core = await generateEditScriptVideoPromptsByBlock({
-      userId: input.userId,
-      projectId: input.projectId,
-      model,
-      locale,
-      userPrompt,
-      screenplayText,
-      structure,
-      requirements,
-      aspectRatio: effectiveVideoRatio,
-      styleBible,
-    })
+    const core = structure
 
     const assetByRequirementKey = new Map<string, ExistingAssetRef>()
     const saved = await prisma.$transaction(async (tx) => {
@@ -1210,7 +1310,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
     })
     await notifyGenerationStep(input.onGenerationStepPersisted, {
       stage: 'edit_script_video_prompt',
-      stageLabel: 'progress.stage.editScriptVideoPrompt',
+      stageLabel: 'progress.stage.editScriptPersist',
       progress: 92,
     })
 
@@ -1227,6 +1327,103 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
     })
     throw caught
   }
+}
+
+export async function generateProjectEditCinematographyShotPlan(input: GenerateEditCinematographyShotPlanInput): Promise<EditCinematographyShotPlanPayload> {
+  const locale = assertLocale(input.locale)
+  const [episode, project, config] = await Promise.all([
+    prisma.projectEpisode.findFirst({
+      where: { id: input.episodeId, projectId: input.projectId },
+      select: { id: true },
+    }),
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: { id: true },
+    }),
+    getProjectModelConfig(input.projectId, input.userId),
+  ])
+  if (!episode || !project) throw new ApiError('NOT_FOUND')
+  const editScript = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId)
+  if (!editScript) throw new ApiError('NOT_FOUND')
+  if (editScript.status !== 'ready') {
+    throw new Error(`EDIT_SCRIPT_NOT_READY:${editScript.id}`)
+  }
+  const directorDecoupage = await resolveReadyEditDirectorDecoupage({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+  })
+  const mappedEditScript = await mapPersistedEditScript(editScript)
+  if (!mappedEditScript.styleBible) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_STYLE_BIBLE_REQUIRED',
+      message: 'Style Bible is required before cinematography shot plan generation',
+    })
+  }
+  const assets = await buildAssetSnapshots(mappedEditScript.requirements)
+  const model = resolveTextModel(config)
+  const raw = await runPromptStep({
+    userId: input.userId,
+    projectId: input.projectId,
+    model,
+    locale,
+    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
+    variables: {
+      style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
+      director_decoupage_json: stringifyForPrompt(parseDirectorDecoupageJson(directorDecoupage.decoupageJson)),
+      edit_script_json: stringifyForPrompt({
+        id: mappedEditScript.id,
+        title: mappedEditScript.title,
+        logline: mappedEditScript.logline,
+        durationSec: mappedEditScript.durationSec,
+        shotCount: mappedEditScript.shotCount,
+        screenplayText: mappedEditScript.screenplayText,
+        shots: mappedEditScript.shots,
+        videoBlocks: mappedEditScript.videoBlocks,
+      }),
+      asset_context_json: stringifyForPrompt(assets),
+      spatial_profiles_json: stringifyForPrompt(assets
+        .filter((asset) => asset.kind === 'location')
+        .map((asset) => ({
+          requirementId: asset.requirementId,
+          name: asset.name,
+          targetId: asset.targetId,
+          shotNumbers: asset.shotNumbers,
+          spatialProfile: asset.spatialProfile ?? null,
+        }))),
+    },
+    stepTitle: 'Edit cinematography shot plan',
+    stepIndex: 1,
+    stepTotal: 1,
+  })
+  const parsed = parseCinematographyShotPlanJson(raw as unknown as Prisma.JsonValue)
+  const expectedShotNumbers = mappedEditScript.shots.map((shot) => shot.shotNumber)
+  const actualShotNumbers = parsed.shots.map((shot) => shot.shotNumber)
+  if (actualShotNumbers.length !== expectedShotNumbers.length
+    || actualShotNumbers.some((shotNumber, index) => shotNumber !== expectedShotNumbers[index])) {
+    throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_COVERAGE_INVALID')
+  }
+  const shotPlanJson = {
+    strategy: 'cinematography_shot_plan',
+    schemaVersion: 1,
+    shots: parsed.shots,
+    hardBans: parsed.hardBans,
+  }
+  const saved = await prisma.projectEditCinematographyShotPlan.upsert({
+    where: { episodeId: input.episodeId },
+    create: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      editScriptId: editScript.id,
+      shotPlanJson: shotPlanJson as unknown as Prisma.InputJsonValue,
+      status: 'ready',
+    },
+    update: {
+      editScriptId: editScript.id,
+      shotPlanJson: shotPlanJson as unknown as Prisma.InputJsonValue,
+      status: 'ready',
+    },
+  })
+  return mapPersistedEditCinematographyShotPlan(saved)
 }
 
 async function findExistingAsset(input: {

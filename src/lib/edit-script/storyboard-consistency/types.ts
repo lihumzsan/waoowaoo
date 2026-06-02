@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import { locationSpatialProfileSchema, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
-import type { EditAssetRequirement, EditScriptPayload, EditScriptShot, EditScriptStyleBible, EditScriptVideoBlock } from '@/lib/edit-script/types'
+import type { EditAssetRequirement, EditCinematographyShot, EditDirectorDecoupageShot, EditScriptPayload, EditScriptShot, EditScriptStyleBible, EditScriptVideoBlock } from '@/lib/edit-script/types'
 
 export interface StoryboardConsistencyModelConfigSnapshot {
   readonly analysisModel: string
@@ -35,6 +35,14 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly editScript: Pick<EditScriptPayload, 'id' | 'title' | 'logline' | 'durationSec' | 'shotCount' | 'userPrompt' | 'screenplayText'>
   readonly styleBible: EditScriptStyleBible
   readonly shots: readonly EditScriptShot[]
+  readonly directorDecoupage: {
+    readonly shots: readonly EditDirectorDecoupageShot[]
+    readonly hardBans: readonly string[]
+  }
+  readonly cinematographyShotPlan: {
+    readonly shots: readonly EditCinematographyShot[]
+    readonly hardBans: readonly string[]
+  }
   readonly videoBlocks: readonly StoryboardConsistencySourceVideoBlock[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
 }
@@ -44,17 +52,54 @@ export interface StoryboardPanelPromptDraft {
   readonly sourceShotNumber: number
   readonly sourceVideoBlockId: string
   readonly prompt: string
+  readonly videoPrompt: string
   readonly metadata: Record<string, unknown>
 }
 
 const sourceShotSchema = z.object({
   shotNumber: z.number().int().positive(),
   durationSec: z.number().int().positive(),
-  visualAction: z.string(),
+  dramaticPurpose: z.string(),
+  visibleAction: z.string(),
+  audienceFocus: z.string(),
+  viewpoint: z.string(),
+  revealPlan: z.string(),
+  performanceBeat: z.string(),
+  continuityIn: z.string(),
+  continuityOut: z.string(),
   charactersAndScene: z.string(),
-  camera: z.string(),
-  videoPrompt: z.string(),
   sound: z.string(),
+})
+
+const directorShotSchema = z.object({
+  shotNumber: z.number().int().positive(),
+  durationSec: z.number().int().positive(),
+  dramaticPurpose: z.string(),
+  visibleAction: z.string(),
+  audienceFocus: z.string(),
+  viewpoint: z.string(),
+  revealPlan: z.string(),
+  performanceBeat: z.string(),
+  continuityIn: z.string(),
+  continuityOut: z.string(),
+  charactersAndScene: z.string(),
+  sound: z.string(),
+})
+
+const cinematographyShotSchema = z.object({
+  shotNumber: z.number().int().positive(),
+  shotScale: z.string(),
+  lens: z.string(),
+  depthOfField: z.string(),
+  cameraPosition: z.string(),
+  cameraHeight: z.string(),
+  cameraAngle: z.string(),
+  movement: z.string(),
+  composition: z.string(),
+  lighting: z.string(),
+  axisAndEyeline: z.string(),
+  continuityIn: z.string(),
+  continuityOut: z.string(),
 })
 
 const sourceVideoBlockSchema = z.object({
@@ -97,6 +142,14 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
   }),
   styleBible: editScriptStyleBibleSchema.shape.styleBible,
   shots: z.array(sourceShotSchema).min(1),
+  directorDecoupage: z.object({
+    shots: z.array(directorShotSchema).min(1),
+    hardBans: z.array(z.string()),
+  }),
+  cinematographyShotPlan: z.object({
+    shots: z.array(cinematographyShotSchema).min(1),
+    hardBans: z.array(z.string()),
+  }),
   videoBlocks: z.array(sourceVideoBlockSchema).min(1),
   assets: z.array(sourceAssetSchema),
 })
@@ -145,6 +198,7 @@ export const cameraPlanPanelSchema = z.object({
   continuityNote: z.string().trim().min(2),
   shotBlocking: shotBlockingSchema,
   finalPanelPrompt: z.string().trim().min(30),
+  finalVideoPrompt: z.string().trim().min(30),
 }).strict()
 
 export const cameraPlanModelOutputSchema = z.object({
@@ -166,7 +220,13 @@ export const cameraStyleBibleModelOutputSchema = z.object({
 export const panelFinalPromptBlockModelOutputSchema = z.object({
   panelFinalPromptBlockOutput: z.object({
     sourceVideoBlockId: z.string().trim().min(1),
-    panels: z.array(cameraPlanPanelSchema).min(1),
+    panels: z.array(z.object({
+      panelIndex: z.number().int().min(0),
+      sourceShotNumber: z.number().int().positive(),
+      sourceVideoBlockId: z.string().trim().min(1),
+      finalPanelPrompt: z.string().trim().min(30),
+      finalVideoPrompt: z.string().trim().min(30),
+    }).strict()).min(1),
   }).passthrough(),
 })
 

@@ -41,10 +41,15 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
     linkedShots: linkedShotContext(input.requirement, input.shots).map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      visualAction: shot.visualAction,
+      dramaticPurpose: shot.dramaticPurpose,
+      visibleAction: shot.visibleAction,
+      audienceFocus: shot.audienceFocus,
+      viewpoint: shot.viewpoint,
+      revealPlan: shot.revealPlan,
+      performanceBeat: shot.performanceBeat,
+      continuityIn: shot.continuityIn,
+      continuityOut: shot.continuityOut,
       charactersAndScene: shot.charactersAndScene,
-      camera: shot.camera,
-      videoPrompt: shot.videoPrompt,
       sound: shot.sound,
     })),
     constraints: [

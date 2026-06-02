@@ -100,22 +100,50 @@ describe('workspace node rendering', () => {
     expect(previewShotMediaKind({
       videoUrl: 'https://example.com/shot.mp4',
       imageUrl: 'https://example.com/shot.png',
-      visualAction: 'Shot action text.',
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: 'Shot action text.',
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
     })).toBe('video')
     expect(previewShotMediaKind({
       videoUrl: null,
       imageUrl: 'https://example.com/shot.png',
-      visualAction: 'Shot action text.',
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: 'Shot action text.',
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
     })).toBe('image')
     expect(previewShotMediaKind({
       videoUrl: null,
       imageUrl: null,
-      visualAction: 'Shot action text.',
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: 'Shot action text.',
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
     })).toBe('text')
     expect(previewShotMediaKind({
       videoUrl: null,
       imageUrl: null,
-      visualAction: ' ',
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: ' ',
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
     })).toBe('empty')
   })
 
@@ -352,7 +380,7 @@ describe('workspace node rendering', () => {
       kind: 'editPipelineStep',
       layoutNodeType: 'editPipelineStep',
       targetType: 'editPipelineStep',
-      targetId: 'edit-1:visualAction',
+      targetId: 'edit-1:visibleAction',
       title: 'Visible Action',
       eyebrow: 'Edit Step',
       body: 'step body',
@@ -408,11 +436,16 @@ describe('workspace node rendering', () => {
           {
             shotNumber: 1,
             durationSec: 3,
-            visualAction: 'Pilot enters the docking bay.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Pilot enters the docking bay.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'Pilot / Docking bay',
-            camera: 'Wide push-in',
             imagePrompt: 'Docking bay image prompt',
-            videoPrompt: 'Docking bay video prompt',
             sound: 'Low engine rumble',
             imageUrl: 'https://example.com/shot-1.png',
             videoUrl: null,
@@ -420,11 +453,16 @@ describe('workspace node rendering', () => {
           {
             shotNumber: 2,
             durationSec: 3,
-            visualAction: 'Warning lights pulse red.',
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'Warning lights pulse red.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
             charactersAndScene: 'AI chamber',
-            camera: 'Close-up',
             imagePrompt: null,
-            videoPrompt: 'Red warning light video prompt',
             sound: 'Alarm beep',
             imageUrl: null,
             videoUrl: null,
@@ -434,7 +472,7 @@ describe('workspace node rendering', () => {
     })
 
     expect(html).toContain('viewVideoPreview')
-    expect(html).toContain('Docking bay video prompt')
+    expect(html).toContain('Pilot enters the docking bay.')
   })
 
   it('renders video plan generation mode switches with storyboard references first before video exists', () => {
@@ -665,7 +703,6 @@ describe('workspace node rendering', () => {
         props: ['Lamp'],
         srtSegment: 'dialogue text',
         imagePrompt: 'image prompt',
-        videoPrompt: 'video prompt',
         photographyRules: 'photo rules',
         actingNotes: 'acting notes',
         promptShot: {
@@ -706,7 +743,6 @@ describe('workspace node rendering', () => {
       width: 300,
       height: 410,
       videoDetails: {
-        videoPrompt: 'video prompt',
         firstLastFramePrompt: 'first last prompt',
         videoGenerationMode: 'firstlastframe',
         videoUrl: 'https://example.com/video.mp4',
@@ -741,7 +777,7 @@ describe('workspace node rendering', () => {
     expect(imageHtml).toContain('image prompt')
     expect(imageHtml).not.toContain('history')
     expect(imageHtml).not.toContain('https://example.com/sketch.png')
-    expect(videoHtml).toContain('video prompt')
+    expect(videoHtml).toContain('video body')
     expect(videoHtml).toContain('<video')
     expect(videoHtml).toContain('src="https://example.com/video.mp4"')
     expect(videoHtml).not.toContain('alt="Video node"')
@@ -812,7 +848,6 @@ describe('workspace node rendering', () => {
         location: 'Selectable street',
         props: ['Selectable lamp'],
         imagePrompt: 'selectable image prompt',
-        videoPrompt: 'selectable video prompt',
       },
     })
 
@@ -849,7 +884,6 @@ describe('workspace node rendering', () => {
         location: 'Street',
         props: [],
         imagePrompt: 'editable image prompt',
-        videoPrompt: 'editable video prompt',
         shotBlocking: {
           absolutePosition: 'Street midground near the lamp',
           screenPosition: 'left third',
@@ -1115,7 +1149,6 @@ describe('workspace node rendering', () => {
         props: [],
         srtSegment: 'shot description',
         imagePrompt: 'image prompt',
-        videoPrompt: 'video prompt',
         photographyRules: '',
         actingNotes: null,
         errorMessage: null,
@@ -1142,7 +1175,6 @@ describe('workspace node rendering', () => {
         props: [],
         srtSegment: 'shot description',
         imagePrompt: 'image prompt',
-        videoPrompt: 'video prompt',
         photographyRules: '',
         actingNotes: null,
         errorMessage: 'image generation failed',
@@ -1182,7 +1214,6 @@ describe('workspace node rendering', () => {
       height: 410,
       expanded: true,
       videoDetails: {
-        videoPrompt: 'video prompt',
         firstLastFramePrompt: null,
         errorMessage: null,
       },

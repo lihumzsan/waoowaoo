@@ -209,7 +209,7 @@ export default function VideoBlockArrangementModal({
         shotNumber: shot.shotNumber,
         durationSec: shot.durationSec,
         title: t('shotTitle', { shot: shot.shotNumber }),
-        description: panel?.description?.trim() || shot.visualAction,
+        description: panel?.description?.trim() || shot.visibleAction,
         imageUrl: rawImageUrl ? toDisplayImageUrl(rawImageUrl) ?? rawImageUrl : null,
       })
     })

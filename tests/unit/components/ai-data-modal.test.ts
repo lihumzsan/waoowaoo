@@ -33,7 +33,7 @@ describe('AIDataModal', () => {
             slot: '皇宫正中龙椅前方台阶下的位置',
           },
         ],
-        videoPrompt: 'dramatic court scene',
+        videoPrompt: null,
         photographyRules: null,
         actingNotes: null,
         videoRatio: '16:9',

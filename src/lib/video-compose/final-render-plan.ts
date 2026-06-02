@@ -62,10 +62,15 @@ export interface FinalRenderEditScriptInput {
 export interface FinalRenderEditShot {
   readonly shotNumber: number
   readonly durationSec: number
-  readonly visualAction: string
+  readonly dramaticPurpose: string
+  readonly visibleAction: string
+  readonly audienceFocus: string
+  readonly viewpoint: string
+  readonly revealPlan: string
+  readonly performanceBeat: string
+  readonly continuityIn: string
+  readonly continuityOut: string
   readonly charactersAndScene?: string
-  readonly camera: string
-  readonly videoPrompt: string
   readonly sound: string
 }
 
@@ -173,7 +178,7 @@ function shotSoundForGroup(shotNumbers: readonly number[], editScript: FinalRend
 function shotDescriptionForGroup(shotNumbers: readonly number[], editScript: FinalRenderEditScriptInput | null, fallback?: string | null): string | null {
   if (!editScript) return normalizeString(fallback) || null
   const descriptions = shotNumbers
-    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.visualAction)
+    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.visibleAction)
     .map((value) => normalizeString(value))
     .filter(Boolean)
   return descriptions.length > 0 ? descriptions.join(' / ') : normalizeString(fallback) || null
@@ -480,10 +485,15 @@ function buildEditScriptJson(editScript: FinalRenderEditScriptInput | null): str
     shots: editScript.shots.map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      visualAction: shot.visualAction,
+      dramaticPurpose: shot.dramaticPurpose,
+      visibleAction: shot.visibleAction,
+      audienceFocus: shot.audienceFocus,
+      viewpoint: shot.viewpoint,
+      revealPlan: shot.revealPlan,
+      performanceBeat: shot.performanceBeat,
+      continuityIn: shot.continuityIn,
+      continuityOut: shot.continuityOut,
       charactersAndScene: shot.charactersAndScene ?? '',
-      camera: shot.camera,
-      videoPrompt: shot.videoPrompt,
       sound: shot.sound,
     })),
   })

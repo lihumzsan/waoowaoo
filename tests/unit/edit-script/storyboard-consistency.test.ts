@@ -56,6 +56,12 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
           lensAndDepthPrompt: '35mm natural depth',
           videoRhythmPrompt: 'slow rhythm',
         },
+        directing: {
+          pointOfViewPrompt: 'restricted protagonist viewpoint',
+          performancePrompt: 'restrained performance through small gestures',
+          informationReleasePrompt: 'reveal information through reaction before event truth',
+          rhythmPrompt: 'hold suspense pauses before faster turns',
+        },
         sound: {
           soundFilterPrompt: 'quiet wind',
         },
@@ -65,12 +71,52 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
     shots: [{
       shotNumber: 1,
       durationSec: 8,
-      visualAction: 'Old monk teaches the young disciple.',
+      dramaticPurpose: 'test dramatic purpose',
+      visibleAction: 'Old monk teaches the young disciple.',
+      audienceFocus: 'test audience focus',
+      viewpoint: 'test viewpoint',
+      revealPlan: 'test reveal plan',
+      performanceBeat: 'test performance beat',
+      continuityIn: 'test continuity in',
+      continuityOut: 'test continuity out',
       charactersAndScene: 'Temple courtyard',
-      camera: 'medium shot',
-      videoPrompt: 'Temple lesson.',
       sound: 'wind',
     }],
+    directorDecoupage: {
+      shots: [{
+        shotNumber: 1,
+        durationSec: 8,
+        dramaticPurpose: 'test dramatic purpose',
+        visibleAction: 'Old monk teaches the young disciple.',
+        audienceFocus: 'test audience focus',
+        viewpoint: 'test viewpoint',
+        revealPlan: 'test reveal plan',
+        performanceBeat: 'test performance beat',
+        continuityIn: 'test continuity in',
+        continuityOut: 'test continuity out',
+        charactersAndScene: 'Temple courtyard',
+        sound: 'wind',
+      }],
+      hardBans: ['no text'],
+    },
+    cinematographyShotPlan: {
+      shots: [{
+        shotNumber: 1,
+        shotScale: 'medium shot',
+        lens: '35mm',
+        depthOfField: 'moderate depth',
+        cameraPosition: 'front of courtyard',
+        cameraHeight: 'eye level',
+        cameraAngle: 'neutral',
+        movement: 'static',
+        composition: 'balanced two-person frame',
+        lighting: 'soft natural light',
+        axisAndEyeline: 'monk left, disciple right',
+        continuityIn: 'test continuity in',
+        continuityOut: 'test continuity out',
+      }],
+      hardBans: ['no text'],
+    },
     videoBlocks: [{
       kind: 'single',
       shotNumbers: [1],
@@ -112,49 +158,14 @@ const cameraPanel = {
   panelIndex: 0,
   sourceShotNumber: 1,
   sourceVideoBlockId: 'edit-1:videoBlock:1',
-  shotScale: '中景',
-  cameraPosition: '庭院正前方偏右',
-  cameraHeight: '视线高度',
-  cameraAngle: '平拍',
-  composition: '人物位于画面中景中央，左后方木门保持可见',
-  cameraMovement: '固定镜头',
-  lensAndDepth: '35mm，自然景深',
-  screenDirection: '弟子从画面右侧看向左侧师父',
-  aestheticIntent: '保持安静克制的教学氛围',
-  emotionalEffect: '沉静',
-  continuityNote: '持续使用左后方木门和中景香炉作为空间锚点',
-  shotBlocking: {
-    locationName: '寺院庭院',
-    absolutePosition: '人物站在中景香炉前方的空地',
-    relativePosition: '老和尚在弟子左侧半步',
-    screenPosition: '画面中部偏左',
-    characterPlacements: [{
-      characterName: '老和尚',
-      absolutePosition: '中景香炉前方偏左',
-      relativePosition: '弟子左侧半步',
-      screenPosition: '画面中部偏左',
-      facing: '面向弟子',
-      eyeline: '看向弟子眼睛',
-    }],
-    cameraPlacement: '庭院正前方偏右，面向木门方向',
-    composition: '左后方木门作为背景锚点',
-    continuityNote: '不使用任何网格坐标',
-  },
-  finalPanelPrompt: '严格按照中文空间档案和人物站位生成寺院庭院教学分镜画面，保持木门与香炉空间关系。',
+  finalPanelPrompt: '严格按照中文空间档案和人物站位生成寺院庭院教学分镜画面，保持木门与香炉空间关系，使用中景静态构图。',
+  finalVideoPrompt: '生成八秒寺院庭院教学视频，固定镜头，老和尚克制地教导年轻弟子，保留风声和空间连续性。',
 }
 
 describe('edit-script storyboard spatial text blocking generation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     aiExecMock.executeAiTextStep
-      .mockResolvedValueOnce({
-        text: JSON.stringify({
-          cameraStyleBible: {
-            strategy: 'camera_style_bible',
-            imageFilterPrompt: '安静自然光，保持寺院庭院空间真实',
-          },
-        }),
-      })
       .mockResolvedValueOnce({
         text: JSON.stringify({
           panelFinalPromptBlockOutput: {
@@ -187,12 +198,12 @@ describe('edit-script storyboard spatial text blocking generation', () => {
     })
 
     expect(result.cameraPlanOutput.strategy).toBe('spatial_text_blocking')
-    expect(result.cameraPlanOutput.panels[0]?.shotBlocking.absolutePosition).toBe('人物站在中景香炉前方的空地')
+    expect(result.cameraPlanOutput.panels[0]?.cameraPosition).toBe('front of courtyard')
     expect(result.panels[0]?.metadata).toMatchObject({ source: 'camera_plan', strategy: 'spatial_text_blocking' })
     const promptCalls = promptMock.buildAiPrompt.mock.calls.map((call) => call[0])
     expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门')
     expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).not.toContain('placementZones')
-    expect(promptCalls[1]?.variables.spatial_profile_strategy_output_json).toContain('edit-1:videoBlock:1')
+    expect(promptCalls[0]?.variables.video_block_json).toContain('edit-1:videoBlock:1')
     const deprecatedVariableKey = ['coordinate', 'strategy', 'output', 'json'].join('_')
     expect(promptCalls[0]?.variables).not.toHaveProperty(deprecatedVariableKey)
     expect(JSON.stringify(result)).not.toContain('"x"')

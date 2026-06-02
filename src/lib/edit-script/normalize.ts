@@ -5,6 +5,7 @@ import type {
 } from './types'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import {
+  editDirectorDecoupageSchema,
   editAssetExtractionSchema,
   editScriptCoreSchema,
   editScriptStructureSchema,
@@ -29,10 +30,15 @@ export function normalizeEditScriptCore(raw: unknown): Omit<EditScriptPayload, '
     .map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      visualAction: shot.visualAction.trim(),
+      dramaticPurpose: shot.dramaticPurpose.trim(),
+      visibleAction: shot.visibleAction.trim(),
+      audienceFocus: shot.audienceFocus.trim(),
+      viewpoint: shot.viewpoint.trim(),
+      revealPlan: shot.revealPlan.trim(),
+      performanceBeat: shot.performanceBeat.trim(),
+      continuityIn: shot.continuityIn.trim(),
+      continuityOut: shot.continuityOut.trim(),
       charactersAndScene: shot.charactersAndScene.trim(),
-      camera: shot.camera.trim(),
-      videoPrompt: shot.videoPrompt.trim(),
       sound: shot.sound.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
@@ -67,10 +73,15 @@ export function normalizeEditScriptStructure(raw: unknown): Omit<EditScriptPaylo
     .map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      visualAction: shot.visualAction.trim(),
+      dramaticPurpose: shot.dramaticPurpose.trim(),
+      visibleAction: shot.visibleAction.trim(),
+      audienceFocus: shot.audienceFocus.trim(),
+      viewpoint: shot.viewpoint.trim(),
+      revealPlan: shot.revealPlan.trim(),
+      performanceBeat: shot.performanceBeat.trim(),
+      continuityIn: shot.continuityIn.trim(),
+      continuityOut: shot.continuityOut.trim(),
       charactersAndScene: shot.charactersAndScene.trim(),
-      camera: shot.camera.trim(),
-      videoPrompt: 'Pending final video prompt.',
       sound: shot.sound.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
@@ -114,7 +125,6 @@ export function applyEditScriptVideoPrompts(
   raw: unknown,
 ): Omit<EditScriptPayload, 'requirements' | 'styleBible'> {
   const parsed = editScriptVideoPromptSchema.parse(raw)
-  const promptByShotNumber = new Map(parsed.shots.map((shot) => [shot.shotNumber, shot.videoPrompt.trim()]))
   const expectedShotNumbers = structure.shots.map((shot) => shot.shotNumber)
   const providedShotNumbers = parsed.shots.map((shot) => shot.shotNumber).sort((left, right) => left - right)
   if (!sameShotNumbers(providedShotNumbers, expectedShotNumbers)) {
@@ -146,15 +156,40 @@ export function applyEditScriptVideoPrompts(
 
   return {
     ...structure,
-    shots: structure.shots.map((shot) => {
-      const videoPrompt = promptByShotNumber.get(shot.shotNumber)
-      if (!videoPrompt) throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_SHOT_MISSING:${shot.shotNumber}`)
-      return {
-        ...shot,
-        videoPrompt,
-      }
-    }),
+    shots: structure.shots,
     videoBlocks: nextBlocks,
+  }
+}
+
+export function normalizeDirectorDecoupage(raw: unknown) {
+  const parsed = editDirectorDecoupageSchema.parse(raw)
+  const shots = parsed.shots
+    .map((shot): EditScriptShot => ({
+      shotNumber: shot.shotNumber,
+      durationSec: shot.durationSec,
+      dramaticPurpose: shot.dramaticPurpose.trim(),
+      visibleAction: shot.visibleAction.trim(),
+      audienceFocus: shot.audienceFocus.trim(),
+      viewpoint: shot.viewpoint.trim(),
+      revealPlan: shot.revealPlan.trim(),
+      performanceBeat: shot.performanceBeat.trim(),
+      continuityIn: shot.continuityIn.trim(),
+      continuityOut: shot.continuityOut.trim(),
+      charactersAndScene: shot.charactersAndScene.trim(),
+      sound: shot.sound.trim(),
+    }))
+    .sort((left, right) => left.shotNumber - right.shotNumber)
+  shots.forEach((shot, index) => {
+    const expectedNumber = index + 1
+    if (shot.shotNumber !== expectedNumber) {
+      throw new Error(`EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS:${shot.shotNumber}:${expectedNumber}`)
+    }
+  })
+  return {
+    strategy: parsed.strategy,
+    schemaVersion: parsed.schemaVersion,
+    shots,
+    hardBans: parsed.hardBans.map((item) => item.trim()),
   }
 }
 

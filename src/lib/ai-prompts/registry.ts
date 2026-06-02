@@ -180,11 +180,16 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/screenplay',
     variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'style_bible_json'],
   },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE]: {
+    pathStem: 'edit-script/director-decoupage',
+    variableKeys: ['user_request', 'screenplay_text', 'style_bible_json', 'duration_seconds', 'aspect_ratio'],
+  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY]: {
     pathStem: 'edit-script/primary',
     variableKeys: [
       'user_request',
       'screenplay_text',
+      'director_decoupage_json',
       'duration_seconds',
       'aspect_ratio',
       'style_bible_json',
@@ -244,6 +249,16 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'location_assets_json',
     ],
   },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN]: {
+    pathStem: 'edit-script/cinematography-shot-plan',
+    variableKeys: [
+      'style_bible_json',
+      'director_decoupage_json',
+      'edit_script_json',
+      'asset_context_json',
+      'spatial_profiles_json',
+    ],
+  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE]: {
     pathStem: 'edit-script/storyboard-camera-style-bible',
     variableKeys: [
@@ -254,12 +269,16 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK]: {
     pathStem: 'edit-script/storyboard-panel-final-prompt-block',
     variableKeys: [
+      'director_decoupage_json',
+      'cinematography_shot_plan_json',
+      'full_edit_script_json',
       'source_snapshot_json',
-      'camera_style_bible_json',
       'spatial_profile_strategy_output_json',
       'video_block_json',
       'block_shots_json',
       'adjacent_blocks_json',
+      'previous_block_json',
+      'next_block_json',
       'panel_contract_json',
     ],
   },

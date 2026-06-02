@@ -19,6 +19,12 @@ export function buildZenStyleBibleFixture(): EditScriptStyleBible {
         lensAndDepthPrompt: '35mm镜头，中浅景深，自然透视。',
         videoRhythmPrompt: '缓慢呼吸式节奏，镜头停留足够久，慢剪辑，镜头之间自然过渡。',
       },
+      directing: {
+        pointOfViewPrompt: 'restricted protagonist viewpoint',
+        performancePrompt: 'restrained performance through small gestures',
+        informationReleasePrompt: 'reveal information through reaction before event truth',
+        rhythmPrompt: 'hold suspense pauses before faster turns',
+      },
       sound: {
         soundFilterPrompt: '低噪、近自然声场、不过度压缩。',
       },

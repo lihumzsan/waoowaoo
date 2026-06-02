@@ -3,13 +3,7 @@ import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import type { Locale } from '@/i18n/routing'
 import {
-  cameraPlanModelOutputSchema,
-  cameraStyleBibleModelOutputSchema,
-  generatedPanelPromptSchema,
   panelFinalPromptBlockModelOutputSchema,
-  type CameraPlanModelOutput,
-  type CameraPlanPanel,
-  type CameraStyleBibleModelOutput,
   type PanelFinalPromptBlockModelOutput,
   type StoryboardConsistencySourceVideoBlock,
   type StoryboardConsistencySourceSnapshot,
@@ -103,41 +97,32 @@ function validatePanelContract(
   validatePanelContractEntries(panelContract(snapshot), panels)
 }
 
-function validatePanels(
+function cinematographyShotFor(
   snapshot: StoryboardConsistencySourceSnapshot,
-  panels: readonly typeof generatedPanelPromptSchema._output[],
-  metadata: Record<string, unknown>,
-): StoryboardPanelPromptDraft[] {
-  validatePanelContract(snapshot, panels)
-  return panels
-    .slice()
-    .sort((left, right) => left.panelIndex - right.panelIndex)
-    .map((panel) => ({
-      panelIndex: panel.panelIndex,
-      sourceShotNumber: panel.sourceShotNumber,
-      sourceVideoBlockId: panel.sourceVideoBlockId,
-      prompt: panel.prompt.trim(),
-      metadata,
-    }))
+  shotNumber: number,
+) {
+  const shot = snapshot.cinematographyShotPlan.shots.find((item) => item.shotNumber === shotNumber)
+  if (!shot) throw new Error(`EDIT_SCRIPT_STORYBOARD_CINEMATOGRAPHY_SHOT_MISSING:${shotNumber}`)
+  return shot
 }
 
-function cameraPlanMetadata(panel: CameraPlanPanel): Record<string, unknown> {
+function cameraPlanMetadata(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number): Record<string, unknown> {
+  const shot = cinematographyShotFor(snapshot, shotNumber)
   return {
     source: 'camera_plan',
     strategy: 'spatial_text_blocking',
     cameraPlan: {
-      shotScale: panel.shotScale,
-      cameraPosition: panel.cameraPosition,
-      cameraHeight: panel.cameraHeight,
-      cameraAngle: panel.cameraAngle,
-      composition: panel.composition,
-      cameraMovement: panel.cameraMovement,
-      lensAndDepth: panel.lensAndDepth,
-      screenDirection: panel.screenDirection,
-      aestheticIntent: panel.aestheticIntent,
-      emotionalEffect: panel.emotionalEffect,
-      continuityNote: panel.continuityNote,
-      shotBlocking: panel.shotBlocking,
+      shotScale: shot.shotScale,
+      cameraPosition: shot.cameraPosition,
+      cameraHeight: shot.cameraHeight,
+      cameraAngle: shot.cameraAngle,
+      composition: shot.composition,
+      cameraMovement: shot.movement,
+      lensAndDepth: `${shot.lens}; ${shot.depthOfField}`,
+      lighting: shot.lighting,
+      axisAndEyeline: shot.axisAndEyeline,
+      continuityIn: shot.continuityIn,
+      continuityOut: shot.continuityOut,
     },
   }
 }
@@ -191,42 +176,41 @@ function spatialProfileStrategyOutputForCameraPlan(
 export async function generateStoryboardPanelFinalPrompts(input: GenerationContext & {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly spatialProfileStrategyOutput: unknown
-}): Promise<CameraPlanModelOutput & {
+}): Promise<{
+  readonly cameraPlanOutput: {
+    readonly strategy: 'spatial_text_blocking'
+    readonly panels: readonly Record<string, unknown>[]
+  }
   readonly panels: readonly StoryboardPanelPromptDraft[]
-  readonly cameraStyleBible: CameraStyleBibleModelOutput['cameraStyleBible']
   readonly blockOutputs: readonly PanelFinalPromptBlockModelOutput['panelFinalPromptBlockOutput'][]
 }> {
-  const cameraPlanSpatialProfileOutput = spatialProfileStrategyOutputForCameraPlan(input.spatialProfileStrategyOutput, null)
-  const bibleRaw = await runTextJsonStep({
-    ...input,
-    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE,
-    variables: {
-      source_snapshot_json: stringifyForPrompt(input.snapshot),
-      spatial_profile_strategy_output_json: stringifyForPrompt(cameraPlanSpatialProfileOutput),
-    },
-    stepTitle: 'Generate edit-script storyboard camera style bible',
-    stepIndex: 1,
-    stepTotal: 2,
-  })
-  const bible = cameraStyleBibleModelOutputSchema.parse(bibleRaw)
   const blockOutputs = await Promise.all(input.snapshot.videoBlocks.map(async (block) => {
     const contract = panelContractForBlock(input.snapshot, block)
+    const adjacent = adjacentBlocks(input.snapshot, block.blockIndex)
     const blockSpatialProfileOutput = spatialProfileStrategyOutputForCameraPlan(input.spatialProfileStrategyOutput, block.sourceVideoBlockId)
     const raw = await runTextJsonStep({
       ...input,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK,
       variables: {
+        director_decoupage_json: stringifyForPrompt(input.snapshot.directorDecoupage),
+        cinematography_shot_plan_json: stringifyForPrompt(input.snapshot.cinematographyShotPlan),
+        full_edit_script_json: stringifyForPrompt({
+          ...input.snapshot.editScript,
+          shots: input.snapshot.shots,
+          videoBlocks: input.snapshot.videoBlocks,
+        }),
         source_snapshot_json: stringifyForPrompt(input.snapshot),
-        camera_style_bible_json: stringifyForPrompt(bible.cameraStyleBible),
         spatial_profile_strategy_output_json: stringifyForPrompt(blockSpatialProfileOutput),
         video_block_json: stringifyForPrompt(block),
         block_shots_json: stringifyForPrompt(shotsForBlock(input.snapshot, block)),
-        adjacent_blocks_json: stringifyForPrompt(adjacentBlocks(input.snapshot, block.blockIndex)),
+        adjacent_blocks_json: stringifyForPrompt(adjacent),
+        previous_block_json: stringifyForPrompt(adjacent.previous),
+        next_block_json: stringifyForPrompt(adjacent.next),
         panel_contract_json: stringifyForPrompt(contract),
       },
       stepTitle: `Generate edit-script storyboard final panel prompts for block ${block.blockIndex + 1}`,
-      stepIndex: 2,
-      stepTotal: 2,
+      stepIndex: 1,
+      stepTotal: 1,
     })
     const parsed = panelFinalPromptBlockModelOutputSchema.parse(raw)
     if (parsed.panelFinalPromptBlockOutput.sourceVideoBlockId !== block.sourceVideoBlockId) {
@@ -235,37 +219,45 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
     validatePanelContractEntries(contract, parsed.panelFinalPromptBlockOutput.panels)
     return parsed.panelFinalPromptBlockOutput
   }))
-  const cameraPlanPanels = blockOutputs.flatMap((block) => block.panels)
-  const parsed = cameraPlanModelOutputSchema.parse({
-    cameraPlanOutput: {
-      strategy: 'spatial_text_blocking',
-      cameraStyleBible: bible.cameraStyleBible,
-      blocks: blockOutputs,
-      panels: cameraPlanPanels,
-    },
-  })
-  validatePanelContract(input.snapshot, parsed.cameraPlanOutput.panels)
-  const panels = validatePanels(
-    input.snapshot,
-    parsed.cameraPlanOutput.panels.map((panel) => ({
+  const finalPanels = blockOutputs.flatMap((block) => block.panels)
+  validatePanelContract(input.snapshot, finalPanels)
+  const panels = finalPanels
+    .slice()
+    .sort((left, right) => left.panelIndex - right.panelIndex)
+    .map((panel) => ({
       panelIndex: panel.panelIndex,
       sourceShotNumber: panel.sourceShotNumber,
       sourceVideoBlockId: panel.sourceVideoBlockId,
-      prompt: panel.finalPanelPrompt,
-    })),
-    { source: 'camera_plan', strategy: 'spatial_text_blocking' },
-  ).map((panel) => {
-    const cameraPlan = parsed.cameraPlanOutput.panels.find((item) => panelKey(item) === panelKey(panel))
-    if (!cameraPlan) throw new Error(`EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN_PANEL_MISSING:${panel.sourceShotNumber}`)
-    return {
-      ...panel,
-      metadata: cameraPlanMetadata(cameraPlan),
-    }
-  })
+      prompt: panel.finalPanelPrompt.trim(),
+      videoPrompt: panel.finalVideoPrompt.trim(),
+      metadata: cameraPlanMetadata(input.snapshot, panel.sourceShotNumber),
+    }))
+  const cameraPlanOutput = {
+    strategy: 'spatial_text_blocking' as const,
+    panels: panelContract(input.snapshot).map((panel) => {
+      const shot = cinematographyShotFor(input.snapshot, panel.sourceShotNumber)
+      return {
+        panelIndex: panel.panelIndex,
+        sourceShotNumber: panel.sourceShotNumber,
+        sourceVideoBlockId: panel.sourceVideoBlockId,
+        shotScale: shot.shotScale,
+        cameraPosition: shot.cameraPosition,
+        cameraHeight: shot.cameraHeight,
+        cameraAngle: shot.cameraAngle,
+        composition: shot.composition,
+        cameraMovement: shot.movement,
+        lensAndDepth: `${shot.lens}; ${shot.depthOfField}`,
+        screenDirection: shot.axisAndEyeline,
+        aestheticIntent: shot.lighting,
+        emotionalEffect: input.snapshot.directorDecoupage.shots.find((item) => item.shotNumber === panel.sourceShotNumber)?.dramaticPurpose ?? null,
+        continuityNote: `${shot.continuityIn} ${shot.continuityOut}`.trim(),
+        shotBlocking: {},
+      }
+    }),
+  }
   return {
-    ...parsed,
+    cameraPlanOutput,
     panels,
-    cameraStyleBible: bible.cameraStyleBible,
     blockOutputs,
   }
 }
