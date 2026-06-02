@@ -8,7 +8,10 @@ import WorkspaceNode, {
   nodeNeedsActualHeightMeasurement,
   videoElementAspectRatio,
 } from '@/features/project-workspace/canvas/nodes/WorkspaceNode'
-import { previewShotMediaKind } from '@/features/project-workspace/canvas/details/EditScriptPreviewDetail'
+import {
+  initialPreviewDetailsExpanded,
+  previewShotMediaKind,
+} from '@/features/project-workspace/canvas/details/EditScriptPreviewDetail'
 import type { WorkspaceCanvasFlowNode, WorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/node-canvas-types'
 
 vi.mock('@xyflow/react', () => ({
@@ -114,6 +117,10 @@ describe('workspace node rendering', () => {
       imageUrl: null,
       visualAction: ' ',
     })).toBe('empty')
+  })
+
+  it('keeps edit script preview prompt details expanded by default', () => {
+    expect(initialPreviewDetailsExpanded()).toBe(true)
   })
 
   it('shows space consistency profile stats while generation is running', () => {
