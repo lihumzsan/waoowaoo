@@ -377,6 +377,19 @@
         "audienceFocus": "Audience Focus",
         "viewpoint": "Viewpoint",
         "revealPlan": "Reveal Plan",
+        "performanceBeat": "Performance Beat",
+        "continuityIn": "Continuity In",
+        "continuityOut": "Continuity Out",
+        "shotScale": "Shot Scale",
+        "lens": "Lens",
+        "depthOfField": "Depth Of Field",
+        "cameraPosition": "Camera Position",
+        "cameraHeight": "Camera Height",
+        "cameraAngle": "Camera Angle",
+        "movement": "Movement",
+        "composition": "Composition",
+        "lighting": "Lighting",
+        "axisAndEyeline": "Axis And Eyeline",
         "shotType": "Shot Type",
         "cameraMove": "Camera Move",
         "description": "Description",
@@ -787,6 +800,12 @@
           "body": "Shared visual, camera, and sound-filter style rules for the full chain.",
           "meta": "The single style source for assets, storyboards, and video prompts"
         },
+        "editDirectorDecoupage": {
+          "title": "Director Decoupage",
+          "eyebrow": "Director Module",
+          "body": "Full shot-level director decoupage, defining why each shot exists, what the audience watches, whose viewpoint it follows, and how it connects.",
+          "meta": "{shots} director shot(s) · {duration}s"
+        },
         "editPipelineStep": {
           "eyebrow": "Edit Generation Step",
           "body": "Step fields projected from the edit-first table",
@@ -799,6 +818,14 @@
           "pendingTitle": "Generating Edit Table",
           "pendingBody": "AI is generating the edit-first table from the current video brief, including characters, locations, shot rhythm, video segments, and sound design.",
           "pendingMeta": "This will become an editable edit table when generation completes"
+        },
+        "editCinematographyShotPlan": {
+          "title": "Cinematography Shot Plan",
+          "eyebrow": "Cinematography Module",
+          "body": "Shot scale, lens, depth of field, camera position, composition, lighting, axis, and continuity are locked for every shot.",
+          "pendingBody": "Waiting to generate the full shot-level cinematography plan from the edit table, assets, and spatial profiles.",
+          "locationImageRequired": "Generate scene asset images first. A final scene image is required before camera position, axis, and composition can be planned reliably.",
+          "meta": "{shots} cinematography shot plan(s)"
         },
         "spaceConsistency": {
           "title": "Space Consistency",

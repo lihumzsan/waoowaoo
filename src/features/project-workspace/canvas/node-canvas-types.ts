@@ -13,14 +13,16 @@ export type WorkspaceCanvasNodeKind =
   | 'finalTimeline'
   | 'editScreenplay'
   | 'editStyleBible'
+  | 'editDirectorDecoupage'
   | 'editPipelineStep'
   | 'editScript'
+  | 'editCinematographyShotPlan'
   | 'spaceConsistency'
   | 'videoPlan'
   | 'bgmScore'
   | 'editRequiredAsset'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | { readonly type: 'update_story'; readonly value: string }

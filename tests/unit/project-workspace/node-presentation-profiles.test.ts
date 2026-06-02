@@ -32,6 +32,17 @@ describe('workspace canvas node presentation profiles', () => {
     })).toEqual({ width: 320, height: 560 })
   })
 
+  it('gives director and cinematography nodes distinct expanded profiles', () => {
+    const directorProfile = getWorkspaceCanvasNodePresentationProfile('editDirectorDecoupage')
+    const cinematographyProfile = getWorkspaceCanvasNodePresentationProfile('editCinematographyShotPlan')
+
+    expect(directorProfile.collapsed).toEqual({ width: 420, height: 360 })
+    expect(directorProfile.expanded).toEqual({ width: 620, height: 720 })
+    expect(cinematographyProfile.collapsed).toEqual({ width: 460, height: 620 })
+    expect(cinematographyProfile.expanded).toEqual({ width: 760, height: 820 })
+    expect(cinematographyProfile.expandedLayout).toBe('wide')
+  })
+
   it('allows measured video plan nodes to shrink to actual content height', () => {
     expect(resolveWorkspaceCanvasMeasuredNodeHeight({
       kind: 'videoPlan',

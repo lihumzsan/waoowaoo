@@ -415,6 +415,43 @@ describe('workspace node rendering', () => {
     expect(html).not.toContain('Sound')
   })
 
+  it('renders cinematography shot plan nodes with shot-level camera fields', () => {
+    const html = renderNode({
+      kind: 'editCinematographyShotPlan',
+      layoutNodeType: 'editCinematographyShotPlan',
+      targetType: 'editCinematographyShotPlan',
+      targetId: 'cinematography-1',
+      title: 'Cinematography Shot Plan',
+      eyebrow: 'Cinematography Module',
+      body: 'shot plan body',
+      meta: '1 shot',
+      statusLabel: 'Ready',
+      width: 460,
+      height: 620,
+      indexLabel: 'C',
+      editPipelineStepDetails: {
+        items: [
+          {
+            title: 'Shot 1',
+            fields: [
+              { label: 'Shot Scale', value: 'close-up' },
+              { label: 'Lens', value: '50mm' },
+              { label: 'Camera Position', value: 'right front of actor' },
+            ],
+            body: 'Hand in foreground, door seam in background.',
+          },
+        ],
+      },
+    })
+
+    expect(html).toContain('data-icon="image"')
+    expect(html).toContain('Cinematography Shot Plan')
+    expect(html).toContain('close-up')
+    expect(html).toContain('50mm')
+    expect(html).toContain('right front of actor')
+    expect(html).toContain('Hand in foreground')
+  })
+
   it('renders an edit script video preview entry from the core edit table node', () => {
     const html = renderNode({
       kind: 'editScript',

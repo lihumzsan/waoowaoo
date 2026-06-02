@@ -81,6 +81,7 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'scriptClip':
     case 'editScreenplay':
     case 'editStyleBible':
+    case 'editDirectorDecoupage':
       return 'story'
     case 'editPipelineStep':
       return 'editPipeline'
@@ -90,6 +91,7 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'imageAsset':
       return 'assets'
     case 'spaceConsistency':
+    case 'editCinematographyShotPlan':
       return 'spaceConsistency'
     case 'shot':
       return 'shots'

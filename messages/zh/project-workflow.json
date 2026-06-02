@@ -377,6 +377,19 @@
         "audienceFocus": "观众焦点",
         "viewpoint": "观看视角",
         "revealPlan": "信息释放",
+        "performanceBeat": "表演节拍",
+        "continuityIn": "入镜衔接",
+        "continuityOut": "出镜衔接",
+        "shotScale": "景别",
+        "lens": "焦段",
+        "depthOfField": "景深",
+        "cameraPosition": "机位",
+        "cameraHeight": "机位高度",
+        "cameraAngle": "拍摄角度",
+        "movement": "摄影运动",
+        "composition": "构图",
+        "lighting": "光线",
+        "axisAndEyeline": "轴线与视线",
         "shotType": "景别",
         "cameraMove": "运镜",
         "description": "描述",
@@ -787,6 +800,12 @@
           "body": "全链路统一使用的画面、镜头和声音滤镜风格规则。",
           "meta": "资产、分镜和视频提示词共用的唯一风格来源"
         },
+        "editDirectorDecoupage": {
+          "title": "导演拆镜",
+          "eyebrow": "导演模块",
+          "body": "全片 shot 级导演拆镜，定义每个镜头为什么存在、观众看什么、从谁的视角看以及如何衔接。",
+          "meta": "{shots} 个导演镜头 · {duration} 秒"
+        },
         "editPipelineStep": {
           "eyebrow": "剪辑生成步骤",
           "body": "从剪辑先行表拆出的阶段字段",
@@ -799,6 +818,14 @@
           "pendingTitle": "剪辑表生成中",
           "pendingBody": "AI 正在根据当前短片需求生成剪辑先行表，并提取人物、场景、镜头节奏、视频片段和声音设计。",
           "pendingMeta": "生成完成后会替换为可编辑剪辑表"
+        },
+        "editCinematographyShotPlan": {
+          "title": "摄影指导方案",
+          "eyebrow": "摄影指导模块",
+          "body": "已锁定每个 shot 的景别、焦段、景深、机位、构图、光线、轴线与衔接。",
+          "pendingBody": "等待根据完整剪辑表、资产和空间画像生成全片 shot 级摄影方案。",
+          "locationImageRequired": "请先完成场景资产图片。没有最终场景图时，摄影方案无法可靠决定机位、轴线和构图。",
+          "meta": "{shots} 个镜头摄影方案"
         },
         "spaceConsistency": {
           "title": "空间一致性",

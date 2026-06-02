@@ -1069,6 +1069,52 @@ function createEditPipelineStepItems(
   }))
 }
 
+function createDirectorDecoupageItems(
+  decoupage: ProjectEditDirectorDecoupage,
+  translate: Translate,
+): WorkspaceCanvasEditPipelineStepItem[] {
+  return decoupage.shots.map((shot) => ({
+    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
+    fields: [
+      { label: translate('nodeFields.duration'), value: durationLabel(shot.durationSec) },
+      { label: translate('nodeFields.dramaticPurpose'), value: shot.dramaticPurpose },
+      { label: translate('nodeFields.audienceFocus'), value: shot.audienceFocus },
+      { label: translate('nodeFields.viewpoint'), value: shot.viewpoint },
+      { label: translate('nodeFields.revealPlan'), value: shot.revealPlan },
+      { label: translate('nodeFields.performanceBeat'), value: shot.performanceBeat },
+      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
+      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
+      { label: translate('nodeFields.sound'), value: shot.sound },
+    ],
+    body: shot.visibleAction,
+    chips: [String(shot.shotNumber)],
+  }))
+}
+
+function createCinematographyShotPlanItems(
+  shotPlan: ProjectEditCinematographyShotPlan,
+  translate: Translate,
+): WorkspaceCanvasEditPipelineStepItem[] {
+  return shotPlan.shots.map((shot) => ({
+    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
+    fields: [
+      { label: translate('nodeFields.shotScale'), value: shot.shotScale },
+      { label: translate('nodeFields.lens'), value: shot.lens },
+      { label: translate('nodeFields.depthOfField'), value: shot.depthOfField },
+      { label: translate('nodeFields.cameraPosition'), value: shot.cameraPosition },
+      { label: translate('nodeFields.cameraHeight'), value: shot.cameraHeight },
+      { label: translate('nodeFields.cameraAngle'), value: shot.cameraAngle },
+      { label: translate('nodeFields.movement'), value: shot.movement },
+      { label: translate('nodeFields.lighting'), value: shot.lighting },
+      { label: translate('nodeFields.axisAndEyeline'), value: shot.axisAndEyeline },
+      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
+      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
+    ],
+    body: shot.composition,
+    chips: [String(shot.shotNumber)],
+  }))
+}
+
 function editPipelineStepReady(editScript: ProjectEditScript, stepKey: EditPipelineStepKey): boolean {
   if (stepKey === 'timeline') return editScript.shots.length > 0 && editScript.shots.every((shot) => shot.durationSec > 0)
   if (stepKey === 'visibleAction') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.visibleAction) && stringValue(shot.charactersAndScene))
@@ -1114,6 +1160,9 @@ export function buildWorkspaceNodeCanvasProjection({
   let zIndex = 0
   let editScriptCanvasRightX: number | null = null
   let editScriptCanvasCenterY: number | null = null
+  let editCinematographyShotPlanNodeId: string | null = null
+  let editCinematographyCanvasRightX: number | null = null
+  let editCinematographyCanvasCenterY: number | null = null
 
   const storyBody = storyText.trim()
   const hasStory = storyBody.length > 0
@@ -1207,45 +1256,6 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
-  if (editDirectorDecoupage && editScreenplay && !editScript) {
-    const nodeId = `edit-director-decoupage:${editDirectorDecoupage.id}`
-    nodes.push(createNode({
-      id: nodeId,
-      fallbackX: STORY_COLUMN_X + EDIT_SCREENPLAY_NODE_WIDTH + 72,
-      fallbackY: editScreenplayFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'editPipelineStep',
-        layoutNodeType: 'editPipelineStep',
-        targetType: 'editPipelineStep',
-        targetId: editDirectorDecoupage.id,
-        title: translate('nodeFields.editStepDirectorIntent'),
-        eyebrow: translate('nodes.editScript.eyebrow'),
-        body: editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
-        meta: translate('nodes.editScript.meta', {
-          shots: editDirectorDecoupage.shots.length,
-          duration: editDirectorDecoupage.shots.reduce((total, shot) => total + shot.durationSec, 0),
-          assets: 0,
-        }),
-        statusLabel: editDirectorDecoupage.status === 'ready' ? translate('status.ready') : translate('status.processing'),
-        isRunning: editDirectorDecoupage.status !== 'ready',
-        width: EDIT_PIPELINE_STEP_NODE_WIDTH,
-        height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
-        indexLabel: 'D',
-        actionLabel: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
-          ? translate('actions.generateEditScript')
-          : undefined,
-        action: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
-          ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
-          : undefined,
-        onAction,
-      },
-    }))
-    edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupage.id}`, `edit-screenplay:${editScreenplay.id}`, nodeId))
-  }
-
   const styleBibleSourceValue = editScreenplay?.styleBible ?? editScript?.styleBible ?? null
   const styleBibleSourceId = editScreenplay && editScreenplay.styleBible !== undefined && editScreenplay.styleBible !== null
     ? editScreenplay.id
@@ -1299,6 +1309,64 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
+  const editDirectorDecoupageNodeId = editDirectorDecoupage ? `edit-director-decoupage:${editDirectorDecoupage.id}` : null
+  const editDirectorDecoupageFallbackY = editStyleSourceBottomY !== null
+    ? editStyleSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
+    : hasStory ? 430 : 180
+  const editDirectorSourceBottomY = editDirectorDecoupageNodeId
+    ? editDirectorDecoupageFallbackY + EDIT_PIPELINE_STEP_NODE_HEIGHT
+    : editStyleSourceBottomY
+  if (editDirectorDecoupage && editDirectorDecoupageNodeId) {
+    const decoupageItems = createDirectorDecoupageItems(editDirectorDecoupage, translate)
+    nodes.push(createNode({
+      id: editDirectorDecoupageNodeId,
+      fallbackX: STORY_COLUMN_X,
+      fallbackY: editDirectorDecoupageFallbackY,
+      zIndex: zIndex++,
+      savedLayoutByKey,
+      ignoreSavedLayout: true,
+      data: {
+        kind: 'editDirectorDecoupage',
+        layoutNodeType: 'editDirectorDecoupage',
+        targetType: 'editDirectorDecoupage',
+        targetId: editDirectorDecoupage.id,
+        title: translate('nodes.editDirectorDecoupage.title'),
+        eyebrow: translate('nodes.editDirectorDecoupage.eyebrow'),
+        body: compactText(
+          editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
+          translate('nodes.editDirectorDecoupage.body'),
+        ),
+        meta: translate('nodes.editDirectorDecoupage.meta', {
+          shots: editDirectorDecoupage.shots.length,
+          duration: editDirectorDecoupage.shots.reduce((total, shot) => total + shot.durationSec, 0),
+        }),
+        statusLabel: editDirectorDecoupage.status === 'ready' ? translate('status.ready') : translate('status.processing'),
+        isRunning: editDirectorDecoupage.status !== 'ready',
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+        width: EDIT_PIPELINE_STEP_NODE_WIDTH,
+        height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
+        indexLabel: 'D',
+        editPipelineStepDetails: {
+          items: decoupageItems,
+        },
+        actionLabel: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+          ? translate('actions.generateEditScript')
+          : undefined,
+        action: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+          ? { type: 'generate_edit_script', screenplayId: editDirectorDecoupage.screenplayId }
+          : undefined,
+        onAction,
+      },
+    }))
+    if (editStyleBibleNodeId) {
+      edges.push(createEdge(`edge:edit-style-bible-director-decoupage:${editDirectorDecoupage.id}`, editStyleBibleNodeId, editDirectorDecoupageNodeId))
+    } else if (editScreenplayNodeId) {
+      edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupage.id}`, editScreenplayNodeId, editDirectorDecoupageNodeId))
+    } else if (hasStory) {
+      edges.push(createEdge(`edge:analysis-director-decoupage:${editDirectorDecoupage.id}`, analysisNodeId, editDirectorDecoupageNodeId))
+    }
+  }
+
   if (editScript) {
     const editScriptNodeId = `edit-script:${editScript.id}`
     const editScriptIsGenerating = editScript.status === 'generating'
@@ -1309,13 +1377,13 @@ export function buildWorkspaceNodeCanvasProjection({
     const pipelineStepLayerHeight = pipelineStepRows > 0
       ? pipelineStepRows * EDIT_PIPELINE_STEP_NODE_HEIGHT + (pipelineStepRows - 1) * EDIT_PIPELINE_STEP_GRID_GAP_Y
       : 0
-    const editPipelineBaseY = editStyleSourceBottomY !== null
-      ? editStyleSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
+    const editPipelineBaseY = editDirectorSourceBottomY !== null
+      ? editDirectorSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
       : hasStory ? 430 : 180
     const editScriptFallbackY = shouldShowPipelineSteps
       ? editPipelineBaseY + pipelineStepLayerHeight + EDIT_PIPELINE_TO_SCRIPT_GAP_Y
-      : editStyleSourceBottomY !== null
-        ? editStyleSourceBottomY + 170
+      : editDirectorSourceBottomY !== null
+        ? editDirectorSourceBottomY + 170
         : hasStory ? 430 : 180
     const editScriptHasRows = editScript.shots.length > 0
     const editScriptHeight = editScriptIsGenerating && !editScriptHasRows
@@ -1458,7 +1526,9 @@ export function buildWorkspaceNodeCanvasProjection({
     }))
     if (pipelineNodeIds.length > 0) {
       const firstPipelineNodeId = pipelineNodeIds[0]
-      if (editStyleBibleNodeId) {
+      if (editDirectorDecoupageNodeId) {
+        edges.push(createEdge(`edge:director-decoupage-edit-pipeline:${editScript.id}`, editDirectorDecoupageNodeId, firstPipelineNodeId))
+      } else if (editStyleBibleNodeId) {
         edges.push(createEdge(`edge:edit-style-bible-edit-pipeline:${editScript.id}`, editStyleBibleNodeId, firstPipelineNodeId))
       } else if (editScreenplayNodeId) {
         edges.push(createEdge(`edge:edit-screenplay-edit-pipeline:${editScript.id}`, editScreenplayNodeId, firstPipelineNodeId))
@@ -1470,6 +1540,8 @@ export function buildWorkspaceNodeCanvasProjection({
         if (nextNodeId) edges.push(createEdge(`edge:edit-pipeline:${editScript.id}:${index + 1}`, nodeId, nextNodeId))
       })
       edges.push(createEdge(`edge:edit-pipeline-edit-script:${editScript.id}`, pipelineNodeIds[pipelineNodeIds.length - 1], editScriptNodeId))
+    } else if (editDirectorDecoupageNodeId) {
+      edges.push(createEdge(`edge:director-decoupage-edit-script:${editScript.id}`, editDirectorDecoupageNodeId, editScriptNodeId))
     } else if (editStyleBibleNodeId) {
       edges.push(createEdge(`edge:edit-style-bible-edit-script:${editScript.id}`, editStyleBibleNodeId, editScriptNodeId))
     } else if (editScreenplayNodeId) {
@@ -1479,10 +1551,12 @@ export function buildWorkspaceNodeCanvasProjection({
     }
 
     const assetBaseY = editScriptFallbackY + editScriptHeight + EDIT_SCRIPT_ASSET_LAYER_GAP_Y
+    const editAssetNodeIds: string[] = []
     let assetRowY = assetBaseY
     let assetRowMaxHeight = 0
     if (editScriptIsReady) editScript.requirements.forEach((asset, index) => {
       const nodeId = `edit-asset:${asset.id}`
+      editAssetNodeIds.push(nodeId)
       const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
       const canRegenerateAsset = asset.status === 'completed' && Boolean(asset.targetId)
       const assetAction: WorkspaceCanvasNodeAction | undefined = canGenerateAsset
@@ -1555,6 +1629,72 @@ export function buildWorkspaceNodeCanvasProjection({
       }))
       edges.push(createEdge(`edge:edit-script-asset:${asset.id}`, editScriptNodeId, nodeId))
     })
+    if (editScriptIsReady) {
+      const matchingShotPlan = editCinematographyShotPlan?.editScriptId === editScript.id
+        ? editCinematographyShotPlan
+        : null
+      const nodeId = matchingShotPlan
+        ? `edit-cinematography-shot-plan:${matchingShotPlan.id}`
+        : `edit-cinematography-shot-plan:pending:${editScript.id}`
+      const items = matchingShotPlan?.status === 'ready'
+        ? createCinematographyShotPlanItems(matchingShotPlan, translate)
+        : []
+      const statusLabel = matchingShotPlan
+        ? matchingShotPlan.status === 'ready' ? translate('status.ready') : translate('status.processing')
+        : translate('status.pending')
+      const canGenerateShotPlan = !matchingShotPlan && locationReferenceReady
+      const action = canGenerateShotPlan
+        ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
+        : !matchingShotPlan
+          ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
+          : null
+      editCinematographyShotPlanNodeId = nodeId
+      editCinematographyCanvasRightX = (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72 + SPACE_CONSISTENCY_NODE_WIDTH
+      editCinematographyCanvasCenterY = editScriptCanvasCenterY
+      nodes.push(createNode({
+        id: nodeId,
+        fallbackX: (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72,
+        fallbackY: editScriptCanvasCenterY !== null
+          ? editScriptCanvasCenterY - SPACE_CONSISTENCY_NODE_HEIGHT / 2
+          : editScriptFallbackY,
+        zIndex: zIndex++,
+        savedLayoutByKey,
+        ignoreSavedLayout: true,
+        data: {
+          kind: 'editCinematographyShotPlan',
+          layoutNodeType: 'editCinematographyShotPlan',
+          targetType: matchingShotPlan ? 'editCinematographyShotPlan' : 'editScript',
+          targetId: matchingShotPlan?.id ?? editScript.id,
+          title: translate('nodes.editCinematographyShotPlan.title'),
+          eyebrow: translate('nodes.editCinematographyShotPlan.eyebrow'),
+          body: matchingShotPlan?.status === 'ready'
+            ? translate('nodes.editCinematographyShotPlan.body')
+            : !locationReferenceReady
+              ? translate('nodes.editCinematographyShotPlan.locationImageRequired')
+              : translate('nodes.editCinematographyShotPlan.pendingBody'),
+          meta: translate('nodes.editCinematographyShotPlan.meta', {
+            shots: matchingShotPlan?.shots.length ?? editScript.shotCount,
+          }),
+          statusLabel,
+          isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready'),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+          width: SPACE_CONSISTENCY_NODE_WIDTH,
+          height: SPACE_CONSISTENCY_NODE_HEIGHT,
+          indexLabel: 'C',
+          editPipelineStepDetails: {
+            items,
+          },
+          actionLabel: action?.label,
+          action: action?.action,
+          actionDisabled: action?.disabled ?? false,
+          onAction,
+        },
+      }))
+      edges.push(createEdge(`edge:edit-script-cinematography-shot-plan:${editScript.id}`, editScriptNodeId, nodeId))
+      editAssetNodeIds.forEach((assetNodeId) => {
+        edges.push(createEdge(`edge:edit-asset-cinematography-shot-plan:${assetNodeId}`, assetNodeId, nodeId))
+      })
+    }
   }
   if (!editScript && editScriptPending) {
     const pendingEditScriptNodeId = `edit-script:pending:${episodeId}`
@@ -1637,8 +1777,10 @@ export function buildWorkspaceNodeCanvasProjection({
     && !hasStoryboardPanels
     && !hasExistingSpaceConsistencyLayer
   const shouldRouteThroughSpaceConsistency = Boolean(editScript && (hasExistingSpaceConsistencyLayer || shouldShowPendingSpaceConsistencyLayer))
-  const spaceConsistencyBaseX = editScriptCanvasRightX !== null
-    ? editScriptCanvasRightX + 72
+  const spaceConsistencyBaseX = editCinematographyCanvasRightX !== null
+    ? editCinematographyCanvasRightX + 72
+    : editScriptCanvasRightX !== null
+      ? editScriptCanvasRightX + 72
     : PANEL_GRID_BASE_X - SPACE_CONSISTENCY_NODE_WIDTH - 90
   const storyboardFlowBaseX = shouldRouteThroughSpaceConsistency
     ? Math.max(
@@ -1682,8 +1824,8 @@ export function buildWorkspaceNodeCanvasProjection({
     nodes.push(createNode({
       id: nodeId,
       fallbackX: spaceConsistencyBaseX,
-      fallbackY: (editScriptCanvasCenterY !== null
-        ? editScriptCanvasCenterY - SPACE_CONSISTENCY_NODE_HEIGHT / 2
+      fallbackY: ((editCinematographyCanvasCenterY ?? editScriptCanvasCenterY) !== null
+        ? (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY ?? 0) - SPACE_CONSISTENCY_NODE_HEIGHT / 2
         : shotGridBaseY) + index * (SPACE_CONSISTENCY_NODE_HEIGHT + 92),
       zIndex: zIndex++,
       savedLayoutByKey,
@@ -1726,7 +1868,7 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    const editScriptSourceNodeId = editScript ? `edit-script:${editScript.id}` : null
+    const editScriptSourceNodeId = editCinematographyShotPlanNodeId ?? (editScript ? `edit-script:${editScript.id}` : null)
     const clipSourceNodeId = clipNodeIds.get(storyboard.clipId) ?? null
     const sourceNodeId = editScriptSourceNodeId ?? clipSourceNodeId
     if (sourceNodeId) {
@@ -1753,8 +1895,8 @@ export function buildWorkspaceNodeCanvasProjection({
     nodes.push(createNode({
       id: nodeId,
       fallbackX: spaceConsistencyBaseX,
-      fallbackY: editScriptCanvasCenterY !== null
-        ? editScriptCanvasCenterY - SPACE_CONSISTENCY_NODE_HEIGHT / 2
+      fallbackY: (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY) !== null
+        ? (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY ?? 0) - SPACE_CONSISTENCY_NODE_HEIGHT / 2
         : shotGridBaseY,
       zIndex: zIndex++,
       savedLayoutByKey,
@@ -1787,7 +1929,11 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    edges.push(createEdge(`edge:edit-script-space-consistency:${editScript.id}`, `edit-script:${editScript.id}`, nodeId))
+    edges.push(createEdge(
+      `edge:edit-script-space-consistency:${editScript.id}`,
+      editCinematographyShotPlanNodeId ?? `edit-script:${editScript.id}`,
+      nodeId,
+    ))
   }
   panelsWithStoryboard.forEach(({ storyboard, panel }, index) => {
     const nodeId = `shot:${panel.id}`

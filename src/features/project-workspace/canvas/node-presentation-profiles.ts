@@ -115,6 +115,15 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     expandedLayout: 'stack',
     defaultExpanded: false,
   },
+  editDirectorDecoupage: {
+    collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
+    expanded: {
+      width: 620,
+      height: 720,
+    },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
   editPipelineStep: {
     collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
     expandedLayout: 'stack',
@@ -126,6 +135,15 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
       height: 420,
     },
     expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
+  editCinematographyShotPlan: {
+    collapsed: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
+    expanded: {
+      width: 760,
+      height: 820,
+    },
+    expandedLayout: 'wide',
     defaultExpanded: false,
   },
   spaceConsistency: {

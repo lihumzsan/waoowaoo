@@ -36,10 +36,14 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'bookOpen'
     case 'editStyleBible':
       return 'sparklesAlt'
+    case 'editDirectorDecoupage':
+      return 'clapperboard'
     case 'editPipelineStep':
       return 'chart'
     case 'editScript':
       return 'clipboardCheck'
+    case 'editCinematographyShotPlan':
+      return 'image'
     case 'spaceConsistency':
       return 'chart'
     case 'videoPlan':
@@ -1654,10 +1658,14 @@ function NodeContent({
       return <EditScreenplayContent data={data} labels={labels} expanded={expanded} />
     case 'editStyleBible':
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
+    case 'editDirectorDecoupage':
+      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'editPipelineStep':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'editScript':
       return <EditScriptContent data={data} labels={labels} />
+    case 'editCinematographyShotPlan':
+      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'spaceConsistency':
       return <SpaceConsistencyContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':

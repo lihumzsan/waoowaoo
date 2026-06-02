@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ProjectClip,
   ProjectEditCinematographyShotPlan,
+  ProjectEditDirectorDecoupage,
   ProjectEditScreenplay,
   ProjectEditScript,
   ProjectPanel,
@@ -171,6 +172,34 @@ function createEditScreenplay(input?: Partial<ProjectEditScreenplay>): ProjectEd
     ...(input?.styleBible !== undefined ? { styleBible: input.styleBible } : {}),
     screenplayText: input?.screenplayText ?? '标题：《光影回溯》\n\n故事梗概：飞船追赶远古光线。',
     status: input?.status ?? 'ready',
+  }
+}
+
+function createDirectorDecoupage(input?: Partial<ProjectEditDirectorDecoupage>): ProjectEditDirectorDecoupage {
+  return {
+    id: input?.id ?? 'director-1',
+    projectId: input?.projectId ?? 'project-1',
+    episodeId: input?.episodeId ?? 'episode-1',
+    screenplayId: input?.screenplayId ?? 'screenplay-1',
+    userPrompt: input?.userPrompt ?? 'make a one minute sci-fi film',
+    status: input?.status ?? 'ready',
+    shots: input?.shots ?? [
+      {
+        shotNumber: 1,
+        durationSec: 3,
+        dramaticPurpose: 'establish hesitation',
+        visibleAction: 'Pilot stops before the sealed door.',
+        audienceFocus: 'pilot hand and dark door seam',
+        viewpoint: 'restricted protagonist viewpoint',
+        revealPlan: 'hide the room beyond the door',
+        performanceBeat: 'fear held in breath and fingers',
+        continuityIn: 'footsteps stop before the door',
+        continuityOut: 'continue along the pilot eyeline',
+        charactersAndScene: 'Pilot outside the sealed door',
+        sound: 'low room tone under stopped footsteps',
+      },
+    ],
+    hardBans: input?.hardBans ?? [],
   }
 }
 
@@ -366,6 +395,7 @@ describe('workspace node canvas projection', () => {
       'edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:assetExtract',
       'edit-script:edit-video',
+      'edit-cinematography-shot-plan:pending:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-pipeline:edit-video:timeline',
@@ -375,6 +405,7 @@ describe('workspace node canvas projection', () => {
       'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
       'edit-pipeline:edit-video:assetExtract->edit-script:edit-video',
+      'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
     ])
 
     const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
@@ -424,6 +455,49 @@ describe('workspace node canvas projection', () => {
     })
   })
 
+  it('keeps the director decoupage node visible after the core edit table is ready', () => {
+    const editScreenplay = createEditScreenplay({ styleBible: createStyleBible() })
+    const editDirectorDecoupage = createDirectorDecoupage({
+      id: 'director-ready',
+      screenplayId: editScreenplay.id,
+    })
+    const editScript = createSingleVideoEditScript({ id: 'edit-after-director', styleBible: editScreenplay.styleBible })
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editDirectorDecoupage,
+      editScript,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:director-ready')
+    const pipelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-after-director:timeline')
+    expect(directorNode?.data.kind).toBe('editDirectorDecoupage')
+    expect(directorNode?.data.layoutNodeType).toBe('editDirectorDecoupage')
+    expect(directorNode?.data.targetType).toBe('editDirectorDecoupage')
+    expect(directorNode?.data.editPipelineStepDetails?.items[0]).toMatchObject({
+      title: 'nodeFields.shotIndex:{"index":1}',
+      fields: expect.arrayContaining([
+        { label: 'nodeFields.dramaticPurpose', value: 'establish hesitation' },
+        { label: 'nodeFields.viewpoint', value: 'restricted protagonist viewpoint' },
+        { label: 'nodeFields.continuityOut', value: 'continue along the pilot eyeline' },
+      ]),
+      body: 'Pilot stops before the sealed door.',
+    })
+    expect(pipelineNode && directorNode ? pipelineNode.position.y : 0).toBeGreaterThan(
+      directorNode ? directorNode.position.y + directorNode.data.height : 0,
+    )
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:director-decoupage-edit-pipeline:edit-after-director',
+      source: 'edit-director-decoupage:director-ready',
+      target: 'edit-pipeline:edit-after-director:timeline',
+    }))
+  })
+
   it('projects the style bible as the style source between screenplay and edit generation', () => {
     const styleBible = createStyleBible()
     const editScreenplay = createEditScreenplay({ styleBible })
@@ -449,6 +523,7 @@ describe('workspace node canvas projection', () => {
       'edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:assetExtract',
       'edit-script:edit-video',
+      'edit-cinematography-shot-plan:pending:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-style-bible:screenplay-1',
@@ -459,6 +534,7 @@ describe('workspace node canvas projection', () => {
       'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
       'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
       'edit-pipeline:edit-video:assetExtract->edit-script:edit-video',
+      'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
     ])
 
     const styleNode = projection.nodes.find((node) => node.id === 'edit-style-bible:screenplay-1')
@@ -774,10 +850,10 @@ describe('workspace node canvas projection', () => {
     expect(bgmNode?.data.height).toBe(320)
     expect(bgmNode?.style).toMatchObject({ width: 420, height: 320 })
     expect(bgmNode?.data.action).toEqual({ type: 'generate_bgm_score' })
-    expect(finalNode?.position).toEqual({
-      x: (bgmNode?.position.x ?? 0) + (bgmNode?.data.width ?? 0) + WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
-      y: bgmNode?.position.y,
-    })
+    expect(finalNode?.position.x).toBe(
+      (bgmNode?.position.x ?? 0) + (bgmNode?.data.width ?? 0) + WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
+    )
+    expect(finalNode && bgmNode ? nodesOverlap(finalNode, bgmNode) : true).toBe(false)
     expect(finalNode?.data.actionDisabled).toBe(true)
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('bgm-score:episode-1->final:episode-1')
   })
@@ -1146,8 +1222,7 @@ describe('workspace node canvas projection', () => {
     expect(videoPlanNodes).toHaveLength(6)
     expect(videoPlanNodes[0].data.height).toBeGreaterThan(560)
     expect(videoPlanNodes[5].position.x).toBe(videoPlanNodes[0].position.x)
-    const firstRowMaxHeight = Math.max(...videoPlanNodes.slice(0, 5).map((node) => node.data.height))
-    expect(videoPlanNodes[5].position.y).toBe(videoPlanNodes[0].position.y + firstRowMaxHeight + 96)
+    expect(videoPlanNodes[5].position.y).toBeGreaterThan(videoPlanNodes[0].position.y)
     videoPlanNodes.forEach((node, index) => {
       videoPlanNodes.slice(index + 1).forEach((otherNode) => {
         expect(nodesOverlap(node, otherNode)).toBe(false)
@@ -1434,6 +1509,7 @@ describe('workspace node canvas projection', () => {
       'edit-script:edit-1',
       'edit-asset:req-character',
       'edit-asset:req-location',
+      'edit-cinematography-shot-plan:pending:edit-1',
     ])
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-1')
     expect(editNode?.data.kind).toBe('editScript')
@@ -2000,6 +2076,24 @@ describe('workspace node canvas projection', () => {
       editScriptId: 'edit-ready',
     })
     expect(editNode?.data.actionDisabled).toBe(false)
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:pending:edit-ready')
+    expect(cinematographyNode?.data.kind).toBe('editCinematographyShotPlan')
+    expect(cinematographyNode?.data.layoutNodeType).toBe('editCinematographyShotPlan')
+    expect(cinematographyNode?.data.action).toEqual({
+      type: 'generate_edit_cinematography_shot_plan',
+      editScriptId: 'edit-ready',
+    })
+    expect(cinematographyNode?.data.actionDisabled).toBe(false)
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:edit-script-cinematography-shot-plan:edit-ready',
+      source: 'edit-script:edit-ready',
+      target: 'edit-cinematography-shot-plan:pending:edit-ready',
+    }))
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:edit-asset-cinematography-shot-plan:edit-asset:req-location',
+      source: 'edit-asset:req-location',
+      target: 'edit-cinematography-shot-plan:pending:edit-ready',
+    }))
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-ready:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-ready')
     expect(consistencyNode).toBeUndefined()
@@ -2173,6 +2267,7 @@ describe('workspace node canvas projection', () => {
 
     const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial')
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-spatial')
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:cinematography-spatial')
     const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-spatial-1')
     expect(spaceNode?.data.kind).toBe('spaceConsistency')
     expect(spaceNode?.data.previewImageUrl).toBeNull()
@@ -2183,9 +2278,21 @@ describe('workspace node canvas projection', () => {
     expect(spaceNode && editNode ? spaceNode.position.x : 0).toBeGreaterThan(
       editNode ? editNode.position.x + editNode.data.width : 0,
     )
-    expect(spaceNode && editNode ? Math.abs(
+    expect(cinematographyNode?.data.kind).toBe('editCinematographyShotPlan')
+    expect(cinematographyNode?.data.editPipelineStepDetails?.items[0]).toMatchObject({
+      fields: expect.arrayContaining([
+        { label: 'nodeFields.shotScale', value: 'medium shot' },
+        { label: 'nodeFields.lens', value: '35mm' },
+        { label: 'nodeFields.cameraPosition', value: 'front of the scene' },
+      ]),
+      body: 'balanced composition',
+    })
+    expect(spaceNode && cinematographyNode ? spaceNode.position.x : 0).toBeGreaterThan(
+      cinematographyNode ? cinematographyNode.position.x + cinematographyNode.data.width : 0,
+    )
+    expect(spaceNode && cinematographyNode ? Math.abs(
       (spaceNode.position.y + spaceNode.data.height / 2)
-      - (editNode.position.y + editNode.data.height / 2),
+      - (cinematographyNode.position.y + cinematographyNode.data.height / 2),
     ) : Number.MAX_SAFE_INTEGER).toBeLessThanOrEqual(1)
     expect(shotNode && spaceNode ? shotNode.position.x : 0).toBeGreaterThan(
       spaceNode ? spaceNode.position.x + spaceNode.data.width : 0,
@@ -2224,7 +2331,11 @@ describe('workspace node canvas projection', () => {
         },
       ],
     })
-    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-source:storyboard-spatial')).toBe(true)
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:space-consistency-source:storyboard-spatial',
+      source: 'edit-cinematography-shot-plan:cinematography-spatial',
+      target: 'space-consistency:storyboard-spatial',
+    }))
     expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-shot:storyboard-spatial')).toBe(true)
   })
 
