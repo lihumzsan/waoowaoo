@@ -339,6 +339,7 @@
         "promptSaving": "Saving",
         "promptSaved": "Saved",
         "promptSaveFailed": "Save failed",
+        "viewVideoPreview": "View Video Preview",
         "moreItems": "{count} more",
         "screenplay": "Screenplay",
         "originalRequest": "Original Request",
@@ -512,6 +513,8 @@
           "candidates": "Candidates",
           "imageGeneration": "Image Generation / Edit",
           "videoPreview": "Video Preview",
+          "editScriptPreview": "Edit Table Video Preview",
+          "editScriptTimeline": "Shot Timeline",
           "videoControls": "Video Controls",
           "bgmScoreOutput": "BGM Output",
           "bgmScoreStats": "BGM Stats",
@@ -547,6 +550,10 @@
           "srtEnd": "SRT End",
           "srtSegment": "Dialogue / SRT",
           "videoPrompt": "Video Prompt",
+          "shotCount": "Shot Count",
+          "currentShot": "Current Shot",
+          "charactersAndScene": "Characters / Scene",
+          "sound": "Sound",
           "photographyRules": "Photography Rules JSON",
           "actingNotes": "Acting Notes JSON",
           "insertPrompt": "Insert Shot Request",
@@ -615,7 +622,9 @@
           "generatingBgm": "Generating BGM",
           "renderFinalVideo": "AI Edit",
           "openFinalVideo": "Open Final Video",
-          "downloadVideos": "Download Videos"
+          "downloadVideos": "Download Videos",
+          "playPreview": "Play Preview",
+          "pausePreview": "Pause Preview"
         },
         "defaults": {
           "variantTitle": "Shot Variant"
@@ -628,6 +637,10 @@
           "noCandidates": "No candidates",
           "noVideo": "No video",
           "noLipSync": "No lip-sync video",
+          "noPreviewMedia": "No visual media",
+          "noPreviewShot": "No shot",
+          "noImagePrompt": "No image prompt",
+          "noVideoPrompt": "No video prompt",
           "selectModel": "Select video model",
           "selectCharacter": "Select character",
           "selectAppearance": "Select appearance",
@@ -682,7 +695,10 @@
           "props": "{count} prop references"
         },
         "labels": {
-          "panelReference": "Shot {number}"
+          "panelReference": "Shot {number}",
+          "previewShot": "Shot {number}",
+          "previewShotAlt": "Shot {number} preview",
+          "editScriptPreviewTitle": "Watch the edit table by shot rhythm"
         }
       },
       "nodes": {

@@ -122,7 +122,6 @@ interface TranslateValues {
 type Translate = (key: string, values?: TranslateValues) => string
 type EditPipelineStepKey = 'timeline' | 'visualAction' | 'camera' | 'audio' | 'primaryTable' | 'assetExtract'
 type EditPipelineStepState = 'pending' | 'processing' | 'ready' | 'failed'
-type SpaceConsistencyDetails = NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>
 
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
@@ -1116,6 +1115,16 @@ export function buildWorkspaceNodeCanvasProjection({
   const storyBody = storyText.trim()
   const hasStory = storyBody.length > 0
   const analysisNodeId = `analysis:${episodeId}`
+  const clipOrder = new Map(clips.map((clip, index) => [clip.id, index]))
+  const panelsWithStoryboard = sortedStoryboards(storyboards, clipOrder).flatMap((storyboard) => (
+    sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
+  ))
+  const hasStoryboardPanels = panelsWithStoryboard.length > 0
+  const panelByShotNumberForVideoPlan = new Map<number, ProjectPanel>()
+  panelsWithStoryboard.forEach(({ panel }) => {
+    const shotNumber = panel.panelNumber ?? panel.panelIndex + 1
+    panelByShotNumberForVideoPlan.set(shotNumber, panel)
+  })
   if (hasStory) {
     nodes.push(createNode({
       id: analysisNodeId,
@@ -1380,7 +1389,15 @@ export function buildWorkspaceNodeCanvasProjection({
           screenplayText: editScript.screenplayText,
           durationSec: editScript.durationSec,
           shotCount: editScript.shotCount,
-          shots: editScript.shots,
+          shots: editScript.shots.map((shot) => {
+            const panel = panelByShotNumberForVideoPlan.get(shot.shotNumber) ?? null
+            return {
+              ...shot,
+              imagePrompt: panel?.imagePrompt ?? null,
+              imageUrl: panel?.imageUrl ?? null,
+              videoUrl: panel?.videoUrl ?? null,
+            }
+          }),
         } : undefined,
         actionLabel: editScriptAction?.label,
         action: editScriptAction?.action,
@@ -1520,7 +1537,6 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
-  const clipOrder = new Map(clips.map((clip, index) => [clip.id, index]))
   const clipNodeIds = new Map<string, string>()
   clips.forEach((clip, index) => {
     const nodeId = `clip:${clip.id}`
@@ -1556,16 +1572,7 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   })
 
-  const panelsWithStoryboard = sortedStoryboards(storyboards, clipOrder).flatMap((storyboard) => (
-    sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
-  ))
-  const hasStoryboardPanels = panelsWithStoryboard.length > 0
   const hasExistingSpaceConsistencyLayer = storyboards.some(storyboardUsesSpatialBlocking)
-  const panelByShotNumberForVideoPlan = new Map<number, ProjectPanel>()
-  panelsWithStoryboard.forEach(({ panel }) => {
-    const shotNumber = panel.panelNumber ?? panel.panelIndex + 1
-    panelByShotNumberForVideoPlan.set(shotNumber, panel)
-  })
   const hasVideoBlocks = editScript?.status === 'ready' && Boolean(editScript.videoBlocks?.length)
   const canShowVideoPlanLayer = hasVideoBlocks && hasStoryboardPanels
   const shouldShowPendingSpaceConsistencyLayer = editScript?.status === 'ready'

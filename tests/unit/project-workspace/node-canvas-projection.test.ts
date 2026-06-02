@@ -1457,6 +1457,93 @@ describe('workspace node canvas projection', () => {
     })
   })
 
+  it('enriches edit script preview shots with storyboard image prompts and media urls', () => {
+    const editScript = createSingleVideoEditScript({
+      id: 'edit-preview',
+      durationSec: 6,
+      shotCount: 2,
+      shots: [
+        {
+          shotNumber: 1,
+          durationSec: 3,
+          visualAction: 'Pilot crosses the docking bay.',
+          charactersAndScene: 'Pilot / Docking Bay',
+          camera: 'locked wide shot',
+          videoPrompt: 'Core edit table video prompt for shot one.',
+          sound: 'air hum',
+        },
+        {
+          shotNumber: 2,
+          durationSec: 3,
+          visualAction: 'A red machine eye opens.',
+          charactersAndScene: 'Pilot / AI Chamber',
+          camera: 'slow push in',
+          videoPrompt: 'Core edit table video prompt for shot two.',
+          sound: 'sub bass pulse',
+        },
+      ],
+      videoBlocks: [
+        {
+          kind: 'group',
+          shotNumbers: [1, 2],
+          gridMode: '2x2',
+          reason: 'Continuous beat.',
+          prompt: 'Continuous video block prompt.',
+        },
+      ],
+    })
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-preview',
+          clipId: 'clip-preview',
+          panels: [
+            createPanel({
+              id: 'panel-preview-1',
+              storyboardId: 'storyboard-preview',
+              panelIndex: 0,
+              panelNumber: 1,
+              imagePrompt: 'Storyboard image prompt for shot one.',
+              imageUrl: 'https://example.com/shot-one.png',
+              videoUrl: 'https://example.com/shot-one.mp4',
+            }),
+            createPanel({
+              id: 'panel-preview-2',
+              storyboardId: 'storyboard-preview',
+              panelIndex: 1,
+              panelNumber: 2,
+              imagePrompt: 'Storyboard image prompt for shot two.',
+              imageUrl: 'https://example.com/shot-two.png',
+              videoUrl: null,
+            }),
+          ],
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+      editScript,
+    })
+
+    const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-preview')
+    expect(editNode?.data.editScriptDetails?.shots[0]).toMatchObject({
+      shotNumber: 1,
+      imagePrompt: 'Storyboard image prompt for shot one.',
+      imageUrl: 'https://example.com/shot-one.png',
+      videoUrl: 'https://example.com/shot-one.mp4',
+      videoPrompt: 'Core edit table video prompt for shot one.',
+    })
+    expect(editNode?.data.editScriptDetails?.shots[1]).toMatchObject({
+      shotNumber: 2,
+      imagePrompt: 'Storyboard image prompt for shot two.',
+      imageUrl: 'https://example.com/shot-two.png',
+      videoUrl: null,
+      videoPrompt: 'Core edit table video prompt for shot two.',
+    })
+  })
+
   it('projects video arrangement nodes only after storyboard images exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',

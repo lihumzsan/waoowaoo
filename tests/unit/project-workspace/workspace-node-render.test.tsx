@@ -356,6 +356,56 @@ describe('workspace node rendering', () => {
     expect(html).not.toContain('Sound')
   })
 
+  it('renders an edit script video preview entry from the core edit table node', () => {
+    const html = renderNode({
+      kind: 'editScript',
+      layoutNodeType: 'editScript',
+      targetType: 'editScript',
+      targetId: 'edit-1',
+      title: 'Core edit table',
+      eyebrow: 'Core Edit Table',
+      body: 'A short action scene.',
+      meta: '2 shots · 6s',
+      statusLabel: 'Ready',
+      width: 720,
+      height: 520,
+      editScriptDetails: {
+        screenplayText: 'screenplay',
+        durationSec: 6,
+        shotCount: 2,
+        shots: [
+          {
+            shotNumber: 1,
+            durationSec: 3,
+            visualAction: 'Pilot enters the docking bay.',
+            charactersAndScene: 'Pilot / Docking bay',
+            camera: 'Wide push-in',
+            imagePrompt: 'Docking bay image prompt',
+            videoPrompt: 'Docking bay video prompt',
+            sound: 'Low engine rumble',
+            imageUrl: 'https://example.com/shot-1.png',
+            videoUrl: null,
+          },
+          {
+            shotNumber: 2,
+            durationSec: 3,
+            visualAction: 'Warning lights pulse red.',
+            charactersAndScene: 'AI chamber',
+            camera: 'Close-up',
+            imagePrompt: null,
+            videoPrompt: 'Red warning light video prompt',
+            sound: 'Alarm beep',
+            imageUrl: null,
+            videoUrl: null,
+          },
+        ],
+      },
+    })
+
+    expect(html).toContain('viewVideoPreview')
+    expect(html).toContain('Docking bay video prompt')
+  })
+
   it('renders video plan generation mode switches with storyboard references first before video exists', () => {
     const html = renderNode({
       kind: 'videoPlan',

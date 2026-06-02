@@ -339,6 +339,7 @@
         "promptSaving": "保存中",
         "promptSaved": "已保存",
         "promptSaveFailed": "保存失败",
+        "viewVideoPreview": "查看视频预览",
         "moreItems": "还有 {count} 项",
         "screenplay": "剧本",
         "originalRequest": "原始需求",
@@ -512,6 +513,8 @@
           "candidates": "候选图",
           "imageGeneration": "图片生成 / 编辑",
           "videoPreview": "视频预览",
+          "editScriptPreview": "剪辑表视频预览",
+          "editScriptTimeline": "镜头时间线",
           "videoControls": "视频控制",
           "bgmScoreOutput": "BGM 输出",
           "bgmScoreStats": "BGM 统计",
@@ -547,6 +550,10 @@
           "srtEnd": "SRT 结束",
           "srtSegment": "台词 / SRT",
           "videoPrompt": "视频提示词",
+          "shotCount": "镜头数",
+          "currentShot": "当前镜头",
+          "charactersAndScene": "人物/场景",
+          "sound": "声音",
           "photographyRules": "摄影规则 JSON",
           "actingNotes": "表演指导 JSON",
           "insertPrompt": "插入镜头要求",
@@ -615,7 +622,9 @@
           "generatingBgm": "BGM 生成中",
           "renderFinalVideo": "AI剪辑",
           "openFinalVideo": "打开成片",
-          "downloadVideos": "下载视频"
+          "downloadVideos": "下载视频",
+          "playPreview": "播放预览",
+          "pausePreview": "暂停预览"
         },
         "defaults": {
           "variantTitle": "镜头变体"
@@ -628,6 +637,10 @@
           "noCandidates": "暂无候选图",
           "noVideo": "暂无视频",
           "noLipSync": "暂无口型视频",
+          "noPreviewMedia": "暂无可视素材",
+          "noPreviewShot": "暂无镜头",
+          "noImagePrompt": "暂无图片提示词",
+          "noVideoPrompt": "暂无视频提示词",
           "selectModel": "选择视频模型",
           "selectCharacter": "选择角色",
           "selectAppearance": "选择形象",
@@ -682,7 +695,10 @@
           "props": "{count} 个道具引用"
         },
         "labels": {
-          "panelReference": "镜头 {number}"
+          "panelReference": "镜头 {number}",
+          "previewShot": "镜头 {number}",
+          "previewShotAlt": "镜头 {number} 预览",
+          "editScriptPreviewTitle": "按镜头节奏观看剪辑表"
         }
       },
       "nodes": {

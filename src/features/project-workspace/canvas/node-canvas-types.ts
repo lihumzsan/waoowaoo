@@ -271,8 +271,11 @@ export interface WorkspaceCanvasEditScriptDetails {
     readonly visualAction: string
     readonly charactersAndScene: string
     readonly camera: string
+    readonly imagePrompt?: string | null
     readonly videoPrompt: string
     readonly sound: string
+    readonly imageUrl?: string | null
+    readonly videoUrl?: string | null
   }[]
 }
 

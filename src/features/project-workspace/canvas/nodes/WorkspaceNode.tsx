@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
+import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import StoryDetail from '../details/StoryDetail'
 import type {
   WorkspaceCanvasAssetRef,
@@ -1079,6 +1080,7 @@ function EditScriptContent({
   readonly data: WorkspaceCanvasFlowNode['data']
   readonly labels: ReturnType<typeof useTranslations>
 }) {
+  const [previewOpen, setPreviewOpen] = useState(false)
   const details = data.editScriptDetails
   if (data.__running === true && !details) {
     return (
@@ -1100,6 +1102,23 @@ function EditScriptContent({
         ))}
         {renderSection(labels('description'), renderTextBlock(data.body))}
       </div>
+      <button
+        type="button"
+        className="nodrag inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900"
+        onClick={(event) => {
+          event.stopPropagation()
+          setPreviewOpen(true)
+        }}
+      >
+        <AppIcon name="playCircle" className="h-4 w-4" />
+        {labels('viewVideoPreview')}
+      </button>
+      {previewOpen ? (
+        <EditScriptPreviewDetail
+          details={details}
+          onClose={() => setPreviewOpen(false)}
+        />
+      ) : null}
       {details.screenplayText
         ? renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 8))
         : null}
