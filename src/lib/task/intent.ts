@@ -53,7 +53,6 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.VOICE_ANALYZE]: 'analyze',
   [TASK_TYPE.ANALYZE_GLOBAL]: 'analyze',
   [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'generate',
-  [TASK_TYPE.AI_STORY_EXPAND]: 'generate',
   [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'modify',
   [TASK_TYPE.AI_MODIFY_LOCATION]: 'modify',
   [TASK_TYPE.AI_MODIFY_PROP]: 'modify',

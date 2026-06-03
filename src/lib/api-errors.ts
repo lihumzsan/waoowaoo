@@ -29,7 +29,6 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/tts(?:\/|$)/,
   /\/lip-sync(?:\/|$)/,
   /\/screenplay-conversion(?:\/|$)/,
-  /\/ai-story-expand(?:\/|$)/,
   /\/voice-(?:analyze|design|generate)(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
   /\/modify-(?:asset|storyboard)-image(?:\/|$)/,

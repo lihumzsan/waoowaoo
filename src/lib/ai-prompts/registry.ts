@@ -75,10 +75,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: ['clip_content', 'locations_lib_name', 'characters_lib_name', 'props_lib_name', 'characters_introduction', 'clip_id'],
     operationIds: ['write_screenplay'],
   },
-  [AI_PROMPT_IDS.SCRIPT_EXPAND_STORY]: {
-    pathStem: 'script/expand-story',
-    variableKeys: ['input'],
-  },
   [AI_PROMPT_IDS.STORYBOARD_PLAN]: {
     pathStem: 'storyboard/plan',
     variableKeys: [

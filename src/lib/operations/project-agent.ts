@@ -22,7 +22,6 @@ import { createSystemProjectOperations } from './domains/project/system-project-
 import { createPlanRunOperations } from './domains/run/run-ops'
 import { createTaskOperations } from './domains/task/task-ops'
 import { createSseOperations } from './domains/debug/sse-ops'
-import { createHomeLlmOperations } from './domains/llm/home-llm-ops'
 import { createAssetHubLlmOperations } from './domains/asset-hub/asset-hub-llm-ops'
 import { createAssetHubVoiceOperations } from './domains/asset-hub/asset-hub-voice-ops'
 import { createAssetHubFolderOperations } from './domains/asset-hub/asset-hub-folder-ops'
@@ -78,12 +77,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     ...withOperationPack(createSseOperations(), {
       groupPath: ['debug', 'sse'],
       channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createHomeLlmOperations(), {
-      groupPath: ['llm'],
-      channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),

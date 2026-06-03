@@ -16,7 +16,7 @@ describe('StoryInputComposer', () => {
         minRows: 8,
         topRight: createElement('span', null, '字数：4'),
         footer: createElement('p', null, '当前配置'),
-        secondaryActions: createElement('button', { type: 'button' }, 'AI 帮我写'),
+        secondaryActions: createElement('button', { type: 'button' }, '次要操作'),
         primaryAction: createElement('button', { type: 'button' }, '开始创作'),
       }),
     )
@@ -26,7 +26,7 @@ describe('StoryInputComposer', () => {
     expect(html).not.toContain('StyleSelector')
     expect(html).toContain('字数：4')
     expect(html).toContain('当前配置')
-    expect(html).toContain('AI 帮我写')
+    expect(html).toContain('次要操作')
     expect(html).toContain('开始创作')
   })
 

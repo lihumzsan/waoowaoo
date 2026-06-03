@@ -633,7 +633,6 @@
           "forceRegenerateImage": "强制重新生成",
           "undoImage": "撤回上一张",
           "add": "添加",
-          "aiWrite": "AI 帮写",
           "smartSplit": "智能分集",
           "retrySave": "重试保存",
           "clearError": "清除错误",

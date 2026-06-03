@@ -75,7 +75,6 @@ export const TASK_TYPE = {
   VOICE_ANALYZE: 'voice_analyze',
   ANALYZE_GLOBAL: 'analyze_global',
   EDIT_SCRIPT_GENERATE: 'edit_script_generate',
-  AI_STORY_EXPAND: 'ai_story_expand',
   AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
   AI_MODIFY_LOCATION: 'ai_modify_location',
   AI_MODIFY_PROP: 'ai_modify_prop',

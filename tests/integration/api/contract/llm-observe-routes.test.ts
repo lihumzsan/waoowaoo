@@ -239,13 +239,6 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/user/ai-story-expand/route.ts',
-    body: { prompt: '宫廷复仇女主回京' },
-    expectedTaskType: TASK_TYPE.AI_STORY_EXPAND,
-    expectedTargetType: 'HomeAiStoryExpand',
-    expectedProjectId: 'home-ai-write',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/ai-modify-appearance/route.ts',
     body: {
       characterId: 'character-1',
@@ -398,7 +391,7 @@ describe('api contract - llm observe routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(ROUTE_CASES.length).toBe(21)
+    expect(ROUTE_CASES.length).toBe(20)
   })
 
   it('marks asset-hub AI routes as force-dynamic to keep app-route build registration stable', async () => {

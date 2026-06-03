@@ -3,12 +3,9 @@
 import React from 'react'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import AiWriteModal from '@/components/home/AiWriteModal'
 import LongTextDetectionPrompt from '@/components/story-input/LongTextDetectionPrompt'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import { AppIcon } from '@/components/ui/icons'
-import { apiFetch } from '@/lib/api-fetch'
-import { expandHomeStory } from '@/lib/home/ai-story-expand'
 import { useSaveProjectEpisodesBatch, useSplitProjectEpisodes } from '@/lib/query/hooks'
 import { useWorkspaceRuntime } from '../../WorkspaceRuntimeContext'
 import { DetailSection } from './detail-shared'
@@ -24,11 +21,8 @@ interface StoryDetailProps {
 
 export default function StoryDetail({ projectId, storyText, episodeName, variant = 'panel' }: StoryDetailProps) {
   const t = useTranslations('projectWorkflow')
-  const homeT = useTranslations('home.aiWrite')
   const runtime = useWorkspaceRuntime()
   const [draft, setDraft] = useState(storyText)
-  const [aiWriteOpen, setAiWriteOpen] = useState(false)
-  const [aiWriteLoading, setAiWriteLoading] = useState(false)
   const [longTextPromptOpen, setLongTextPromptOpen] = useState(false)
   const splitProjectEpisodes = useSplitProjectEpisodes(projectId)
   const saveProjectEpisodesBatch = useSaveProjectEpisodesBatch(projectId)
@@ -45,17 +39,6 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
       return
     }
     await runtime.onGenerateEditScreenplay(draft.trim())
-  }
-
-  const runAiWrite = async (prompt: string) => {
-    setAiWriteLoading(true)
-    try {
-      const result = await expandHomeStory({ apiFetch, prompt })
-      await saveStory(result.expandedText)
-      setAiWriteOpen(false)
-    } finally {
-      setAiWriteLoading(false)
-    }
   }
 
   const runSmartSplit = async () => {
@@ -94,25 +77,14 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
       maxHeightViewportRatio={maxHeightViewportRatio}
       disabled={isGeneratingScript}
       secondaryActions={(
-        <>
-          <button
-            type="button"
-            onClick={() => setAiWriteOpen(true)}
-            disabled={isGeneratingScript}
-            className={secondaryButtonClassName}
-          >
-            <AppIcon name="sparkles" className="h-4 w-4 text-[#7c3aed]" />
-            {t('canvas.workspace.detail.actions.aiWrite')}
-          </button>
-          <button
-            type="button"
-            onClick={() => { void runSmartSplit() }}
-            disabled={isGeneratingScript || splitProjectEpisodes.isPending || saveProjectEpisodesBatch.isPending || !draft.trim()}
-            className={`${secondaryButtonClassName} disabled:opacity-50`}
-          >
-            {t('canvas.workspace.detail.actions.smartSplit')}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => { void runSmartSplit() }}
+          disabled={isGeneratingScript || splitProjectEpisodes.isPending || saveProjectEpisodesBatch.isPending || !draft.trim()}
+          className={`${secondaryButtonClassName} disabled:opacity-50`}
+        >
+          {t('canvas.workspace.detail.actions.smartSplit')}
+        </button>
       )}
       primaryAction={(
         <button
@@ -140,13 +112,6 @@ export default function StoryDetail({ projectId, storyText, episodeName, variant
         {composer}
       </DetailSection>
       )}
-      <AiWriteModal
-        open={aiWriteOpen}
-        loading={aiWriteLoading}
-        onClose={() => setAiWriteOpen(false)}
-        onStart={(prompt) => { void runAiWrite(prompt) }}
-        t={(key) => homeT(key)}
-      />
       <LongTextDetectionPrompt
         open={longTextPromptOpen}
         onClose={() => setLongTextPromptOpen(false)}
