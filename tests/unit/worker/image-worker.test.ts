@@ -17,6 +17,7 @@ const handlerMock = vi.hoisted(() => ({
   handleAssetHubImageTask: vi.fn(async () => ({ ok: true })),
   handleAssetHubModifyTask: vi.fn(async () => ({ ok: true })),
   handleCharacterImageTask: vi.fn(async () => ({ ok: true })),
+  handleEditStylePreviewImageTask: vi.fn(async () => ({ ok: true })),
   handleLocationImageTask: vi.fn(async () => ({ ok: true })),
   handleModifyAssetImageTask: vi.fn(async () => ({ ok: true })),
   handlePanelImageTask: vi.fn(async () => ({ ok: true })),
@@ -101,5 +102,15 @@ describe('worker image concurrency behavior', () => {
       limit: 5,
     }))
     expect(handlerMock.handlePanelImageTask).toHaveBeenCalledWith(job)
+  })
+
+  it('routes edit style preview image tasks to the preview handler', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)
+    await processor!(job)
+
+    expect(handlerMock.handleEditStylePreviewImageTask).toHaveBeenCalledWith(job)
   })
 })

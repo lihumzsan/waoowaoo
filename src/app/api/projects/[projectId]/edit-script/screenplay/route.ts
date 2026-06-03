@@ -3,10 +3,12 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import {
+  confirmProjectEditStylePreview,
   generateProjectEditScreenplay,
   readProjectEditScreenplay,
 } from '@/lib/edit-script/service'
 import {
+  confirmEditStylePreviewRequestSchema,
   createEditScreenplayRequestSchema,
   getEditScreenplayRequestSchema,
 } from '@/lib/edit-script/types'
@@ -57,6 +59,30 @@ export const POST = apiHandler(async (
     prompt: parsed.data.prompt,
     videoRatio: parsed.data.videoRatio,
     artStyle: parsed.data.artStyle,
+  })
+
+  return NextResponse.json({ screenplay })
+})
+
+export const PATCH = apiHandler(async (
+  request: NextRequest,
+  context: { params: Promise<{ projectId: string }> },
+) => {
+  const { projectId } = await context.params
+  const authResult = await requireProjectAuth(projectId)
+  if (isErrorResponse(authResult)) return authResult
+
+  const body = await request.json().catch(() => ({})) as unknown
+  const parsed = confirmEditStylePreviewRequestSchema.safeParse(body)
+  if (!parsed.success) {
+    throw new ApiError('INVALID_PARAMS')
+  }
+
+  const screenplay = await confirmProjectEditStylePreview({
+    projectId,
+    episodeId: parsed.data.episodeId,
+    userId: authResult.session.user.id,
+    stylePreviewId: parsed.data.stylePreviewId,
   })
 
   return NextResponse.json({ screenplay })

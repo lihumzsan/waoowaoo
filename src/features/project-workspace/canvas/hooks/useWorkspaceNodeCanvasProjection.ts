@@ -124,6 +124,7 @@ interface TranslateValues {
 type Translate = (key: string, values?: TranslateValues) => string
 type EditPipelineStepKey = 'timeline' | 'visibleAction' | 'camera' | 'audio' | 'primaryTable' | 'assetExtract'
 type EditPipelineStepState = 'pending' | 'processing' | 'ready' | 'failed'
+type EditStylePreviewState = 'pending' | 'processing' | 'ready' | 'confirmed' | 'failed'
 
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
@@ -156,6 +157,22 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function editStylePreviewState(status: string | undefined): EditStylePreviewState {
+  if (status === 'generating') return 'processing'
+  if (status === 'completed') return 'ready'
+  if (status === 'confirmed') return 'confirmed'
+  if (status === 'failed') return 'failed'
+  return 'pending'
+}
+
+function editStylePreviewStatusLabel(state: EditStylePreviewState, translate: Translate): string {
+  if (state === 'ready') return translate('status.ready')
+  if (state === 'confirmed') return translate('status.confirmed')
+  if (state === 'processing') return translate('status.processing')
+  if (state === 'failed') return translate('status.failed')
+  return translate('status.pending')
 }
 
 function numberValue(value: unknown): number | null {
@@ -1228,8 +1245,14 @@ export function buildWorkspaceNodeCanvasProjection({
         eyebrow: translate('nodes.editScreenplay.eyebrow'),
         body: compactText(editScreenplay.screenplayText, translate('empty.screenplay')),
         meta: translate('nodes.editScreenplay.meta'),
-        statusLabel: editScreenplay.status === 'ready' ? translate('status.ready') : translate('status.processing'),
-        isRunning: editScreenplay.status !== 'ready',
+        statusLabel: editScreenplay.status === 'ready'
+          ? translate('status.ready')
+          : editScreenplay.status === 'style_preview_ready'
+            ? translate('status.awaitingStyleConfirmation')
+            : editScreenplay.status === 'failed'
+              ? translate('status.failed')
+              : translate('status.processing'),
+        isRunning: editScreenplay.status !== 'ready' && editScreenplay.status !== 'style_preview_ready' && editScreenplay.status !== 'failed',
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         width: EDIT_SCREENPLAY_NODE_WIDTH,
         height: editScreenplayHeight,
@@ -1256,6 +1279,8 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
+  const stylePreviews = editScreenplay?.stylePreviews ?? []
+  const shouldShowStylePreviews = Boolean(editScreenplay) && !editScreenplay?.styleBible && stylePreviews.length > 0
   const styleBibleSourceValue = editScreenplay?.styleBible ?? editScript?.styleBible ?? null
   const styleBibleSourceId = editScreenplay && editScreenplay.styleBible !== undefined && editScreenplay.styleBible !== null
     ? editScreenplay.id
@@ -1267,11 +1292,62 @@ export function buildWorkspaceNodeCanvasProjection({
   const editStyleBibleFallbackY = editScreenplay
     ? editScreenplayFallbackY + editScreenplayHeight + EDIT_STYLE_BIBLE_LAYER_GAP_Y
     : hasStory ? 430 : 180
+  const stylePreviewLayerBottomY = shouldShowStylePreviews
+    ? editStyleBibleFallbackY + EDIT_STYLE_BIBLE_NODE_HEIGHT
+    : null
   const editStyleSourceBottomY = editStyleBibleNodeId
     ? editStyleBibleFallbackY + EDIT_STYLE_BIBLE_NODE_HEIGHT
+    : stylePreviewLayerBottomY !== null
+      ? stylePreviewLayerBottomY
     : editScreenplay
       ? editScreenplayFallbackY + editScreenplayHeight
       : null
+  if (shouldShowStylePreviews && editScreenplayNodeId) {
+    const previewScreenplay = editScreenplay
+    if (!previewScreenplay) throw new Error('EDIT_STYLE_PREVIEW_SCREENPLAY_REQUIRED')
+    stylePreviews.forEach((preview, index) => {
+      const previewDetails = buildStyleBibleDetails(preview.styleBible)
+      if (!previewDetails) return
+      const previewState = editStylePreviewState(preview.status)
+      const previewNodeId = `edit-style-preview:${preview.id}`
+      nodes.push(createNode({
+        id: previewNodeId,
+        fallbackX: STORY_COLUMN_X + index * (EDIT_STYLE_BIBLE_NODE_WIDTH + EDIT_PIPELINE_STEP_GRID_GAP_X),
+        fallbackY: editStyleBibleFallbackY,
+        zIndex: zIndex++,
+        savedLayoutByKey,
+        ignoreSavedLayout: true,
+        data: {
+          kind: 'editStylePreview',
+          layoutNodeType: 'editStylePreview',
+          targetType: 'editStylePreview',
+          targetId: preview.id,
+          title: preview.title,
+          eyebrow: translate('nodes.editStylePreview.eyebrow'),
+          body: compactText(preview.summary, translate('nodes.editStylePreview.body')),
+          meta: translate('nodes.editStylePreview.meta'),
+          statusLabel: editStylePreviewStatusLabel(previewState, translate),
+          isRunning: previewState === 'pending' || previewState === 'processing',
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(preview.id)),
+          width: EDIT_STYLE_BIBLE_NODE_WIDTH,
+          height: EDIT_STYLE_BIBLE_NODE_HEIGHT,
+          indexLabel: `B${index + 1}`,
+          previewImageUrl: preview.imageUrl,
+          previewAspectRatio: 1,
+          previewDisplayHeight: 220,
+          styleBibleDetails: previewDetails,
+          actionLabel: previewState === 'ready' && previewScreenplay.status === 'style_preview_ready'
+            ? translate('actions.confirmEditStylePreview')
+            : undefined,
+          action: previewState === 'ready' && previewScreenplay.status === 'style_preview_ready'
+            ? { type: 'confirm_edit_style_preview', stylePreviewId: preview.id }
+            : undefined,
+          onAction,
+        },
+      }))
+      edges.push(createEdge(`edge:edit-screenplay-edit-style-preview:${preview.id}`, editScreenplayNodeId, previewNodeId))
+    })
+  }
   if (styleBibleDetails && styleBibleSourceId && editStyleBibleNodeId) {
     nodes.push(createNode({
       id: editStyleBibleNodeId,

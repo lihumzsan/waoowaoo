@@ -12,6 +12,7 @@ export type WorkspaceCanvasNodeKind =
   | 'videoClip'
   | 'finalTimeline'
   | 'editScreenplay'
+  | 'editStylePreview'
   | 'editStyleBible'
   | 'editDirectorDecoupage'
   | 'editPipelineStep'
@@ -22,11 +23,12 @@ export type WorkspaceCanvasNodeKind =
   | 'bgmScore'
   | 'editRequiredAsset'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | { readonly type: 'update_story'; readonly value: string }
   | { readonly type: 'generate_edit_screenplay'; readonly prompt: string }
+  | { readonly type: 'confirm_edit_style_preview'; readonly stylePreviewId: string }
   | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }

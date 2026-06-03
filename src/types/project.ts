@@ -307,8 +307,26 @@ export interface ProjectEditScreenplay {
   episodeId: string
   userPrompt: string
   styleBible?: unknown
+  stylePreviews?: ProjectEditStylePreview[]
   screenplayText: string
   status: string
+}
+
+export interface ProjectEditStylePreview {
+  id: string
+  projectId: string
+  episodeId: string
+  screenplayId: string
+  styleKey: 'style_a' | 'style_b' | 'style_c'
+  title: string
+  summary: string
+  styleBible: unknown
+  gridImagePrompt: string
+  imageKey: string | null
+  imageUrl: string | null
+  status: 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
+  taskId: string | null
+  errorMessage: string | null
 }
 
 export interface ProjectEditDirectorDecoupage {

@@ -9,6 +9,7 @@ import {
   handleAssetHubImageTask,
   handleAssetHubModifyTask,
   handleCharacterStyleTestTask,
+  handleEditStylePreviewImageTask,
   handleCharacterImageTask,
   handleLocationImageTask,
   handleModifyAssetImageTask,
@@ -26,6 +27,8 @@ async function processImageTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.IMAGE_CHARACTER:
       return await handleCharacterImageTask(job)
+    case TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE:
+      return await handleEditStylePreviewImageTask(job)
     case TASK_TYPE.CHARACTER_STYLE_TEST:
       return await handleCharacterStyleTestTask(job)
     case TASK_TYPE.SCENE_REFERENCE_TEST:

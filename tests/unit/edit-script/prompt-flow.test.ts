@@ -33,7 +33,7 @@ const styleBibleJson = JSON.stringify({
 })
 
 describe('edit script block-first prompt flow', () => {
-  it('builds a style-bible-first prompt chain with one style source', () => {
+  it('builds a screenplay-first prompt chain with style preview candidates before the single confirmed style source', () => {
     const screenplayText = [
       '标题：《灯下的人》',
       '',
@@ -44,30 +44,6 @@ describe('edit script block-first prompt flow', () => {
       '动作：人物走入昏暗房间，沿着窗边的光线慢慢前行，在桌前停下。',
     ].join('\n')
 
-    const styleBiblePrompt = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE,
-      locale: 'zh',
-      variables: {
-        user_request: '生成一条禅修短片',
-        duration_seconds: '8',
-        aspect_ratio: '9:16',
-        project_style_json: JSON.stringify({ artStyle: 'realistic', aspectRatio: '9:16' }),
-      },
-    })
-
-    expect(styleBiblePrompt).toContain('唯一风格圣经生成器')
-    expect(styleBiblePrompt).toContain('任何剧本、资产、分镜或视频提示词生成之前')
-    expect(styleBiblePrompt).toContain('Style Bible 是后续导演拆镜、资产图、摄影方案、分镜图、视频提示词、声音提示词的唯一风格来源')
-    expect(styleBiblePrompt).toContain('不要输出大而全的正向风格字段')
-    expect(styleBiblePrompt).toContain('imageFilterPrompt 必须是一句可直接塞进图片或视频提示词的画面滤镜短语')
-    expect(styleBiblePrompt).toContain('sound.soundFilterPrompt')
-    expect(styleBiblePrompt).toContain('hardBans')
-    expect(styleBiblePrompt).toContain('禅意东方作者电影')
-    expect(styleBiblePrompt).toContain('柔和自然光，低对比度，轻微柔焦')
-    expect(styleBiblePrompt).toContain('不要商业广告感，不要高反差大片感')
-    expect(styleBiblePrompt).not.toContain('春夏秋冬又一春')
-    expect(styleBiblePrompt).not.toContain('金基德')
-
     const screenplayPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
       locale: 'zh',
@@ -75,15 +51,40 @@ describe('edit script block-first prompt flow', () => {
         user_request: '生成一条连续短片',
         duration_seconds: '8',
         aspect_ratio: '9:16',
-        style_bible_json: styleBibleJson,
+        project_style_json: JSON.stringify({ artStyle: 'realistic', aspectRatio: '9:16' }),
       },
     })
 
     expect(screenplayPrompt).toContain('AI 可控短片剧本')
-    expect(screenplayPrompt).toContain('Style Bible（唯一风格来源）')
-    expect(screenplayPrompt).toContain('这里只写剧情内容')
+    expect(screenplayPrompt).toContain('项目风格输入')
+    expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
     expect(screenplayPrompt).toContain('不要出现“镜头”“特写”“推镜”“剪切”“CUT TO”')
-    expect(screenplayPrompt).toContain('柔和自然光，低对比度，轻微柔焦')
+    expect(screenplayPrompt).not.toContain('Style Bible（唯一风格来源）')
+    expect(screenplayPrompt).not.toContain('柔和自然光，低对比度，轻微柔焦')
+
+    const stylePreviewPrompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
+      locale: 'zh',
+      variables: {
+        user_request: '生成一条禅修短片',
+        screenplay_text: screenplayText,
+        duration_seconds: '8',
+        aspect_ratio: '9:16',
+        project_style_json: JSON.stringify({ artStyle: 'realistic', aspectRatio: '9:16' }),
+      },
+    })
+
+    expect(stylePreviewPrompt).toContain('基于同一份剧本生成 3 个可供用户选择的 Style Bible 候选')
+    expect(stylePreviewPrompt).toContain('三个候选必须都忠于用户需求和剧本事实')
+    expect(stylePreviewPrompt).toContain('九宫格')
+    expect(stylePreviewPrompt).toContain('3x3')
+    expect(stylePreviewPrompt).toContain('gridImagePrompt')
+    expect(stylePreviewPrompt).toContain('style_a')
+    expect(stylePreviewPrompt).toContain('style_b')
+    expect(stylePreviewPrompt).toContain('style_c')
+    expect(stylePreviewPrompt).toContain('no text, no subtitles, no logo, no watermark')
+    expect(stylePreviewPrompt).not.toContain('春夏秋冬又一春')
+    expect(stylePreviewPrompt).not.toContain('金基德')
 
     const primaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,

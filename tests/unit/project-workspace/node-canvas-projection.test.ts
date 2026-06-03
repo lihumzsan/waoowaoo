@@ -170,6 +170,7 @@ function createEditScreenplay(input?: Partial<ProjectEditScreenplay>): ProjectEd
     episodeId: input?.episodeId ?? 'episode-1',
     userPrompt: input?.userPrompt ?? 'make a one minute sci-fi film',
     ...(input?.styleBible !== undefined ? { styleBible: input.styleBible } : {}),
+    ...(input?.stylePreviews !== undefined ? { stylePreviews: input.stylePreviews } : {}),
     screenplayText: input?.screenplayText ?? '标题：《光影回溯》\n\n故事梗概：飞船追赶远古光线。',
     status: input?.status ?? 'ready',
   }
@@ -551,6 +552,93 @@ describe('workspace node canvas projection', () => {
       (styleNode?.position.y ?? 0) + (styleNode?.data.height ?? 0),
     )
     expect(styleNode && timelineNode ? nodesOverlap(styleNode, timelineNode) : true).toBe(false)
+  })
+
+  it('projects screenplay style preview candidates before a Style Bible is confirmed', () => {
+    const styleBible = createStyleBible()
+    const editScreenplay = createEditScreenplay({
+      styleBible: null,
+      status: 'style_preview_ready',
+      stylePreviews: [
+        {
+          id: 'style-preview-a',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          screenplayId: 'screenplay-1',
+          styleKey: 'style_a',
+          title: '自然光主方案',
+          summary: '低饱和自然光，克制胶片感。',
+          styleBible,
+          gridImagePrompt: 'single image, 3x3 grid, nine cinematic frames, no text',
+          imageKey: 'style-preview/a.png',
+          imageUrl: 'https://cdn.example.com/a.png',
+          status: 'completed',
+          taskId: 'task-a',
+          errorMessage: null,
+        },
+        {
+          id: 'style-preview-b',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          screenplayId: 'screenplay-1',
+          styleKey: 'style_b',
+          title: '夜色情绪',
+          summary: '暗部更强，情绪更悬疑。',
+          styleBible,
+          gridImagePrompt: 'single image, 3x3 grid, nine cinematic frames, no text',
+          imageKey: 'style-preview/b.png',
+          imageUrl: 'https://cdn.example.com/b.png',
+          status: 'completed',
+          taskId: 'task-b',
+          errorMessage: null,
+        },
+        {
+          id: 'style-preview-c',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          screenplayId: 'screenplay-1',
+          styleKey: 'style_c',
+          title: '作者化留白',
+          summary: '更克制、更安静的作者化方案。',
+          styleBible,
+          gridImagePrompt: 'single image, 3x3 grid, nine cinematic frames, no text',
+          imageKey: 'style-preview/c.png',
+          imageUrl: 'https://cdn.example.com/c.png',
+          status: 'completed',
+          taskId: 'task-c',
+          errorMessage: null,
+        },
+      ],
+    })
+
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const previewNodes = projection.nodes.filter((node) => node.data.kind === 'editStylePreview')
+    expect(projection.nodes.some((node) => node.data.kind === 'editStyleBible')).toBe(false)
+    expect(previewNodes.map((node) => node.id)).toEqual([
+      'edit-style-preview:style-preview-a',
+      'edit-style-preview:style-preview-b',
+      'edit-style-preview:style-preview-c',
+    ])
+    expect(previewNodes[0]?.data.previewImageUrl).toBe('https://cdn.example.com/a.png')
+    expect(previewNodes[0]?.data.action).toEqual({
+      type: 'confirm_edit_style_preview',
+      stylePreviewId: 'style-preview-a',
+    })
+    expect(previewNodes[0]?.data.actionLabel).toBe('actions.confirmEditStylePreview')
+    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
+      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-a',
+      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-b',
+      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-c',
+    ])
   })
 
   it('keeps long edit screenplay cards from covering the edit pipeline in the default layout', () => {

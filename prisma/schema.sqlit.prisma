@@ -140,6 +140,7 @@ model ProjectEpisode {
   voiceLines              ProjectVoiceLine[]
   editorProject           VideoEditorProject?
   editScreenplay          ProjectEditScreenplay?
+  editStylePreviews       ProjectEditStylePreview[]
   editDirectorDecoupage   ProjectEditDirectorDecoupage?
   editScript              ProjectEditScript?
   editCinematographyShotPlan ProjectEditCinematographyShotPlan?
@@ -164,11 +165,40 @@ model ProjectEditScreenplay {
   updatedAt      DateTime       @default(now()) @updatedAt
   project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  stylePreviews  ProjectEditStylePreview[]
   directorDecoupage ProjectEditDirectorDecoupage?
 
   @@index([projectId])
   @@index([episodeId])
   @@map("project_edit_screenplays")
+}
+
+model ProjectEditStylePreview {
+  id               String                @id @default(uuid())
+  projectId        String
+  episodeId        String
+  editScreenplayId String
+  styleKey         String
+  title            String
+  summary          String
+  styleBibleJson   Json
+  imagePrompt      String
+  imageKey         String?
+  status           String                @default("pending")
+  taskId           String?
+  errorMessage     String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @default(now()) @updatedAt
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode          ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  editScreenplay   ProjectEditScreenplay @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+
+  @@unique([editScreenplayId, styleKey])
+  @@index([projectId])
+  @@index([episodeId])
+  @@index([editScreenplayId])
+  @@index([taskId])
+  @@map("project_edit_style_previews")
 }
 
 model ProjectEditDirectorDecoupage {
@@ -526,6 +556,7 @@ model Project {
   characters         ProjectCharacter[]
   locations          ProjectLocation[]
   editScreenplays    ProjectEditScreenplay[]
+  editStylePreviews  ProjectEditStylePreview[]
   editDirectorDecoupages ProjectEditDirectorDecoupage[]
   editScripts        ProjectEditScript[]
   editCinematographyShotPlans ProjectEditCinematographyShotPlan[]

@@ -80,6 +80,7 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'analysis':
     case 'scriptClip':
     case 'editScreenplay':
+    case 'editStylePreview':
     case 'editStyleBible':
     case 'editDirectorDecoupage':
       return 'story'

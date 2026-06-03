@@ -106,6 +106,15 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     expandedLayout: 'stack',
     defaultExpanded: false,
   },
+  editStylePreview: {
+    collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
+    expanded: {
+      width: 620,
+      height: 760,
+    },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
   editStyleBible: {
     collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
     expanded: {

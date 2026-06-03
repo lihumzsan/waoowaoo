@@ -2,6 +2,7 @@ import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 
 const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.IMAGE_PANEL]: 'progress.taskType.imagePanel',
+  [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'progress.taskType.editStylePreviewImage',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE]: 'progress.taskType.editScriptStoryboardPrepare',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'progress.taskType.editScriptStoryboardCameraPlan',
   [TASK_TYPE.CHARACTER_STYLE_TEST]: 'progress.taskType.characterStyleTest',
@@ -54,6 +55,9 @@ const STAGE_LABELS: Record<string, string> = {
   generate_character_image: 'progress.stage.generateCharacterImage',
   generate_location_image: 'progress.stage.generateLocationImage',
   generate_panel_candidate: 'progress.stage.generatePanelCandidate',
+  edit_style_preview_image_prepare: 'progress.stage.editStylePreviewImagePrepare',
+  edit_style_preview_image_generate: 'progress.stage.editStylePreviewImageGenerate',
+  edit_style_preview_image_persist: 'progress.stage.editStylePreviewImagePersist',
   edit_script_storyboard_prepare: 'progress.stage.editScriptStoryboardPrepare',
   edit_script_storyboard_camera_plan: 'progress.stage.editScriptStoryboardCameraPlan',
   generate_panel_video: 'progress.stage.generatePanelVideo',

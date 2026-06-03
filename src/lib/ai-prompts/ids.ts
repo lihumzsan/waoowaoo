@@ -30,6 +30,7 @@ export const AI_PROMPT_IDS = {
   VOICE_GENERATE_LINES: 'voice-generate-lines',
   MUSIC_FINAL_RENDER_BGM: 'music-final-render-bgm',
   EDIT_SCRIPT_STYLE_BIBLE: 'edit-script-style-bible',
+  EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS: 'edit-script-style-preview-options',
   EDIT_SCRIPT_SCREENPLAY: 'edit-script-screenplay',
   EDIT_SCRIPT_DIRECTOR_DECOUPAGE: 'edit-script-director-decoupage',
   EDIT_SCRIPT_PRIMARY: 'edit-script-primary',

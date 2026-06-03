@@ -230,6 +230,7 @@ export {
     useCreateProjectEditDirectorDecoupage,
     useCreateProjectEditScreenplay,
     useCreateProjectEditScript,
+    useConfirmProjectEditStylePreview,
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
     useGenerateProjectEditScriptStoryboardSpatialBlocking,

@@ -244,6 +244,7 @@
       "actions": {
         "generateScript": "生成剧本",
         "generateEditDirectorDecoupage": "生成导演拆镜",
+        "confirmEditStylePreview": "确认此风格",
         "generateEditScript": "生成剪辑表",
         "generateCinematographyShotPlan": "生成摄影方案",
         "generateStoryboard": "生成分镜",
@@ -271,6 +272,8 @@
         "empty": "待输入",
         "pending": "待生成",
         "ready": "已就绪",
+        "confirmed": "已确认",
+        "awaitingStyleConfirmation": "等待风格确认",
         "finalReady": "已成片",
         "aiEditing": "AI剪辑中",
         "generatingBgm": "BGM 生成中",
@@ -793,6 +796,11 @@
           "title": "剧本",
           "eyebrow": "编剧模块",
           "meta": "作为剪辑先行表的剧情输入"
+        },
+        "editStylePreview": {
+          "eyebrow": "风格候选",
+          "body": "根据剧本生成的九宫格影片基调预览。",
+          "meta": "确认后作为唯一 Style Bible"
         },
         "editStyleBible": {
           "title": "Style Bible",

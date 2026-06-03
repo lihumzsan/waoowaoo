@@ -10,12 +10,35 @@ export type EditAssetStatus = (typeof EDIT_ASSET_STATUSES)[number]
 export const EDIT_SCRIPT_VIDEO_RATIOS = ['9:16', '16:9', '21:9'] as const
 export type EditScriptVideoRatio = (typeof EDIT_SCRIPT_VIDEO_RATIOS)[number]
 
+export const EDIT_STYLE_PREVIEW_KEYS = ['style_a', 'style_b', 'style_c'] as const
+export type EditStylePreviewKey = (typeof EDIT_STYLE_PREVIEW_KEYS)[number]
+
+export type EditStylePreviewStatus = 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
+
+export interface EditStylePreviewPayload {
+  readonly id: string
+  readonly projectId: string
+  readonly episodeId: string
+  readonly screenplayId: string
+  readonly styleKey: EditStylePreviewKey
+  readonly title: string
+  readonly summary: string
+  readonly styleBible: EditScriptStyleBible
+  readonly gridImagePrompt: string
+  readonly imageKey: string | null
+  readonly imageUrl: string | null
+  readonly status: EditStylePreviewStatus
+  readonly taskId: string | null
+  readonly errorMessage: string | null
+}
+
 export interface EditScreenplayPayload {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
   readonly userPrompt: string
   readonly styleBible: EditScriptStyleBible | null
+  readonly stylePreviews: readonly EditStylePreviewPayload[]
   readonly screenplayText: string
   readonly status: string
 }
@@ -254,7 +277,49 @@ export const editScriptStyleBibleSchema = z.object({
   }).passthrough(),
 })
 
+export const editStylePreviewOptionSchema = z.object({
+  styleKey: z.enum(EDIT_STYLE_PREVIEW_KEYS),
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  styleBible: editScriptStyleBibleSchema.shape.styleBible,
+  gridImagePrompt: z.string().trim().min(1),
+})
+
+export const editStylePreviewOptionsSchema = z.object({
+  stylePreviews: z.tuple([
+    editStylePreviewOptionSchema,
+    editStylePreviewOptionSchema,
+    editStylePreviewOptionSchema,
+  ]),
+}).superRefine((value, context) => {
+  const expectedKeys = new Set<EditStylePreviewKey>(EDIT_STYLE_PREVIEW_KEYS)
+  const actualKeys = new Set(value.stylePreviews.map((preview) => preview.styleKey))
+  if (actualKeys.size !== EDIT_STYLE_PREVIEW_KEYS.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['stylePreviews'],
+      message: 'Style preview keys must be unique.',
+    })
+  }
+  for (const key of expectedKeys) {
+    if (!actualKeys.has(key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['stylePreviews'],
+        message: `Missing style preview key: ${key}`,
+      })
+    }
+  }
+})
+
+export type EditStylePreviewOption = z.infer<typeof editStylePreviewOptionSchema>
+
 export type EditScriptStyleBible = z.infer<typeof editScriptStyleBibleSchema>['styleBible']
+
+export const confirmEditStylePreviewRequestSchema = z.object({
+  episodeId: z.string().trim().min(1),
+  stylePreviewId: z.string().trim().min(1),
+})
 
 export const editScriptVideoPromptBlockSchema = z.object({
   sourceVideoBlockIndex: z.number().int().min(0).max(59),

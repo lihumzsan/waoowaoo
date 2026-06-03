@@ -34,6 +34,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'film'
     case 'editScreenplay':
       return 'bookOpen'
+    case 'editStylePreview':
+      return 'image'
     case 'editStyleBible':
       return 'sparklesAlt'
     case 'editDirectorDecoupage':
@@ -1189,10 +1191,12 @@ function StyleBibleContent({
 }) {
   const details = data.styleBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const shouldShowPreview = data.kind === 'editStylePreview' && hasText(data.previewImageUrl)
 
   if (!expanded) {
     return (
       <div className="space-y-2">
+        {shouldShowPreview ? <MediaPreview data={data} /> : null}
         {details.styleSummary ? renderSection(labels('styleSummary'), renderSummaryText(details.styleSummary, 3)) : null}
         {details.visual.imageFilterPrompt ? renderSection(labels('imageFilterPrompt'), renderSummaryText(details.visual.imageFilterPrompt, 3)) : null}
         {details.visual.negativePrompt ? renderSection(labels('negativePrompt'), renderSummaryText(details.visual.negativePrompt, 3)) : null}
@@ -1202,6 +1206,7 @@ function StyleBibleContent({
 
   return (
     <div className="space-y-2">
+      {shouldShowPreview ? <MediaPreview data={data} /> : null}
       {renderTextSection(labels('styleSummary'), details.styleSummary)}
       {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
       {renderStylePolicySection(labels('visualPolicy'), [
@@ -1656,6 +1661,8 @@ function NodeContent({
       return <BgmScoreContent data={data} labels={labels} expanded={expanded} />
     case 'editScreenplay':
       return <EditScreenplayContent data={data} labels={labels} expanded={expanded} />
+    case 'editStylePreview':
+      return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editStyleBible':
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editDirectorDecoupage':

@@ -244,6 +244,7 @@
       "actions": {
         "generateScript": "Generate Screenplay",
         "generateEditDirectorDecoupage": "Generate Director Decoupage",
+        "confirmEditStylePreview": "Confirm This Style",
         "generateEditScript": "Generate Edit Table",
         "generateCinematographyShotPlan": "Generate Cinematography Plan",
         "generateStoryboard": "Generate Storyboard",
@@ -271,6 +272,8 @@
         "empty": "Empty",
         "pending": "Pending",
         "ready": "Ready",
+        "confirmed": "Confirmed",
+        "awaitingStyleConfirmation": "Awaiting Style Confirmation",
         "finalReady": "Final Ready",
         "aiEditing": "AI Editing",
         "generatingBgm": "Generating BGM",
@@ -793,6 +796,11 @@
           "title": "Screenplay",
           "eyebrow": "Screenwriting Module",
           "meta": "Story input for the edit-first table"
+        },
+        "editStylePreview": {
+          "eyebrow": "Style Candidate",
+          "body": "A 3x3 film tone preview generated from the screenplay.",
+          "meta": "Becomes the single Style Bible after confirmation"
         },
         "editStyleBible": {
           "title": "Style Bible",

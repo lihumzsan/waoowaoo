@@ -38,6 +38,11 @@ interface CreateEditScreenplayInput {
   artStyle?: ArtStyleValue
 }
 
+interface ConfirmEditStylePreviewInput {
+  episodeId: string
+  stylePreviewId: string
+}
+
 interface CreateEditDirectorDecoupageInput {
   episodeId: string
   screenplayId?: string
@@ -230,6 +235,36 @@ export function useCreateProjectEditScreenplay(projectId: string | null) {
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
+      ])
+    },
+  })
+}
+
+export function useConfirmProjectEditStylePreview(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: ConfirmEditStylePreviewInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/screenplay`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to confirm edit style preview')
+      }
+      const data = await response.json() as EditScreenplayResponse
+      if (!data.screenplay) throw new Error('EDIT_SCREENPLAY_RESPONSE_EMPTY')
+      return data.screenplay
+    },
+    onSuccess: async (screenplay) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
     },
   })

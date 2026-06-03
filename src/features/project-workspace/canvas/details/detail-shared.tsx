@@ -80,6 +80,7 @@ export function resolveTone(kind: WorkspaceCanvasFlowNode['data']['kind']): Deta
     case 'finalTimeline':
       return 'final'
     case 'editScreenplay':
+    case 'editStylePreview':
     case 'editStyleBible':
     case 'editDirectorDecoupage':
     case 'editPipelineStep':
