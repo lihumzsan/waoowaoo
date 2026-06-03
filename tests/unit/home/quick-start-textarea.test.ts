@@ -28,19 +28,16 @@ vi.mock('@/components/story-input/StoryInputComposer', () => ({
     minRows,
     textareaClassName,
     primaryAction,
-    secondaryActions,
   }: {
     minRows: number
     textareaClassName?: string
     primaryAction: React.ReactNode
-    secondaryActions?: React.ReactNode
   }) => createElement(
     'section',
     {
       'data-min-rows': String(minRows),
       'data-textarea-class': textareaClassName,
     },
-    secondaryActions,
     primaryAction,
     'StoryInputComposer',
   ),
@@ -76,10 +73,6 @@ vi.mock('@/lib/api-fetch', () => ({
 vi.mock('@/lib/home/create-project-launch', () => ({
   createHomeProjectLaunch: vi.fn(),
   writeHomeAssistantAutoStartMessage: vi.fn(),
-}))
-
-vi.mock('@/lib/home/ai-story-expand', () => ({
-  expandHomeStory: vi.fn(),
 }))
 
 describe('resolveTextareaTargetHeight', () => {

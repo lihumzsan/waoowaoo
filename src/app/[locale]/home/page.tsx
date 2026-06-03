@@ -13,14 +13,12 @@ import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
-import { expandHomeStory } from '@/lib/home/ai-story-expand'
 import {
   createHomeProjectLaunch,
   writeHomeAssistantAutoStartMessage,
 } from '@/lib/home/create-project-launch'
 import { formatDefaultProjectTimestamp } from '@/lib/projects/default-name'
 import { HOME_QUICK_START_MIN_ROWS } from '@/lib/ui/textarea-height'
-import AiWriteModal from '@/components/home/AiWriteModal'
 
 interface ProjectStats {
   episodes: number
@@ -52,8 +50,6 @@ export default function HomePage() {
   const [inputValue, setInputValue] = useState('')
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [aiWriteOpen, setAiWriteOpen] = useState(false)
-  const [aiWriteLoading, setAiWriteLoading] = useState(false)
 
   // 鉴权
   useEffect(() => {
@@ -116,26 +112,6 @@ export default function HomePage() {
       setCreateError(message)
     } finally {
       setCreateLoading(false)
-    }
-  }
-
-  // AI 帮我写 — 直接生成文本并回填首页输入框
-  const handleAiWriteStart = async (prompt: string) => {
-    if (aiWriteLoading) return
-    setAiWriteLoading(true)
-    try {
-      const result = await expandHomeStory({
-        apiFetch,
-        prompt,
-      })
-
-      setInputValue(result.expandedText)
-      setAiWriteOpen(false)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed'
-      window.alert(message)
-    } finally {
-      setAiWriteLoading(false)
     }
   }
 
@@ -355,25 +331,6 @@ export default function HomePage() {
                   <AppIcon name="arrowRight" className="w-4 h-4" />
                 </button>
               )}
-              secondaryActions={(
-                <button
-                  onClick={() => setAiWriteOpen(true)}
-                  disabled={createLoading}
-                  className="glass-btn-base flex h-10 flex-shrink-0 items-center gap-1.5 border border-[var(--glass-stroke-strong)] px-3 text-sm transition-all hover:border-[var(--glass-tone-info-fg)]/40"
-                >
-                  <AppIcon name="sparkles" className="w-4 h-4 text-[#7c3aed]" />
-                  <span
-                    className="font-medium"
-                    style={{
-                      background: 'linear-gradient(135deg, #3b82f6, #7c3aed)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    {t('aiWrite.trigger')}
-                  </span>
-                </button>
-              )}
               footer={createError ? (
                 <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
                   {createError}
@@ -382,14 +339,6 @@ export default function HomePage() {
             />
           </div>
         </div>
-        {/* AI 帮我写模态框 */}
-        <AiWriteModal
-          open={aiWriteOpen}
-          loading={aiWriteLoading}
-          onClose={() => setAiWriteOpen(false)}
-          onStart={(prompt) => void handleAiWriteStart(prompt)}
-          t={(key: string) => t(`aiWrite.${key}`)}
-        />
       </main>
 
       {/* 最近项目 */}
