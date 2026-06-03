@@ -1325,7 +1325,7 @@ export function buildWorkspaceNodeCanvasProjection({
           title: preview.title,
           eyebrow: translate('nodes.editStylePreview.eyebrow'),
           body: compactText(preview.summary, translate('nodes.editStylePreview.body')),
-          meta: translate('nodes.editStylePreview.meta'),
+          meta: translate('nodes.editStylePreview.meta', { ratio: preview.aspectRatio }),
           statusLabel: editStylePreviewStatusLabel(previewState, translate),
           isRunning: previewState === 'pending' || previewState === 'processing',
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(preview.id)),

@@ -1,14 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, type CompositionEvent, type ReactNode } from 'react'
-import { RatioSelector, StyleSelector } from '@/components/selectors/RatioStyleSelectors'
 import { resolveTextareaTargetHeight } from '@/lib/ui/textarea-height'
-
-interface StoryInputComposerOption {
-  value: string
-  label: string
-  recommended?: boolean
-}
 
 interface StoryInputComposerProps {
   variant?: 'surface' | 'plain'
@@ -22,13 +15,6 @@ interface StoryInputComposerProps {
   footer?: ReactNode
   secondaryActions?: ReactNode
   primaryAction: ReactNode
-  videoRatio: string
-  onVideoRatioChange: (value: string) => void
-  ratioOptions: StoryInputComposerOption[]
-  getRatioUsage?: (ratio: string) => string
-  artStyle: string
-  onArtStyleChange: (value: string) => void
-  styleOptions: StoryInputComposerOption[]
   onCompositionStart?: () => void
   onCompositionEnd?: (event: CompositionEvent<HTMLTextAreaElement>) => void
   textareaClassName?: string
@@ -49,13 +35,6 @@ export default function StoryInputComposer({
   footer,
   secondaryActions,
   primaryAction,
-  videoRatio,
-  onVideoRatioChange,
-  ratioOptions,
-  getRatioUsage,
-  artStyle,
-  onArtStyleChange,
-  styleOptions,
   onCompositionStart,
   onCompositionEnd,
   textareaClassName,
@@ -146,23 +125,6 @@ export default function StoryInputComposer({
       </div>
 
       <div className={controlsClass}>
-        <div className="flex min-w-max flex-1 items-center gap-2">
-          <div className="w-[118px] flex-shrink-0">
-            <RatioSelector
-              value={videoRatio}
-              onChange={onVideoRatioChange}
-              options={ratioOptions}
-              getUsage={getRatioUsage}
-            />
-          </div>
-          <div className="w-[132px] flex-shrink-0">
-            <StyleSelector
-              value={artStyle}
-              onChange={onArtStyleChange}
-              options={styleOptions}
-            />
-          </div>
-        </div>
         <div className="ml-auto flex min-w-max items-center gap-2">
           {secondaryActions}
           {primaryAction}

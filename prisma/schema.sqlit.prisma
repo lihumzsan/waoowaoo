@@ -179,6 +179,7 @@ model ProjectEditStylePreview {
   episodeId        String
   editScreenplayId String
   styleKey         String
+  aspectRatio      String
   title            String
   summary          String
   styleBibleJson   Json

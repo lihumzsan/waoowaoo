@@ -29,6 +29,7 @@ import type {
   EditAssetRequirement,
   EditAssetStatus,
   EditScreenplayPayload,
+  EditScriptVideoRatio,
   EditStylePreviewKey,
   EditStylePreviewOption,
   EditStylePreviewPayload,
@@ -66,8 +67,6 @@ interface GenerateEditScreenplayInput {
   readonly userId: string
   readonly locale: Locale
   readonly prompt: string
-  readonly videoRatio?: '9:16' | '16:9' | '21:9'
-  readonly artStyle?: string
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -184,6 +183,7 @@ interface PersistedEditStylePreview {
   readonly episodeId: string
   readonly editScreenplayId: string
   readonly styleKey: string
+  readonly aspectRatio: string
   readonly title: string
   readonly summary: string
   readonly styleBibleJson: Prisma.JsonValue
@@ -252,6 +252,11 @@ function normalizeStylePreviewKey(value: string): EditStylePreviewKey {
   return 'style_a'
 }
 
+function normalizeStylePreviewAspectRatio(value: string): EditScriptVideoRatio {
+  if (value === '9:16' || value === '16:9' || value === '21:9') return value
+  throw new Error(`EDIT_STYLE_PREVIEW_ASPECT_RATIO_INVALID:${value}`)
+}
+
 function resolveStylePreviewImageModel(config: Awaited<ReturnType<typeof getProjectModelConfig>>): string {
   if (config.storyboardModel) return config.storyboardModel
   throw new ApiError('INVALID_PARAMS', {
@@ -262,21 +267,6 @@ function resolveStylePreviewImageModel(config: Awaited<ReturnType<typeof getProj
 
 function stringifyForPrompt(value: unknown): string {
   return JSON.stringify(value, null, 2)
-}
-
-interface EditScriptProjectStyleInput {
-  readonly artStyle: string | null
-  readonly aspectRatio: string | null
-}
-
-function buildProjectStyleInput(input: {
-  readonly artStyle: string | null
-  readonly videoRatio: string | null
-}): EditScriptProjectStyleInput {
-  return {
-    artStyle: input.artStyle,
-    aspectRatio: input.videoRatio,
-  }
 }
 
 function parseOptionalStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible | null {
@@ -301,6 +291,7 @@ function mapPersistedStylePreview(preview: PersistedEditStylePreview): EditStyle
     episodeId: preview.episodeId,
     screenplayId: preview.editScreenplayId,
     styleKey: normalizeStylePreviewKey(preview.styleKey),
+    aspectRatio: normalizeStylePreviewAspectRatio(preview.aspectRatio),
     title: preview.title,
     summary: preview.summary,
     styleBible: parseRequiredStyleBibleJson(preview.styleBibleJson),
@@ -458,8 +449,6 @@ async function generateEditStylePreviewOptions(input: {
   readonly userPrompt: string
   readonly screenplayText: string
   readonly durationSeconds: number
-  readonly aspectRatio: string
-  readonly projectStyle: EditScriptProjectStyleInput
 }): Promise<readonly EditStylePreviewOption[]> {
   const raw = await runPromptStep({
     userId: input.userId,
@@ -471,8 +460,6 @@ async function generateEditStylePreviewOptions(input: {
       user_request: input.userPrompt,
       screenplay_text: input.screenplayText,
       duration_seconds: String(input.durationSeconds),
-      aspect_ratio: input.aspectRatio,
-      project_style_json: stringifyForPrompt(input.projectStyle),
     },
     stepTitle: 'Edit style preview options',
     stepIndex: 2,
@@ -1007,6 +994,7 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
   }
 
   const selectedStyleBible = parseRequiredStyleBibleJson(selectedPreview.styleBibleJson)
+  const selectedAspectRatio = normalizeStylePreviewAspectRatio(selectedPreview.aspectRatio)
   await prisma.$transaction([
     prisma.projectEditStylePreview.updateMany({
       where: {
@@ -1029,6 +1017,12 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
       data: {
         styleBibleJson: styleBibleToJsonValue(selectedStyleBible),
         status: 'ready',
+      },
+    }),
+    prisma.project.update({
+      where: { id: project.id },
+      data: {
+        videoRatio: selectedAspectRatio,
       },
     }),
   ])
@@ -1200,39 +1194,15 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       where: { id: input.projectId, userId: input.userId },
       select: {
         id: true,
-        artStyle: true,
-        videoRatio: true,
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
   ])
   if (!episode || !project) throw new ApiError('NOT_FOUND')
-  const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
-  const effectiveArtStyle = input.artStyle ?? project.artStyle
-  if (input.artStyle && !isArtStyleValue(input.artStyle)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  if ((input.videoRatio && input.videoRatio !== project.videoRatio)
-    || (input.artStyle && input.artStyle !== project.artStyle)) {
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-        ...(input.artStyle ? { artStyle: input.artStyle } : {}),
-      },
-    })
-  }
 
   const model = resolveTextModel(config)
   const imageModel = resolveStylePreviewImageModel(config)
   const defaults = resolveEditScriptDefaults(input.prompt)
-  const projectStyle = buildProjectStyleInput({
-    artStyle: effectiveArtStyle,
-    videoRatio: effectiveVideoRatio,
-  })
   const screenplayText = await runPromptTextStep({
     userId: input.userId,
     projectId: input.projectId,
@@ -1242,7 +1212,6 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
     variables: {
       user_request: input.prompt,
       duration_seconds: String(defaults.durationSeconds),
-      aspect_ratio: effectiveVideoRatio,
     },
     stepTitle: 'Edit screenplay',
     stepIndex: 1,
@@ -1274,8 +1243,6 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       userPrompt: input.prompt,
       screenplayText,
       durationSeconds: defaults.durationSeconds,
-      aspectRatio: effectiveVideoRatio,
-      projectStyle,
     })
 
     const stylePreviews = await prisma.$transaction(async (tx) => {
@@ -1290,6 +1257,7 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
             episodeId: input.episodeId,
             editScreenplayId: saved.id,
             styleKey: option.styleKey,
+            aspectRatio: option.aspectRatio,
             title: option.title,
             summary: option.summary,
             styleBibleJson: styleBibleToJsonValue(option.styleBible),

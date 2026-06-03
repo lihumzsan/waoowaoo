@@ -178,11 +178,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS]: {
     pathStem: 'edit-script/style-preview-options',
-    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds', 'aspect_ratio', 'project_style_json'],
+    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY]: {
     pathStem: 'edit-script/screenplay',
-    variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio'],
+    variableKeys: ['user_request', 'duration_seconds'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE]: {
     pathStem: 'edit-script/director-decoupage',

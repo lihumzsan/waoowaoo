@@ -155,6 +155,7 @@ const mockStylePreviewOptions = {
   stylePreviews: [
     {
       styleKey: 'style_a',
+      aspectRatio: '9:16',
       title: '静冷科幻',
       summary: '冷色、克制、空间感强。',
       styleBible: mockStyleBible,
@@ -162,6 +163,7 @@ const mockStylePreviewOptions = {
     },
     {
       styleKey: 'style_b',
+      aspectRatio: '16:9',
       title: '暖色悬疑',
       summary: '暖光、阴影、悬疑节奏。',
       styleBible: {
@@ -172,6 +174,7 @@ const mockStylePreviewOptions = {
     },
     {
       styleKey: 'style_c',
+      aspectRatio: '21:9',
       title: '硬朗工业',
       summary: '工业质感、强结构、低饱和。',
       styleBible: {
@@ -321,6 +324,7 @@ describe('edit script generation status persistence', () => {
         episodeId: string
         editScreenplayId: string
         styleKey: string
+        aspectRatio: string
         title: string
         summary: string
         styleBibleJson: unknown
@@ -333,6 +337,7 @@ describe('edit script generation status persistence', () => {
       episodeId: input.data.episodeId,
       editScreenplayId: input.data.editScreenplayId,
       styleKey: input.data.styleKey,
+      aspectRatio: input.data.aspectRatio,
       title: input.data.title,
       summary: input.data.summary,
       styleBibleJson: input.data.styleBibleJson,
@@ -407,6 +412,7 @@ describe('edit script generation status persistence', () => {
         episodeId: 'episode-1',
         editScreenplayId: 'screenplay-1',
         styleKey: preview.styleKey,
+        aspectRatio: preview.aspectRatio,
         title: preview.title,
         summary: preview.summary,
         styleBibleJson: preview.styleBible,
@@ -460,6 +466,12 @@ describe('edit script generation status persistence', () => {
       }),
     }))
     expect(txMock.projectEditStylePreview.create).toHaveBeenCalledTimes(3)
+    expect(txMock.projectEditStylePreview.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({
+        styleKey: 'style_a',
+        aspectRatio: '9:16',
+      }),
+    }))
     expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -506,6 +518,7 @@ describe('edit script generation status persistence', () => {
       episodeId: 'episode-1',
       editScreenplayId: 'screenplay-1',
       styleKey: 'style_b',
+      aspectRatio: '16:9',
       title: '暖色悬疑',
       summary: '暖光、阴影、悬疑节奏。',
       styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
@@ -528,6 +541,7 @@ describe('edit script generation status persistence', () => {
           episodeId: 'episode-1',
           editScreenplayId: 'screenplay-1',
           styleKey: preview.styleKey,
+          aspectRatio: preview.aspectRatio,
           title: preview.title,
           summary: preview.summary,
           styleBibleJson: preview.styleBible,
@@ -553,6 +567,7 @@ describe('edit script generation status persistence', () => {
         episodeId: 'episode-1',
         editScreenplayId: 'screenplay-1',
         styleKey: preview.styleKey,
+        aspectRatio: preview.aspectRatio,
         title: preview.title,
         summary: preview.summary,
         styleBibleJson: preview.styleBible,
@@ -592,6 +607,12 @@ describe('edit script generation status persistence', () => {
       data: {
         styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
         status: 'ready',
+      },
+    })
+    expect(prismaMock.project.update).toHaveBeenCalledWith({
+      where: { id: 'project-1' },
+      data: {
+        videoRatio: '16:9',
       },
     })
     expect(screenplay.status).toBe('ready')

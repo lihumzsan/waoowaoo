@@ -1,5 +1,4 @@
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import type { StylePresetRef } from '@/lib/style-preset/types'
 
 export const HOME_ASSISTANT_AUTOSTART_QUERY = 'assistantAutoStart' as const
 export const HOME_ASSISTANT_AUTOSTART_VALUE = 'home-input' as const
@@ -34,9 +33,6 @@ export interface CreateHomeProjectLaunchParams {
   apiFetch: ApiFetchLike
   projectName: string
   storyText: string
-  videoRatio: string
-  artStyle: string
-  visualStylePreset?: StylePresetRef
   episodeName: string
 }
 
@@ -126,9 +122,6 @@ export async function createHomeProjectLaunch({
   apiFetch,
   projectName,
   storyText,
-  videoRatio,
-  artStyle,
-  visualStylePreset,
   episodeName,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
   if (!storyText.trim()) {
@@ -148,20 +141,6 @@ export async function createHomeProjectLaunch({
   }
 
   const projectId = await readProjectId(projectResponse)
-
-  const configResponse = await apiFetch(`/api/projects/${projectId}/config`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      videoRatio,
-      artStyle,
-      ...(visualStylePreset ? { visualStylePreset } : {}),
-    }),
-  })
-
-  if (!configResponse.ok) {
-    throw new Error(await readApiErrorMessage(configResponse, 'Failed to save project config'))
-  }
 
   const episodeResponse = await apiFetch(`/api/projects/${projectId}/episodes`, {
     method: 'POST',

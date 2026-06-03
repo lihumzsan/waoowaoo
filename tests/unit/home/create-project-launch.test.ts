@@ -19,7 +19,7 @@ describe('createHomeProjectLaunch', () => {
     vi.restoreAllMocks()
   })
 
-  it('creates project, config, empty first episode, and returns an assistant auto-start workspace target', async () => {
+  it('creates project, empty first episode, and returns an assistant auto-start workspace target', async () => {
     const apiFetch = vi
       .fn<(
         input: string,
@@ -28,7 +28,6 @@ describe('createHomeProjectLaunch', () => {
       .mockResolvedValueOnce(buildJsonResponse({
         project: { id: 'project-1' },
       }, 201))
-      .mockResolvedValueOnce(buildJsonResponse({ success: true }, 200))
       .mockResolvedValueOnce(buildJsonResponse({
         episode: { id: 'episode-1' },
       }, 201))
@@ -37,8 +36,6 @@ describe('createHomeProjectLaunch', () => {
       apiFetch,
       projectName: '开场白',
       storyText: '第一章内容',
-      videoRatio: '9:16',
-      artStyle: 'american-comic',
       episodeName: '第 1 集',
     })
 
@@ -49,15 +46,7 @@ describe('createHomeProjectLaunch', () => {
         name: '开场白',
       }),
     })
-    expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/projects/project-1/config', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        videoRatio: '9:16',
-        artStyle: 'american-comic',
-      }),
-    })
-    expect(apiFetch).toHaveBeenNthCalledWith(3, '/api/projects/project-1/episodes', {
+    expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/projects/project-1/episodes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -86,7 +75,6 @@ describe('createHomeProjectLaunch', () => {
       .mockResolvedValueOnce(buildJsonResponse({
         project: { id: 'project-1' },
       }, 201))
-      .mockResolvedValueOnce(buildJsonResponse({ success: true }, 200))
       .mockResolvedValueOnce(buildJsonResponse({
         episode: {},
       }, 201))
@@ -95,8 +83,6 @@ describe('createHomeProjectLaunch', () => {
       apiFetch,
       projectName: '开场白',
       storyText: '第一章内容',
-      videoRatio: '9:16',
-      artStyle: 'american-comic',
       episodeName: '第 1 集',
     })).rejects.toThrow('Episode creation response missing episode id')
   })

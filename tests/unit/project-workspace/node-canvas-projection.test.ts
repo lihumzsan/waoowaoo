@@ -566,6 +566,7 @@ describe('workspace node canvas projection', () => {
           episodeId: 'episode-1',
           screenplayId: 'screenplay-1',
           styleKey: 'style_a',
+          aspectRatio: '9:16',
           title: '自然光主方案',
           summary: '低饱和自然光，克制胶片感。',
           styleBible,
@@ -582,6 +583,7 @@ describe('workspace node canvas projection', () => {
           episodeId: 'episode-1',
           screenplayId: 'screenplay-1',
           styleKey: 'style_b',
+          aspectRatio: '16:9',
           title: '夜色情绪',
           summary: '暗部更强，情绪更悬疑。',
           styleBible,
@@ -598,6 +600,7 @@ describe('workspace node canvas projection', () => {
           episodeId: 'episode-1',
           screenplayId: 'screenplay-1',
           styleKey: 'style_c',
+          aspectRatio: '21:9',
           title: '作者化留白',
           summary: '更克制、更安静的作者化方案。',
           styleBible,
@@ -629,6 +632,7 @@ describe('workspace node canvas projection', () => {
       'edit-style-preview:style-preview-c',
     ])
     expect(previewNodes[0]?.data.previewImageUrl).toBe('https://cdn.example.com/a.png')
+    expect(previewNodes[0]?.data.meta).toBe('nodes.editStylePreview.meta:{"ratio":"9:16"}')
     expect(previewNodes[0]?.data.action).toEqual({
       type: 'confirm_edit_style_preview',
       stylePreviewId: 'style-preview-a',

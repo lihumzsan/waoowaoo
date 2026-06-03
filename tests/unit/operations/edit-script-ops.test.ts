@@ -170,6 +170,24 @@ describe('edit-script operations', () => {
     }))
   })
 
+  it('does not forward aspect ratio from agent screenplay generation', async () => {
+    const operations = createEditScriptOperations()
+    await operations.generate_edit_screenplay.execute(buildContext(), {
+      prompt: 'make a vertical short film',
+      confirmed: true,
+      videoRatio: '9:16',
+    })
+
+    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      prompt: 'make a vertical short film',
+    }))
+    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
+      videoRatio: expect.anything(),
+    }))
+  })
+
   it('passes screenplay id into director decoupage generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_director_decoupage.execute(buildContext(), {

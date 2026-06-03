@@ -6,7 +6,6 @@ User original request:
 {{user_request}}
 
 Target total duration: {{duration_seconds}} seconds
-Aspect ratio: {{aspect_ratio}}
 
 Responsibility boundary:
 - Only write story content here. Do not write camera language, shot size, composition, camera movement, editing rhythm, group/single structure, video prompts, sound effects, BGM, or post-production notes.

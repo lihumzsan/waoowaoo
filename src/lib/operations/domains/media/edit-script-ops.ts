@@ -28,7 +28,6 @@ const confirmedInputFields = {
 const generateEditScreenplayInputSchema = z.object({
   ...confirmedInputFields,
   prompt: z.string().trim().min(1),
-  videoRatio: editScriptVideoRatioSchema.optional(),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -222,7 +221,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         episodeId: resolveEpisodeId(input, ctx.context.episodeId),
         locale: resolveLocale(ctx.context.locale),
         prompt: input.prompt,
-        ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
       })),
     }),
     generate_edit_director_decoupage: defineOperation({

@@ -800,7 +800,7 @@
         "editStylePreview": {
           "eyebrow": "Style Candidate",
           "body": "A 3x3 film tone preview generated from the screenplay.",
-          "meta": "Becomes the single Style Bible after confirmation"
+          "meta": "Becomes the single Style Bible · {ratio}"
         },
         "editStyleBible": {
           "title": "Style Bible",

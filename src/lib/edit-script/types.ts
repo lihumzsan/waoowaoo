@@ -21,6 +21,7 @@ export interface EditStylePreviewPayload {
   readonly episodeId: string
   readonly screenplayId: string
   readonly styleKey: EditStylePreviewKey
+  readonly aspectRatio: EditScriptVideoRatio
   readonly title: string
   readonly summary: string
   readonly styleBible: EditScriptStyleBible
@@ -279,6 +280,7 @@ export const editScriptStyleBibleSchema = z.object({
 
 export const editStylePreviewOptionSchema = z.object({
   styleKey: z.enum(EDIT_STYLE_PREVIEW_KEYS),
+  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   styleBible: editScriptStyleBibleSchema.shape.styleBible,
@@ -410,8 +412,6 @@ export const getEditCinematographyShotPlanRequestSchema = z.object({
 export const createEditScreenplayRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   prompt: z.string().trim().min(1),
-  videoRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS).optional(),
-  artStyle: z.string().trim().min(1).optional(),
 })
 
 export const getEditScreenplayRequestSchema = z.object({

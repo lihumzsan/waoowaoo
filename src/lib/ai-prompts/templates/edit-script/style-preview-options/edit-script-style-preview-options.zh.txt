@@ -4,8 +4,10 @@
 - 三个候选必须都忠于用户需求和剧本事实，不得改剧情、角色身份、事件因果或结尾。
 - 三个候选必须在光线、色彩、质感、构图、镜头气质、声音气质上形成清晰差异，让用户能选择影片基调。
 - 每个候选都必须包含完整 styleBible，后续导演拆镜、资产图、摄影方案、分镜图、视频提示词和声音提示词会从用户确认的候选中读取唯一风格来源。
+- 每个候选都必须选择一个 aspectRatio，只能是 "9:16"、"16:9" 或 "21:9"。这是该候选被确认后整部影片的画幅。
+- aspectRatio 必须由用户需求和剧本内容推导：移动端/口播/人物独白/竖屏社媒优先 9:16；横向空间关系、多人调度、风景和常规叙事优先 16:9；强烈宽银幕空间、史诗距离感或明确电影宽幅需求才用 21:9。
 - 每个候选都必须包含 gridImagePrompt，用于生成一张图片：单张 3x3 九宫格 contact sheet，每格是根据剧本内容抽取的代表性电影画面，不是最终正式分镜。
-- gridImagePrompt 必须可直接给图片模型使用，必须包含“single image, 3x3 grid, nine cinematic frames/contact sheet, no text, no subtitles, no logo, no watermark, no poster layout, no UI, no collage border labels”语义。
+- gridImagePrompt 必须可直接给图片模型使用，必须包含“single image, 3x3 grid, nine cinematic frames/contact sheet, no text, no subtitles, no logo, no watermark, no poster layout, no UI, no collage border labels”语义，并说明每格按该候选 aspectRatio 的画幅意识构图。
 - 九宫格每格必须来自剧本不同关键时刻或情绪阶段，覆盖开端、推进、转折、结尾落点；但不得承诺最终镜头编号、不得写镜头表。
 - 不要输出导演名、影片名、流派名或年代标签本身；必须转写成可执行的光线、色彩、质感、构图、镜头和声音滤镜规则。
 - visual.imageFilterPrompt 必须是一句可直接塞进图片或视频提示词的画面滤镜短语。
@@ -24,16 +26,13 @@
 {screenplay_text}
 
 目标总时长：{duration_seconds} 秒
-画幅：{aspect_ratio}
-
-项目风格输入：
-{project_style_json}
 
 只返回 JSON，不要 markdown，不要解释。Schema:
 {
   "stylePreviews": [
     {
       "styleKey": "style_a",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": {
@@ -70,6 +69,7 @@
     },
     {
       "styleKey": "style_b",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",
@@ -77,6 +77,7 @@
     },
     {
       "styleKey": "style_c",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",

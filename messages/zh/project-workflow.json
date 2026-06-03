@@ -800,7 +800,7 @@
         "editStylePreview": {
           "eyebrow": "风格候选",
           "body": "根据剧本生成的九宫格影片基调预览。",
-          "meta": "确认后作为唯一 Style Bible"
+          "meta": "确认后作为唯一 Style Bible · {ratio}"
         },
         "editStyleBible": {
           "title": "Style Bible",

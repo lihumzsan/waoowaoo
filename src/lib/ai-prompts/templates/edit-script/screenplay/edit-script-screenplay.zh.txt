@@ -6,7 +6,6 @@
 {{user_request}}
 
 目标总时长：{{duration_seconds}} 秒
-画幅：{{aspect_ratio}}
 
 职责边界：
 - 这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明。

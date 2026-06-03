@@ -50,11 +50,12 @@ describe('edit script block-first prompt flow', () => {
       variables: {
         user_request: '生成一条连续短片',
         duration_seconds: '8',
-        aspect_ratio: '9:16',
       },
     })
 
     expect(screenplayPrompt).toContain('AI 可控短片剧本')
+    expect(screenplayPrompt).not.toContain('画幅')
+    expect(screenplayPrompt).not.toContain('aspect_ratio')
     expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
     expect(screenplayPrompt).toContain('不要出现“镜头”“特写”“推镜”“剪切”“CUT TO”')
     expect(screenplayPrompt).not.toContain('项目风格输入')
@@ -69,8 +70,6 @@ describe('edit script block-first prompt flow', () => {
         user_request: '生成一条禅修短片',
         screenplay_text: screenplayText,
         duration_seconds: '8',
-        aspect_ratio: '9:16',
-        project_style_json: JSON.stringify({ artStyle: 'realistic', aspectRatio: '9:16' }),
       },
     })
 
@@ -79,10 +78,16 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).toContain('九宫格')
     expect(stylePreviewPrompt).toContain('3x3')
     expect(stylePreviewPrompt).toContain('gridImagePrompt')
+    expect(stylePreviewPrompt).toContain('aspectRatio')
+    expect(stylePreviewPrompt).toContain('"9:16"')
+    expect(stylePreviewPrompt).toContain('"16:9"')
+    expect(stylePreviewPrompt).toContain('"21:9"')
     expect(stylePreviewPrompt).toContain('style_a')
     expect(stylePreviewPrompt).toContain('style_b')
     expect(stylePreviewPrompt).toContain('style_c')
     expect(stylePreviewPrompt).toContain('no text, no subtitles, no logo, no watermark')
+    expect(stylePreviewPrompt).not.toContain('项目风格输入')
+    expect(stylePreviewPrompt).not.toContain('project_style_json')
     expect(stylePreviewPrompt).not.toContain('春夏秋冬又一春')
     expect(stylePreviewPrompt).not.toContain('金基德')
 

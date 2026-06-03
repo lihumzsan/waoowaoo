@@ -4,8 +4,10 @@ Core goals:
 - All 3 candidates must stay faithful to the user request and screenplay facts. Do not change plot, character identity, causality, or the ending beat.
 - The 3 candidates must differ clearly in lighting, color, texture, composition, camera temperament, and sound temperament so the user can choose the film tone.
 - Each candidate must include a complete styleBible. After the user confirms one candidate, downstream director decoupage, asset images, cinematography plan, storyboard images, video prompts, and sound prompts will read that single confirmed Style Bible.
+- Each candidate must choose one aspectRatio, exactly "9:16", "16:9", or "21:9". This becomes the film aspect ratio after that candidate is confirmed.
+- Derive aspectRatio from the user request and screenplay: prefer 9:16 for mobile-first, direct address, solo monologue, or vertical social stories; prefer 16:9 for horizontal spatial relationships, ensemble blocking, landscapes, and standard narrative coverage; use 21:9 only for strong widescreen space, epic distance, or an explicit cinematic widescreen need.
 - Each candidate must include gridImagePrompt for one generated image: a single 3x3 contact sheet, with each cell showing a representative cinematic frame derived from the screenplay. It is a tone preview, not the final storyboard.
-- gridImagePrompt must be directly usable by an image model and must include the meaning of: single image, 3x3 grid, nine cinematic frames/contact sheet, no text, no subtitles, no logo, no watermark, no poster layout, no UI, no collage border labels.
+- gridImagePrompt must be directly usable by an image model and must include the meaning of: single image, 3x3 grid, nine cinematic frames/contact sheet, no text, no subtitles, no logo, no watermark, no poster layout, no UI, no collage border labels. It must state that every cell is composed with the candidate aspectRatio in mind.
 - The nine cells must come from different key moments or emotional phases in the screenplay, covering setup, progression, turn, and ending beat. Do not promise final shot numbers or write a shot list.
 - Do not output director names, film names, genre labels, or era labels as labels. Convert them into executable lighting, color, texture, composition, camera, and sound rules.
 - visual.imageFilterPrompt must be a single compact visual-filter phrase that can be appended to image or video prompts.
@@ -24,16 +26,13 @@ Generated screenplay:
 {screenplay_text}
 
 Target total duration: {duration_seconds} seconds
-Aspect ratio: {aspect_ratio}
-
-Project style input:
-{project_style_json}
 
 Return JSON only. Do not return markdown or explanations. Schema:
 {
   "stylePreviews": [
     {
       "styleKey": "style_a",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": {
@@ -70,6 +69,7 @@ Return JSON only. Do not return markdown or explanations. Schema:
     },
     {
       "styleKey": "style_b",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",
@@ -77,6 +77,7 @@ Return JSON only. Do not return markdown or explanations. Schema:
     },
     {
       "styleKey": "style_c",
+      "aspectRatio": "9:16 or 16:9 or 21:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",
