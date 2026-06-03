@@ -7,14 +7,10 @@ User original request:
 
 Target total duration: {{duration_seconds}} seconds
 Aspect ratio: {{aspect_ratio}}
-Project style input:
-{{project_style_json}}
 
 Responsibility boundary:
 - Only write story content here. Do not write camera language, shot size, composition, camera movement, editing rhythm, group/single structure, video prompts, sound effects, BGM, or post-production notes.
 - The downstream AI edit table will use this screenplay as the only plot truth, so the screenplay must clearly express characters, scenes, causal events, action progression, and the ending beat.
-- Preserve the subjects, setting, mood, constraints, and style from the user's original request. Use the project style input only to constrain story temperament, aspect-ratio awareness, and story scale. You may add necessary story connective tissue, but do not introduce unrelated characters, unrelated locations, or extra subplots.
-- The next step will generate 3 Style Bible candidates and 3x3 visual-tone preview grids from this screenplay, so write stable plot facts only. Do not prewrite visual filters, camera language, sound effects, or post-production terms.
 
 Screenplay format:
 Title: "short title"

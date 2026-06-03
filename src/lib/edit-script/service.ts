@@ -1243,7 +1243,6 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       user_request: input.prompt,
       duration_seconds: String(defaults.durationSeconds),
       aspect_ratio: effectiveVideoRatio,
-      project_style_json: stringifyForPrompt(projectStyle),
     },
     stepTitle: 'Edit screenplay',
     stepIndex: 1,
