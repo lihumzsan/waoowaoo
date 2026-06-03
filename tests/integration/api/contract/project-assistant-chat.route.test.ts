@@ -142,7 +142,6 @@ describe('project assistant chat route', () => {
           ],
           context: {
             episodeId: 'episode-1',
-            currentStage: 'config',
             selectedScopeRef: 'panel:panel-1',
             selectedPanelId: 'panel-1',
             selectedClipId: 'clip-1',
@@ -160,7 +159,6 @@ describe('project assistant chat route', () => {
       userId: 'user-1',
       context: {
         episodeId: 'episode-1',
-        currentStage: 'config',
         selectedScopeRef: 'panel:panel-1',
         selectedPanelId: 'panel-1',
         selectedClipId: 'clip-1',
@@ -340,7 +338,6 @@ describe('project assistant chat route', () => {
           context: {
             locale: 'zh',
             episodeId: 'episode-1',
-            currentStage: 'workspace',
             selectedScopeRef: 'panel:panel-1',
             selectedPanelId: 'panel-1',
             selectedClipId: 'clip-1',
@@ -366,7 +363,6 @@ describe('project assistant chat route', () => {
       context: {
         locale: 'zh',
         episodeId: 'episode-1',
-        currentStage: 'workspace',
         selectedScopeRef: 'panel:panel-1',
         selectedPanelId: 'panel-1',
         selectedClipId: 'clip-1',

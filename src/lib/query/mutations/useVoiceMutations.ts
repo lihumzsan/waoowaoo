@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { resolveTaskResponse } from '@/lib/task/client'
-import type { SpeakerVoiceEntry, SpeakerVoicePatch } from '@/lib/ai-registry/voice-line'
+import type { SpeakerVoicePatch } from '@/lib/ai-registry/voice-line'
 import {
     requestBlobWithError,
     requestJsonWithError,
@@ -57,44 +57,6 @@ export function useDesignProjectVoice(projectId: string) {
                 audioBase64?: string
                 requestId?: string
             }>(response)
-        },
-    })
-}
-
-/**
- * 分析镜头变体（项目）
- */
-
-export function useFetchProjectVoiceStageData(projectId: string) {
-    return useMutation({
-        mutationFn: async ({ episodeId }: { episodeId: string }): Promise<{
-            voiceLines: ProjectVoiceLine[]
-            speakerVoices: Record<string, SpeakerVoiceEntry>
-            speakers: string[]
-        }> => {
-            const [linesData, voicesData, speakersData] = await Promise.all([
-                requestJsonWithError<{ voiceLines?: ProjectVoiceLine[] }>(
-                    `/api/projects/${projectId}/voice-lines?episodeId=${episodeId}`,
-                    { method: 'GET' },
-                    '获取台词失败',
-                ),
-                requestJsonWithError<{ speakerVoices?: Record<string, SpeakerVoiceEntry> }>(
-                    `/api/projects/${projectId}/speaker-voice?episodeId=${episodeId}`,
-                    { method: 'GET' },
-                    '获取角色音色失败',
-                ),
-                requestJsonWithError<{ speakers?: string[] }>(
-                    `/api/projects/${projectId}/voice-lines?speakersOnly=1`,
-                    { method: 'GET' },
-                    '获取说话人失败',
-                ),
-            ])
-
-            return {
-                voiceLines: linesData.voiceLines || [],
-                speakerVoices: voicesData.speakerVoices || {},
-                speakers: speakersData.speakers || [],
-            }
         },
     })
 }

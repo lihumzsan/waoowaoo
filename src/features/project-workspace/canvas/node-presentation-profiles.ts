@@ -66,11 +66,6 @@ export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
 }
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
-  storyInput: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
   analysis: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',

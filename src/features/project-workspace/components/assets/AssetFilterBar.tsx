@@ -31,9 +31,9 @@ export default function AssetFilterBar({
 
     const segmentOptions = [
         { value: 'all' as const, label: `${t('filterBar.all')} (${counts.all})` },
-        { value: 'character' as const, label: `${t('stage.characters')} (${counts.character})` },
-        { value: 'location' as const, label: `${t('stage.locations')} (${counts.location})` },
-        { value: 'prop' as const, label: `${t('stage.props')} (${counts.prop})` },
+        { value: 'character' as const, label: `${t('overview.characters')} (${counts.character})` },
+        { value: 'location' as const, label: `${t('overview.locations')} (${counts.location})` },
+        { value: 'prop' as const, label: `${t('overview.props')} (${counts.prop})` },
     ]
 
     return (

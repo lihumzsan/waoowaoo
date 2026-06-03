@@ -4,7 +4,7 @@ import { useEpisodeData } from '@/lib/query/hooks'
 import type { ProjectClip, ProjectEditScript, ProjectFinalVideo, ProjectShot, ProjectStoryboard, ProjectVideoGroup } from '@/types/project'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 
-interface EpisodeStagePayload {
+interface EpisodeCanvasPayload {
   name?: string
   novelText?: string | null
   audioUrl?: string | null
@@ -17,10 +17,10 @@ interface EpisodeStagePayload {
   videoGroups?: ProjectVideoGroup[]
 }
 
-export function useWorkspaceEpisodeStageData() {
+export function useWorkspaceEpisodeCanvasData() {
   const { projectId, episodeId } = useWorkspaceProvider()
   const { data: episodeData } = useEpisodeData(projectId, episodeId || null)
-  const payload = episodeData as EpisodeStagePayload | null
+  const payload = episodeData as EpisodeCanvasPayload | null
 
   return {
     episodeName: payload?.name,

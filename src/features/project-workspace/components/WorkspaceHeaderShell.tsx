@@ -6,7 +6,7 @@ import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
 import WorkspaceTopActions from './WorkspaceTopActions'
 import type { ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
-import { resolveEpisodeStageArtifacts } from '@/lib/project-workflow/stage-readiness'
+import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
 
 interface EpisodeSummary {
   id: string
@@ -164,7 +164,7 @@ export default function WorkspaceHeaderShell({
           <EpisodeSelector
             projectName={projectName}
             episodes={sorted.map((ep) => {
-              const stageArtifacts = resolveEpisodeStageArtifacts({
+              const episodeArtifacts = resolveEpisodeArtifactReadiness({
                 novelText: null,
                 clips: ep.clips || [],
                 storyboards: ep.storyboards || [],
@@ -175,8 +175,8 @@ export default function WorkspaceHeaderShell({
                 title: ep.name,
                 summary: ep.description ?? undefined,
                 status: {
-                  script: stageArtifacts.hasScript ? 'ready' as const : 'empty' as const,
-                  visual: stageArtifacts.hasVideo ? 'ready' as const : 'empty' as const,
+                  script: episodeArtifacts.hasScript ? 'ready' as const : 'empty' as const,
+                  visual: episodeArtifacts.hasVideo ? 'ready' as const : 'empty' as const,
                 },
               }
             })}

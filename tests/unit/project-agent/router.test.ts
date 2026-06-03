@@ -65,7 +65,7 @@ describe('routeProjectAgentRequest', () => {
     const route = await routeProjectAgentRequest({
       messages: [buildUserMessage('把角色A的人设应用到第12镜并修改镜头描述。')],
       phase: buildPhaseSnapshot(),
-      context: { episodeId: 'ep-1', currentStage: 'storyboard-edit', locale: 'zh' },
+      context: { episodeId: 'ep-1', locale: 'zh' },
       model: {} as never,
       allowedRequestedGroups: [['storyboard', 'edit'], ['asset', 'character'], ['project', 'read']],
     })
@@ -92,7 +92,7 @@ describe('routeProjectAgentRequest', () => {
     const route = await routeProjectAgentRequest({
       messages: [buildUserMessage('帮我处理一下这个项目')],
       phase: buildPhaseSnapshot(),
-      context: { currentStage: 'config', locale: 'zh' },
+      context: { locale: 'zh' },
       model: {} as never,
       allowedRequestedGroups: [['project', 'read'], ['skill'], ['storyboard', 'edit']],
     })
@@ -116,7 +116,7 @@ describe('routeProjectAgentRequest', () => {
     const route = await routeProjectAgentRequest({
       messages: [buildUserMessage('给我一个希区柯克风格的恐怖短片计划。')],
       phase: buildPhaseSnapshot(),
-      context: { currentStage: 'concept', locale: 'zh', interactionMode: 'plan' },
+      context: { locale: 'zh', interactionMode: 'plan' },
       model: {} as never,
       allowedRequestedGroups: [['project', 'read'], ['skill']],
     })

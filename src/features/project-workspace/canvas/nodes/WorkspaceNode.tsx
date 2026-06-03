@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
-import StoryDetail from '../details/StoryDetail'
 import type {
   WorkspaceCanvasAssetRef,
   WorkspaceCanvasFlowNode,
@@ -18,8 +17,6 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 
 function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconName {
   switch (kind) {
-    case 'storyInput':
-      return 'fileText'
     case 'analysis':
       return 'chart'
     case 'scriptClip':
@@ -290,7 +287,7 @@ function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
 }
 
 function nodeCanToggleDetails(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind !== 'storyInput' && kind !== 'analysis' && kind !== 'editScript'
+  return kind !== 'analysis' && kind !== 'editScript'
 }
 
 function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -454,41 +451,6 @@ function renderScene(scene: WorkspaceCanvasScriptScene, index: number, labels: R
       {renderChips(labels('characters'), scene.characters)}
       {renderLines(scene.lines, labels)}
     </section>
-  )
-}
-
-function StoryContent({
-  data,
-  onDraftChange,
-  draft,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly draft: string
-  readonly onDraftChange: (value: string) => void
-}) {
-  if (data.projectId) {
-    return (
-      <StoryDetail
-        projectId={data.projectId}
-        storyText={data.body}
-        episodeName={data.episodeName}
-        variant="node"
-      />
-    )
-  }
-
-  return (
-    <textarea
-      className="nodrag nowheel h-[116px] w-full resize-none rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-6 text-[var(--glass-text-secondary)] outline-none transition focus:border-slate-400"
-      value={draft}
-      placeholder={data.body || data.title}
-      onChange={(event) => onDraftChange(event.target.value)}
-      onBlur={() => {
-        if (draft !== data.body) {
-          data.onAction?.({ type: 'update_story', value: draft })
-        }
-      }}
-    />
   )
 }
 
@@ -1620,14 +1582,10 @@ function SpaceConsistencyContent({
 
 function NodeContent({
   data,
-  draft,
-  setDraft,
   labels,
   expanded,
 }: {
   readonly data: WorkspaceCanvasFlowNode['data']
-  readonly draft: string
-  readonly setDraft: (value: string) => void
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
@@ -1643,8 +1601,6 @@ function NodeContent({
   }
 
   switch (data.kind) {
-    case 'storyInput':
-      return <StoryContent data={data} draft={draft} onDraftChange={setDraft} />
     case 'analysis':
       return <AnalysisContent data={data} />
     case 'scriptClip':
@@ -1685,9 +1641,7 @@ function NodeContent({
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const measuredContentRef = useRef<HTMLDivElement | null>(null)
-  const [storyDraft, setStoryDraft] = useState(data.body)
   const expanded = data.expanded === true
-  const hasTarget = data.kind !== 'storyInput'
   const hasSource = data.kind !== 'finalTimeline'
   const action = data.action
   const canToggleDetails = nodeCanToggleDetails(data.kind)
@@ -1708,10 +1662,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     nodeShowsMetaFooter(data.kind)
   )
   const runningData = isRunning ? { ...data, __running: true } : data
-
-  useEffect(() => {
-    setStoryDraft(data.body)
-  }, [data.body])
 
   useEffect(() => {
     if (!nodeId || !onMeasureNodeSize || !nodeNeedsActualHeightMeasurement(data.kind)) return undefined
@@ -1735,7 +1685,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
   return (
     <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>
-      {hasTarget ? <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
+      <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" />
       {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 
       <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-200 ring-2 ring-sky-100' : 'border-slate-200'}`}>
@@ -1781,7 +1731,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
           </header>
 
           <div className={`space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}>
-            <NodeContent data={runningData} draft={storyDraft} setDraft={setStoryDraft} labels={labels} expanded={expanded} />
+            <NodeContent data={runningData} labels={labels} expanded={expanded} />
 
             {shouldShowFooter ? (
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">

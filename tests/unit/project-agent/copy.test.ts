@@ -7,7 +7,6 @@ describe('project agent prompt copy', () => {
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      stage: 'concept',
       interactionMode: 'plan',
     })
 

@@ -134,7 +134,6 @@ export {
     useUpdateProjectCharacterVoiceSettings,
     useSaveProjectDesignedVoice,
     useUpdateProjectClip,
-    useFetchProjectVoiceStageData,
     useAnalyzeProjectVoice,
     useGenerateProjectVoice,
     useCreateProjectVoiceLine,

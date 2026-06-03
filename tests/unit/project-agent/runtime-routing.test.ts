@@ -216,7 +216,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { episodeId: 'ep-1', currentStage: 'storyboard' },
+      context: { episodeId: 'ep-1' },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'show character' }] },
       ],
@@ -258,7 +258,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { episodeId: 'ep-1', currentStage: 'storyboard' },
+      context: { episodeId: 'ep-1' },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'regenerate panel image' }] },
       ],
@@ -284,7 +284,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { currentStage: 'config' },
+      context: {},
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'help me with this' }] },
       ],
@@ -312,7 +312,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { episodeId: 'ep-1', currentStage: 'storyboard', interactionMode: 'plan' },
+      context: { episodeId: 'ep-1', interactionMode: 'plan' },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'plan this storyboard change' }] },
       ],
@@ -337,7 +337,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { episodeId: 'ep-1', currentStage: 'concept', interactionMode: 'plan' },
+      context: { episodeId: 'ep-1', interactionMode: 'plan' },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '给我一个希区柯克风格恐怖片计划' }] },
       ],
@@ -364,7 +364,7 @@ describe('project agent runtime tool routing', () => {
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
-      context: { episodeId: 'ep-1', currentStage: 'storyboard', interactionMode: 'auto' },
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'regenerate panel image' }] },
       ],

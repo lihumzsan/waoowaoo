@@ -21,7 +21,7 @@ function createNode(input: {
   const kind = input.kind ?? 'shot'
   const width = input.width ?? 100
   const height = input.height ?? 100
-  const layoutNodeType: CanvasLayoutNodeType = kind === 'storyInput' ? 'story' : kind
+  const layoutNodeType: CanvasLayoutNodeType = kind
   return {
     id: input.id,
     type: 'workspaceNode',

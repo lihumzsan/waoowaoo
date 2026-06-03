@@ -17,13 +17,6 @@ describe('glass input focus style', () => {
       'src/features/project-workspace/components/assets/ImageEditModal.tsx',
       'src/features/project-workspace/components/smart-import/steps/StepMapping.tsx',
       'src/features/project-workspace/components/smart-import/steps/StepSource.tsx',
-      'src/features/project-workspace/components/storyboard/ImageEditModal.tsx',
-      'src/features/project-workspace/components/storyboard/InsertPanelModal.tsx',
-      'src/features/project-workspace/components/video/FirstLastFramePanel.tsx',
-      'src/features/project-workspace/components/video/VideoPromptModal.tsx',
-      'src/features/project-workspace/components/video/panel-card/VideoPanelCardBody.tsx',
-      'src/features/project-workspace/components/voice/EmotionSettingsPanel.tsx',
-      'src/features/project-workspace/components/voice-stage/VoiceControlPanel.tsx',
     ]
 
     const source = files.map((file) => readFileSync(file, 'utf8')).join('\n')

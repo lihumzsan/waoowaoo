@@ -12,7 +12,6 @@ export const GET = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || null
-  const currentStage = request.nextUrl.searchParams.get('currentStage')?.trim() || null
   const scopeRef = request.nextUrl.searchParams.get('scopeRef')?.trim() || null
   const selectedPanelId = request.nextUrl.searchParams.get('selectedPanelId')?.trim() || null
   const selectedClipId = request.nextUrl.searchParams.get('selectedClipId')?.trim() || null
@@ -25,7 +24,6 @@ export const GET = apiHandler(async (
     userId: authResult.session.user.id,
     context: {
       episodeId,
-      currentStage,
     },
     input: {
       detail: 'full',

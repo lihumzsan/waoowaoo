@@ -4,7 +4,10 @@ import { useMemo } from 'react'
 import type { WorkspaceRuntimeValue, WorkspaceVideoBlockArrangementBlock } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
+import type {
+  WorkspaceBatchVideoGenerationParams,
+  WorkspaceVideoGenerationOptions,
+} from '../video-generation-types'
 
 interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
@@ -51,10 +54,10 @@ interface UseWorkspaceRuntimeParams {
       flModel: string
       customPrompt?: string
     },
-    generationOptions?: VideoGenerationOptions,
+    generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => Promise<void>
-  handleGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
+  handleGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
   handleGenerateBgmScore: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>

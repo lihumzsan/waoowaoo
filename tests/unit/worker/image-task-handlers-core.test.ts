@@ -13,7 +13,7 @@ const utilsMock = vi.hoisted(() => ({
 }))
 
 const outboundImageMock = vi.hoisted(() => ({
-  normalizeOptionalReferenceImagesForGeneration: vi.fn(async () => ['normalized-reference-image']),
+  normalizeReferenceImagesForGeneration: vi.fn(async () => ['normalized-reference-image']),
   normalizeToBase64ForGeneration: vi.fn(async () => 'base64-required-reference'),
 }))
 
@@ -136,7 +136,7 @@ describe('worker image-task-handlers-core', () => {
           aspectRatio: LOCATION_IMAGE_RATIO,
           resolution: '1536x1024',
           quality: 'medium',
-          referenceImages: ['https://signed/current-image.png', 'normalized-reference-image'],
+          referenceImages: ['base64-required-reference', 'normalized-reference-image'],
         }),
       }),
     )

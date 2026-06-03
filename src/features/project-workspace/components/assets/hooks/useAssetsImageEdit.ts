@@ -130,7 +130,7 @@ export function useAssetsImageEdit({
     }).then((data) => {
       const result = (data || {}) as { descriptionUpdated?: boolean }
       _ulogInfo(`[${assetLabel}编辑] ✅ 完成: ${locationName}`)
-      const descNote = result.descriptionUpdated ? t('stage.updateSuccess') : ''
+      const descNote = result.descriptionUpdated ? t('overview.updateSuccess') : ''
       showToast(`${locationName} ${t('image.editSuccess')}${descNote}`, 'success')
     }).catch((error: unknown) => {
       _ulogInfo(`[${assetLabel}编辑] ❌ 失败: ${locationName}`, error)
@@ -153,7 +153,7 @@ export function useAssetsImageEdit({
         onSuccess: (data) => {
           const result = (data || {}) as { descriptionUpdated?: boolean }
           _ulogInfo(`[角色编辑] ✅ 完成: ${characterName}`)
-          const descNote = result.descriptionUpdated ? t('stage.updateSuccess') : ''
+          const descNote = result.descriptionUpdated ? t('overview.updateSuccess') : ''
           showToast(`${characterName} ${t('image.editSuccess')}${descNote}`, 'success')
         },
         onError: (error: unknown) => {

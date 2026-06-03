@@ -1,4 +1,4 @@
-export type StageArtifactReadiness = {
+export type EpisodeArtifactReadiness = {
   hasStory: boolean
   hasScript: boolean
   hasStoryboard: boolean
@@ -63,7 +63,7 @@ export function hasVideoArtifacts(storyboards: unknown[] | null | undefined) {
     && storyboard.panels.some((panel) => isStoryboardPanelLike(panel) && hasNonEmptyText(panel.videoUrl)))
 }
 
-export function resolveEpisodeStageArtifacts(episode: EpisodeLike | null | undefined): StageArtifactReadiness {
+export function resolveEpisodeArtifactReadiness(episode: EpisodeLike | null | undefined): EpisodeArtifactReadiness {
   return {
     hasStory: hasNonEmptyText(episode?.novelText),
     hasScript: hasScriptArtifacts(episode?.clips),

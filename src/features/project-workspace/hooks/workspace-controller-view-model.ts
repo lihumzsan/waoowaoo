@@ -3,7 +3,10 @@
 import type { UserModelsPayload } from './useWorkspaceUserModels'
 import type { WorkspaceRuntimeValue } from '../WorkspaceRuntimeContext'
 import type { TaskPresentationState } from '@/lib/task/presentation'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
+import type {
+  WorkspaceBatchVideoGenerationParams,
+  WorkspaceVideoGenerationOptions,
+} from '../video-generation-types'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 
@@ -89,10 +92,10 @@ interface BuildWorkspaceControllerViewModelParams {
         flModel: string
         customPrompt?: string
       },
-      generationOptions?: VideoGenerationOptions,
+      generationOptions?: WorkspaceVideoGenerationOptions,
       panelId?: string,
     ) => Promise<void>
-    handleGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
+    handleGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
     handleUpdateVideoPrompt: (
       storyboardId: string,
       panelIndex: number,

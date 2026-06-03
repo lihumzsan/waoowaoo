@@ -48,8 +48,8 @@ import {
   hasScriptArtifacts,
   hasStoryboardArtifacts,
   hasVideoArtifacts,
-  resolveEpisodeStageArtifacts,
-} from '@/lib/project-workflow/stage-readiness'
+  resolveEpisodeArtifactReadiness,
+} from '@/lib/project-workflow/episode-artifact-readiness'
 
 interface ConfirmLocationSelectionMutation {
   mutationFn: (variables: { locationId: string }) => Promise<unknown>
@@ -194,7 +194,7 @@ describe('project global analyze mutation', () => {
   })
 })
 
-describe('stage readiness', () => {
+describe('episode artifact readiness', () => {
   it('treats script as ready only when at least one clip has non-empty screenplay', () => {
     expect(hasScriptArtifacts([])).toBe(false)
     expect(hasScriptArtifacts([
@@ -216,8 +216,8 @@ describe('stage readiness', () => {
     expect(hasVideoArtifacts([{ panels: [{ id: 'panel-1', videoUrl: 'https://example.com/video.mp4' }] }])).toBe(true)
   })
 
-  it('derives full episode stage artifacts from persisted outputs', () => {
-    const readiness = resolveEpisodeStageArtifacts({
+  it('derives full episode artifact readiness from persisted outputs', () => {
+    const readiness = resolveEpisodeArtifactReadiness({
       novelText: 'story',
       clips: [
         { id: 'clip-1', summary: '', location: null, characters: null, props: null, content: 'a', screenplay: '{"scenes":[]}' },

@@ -159,13 +159,11 @@ export async function resolveProjectPhase(params: {
   projectId: string
   userId: string
   episodeId?: string | null
-  currentStage?: string | null
 }): Promise<ProjectPhaseSnapshot> {
   const projection = await assembleProjectProjectionLite({
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.episodeId || null,
-    currentStage: params.currentStage || null,
   })
 
   const progress = projection.progress

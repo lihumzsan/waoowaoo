@@ -37,7 +37,6 @@ describe('assembleProjectProjectionFull', () => {
       projectName: 'p',
       episodeId: 'episode-1',
       episodeName: 'e',
-      currentStage: null,
       selectedScopeRef: null,
       policy: {
         projectId: 'project-1',
@@ -138,7 +137,6 @@ describe('assembleProjectProjectionFull', () => {
       projectName: 'p',
       episodeId: null,
       episodeName: null,
-      currentStage: null,
       selectedScopeRef: null,
       policy: {
         projectId: 'project-1',
@@ -176,7 +174,6 @@ describe('assembleProjectProjectionFull', () => {
       projectName: 'p',
       episodeId: 'episode-1',
       episodeName: 'e',
-      currentStage: null,
       selectedScopeRef: null,
       policy: {
         projectId: 'project-1',

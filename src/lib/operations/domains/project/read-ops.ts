@@ -69,7 +69,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId: ctx.context.episodeId || null,
-          currentStage: ctx.context.currentStage || null,
         })
         writeOperationDataPart<ProjectPhasePartData>(ctx.writer, 'data-project-phase', {
           phase: snapshot.phase,
@@ -94,7 +93,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId: ctx.context.episodeId || null,
-            currentStage: ctx.context.currentStage || null,
             panelLimit: input.panelLimit,
             scope: parseProjectionScope(input.scopeRef) ?? null,
           })
@@ -102,7 +100,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId: ctx.context.episodeId || null,
-            currentStage: ctx.context.currentStage || null,
           })),
     }),
     get_project_context: defineOperation({
@@ -123,7 +120,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId: ctx.context.episodeId || null,
-          currentStage: ctx.context.currentStage || null,
           selectedScopeRef: normalizeString(input.selectedScopeRef) || ctx.context.selectedScopeRef || null,
           selectedPanelId: normalizeString(input.selectedPanelId) || ctx.context.selectedPanelId || null,
           selectedClipId: normalizeString(input.selectedClipId) || ctx.context.selectedClipId || null,

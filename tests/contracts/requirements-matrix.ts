@@ -66,7 +66,7 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     risk: 'route 与 worker 契约分叉导致异步任务直接报错',
     priority: 'P0',
     tests: [
-      'tests/unit/project-workflow/panel-stage-runtime.test.ts',
+      'tests/unit/project-workflow/insert-panel-runtime.test.ts',
       'tests/integration/api/contract/direct-submit-text-routes.test.ts',
       'tests/unit/worker/llm-proxy.test.ts',
     ],

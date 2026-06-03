@@ -115,7 +115,6 @@ export async function assembleProjectContext(params: {
   projectId: string
   userId: string
   episodeId?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null
@@ -293,7 +292,6 @@ export async function assembleProjectContext(params: {
     projectName: project.name,
     episodeId: episode?.id || null,
     episodeName: episode?.name || null,
-    currentStage: params.currentStage || null,
     selectedScopeRef: params.selectedScopeRef || null,
     selectedPanelId: params.selectedPanelId || null,
     selectedClipId: params.selectedClipId || null,

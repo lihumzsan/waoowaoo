@@ -16,7 +16,6 @@ export type ProjectAgentInteractionMode = 'auto' | 'plan' | 'fast'
 export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null
@@ -155,7 +154,6 @@ export interface ProjectAssistantContextSnapshot {
   projectName: string
   episodeId?: string | null
   episodeName?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null

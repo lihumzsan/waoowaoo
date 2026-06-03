@@ -3,7 +3,10 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from './components/video'
+import type {
+  WorkspaceBatchVideoGenerationParams,
+  WorkspaceVideoGenerationOptions,
+} from './video-generation-types'
 
 export interface WorkspaceVideoModelOption {
   value: string
@@ -58,10 +61,10 @@ export interface WorkspaceRuntimeValue {
       flModel: string
       customPrompt?: string
     },
-    generationOptions?: VideoGenerationOptions,
+    generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => Promise<void>
-  onGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
+  onGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
   onGenerateBgmScore: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>

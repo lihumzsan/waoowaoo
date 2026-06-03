@@ -65,7 +65,6 @@ function normalizeProjectAgentContext(raw: unknown): ProjectAgentContext {
   const record = raw as UnknownObject
   const locale = typeof record.locale === 'string' ? record.locale.trim() : ''
   const episodeId = typeof record.episodeId === 'string' ? record.episodeId.trim() : ''
-  const currentStage = typeof record.currentStage === 'string' ? record.currentStage.trim() : ''
   const selectedScopeRef = typeof record.selectedScopeRef === 'string' ? record.selectedScopeRef.trim() : ''
   const selectedPanelId = typeof record.selectedPanelId === 'string' ? record.selectedPanelId.trim() : ''
   const selectedClipId = typeof record.selectedClipId === 'string' ? record.selectedClipId.trim() : ''
@@ -74,7 +73,6 @@ function normalizeProjectAgentContext(raw: unknown): ProjectAgentContext {
   return {
     ...(locale ? { locale } : {}),
     ...(episodeId ? { episodeId } : {}),
-    ...(currentStage ? { currentStage } : {}),
     ...(selectedScopeRef ? { selectedScopeRef } : {}),
     ...(selectedPanelId ? { selectedPanelId } : {}),
     ...(selectedClipId ? { selectedClipId } : {}),
@@ -175,7 +173,6 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     userId: input.userId,
     episodeId: context.episodeId || null,
-    currentStage: context.currentStage || null,
   })
   const resolved = await resolveProjectAgentLanguageModel({
     userId: input.userId,
@@ -293,7 +290,6 @@ export async function createProjectAgentChatResponse(input: {
         locale,
         projectId: input.projectId,
         episodeId: context.episodeId || 'unknown',
-        stage: context.currentStage || 'unknown',
         interactionMode: executionMode.interactionMode,
       })
       const modelMessages = await toModelMessages(runtimeMessages)

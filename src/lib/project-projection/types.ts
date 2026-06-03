@@ -18,7 +18,6 @@ export interface ProjectProjectionLite {
   projectName: string
   episodeId?: string | null
   episodeName?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
   policy: ProjectPolicySnapshot
   progress: ProjectProjectionProgress

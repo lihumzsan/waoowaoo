@@ -79,7 +79,6 @@ export async function assembleProjectProjectionLite(params: {
   projectId: string
   userId: string
   episodeId?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
 }): Promise<ProjectProjectionLite> {
   const episodeId = params.episodeId || null
@@ -152,7 +151,6 @@ export async function assembleProjectProjectionLite(params: {
     projectName: project.name,
     episodeId: episode?.id || null,
     episodeName: episode?.name || null,
-    currentStage: params.currentStage || null,
     selectedScopeRef: params.selectedScopeRef || null,
     policy,
     progress,

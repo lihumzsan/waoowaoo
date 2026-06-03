@@ -50,7 +50,7 @@ const mustIncludeRules: Rule[] = [
   },
   {
     file: 'src/lib/workers/handlers/image-task-handlers-core.ts',
-    pattern: /normalizeReferenceImagesForGeneration\(extraReferenceInputs\)/,
+    pattern: /normalizeReferenceImagesForGeneration\(extraReferenceInputs,/,
     message: 'image-task-handlers-core.ts must normalize extra references before outbound',
   },
   {
@@ -64,34 +64,19 @@ const mustIncludeRules: Rule[] = [
     message: 'video.worker.ts must normalize last frame to base64',
   },
   {
-    file: 'src/app/api/projects/[projectId]/modify-asset-image/route.ts',
+    file: 'src/lib/assets/services/asset-actions.ts',
     pattern: /sanitizeImageInputsForTaskPayload/,
-    message: 'modify-asset-image route must sanitize image inputs',
+    message: 'asset modify service must sanitize image inputs before task payload creation',
   },
   {
-    file: 'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
+    file: 'src/lib/operations/domains/media/media-ops.ts',
     pattern: /sanitizeImageInputsForTaskPayload/,
-    message: 'modify-storyboard-image route must sanitize image inputs',
+    message: 'modify_storyboard_image operation must sanitize image inputs before task payload creation',
   },
   {
     file: 'src/components/ui/ImagePreviewModal.tsx',
     pattern: /import\s+\{\s*resolveOriginalImageUrl,\s*toDisplayImageUrl\s*\}\s+from\s+'@\/lib\/media\/image-url'/,
     message: 'ImagePreviewModal must use shared image-url helpers',
-  },
-  {
-    file: 'src/lib/project-workflow/stages/video-stage-runtime-core.tsx',
-    pattern: /onPreviewImage=\{setPreviewImage\}/,
-    message: 'Video stage runtime must wire preview callback to VideoPanelCard',
-  },
-  {
-    file: 'src/features/project-workspace/components/video/panel-card/types.ts',
-    pattern: /onPreviewImage\?:\s*\(imageUrl:\s*string\)\s*=>\s*void/,
-    message: 'VideoPanelCard runtime props must expose onPreviewImage',
-  },
-  {
-    file: 'src/features/project-workspace/components/video/panel-card/VideoPanelCardHeader.tsx',
-    pattern: /className="absolute left-1\/2 top-1\/2 z-10 h-16 w-16 -translate-x-1\/2 -translate-y-1\/2 rounded-full"/,
-    message: 'VideoPanelCard play trigger must be centered small button (preview/play separation)',
   },
 ]
 

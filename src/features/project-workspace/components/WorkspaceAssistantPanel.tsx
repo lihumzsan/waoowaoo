@@ -151,7 +151,6 @@ export default function WorkspaceAssistantPanel({
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
     episodeId,
-    currentStage: null,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
     selectedPanelId: selection?.selectedPanelId ?? null,
     selectedClipId: selection?.selectedClipId ?? null,

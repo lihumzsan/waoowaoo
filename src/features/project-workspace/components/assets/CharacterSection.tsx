@@ -161,14 +161,14 @@ export default function CharacterSection({
                     <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)]">
                         <AppIcon name="user" className="h-5 w-5" />
                     </span>
-                    <h3 className="text-lg font-bold text-[var(--glass-text-primary)]">{t("stage.characterAssets")}</h3>
+                    <h3 className="text-lg font-bold text-[var(--glass-text-primary)]">{t("overview.characterAssets")}</h3>
                     {isAnalyzingAssets && (
                         <span className="px-2 py-1 text-xs bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)] rounded-lg flex items-center gap-1">
                             <TaskStatusInline state={analyzingAssetsState} />
                         </span>
                     )}
                     <span className="text-sm text-[var(--glass-text-tertiary)] bg-[var(--glass-bg-muted)]/50 px-2 py-1 rounded-lg">
-                        {t("stage.counts", { characterCount: characters.length, appearanceCount: totalAppearances })}
+                        {t("overview.counts", { characterCount: characters.length, appearanceCount: totalAppearances })}
                     </span>
                 </div>
                 <button

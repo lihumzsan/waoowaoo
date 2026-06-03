@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import type { WorkspaceCanvasEditScriptDetails } from '../node-canvas-types'
-import { DetailSection } from './detail-shared'
 
 interface EditScriptPreviewDetailProps {
   readonly details: WorkspaceCanvasEditScriptDetails
@@ -31,6 +30,21 @@ interface PreviewShot {
   readonly sound: string
   readonly imageUrl: string | null
   readonly videoUrl: string | null
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  readonly title: string
+  readonly children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</h3>
+      {children}
+    </section>
+  )
 }
 
 export type PreviewShotMediaKind = 'video' | 'image' | 'text' | 'empty'

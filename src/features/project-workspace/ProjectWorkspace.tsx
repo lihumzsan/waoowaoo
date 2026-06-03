@@ -120,7 +120,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         {vm.execution.showCreatingToast && (
           <ProgressToast
             show
-            message={vm.i18n.t('storyInput.creating')}
+            message={vm.i18n.t('execution.creating')}
             step={vm.execution.transitionProgress.step || ''}
           />
         )}

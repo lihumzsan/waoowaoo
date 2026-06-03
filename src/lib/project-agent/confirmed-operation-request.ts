@@ -6,7 +6,6 @@ export type ConfirmedOperationRequest = {
   context?: {
     locale?: string
     episodeId?: string
-    currentStage?: string
     selectedScopeRef?: string
     selectedPanelId?: string
     selectedClipId?: string
@@ -41,7 +40,6 @@ function normalizeContext(value: unknown): ConfirmedOperationRequest['context'] 
   if (!isRecord(value)) return undefined
   const locale = readOptionalString(value, 'locale')
   const episodeId = readOptionalString(value, 'episodeId')
-  const currentStage = readOptionalString(value, 'currentStage')
   const selectedScopeRef = readOptionalString(value, 'selectedScopeRef')
   const selectedPanelId = readOptionalString(value, 'selectedPanelId')
   const selectedClipId = readOptionalString(value, 'selectedClipId')
@@ -49,7 +47,6 @@ function normalizeContext(value: unknown): ConfirmedOperationRequest['context'] 
   const context = {
     ...(locale ? { locale } : {}),
     ...(episodeId ? { episodeId } : {}),
-    ...(currentStage ? { currentStage } : {}),
     ...(selectedScopeRef ? { selectedScopeRef } : {}),
     ...(selectedPanelId ? { selectedPanelId } : {}),
     ...(selectedClipId ? { selectedClipId } : {}),

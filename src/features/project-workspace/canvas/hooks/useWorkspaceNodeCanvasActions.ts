@@ -8,11 +8,6 @@ export function useWorkspaceNodeCanvasActions() {
   const runtime = useWorkspaceRuntime()
 
   return useCallback(async (action: WorkspaceCanvasNodeAction) => {
-    if (action.type === 'update_story') {
-      await runtime.onNovelTextChange(action.value)
-      return
-    }
-
     if (action.type === 'update_clip') {
       await runtime.onClipUpdate(action.clipId, action.data)
       return

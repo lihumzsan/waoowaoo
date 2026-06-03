@@ -17,7 +17,7 @@ function createNode(input: {
 }): WorkspaceCanvasFlowNode {
   const width = input.width ?? 100
   const height = input.height ?? 120
-  const layoutNodeType: CanvasLayoutNodeType = input.kind === 'storyInput' ? 'story' : input.kind
+  const layoutNodeType: CanvasLayoutNodeType = input.kind
   return {
     id: input.id,
     type: 'workspaceNode',
@@ -42,7 +42,6 @@ function createNode(input: {
 
 describe('workspace layout model', () => {
   it('assigns stable business lanes for every workspace node kind', () => {
-    expect(resolveWorkspaceCanvasLayoutLane('storyInput')).toBe('story')
     expect(resolveWorkspaceCanvasLayoutLane('analysis')).toBe('story')
     expect(resolveWorkspaceCanvasLayoutLane('editPipelineStep')).toBe('editPipeline')
     expect(resolveWorkspaceCanvasLayoutLane('editScript')).toBe('editScript')

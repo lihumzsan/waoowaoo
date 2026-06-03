@@ -50,7 +50,6 @@ export function buildProjectAgentSystemPrompt(params: {
   locale: ProjectAgentLocale
   projectId: string
   episodeId: string
-  stage: string
   interactionMode: ProjectAgentInteractionMode
 }): string {
   if (params.locale === 'en') {
@@ -73,7 +72,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'For edit-first assets: editScript.requirements are binding records, not asset IDs. To create/bind/generate those assets, use generate_edit_script_assets. Use generate_character_image/generate_location_image only when you already have a real ProjectCharacter/ProjectLocation ID.',
       'When the user says "this", "current", or "selected", use selectedScopeRef/selectedPanelId/selectedClipId/selectedAssetId from project context. If the required selection id is missing, ask a clarifying question before acting.',
       'When you see staleArtifacts or failedItems: explain the reason first and recommend the next action.',
-      'You may only use the tools injected into the current turn. Tool availability is dynamically trimmed by intent and stage.',
+      'You may only use the tools injected into the current turn. Tool availability is dynamically trimmed by intent and project state.',
       'The router has already selected requested tool groups. Do not assume missing tools exist.',
       'interactionMode=auto means follow the routed intent; interactionMode=plan means downgrade act requests into planning/confirmation preparation; interactionMode=fast means allow direct execution when safety rules permit it.',
       params.interactionMode === 'plan'
@@ -86,7 +85,6 @@ export function buildProjectAgentSystemPrompt(params: {
       'If you need panel-level detail, call get_project_snapshot with detail=full.',
       `projectId=${params.projectId}`,
       `episodeId=${params.episodeId}`,
-      `currentStage=${params.stage}`,
       `interactionMode=${params.interactionMode}`,
     ].join('\n')
   }
@@ -110,7 +108,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '剪辑先行资产里，editScript.requirements 是剪辑表到真实资产的绑定记录，不是真实资产 ID。创建/绑定/生成这些资产必须调用 generate_edit_script_assets；只有已经拿到真实 ProjectCharacter/ProjectLocation ID 时，才调用 generate_character_image/generate_location_image。',
     '当用户说“这个 / 当前 / 选中项”时，优先使用 project context 里的 selectedScopeRef/selectedPanelId/selectedClipId/selectedAssetId。缺少必要选择 ID 时，先追问再执行。',
     '当你看到 staleArtifacts 或 failedItems：优先解释原因与推荐动作（例如重跑计划、或执行更小粒度的 act 修复）。',
-    '你只能使用当前会话注入的 tools 来完成任务（会根据用户意图与阶段动态裁剪）。tool 定义中已包含使用说明，无需额外列举。',
+    '你只能使用当前会话注入的 tools 来完成任务（会根据用户意图与项目状态动态裁剪）。tool 定义中已包含使用说明，无需额外列举。',
     'router 已经先行选择了 requestedGroups（工具分组），不要假设未注入的工具存在。',
     'interactionMode=auto 表示跟随 router 判定；interactionMode=plan 表示把 act 请求降级为规划/确认准备；interactionMode=fast 表示在安全规则允许时可直接执行。',
     params.interactionMode === 'plan'
@@ -123,7 +121,6 @@ export function buildProjectAgentSystemPrompt(params: {
     '如果需要分镜面板级别的细节，调用 get_project_snapshot 并传入 detail=full。',
     `projectId=${params.projectId}`,
     `episodeId=${params.episodeId}`,
-    `currentStage=${params.stage}`,
     `interactionMode=${params.interactionMode}`,
   ].join('\n')
 }

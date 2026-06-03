@@ -12,7 +12,7 @@ import {
   uploadImageSourceToCos,
 } from '../utils'
 import {
-  normalizeOptionalReferenceImagesForGeneration,
+  normalizeReferenceImagesForGeneration,
   normalizeToBase64ForGeneration,
 } from '@/lib/media/outbound-image'
 import {
@@ -94,10 +94,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const normalizedExtras = await normalizeOptionalReferenceImagesForGeneration(extraReferenceInputs, {
+    const requiredReference = await normalizeToBase64ForGeneration(currentUrl)
+    const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'image-task-handlers-core.extra' },
     })
-    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
+    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
     const currentDescription = readIndexedDescription({
       descriptions: appearance.descriptions,
       fallbackDescription: appearance.description,
@@ -202,10 +203,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const normalizedExtras = await normalizeOptionalReferenceImagesForGeneration(extraReferenceInputs, {
+    const requiredReference = await normalizeToBase64ForGeneration(currentUrl)
+    const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'image-task-handlers-core.extra' },
     })
-    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
+    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
 
     const isProp = type === 'prop'
     const spatialProfileModel = projectModels.analysisModel
@@ -354,7 +356,7 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
       }
     }
 
-    const normalizedExtras = await normalizeOptionalReferenceImagesForGeneration(extraReferenceInputs, {
+    const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'image-task-handlers-core.extra' },
     })
     const uniqueReferences = Array.from(new Set([requiredReference, ...normalizedExtras]))

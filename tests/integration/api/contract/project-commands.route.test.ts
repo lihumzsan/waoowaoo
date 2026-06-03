@@ -83,7 +83,6 @@ const contextAssemblerMock = vi.hoisted(() => ({
     projectName: 'Project One',
     episodeId: 'episode-1',
     episodeName: 'Episode One',
-    currentStage: 'config',
     selectedScopeRef: null,
     latestArtifacts: [],
     activePlanRuns: [],
@@ -333,7 +332,6 @@ describe('project commands routes', () => {
       projectName: 'Project One',
       episodeId: 'episode-1',
       episodeName: 'Episode One',
-      currentStage: 'config',
       selectedScopeRef: null,
       latestArtifacts: [],
       activePlanRuns: [],
@@ -351,7 +349,7 @@ describe('project commands routes', () => {
       buildMockRequest({
         path: '/api/projects/project-1/context',
         method: 'GET',
-        query: { episodeId: 'episode-1', currentStage: 'config' },
+        query: { episodeId: 'episode-1' },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
@@ -361,7 +359,6 @@ describe('project commands routes', () => {
     expect(payload.context).toMatchObject({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      currentStage: 'config',
     })
   })
 })

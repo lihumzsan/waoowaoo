@@ -30,7 +30,7 @@ import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout
 import { useProjectEditCinematographyShotPlan, useProjectEditDirectorDecoupage, useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
 import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
-import { useWorkspaceEpisodeStageData } from '../hooks/useWorkspaceEpisodeStageData'
+import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
@@ -172,7 +172,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, novelText, clips, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeStageData()
+  const { episodeName, novelText, clips, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editDirectorDecoupage } = useProjectEditDirectorDecoupage(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
@@ -639,7 +639,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
   }, [attachNodeUiState, persistCurrentLayoutSafely, reactFlow])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
-    if (node.data.kind === 'analysis' || node.data.kind === 'storyInput') return
+    if (node.data.kind === 'analysis') return
     setSelectedNodeId(node.id)
   }, [])
 

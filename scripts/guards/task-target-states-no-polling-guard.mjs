@@ -14,14 +14,6 @@ function fail(title, details = []) {
   process.exit(1)
 }
 
-function readFile(relativePath) {
-  const fullPath = path.join(root, relativePath)
-  if (!fs.existsSync(fullPath)) {
-    fail('Missing required file', [relativePath])
-  }
-  return fs.readFileSync(fullPath, 'utf8')
-}
-
 function walk(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
@@ -61,11 +53,12 @@ if (refetchIntervalMsHits.length > 0) {
   fail('Found forbidden refetchIntervalMs usage', refetchIntervalMsHits)
 }
 
-const voiceStagePath =
-  'src/features/project-workspace/components/VoiceStage.tsx'
-const voiceStageText = readFile(voiceStagePath)
-if (voiceStageText.includes('setInterval(')) {
-  fail('VoiceStage must not use timer polling', [voiceStagePath])
+function readFile(relativePath) {
+  const fullPath = path.join(root, relativePath)
+  if (!fs.existsSync(fullPath)) {
+    fail('Missing required file', [relativePath])
+  }
+  return fs.readFileSync(fullPath, 'utf8')
 }
 
 const targetStateMapPath = 'src/lib/query/hooks/useTaskTargetStateMap.ts'

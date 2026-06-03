@@ -9,8 +9,8 @@ const validLayout = {
   schemaVersion: 1,
   viewport: { x: 10, y: 20, zoom: 0.8 },
   nodeLayouts: [{
-    nodeKey: 'story:episode-1',
-    nodeType: 'story',
+    nodeKey: 'analysis:episode-1',
+    nodeType: 'analysis',
     targetType: 'episode',
     targetId: 'episode-1',
     x: 0,

@@ -136,7 +136,6 @@ describe('assembleProjectContext', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      currentStage: null,
       selectedScopeRef: null,
     })
 

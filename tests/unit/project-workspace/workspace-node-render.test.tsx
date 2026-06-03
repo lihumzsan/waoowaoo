@@ -30,24 +30,6 @@ vi.mock('@/components/ui/icons', () => ({
   AppIcon: ({ name }: { readonly name: string }) => <span data-icon={name} />,
 }))
 
-vi.mock('@/features/project-workspace/canvas/details/StoryDetail', () => ({
-  default: ({
-    projectId,
-    storyText,
-    episodeName,
-    variant,
-  }: {
-    readonly projectId: string
-    readonly storyText: string
-    readonly episodeName?: string
-    readonly variant?: 'panel' | 'node'
-  }) => (
-    <div data-testid="story-detail" data-variant={variant}>
-      {projectId}:{episodeName}:{storyText}
-    </div>
-  ),
-}))
-
 function renderNode(data: WorkspaceCanvasNodeData): string {
   const props = { data } as NodeProps<WorkspaceCanvasFlowNode>
   return renderToStaticMarkup(<WorkspaceNode {...props} />)
@@ -272,32 +254,6 @@ describe('workspace node rendering', () => {
     expect(html).toContain('Left wood door')
     expect(html).toContain('stone path')
     expect(html).toContain('soft light from upper right')
-  })
-
-  it('renders story input controls inline without opening a detail action', () => {
-    const html = renderNode({
-      kind: 'storyInput',
-      projectId: 'project-1',
-      episodeName: 'Episode 1',
-      layoutNodeType: 'story',
-      targetType: 'episode',
-      targetId: 'episode-1',
-      title: 'Story node',
-      eyebrow: 'Story',
-      body: 'inline story body',
-      meta: '12 chars',
-      statusLabel: 'Ready',
-      width: 960,
-      height: 600,
-      nodeId: 'story:episode-1',
-    })
-
-    expect(html).toContain('data-testid="story-detail"')
-    expect(html).toContain('data-variant="node"')
-    expect(html).toContain('project-1:Episode 1:inline story body')
-    expect(html).toContain('rounded-[24px]')
-    expect(html).toContain('border-slate-200')
-    expect(html).not.toContain('nodeFields.openDetails')
   })
 
   it('renders storage keys through the signed storage display route', () => {
@@ -821,7 +777,7 @@ describe('workspace node rendering', () => {
     expect(videoHtml).not.toContain('first last prompt')
     expect(videoHtml).not.toContain('lip.mp4')
     expect(finalHtml).not.toContain('panel-1')
-    expect(`${shotHtml}${imageHtml}${videoHtml}${finalHtml}`).not.toContain('StoryboardStage')
+    expect(`${shotHtml}${imageHtml}${videoHtml}${finalHtml}`).not.toContain('StoryboardCanvas')
     expect(`${shotHtml}${imageHtml}${videoHtml}${finalHtml}`).not.toContain('overflow-y-auto')
   })
 

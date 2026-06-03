@@ -105,7 +105,6 @@ export interface ProjectContextSnapshot {
   projectName: string
   episodeId?: string | null
   episodeName?: string | null
-  currentStage?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null

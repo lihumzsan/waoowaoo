@@ -3,7 +3,10 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { useGenerateVideo, useBatchGenerateVideos, useGenerateBgmScore, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
 import { useUpdateProjectPanelVideoPrompt, useUpdateProjectClip, useUpdateProjectConfig } from '@/lib/query/hooks'
-import type { BatchVideoGenerationParams, VideoGenerationOptions } from '../components/video'
+import type {
+  WorkspaceBatchVideoGenerationParams,
+  WorkspaceVideoGenerationOptions,
+} from '../video-generation-types'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -54,7 +57,7 @@ export function useWorkspaceVideoActions({
       flModel: string
       customPrompt?: string
     },
-    generationOptions?: VideoGenerationOptions,
+    generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => {
     const normalizedVideoModel = typeof videoModel === 'string' && videoModel.trim()
@@ -85,7 +88,7 @@ export function useWorkspaceVideoActions({
     }
   }
 
-  const handleGenerateAllVideos = async (options?: BatchVideoGenerationParams) => {
+  const handleGenerateAllVideos = async (options?: WorkspaceBatchVideoGenerationParams) => {
     if (!episodeId) {
       alert(t('execution.selectEpisode'))
       return

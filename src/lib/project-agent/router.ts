@@ -169,7 +169,6 @@ function buildRouterPrompt(params: {
   allowedRequestedGroups: string[][]
 }): { system: string; prompt: string } {
   const episodeId = params.context.episodeId || 'none'
-  const stage = params.context.currentStage || 'unknown'
   const interactionMode = params.context.interactionMode || 'auto'
 
   const groupList = JSON.stringify(params.allowedRequestedGroups)
@@ -190,10 +189,9 @@ function buildRouterPrompt(params: {
       ].join('\n'),
       prompt: [
         `episodeId=${episodeId}`,
-        `currentStage=${stage}`,
         `interactionMode=${interactionMode}`,
         '',
-        'Phase summary:',
+        'Project state summary:',
         params.phaseSummary,
         '',
         'Recent conversation excerpt:',
@@ -220,10 +218,9 @@ function buildRouterPrompt(params: {
     ].join('\n'),
     prompt: [
       `episodeId=${episodeId}`,
-      `currentStage=${stage}`,
       `interactionMode=${interactionMode}`,
       '',
-      '阶段摘要：',
+      '项目状态摘要：',
       params.phaseSummary,
       '',
       '最近对话摘录：',
