@@ -89,6 +89,7 @@ describe('worker character-style-test-task-handler', () => {
     expect(generationInput?.prompt).toContain('基础身份区 + 扩展语境区')
     expect(generationInput?.prompt).toContain('同一角色的正面全身、侧面全身、背面全身三视图')
     expect(generationInput?.prompt).toContain('根据本次角色特征自由生成 2 到 4 个小画面或姿态样本')
+    expect(generationInput?.prompt).toContain('推导示例：输入“武僧”时')
     expect(generationInput?.prompt).toContain('用户没有明确指定的外观细节不要机械写死')
     expect(generationInput?.prompt).toContain('资产图不能使用纯白底')
     expect(generationInput?.prompt).toContain('不要引用项目 Style Bible')

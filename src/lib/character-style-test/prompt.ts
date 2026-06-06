@@ -19,6 +19,7 @@ function buildChineseStyleExpansion(characterRequest: string): string {
     '- 材质质感：强化服装面料、皮肤、配饰、背景表面的触感；不能只有干净线稿或默认 3D 建模质感。',
     '- 外观自由度：用户没有明确写死的发色、配饰、服装细节、年龄感和材质细节，可以由 AI 根据身份语义合理设计；只选择少量稳定、可复用、容易被分镜继承的识别锚点，不要堆满随机细节。',
     '- 角色扩展语境：根据角色身份自动推导 2 到 4 个代表性动作、姿态或工作/生活语境，例如武僧可以练武或持棍静立，模特可以走台步，程序员可以在深夜工位前站立或倚桌思考；这些扩展必须服务角色识别和风格继承，而不是讲具体剧情。',
+    '- 推导示例：输入“武僧”时，可推导旧棉麻僧衣、木棍、练武站姿、晨雾寺院光影；输入“模特”时，可推导高级定制服装、T 台步态、摄影棚/秀场灯光；输入“程序员”时，可推导深夜工位、屏幕冷光、疲惫但专注的站姿或倚桌姿态。示例只用于理解推导方式，不要照搬到不相关角色。',
     '- 构图规则：整张图像像一张完整角色资产板，基础身份区与扩展语境区共享同一风格、灯光、滤镜、色彩和材质逻辑；版式可以根据角色语义灵活组织，不要做成四张孤立证件照。',
     '- 禁止项：纯白底、灰白渐变底、普通证件照、无风格三视图、默认棚拍、不可继承的临时剧情事件、第二个人物、文字标签、编号、水印、Logo。',
   ].join('\n')
@@ -36,6 +37,7 @@ function buildEnglishStyleExpansion(characterRequest: string): string {
     '- Material texture: emphasize costume fabric, skin, accessories, and background surface tactility. Do not use only clean line art or a default 3D modeling look.',
     '- Appearance freedom: hair color, accessories, outfit details, perceived age, and material details that the user did not explicitly lock may be reasonably designed by AI from the identity semantics. Choose only a few stable, reusable recognition anchors that later storyboard images can inherit; do not pile on random details.',
     '- Character context expansion: infer 2 to 4 representative actions, poses, or work/life contexts from the character identity. For example, a martial monk may train or stand with a staff, a fashion model may walk a runway, and a programmer may stand by a late-night workstation or lean on a desk thinking. These expansions must support character recognition and style inheritance, not tell a specific plot event.',
+    '- Inference examples: for "martial monk", infer worn cotton-linen robes, a wooden staff, training stance, and misty temple morning light; for "fashion model", infer couture outfit, runway walk, studio or catwalk lighting; for "programmer", infer late-night workstation, cool monitor glow, tired but focused standing pose or desk-leaning pose. These examples explain the inference method only; do not copy them into unrelated characters.',
     '- Composition rule: the image must read as one complete character asset board. The foundation identity area and contextual expansion area share one style, lighting, filter, palette, and material logic. The layout may adapt to the character semantics; do not make four isolated ID photos.',
     '- Bans: pure white background, gray-white gradient background, plain ID photo, styleless three-view sheet, default studio render, non-inheritable temporary plot event, second character, text labels, numbers, watermark, Logo.',
   ].join('\n')
