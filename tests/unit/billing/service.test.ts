@@ -518,7 +518,7 @@ describe('billing/service', () => {
       expect((settled as Extract<TaskBillingInfo, { billable: true }>).chargedCost).toBeCloseTo(calcVoice(50), 8)
     })
 
-    it('settleTaskBilling charges Seedance 2.0 videos from exact usage tokens', async () => {
+    it('settleTaskBilling charges Seedance 2.0 videos from product video credits', async () => {
       ledgerMock.confirmChargeWithRecord.mockResolvedValueOnce(true)
 
       const settled = await settleTaskBilling({
@@ -533,8 +533,8 @@ describe('billing/service', () => {
         result: { actualVideoTokens: 120_000 },
       })
 
-      expect(ledgerMock.increasePendingFreezeAmount).toHaveBeenCalledTimes(1)
-      expect((settled as Extract<TaskBillingInfo, { billable: true }>).chargedCost).toBeCloseTo(5.52, 8)
+      expect(ledgerMock.increasePendingFreezeAmount).not.toHaveBeenCalled()
+      expect((settled as Extract<TaskBillingInfo, { billable: true }>).chargedCost).toBeCloseTo(5, 8)
     })
 
     it('settleTaskBilling keeps quoted charge when text usage has no token counts', async () => {

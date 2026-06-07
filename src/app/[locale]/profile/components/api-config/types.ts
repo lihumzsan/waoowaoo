@@ -118,6 +118,12 @@ export interface ApiConfig {
         video: number
     }
     pricingDisplay?: PricingDisplayMap
+    deployment?: {
+        edition: 'self-hosted' | 'cloud'
+        providerCredentialMode: 'user-key' | 'platform-key'
+        isCloud: boolean
+        usesPlatformProviderKeys: boolean
+    }
 }
 
 export const API_CONFIG_PRESET_COMING_SOON_MODEL_KEYS = new Set<string>([])

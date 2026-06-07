@@ -40,7 +40,7 @@ describe('billing/cost error branches', () => {
     vi.clearAllMocks()
   })
 
-  it('throws ambiguous pricing error when catalog has multiple candidates', () => {
+  it('ignores ambiguous provider pricing because product credits own pricing', () => {
     lookupMock.resolveBuiltinPricing.mockReturnValue({
       status: 'ambiguous_model',
       apiType: 'image',
@@ -61,18 +61,20 @@ describe('billing/cost error branches', () => {
       ],
     })
 
-    expect(() => calcImage('shared-model', 1)).toThrow('Ambiguous image pricing modelId')
+    expect(calcImage('shared-model', 1)).toBe(1)
+    expect(lookupMock.resolveBuiltinPricing).not.toHaveBeenCalled()
   })
 
-  it('throws unknown model when catalog returns not_configured', () => {
+  it('charges unknown models from product credits without catalog fallback', () => {
     lookupMock.resolveBuiltinPricing.mockReturnValue({
       status: 'not_configured',
     })
 
-    expect(() => calcImage('provider::missing-image-model', 1)).toThrow('Unknown image model pricing')
+    expect(calcImage('provider::missing-image-model', 1)).toBe(1)
+    expect(lookupMock.resolveBuiltinPricing).not.toHaveBeenCalled()
   })
 
-  it('normalizes invalid numeric inputs to zero before pricing', () => {
+  it('normalizes invalid numeric inputs before product credit pricing', () => {
     lookupMock.resolveBuiltinPricing.mockImplementation(
       (input: { selections?: { tokenType?: 'input' | 'output' } }) => {
         if (input.selections?.tokenType === 'input') return { status: 'resolved', amount: 2 }
@@ -81,10 +83,10 @@ describe('billing/cost error branches', () => {
       },
     )
 
-    expect(calcText('text-model', Number.NaN, 1_000_000)).toBeCloseTo(4, 8)
-    expect(calcText('text-model', 1_000_000, Number.NaN)).toBeCloseTo(2, 8)
-    expect(calcImage('image-model', Number.NaN)).toBe(0)
-    expect(calcVideo('video-model', '720p', Number.NaN)).toBe(0)
+    expect(calcText('text-model', Number.NaN, 1_000_000)).toBeCloseTo(10, 8)
+    expect(calcText('text-model', 1_000_000, Number.NaN)).toBeCloseTo(10, 8)
+    expect(calcImage('image-model', Number.NaN)).toBe(1)
+    expect(calcVideo('video-model', '720p', Number.NaN)).toBe(5)
     expect(calcVoice(Number.NaN)).toBe(0)
   })
 })

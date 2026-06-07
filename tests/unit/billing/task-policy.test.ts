@@ -73,11 +73,14 @@ describe('billing/task-policy', () => {
     expect(proInfo.maxFrozenCost).toBeGreaterThan(0)
   })
 
-  it('fails music billing explicitly when model pricing is not configured', () => {
-    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+  it('uses product credit pricing for uncatalogued music models', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
       musicModel: 'google::unknown-music',
       durationSeconds: 30,
-    })).toThrow('Unknown music model pricing')
+    }))
+
+    expect(info.model).toBe('google::unknown-music')
+    expect(info.maxFrozenCost).toBeGreaterThan(0)
   })
 
   it('honors candidateCount/count for image tasks', () => {

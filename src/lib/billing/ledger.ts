@@ -429,7 +429,7 @@ export async function recordShadowUsage(
           type: 'shadow_consume',
           amount: 0,
           balanceAfter: toMoneyNumber(balance.balance),
-          description: `[SHADOW] ${params.action} - ${params.model} - ¥${params.cost.toFixed(4)}${metadataSummary ? ` | ${metadataSummary}` : ''}`,
+          description: `[SHADOW] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits${metadataSummary ? ` | ${metadataSummary}` : ''}`,
           relatedId: null,
           freezeId: null,
           projectId: params.projectId || null,
@@ -467,59 +467,72 @@ function resolveAddBalanceOptions(reasonOrOptions?: string | AddBalanceOptions):
   }
 }
 
+export async function addBalanceWithTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  amount: number,
+  reasonOrOptions?: string | AddBalanceOptions,
+): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('amount must be a positive number')
+  }
+  const options = resolveAddBalanceOptions(reasonOrOptions)
+  const transactionType = options.type || 'recharge'
+  const relatedId = options.externalOrderId || null
+
+  if (options.idempotencyKey) {
+    const existing = await tx.balanceTransaction.findFirst({
+      where: {
+        userId,
+        type: transactionType,
+        idempotencyKey: options.idempotencyKey,
+      },
+      select: { id: true },
+    })
+    if (existing) return
+  }
+
+  const updatedBalance = await tx.userBalance.upsert({
+    where: { userId },
+    create: { userId, balance: amount, frozenAmount: 0, totalSpent: 0 },
+    update: { balance: { increment: amount } },
+  })
+
+  const auditSummary = JSON.stringify({
+    reason: options.reason || null,
+    operatorId: options.operatorId || null,
+    externalOrderId: options.externalOrderId || null,
+    idempotencyKey: options.idempotencyKey || null,
+  })
+
+  await tx.balanceTransaction.create({
+    data: {
+      userId,
+      type: transactionType,
+      amount,
+      balanceAfter: toMoneyNumber(updatedBalance.balance),
+      description: `${options.reason || 'balance recharge'}${auditSummary ? ` | audit=${auditSummary}` : ''}`,
+      relatedId,
+      freezeId: null,
+      operatorId: options.operatorId || null,
+      externalOrderId: options.externalOrderId || null,
+      idempotencyKey: options.idempotencyKey || null,
+    },
+  })
+}
+
 export async function addBalance(userId: string, amount: number, reasonOrOptions?: string | AddBalanceOptions): Promise<boolean> {
   try {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('amount must be a positive number')
     }
     const options = resolveAddBalanceOptions(reasonOrOptions)
-    const relatedId = options.externalOrderId || null
 
     await prisma.$transaction(async (tx) => {
-      if (options.idempotencyKey) {
-        const existing = await tx.balanceTransaction.findFirst({
-          where: {
-            userId,
-            type: options.type || 'recharge',
-            idempotencyKey: options.idempotencyKey,
-          },
-          select: { id: true },
-        })
-        if (existing) {
-          return
-        }
-      }
-
-      const updatedBalance = await tx.userBalance.upsert({
-        where: { userId },
-        create: { userId, balance: amount, frozenAmount: 0, totalSpent: 0 },
-        update: { balance: { increment: amount } },
-      })
-
-      const auditSummary = JSON.stringify({
-        reason: options.reason || null,
-        operatorId: options.operatorId || null,
-        externalOrderId: options.externalOrderId || null,
-        idempotencyKey: options.idempotencyKey || null,
-      })
-
-      await tx.balanceTransaction.create({
-        data: {
-          userId,
-          type: options.type || 'recharge',
-          amount,
-          balanceAfter: toMoneyNumber(updatedBalance.balance),
-          description: `${options.reason || 'balance recharge'}${auditSummary ? ` | audit=${auditSummary}` : ''}`,
-          relatedId,
-          freezeId: null,
-          operatorId: options.operatorId || null,
-          externalOrderId: options.externalOrderId || null,
-          idempotencyKey: options.idempotencyKey || null,
-        },
-      })
+      await addBalanceWithTransaction(tx, userId, amount, options)
     })
 
-    _ulogInfo(`[Balance] add balance success: userId=${userId}, amount=¥${amount}, reason=${options.reason || 'N/A'}`)
+    _ulogInfo(`[Balance] add balance success: userId=${userId}, credits=${amount}, reason=${options.reason || 'N/A'}`)
     return true
   } catch (error) {
     _ulogError('[Balance] add balance failed:', error)

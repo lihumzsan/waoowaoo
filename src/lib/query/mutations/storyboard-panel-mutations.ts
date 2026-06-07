@@ -62,7 +62,7 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
             })
             if (!res.ok) {
                 const error = await res.json().catch(() => ({}))
-                if (res.status === 402) throw new Error('余额不足，请充值后继续使用')
+                if (res.status === 402) throw new Error('额度不足，请获取额度后继续使用')
                 if (res.status === 400 && String(error?.error || '').includes('敏感')) {
                     throw new Error(resolveTaskErrorMessage(error, '提示词包含敏感内容'))
                 }

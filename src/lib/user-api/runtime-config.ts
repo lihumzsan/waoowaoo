@@ -10,6 +10,7 @@
 import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import { getDeploymentConfig } from '@/lib/deployment/config'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
   findRuntimeModelByKey,
@@ -58,12 +59,66 @@ interface CustomProvider {
 
 type LlmProtocolType = RuntimeLlmProtocolType
 
+type PlatformProviderEnv = {
+  apiKey: string
+  baseUrl?: string
+}
+
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function readEnvString(name: string): string {
+  return readTrimmedString(process.env[name])
+}
+
+function getProviderFamily(providerId: string): string {
+  const trimmed = providerId.trim()
+  const colonIndex = trimmed.indexOf(':')
+  return colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex)
+}
+
+function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
+  const providerFamily = getProviderFamily(providerId)
+  const envPrefix = (() => {
+    switch (providerFamily) {
+      case 'google':
+      case 'gemini-compatible':
+        return 'PLATFORM_GOOGLE'
+      case 'fal':
+        return 'PLATFORM_FAL'
+      case 'ark':
+        return 'PLATFORM_ARK'
+      case 'bailian':
+        return 'PLATFORM_BAILIAN'
+      case 'openai':
+      case 'openai-compatible':
+        return 'PLATFORM_OPENAI'
+      case 'openrouter':
+        return 'PLATFORM_OPENROUTER'
+      case 'minimax':
+        return 'PLATFORM_MINIMAX'
+      case 'vidu':
+        return 'PLATFORM_VIDU'
+      default:
+        throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
+    }
+  })()
+
+  const apiKey = readEnvString(`${envPrefix}_API_KEY`)
+  if (!apiKey) {
+    throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
+  }
+
+  const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
+  return {
+    apiKey,
+    ...(baseUrl ? { baseUrl } : {}),
+  }
 }
 
 function isUnifiedModelType(value: unknown): value is UnifiedModelType {
@@ -292,6 +347,17 @@ export interface ProviderConfig {
 }
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
+  const deployment = getDeploymentConfig()
+  if (deployment.providerCredentialMode === 'platform-key') {
+    const platform = resolvePlatformProviderEnv(providerId)
+    return {
+      id: providerId,
+      name: providerId,
+      apiKey: platform.apiKey,
+      baseUrl: normalizeProviderRuntimeBaseUrl(providerId, platform.baseUrl),
+    }
+  }
+
   const { providers } = await readUserConfig(userId)
   const provider = pickProviderStrict(providers, providerId)
 
@@ -350,6 +416,8 @@ export async function getLipSyncApiKey(userId: string, model?: string | null): P
 }
 
 export async function hasApiConfig(userId: string): Promise<boolean> {
+  if (getDeploymentConfig().providerCredentialMode === 'platform-key') return true
+
   const pref = await prisma.userPreference.findUnique({
     where: { userId },
     select: { customProviders: true },

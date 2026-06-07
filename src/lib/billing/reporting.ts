@@ -132,7 +132,7 @@ export async function recordUsageCostOnly(
     },
   })
 
-  _ulogInfo(`[计费] ${params.action} - ${params.model} - ¥${params.cost.toFixed(4)} (已记录${hasProject ? '' : '，无项目归属'})`)
+  _ulogInfo(`[Billing] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits (recorded${hasProject ? '' : ', no project scope'})`)
 }
 
 export async function getProjectTotalCost(projectId: string): Promise<number> {

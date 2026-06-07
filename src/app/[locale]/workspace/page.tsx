@@ -29,11 +29,12 @@ interface Pagination {
 }
 
 const PAGE_SIZE = 7 // 加上新建项目按钮正好8个，4列布局下2行
-const DEFAULT_BILLING_CURRENCY = 'CNY'
+const DEFAULT_BILLING_CURRENCY = 'CREDITS'
 
 function formatProjectCost(amount: number, currency = DEFAULT_BILLING_CURRENCY): string {
   if (currency === 'USD') return `$${amount.toFixed(2)}`
-  return `¥${amount.toFixed(2)}`
+  if (currency === 'CREDITS') return `${amount.toFixed(2)} credits`
+  return `${amount.toFixed(2)} ${currency}`
 }
 
 function toProjectValidationMessage(

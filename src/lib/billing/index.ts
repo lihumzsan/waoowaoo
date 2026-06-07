@@ -2,7 +2,7 @@ export { getBillingMode, getBootBillingEnabled } from './mode'
 export { BILLING_CURRENCY } from './currency'
 export { InsufficientBalanceError } from './errors'
 export { getProjectCostDetails, getProjectTotalCost, getUserCostDetails, getUserCostSummary } from './reporting'
-export { addBalance, getBalance } from './ledger'
+export { addBalance, addBalanceWithTransaction, getBalance } from './ledger'
 export {
   handleBillingError,
   prepareTaskBilling,

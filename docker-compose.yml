@@ -113,6 +113,8 @@ services:
       LOG_SERVICE: "waoowaoo"
       LOG_REDACT_KEYS: "password,token,apiKey,apikey,authorization,cookie,secret,access_token,refresh_token"
       # 计费
+      DEPLOYMENT_EDITION: "self-hosted"
+      PROVIDER_CREDENTIAL_MODE: "user-key"
       BILLING_MODE: "OFF"
       # 流式
       LLM_STREAM_EPHEMERAL_ENABLED: "true"

@@ -17,7 +17,7 @@ export const USER_ERROR_MESSAGES_ZH: Record<UnifiedErrorCode, string> = {
   EXTERNAL_ERROR: '外部服务暂时不可用，请稍后重试。',
   NETWORK_ERROR: '网络异常，请稍后重试。',
   EMPTY_RESPONSE: '模型返回空响应（无有效内容），请稍后重试。',
-  INSUFFICIENT_BALANCE: '余额不足，请先充值。',
+  INSUFFICIENT_BALANCE: '额度不足，请先获取额度。',
   SENSITIVE_CONTENT: '内容可能涉及敏感信息，请修改后重试。',
   GENERATION_TIMEOUT: '生成超时，请重试。',
   VIDEO_API_FORMAT_UNSUPPORTED: '当前视频接口格式暂不支持。',

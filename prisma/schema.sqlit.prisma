@@ -624,6 +624,7 @@ model User {
   tasks              Task[]
   taskEvents         TaskEvent[]
   stylePresets       UserStylePreset[]
+  inviteRedemptions  InviteRedemption[]
 
   @@map("user")
 }
@@ -752,6 +753,39 @@ model UserBalance {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_balances")
+}
+
+model InviteCode {
+  id              String    @id @default(uuid())
+  codeHash        String    @unique
+  amount          Decimal
+  maxRedemptions  Int?
+  redeemedCount   Int       @default(0)
+  expiresAt       DateTime?
+  disabledAt      DateTime?
+  description     String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+  redemptions     InviteRedemption[]
+
+  @@index([expiresAt])
+  @@index([disabledAt])
+  @@map("invite_codes")
+}
+
+model InviteRedemption {
+  id           String     @id @default(uuid())
+  inviteCodeId String
+  userId       String
+  amount       Decimal
+  createdAt    DateTime   @default(now())
+  inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteCodeId, userId])
+  @@index([userId])
+  @@map("invite_redemptions")
 }
 
 model BalanceFreeze {

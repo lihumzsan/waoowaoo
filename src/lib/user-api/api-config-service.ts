@@ -12,6 +12,7 @@ import { composeModelKey } from '@/lib/ai-registry/selection'
 import { buildApiConfigServerCatalog, DEFAULT_LIPSYNC_MODEL_KEY, getGoogleCompatibleApiConfigPresetModels } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
+import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 import type { ApiConfigPutBody, DefaultModelsPayload, StoredModel } from './api-config-types'
 import { getProviderKey, isRecord } from './api-config-shared'
@@ -79,6 +80,7 @@ export async function getUserApiConfig(userId: string) {
   }))
 
   const billingMode = await getBillingMode()
+  const deployment = getDeploymentConfig()
   const parsedModels = parseStoredModels(pref?.customModels)
   const models = billingMode === 'OFF' ? parsedModels : sanitizeModelsForBilling(parsedModels)
   const pricingDisplay = buildPricingDisplayMap()
@@ -142,6 +144,7 @@ export async function getUserApiConfig(userId: string) {
     capabilityDefaults,
     workflowConcurrency,
     pricingDisplay,
+    deployment: toPublicDeploymentConfig(deployment),
   }
 }
 

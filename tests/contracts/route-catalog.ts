@@ -25,6 +25,7 @@ export type RouteCatalogEntry = {
 }
 
 const ROUTE_FILES = [
+  'src/app/api/admin/credits/grant/route.ts',
   'src/app/api/admin/download-logs/route.ts',
   'src/app/api/asset-hub/ai-design-character/route.ts',
   'src/app/api/asset-hub/ai-design-location/route.ts',
@@ -60,6 +61,7 @@ const ROUTE_FILES = [
   'src/app/api/auth/register/route.ts',
   'src/app/api/character-style-test/route.ts',
   'src/app/api/cos/image/route.ts',
+  'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',
   'src/app/api/mutation-batches/[batchId]/revert/route.ts',
   'src/app/api/storage/sign/route.ts',
@@ -176,6 +178,7 @@ const ROUTE_FILES = [
   'src/app/api/user/balance/route.ts',
   'src/app/api/user/costs/details/route.ts',
   'src/app/api/user/costs/route.ts',
+  'src/app/api/user/invite-codes/redeem/route.ts',
   'src/app/api/user/models/route.ts',
   'src/app/api/user/style-presets/[presetId]/route.ts',
   'src/app/api/user/style-presets/design/route.ts',
