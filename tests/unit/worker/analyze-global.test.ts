@@ -5,6 +5,8 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const prismaMock = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   userPreference: { findUnique: vi.fn() },
+  projectEditScript: { findFirst: vi.fn() },
+  projectEditScreenplay: { findFirst: vi.fn() },
 }))
 
 const llmMock = vi.hoisted(() => ({
@@ -44,9 +46,11 @@ const persistMock = vi.hoisted(() => ({
   }),
 }))
 
-const visualProfileMock = vi.hoisted(() => ({
-  generateCreatedCharacterVisualProfile: vi.fn(async () => ({
-    success: true,
+const promptMock = vi.hoisted(() => ({
+  buildAnalyzeGlobalPrompts: vi.fn(() => ({
+    characterPrompt: 'character prompt',
+    locationPrompt: 'location prompt',
+    propPrompt: 'prop prompt',
   })),
 }))
 
@@ -87,17 +91,12 @@ vi.mock('@/lib/workers/handlers/analyze-global-parse', () => ({
 }))
 vi.mock('@/lib/workers/handlers/analyze-global-prompt', () => ({
   loadAnalyzeGlobalPromptTemplates: vi.fn(() => ({ characterTemplate: 'c', locationTemplate: 'l', propTemplate: 'p' })),
-  buildAnalyzeGlobalPrompts: vi.fn(() => ({
-    characterPrompt: 'character prompt',
-    locationPrompt: 'location prompt',
-    propPrompt: 'prop prompt',
-  })),
+  buildAnalyzeGlobalPrompts: promptMock.buildAnalyzeGlobalPrompts,
 }))
 vi.mock('@/lib/workers/handlers/analyze-global-persist', () => ({
   createAnalyzeGlobalStats: persistMock.createAnalyzeGlobalStats,
   persistAnalyzeGlobalChunk: persistMock.persistAnalyzeGlobalChunk,
 }))
-vi.mock('@/lib/workers/handlers/character-visual-profile', () => visualProfileMock)
 
 import { handleAnalyzeGlobalTask } from '@/lib/workers/handlers/analyze-global'
 
@@ -129,6 +128,8 @@ describe('worker analyze-global behavior', () => {
       locations: [{ id: 'loc-1', name: 'Old Town', summary: 'old town summary', assetKind: 'location' }],
       episodes: [{ id: 'ep-1', name: '第一集', novelText: 'episode text' }],
     })
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
   })
 
   it('no analyzable content -> explicit error', async () => {
@@ -150,13 +151,9 @@ describe('worker analyze-global behavior', () => {
 
     expect(parseMock.chunkContent).toHaveBeenCalled()
     expect(persistMock.persistAnalyzeGlobalChunk).toHaveBeenCalledTimes(2)
-    expect(visualProfileMock.generateCreatedCharacterVisualProfile).toHaveBeenCalledTimes(2)
-    expect(visualProfileMock.generateCreatedCharacterVisualProfile).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ data: expect.objectContaining({ projectId: 'project-1' }) }),
-      'char-new-1',
-      { suppressProgress: true },
-    )
+    expect(promptMock.buildAnalyzeGlobalPrompts).toHaveBeenCalledWith(expect.objectContaining({
+      styleBiblePrompt: expect.stringContaining('当前没有项目 Style Bible'),
+    }))
 
     expect(result).toEqual({
       success: true,

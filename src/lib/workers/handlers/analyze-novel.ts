@@ -14,7 +14,14 @@ import { resolveAnalysisModel } from './resolve-analysis-model'
 import { seedProjectLocationBackedImageSlots } from '@/lib/assets/services/location-backed-assets'
 import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
-import { generateCreatedCharacterVisualProfile } from './character-visual-profile'
+import {
+  createProjectCharacterWithAnalyzedAppearances,
+  type CharacterAnalysisDb,
+} from './analyzed-character-appearance'
+import {
+  renderStyleBiblePromptBlock,
+  resolveEditScriptStyleBibleForTask,
+} from '@/lib/edit-script/style-bible-prompt'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
@@ -43,6 +50,36 @@ function nameMatchesWithAlias(existingName: string, newName: string): boolean {
 
 function parseJsonResponse(responseText: string): Record<string, unknown> {
   return safeParseJsonObject(responseText)
+}
+
+function readCharacterArray(value: Record<string, unknown>): Array<Record<string, unknown>> {
+  const newCharacters = value.new_characters
+  if (Array.isArray(newCharacters)) {
+    return newCharacters.filter((item): item is Record<string, unknown> =>
+      typeof item === 'object' && item !== null && !Array.isArray(item),
+    )
+  }
+  const characters = value.characters
+  if (!Array.isArray(characters)) return []
+  return characters.filter((item): item is Record<string, unknown> =>
+    typeof item === 'object' && item !== null && !Array.isArray(item),
+  )
+}
+
+function renderCharacterAnalyzeStyleBible(input: {
+  styleBible: Awaited<ReturnType<typeof resolveEditScriptStyleBibleForTask>>
+  locale: TaskJobData['locale']
+}): string {
+  if (!input.styleBible) {
+    return input.locale === 'en'
+      ? 'No project Style Bible is available. Infer visual choices only from the script and explicit project settings.'
+      : '当前没有项目 Style Bible。只能根据剧本与显式项目设置推导角色视觉。'
+  }
+  return renderStyleBiblePromptBlock({
+    styleBible: input.styleBible,
+    usage: 'assetImage',
+    locale: input.locale,
+  })
 }
 
 export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
@@ -100,12 +137,21 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
     .filter((item) => readAssetKind(item as unknown as Record<string, unknown>) === 'prop')
     .map((item) => item.name)
     .join(', ')
+  const styleBible = await resolveEditScriptStyleBibleForTask({
+    projectId,
+    episodeId: job.data.episodeId,
+  })
+  const styleBiblePrompt = renderCharacterAnalyzeStyleBible({
+    styleBible,
+    locale: job.data.locale,
+  })
   const characterPromptTemplate = buildPrompt({
     promptId: PROMPT_IDS.CHARACTER_ANALYZE,
     locale: job.data.locale,
     variables: {
       input: contentToAnalyze,
       characters_lib_info: charactersLibName || '无',
+      style_bible: styleBiblePrompt,
     },
   })
   const locationPromptTemplate = buildPrompt({
@@ -232,9 +278,7 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
   const charactersData = parseJsonResponse(characterResponseText)
   const locationsData = parseJsonResponse(locationResponseText)
   const propsData = parseJsonResponse(propResponseText)
-  const parsedCharacters = Array.isArray(charactersData.characters)
-    ? (charactersData.characters as Array<Record<string, unknown>>)
-    : []
+  const parsedCharacters = readCharacterArray(charactersData)
   const parsedLocations = Array.isArray(locationsData.locations)
     ? (locationsData.locations as Array<Record<string, unknown>>)
     : []
@@ -259,37 +303,16 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
     )
     if (existsInLibrary) continue
 
-    const profileData = {
-      role_level: item.role_level,
-      archetype: item.archetype,
-      personality_tags: toStringArray(item.personality_tags),
-      era_period: item.era_period,
-      social_class: item.social_class,
-      occupation: item.occupation,
-      costume_tier: item.costume_tier,
-      suggested_colors: toStringArray(item.suggested_colors),
-      primary_identifier: item.primary_identifier,
-      visual_keywords: toStringArray(item.visual_keywords),
-      gender: item.gender,
-      age_range: item.age_range,
-    }
-
-    const created = await prisma.projectCharacter.create({
-      data: {
-        projectId: project.id,
-        name,
-        aliases: JSON.stringify(toStringArray(item.aliases)),
-        profileData: JSON.stringify(profileData),
-        profileConfirmed: false,
-      },
-      select: { id: true },
-    })
+    const aliases = toStringArray(item.aliases)
+    const created = await prisma.$transaction(async (tx) => await createProjectCharacterWithAnalyzedAppearances({
+      db: tx as unknown as CharacterAnalysisDb,
+      projectId: project.id,
+      character: item,
+      name,
+      aliases,
+      introduction: readText(item.introduction),
+    }))
     createdCharacters.push(created)
-    await generateCreatedCharacterVisualProfile(
-      job,
-      created.id,
-      { suppressProgress: true },
-    )
   }
 
   const createdLocations: Array<{ id: string }> = []

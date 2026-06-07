@@ -19,10 +19,29 @@ import {
 import { buildAnalyzeGlobalPrompts, loadAnalyzeGlobalPromptTemplates } from './analyze-global-prompt'
 import { createAnalyzeGlobalStats, persistAnalyzeGlobalChunk } from './analyze-global-persist'
 import { resolveAnalysisModel } from './resolve-analysis-model'
-import { generateCreatedCharacterVisualProfile } from './character-visual-profile'
+import {
+  renderStyleBiblePromptBlock,
+  resolveEditScriptStyleBibleForTask,
+} from '@/lib/edit-script/style-bible-prompt'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
+}
+
+function renderAnalyzeGlobalStyleBible(input: {
+  styleBible: Awaited<ReturnType<typeof resolveEditScriptStyleBibleForTask>>
+  locale: TaskJobData['locale']
+}): string {
+  if (!input.styleBible) {
+    return input.locale === 'en'
+      ? 'No project Style Bible is available. Infer visual choices only from the script and explicit project settings.'
+      : '当前没有项目 Style Bible。只能根据剧本与显式项目设置推导角色视觉。'
+  }
+  return renderStyleBiblePromptBlock({
+    styleBible: input.styleBible,
+    usage: 'assetImage',
+    locale: input.locale,
+  })
 }
 
 export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
@@ -94,6 +113,14 @@ export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
     .filter((item) => readAssetKind(item as unknown as Record<string, unknown>) === 'prop')
     .map((item) => item.name)
   const stats = createAnalyzeGlobalStats(chunks.length)
+  const styleBible = await resolveEditScriptStyleBibleForTask({
+    projectId,
+    episodeId: job.data.episodeId,
+  })
+  const styleBiblePrompt = renderAnalyzeGlobalStyleBible({
+    styleBible,
+    locale: job.data.locale,
+  })
 
   await reportTaskProgress(job, 10, {
     stage: 'analyze_global_prepare',
@@ -128,6 +155,7 @@ export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
         existingCharacters,
         existingLocationInfo,
         existingPropNames,
+        styleBiblePrompt,
       })
 
       const [characterCompletion, locationCompletion, propCompletion] = await withInternalLLMStreamCallbacks(
@@ -186,7 +214,7 @@ export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
       const locationsData = safeParseLocationsResponse(locationResponse)
       const propsData = safeParsePropsResponse(propResponse)
 
-      const persistResult = await persistAnalyzeGlobalChunk({
+      await persistAnalyzeGlobalChunk({
         projectId,
         charactersData,
         locationsData,
@@ -198,15 +226,6 @@ export async function handleAnalyzeGlobalTask(job: Job<TaskJobData>) {
         existingPropNames,
         stats,
       })
-
-      for (const createdCharacter of persistResult.createdCharacters) {
-        await assertTaskActive(job, `analyze_global_character_visual:${createdCharacter.id}`)
-        await generateCreatedCharacterVisualProfile(
-          job,
-          createdCharacter.id,
-          { suppressProgress: true },
-        )
-      }
 
       stats.processedChunks += 1
     }

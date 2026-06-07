@@ -22,10 +22,12 @@ export function buildAnalyzeGlobalPrompts(params: {
   existingCharacters: CharacterBrief[]
   existingLocationInfo: string[]
   existingPropNames: string[]
+  styleBiblePrompt: string
 }) {
   const characterPrompt = params.templates.characterPromptTemplate
     .replace('{input}', params.chunk)
     .replace('{characters_lib_info}', buildCharactersLibInfo(params.existingCharacters))
+    .replace('{style_bible}', params.styleBiblePrompt)
   const locationPrompt = params.templates.locationPromptTemplate
     .replace('{input}', params.chunk)
     .replace('{locations_lib_name}', params.existingLocationInfo.join(', ') || '无')

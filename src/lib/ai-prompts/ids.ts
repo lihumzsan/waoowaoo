@@ -1,6 +1,5 @@
 export const AI_PROMPT_IDS = {
   CHARACTER_ANALYZE: 'character-analyze',
-  CHARACTER_VISUAL_PROFILE: 'character-visual-profile',
   CHARACTER_CREATE: 'character-create',
   CHARACTER_MODIFY: 'character-modify',
   CHARACTER_UPDATE_DESCRIPTION: 'character-update-description',

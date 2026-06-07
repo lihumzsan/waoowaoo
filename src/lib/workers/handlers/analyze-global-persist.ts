@@ -12,6 +12,10 @@ import {
 import { seedProjectLocationBackedImageSlots } from '@/lib/assets/services/location-backed-assets'
 import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
+import {
+  createProjectCharacterWithAnalyzedAppearances,
+  type CharacterAnalysisDb,
+} from './analyzed-character-appearance'
 
 export type AnalyzeGlobalStats = {
   totalChunks: number
@@ -51,8 +55,6 @@ export async function persistAnalyzeGlobalChunk(params: {
   existingPropNames: string[]
   stats: AnalyzeGlobalStats
 }) {
-  const createdCharacters: Array<{ id: string }> = []
-
   for (const char of params.charactersData.new_characters || []) {
     const name = readText(char.name).trim()
     const aliases = toStringArray(char.aliases)
@@ -67,48 +69,23 @@ export async function persistAnalyzeGlobalChunk(params: {
       continue
     }
 
-    try {
-      const profileData = {
-        role_level: char.role_level,
-        archetype: char.archetype,
-        personality_tags: toStringArray(char.personality_tags),
-        era_period: char.era_period,
-        social_class: char.social_class,
-        occupation: char.occupation,
-        costume_tier: char.costume_tier,
-        suggested_colors: toStringArray(char.suggested_colors),
-        primary_identifier: char.primary_identifier,
-        visual_keywords: toStringArray(char.visual_keywords),
-        gender: char.gender,
-        age_range: char.age_range,
-      }
+    const created = await prisma.$transaction(async (tx) => await createProjectCharacterWithAnalyzedAppearances({
+      db: tx as unknown as CharacterAnalysisDb,
+      projectId: params.projectId,
+      character: char,
+      name,
+      aliases,
+      introduction: readText(char.introduction),
+    }))
 
-      const created = await prisma.projectCharacter.create({
-        data: {
-          projectId: params.projectId,
-          name,
-          aliases: JSON.stringify(aliases),
-          introduction: readText(char.introduction),
-          profileData: JSON.stringify(profileData),
-          profileConfirmed: false,
-        },
-        select: {
-          id: true,
-        },
-      })
-
-      params.existingCharacters.push({
-        id: created.id,
-        name,
-        aliases,
-        introduction: readText(char.introduction),
-      })
-      params.existingCharacterNames.push(name, ...aliases)
-      params.stats.newCharacters += 1
-      createdCharacters.push(created)
-    } catch {
-      params.stats.skippedCharacters += 1
-    }
+    params.existingCharacters.push({
+      id: created.id,
+      name,
+      aliases,
+      introduction: readText(char.introduction),
+    })
+    params.existingCharacterNames.push(name, ...aliases)
+    params.stats.newCharacters += 1
   }
 
   for (const update of params.charactersData.updated_characters || []) {
@@ -238,9 +215,5 @@ export async function persistAnalyzeGlobalChunk(params: {
     } catch {
       params.stats.skippedProps += 1
     }
-  }
-
-  return {
-    createdCharacters,
   }
 }

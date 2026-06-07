@@ -3,15 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   project: { findUnique: vi.fn(), update: vi.fn(async () => ({})) },
   userPreference: { findUnique: vi.fn() },
   projectEpisode: { findFirst: vi.fn() },
   projectCharacter: { create: vi.fn(async () => ({ id: 'char-new-1' })) },
+  characterAppearance: { create: vi.fn(async () => ({})) },
   projectLocation: { create: vi.fn(async () => ({ id: 'loc-new-1' })) },
   locationImage: {
     create: vi.fn(async () => ({})),
     createMany: vi.fn(async () => ({ count: 1 })),
   },
+  projectEditScript: { findFirst: vi.fn() },
+  projectEditScreenplay: { findFirst: vi.fn() },
 }))
 
 const llmMock = vi.hoisted(() => ({
@@ -24,10 +28,13 @@ const workerMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
 }))
 
-const visualProfileMock = vi.hoisted(() => ({
-  generateCreatedCharacterVisualProfile: vi.fn(async () => ({
-    success: true,
-  })),
+const aiPromptMock = vi.hoisted(() => ({
+  buildAiPrompt: vi.fn((input: { promptId: string; variables?: Record<string, unknown> }) => {
+    if (input.promptId === 'character-analyze') {
+      return `character-analysis-prompt:${String(input.variables?.style_bible || '')}`
+    }
+    return 'analysis-prompt'
+  }),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -71,9 +78,8 @@ vi.mock('@/lib/ai-prompts', () => ({
     LOCATION_ANALYZE: 'location-analyze',
     PROP_ANALYZE: 'prop-analyze',
   },
-  buildAiPrompt: vi.fn(() => 'analysis-prompt'),
+  buildAiPrompt: aiPromptMock.buildAiPrompt,
 }))
-vi.mock('@/lib/workers/handlers/character-visual-profile', () => visualProfileMock)
 
 import { handleAnalyzeNovelTask } from '@/lib/workers/handlers/analyze-novel'
 
@@ -96,6 +102,9 @@ function buildJob(): Job<TaskJobData> {
 describe('worker analyze-novel behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) =>
+      await callback(prismaMock),
+    )
 
     prismaMock.projectLocation.create
       .mockResolvedValueOnce({ id: 'loc-new-1' })
@@ -115,6 +124,8 @@ describe('worker analyze-novel behavior', () => {
     prismaMock.projectEpisode.findFirst.mockResolvedValue({
       novelText: '首集内容',
     })
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
 
     llmMock.getCompletionContent
       .mockReturnValueOnce(JSON.stringify({
@@ -122,9 +133,19 @@ describe('worker analyze-novel behavior', () => {
           {
             name: '新角色',
             aliases: ['别名A'],
+            introduction: '新角色介绍',
             role_level: 'main',
             personality_tags: ['冷静'],
             visual_keywords: ['黑发'],
+            expected_appearances: [{ id: 1, change_reason: '初始形象' }],
+            appearances: [{
+              id: 1,
+              change_reason: '初始形象',
+              descriptions: [
+                '新角色，黑发，冷静，深色长外套，黑色短靴，低饱和电影质感',
+                '新角色，利落短发，深色长外套，黑色短靴，克制轮廓',
+              ],
+            }],
           },
         ],
       }))
@@ -186,11 +207,32 @@ describe('worker analyze-novel behavior', () => {
         }),
       }),
     )
-    expect(visualProfileMock.generateCreatedCharacterVisualProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ projectId: 'project-1' }) }),
-      'char-new-1',
-      { suppressProgress: true },
+    expect(prismaMock.projectCharacter.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          introduction: '新角色介绍',
+          profileConfirmed: true,
+        }),
+      }),
     )
+    expect(prismaMock.characterAppearance.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        characterId: 'char-new-1',
+        appearanceIndex: 0,
+        changeReason: '初始形象',
+        description: '新角色，黑发，冷静，深色长外套，黑色短靴，低饱和电影质感',
+        descriptions: JSON.stringify([
+          '新角色，黑发，冷静，深色长外套，黑色短靴，低饱和电影质感',
+          '新角色，利落短发，深色长外套，黑色短靴，克制轮廓',
+        ]),
+      }),
+    })
+    expect(aiPromptMock.buildAiPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      promptId: 'character-analyze',
+      variables: expect.objectContaining({
+        style_bible: expect.stringContaining('当前没有项目 Style Bible'),
+      }),
+    }))
 
     expect(prismaMock.projectLocation.create).toHaveBeenCalledWith(
       expect.objectContaining({

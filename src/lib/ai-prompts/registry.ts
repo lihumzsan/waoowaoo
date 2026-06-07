@@ -4,12 +4,8 @@ import type { AiPromptCatalogEntry } from './types'
 export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.CHARACTER_ANALYZE]: {
     pathStem: 'character/analyze',
-    variableKeys: ['input', 'characters_lib_info'],
+    variableKeys: ['input', 'characters_lib_info', 'style_bible'],
     operationIds: ['analyze_characters'],
-  },
-  [AI_PROMPT_IDS.CHARACTER_VISUAL_PROFILE]: {
-    pathStem: 'character/visual-profile',
-    variableKeys: ['character_profiles'],
   },
   [AI_PROMPT_IDS.CHARACTER_CREATE]: {
     pathStem: 'character/create',
