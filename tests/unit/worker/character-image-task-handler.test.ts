@@ -131,6 +131,12 @@ describe('worker character-image-task-handler behavior', () => {
     const realisticStylePrompt = getArtStylePrompt('realistic', 'zh')
 
     expect(generationInput.prompt).toContain(CHARACTER_PROMPT_SUFFIX)
+    expect(generationInput.prompt).toContain('画面固定为单张完整 16:9 横版角色资产板')
+    expect(generationInput.prompt).toContain('左侧约 40% 宽度是角色主全身英雄照')
+    expect(generationInput.prompt).toContain('主全身照必须只有人物本体')
+    expect(generationInput.prompt).toContain('不能手持任何物品')
+    expect(generationInput.prompt).toContain('右上约 35% 高度是标准三视图')
+    expect(generationInput.prompt).toContain('右下约 65% 高度是 3 个横向排列的动作/语境样本')
     expect(generationInput.prompt).toContain(realisticStylePrompt)
     expect(generationInput.prompt.split(CHARACTER_PROMPT_SUFFIX).length - 1).toBe(1)
     expect(generationInput.prompt.split(realisticStylePrompt).length - 1).toBe(1)
@@ -198,6 +204,7 @@ describe('worker character-image-task-handler behavior', () => {
       prompt: string
     }
     expect(generationInput.prompt).toContain('角色描述A')
+    expect(generationInput.prompt).toContain('角色资产设定图')
     expect(generationInput.prompt).toContain('系统 Style Bible 视觉要求（固定追加，必须遵守）：')
     expect(generationInput.prompt).toContain('用途：资产图生成')
     expect(generationInput.prompt).toContain('画面滤镜：轻微柔焦，35mm镜头，克制高光。')

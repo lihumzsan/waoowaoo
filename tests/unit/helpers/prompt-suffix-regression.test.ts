@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   addCharacterPromptSuffix,
   addPropPromptSuffix,
+  CHARACTER_ASSET_IMAGE_RATIO,
   CHARACTER_PROMPT_SUFFIX,
+  PROP_IMAGE_RATIO,
   PROP_PROMPT_SUFFIX,
   removeCharacterPromptSuffix,
   removePropPromptSuffix,
@@ -19,7 +21,15 @@ describe('character prompt suffix regression', () => {
     const generated = addCharacterPromptSuffix(basePrompt)
 
     expect(generated).toContain(CHARACTER_PROMPT_SUFFIX)
+    expect(generated).toContain('左侧约 40% 宽度是角色主全身英雄照')
+    expect(generated).toContain('不能手持任何物品')
+    expect(generated).toContain('右下约 65% 高度是 3 个横向排列的动作/语境样本')
     expect(countOccurrences(generated, CHARACTER_PROMPT_SUFFIX)).toBe(1)
+  })
+
+  it('uses a 16:9 character asset board without changing prop ratio', () => {
+    expect(CHARACTER_ASSET_IMAGE_RATIO).toBe('16:9')
+    expect(PROP_IMAGE_RATIO).toBe('3:2')
   })
 
   it('removes suffix text from prompt', () => {

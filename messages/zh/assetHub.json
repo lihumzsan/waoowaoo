@@ -112,8 +112,8 @@
         "locationSummaryLabel": "场景描述",
         "locationSummaryPlaceholder": "请描述场景的环境、氛围、特征等...",
         "referenceUpload": "上传参考图",
-        "referenceUploadTip": "上传一张角色图片，AI 将自动转换为三视图设定图",
-        "convertToCharacter": "转换三视图",
+        "referenceUploadTip": "上传一张角色图片，AI 将自动转换为角色资产板",
+        "convertToCharacter": "转换资产板",
         "converting": "转换中...",
         "dropOrClick": "拖放图片或点击上传",
         "supportedFormats": "支持 JPG、PNG 格式"

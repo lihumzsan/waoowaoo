@@ -194,11 +194,22 @@ describe('worker reference-to-character', () => {
     const { prompt, options } = readGenerateCall(0)
     expect(prompt).toContain('冷静黑发角色')
     expect(prompt).toContain(CHARACTER_PROMPT_SUFFIX)
+    expect(prompt).toContain('画面固定为单张完整 16:9 横版角色资产板')
+    expect(prompt).toContain('主全身照必须只有人物本体')
+    expect(prompt).toContain('右上约 35% 高度是标准三视图')
     expect(options.aspectRatio).toBe(CHARACTER_IMAGE_BANANA_RATIO)
     expect(Object.prototype.hasOwnProperty.call(options, 'referenceImages')).toBe(false)
+    expect(workersSharedMock.reportTaskProgress).toHaveBeenCalledWith(
+      expect.anything(),
+      35,
+      expect.objectContaining({
+        stage: 'reference_to_character_generate',
+        stageLabel: '生成角色资产板',
+      }),
+    )
   })
 
-  it('keeps three-view suffix in template flow without requiring vision analysis in background mode', async () => {
+  it('keeps asset-board suffix in template flow without requiring vision analysis in background mode', async () => {
     const job = buildJob(
       {
         referenceImageUrls: [' https://example.com/ref-a.png ', 'https://example.com/ref-b.png'],
@@ -219,6 +230,7 @@ describe('worker reference-to-character', () => {
     const { prompt, options } = readGenerateCall(0)
     expect(prompt).toContain('BASE_REFERENCE_PROMPT')
     expect(prompt).toContain(CHARACTER_PROMPT_SUFFIX)
+    expect(prompt).toContain('右下约 65% 高度是 3 个横向排列的动作/语境样本')
     expect(options.referenceImages).toEqual(['https://example.com/ref-a.png', 'https://example.com/ref-b.png'])
     expect(options.aspectRatio).toBe(CHARACTER_IMAGE_BANANA_RATIO)
 

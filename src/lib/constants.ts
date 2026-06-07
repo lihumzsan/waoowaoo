@@ -104,8 +104,8 @@ export function getArtStylePrompt(
   return locale === 'en' ? style.promptEn : style.promptZh
 }
 
-// 角色形象生成的系统后缀（始终添加到提示词末尾，不显示给用户）- 左侧面部特写+右侧三视图
-export const CHARACTER_PROMPT_SUFFIX = '角色设定图，画面分为左右两个区域：【左侧区域】占约1/3宽度，是角色的正面特写（如果是人类则展示完整正脸，如果是动物/生物则展示最具辨识度的正面形态）；【右侧区域】占约2/3宽度，是角色三视图横向排列（从左到右依次为：正面全身、侧面全身、背面全身），三视图高度一致。纯白色背景，无其他元素。'
+// 角色形象生成的系统后缀（始终添加到提示词末尾，不显示给用户）- 固定 16:9 角色资产板
+export const CHARACTER_PROMPT_SUFFIX = '角色资产设定图，画面固定为单张完整 16:9 横版角色资产板，不要拆成多张输出。版式固定：左侧约 40% 宽度是角色主全身英雄照，完整展示头发、体型、服装、鞋子和主要可穿戴配饰；主全身照必须只有人物本体，可以是自然静态姿势或符合角色气质的轻微姿态，但不能手持任何物品，不能出现与人物粘连的道具、武器、工具、家具、桌面、宠物或环境物件，避免后续分镜把临时物件误认为角色固定资产。右侧约 60% 宽度上下分区：右上约 35% 高度是标准三视图，同一角色的正面全身、侧面全身、背面全身横向排列，三视图高度一致，服装、体型、发型、配饰完全一致；右下约 65% 高度是 3 个横向排列的动作/语境样本，根据角色身份合理选择可复用的站姿、动作或轻场景语境，用来展示角色在分镜中的动态气质，但不得加入剧情事件、文字标签、编号、水印、Logo。整张图不能使用纯白底，必须落实项目风格或输入风格中的背景氛围、灯光、色彩、滤镜和材质质感；背景只服务于资产风格，不绑定具体剧情地点，不出现会误导分镜的固定场景锚点。角色外观、服装、轮廓、发型、体型和主要配饰必须稳定清晰，便于后续分镜图片引用；保持自然中性表情，完整展示鞋子与服装细节。'
 
 // 道具图片生成的系统后缀（固定白底三视图资产图）
 export const PROP_PROMPT_SUFFIX = '道具设定图，画面分为左右两个区域：【左侧区域】占约1/3宽度，是道具主体的主视图特写；【右侧区域】占约2/3宽度，是同一道具的三视图横向排列（从左到右依次为：正面、侧面、背面），三视图高度一致。纯白色背景，主体居中完整展示，无人物、无手部、无桌面陈设、无环境背景、无其他元素。'
@@ -113,17 +113,16 @@ export const PROP_PROMPT_SUFFIX = '道具设定图，画面分为左右两个区
 // 场景图片生成的系统后缀（已禁用四视图，直接生成单张场景图）
 export const LOCATION_PROMPT_SUFFIX = ''
 
-// 角色资产图生成比例（当前角色设定图实际使用 3:2）
-export const CHARACTER_ASSET_IMAGE_RATIO = '3:2'
-// 历史保留：旧注释中曾写 16:9，但当前资产图生成统一以 CHARACTER_ASSET_IMAGE_RATIO 为准
+// 角色资产图生成比例（固定角色资产板：左主全身 + 右上三视图 + 右下动作/语境样本）
+export const CHARACTER_ASSET_IMAGE_RATIO = '16:9'
 export const CHARACTER_IMAGE_RATIO = CHARACTER_ASSET_IMAGE_RATIO
 // 角色图片尺寸（用于Seedream API）
 export const CHARACTER_IMAGE_SIZE = '3840x2160'  // 16:9 横版
 // 角色图片尺寸（用于Banana API）
 export const CHARACTER_IMAGE_BANANA_RATIO = CHARACTER_ASSET_IMAGE_RATIO
 
-// 道具图片生成比例（与角色资产图保持一致）
-export const PROP_IMAGE_RATIO = CHARACTER_ASSET_IMAGE_RATIO
+// 道具图片生成比例（道具仍使用紧凑设定图，不跟随角色资产板比例）
+export const PROP_IMAGE_RATIO = '3:2'
 
 // 场景图片生成比例（1:1 正方形单张场景）
 export const LOCATION_IMAGE_RATIO = '1:1'

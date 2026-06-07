@@ -196,7 +196,7 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
 
   await reportTaskProgress(job, 35, {
     stage: 'reference_to_character_generate',
-    stageLabel: '生成角色三视图',
+    stageLabel: job.data.locale === 'en' ? 'Generating character asset board' : '生成角色资产板',
     displayMode: 'detail',
   })
 

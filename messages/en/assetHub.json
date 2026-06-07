@@ -112,8 +112,8 @@
         "locationSummaryLabel": "Location Description",
         "locationSummaryPlaceholder": "Describe the environment, atmosphere, features, etc...",
         "referenceUpload": "Upload Reference",
-        "referenceUploadTip": "Upload a character image, AI will convert it to a three-view design sheet",
-        "convertToCharacter": "Convert to 3-View",
+        "referenceUploadTip": "Upload a character image, AI will convert it to a character asset board",
+        "convertToCharacter": "Convert to Board",
         "converting": "Converting...",
         "dropOrClick": "Drop image or click to upload",
         "supportedFormats": "JPG, PNG supported"

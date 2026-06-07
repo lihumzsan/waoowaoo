@@ -1,4 +1,4 @@
-# Reference Image To Character Sheet Prompt (img2img)
+# Reference Image To Character Asset Board Prompt (img2img)
 
 Use the provided reference image to extract face traits, hairstyle, body shape, and outfit structure.
 
@@ -9,11 +9,12 @@ Only if no explicit style instruction is provided, you may preserve the original
 
 ## Generation rules
 1. Ignore the original image color cast and lighting defects
-2. Use clean, soft studio lighting
-3. Keep natural, aesthetically correct body proportions
+2. Use the background atmosphere, lighting, color palette, filter, and material texture from the selected style or project style
+3. Keep natural, aesthetically correct body proportions, with complete outfit, footwear, and key wearable accessories visible
 4. Do not copy blur, noise, compression artifacts, or defects
 5. Output must be clear, sharp, and production-quality
-6. Character expression should be neutral and calm, looking at camera
+6. Character expression should be neutral and calm
+7. Output must be useful as a storyboard reference asset: stable character identity anchors, with background serving style only and not binding the character to a specific plot location
 
 ## Missing-part completion
 If only half body or partial body is visible, infer and complete hidden parts consistently:

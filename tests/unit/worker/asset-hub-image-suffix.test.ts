@@ -123,6 +123,9 @@ describe('asset hub character image prompt suffix regression', () => {
 
     expect(prompt).toContain('主角，黑发，冷静')
     expect(prompt).toContain(CHARACTER_PROMPT_SUFFIX)
+    expect(prompt).toContain('画面固定为单张完整 16:9 横版角色资产板')
+    expect(prompt).toContain('主全身照必须只有人物本体')
+    expect(prompt).toContain('右下约 65% 高度是 3 个横向排列的动作/语境样本')
     expect(countOccurrences(prompt, CHARACTER_PROMPT_SUFFIX)).toBe(1)
     expect(callArg?.options).toEqual(expect.objectContaining({ aspectRatio: CHARACTER_ASSET_IMAGE_RATIO }))
     expect(callArg?.label).toBeUndefined()
