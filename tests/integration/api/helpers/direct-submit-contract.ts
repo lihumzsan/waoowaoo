@@ -468,6 +468,22 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
+    routeFile: 'src/app/api/scene-prompt-test/generate/route.ts',
+    body: {
+      story: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。',
+      styleRequest: '低饱和东方武侠电影，晨雾，旧木，棉麻质感',
+      storyDirection: '后续会有离别、下山、回望寺门的镜头',
+    },
+    expectedTaskType: TASK_TYPE.SCENE_PROMPT_TEST,
+    expectedTargetType: 'ScenePromptTest',
+    expectedProjectId: 'system',
+    expectedPayloadSubset: {
+      story: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。',
+      imageModel: 'img::location',
+      count: 4,
+    },
+  },
+  {
     routeFile: 'src/app/api/scene-reference-test/generate-scenes/route.ts',
     body: {
       sceneDescription: 'rainy temple backyard',

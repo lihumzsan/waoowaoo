@@ -14,6 +14,7 @@ import {
   handleModifyAssetImageTask,
   handlePanelImageTask,
   handlePanelVariantTask,
+  handleScenePromptTestTask,
   handleSceneReferenceComparisonTask,
   handleSceneReferenceTask,
 } from './handlers/image-task-handlers'
@@ -28,6 +29,8 @@ async function processImageTask(job: Job<TaskJobData>) {
       return await handleCharacterImageTask(job)
     case TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE:
       return await handleEditStylePreviewImageTask(job)
+    case TASK_TYPE.SCENE_PROMPT_TEST:
+      return await handleScenePromptTestTask(job)
     case TASK_TYPE.SCENE_REFERENCE_TEST:
       return await handleSceneReferenceTask(job)
     case TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST:

@@ -6,6 +6,7 @@ export { handleModifyAssetImageTask } from './modify-asset-image-task-handler'
 export { handleAssetHubImageTask } from './asset-hub-image-task-handler'
 export { handleAssetHubModifyTask } from './asset-hub-modify-task-handler'
 export { handlePanelVariantTask } from './panel-variant-task-handler'
+export { handleScenePromptTestTask } from './scene-prompt-test-task-handler'
 export {
   handleSceneReferenceComparisonTask,
   handleSceneReferenceTask,

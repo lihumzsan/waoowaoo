@@ -110,7 +110,7 @@ describe('api contract - direct submit media routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(DIRECT_MEDIA_CASES.length).toBe(15)
+    expect(DIRECT_MEDIA_CASES.length).toBe(16)
   })
 
   for (const routeCase of DIRECT_MEDIA_CASES) {

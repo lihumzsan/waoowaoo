@@ -5,6 +5,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'progress.taskType.editStylePreviewImage',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE]: 'progress.taskType.editScriptStoryboardPrepare',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'progress.taskType.editScriptStoryboardCameraPlan',
+  [TASK_TYPE.SCENE_PROMPT_TEST]: 'progress.taskType.scenePromptTest',
   [TASK_TYPE.SCENE_REFERENCE_TEST]: 'progress.taskType.sceneReferenceTest',
   [TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST]: 'progress.taskType.sceneReferenceComparisonTest',
   [TASK_TYPE.IMAGE_CHARACTER]: 'progress.taskType.imageCharacter',
