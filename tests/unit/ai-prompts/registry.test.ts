@@ -35,6 +35,19 @@ describe('ai prompt registry', () => {
     expect(visualEn).toContain('"negativePrompt"')
   })
 
+  it('keeps character analysis style-aware without role or costume tiers', () => {
+    const template = getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_ANALYZE, 'zh')
+
+    expect(template).toContain('示例 1：80/90 年代现实题材')
+    expect(template).toContain('示例 2：科幻外星人片')
+    expect(template).toContain('示例 3：古代武侠/修行题材')
+    expect(template).toContain('剧本背景与 Style Bible 如何共同影响选角')
+    expect(template).not.toContain('"role_level"')
+    expect(template).not.toContain('"costume_tier"')
+    expect(template).not.toContain('【角色重要性 role_level】')
+    expect(template).not.toContain('【服装华丽度 costume_tier】')
+  })
+
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const variantTemplate = getAiPromptTemplate(AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE, 'zh')
     const videoBlockTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK, 'zh')

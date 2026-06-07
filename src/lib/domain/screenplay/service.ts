@@ -79,13 +79,11 @@ async function persistAnalyzedCharacters(params: {
     if (params.existingNames.has(key)) continue
 
     const profileData = {
-      role_level: item.role_level,
       archetype: item.archetype,
       personality_tags: toStringArray(item.personality_tags),
       era_period: item.era_period,
       social_class: item.social_class,
       occupation: item.occupation,
-      costume_tier: item.costume_tier,
       suggested_colors: toStringArray(item.suggested_colors),
       primary_identifier: item.primary_identifier,
       visual_keywords: toStringArray(item.visual_keywords),

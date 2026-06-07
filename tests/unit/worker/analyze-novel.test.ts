@@ -134,7 +134,6 @@ describe('worker analyze-novel behavior', () => {
             name: '新角色',
             aliases: ['别名A'],
             introduction: '新角色介绍',
-            role_level: 'main',
             personality_tags: ['冷静'],
             visual_keywords: ['黑发'],
             expected_appearances: [{ id: 1, change_reason: '初始形象' }],

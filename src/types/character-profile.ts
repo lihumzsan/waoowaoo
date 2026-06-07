@@ -3,14 +3,7 @@
  * 用于角色视觉档案生成
  */
 
-export type RoleLevel = 'S' | 'A' | 'B' | 'C' | 'D'
-
-export type CostumeTier = 1 | 2 | 3 | 4 | 5
-
 export interface CharacterProfileData {
-    /** 角色重要性层级 */
-    role_level: RoleLevel
-
     /** 角色原型 (如: 霸道总裁, 心机婊) */
     archetype: string
 
@@ -26,13 +19,10 @@ export interface CharacterProfileData {
     /** 职业 (可选) */
     occupation?: string
 
-    /** 服装华丽度 (1-5) */
-    costume_tier: CostumeTier
-
     /** 建议色彩 */
     suggested_colors: string[]
 
-    /** 主要辨识标志 (S/A级角色必须) */
+    /** 主要辨识标志 */
     primary_identifier?: string
 
     /** 视觉关键词 */
@@ -59,15 +49,10 @@ export function validateProfileData(data: unknown): data is CharacterProfileData
     if (!data || typeof data !== 'object') return false
     const candidate = data as Partial<CharacterProfileData>
     return !!(
-        typeof candidate.role_level === 'string' &&
-        ['S', 'A', 'B', 'C', 'D'].includes(candidate.role_level) &&
         typeof candidate.archetype === 'string' &&
         Array.isArray(candidate.personality_tags) &&
         typeof candidate.era_period === 'string' &&
         typeof candidate.social_class === 'string' &&
-        typeof candidate.costume_tier === 'number' &&
-        candidate.costume_tier >= 1 &&
-        candidate.costume_tier <= 5 &&
         Array.isArray(candidate.suggested_colors) &&
         Array.isArray(candidate.visual_keywords) &&
         typeof candidate.gender === 'string' &&

@@ -39,7 +39,6 @@ describe('analyze global persist', () => {
           name: '武僧',
           aliases: ['山寺僧人'],
           introduction: '山寺武僧，故事核心角色',
-          role_level: 'S',
           personality_tags: ['沉稳', '克制'],
           visual_keywords: ['旧棉麻质感', '低饱和武侠'],
           appearances: [{

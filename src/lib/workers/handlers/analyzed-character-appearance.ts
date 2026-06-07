@@ -68,13 +68,11 @@ export function buildCharacterProfileData(character: Record<string, unknown>) {
     : readRecordArray(character.appearances)
 
   return {
-    role_level: character.role_level,
     archetype: character.archetype,
     personality_tags: toStringArray(character.personality_tags),
     era_period: character.era_period,
     social_class: character.social_class,
     occupation: character.occupation,
-    costume_tier: character.costume_tier,
     suggested_colors: toStringArray(character.suggested_colors),
     primary_identifier: character.primary_identifier,
     visual_keywords: toStringArray(character.visual_keywords),

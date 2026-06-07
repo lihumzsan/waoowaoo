@@ -23,7 +23,6 @@ describe('analyzed character appearance persistence', () => {
       aliases: ['僧人'],
       introduction: '山寺武僧，故事中的核心修行者',
       character: {
-        role_level: 'S',
         archetype: '武僧',
         personality_tags: ['沉稳', '克制'],
         visual_keywords: ['旧棉麻质感', '克制轮廓'],
@@ -50,6 +49,12 @@ describe('analyzed character appearance persistence', () => {
       }),
       select: { id: true },
     })
+    const createCharacterArg = vi.mocked(db.projectCharacter.create).mock.calls[0]?.[0] as {
+      data?: { profileData?: string }
+    }
+    const profileData = JSON.parse(createCharacterArg.data?.profileData || '{}') as Record<string, unknown>
+    expect(Object.prototype.hasOwnProperty.call(profileData, 'role_level')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(profileData, 'costume_tier')).toBe(false)
     expect(db.characterAppearance.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         characterId: 'character-1',
