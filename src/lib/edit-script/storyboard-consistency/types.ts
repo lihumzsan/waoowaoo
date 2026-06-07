@@ -53,6 +53,7 @@ export interface StoryboardPanelPromptDraft {
   readonly sourceVideoBlockId: string
   readonly prompt: string
   readonly videoPrompt: string
+  readonly shotBlocking: ShotBlocking
   readonly metadata: Record<string, unknown>
 }
 
@@ -224,6 +225,7 @@ export const panelFinalPromptBlockModelOutputSchema = z.object({
       panelIndex: z.number().int().min(0),
       sourceShotNumber: z.number().int().positive(),
       sourceVideoBlockId: z.string().trim().min(1),
+      shotBlocking: shotBlockingSchema,
       finalPanelPrompt: z.string().trim().min(30),
       finalVideoPrompt: z.string().trim().min(30),
     }).strict()).min(1),
@@ -234,3 +236,4 @@ export type CameraPlanPanel = z.infer<typeof cameraPlanPanelSchema>
 export type CameraPlanModelOutput = z.infer<typeof cameraPlanModelOutputSchema>
 export type CameraStyleBibleModelOutput = z.infer<typeof cameraStyleBibleModelOutputSchema>
 export type PanelFinalPromptBlockModelOutput = z.infer<typeof panelFinalPromptBlockModelOutputSchema>
+export type ShotBlocking = z.infer<typeof shotBlockingSchema>

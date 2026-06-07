@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { Locale } from '@/i18n/routing'
 import type {
+  ShotBlocking,
   StoryboardConsistencyAssetSnapshot,
   StoryboardConsistencySourceSnapshot,
   StoryboardConsistencySourceVideoBlock,
@@ -31,6 +32,7 @@ interface PanelDraft {
   readonly duration: number
   readonly imagePrompt: string
   readonly videoPrompt: string
+  readonly shotBlocking: ShotBlocking
   readonly photographyRules: string
   readonly actingNotes: string | null
   readonly sourceShotNumber: number
@@ -49,6 +51,18 @@ function editStoryboardPanelSourceToJson(source: Record<string, unknown>): strin
     source: 'edit_script',
     ...source,
   })
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function cameraPlanForPanel(generated: StoryboardPanelPromptDraft): Record<string, unknown> {
+  const metadataCameraPlan = isRecord(generated.metadata.cameraPlan) ? generated.metadata.cameraPlan : {}
+  return {
+    ...metadataCameraPlan,
+    shotBlocking: generated.shotBlocking,
+  }
 }
 
 function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number) {
@@ -244,6 +258,7 @@ function buildPanelDrafts(input: {
       sourceVideoBlockIndex: block.blockIndex,
       sourceVideoBlockKind: block.kind,
       consistencyMode: 'spatial_text_blocking',
+      cameraPlan: cameraPlanForPanel(generated),
       consistencyMetadata: generated?.metadata ?? null,
     }
     return {
@@ -261,6 +276,7 @@ function buildPanelDrafts(input: {
       duration: shot.durationSec,
       imagePrompt: generated.prompt,
       videoPrompt: generated.videoPrompt,
+      shotBlocking: generated.shotBlocking,
       photographyRules: editStoryboardPanelSourceToJson(source),
       actingNotes: null,
       sourceShotNumber: shot.shotNumber,

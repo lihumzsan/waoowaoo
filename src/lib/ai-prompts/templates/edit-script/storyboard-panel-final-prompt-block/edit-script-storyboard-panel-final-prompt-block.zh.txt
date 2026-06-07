@@ -5,6 +5,8 @@
 - Cinematography Shot Plan 决定 shot 的景别、焦段、景深、机位、构图、运动、光线、轴线和视线。
 - 你不能重新发明镜头，不能改变 shot 顺序、shot 含义、摄影参数或空间事实。
 - spatial_profile_strategy_output_json 是真实空间事实；不得违反空间锚点、前中后景和光线方向。
+- 每个 panel 必须输出 shotBlocking，作为结构化执行数据；它只能来自 Cinematography Shot Plan、spatial_profile_strategy_output_json、Director Decoupage 和 edit script 动作，不得另编一套调度。
+- shotBlocking 必须用 absolutePosition、relativePosition、screenPosition、characterPlacements、cameraPlacement、composition、continuityNote 把人物站位、相对关系、画面位置、机位和连续性写清楚。
 - finalPanelPrompt 必须是可直接交给图片模型的单张电影分镜图提示词。
 - finalVideoPrompt 必须是可直接交给视频模型的当前 shot 视频提示词，必须包含导演动作、摄影运动/静止、声音和时长约束。
 - 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource。
@@ -49,6 +51,25 @@ panel_contract_json：
         "panelIndex": 0,
         "sourceShotNumber": 1,
         "sourceVideoBlockId": "当前 panel 所属 videoBlock 的 sourceVideoBlockId",
+        "shotBlocking": {
+          "locationName": "当前 shot 的场景/地点名称",
+          "absolutePosition": "镜头动作和人物位于真实场景锚点中的具体位置",
+          "relativePosition": "人物、道具和空间锚点之间的相对关系",
+          "screenPosition": "镜头动作和人物在画面中的位置",
+          "characterPlacements": [
+            {
+              "characterName": "角色名",
+              "absolutePosition": "角色位于真实场景锚点中的具体位置",
+              "relativePosition": "角色相对其他角色、道具和锚点的位置关系",
+              "screenPosition": "角色在画面中的区域",
+              "facing": "角色朝向",
+              "eyeline": "角色视线目标"
+            }
+          ],
+          "cameraPlacement": "来自 Cinematography Shot Plan 的机位和拍摄方向",
+          "composition": "来自 Cinematography Shot Plan 和空间档案的构图安排",
+          "continuityNote": "本 shot 的轴线、视线和空间连续性要求"
+        },
         "finalPanelPrompt": "完整、具体、可直接用于单张电影分镜图生成的提示词",
         "finalVideoPrompt": "完整、具体、可直接用于当前 shot 视频生成的提示词"
       }

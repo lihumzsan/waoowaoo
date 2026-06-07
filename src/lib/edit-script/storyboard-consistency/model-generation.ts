@@ -5,6 +5,7 @@ import type { Locale } from '@/i18n/routing'
 import {
   panelFinalPromptBlockModelOutputSchema,
   type PanelFinalPromptBlockModelOutput,
+  type ShotBlocking,
   type StoryboardConsistencySourceVideoBlock,
   type StoryboardConsistencySourceSnapshot,
   type StoryboardPanelPromptDraft,
@@ -106,7 +107,11 @@ function cinematographyShotFor(
   return shot
 }
 
-function cameraPlanMetadata(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number): Record<string, unknown> {
+function cameraPlanMetadata(
+  snapshot: StoryboardConsistencySourceSnapshot,
+  shotNumber: number,
+  shotBlocking: ShotBlocking,
+): Record<string, unknown> {
   const shot = cinematographyShotFor(snapshot, shotNumber)
   return {
     source: 'camera_plan',
@@ -123,6 +128,7 @@ function cameraPlanMetadata(snapshot: StoryboardConsistencySourceSnapshot, shotN
       axisAndEyeline: shot.axisAndEyeline,
       continuityIn: shot.continuityIn,
       continuityOut: shot.continuityOut,
+      shotBlocking,
     },
   }
 }
@@ -221,6 +227,7 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
   }))
   const finalPanels = blockOutputs.flatMap((block) => block.panels)
   validatePanelContract(input.snapshot, finalPanels)
+  const finalPanelByKey = new Map(finalPanels.map((panel) => [panelKey(panel), panel]))
   const panels = finalPanels
     .slice()
     .sort((left, right) => left.panelIndex - right.panelIndex)
@@ -230,12 +237,15 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
       sourceVideoBlockId: panel.sourceVideoBlockId,
       prompt: panel.finalPanelPrompt.trim(),
       videoPrompt: panel.finalVideoPrompt.trim(),
-      metadata: cameraPlanMetadata(input.snapshot, panel.sourceShotNumber),
+      shotBlocking: panel.shotBlocking,
+      metadata: cameraPlanMetadata(input.snapshot, panel.sourceShotNumber, panel.shotBlocking),
     }))
   const cameraPlanOutput = {
     strategy: 'spatial_text_blocking' as const,
     panels: panelContract(input.snapshot).map((panel) => {
       const shot = cinematographyShotFor(input.snapshot, panel.sourceShotNumber)
+      const generatedPanel = finalPanelByKey.get(panelKey(panel))
+      if (!generatedPanel) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_MISSING:${panel.sourceShotNumber}`)
       return {
         panelIndex: panel.panelIndex,
         sourceShotNumber: panel.sourceShotNumber,
@@ -251,7 +261,7 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
         aestheticIntent: shot.lighting,
         emotionalEffect: input.snapshot.directorDecoupage.shots.find((item) => item.shotNumber === panel.sourceShotNumber)?.dramaticPurpose ?? null,
         continuityNote: `${shot.continuityIn} ${shot.continuityOut}`.trim(),
-        shotBlocking: {},
+        shotBlocking: generatedPanel.shotBlocking,
       }
     }),
   }
