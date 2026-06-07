@@ -205,13 +205,11 @@ export function useGenerateCharacterImage() {
       characterId,
       appearanceId,
       appearanceIndex,
-      artStyle,
       count,
     }: {
       characterId: string
       appearanceId: string
       appearanceIndex: number
-      artStyle?: string
       count?: number
     }) => {
       return await requestJsonWithError<GenerateCharacterImageResponse>(`/api/assets/${characterId}/generate`, {
@@ -222,7 +220,6 @@ export function useGenerateCharacterImage() {
           kind: 'character',
           appearanceId,
           appearanceIndex,
-          artStyle,
           count,
         }),
       }, 'Failed to generate image')

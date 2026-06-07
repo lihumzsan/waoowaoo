@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import ApiConfigTab from './components/ApiConfigTab'
-import StylePresetsTab from './components/StylePresetsTab'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
@@ -144,7 +143,6 @@ export default function ProfilePage() {
     label: string
   }> = [
     { section: 'apiConfig', icon: 'settingsHexAlt', label: t('apiConfig') },
-    { section: 'stylePresets', icon: 'sparkles', label: t('stylePresets.title') },
     { section: 'billing', icon: 'receipt', label: t('billingRecords') },
   ]
 
@@ -219,8 +217,6 @@ export default function ProfilePage() {
 
               {activeSection === 'apiConfig' ? (
                 <ApiConfigTab />
-              ) : activeSection === 'stylePresets' ? (
-                <StylePresetsTab />
               ) : isCloud ? (
                 <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
                   <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">

@@ -21,6 +21,7 @@ function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): 
     title: editScript.title,
     logline: editScript.logline ?? null,
     durationSec: editScript.durationSec,
+    styleBible: editScript.styleBible ?? null,
     shots: editScript.shots.map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
@@ -50,10 +51,6 @@ function buildProjectContextPayload(projectContext: FinalRenderProjectContextInp
   if (!projectContext) return {}
   return {
     videoRatio: normalizeString(projectContext.videoRatio) || null,
-    artStyle: normalizeString(projectContext.artStyle) || null,
-    artStylePrompt: normalizeString(projectContext.artStylePrompt) || null,
-    visualStylePresetSource: normalizeString(projectContext.visualStylePresetSource) || null,
-    visualStylePresetId: normalizeString(projectContext.visualStylePresetId) || null,
   }
 }
 

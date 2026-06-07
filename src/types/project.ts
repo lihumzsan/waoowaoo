@@ -501,10 +501,6 @@ export interface ProjectWorkflowData {
   musicModel: string | null
   videoRatio: string | null
   capabilityOverrides?: CapabilitySelections | string | null
-  artStyle: string | null
-  artStylePrompt: string | null
-  visualStylePresetSource: string | null
-  visualStylePresetId: string | null
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null

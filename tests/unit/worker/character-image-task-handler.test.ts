@@ -1,12 +1,12 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHARACTER_ASSET_IMAGE_RATIO, CHARACTER_PROMPT_SUFFIX, getArtStylePrompt } from '@/lib/constants'
+import { CHARACTER_ASSET_IMAGE_RATIO, CHARACTER_PROMPT_SUFFIX } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
-  getProjectModels: vi.fn(async () => ({ characterModel: 'image-model-1', artStyle: 'realistic' })),
+  getProjectModels: vi.fn(async () => ({ characterModel: 'image-model-1' })),
   toSignedUrlIfCos: vi.fn((url: string | null | undefined) => (url ? `https://signed.example/${url}` : null)),
 }))
 
@@ -82,9 +82,7 @@ describe('worker character-image-task-handler behavior', () => {
     vi.clearAllMocks()
 
     prismaMock.project.findUnique.mockResolvedValue({
-      visualStylePresetSource: 'system',
-      visualStylePresetId: 'realistic',
-      artStyle: 'realistic',
+      id: 'project-1',
     })
 
     prismaMock.characterAppearance.findUnique.mockResolvedValue({
@@ -110,7 +108,7 @@ describe('worker character-image-task-handler behavior', () => {
   })
 
   it('characterModel not configured -> explicit error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '', artStyle: 'realistic' })
+    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '' })
     await expect(handleCharacterImageTask(buildJob({}))).rejects.toThrow('Character model not configured')
   })
 
@@ -128,8 +126,6 @@ describe('worker character-image-task-handler behavior', () => {
       prompt: string
       options?: { referenceImages?: string[]; aspectRatio?: string }
     }
-    const realisticStylePrompt = getArtStylePrompt('realistic', 'zh')
-
     expect(generationInput.prompt).toContain(CHARACTER_PROMPT_SUFFIX)
     expect(generationInput.prompt).toContain('画面固定为单张完整 16:9 横版角色资产板')
     expect(generationInput.prompt).toContain('左侧约 40% 宽度是角色主全身英雄照')
@@ -137,9 +133,10 @@ describe('worker character-image-task-handler behavior', () => {
     expect(generationInput.prompt).toContain('不能手持任何物品')
     expect(generationInput.prompt).toContain('右上约 35% 高度是标准三视图')
     expect(generationInput.prompt).toContain('右下约 65% 高度是 3 个横向排列的动作/语境样本')
-    expect(generationInput.prompt).toContain(realisticStylePrompt)
     expect(generationInput.prompt.split(CHARACTER_PROMPT_SUFFIX).length - 1).toBe(1)
-    expect(generationInput.prompt.split(realisticStylePrompt).length - 1).toBe(1)
+    expect(generationInput.prompt).not.toContain('美式漫画风格')
+    expect(generationInput.prompt).not.toContain('日式动漫风格')
+    expect(generationInput.prompt).not.toContain('写实电影风格')
     expect(utilsMock.toSignedUrlIfCos).toHaveBeenCalledWith('cos/primary-selected.png', 3600)
     expect(generationInput.options).toEqual(expect.objectContaining({
       referenceImages: ['normalized-primary-ref'],
@@ -182,17 +179,6 @@ describe('worker character-image-task-handler behavior', () => {
     expect(Object.prototype.hasOwnProperty.call(generationInput.options || {}, 'referenceImages')).toBe(false)
   })
 
-  it('payload artStyle overrides project artStyle in prompt', async () => {
-    const job = buildJob({ imageIndex: 0, artStyle: 'japanese-anime' })
-    await handleCharacterImageTask(job)
-
-    const generationInput = sharedMock.generateCleanImageToStorage.mock.calls[0]?.[0] as {
-      prompt: string
-    }
-    expect(generationInput.prompt).toContain(getArtStylePrompt('japanese-anime', 'zh'))
-    expect(generationInput.prompt).not.toContain(getArtStylePrompt('realistic', 'zh'))
-  })
-
   it('appends Style Bible block to final character asset image prompt', async () => {
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
@@ -211,9 +197,9 @@ describe('worker character-image-task-handler behavior', () => {
     expect(generationInput.prompt).toContain('负向约束：避免商业广告感，避免高反差大片感，避免炫技运镜。')
   })
 
-  it('invalid payload artStyle -> explicit error', async () => {
+  it('legacy payload artStyle -> explicit error', async () => {
     await expect(handleCharacterImageTask(buildJob({ imageIndex: 0, artStyle: 'noir' }))).rejects.toThrow(
-      'Invalid artStyle in IMAGE_CHARACTER payload',
+      'LEGACY_ART_STYLE_REMOVED',
     )
   })
 

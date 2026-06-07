@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { attachMediaFieldsToGlobalLocation } from '@/lib/media/attach'
-import { isArtStyleValue } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -21,6 +20,15 @@ function normalizeFolderFilter(value: unknown): string | null | undefined {
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
+}
+
+function assertNoLegacyArtStyle(body: Record<string, unknown>) {
+  if (!hasOwn(body, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 export function createAssetHubLocationLibraryOperations(): ProjectAgentOperationRegistryDraft {
@@ -81,21 +89,13 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       },
       inputSchema: z.object({
         name: z.string().min(1),
-        artStyle: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const name = normalizeString(body.name)
         if (!name) throw new ApiError('INVALID_PARAMS')
-
-        const normalizedArtStyle = normalizeString(body.artStyle)
-        if (!isArtStyleValue(normalizedArtStyle)) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_ART_STYLE',
-            message: 'artStyle is required and must be a supported value',
-          })
-        }
 
         const folderId = normalizeString(body.folderId) || null
         if (folderId) {
@@ -116,7 +116,6 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
             userId: ctx.userId,
             folderId,
             name,
-            artStyle: normalizedArtStyle,
             summary,
           },
         })

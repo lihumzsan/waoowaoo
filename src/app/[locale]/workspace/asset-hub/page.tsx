@@ -85,7 +85,6 @@ export default function AssetHubPage() {
         appearanceId: string
         appearanceIndex: number
         changeReason: string
-        artStyle: string | null
         description: string
     } | null>(null)
 
@@ -95,7 +94,6 @@ export default function AssetHubPage() {
         locationName: string
         summary: string
         imageIndex: number
-        artStyle: string | null
         description: string
     } | null>(null)
     const [propEditModal, setPropEditModal] = useState<{
@@ -262,7 +260,6 @@ export default function AssetHubPage() {
             id: string
             appearanceIndex: number
             changeReason: string
-            artStyle?: string | null
             description: string | null
         }
         setCharacterEditModal({
@@ -271,7 +268,6 @@ export default function AssetHubPage() {
             appearanceId: typedAppearance.id,
             appearanceIndex: typedAppearance.appearanceIndex,
             changeReason: typedAppearance.changeReason || t('appearanceLabel', { index: typedAppearance.appearanceIndex }),
-            artStyle: typedAppearance.artStyle || null,
             description: typedAppearance.description || ''
         })
     }
@@ -282,7 +278,6 @@ export default function AssetHubPage() {
             id: string
             name: string
             summary: string | null
-            artStyle: string | null
             images: Array<{ imageIndex: number; description: string | null }>
         }
         const image = typedLocation.images.find(img => img.imageIndex === imageIndex)
@@ -291,7 +286,6 @@ export default function AssetHubPage() {
             locationName: typedLocation.name,
             summary: typedLocation.summary || '',
             imageIndex: imageIndex,
-            artStyle: typedLocation.artStyle || null,
             description: image?.description || typedLocation.summary || ''
         })
     }
@@ -322,7 +316,6 @@ export default function AssetHubPage() {
                 id: characterEditModal.characterId,
                 appearanceId: characterEditModal.appearanceId,
                 appearanceIndex: characterEditModal.appearanceIndex,
-                artStyle: characterEditModal.artStyle || undefined,
                 count: characterGenerationCount,
             })
             refreshAssets()
@@ -338,7 +331,6 @@ export default function AssetHubPage() {
         try {
             await locationActions.generate({
                 id: locationEditModal.locationId,
-                artStyle: locationEditModal.artStyle || undefined,
                 count: locationGenerationCount,
             })
             refreshAssets()

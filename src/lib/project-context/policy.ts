@@ -2,7 +2,6 @@ import type { ProjectPolicyOverrideInput, ProjectPolicySnapshot } from './types'
 
 export const DEFAULT_PROJECT_POLICY_VALUES = {
   videoRatio: '9:16',
-  artStyle: 'american-comic',
 } as const
 
 export function resolveProjectContextPolicy(params: {
@@ -21,10 +20,6 @@ export function resolveProjectContextPolicy(params: {
       commandPolicy?.videoRatio
       || projectPolicy?.videoRatio
       || DEFAULT_PROJECT_POLICY_VALUES.videoRatio,
-    artStyle:
-      commandPolicy?.artStyle
-      || projectPolicy?.artStyle
-      || DEFAULT_PROJECT_POLICY_VALUES.artStyle,
     analysisModel:
       commandPolicy?.analysisModel !== undefined
         ? commandPolicy.analysisModel

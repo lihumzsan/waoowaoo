@@ -10,7 +10,7 @@ import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { ensureProjectLocationImageSlots } from '@/lib/image-generation/location-slots'
 import { hasCharacterAppearanceOutput, hasLocationImageOutput, hasPanelImageOutput } from '@/lib/task/has-output'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
-import { resolveProjectImageStyleSignatureForTask } from '@/lib/image-generation/style'
+import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
@@ -28,6 +28,15 @@ function toObject(value: unknown): Record<string, unknown> {
 function toNumberOrNull(value: unknown): number | null {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function assertNoLegacyArtStyle(input: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
@@ -61,6 +70,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
       }),
       outputSchema: taskSubmitOperationOutputSchema,
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(toObject(input))
         const count = input.type === 'character'
           ? normalizeImageGenerationCount('character', (input as Record<string, unknown>).count)
           : normalizeImageGenerationCount('location', (input as Record<string, unknown>).count)
@@ -119,12 +129,9 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const locale = resolveRequiredTaskLocale(ctx.request, billingPayload)
-        const styleSignature = await resolveProjectImageStyleSignatureForTask({
+        const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
           projectId: ctx.projectId,
-          userId: ctx.userId,
-          locale,
-          artStyleOverride: toObject(input).artStyle,
-          invalidOverrideMessage: 'Invalid artStyle in regenerate_group payload',
+          episodeId: normalizeString(toObject(input).episodeId) || null,
         })
 
         return await submitOperationTask({
@@ -142,7 +149,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
             intent: 'regenerate',
             hasOutputAtStart,
           }),
-          dedupeKey: `regenerate_group:${targetType}:${targetId}:${count}:${styleSignature}`,
+          dedupeKey: `regenerate_group:${targetType}:${targetId}:${count}:${styleBibleSignature}`,
           billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.REGENERATE_GROUP, billingPayload),
           decoratePayload: false,
         })
@@ -175,6 +182,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       outputSchema: taskSubmitOperationOutputSchema,
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(toObject(input))
         const imageIndex = (input as Record<string, unknown>).imageIndex
         const parsedImageIndex = toNumberOrNull(imageIndex)
         if (parsedImageIndex === null) {
@@ -218,12 +226,9 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const locale = resolveRequiredTaskLocale(ctx.request, billingPayload)
-        const styleSignature = await resolveProjectImageStyleSignatureForTask({
+        const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
           projectId: ctx.projectId,
-          userId: ctx.userId,
-          locale,
-          artStyleOverride: toObject(input).artStyle,
-          invalidOverrideMessage: 'Invalid artStyle in regenerate_single_image payload',
+          episodeId: normalizeString(toObject(input).episodeId) || null,
         })
 
         return await submitOperationTask({
@@ -241,7 +246,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
             intent: 'regenerate',
             hasOutputAtStart,
           }),
-          dedupeKey: `${taskType}:${targetId}:single:${parsedImageIndex}:${styleSignature}`,
+          dedupeKey: `${taskType}:${targetId}:single:${parsedImageIndex}:${styleBibleSignature}`,
           billingInfo: buildDefaultTaskBillingInfo(taskType, billingPayload),
           decoratePayload: false,
         })

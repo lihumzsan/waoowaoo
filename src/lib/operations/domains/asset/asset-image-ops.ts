@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import { ApiError } from '@/lib/api-errors'
 import { submitAssetGenerateTask, submitAssetModifyTask } from '@/lib/assets/services/asset-actions'
 import { createMutationBatch } from '@/lib/mutation-batch/service'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
@@ -18,6 +19,15 @@ function normalizeString(value: unknown): string {
 function resolveLocaleFromContext(locale?: unknown): string {
   const normalized = normalizeString(locale)
   return normalized || 'zh'
+}
+
+function assertNoLegacyArtStyle(input: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 const modifyCharacterImageInputSchema = z.object({
@@ -136,7 +146,6 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         appearanceIndex: z.number().int().min(0).max(20).optional(),
         count: z.number().int().positive().max(6).optional(),
         imageIndex: z.number().int().min(0).max(20).optional(),
-        artStyle: z.string().optional(),
       }).refine((value) => Boolean(value.characterId || value.characterName), {
         message: 'characterId or characterName is required',
         path: ['characterId'],
@@ -146,6 +155,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         appearanceId: z.string().nullable(),
       }),
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const locale = resolveLocaleFromContext(ctx.context.locale)
 
         let characterId = normalizeString(input.characterId)
@@ -197,7 +207,6 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
           ...(typeof input.appearanceIndex === 'number' ? { appearanceIndex: input.appearanceIndex } : {}),
           ...(typeof input.count === 'number' ? { count: input.count } : {}),
           ...(typeof input.imageIndex === 'number' ? { imageIndex: input.imageIndex } : {}),
-          ...(normalizeString(input.artStyle) ? { artStyle: normalizeString(input.artStyle) } : {}),
         }
 
         const result = await submitAssetGenerateTask({
@@ -275,7 +284,6 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         locationName: z.string().min(1).optional(),
         count: z.number().int().positive().max(6).optional(),
         imageIndex: z.number().int().min(0).max(50).optional(),
-        artStyle: z.string().optional(),
       }).refine((value) => Boolean(value.locationId || value.locationName), {
         message: 'locationId or locationName is required',
         path: ['locationId'],
@@ -284,6 +292,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         locationId: z.string().min(1),
       }),
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const locale = resolveLocaleFromContext(ctx.context.locale)
 
         let locationId = normalizeString(input.locationId)
@@ -323,7 +332,6 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
           },
           ...(typeof input.count === 'number' ? { count: input.count } : {}),
           ...(typeof input.imageIndex === 'number' ? { imageIndex: input.imageIndex } : {}),
-          ...(normalizeString(input.artStyle) ? { artStyle: normalizeString(input.artStyle) } : {}),
         }
 
         const result = await submitAssetGenerateTask({

@@ -388,7 +388,6 @@ export const createEditScriptRequestSchema = z.object({
   prompt: z.never().optional(),
   screenplayId: z.string().trim().min(1).optional(),
   videoRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS).optional(),
-  artStyle: z.string().trim().min(1).optional(),
 })
 
 export const createEditDirectorDecoupageRequestSchema = z.object({

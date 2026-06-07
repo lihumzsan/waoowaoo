@@ -252,7 +252,6 @@ export async function assembleProjectContext(params: {
       projectId: params.projectId,
       episodeId: params.episodeId || null,
       videoRatio: project.videoRatio,
-      artStyle: project.artStyle,
       analysisModel: project.analysisModel,
       overrides: {},
     },

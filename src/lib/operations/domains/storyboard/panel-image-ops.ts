@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import { ApiError } from '@/lib/api-errors'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
@@ -12,7 +13,7 @@ import {
 } from '@/lib/config-service'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
-import { resolveProjectImageStyleSignatureForTask } from '@/lib/image-generation/style'
+import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
 import { createMutationBatch } from '@/lib/mutation-batch/service'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -95,6 +96,15 @@ function createReferenceSignature(input: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function assertNoLegacyArtStyle(input: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 function createPanelVariantId(): string {
@@ -201,6 +211,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         panelId: z.string().min(1),
       }),
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const locale = resolveLocaleFromContext(ctx.context.locale)
 
         let panelId = normalizeString(input.panelId)
@@ -320,11 +331,9 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         const hasOutputAtStart = await hasPanelImageOutput(panelId)
 
         const taskLocale = resolveRequiredTaskLocale(ctx.request, body)
-        const styleSignature = await resolveProjectImageStyleSignatureForTask({
+        const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
           projectId: ctx.projectId,
-          userId: ctx.userId,
-          locale: taskLocale,
-          invalidOverrideMessage: 'Invalid artStyle in image_panel payload',
+          storyboardId: normalizeString(input.storyboardId) || null,
         })
 
         const result = await submitOperationTask({
@@ -342,7 +351,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
             intent: 'regenerate',
             hasOutputAtStart,
           }),
-          dedupeKey: `image_panel:${panelId}:${candidateCount}:${styleSignature}:${referenceSignature}`,
+          dedupeKey: `image_panel:${panelId}:${candidateCount}:${styleBibleSignature}:${referenceSignature}`,
           billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload),
           decoratePayload: false,
         })
@@ -408,6 +417,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         panelId: z.string().min(1),
       }),
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const locale = resolveLocaleFromContext(ctx.context.locale)
         const storyboardId = input.storyboardId.trim()
         const insertAfterPanelId = input.insertAfterPanelId.trim()
@@ -516,11 +526,9 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         let result: Awaited<ReturnType<typeof submitOperationTask>>
         try {
           const taskLocale = resolveRequiredTaskLocale(ctx.request, billingPayload)
-          const styleSignature = await resolveProjectImageStyleSignatureForTask({
+          const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
             projectId: ctx.projectId,
-            userId: ctx.userId,
-            locale: taskLocale,
-            invalidOverrideMessage: 'Invalid artStyle in panel_variant payload',
+            storyboardId,
           })
 
           result = await submitOperationTask({
@@ -535,7 +543,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
             source: ctx.source,
             confirmed: input.confirmed === true,
             payload: billingPayload,
-            dedupeKey: `panel_variant:${storyboardId}:${insertAfterPanelId}:${sourcePanelId}:${styleSignature}`,
+            dedupeKey: `panel_variant:${storyboardId}:${insertAfterPanelId}:${sourcePanelId}:${styleBibleSignature}`,
             billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.PANEL_VARIANT, billingPayload),
             decoratePayload: false,
           })

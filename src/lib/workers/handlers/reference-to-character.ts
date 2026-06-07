@@ -9,7 +9,6 @@ import {
   CHARACTER_IMAGE_BANANA_RATIO,
   addCharacterPromptSuffix,
 } from '@/lib/constants'
-import { resolveProjectImageStyleForTask, resolveSystemImageStylePrompt } from '@/lib/image-generation/style'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import { reportTaskProgress } from '@/lib/workers/shared'
@@ -116,7 +115,9 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
   const characterId = readString(payload.characterId)
   const extractOnly = readBoolean(payload.extractOnly)
   const customDescription = readString(payload.customDescription)
-  const artStyle = readString(payload.artStyle)
+  if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
+    throw new Error('LEGACY_ART_STYLE_REMOVED')
+  }
 
   if (isBackgroundJob && (!characterId || !appearanceId)) {
     throw new Error('Missing characterId or appearanceId for background job')
@@ -167,28 +168,11 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
     }
   }
 
-  const artStylePrompt = isProject
-    ? (await resolveProjectImageStyleForTask({
-        projectId: job.data.projectId,
-        userId: job.data.userId,
-        locale: job.data.locale,
-        artStyleOverride: artStyle,
-        invalidOverrideMessage: 'Invalid artStyle in REFERENCE_TO_CHARACTER payload',
-      })).prompt
-    : resolveSystemImageStylePrompt({
-        artStyle,
-        locale: job.data.locale,
-        errorMessage: 'Invalid artStyle in ASSET_HUB_REFERENCE_TO_CHARACTER payload',
-      })
-
   const basePrompt = customDescription || buildPrompt({
     promptId: PROMPT_IDS.CHARACTER_REFERENCE_TO_SHEET,
     locale: job.data.locale,
   })
-  let prompt = addCharacterPromptSuffix(basePrompt)
-  if (artStylePrompt) {
-    prompt = `${prompt}，${artStylePrompt}`
-  }
+  const prompt = addCharacterPromptSuffix(basePrompt)
 
   const useReferenceImages = !customDescription
   const keyPrefix = isAssetHub ? 'ref-char' : `proj-ref-char-${job.data.projectId}`

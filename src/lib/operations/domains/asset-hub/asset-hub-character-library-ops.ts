@@ -3,7 +3,7 @@ import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { attachMediaFieldsToGlobalCharacter } from '@/lib/media/attach'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
-import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue } from '@/lib/constants'
+import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -36,6 +36,15 @@ function parseReferenceImages(body: Record<string, unknown>): string[] {
   if (urls.length > 0) return urls.slice(0, 5)
   const single = normalizeString(body.referenceImageUrl)
   return single ? [single] : []
+}
+
+function assertNoLegacyArtStyle(body: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperationRegistryDraft {
@@ -96,24 +105,16 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       },
       inputSchema: z.object({
         name: z.string().min(1),
-        artStyle: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
         const taskLocale = resolveTaskLocale(ctx.request, body)
         const bodyMeta = isRecord(body.meta) ? body.meta : {}
+        assertNoLegacyArtStyle(body)
 
         const name = normalizeString(body.name)
         if (!name) throw new ApiError('INVALID_PARAMS')
-
-        const normalizedArtStyle = normalizeString(body.artStyle)
-        if (!isArtStyleValue(normalizedArtStyle)) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_ART_STYLE',
-            message: 'artStyle is required and must be a supported value',
-          })
-        }
 
         const folderId = normalizeString(body.folderId) || null
         if (folderId) {
@@ -156,7 +157,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
             characterId: character.id,
             appearanceIndex: PRIMARY_APPEARANCE_INDEX,
             changeReason: '初始形象',
-            artStyle: normalizedArtStyle,
             description: descriptionText,
             descriptions: JSON.stringify([descriptionText]),
             imageUrl: initialImageUrl,
@@ -179,7 +179,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
             appearanceId: appearance.id,
             count,
             isBackgroundJob: true,
-            artStyle: normalizedArtStyle,
             ...(customDescription ? { customDescription } : {}),
             ...(taskLocale ? { locale: taskLocale } : {}),
             meta: {

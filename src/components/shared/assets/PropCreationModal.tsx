@@ -35,7 +35,6 @@ export function PropCreationModal({
   const [name, setName] = useState('')
   const [summary, setSummary] = useState('')
   const [description, setDescription] = useState('')
-  const [artStyle, setArtStyle] = useState('american-comic')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingState = isSubmitting
     ? resolveTaskPresentationState({
@@ -65,7 +64,6 @@ export function PropCreationModal({
         summary: summary.trim(),
         description: description.trim(),
         folderId,
-        ...(mode === 'asset-hub' ? { artStyle } : {}),
       }) as { assetId?: string }
       if (generateAfterCreate) {
         if (!result.assetId) {
@@ -73,7 +71,6 @@ export function PropCreationModal({
         }
         await actions.generate({
           id: result.assetId,
-          ...(mode === 'asset-hub' ? { artStyle } : {}),
           count,
         })
       }

@@ -189,7 +189,6 @@
         "generatingAutoClose": "Generating image, will close automatically when done...",
         "aiLocationTip": "Enter what you want to modify, AI will adjust the scene description",
         "aiDesignPlaceholderLocation": "e.g. An ancient magical library, towering bookshelves, dim candlelight, mysterious atmosphere...",
-        "artStyle": "Art Style",
         "generate": "Generate",
         "introduction": "Character Introduction",
         "introductionPlaceholder": "e.g.: The protagonist; 'I' refers to her. Others call her 'Snow' or 'Sister Snow'...",

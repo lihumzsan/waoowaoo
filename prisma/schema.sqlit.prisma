@@ -534,10 +534,6 @@ model Project {
   musicModel         String?
   videoRatio         String                 @default("9:16")
   globalAssetText    String?
-  artStyle           String                 @default("american-comic")
-  artStylePrompt     String?
-  visualStylePresetSource String            @default("system")
-  visualStylePresetId String                @default("american-comic")
   characterModel     String?
   locationModel      String?
   storyboardModel    String?
@@ -623,28 +619,9 @@ model User {
   globalVoices       GlobalVoice[]
   tasks              Task[]
   taskEvents         TaskEvent[]
-  stylePresets       UserStylePreset[]
   inviteRedemptions  InviteRedemption[]
 
   @@map("user")
-}
-
-model UserStylePreset {
-  id         String    @id @default(uuid())
-  userId     String
-  kind       String
-  name       String
-  summary    String?
-  config     String
-  version    Int       @default(1)
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @default(now()) @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, kind])
-  @@map("user_style_presets")
 }
 
 model UserPreference {
@@ -665,7 +642,6 @@ model UserPreference {
   videoConcurrency Int? // 视频流程并发上限
   videoRatio      String   @default("9:16")
   videoResolution String   @default("720p")
-  artStyle        String   @default("american-comic")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now()) @updatedAt
   imageResolution String   @default("2K")
@@ -945,7 +921,6 @@ model GlobalCharacterAppearance {
   characterId          String
   appearanceIndex      Int
   changeReason         String   @default("default")
-  artStyle             String?
   description          String?
   descriptions         String?
   imageUrl             String?
@@ -977,7 +952,6 @@ model GlobalLocation {
   userId    String
   folderId  String?
   name      String
-  artStyle  String?
   summary   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

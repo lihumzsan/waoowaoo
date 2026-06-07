@@ -13,7 +13,7 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { resolveProjectImageStyleSignatureForTask } from '@/lib/image-generation/style'
+import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
 import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 function parseReferenceImages(body: Record<string, unknown>): string[] {
@@ -44,6 +44,19 @@ const EFFECTS_BILLABLE_LONG_RUNNING = {
   externalSideEffects: true,
   longRunning: true,
 } as const
+
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function assertNoLegacyArtStyle(input: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
+}
 
 export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
   return {
@@ -254,6 +267,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const referenceImages = parseReferenceImages(body)
         if (referenceImages.length === 0) {
           throw new ApiError('INVALID_PARAMS')
@@ -270,13 +284,9 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
 
         const targetType = appearanceId ? 'CharacterAppearance' : 'Project'
         const targetId = appearanceId || characterId || ctx.projectId
-        const locale = resolveRequiredTaskLocale(ctx.request, body)
-        const styleSignature = await resolveProjectImageStyleSignatureForTask({
+        const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
           projectId: ctx.projectId,
-          userId: ctx.userId,
-          locale,
-          artStyleOverride: body.artStyle,
-          invalidOverrideMessage: 'Invalid artStyle in reference_to_character payload',
+          episodeId: normalizeString(body.episodeId) || null,
         })
 
         return await submitOperationTask({
@@ -290,7 +300,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           source: ctx.source,
           confirmed: body.confirmed === true,
           payload: body,
-          dedupeKey: `reference_to_character:${targetId}:${count}:${styleSignature}`,
+          dedupeKey: `reference_to_character:${targetId}:${count}:${styleBibleSignature}`,
         })
       },
     }),

@@ -24,7 +24,6 @@ export const AI_PROMPT_IDS = {
   SHOT_VARIANT_GENERATE: 'shot-variant-generate',
   PANEL_IMAGE_GENERATE: 'panel-image-generate',
   IMAGE_UPDATE_SHOT_PROMPT: 'image-update-shot-prompt',
-  DESIGN_VISUAL_STYLE_PRESET: 'design-visual-style-preset',
   VOICE_GENERATE_LINES: 'voice-generate-lines',
   MUSIC_FINAL_RENDER_BGM: 'music-final-render-bgm',
   EDIT_SCRIPT_STYLE_BIBLE: 'edit-script-style-bible',

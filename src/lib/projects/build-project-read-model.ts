@@ -37,10 +37,6 @@ type ProjectWorkflowSource = {
   musicModel?: string | null
   videoRatio?: string | null
   capabilityOverrides?: ProjectWorkflowData['capabilityOverrides']
-  artStyle?: string | null
-  artStylePrompt?: string | null
-  visualStylePresetSource?: string | null
-  visualStylePresetId?: string | null
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null
@@ -80,10 +76,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     musicModel: source.musicModel ?? null,
     videoRatio: source.videoRatio ?? null,
     capabilityOverrides: source.capabilityOverrides ?? null,
-    artStyle: source.artStyle ?? null,
-    artStylePrompt: source.artStylePrompt ?? null,
-    visualStylePresetSource: source.visualStylePresetSource ?? null,
-    visualStylePresetId: source.visualStylePresetId ?? null,
     videoResolution: source.videoResolution ?? null,
     imageResolution: source.imageResolution ?? null,
     lastEpisodeId: source.lastEpisodeId ?? null,

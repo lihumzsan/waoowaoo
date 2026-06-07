@@ -4,14 +4,12 @@ export interface ProjectPolicySnapshot {
   projectId: string
   episodeId?: string | null
   videoRatio: string
-  artStyle: string
   analysisModel?: string | null
   overrides: Record<string, unknown>
 }
 
 export interface ProjectPolicyOverrideInput {
   videoRatio?: string
-  artStyle?: string
   analysisModel?: string | null
   overrides?: Record<string, unknown>
 }

@@ -44,9 +44,6 @@ export function useWorkspaceProjectSnapshot({
       musicModel: project.musicModel ?? undefined,
       videoRatio: project.videoRatio ?? undefined,
       capabilityOverrides,
-      artStyle: project.artStyle ?? undefined,
-      visualStylePresetSource: project.visualStylePresetSource ?? undefined,
-      visualStylePresetId: project.visualStylePresetId ?? undefined,
     }
   }, [episode?.novelText, episode?.storyboards, project])
 }

@@ -3,6 +3,7 @@ import type { Job } from 'bullmq'
 import { executeAiTextStep, generateMusic } from '@/lib/ai-exec/engine'
 import { prisma } from '@/lib/prisma'
 import { safeParseJsonObject } from '@/lib/json-repair'
+import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
@@ -111,6 +112,7 @@ async function buildEditScript(episodeId: string): Promise<FinalRenderEditScript
       title: true,
       logline: true,
       durationSec: true,
+      styleBibleJson: true,
       shotsJson: true,
       videoBlocksJson: true,
     },
@@ -124,6 +126,7 @@ async function buildEditScript(episodeId: string): Promise<FinalRenderEditScript
     title: script.title,
     logline: script.logline,
     durationSec: script.durationSec,
+    styleBible: parseNullableEditScriptStyleBible(script.styleBibleJson),
     shots,
     videoBlocks: parseFinalRenderEditScriptVideoBlocks({
       value: script.videoBlocksJson,
@@ -231,10 +234,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
         select: {
           analysisModel: true,
           videoRatio: true,
-          artStyle: true,
-          artStylePrompt: true,
-          visualStylePresetSource: true,
-          visualStylePresetId: true,
         },
       }),
       prisma.projectEpisode.findFirst({
@@ -297,10 +296,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
           editScript,
           projectContext: {
             videoRatio: project.videoRatio,
-            artStyle: project.artStyle,
-            artStylePrompt: project.artStylePrompt,
-            visualStylePresetSource: project.visualStylePresetSource,
-            visualStylePresetId: project.visualStylePresetId,
           },
           clips,
           totalDurationSeconds: durationSeconds,

@@ -56,6 +56,13 @@ export const POST = apiHandler(async (
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
   }
+  if (body && typeof body === 'object' && !Array.isArray(body) && Object.prototype.hasOwnProperty.call(body, 'artStyle')) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'LEGACY_ART_STYLE_REMOVED',
+      field: 'artStyle',
+      message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+    })
+  }
 
   const result = await submitOperationTask({
     request,
@@ -72,7 +79,6 @@ export const POST = apiHandler(async (
       episodeId: parsed.data.episodeId,
       ...(parsed.data.screenplayId ? { screenplayId: parsed.data.screenplayId } : {}),
       ...(parsed.data.videoRatio ? { videoRatio: parsed.data.videoRatio } : {}),
-      ...(parsed.data.artStyle ? { artStyle: parsed.data.artStyle } : {}),
       displayMode: 'detail',
     },
     dedupeKey: `edit_script_generate:${projectId}:${parsed.data.episodeId}`,

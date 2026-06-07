@@ -77,12 +77,10 @@ export function useGenerateProjectLocationImage(projectId: string) {
         mutationFn: async ({
             locationId,
             imageIndex,
-            artStyle,
             count,
         }: {
             locationId: string
             imageIndex?: number
-            artStyle?: string
             count?: number
         }) => {
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
@@ -92,7 +90,6 @@ export function useGenerateProjectLocationImage(projectId: string) {
                     projectId,
                     locationId,
                     imageIndex,
-                    artStyle,
                     count,
                 }))
             }, 'Failed to generate image')
@@ -120,7 +117,6 @@ export function buildProjectLocationGenerateImageBody(input: {
     projectId: string
     locationId: string
     imageIndex?: number
-    artStyle?: string
     count?: number
 }) {
     return {
@@ -128,7 +124,6 @@ export function buildProjectLocationGenerateImageBody(input: {
         kind: 'location' as const,
         projectId: input.projectId,
         imageIndex: input.imageIndex,
-        ...(input.artStyle ? { artStyle: input.artStyle } : {}),
         count: input.count,
     }
 }

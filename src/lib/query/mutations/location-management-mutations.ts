@@ -248,7 +248,6 @@ export function useCreateProjectLocation(projectId: string) {
         mutationFn: async (payload: {
             name: string
             description: string
-            artStyle?: string
             count?: number
         }) =>
             await requestJsonWithError(

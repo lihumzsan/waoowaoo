@@ -58,7 +58,6 @@ const messages = {
     profile: '设置中心',
     settingsMenu: {
       apiConfig: 'API 配置',
-      stylePresets: '我的风格',
       billingRecords: '扣费记录',
     },
     downloadLogs: '下载日志',
@@ -125,11 +124,11 @@ describe('Navbar compact split navigation', () => {
 
     expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('href="/profile?section=apiConfig"')
-    expect(html).toContain('href="/profile?section=stylePresets"')
+    expect(html).not.toContain('href="/profile?section=stylePresets"')
+    expect(html).not.toContain('我的风格')
     expect(html).toContain('href="/profile?section=billing"')
     expect(html).toContain('检查更新')
-    expect(html.indexOf('API 配置')).toBeLessThan(html.indexOf('我的风格'))
-    expect(html.indexOf('我的风格')).toBeLessThan(html.indexOf('扣费记录'))
+    expect(html.indexOf('API 配置')).toBeLessThan(html.indexOf('扣费记录'))
   })
 
   it('does not keep a persistent selected state on the current navbar route', () => {

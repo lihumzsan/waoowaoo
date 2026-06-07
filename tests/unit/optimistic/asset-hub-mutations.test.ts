@@ -69,7 +69,6 @@ interface CreateCharacterMutation {
     variables: {
       name: string
       description: string
-      artStyle: string
       folderId?: string | null
       generateFromReference?: boolean
     },
@@ -91,7 +90,6 @@ function buildGlobalCharacter(selectedIndex: number | null): GlobalCharacter {
       id: 'appearance-1',
       appearanceIndex: 0,
       changeReason: 'default',
-      artStyle: 'realistic',
       description: null,
       descriptionSource: null,
       imageUrl: selectedIndex === null ? null : `img-${selectedIndex}`,
@@ -110,7 +108,6 @@ function buildGlobalLocation(id: string): GlobalLocation {
     name: `Location ${id}`,
     summary: null,
     folderId: 'folder-1',
-    artStyle: 'realistic',
     images: [{
       id: `${id}-img-0`,
       imageIndex: 0,
@@ -243,7 +240,7 @@ describe('asset hub optimistic mutations', () => {
     const mutation = useCreateAssetHubCharacter() as unknown as CreateCharacterMutation
     mutation.onSuccess(
       { character: buildGlobalCharacter(null) },
-      { name: 'Hero', description: 'desc', artStyle: 'realistic', folderId: 'folder-1' },
+      { name: 'Hero', description: 'desc', folderId: 'folder-1' },
     )
 
     expect(queryClient.getQueryData<GlobalCharacter[]>(allCharactersKey)?.[0]?.id).toBe('character-1')
@@ -264,7 +261,6 @@ describe('asset hub optimistic mutations', () => {
       {
         name: 'Hero',
         description: 'desc',
-        artStyle: 'realistic',
         folderId: 'folder-1',
         generateFromReference: true,
       },

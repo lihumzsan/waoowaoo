@@ -27,7 +27,6 @@ interface UseCharacterCreationSubmitParams {
   name: string
   description: string
   aiInstruction: string
-  artStyle: string
   referenceImagesBase64: string[]
   referenceSubMode: 'direct' | 'extract'
   isSubAppearance: boolean
@@ -51,7 +50,6 @@ export function useCharacterCreationSubmit({
   name,
   description,
   aiInstruction,
-  artStyle,
   referenceImagesBase64,
   referenceSubMode,
   isSubAppearance,
@@ -157,7 +155,6 @@ export function useCharacterCreationSubmit({
           name: name.trim(),
           description: finalDescription || t('character.defaultDescription', { name: name.trim() }),
           folderId: folderId ?? null,
-          artStyle,
           generateFromReference: true,
           referenceImageUrls,
           customDescription: referenceSubMode === 'extract' ? finalDescription : undefined,
@@ -184,7 +181,6 @@ export function useCharacterCreationSubmit({
       setIsSubmitting(false)
     }
   }, [
-    artStyle,
     createAssetHubCharacter,
     createProjectCharacter,
     description,
@@ -254,7 +250,6 @@ export function useCharacterCreationSubmit({
           name: name.trim(),
           description: description.trim(),
           folderId: folderId ?? null,
-          artStyle,
         })
       } else {
         await createProjectCharacter.mutateAsync({
@@ -272,7 +267,6 @@ export function useCharacterCreationSubmit({
       setIsSubmitting(false)
     }
   }, [
-    artStyle,
     changeReason,
     createAssetHubCharacter,
     createProjectAppearance,
@@ -304,7 +298,6 @@ export function useCharacterCreationSubmit({
           name: name.trim(),
           description: description.trim(),
           folderId: folderId ?? null,
-          artStyle,
         }) as CreatedCharacterResponse
         const createdCharacterId = result.character?.id
         const createdAppearanceId = result.character?.appearances?.[0]?.id
@@ -316,7 +309,6 @@ export function useCharacterCreationSubmit({
           characterId: createdCharacterId,
           appearanceId: createdAppearanceId,
           appearanceIndex: createdAppearanceIndex,
-          artStyle,
           count: characterGenerationCount,
         })
       } else {
@@ -346,7 +338,6 @@ export function useCharacterCreationSubmit({
       setIsSubmitting(false)
     }
   }, [
-    artStyle,
     characterGenerationCount,
     createAssetHubCharacter,
     createProjectCharacter,

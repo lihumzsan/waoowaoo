@@ -14,7 +14,6 @@ export interface GlobalCharacterAppearance {
     id: string
     appearanceIndex: number
     changeReason: string
-    artStyle: string | null
     description: string | null
     descriptionSource: string | null
     imageUrl: string | null
@@ -61,7 +60,6 @@ export interface GlobalLocation {
     id: string
     name: string
     summary: string | null
-    artStyle: string | null
     folderId: string | null
     images: GlobalLocationImage[]
 }
@@ -70,7 +68,6 @@ export interface GlobalProp {
     id: string
     name: string
     summary: string | null
-    artStyle: string | null
     folderId: string | null
     images: GlobalLocationImage[]
 }
@@ -117,7 +114,6 @@ export function useGlobalCharacters(folderId?: string | null) {
                 id: variant.id,
                 appearanceIndex: variant.index,
                 changeReason: variant.label,
-                artStyle: null,
                 description: variant.description,
                 descriptionSource: null,
                 imageUrl: variant.renders.find((render) => render.isSelected)?.imageUrl
@@ -157,7 +153,6 @@ export function useGlobalLocations(folderId?: string | null) {
             id: asset.id,
             name: asset.name,
             summary: asset.summary,
-            artStyle: null,
             folderId: asset.folderId,
             images: asset.variants.map((variant) => {
                 const render = variant.renders[0] ?? null
@@ -195,7 +190,6 @@ export function useGlobalProps(folderId?: string | null) {
             id: asset.id,
             name: asset.name,
             summary: asset.summary,
-            artStyle: null,
             folderId: asset.folderId,
             images: asset.variants.map((variant) => {
                 const render = variant.renders[0] ?? null

@@ -43,7 +43,6 @@ interface Location {
   id: string
   name: string
   summary: string | null
-  artStyle?: string | null
   folderId: string | null
   images: LocationImage[]
 }
@@ -127,7 +126,6 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const handleGenerate = (count = generationCount) => {
     generateImage.mutate({
       locationId: location.id,
-      artStyle: location.artStyle || undefined,
       count,
     }, {
       onError: (error) => alert(error.message || t('generateFailed'))

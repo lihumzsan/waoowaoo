@@ -14,7 +14,7 @@ import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue, resolv
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { deleteObject, uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
-import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue, type ArtStyleValue, removeLocationPromptSuffix } from '@/lib/constants'
+import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 import {
@@ -73,6 +73,15 @@ function toObject(value: unknown): Record<string, unknown> {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function assertNoLegacyArtStyle(input: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 function resolveStoryboardGroupInsertCreatedAt<T extends { createdAt: Date }>(
@@ -176,12 +185,12 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         generateFromReference: z.boolean().optional(),
         customDescription: z.string().optional(),
         count: z.number().int().positive().max(6).optional(),
-        artStyle: z.string().optional(),
         meta: z.record(z.unknown()).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const taskLocale = resolveTaskLocale(ctx.request, body)
         const bodyMeta = toObject(body.meta)
         const acceptLanguage = ctx.request.headers.get('accept-language') || ''
@@ -194,17 +203,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           ? normalizeImageGenerationCount('reference-to-character', input.count)
           : normalizeImageGenerationCount('character', input.count)
 
-        let artStyle: ArtStyleValue | undefined
-        if (Object.prototype.hasOwnProperty.call(input, 'artStyle')) {
-          const parsedArtStyle = normalizeString(input.artStyle)
-          if (!isArtStyleValue(parsedArtStyle)) {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-          artStyle = parsedArtStyle
-        }
         const referenceImageUrls = Array.isArray(input.referenceImageUrls)
           ? input.referenceImageUrls.map((item: unknown) => normalizeString(item)).filter(Boolean)
           : []
@@ -258,7 +256,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               appearanceId: appearance.id,
               count,
               isBackgroundJob: true,
-              ...(artStyle ? { artStyle } : {}),
               customDescription: customDescription || undefined,
               locale: taskLocale || undefined,
               meta: {
@@ -691,26 +688,16 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         description: z.string().min(1),
         summary: z.string().optional(),
         count: z.number().int().positive().max(6).optional(),
-        artStyle: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
         const summary = normalizeString(input.summary)
         const count = Object.prototype.hasOwnProperty.call(input, 'count')
           ? normalizeImageGenerationCount('location', (input as Record<string, unknown>).count)
           : 1
-
-        if (Object.prototype.hasOwnProperty.call(input, 'artStyle')) {
-          const parsedArtStyle = normalizeString(input.artStyle)
-          if (parsedArtStyle && !isArtStyleValue(parsedArtStyle)) {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-        }
 
         if (!name || !description) {
           throw new ApiError('INVALID_PARAMS')

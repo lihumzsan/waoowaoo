@@ -1,12 +1,12 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, getArtStylePrompt } from '@/lib/constants'
+import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
-  getProjectModels: vi.fn(async () => ({ locationModel: 'location-model-1', analysisModel: 'analysis-model-1', artStyle: 'japanese-anime' })),
+  getProjectModels: vi.fn(async () => ({ locationModel: 'location-model-1', analysisModel: 'analysis-model-1' })),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -93,9 +93,7 @@ describe('worker location-image-task-handler behavior', () => {
     vi.clearAllMocks()
 
     prismaMock.project.findUnique.mockResolvedValue({
-      visualStylePresetSource: 'system',
-      visualStylePresetId: 'japanese-anime',
-      artStyle: 'japanese-anime',
+      id: 'project-1',
     })
 
     prismaMock.locationImage.findUnique.mockResolvedValue({
@@ -123,18 +121,17 @@ describe('worker location-image-task-handler behavior', () => {
   })
 
   it('locationModel missing -> explicit error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: '', analysisModel: 'analysis-model-1', artStyle: 'japanese-anime' })
+    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: '', analysisModel: 'analysis-model-1' })
     await expect(handleLocationImageTask(buildJob({}))).rejects.toThrow('Location model not configured')
   })
 
   it('analysis model missing for location -> explicit spatial profile error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: 'location-model-1', analysisModel: '', artStyle: 'japanese-anime' })
+    utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: 'location-model-1', analysisModel: '' })
     await expect(handleLocationImageTask(buildJob({ imageIndex: 0 }))).rejects.toThrow('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
   })
 
   it('success path -> generates and persists concrete location image url', async () => {
     const result = await handleLocationImageTask(buildJob({ imageIndex: 0 }))
-    const animeStylePrompt = getArtStylePrompt('japanese-anime', 'zh')
 
     expect(result).toEqual({
       updated: 1,
@@ -163,7 +160,9 @@ describe('worker location-image-task-handler behavior', () => {
     if (!generationCall) throw new Error('expected generateCleanImageToStorage call')
     const generationInput = generationCall[0]
     expect(generationInput.prompt).not.toContain('可站位置：')
-    expect(generationInput.prompt.split(animeStylePrompt).length - 1).toBe(1)
+    expect(generationInput.prompt).not.toContain('美式漫画风格')
+    expect(generationInput.prompt).not.toContain('日式动漫风格')
+    expect(generationInput.prompt).not.toContain('写实电影风格')
 
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
@@ -180,16 +179,6 @@ describe('worker location-image-task-handler behavior', () => {
       model: 'analysis-model-1',
       locale: 'zh',
     })
-  })
-
-  it('payload artStyle overrides project artStyle in prompt', async () => {
-    await handleLocationImageTask(buildJob({ imageIndex: 0, artStyle: 'realistic' }))
-
-    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: expect.stringContaining(getArtStylePrompt('realistic', 'zh')),
-      }),
-    )
   })
 
   it('appends Style Bible block to final location asset image prompt', async () => {
@@ -216,9 +205,9 @@ describe('worker location-image-task-handler behavior', () => {
     )
   })
 
-  it('invalid payload artStyle -> explicit error', async () => {
+  it('legacy payload artStyle -> explicit error', async () => {
     await expect(handleLocationImageTask(buildJob({ imageIndex: 0, artStyle: 'anime' }))).rejects.toThrow(
-      'Invalid artStyle in IMAGE_LOCATION payload',
+      'LEGACY_ART_STYLE_REMOVED',
     )
   })
 

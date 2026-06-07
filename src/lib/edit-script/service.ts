@@ -8,7 +8,7 @@ import { buildDefaultTaskBillingInfo, withTextBilling } from '@/lib/billing'
 import { buildImageBillingPayloadFromUserConfig, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue } from '@/lib/constants'
+import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { submitAssetGenerateTask } from '@/lib/assets/services/asset-actions'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import { getSignedUrl } from '@/lib/storage'
@@ -56,7 +56,6 @@ interface GenerateEditScriptInput {
   readonly locale: Locale
   readonly screenplayId?: string
   readonly videoRatio?: '9:16' | '16:9' | '21:9'
-  readonly artStyle?: string
   readonly onGenerationStepPersisted?: (step: EditScriptGenerationStep) => Promise<void>
 }
 
@@ -1379,7 +1378,6 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       where: { id: input.projectId, userId: input.userId },
       select: {
         id: true,
-        artStyle: true,
         videoRatio: true,
       },
     }),
@@ -1387,19 +1385,11 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
   ])
   if (!episode || !project) throw new ApiError('NOT_FOUND')
   const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
-  if (input.artStyle && !isArtStyleValue(input.artStyle)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  if ((input.videoRatio && input.videoRatio !== project.videoRatio)
-    || (input.artStyle && input.artStyle !== project.artStyle)) {
+  if (input.videoRatio && input.videoRatio !== project.videoRatio) {
     await prisma.project.update({
       where: { id: project.id },
       data: {
-        ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-        ...(input.artStyle ? { artStyle: input.artStyle } : {}),
+        videoRatio: input.videoRatio,
       },
     })
   }

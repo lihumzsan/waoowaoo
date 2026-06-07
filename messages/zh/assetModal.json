@@ -60,9 +60,6 @@
         "description": "图片描述",
         "descriptionPlaceholder": "只写道具本体的材质、颜色、结构和装饰细节..."
     },
-    "artStyle": {
-        "title": "画面风格"
-    },
     "aiDesign": {
         "title": "AI 设计",
         "placeholder": "描述你想要的角色特征...",

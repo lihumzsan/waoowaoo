@@ -31,7 +31,9 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
   const screenplayId = readText(payload.screenplayId)
   const videoRatio = readVideoRatio(payload.videoRatio)
-  const artStyle = readText(payload.artStyle)
+  if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
+    throw new Error('LEGACY_ART_STYLE_REMOVED')
+  }
   if (!episodeId) throw new Error('episodeId is required')
 
   await reportTaskProgress(job, 12, {
@@ -54,7 +56,6 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
         locale: job.data.locale,
         ...(screenplayId ? { screenplayId } : {}),
         ...(videoRatio ? { videoRatio } : {}),
-        ...(artStyle ? { artStyle } : {}),
         onGenerationStepPersisted: async (step) => {
           await reportTaskProgress(job, step.progress, {
             stage: step.stage,

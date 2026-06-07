@@ -50,60 +50,6 @@ export const TTS_VOICES = [
   { value: 'zh-CN-XiaoyiNeural', label: '晓伊 (女声)', preview: '女' }
 ]
 
-export const ART_STYLES = [
-  {
-    value: 'american-comic',
-    label: '漫画风',
-    preview: '漫',
-    promptZh: '日式动漫风格',
-    promptEn: 'Japanese anime style'
-  },
-  {
-    value: 'chinese-comic',
-    label: '精致国漫',
-    preview: '国',
-    promptZh: '现代高质量漫画风格，动漫风格，细节丰富精致，线条锐利干净，质感饱满，超清，干净的画面风格，2D风格，动漫风格。',
-    promptEn: 'Modern premium Chinese comic style, rich details, clean sharp line art, full texture, ultra-clear 2D anime aesthetics.'
-  },
-  {
-    value: 'japanese-anime',
-    label: '日系动漫风',
-    preview: '日',
-    promptZh: '现代日系动漫风格，赛璐璐上色，清晰干净的线条，视觉小说CG感。高质量2D风格',
-    promptEn: 'Modern Japanese anime style, cel shading, clean line art, visual-novel CG look, high-quality 2D style.'
-  },
-  {
-    value: 'realistic',
-    label: '真人风格',
-    preview: '实',
-    promptZh: '真实电影级画面质感，真实现实场景，色彩饱满通透，画面干净精致，真实感',
-    promptEn: 'Realistic cinematic look, real-world scene fidelity, rich transparent colors, clean and refined image quality.'
-  }
-]
-
-export type ArtStyleValue = (typeof ART_STYLES)[number]['value']
-
-export function isArtStyleValue(value: unknown): value is ArtStyleValue {
-  return typeof value === 'string' && ART_STYLES.some((style) => style.value === value)
-}
-
-/**
- * 🔥 实时从 ART_STYLES 常量获取风格 prompt
- * 这是获取风格 prompt 的唯一正确方式，确保始终使用最新的常量定义
- * 
- * @param artStyle - 风格标识符，如 'realistic', 'american-comic' 等
- * @returns 对应的风格 prompt，如果找不到则返回空字符串
- */
-export function getArtStylePrompt(
-  artStyle: string | null | undefined,
-  locale: 'zh' | 'en',
-): string {
-  if (!artStyle) return ''
-  const style = ART_STYLES.find(s => s.value === artStyle)
-  if (!style) return ''
-  return locale === 'en' ? style.promptEn : style.promptZh
-}
-
 // 角色形象生成的系统后缀（始终添加到提示词末尾，不显示给用户）- 固定 16:9 角色资产板
 export const CHARACTER_PROMPT_SUFFIX = '角色资产设定图，画面固定为单张完整 16:9 横版角色资产板，不要拆成多张输出。版式固定：左侧约 40% 宽度是角色主全身英雄照，完整展示头发、体型、服装、鞋子和主要可穿戴配饰；主全身照必须只有人物本体，可以是自然静态姿势或符合角色气质的轻微姿态，但不能手持任何物品，不能出现与人物粘连的道具、武器、工具、家具、桌面、宠物或环境物件，避免后续分镜把临时物件误认为角色固定资产。右侧约 60% 宽度上下分区：右上约 35% 高度是标准三视图，同一角色的正面全身、侧面全身、背面全身横向排列，三视图高度一致，服装、体型、发型、配饰完全一致；右下约 65% 高度是 3 个横向排列的动作/语境样本，根据角色身份合理选择可复用的站姿、动作或轻场景语境，用来展示角色在分镜中的动态气质，但不得加入剧情事件、文字标签、编号、水印、Logo。整张图不能使用纯白底，必须落实项目风格或输入风格中的背景氛围、灯光、色彩、滤镜和材质质感；背景只服务于资产风格，不绑定具体剧情地点，不出现会误导分镜的固定场景锚点。角色外观、服装、轮廓、发型、体型和主要配饰必须稳定清晰，便于后续分镜图片引用；保持自然中性表情，完整展示鞋子与服装细节。'
 

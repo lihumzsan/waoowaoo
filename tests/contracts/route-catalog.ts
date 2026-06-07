@@ -179,9 +179,6 @@ const ROUTE_FILES = [
   'src/app/api/user/costs/route.ts',
   'src/app/api/user/invite-codes/redeem/route.ts',
   'src/app/api/user/models/route.ts',
-  'src/app/api/user/style-presets/[presetId]/route.ts',
-  'src/app/api/user/style-presets/design/route.ts',
-  'src/app/api/user/style-presets/route.ts',
   'src/app/api/user/transactions/route.ts',
 ] as const
 

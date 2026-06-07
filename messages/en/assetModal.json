@@ -60,9 +60,6 @@
         "description": "Image Description",
         "descriptionPlaceholder": "Describe only the prop itself: material, color, structure, and decoration..."
     },
-    "artStyle": {
-        "title": "Art Style"
-    },
     "aiDesign": {
         "title": "AI Design",
         "placeholder": "Describe the character you want...",

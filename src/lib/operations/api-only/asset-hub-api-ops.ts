@@ -3,7 +3,7 @@ import sharp from 'sharp'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue } from '@/lib/constants'
+import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { buildCharacterDescriptionFields } from '@/lib/assets/description-fields'
 import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -43,6 +43,15 @@ function parseAppearanceIndex(value: unknown): number | null {
   if (num === null) return null
   const int = Math.floor(num)
   return Number.isFinite(int) ? int : null
+}
+
+function assertNoLegacyArtStyle(body: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
 }
 
 const SUPPORTED_AUDIO_MIME_TYPES: ReadonlySet<string> = new Set<string>([
@@ -141,28 +150,16 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const description = normalizeString((input as unknown as Record<string, unknown>).description)
-        const inputArtStyle = normalizeString((input as unknown as Record<string, unknown>).artStyle)
+        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
 
         const character = await prisma.globalCharacter.findFirst({
           where: { id: input.characterId, userId: ctx.userId },
-          include: { appearances: true },
+          select: { id: true, appearances: { select: { appearanceIndex: true } } },
         })
         if (!character) throw new ApiError('NOT_FOUND')
 
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const nextIndex = maxIndex + 1
-        const inheritedArtStyle = (() => {
-          if (inputArtStyle) return inputArtStyle
-          const primary = character.appearances.find((item) => item.appearanceIndex === PRIMARY_APPEARANCE_INDEX)
-            || character.appearances[0]
-          return normalizeString(primary?.artStyle)
-        })()
-        if (!isArtStyleValue(inheritedArtStyle)) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_ART_STYLE',
-            message: 'artStyle is required and must be a supported value',
-          })
-        }
 
         const trimmed = description ? description.trim() : ''
         const appearance = await prisma.globalCharacterAppearance.create({
@@ -170,7 +167,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
             characterId: input.characterId,
             appearanceIndex: nextIndex,
             changeReason: input.changeReason,
-            artStyle: inheritedArtStyle,
             description: trimmed || null,
             descriptions: trimmed ? JSON.stringify([trimmed]) : null,
             imageUrls: encodeImageUrls([]),
@@ -202,6 +198,7 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const character = await prisma.globalCharacter.findFirst({
           where: { id: input.characterId, userId: ctx.userId },
           select: { id: true },
@@ -227,22 +224,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
         }
         if (body.changeReason !== undefined) {
           updateData.changeReason = body.changeReason
-        }
-        if (body.artStyle !== undefined) {
-          if (typeof body.artStyle !== 'string') {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-          const normalizedArtStyle = body.artStyle.trim()
-          if (!isArtStyleValue(normalizedArtStyle)) {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-          updateData.artStyle = normalizedArtStyle
         }
 
         await prisma.globalCharacterAppearance.update({

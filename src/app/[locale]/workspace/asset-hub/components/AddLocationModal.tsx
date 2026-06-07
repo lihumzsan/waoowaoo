@@ -3,7 +3,6 @@ import { logError as _ulogError } from '@/lib/logging/core'
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { ART_STYLES } from '@/lib/constants'
 import { useAiDesignLocation, useCreateAssetHubLocation } from '@/lib/query/hooks'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
@@ -32,7 +31,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
     const [name, setName] = useState('')
     const [summary, setSummary] = useState('')
     const [aiInstruction, setAiInstruction] = useState('')
-    const [artStyle, setArtStyle] = useState('american-comic')
 
     const aiDesignMutation = useAiDesignLocation()
     const createLocationMutation = useCreateAssetHubLocation()
@@ -78,7 +76,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
                 name: name.trim(),
                 summary: summary.trim(),
                 folderId,
-                artStyle,
                 count: locationGenerationCount,
             })
             onSuccess()
@@ -158,28 +155,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
                                 placeholder={t('modal.locationNamePlaceholder')}
                                 className="glass-input-base w-full px-3 py-2 text-sm"
                             />
-                        </div>
-
-                        {/* 风格选择 */}
-                        <div className="space-y-2">
-                            <label className="glass-field-label block">
-                                画面风格
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {ART_STYLES.map((style) => (
-                                    <button
-                                        key={style.value}
-                                        type="button"
-                                        onClick={() => setArtStyle(style.value)}
-                                        className={`glass-btn-base px-3 py-2 rounded-lg text-sm border flex items-center justify-start transition-all ${artStyle === style.value
-                                            ? 'glass-btn-tone-info border-[var(--glass-stroke-focus)]'
-                                            : 'glass-btn-soft border-[var(--glass-stroke-base)] text-[var(--glass-text-secondary)] hover:border-[var(--glass-stroke-strong)]'
-                                            }`}
-                                    >
-                                        <span>{style.label}</span>
-                                    </button>
-                                ))}
-                            </div>
                         </div>
 
                         {/* 场景描述 */}

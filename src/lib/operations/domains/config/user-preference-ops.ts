@@ -1,31 +1,11 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { isArtStyleValue } from '@/lib/constants'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function validateArtStyleField(value: unknown): string {
-  if (typeof value !== 'string') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      field: 'artStyle',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  const artStyle = value.trim()
-  if (!isArtStyleValue(artStyle)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      field: 'artStyle',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  return artStyle
 }
 
 const ALLOWED_FIELDS: ReadonlyArray<string> = [
@@ -39,7 +19,6 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'musicModel',
   'lipSyncModel',
   'videoRatio',
-  'artStyle',
 ]
 
 export function createUserPreferenceOperations(): ProjectAgentOperationRegistryDraft {
@@ -85,7 +64,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       },
       confirmation: {
         required: true,
-        summary: '将覆盖更新用户偏好设置（例如模型与画风等）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将覆盖更新用户偏好设置（例如模型等）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
@@ -97,10 +76,6 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
           if (!Object.prototype.hasOwnProperty.call(body, field)) continue
           const value = body[field]
           if (value === undefined) continue
-          if (field === 'artStyle') {
-            updateData[field] = validateArtStyleField(value)
-            continue
-          }
           updateData[field] = value
         }
 

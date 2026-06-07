@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue } from '@/lib/constants'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -29,11 +28,20 @@ function parseDescriptions(jsonValue: unknown): string[] {
   }
 }
 
+function assertNoLegacyArtStyle(body: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
+}
+
 export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     asset_hub_update_character_appearance: defineOperation({
       id: 'asset_hub_update_character_appearance',
-      summary: 'Update a global character appearance description/changeReason/artStyle.',
+      summary: 'Update a global character appearance description/changeReason.',
       intent: 'act',
       effects: {
         writes: true,
@@ -51,6 +59,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const characterId = normalizeString(body.characterId)
         const appearanceIndex = parseAppearanceIndex(body.appearanceIndex)
 
@@ -91,23 +100,6 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
 
         if (body.changeReason !== undefined) updateData.changeReason = body.changeReason
 
-        if (body.artStyle !== undefined) {
-          if (typeof body.artStyle !== 'string') {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-          const normalizedArtStyle = body.artStyle.trim()
-          if (!isArtStyleValue(normalizedArtStyle)) {
-            throw new ApiError('INVALID_PARAMS', {
-              code: 'INVALID_ART_STYLE',
-              message: 'artStyle must be a supported value',
-            })
-          }
-          updateData.artStyle = normalizedArtStyle
-        }
-
         await prisma.globalCharacterAppearance.update({
           where: { id: appearance.id },
           data: updateData,
@@ -137,6 +129,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyArtStyle(body)
         const characterId = normalizeString(body.characterId)
         const description = normalizeString(body.description)
         if (!characterId || !description) throw new ApiError('INVALID_PARAMS')
@@ -150,27 +143,11 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const newIndex = maxIndex + 1
 
-        const inputArtStyle = normalizeString(body.artStyle)
-        const fallbackArtStyle = (() => {
-          if (inputArtStyle) return inputArtStyle
-          const primary = character.appearances.find((item) => item.appearanceIndex === PRIMARY_APPEARANCE_INDEX)
-            || character.appearances[0]
-          return normalizeString(primary?.artStyle)
-        })()
-
-        if (!isArtStyleValue(fallbackArtStyle)) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_ART_STYLE',
-            message: 'artStyle is required and must be a supported value',
-          })
-        }
-
         const appearance = await prisma.globalCharacterAppearance.create({
           data: {
             characterId,
             appearanceIndex: newIndex,
             changeReason: normalizeString(body.changeReason) || '形象变化',
-            artStyle: fallbackArtStyle,
             description,
             descriptions: JSON.stringify([description]),
             imageUrls: encodeImageUrls([]),

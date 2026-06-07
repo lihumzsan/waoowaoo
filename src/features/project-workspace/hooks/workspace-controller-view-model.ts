@@ -28,9 +28,6 @@ interface ProjectSnapshotInput {
   musicModel: string | undefined
   videoRatio: string | undefined
   capabilityOverrides: CapabilitySelections
-  artStyle: string | undefined
-  visualStylePresetSource: string | undefined
-  visualStylePresetId: string | undefined
 }
 
 interface BuildWorkspaceControllerViewModelParams {

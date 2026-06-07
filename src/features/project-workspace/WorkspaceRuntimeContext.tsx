@@ -28,9 +28,6 @@ export interface WorkspaceRuntimeValue {
   isConfirmingAssets: boolean
   isStartingPlan: boolean
   videoRatio: string | null | undefined
-  artStyle: string | null | undefined
-  visualStylePresetSource: string | null | undefined
-  visualStylePresetId: string | null | undefined
   videoModel: string | null | undefined
   singleShotVideoModel: string | null | undefined
   sequenceVideoModel: string | null | undefined
@@ -38,8 +35,6 @@ export interface WorkspaceRuntimeValue {
   userVideoModels: WorkspaceVideoModelOption[]
   onNovelTextChange: (value: string) => Promise<void>
   onVideoRatioChange: (value: string) => Promise<void>
-  onArtStyleChange: (value: string) => Promise<void>
-  onVisualStylePresetChange: (value: { presetSource: 'system' | 'user'; presetId: string }) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
   onGenerateEditScreenplay: (prompt: string) => Promise<void>
   onConfirmEditStylePreview: (stylePreviewId: string) => Promise<void>

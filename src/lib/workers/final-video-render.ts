@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { parseEditorProjectData, readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
+import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
@@ -121,6 +122,7 @@ async function buildEditScript(episodeId: string): Promise<FinalRenderEditScript
       title: true,
       logline: true,
       durationSec: true,
+      styleBibleJson: true,
       shotsJson: true,
       videoBlocksJson: true,
     },
@@ -138,6 +140,7 @@ async function buildEditScript(episodeId: string): Promise<FinalRenderEditScript
     title: script.title,
     logline: script.logline,
     durationSec: script.durationSec,
+    styleBible: parseNullableEditScriptStyleBible(script.styleBibleJson),
     shots,
     videoBlocks,
   }
@@ -238,10 +241,6 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { id: job.data.projectId },
         select: {
           videoRatio: true,
-          artStyle: true,
-          artStylePrompt: true,
-          visualStylePresetSource: true,
-          visualStylePresetId: true,
         },
       }),
       prisma.projectEpisode.findFirst({

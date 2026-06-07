@@ -1,7 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { CHARACTER_ASSET_IMAGE_RATIO, addCharacterPromptSuffix, PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
-import { resolveProjectImageStyleForTask } from '@/lib/image-generation/style'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -73,6 +72,9 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   const models = await getProjectModels(projectId, userId)
   const modelId = models.characterModel
   if (!modelId) throw new Error('Character model not configured')
+  if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
+    throw new Error('LEGACY_ART_STYLE_REMOVED')
+  }
 
   const appearanceId = pickFirstString(job.data.targetId, payload.appearanceId)
   let appearance: CharacterAppearanceRecord | null = null
@@ -98,13 +100,6 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
 
   if (!appearance) throw new Error('Character appearance not found')
 
-  const artStyle = (await resolveProjectImageStyleForTask({
-    projectId,
-    userId,
-    locale: job.data.locale,
-    artStyleOverride: payload.artStyle,
-    invalidOverrideMessage: 'Invalid artStyle in IMAGE_CHARACTER payload',
-  })).prompt
   const styleBible = await resolveEditScriptStyleBibleForTask({
     projectId,
     episodeId: job.data.episodeId,
@@ -148,7 +143,7 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   for (let i = 0; i < indexes.length; i++) {
     const index = indexes[i]
     const raw = baseDescriptions[index] || baseDescriptions[0]
-    const promptBase = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
+    const promptBase = addCharacterPromptSuffix(raw)
     const prompt = appendStyleBiblePromptBlock({
       prompt: promptBase,
       styleBible,

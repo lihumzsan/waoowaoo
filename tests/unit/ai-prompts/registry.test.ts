@@ -27,14 +27,6 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('创建一个阴郁的老管家')
   })
 
-  it('registers style preset design prompts in both locales', () => {
-    const visualZh = getAiPromptTemplate(AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET, 'zh')
-    const visualEn = getAiPromptTemplate(AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET, 'en')
-
-    expect(visualZh).toContain('"detailLevel"')
-    expect(visualEn).toContain('"negativePrompt"')
-  })
-
   it('keeps character analysis style-aware without role or costume tiers', () => {
     const template = getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_ANALYZE, 'zh')
 
@@ -52,7 +44,6 @@ describe('ai prompt registry', () => {
     const variantTemplate = getAiPromptTemplate(AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE, 'zh')
     const videoBlockTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK, 'zh')
     const storyboardDetailTemplate = getAiPromptTemplate(AI_PROMPT_IDS.STORYBOARD_REFINE_DETAIL, 'zh')
-    const visualStyleTemplate = getAiPromptTemplate(AI_PROMPT_IDS.DESIGN_VISUAL_STYLE_PRESET, 'zh')
 
     expect(variantTemplate).toContain('所有会写入画布或给用户展示的提示词字段必须全中文')
     expect(variantTemplate).toContain('❌ video_prompt 使用英文句子（必须中文）')
@@ -65,6 +56,5 @@ describe('ai prompt registry', () => {
     expect(videoBlockTemplate).not.toContain('Sound effects only')
 
     expect(storyboardDetailTemplate).toContain('video_prompt 会显示在画布上')
-    expect(visualStyleTemplate).toContain('prompt 与 negativePrompt 会拼入图片生成提示词')
   })
 })

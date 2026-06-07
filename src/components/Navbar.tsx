@@ -56,7 +56,6 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
     label: string
   }> = [
     { section: 'apiConfig', icon: 'settingsHexAlt', label: t('settingsMenu.apiConfig') },
-    { section: 'stylePresets', icon: 'sparkles', label: t('settingsMenu.stylePresets') },
     { section: 'billing', icon: 'receipt', label: t('settingsMenu.billingRecords') },
   ]
 

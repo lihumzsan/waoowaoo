@@ -1,6 +1,5 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { resolveProjectVisualStylePreset } from '@/lib/style-preset'
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { type TaskJobData } from '@/lib/task/types'
 import {
@@ -265,11 +264,6 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
     context: { taskType: String(job.data.type), scope: 'panel-variant.refs' },
   })
 
-  const artStyle = (await resolveProjectVisualStylePreset({
-    projectId: job.data.projectId,
-    userId: job.data.userId,
-    locale: job.data.locale,
-  })).prompt
   const charactersInfo = buildCharactersInfo(newPanel, projectData)
   const characterAssetsDesc = includeCharacterAssets
     ? buildCharacterAssetsDescription(newPanel, projectData)
@@ -297,7 +291,7 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
     }),
     referenceImages: formatReferenceImagesMapForPrompt(referenceImagesMap, job.data.locale),
     aspectRatio,
-    style: artStyle,
+    style: '',
   })
 
   _ulogInfo('[panel-variant] resolved variant prompt', prompt)

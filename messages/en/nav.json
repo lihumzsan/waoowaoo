@@ -1,14 +1,13 @@
 {
-  "workspace": "Workspace",
-  "assetHub": "Asset Hub",
-  "profile": "Settings",
-  "settingsMenu": {
-    "apiConfig": "API Configuration",
-    "stylePresets": "My Styles",
-    "billingRecords": "Billing Records"
-  },
-  "downloadLogs": "Download Logs",
-  "signin": "Sign In",
-  "signup": "Sign Up",
-  "logout": "Logout"
+    "workspace": "Workspace",
+    "assetHub": "Asset Hub",
+    "profile": "Settings",
+    "settingsMenu": {
+        "apiConfig": "API Configuration",
+        "billingRecords": "Billing Records"
+    },
+    "downloadLogs": "Download Logs",
+    "signin": "Sign In",
+    "signup": "Sign Up",
+    "logout": "Logout"
 }

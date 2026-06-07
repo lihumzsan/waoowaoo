@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AI_PROMPT_IDS, buildAiPrompt, type AiPromptLocale } from '@/lib/ai-prompts'
-import { editScriptShotSchema } from '@/lib/edit-script/types'
+import { editScriptShotSchema, type EditScriptStyleBible } from '@/lib/edit-script/types'
 import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 
 export type FinalRenderAspectRatio = '9:16' | '16:9' | '21:9'
@@ -55,6 +55,7 @@ export interface FinalRenderEditScriptInput {
   readonly title: string
   readonly logline?: string | null
   readonly durationSec: number
+  readonly styleBible?: EditScriptStyleBible | null
   readonly shots: readonly FinalRenderEditShot[]
   readonly videoBlocks: readonly FinalRenderEditVideoBlock[]
 }
@@ -97,10 +98,6 @@ export interface FinalRenderClipPlan {
 
 export interface FinalRenderProjectContextInput {
   readonly videoRatio?: string | null
-  readonly artStyle?: string | null
-  readonly artStylePrompt?: string | null
-  readonly visualStylePresetSource?: string | null
-  readonly visualStylePresetId?: string | null
 }
 
 export interface FinalRenderMusicPromptInput {
@@ -458,10 +455,6 @@ function buildProjectContextJson(projectContext: FinalRenderProjectContextInput 
   if (!projectContext) return safeJsonStringify({})
   return safeJsonStringify({
     videoRatio: normalizeString(projectContext.videoRatio) || null,
-    artStyle: normalizeString(projectContext.artStyle) || null,
-    artStylePrompt: normalizeString(projectContext.artStylePrompt) || null,
-    visualStylePresetSource: normalizeString(projectContext.visualStylePresetSource) || null,
-    visualStylePresetId: normalizeString(projectContext.visualStylePresetId) || null,
   })
 }
 
@@ -473,6 +466,7 @@ function buildEditScriptJson(editScript: FinalRenderEditScriptInput | null): str
     title: editScript.title,
     logline: editScript.logline ?? null,
     durationSec: editScript.durationSec,
+    styleBible: editScript.styleBible ?? null,
     shotCount: editScript.shots.length,
     videoBlocks: editScript.videoBlocks.map((block, index) => ({
       blockNumber: index + 1,

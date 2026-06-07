@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import type { Locale } from '@/i18n/routing'
 import { prisma } from '@/lib/prisma'
 import { editScriptStyleBibleSchema, type EditScriptStyleBible } from './types'
@@ -97,6 +98,20 @@ export async function resolveEditScriptStyleBibleForStoryboardTask(input: {
     projectId: input.projectId,
     episodeId: storyboard?.episodeId ?? null,
   })
+}
+
+export async function resolveEditScriptStyleBibleSignatureForTask(input: {
+  readonly projectId: string
+  readonly episodeId?: string | null
+  readonly storyboardId?: string | null
+}): Promise<string> {
+  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask(input)
+  if (!styleBible) return 'style-bible:none'
+  const digest = createHash('sha1')
+    .update(JSON.stringify(styleBible))
+    .digest('hex')
+    .slice(0, 16)
+  return `style-bible:${digest}`
 }
 
 function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale, usage: StyleBiblePromptUsage): string[] {

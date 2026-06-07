@@ -189,7 +189,6 @@
         "generatingAutoClose": "正在生成图片，完成后将自动关闭...",
         "aiLocationTip": "输入你想修改的内容，AI会自动调整场景描述",
         "aiDesignPlaceholderLocation": "例如：一个古老的魔法图书馆，高耸的书架，昏暗的烛光，神秘的氛围...",
-        "artStyle": "画面风格",
         "generate": "生成",
         "introduction": "角色介绍",
         "introductionPlaceholder": "例如：本书主角，第一人称'我'指的就是她。其他角色称她为'小雪'或'雪姐'...",

@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { removeLocationPromptSuffix } from '@/lib/constants'
-import { resolveProjectVisualStylePreset } from '@/lib/style-preset'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
@@ -390,19 +389,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
     existingPropNameSet.add(normalizedName)
     createdProps.push(created)
   }
-
-  const visualStyle = await resolveProjectVisualStylePreset({
-    projectId,
-    userId: job.data.userId,
-    locale: job.data.locale,
-  })
-
-  await prisma.project.update({
-    where: { id: project.id },
-    data: {
-      artStylePrompt: visualStyle.prompt || '',
-    },
-  })
 
   await reportTaskProgress(job, 96, {
     stage: 'analyze_novel_done',

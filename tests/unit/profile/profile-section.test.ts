@@ -7,7 +7,7 @@ import {
 
 describe('profile section routing', () => {
   it('keeps billing records as the final settings center section', () => {
-    expect(PROFILE_SECTIONS).toEqual(['apiConfig', 'stylePresets', 'billing'])
+    expect(PROFILE_SECTIONS).toEqual(['apiConfig', 'billing'])
   })
 
   it('uses api config when the section query is absent', () => {

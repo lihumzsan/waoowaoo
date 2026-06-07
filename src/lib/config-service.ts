@@ -111,7 +111,6 @@ export interface ProjectModelConfig {
   audioModel: string | null
   musicModel: string | null
   videoRatio: string | null
-  artStyle: string | null
   capabilityDefaults: CapabilitySelections
   capabilityOverrides: CapabilitySelections
 }
@@ -171,7 +170,6 @@ export async function getProjectModelConfig(
     audioModel: extractModelKey(projectData?.audioModel) || extractModelKey(userPref?.audioModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     videoRatio: projectData?.videoRatio || '9:16',
-    artStyle: projectData?.artStyle || null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
   }

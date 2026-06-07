@@ -2,11 +2,6 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { ApiError } from '@/lib/api-errors'
-import { isArtStyleValue } from '@/lib/constants'
-import {
-  parseStylePresetRef,
-  resolveVisualStylePreset,
-} from '@/lib/style-preset'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { buildProjectReadModel } from '@/lib/projects/build-project-read-model'
 import {
@@ -124,25 +119,6 @@ function validateModelKeyField(field: typeof MODEL_FIELDS[number], value: unknow
   }
 }
 
-function validateArtStyleField(value: unknown): string {
-  if (typeof value !== 'string') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      field: 'artStyle',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  const artStyle = value.trim()
-  if (!isArtStyleValue(artStyle)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVALID_ART_STYLE',
-      field: 'artStyle',
-      message: 'artStyle must be a supported value',
-    })
-  }
-  return artStyle
-}
-
 function resolveCapabilityContext(
   modelKey: string,
   modelContextMap: Record<string, CapabilityModelContext>,
@@ -246,20 +222,13 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       inputSchema: z.object({}),
       outputSchema: z.object({
         capabilityOverrides: z.record(z.record(z.union([z.string(), z.number(), z.boolean()]))),
-        visualStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }),
       }),
       execute: async (ctx) => {
         const projectData = await prisma.project.findUnique({
           where: { id: ctx.projectId },
-          select: {
-            capabilityOverrides: true,
-            artStyle: true,
-            visualStylePresetSource: true,
-            visualStylePresetId: true,
-            analysisModel: true,
+            select: {
+              capabilityOverrides: true,
+              analysisModel: true,
             characterModel: true,
             locationModel: true,
             storyboardModel: true,
@@ -275,19 +244,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND', {
             code: 'PROJECT_NOT_FOUND',
             field: 'projectId',
-          })
-        }
-        if (projectData.visualStylePresetSource !== 'system' && projectData.visualStylePresetSource !== 'user') {
-          throw new ApiError('INTERNAL_ERROR', {
-            code: 'VISUAL_STYLE_PRESET_SOURCE_INVALID',
-            field: 'visualStylePresetSource',
-          })
-        }
-        const visualStylePresetId = projectData.visualStylePresetId.trim()
-        if (!visualStylePresetId) {
-          throw new ApiError('INTERNAL_ERROR', {
-            code: 'VISUAL_STYLE_PRESET_ID_MISSING',
-            field: 'visualStylePresetId',
           })
         }
         const storedOverrides = parseStoredCapabilitySelections(projectData.capabilityOverrides)
@@ -307,17 +263,13 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
         return {
           capabilityOverrides: cleanedOverrides,
-          visualStylePreset: {
-            presetSource: projectData.visualStylePresetSource,
-            presetId: visualStylePresetId,
-          },
         }
       },
     },
 
     update_project_config: {
       id: 'update_project_config',
-      summary: 'Update project model keys, artStyle, and capability overrides.',
+      summary: 'Update project model keys and capability overrides.',
       intent: 'act',
       effects: {
         writes: true,
@@ -341,11 +293,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         audioModel: z.string().nullable().optional(),
         musicModel: z.string().nullable().optional(),
         videoRatio: z.string().optional(),
-        artStyle: z.string().optional(),
-        visualStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }).optional(),
         capabilityOverrides: z.unknown().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -376,8 +323,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         const allowedProjectFields = [
           ...MODEL_FIELDS,
           'videoRatio',
-          'artStyle',
-          'visualStylePreset',
           'capabilityOverrides',
         ] as const
 
@@ -387,38 +332,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
           if ((MODEL_FIELDS as readonly string[]).includes(field)) {
             validateModelKeyField(field as typeof MODEL_FIELDS[number], body[field])
-          }
-
-          if (field === 'artStyle') {
-            updateData[field] = validateArtStyleField(body[field])
-            updateData.visualStylePresetSource = 'system'
-            updateData.visualStylePresetId = updateData[field]
-            continue
-          }
-
-          if (field === 'visualStylePreset') {
-            let ref: ReturnType<typeof parseStylePresetRef>
-            try {
-              ref = parseStylePresetRef(body.visualStylePreset)
-              await resolveVisualStylePreset({
-                userId: ctx.userId,
-                presetSource: ref.presetSource,
-                presetId: ref.presetId,
-                locale: 'zh',
-              })
-            } catch {
-              throw new ApiError('INVALID_PARAMS', {
-                code: 'INVALID_VISUAL_STYLE_PRESET',
-                field: 'visualStylePreset',
-                message: 'visualStylePreset must reference a supported preset',
-              })
-            }
-            updateData.visualStylePresetSource = ref.presetSource
-            updateData.visualStylePresetId = ref.presetId
-            if (ref.presetSource === 'system') {
-              updateData.artStyle = ref.presetId
-            }
-            continue
           }
 
           if (field === 'capabilityOverrides') {

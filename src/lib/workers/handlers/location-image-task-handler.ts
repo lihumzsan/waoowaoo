@@ -1,7 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
-import { resolveProjectImageStyleForTask } from '@/lib/image-generation/style'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '../shared'
@@ -62,15 +61,11 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   const assetType = payload.type === 'prop' ? 'prop' : 'location'
   const spatialProfileModel = models.analysisModel
   if (assetType === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+  if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
+    throw new Error('LEGACY_ART_STYLE_REMOVED')
+  }
   const requestedCount = resolveRequestedLocationCount(payload)
 
-  const artStyle = (await resolveProjectImageStyleForTask({
-    projectId,
-    userId,
-    locale: job.data.locale,
-    artStyleOverride: payload.artStyle,
-    invalidOverrideMessage: 'Invalid artStyle in IMAGE_LOCATION payload',
-  })).prompt
   const styleBible = await resolveEditScriptStyleBibleForTask({
     projectId,
     episodeId: job.data.episodeId,
@@ -134,7 +129,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
     const promptWithSuffix = assetType === 'prop'
       ? addPropPromptSuffix(promptCore)
       : addLocationPromptSuffix(promptCore)
-    const promptBase = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+    const promptBase = promptWithSuffix
     const prompt = appendStyleBiblePromptBlock({
       prompt: promptBase,
       styleBible,

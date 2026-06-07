@@ -2,12 +2,6 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { toMoneyNumber, type MoneyValue } from '@/lib/billing/money'
-import { isArtStyleValue } from '@/lib/constants'
-import {
-  parseStylePresetRef,
-  resolveVisualStylePreset,
-  type StylePresetRef,
-} from '@/lib/style-preset'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
   formatProjectValidationIssue,
@@ -29,15 +23,6 @@ function readProjectDraftBody(body: unknown): ProjectDraftInput {
     name: typeof payload.name === 'string' ? payload.name : '',
     description: typeof payload.description === 'string' ? payload.description : null,
   }
-}
-
-function readStylePresetRefField(body: unknown, field: string): StylePresetRef | null {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
-  const payload = body as Record<string, unknown>
-  if (!Object.prototype.hasOwnProperty.call(payload, field)) return null
-  const value = payload[field]
-  if (value === null) return null
-  return parseStylePresetRef(value)
 }
 
 const EFFECTS_QUERY = {
@@ -222,10 +207,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
-        visualStylePreset: z.object({
-          presetSource: z.enum(['system', 'user']),
-          presetId: z.string(),
-        }).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -242,44 +223,10 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         }
 
         const normalized = normalizeProjectDraft(draft)
-        let visualStyleFields: {
-          visualStylePresetSource: string
-          visualStylePresetId: string
-          artStyle?: string
-        } | null = null
-        try {
-          const visualStylePresetRef = readStylePresetRefField(input, 'visualStylePreset')
-          if (visualStylePresetRef) {
-            await resolveVisualStylePreset({
-              userId: ctx.userId,
-              presetSource: visualStylePresetRef.presetSource,
-              presetId: visualStylePresetRef.presetId,
-              locale: 'zh',
-            })
-            visualStyleFields = {
-              visualStylePresetSource: visualStylePresetRef.presetSource,
-              visualStylePresetId: visualStylePresetRef.presetId,
-              ...(visualStylePresetRef.presetSource === 'system' ? { artStyle: visualStylePresetRef.presetId } : {}),
-            }
-          }
-        } catch {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'INVALID_VISUAL_STYLE_PRESET',
-            field: 'visualStylePreset',
-            message: 'visualStylePreset must reference a supported preset',
-          })
-        }
 
         const userPreference = await prisma.userPreference.findUnique({
           where: { userId: ctx.userId },
         })
-
-        if (userPreference?.artStyle && !isArtStyleValue(userPreference.artStyle)) {
-          throw new ApiError('EXTERNAL_ERROR', {
-            code: 'USER_PREFERENCE_ART_STYLE_INVALID',
-            message: 'userPreference.artStyle is invalid',
-          })
-        }
 
         const project = await prisma.project.create({
           data: {
@@ -299,13 +246,8 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               musicModel: userPreference.musicModel,
               videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,
-              artStyle: userPreference.artStyle,
               imageResolution: userPreference.imageResolution,
             }),
-            ...(visualStyleFields ?? (userPreference?.artStyle ? {
-              visualStylePresetSource: 'system',
-              visualStylePresetId: userPreference.artStyle,
-            } : {})),
           },
         })
 

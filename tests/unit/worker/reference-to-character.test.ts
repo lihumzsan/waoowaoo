@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHARACTER_PROMPT_SUFFIX, CHARACTER_IMAGE_BANANA_RATIO, getArtStylePrompt } from '@/lib/constants'
+import { CHARACTER_PROMPT_SUFFIX, CHARACTER_IMAGE_BANANA_RATIO } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData, type TaskType } from '@/lib/task/types'
 
 const sharpMock = vi.hoisted(() =>
@@ -98,9 +98,6 @@ const prismaMock = vi.hoisted(() => ({
   project: {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
-      artStyle: 'realistic',
-      visualStylePresetSource: 'system',
-      visualStylePresetId: 'realistic',
     })),
   },
   globalCharacterAppearance: {
@@ -264,7 +261,7 @@ describe('worker reference-to-character', () => {
     expect(cosKeys?.every((item) => item.startsWith('cos/reference-key-'))).toBe(true)
   })
 
-  it('uses project visual style when project reference generation has no override', async () => {
+  it('does not append legacy fixed visual style for project reference generation', async () => {
     const job = buildJob(
       {
         referenceImageUrls: ['https://example.com/ref-a.png'],
@@ -277,10 +274,12 @@ describe('worker reference-to-character', () => {
     await handleReferenceToCharacterTask(job)
 
     const { prompt } = readGenerateCall(0)
-    expect(prompt).toContain(getArtStylePrompt('realistic', 'zh'))
+    expect(prompt).not.toContain('美式漫画风格')
+    expect(prompt).not.toContain('日式动漫风格')
+    expect(prompt).not.toContain('写实电影风格')
   })
 
-  it('uses explicit override instead of project visual style for project reference generation', async () => {
+  it('rejects legacy artStyle override for project reference generation', async () => {
     const job = buildJob(
       {
         referenceImageUrls: ['https://example.com/ref-a.png'],
@@ -291,11 +290,7 @@ describe('worker reference-to-character', () => {
       TASK_TYPE.REFERENCE_TO_CHARACTER,
     )
 
-    await handleReferenceToCharacterTask(job)
-
-    const { prompt } = readGenerateCall(0)
-    expect(prompt).toContain(getArtStylePrompt('japanese-anime', 'zh'))
-    expect(prompt).not.toContain(getArtStylePrompt('realistic', 'zh'))
+    await expect(handleReferenceToCharacterTask(job)).rejects.toThrow('LEGACY_ART_STYLE_REMOVED')
   })
 
   it('generates project reference sheets as clean images', async () => {

@@ -23,7 +23,6 @@ export function buildAssistantProjectContextSnapshot(
     editScript: context.episodeDetail?.editScript ?? null,
     config: {
       analysisModel: context.policy.analysisModel || null,
-      artStyle: context.policy.artStyle,
       videoRatio: context.policy.videoRatio,
     },
   }
