@@ -135,7 +135,6 @@ describe('worker asset-hub-ai-modify behavior', () => {
     expect(result).toEqual({
       success: true,
       modifiedDescription: 'modified description',
-      availableSlots: [],
     })
     expect(llmStreamMock.flush).toHaveBeenCalled()
   })
@@ -152,7 +151,6 @@ describe('worker asset-hub-ai-modify behavior', () => {
     expect(result).toEqual({
       success: true,
       modifiedDescription: 'modified description',
-      availableSlots: [],
     })
   })
 })

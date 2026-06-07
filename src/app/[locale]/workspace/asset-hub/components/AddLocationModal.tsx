@@ -9,7 +9,6 @@ import { useImageGenerationCount } from '@/lib/image-generation/use-image-genera
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
-import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 
 interface AddLocationModalProps {
     folderId: string | null
@@ -34,7 +33,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
     const [summary, setSummary] = useState('')
     const [aiInstruction, setAiInstruction] = useState('')
     const [artStyle, setArtStyle] = useState('american-comic')
-    const [availableSlots, setAvailableSlots] = useState<LocationAvailableSlot[]>([])
 
     const aiDesignMutation = useAiDesignLocation()
     const createLocationMutation = useCreateAssetHubLocation()
@@ -65,7 +63,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
         try {
             const data = await aiDesignMutation.mutateAsync(aiInstruction.trim())
             setSummary(data.prompt || '')
-            setAvailableSlots(Array.isArray(data.availableSlots) ? data.availableSlots : [])
             setAiInstruction('')
         } catch (error) {
             _ulogError('AI设计失败:', error)
@@ -83,7 +80,6 @@ export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationMo
                 folderId,
                 artStyle,
                 count: locationGenerationCount,
-                availableSlots,
             })
             onSuccess()
         } catch (error) {

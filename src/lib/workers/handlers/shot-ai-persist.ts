@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { type LocationAvailableSlot, stringifyLocationAvailableSlots } from '@/lib/location-available-slots'
 
 function normalizeModelKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -58,7 +57,6 @@ export async function persistLocationDescription(params: {
   locationId: string
   imageIndex: number
   modifiedDescription: string
-  availableSlots?: LocationAvailableSlot[]
 }) {
   const locationImage = await prisma.locationImage.findFirst({
     where: {
@@ -75,7 +73,6 @@ export async function persistLocationDescription(params: {
     where: { id: locationImage.id },
     data: {
       description: params.modifiedDescription,
-      ...(params.availableSlots ? { availableSlots: stringifyLocationAvailableSlots(params.availableSlots) } : {}),
     },
   })
 

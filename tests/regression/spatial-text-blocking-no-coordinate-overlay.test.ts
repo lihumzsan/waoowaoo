@@ -60,7 +60,6 @@ describe('spatial text blocking regression', () => {
       expect(renderedPrompt).toContain('人物站在门廊左侧阴影里')
       expect(renderedPrompt).toContain('木质柜台')
       expect(renderedPrompt).not.toContain('placementZones')
-      expect(renderedPrompt).not.toContain('available_slots')
       expect(renderedPrompt).not.toContain('"x"')
       expect(renderedPrompt).not.toContain('"y"')
     }

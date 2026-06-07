@@ -19,10 +19,6 @@ import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { resolveProjectImageStyleSignatureForTask } from '@/lib/image-generation/style'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 import {
-  normalizeLocationAvailableSlots,
-  stringifyLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   createGlobalLocationBackedAsset,
   createProjectLocationBackedAsset,
   deleteGlobalLocationBackedAsset,
@@ -927,7 +923,6 @@ async function copyLocationFromGlobal(input: AssetCopyInput) {
         locationId: input.targetId,
         imageIndex: image.imageIndex,
         description: image.description,
-        availableSlots: image.availableSlots,
         imageUrl: image.imageUrl,
         spatialProfileJson: input.kind === 'location' && image.spatialProfileJson !== null
           ? image.spatialProfileJson as Prisma.InputJsonValue
@@ -1007,16 +1002,6 @@ async function updateGlobalAsset(input: AssetUpdateInput) {
       where: { id: input.assetId },
       data: updateData,
     })
-    if (input.body.availableSlots !== undefined) {
-      await prisma.globalLocationImage.updateMany({
-        where: { locationId: input.assetId },
-        data: {
-          availableSlots: stringifyLocationAvailableSlots(
-            normalizeLocationAvailableSlots(input.body.availableSlots),
-          ),
-        },
-      })
-    }
     return { success: true, location }
   }
   if (input.kind === 'prop') {

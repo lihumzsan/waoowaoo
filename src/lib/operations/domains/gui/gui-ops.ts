@@ -16,10 +16,6 @@ import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-ur
 import { deleteObject, uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
 import { PRIMARY_APPEARANCE_INDEX, isArtStyleValue, type ArtStyleValue, removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import {
-  normalizeLocationAvailableSlots,
-  stringifyLocationAvailableSlots,
-} from '@/lib/location-available-slots'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 import {
   collectBailianManagedVoiceIds,
@@ -690,11 +686,10 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      summary: 'Create a project location and its initial locationImage records.',
 	      intent: 'act',
 	      effects: EFFECTS_WRITE,
-	      inputSchema: z.object({
-	        name: z.string().min(1),
-	        description: z.string().min(1),
-	        summary: z.string().optional(),
-        availableSlots: z.unknown().optional(),
+      inputSchema: z.object({
+        name: z.string().min(1),
+        description: z.string().min(1),
+        summary: z.string().optional(),
         count: z.number().int().positive().max(6).optional(),
         artStyle: z.string().optional(),
       }).passthrough(),
@@ -703,7 +698,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
         const summary = normalizeString(input.summary)
-        const availableSlots = normalizeLocationAvailableSlots((input as Record<string, unknown>).availableSlots)
         const count = Object.prototype.hasOwnProperty.call(input, 'count')
           ? normalizeImageGenerationCount('location', (input as Record<string, unknown>).count)
           : 1
@@ -736,7 +730,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             locationId: location.id,
             imageIndex,
             description: cleanDescription,
-            availableSlots: stringifyLocationAvailableSlots(availableSlots),
           })),
         })
 
@@ -750,16 +743,15 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	    }),
 	    patch_location: defineOperation({
 	      id: 'patch_location',
-	      summary: 'Update a location name/summary or update locationImage description/availableSlots.',
+	      summary: 'Update a location name/summary or update locationImage description.',
 	      intent: 'act',
 	      effects: EFFECTS_WRITE_OVERWRITE,
 	      inputSchema: z.object({
 	        locationId: z.string().min(1),
 	        name: z.string().optional(),
-	        summary: z.string().optional().nullable(),
+        summary: z.string().optional().nullable(),
         imageIndex: z.number().int().min(0).max(50).optional(),
         description: z.string().optional(),
-        availableSlots: z.unknown().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -792,9 +784,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             },
             data: {
               description: cleanDescription,
-              ...(Object.prototype.hasOwnProperty.call(input, 'availableSlots')
-                ? { availableSlots: stringifyLocationAvailableSlots(normalizeLocationAvailableSlots((input as Record<string, unknown>).availableSlots)) }
-                : {}),
             },
           })
           return { success: true, image }

@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 import { resolveTaskResponse } from '@/lib/task/client'
 import { apiFetch } from '@/lib/api-fetch'
 import {
@@ -128,12 +127,10 @@ export function useUpdateProjectLocationDescription(projectId: string) {
             locationId,
             description,
             imageIndex,
-            availableSlots,
         }: {
             locationId: string
             description: string
             imageIndex?: number
-            availableSlots?: LocationAvailableSlot[]
         }) => {
             return await requestJsonWithError(`/api/projects/${projectId}/location`, {
                 method: 'PATCH',
@@ -142,7 +139,6 @@ export function useUpdateProjectLocationDescription(projectId: string) {
                     locationId,
                     imageIndex: typeof imageIndex === 'number' ? imageIndex : 0,
                     description,
-                    ...(availableSlots ? { availableSlots } : {}),
                 }),
             }, 'Failed to update location description')
         },
@@ -181,7 +177,7 @@ export function useAiModifyProjectLocationDescription(projectId: string) {
                 },
                 'Failed to modify location description',
             )
-            return resolveTaskResponse<{ prompt?: string; modifiedDescription?: string; availableSlots?: LocationAvailableSlot[] }>(response)
+            return resolveTaskResponse<{ prompt?: string; modifiedDescription?: string }>(response)
         },
     })
 }
@@ -234,7 +230,7 @@ export function useAiCreateProjectLocation(projectId: string) {
                 },
                 'Failed to design location',
             )
-            return await resolveTaskResponse<{ prompt?: string; availableSlots?: LocationAvailableSlot[] }>(response)
+            return await resolveTaskResponse<{ prompt?: string }>(response)
         },
     })
 }
@@ -254,7 +250,6 @@ export function useCreateProjectLocation(projectId: string) {
             description: string
             artStyle?: string
             count?: number
-            availableSlots?: LocationAvailableSlot[]
         }) =>
             await requestJsonWithError(
                 `/api/projects/${projectId}/location`,

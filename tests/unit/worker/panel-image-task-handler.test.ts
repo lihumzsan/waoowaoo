@@ -233,11 +233,6 @@ describe('worker panel-image-task-handler behavior', () => {
         storyboard_text_json_input: expect.stringContaining('"slot": "街道左侧靠墙的留白位置"'),
       }),
     }))
-    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      variables: expect.objectContaining({
-        storyboard_text_json_input: expect.not.stringContaining('"available_slots"'),
-      }),
-    }))
     const promptCalls = promptMock.buildPrompt.mock.calls as unknown as Array<[unknown]>
     const promptCall = promptCalls[0]?.[0] as {
       variables?: { storyboard_text_json_input?: string }

@@ -11,10 +11,6 @@ import {
   uploadImageSourceToCos,
 } from '../utils'
 import {
-  formatLocationAvailableSlotsText,
-  parseLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   AnyObj,
   formatReferenceImagesMapForPrompt,
   normalizeReferenceImageItemsForGeneration,
@@ -124,17 +120,12 @@ function buildLocationAssetDescription(params: {
       )
       const selectedImage = location?.images?.find((image) => image.isSelected) ?? location?.images?.[0]
       const description = selectedImage?.description?.trim()
-      const slotsText = formatLocationAvailableSlotsText(
-        parseLocationAvailableSlots(selectedImage?.availableSlots),
-        params.locale,
-      )
       const parts = [
         params.locale === 'en' ? `Location: ${params.locationName}` : `场景：${params.locationName}`,
       ]
       if (description) {
         parts.push(params.locale === 'en' ? `Scene description: ${description}` : `场景描述：${description}`)
       }
-      if (slotsText) parts.push(slotsText)
       return parts.join('\n')
     }
     return params.locale === 'en' ? 'Location reference disabled' : '未使用场景参考图'

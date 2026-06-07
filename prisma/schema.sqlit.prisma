@@ -58,7 +58,6 @@ model LocationImage {
   locationId          String
   imageIndex          Int
   description         String?
-  availableSlots      String?
   imageUrl            String?
   spatialProfileJson  Json?
   spatialProfileStatus String                  @default("pending")
@@ -964,7 +963,6 @@ model GlobalLocationImage {
   locationId          String
   imageIndex          Int
   description         String?
-  availableSlots      String?
   imageUrl            String?
   spatialProfileJson  Json?
   spatialProfileStatus String   @default("pending")

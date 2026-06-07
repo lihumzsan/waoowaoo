@@ -80,7 +80,6 @@ describe('worker asset-hub-ai-design behavior', () => {
     }))
     expect(result).toEqual({
       prompt: 'generated prompt',
-      availableSlots: [],
     })
   })
 

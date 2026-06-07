@@ -132,7 +132,6 @@ describe('edit script asset design', () => {
       .mockResolvedValueOnce({
         success: true,
         prompt: '「环形太空舱中控室」广角镜头展示环形墙面、中控台和远处观察窗。',
-        availableSlots: ['中控台前方留出的站立位置'],
       })
 
     const designed = await designEditAssetRequirements({
@@ -158,8 +157,7 @@ describe('edit script asset design', () => {
     expect(designed[0]?.description).toBe('冷静研究员，约三十五岁，短发整齐，穿银灰色极简航天制服，黑色软底工作靴。')
     expect(designed[0]?.voiceTimbreText).toBe('成年女性声线，冷静清亮，中音区，口腔共鸣干净，鼻音弱，颗粒感少。')
     expect(designed[1]?.description).toContain('「环形太空舱中控室」广角镜头展示环形墙面、中控台和远处观察窗。')
-    expect(designed[1]?.description).toContain('可站位置：')
-    expect(designed[1]?.description).toContain('- 中控台前方留出的站立位置')
+    expect(designed[1]?.description).not.toContain('可站位置：')
   })
 
   it('fails explicitly when the reused asset design prompt returns no usable prompt', async () => {

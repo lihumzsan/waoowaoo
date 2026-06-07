@@ -19,8 +19,6 @@ const FORBIDDEN_FIELD_NAMES = new Set([
   'cameraVantages',
   'profileSource',
   'placementZones',
-  'availableSlots',
-  'available_slots',
 ])
 const COORDINATE_PATTERN = /\b(?:x|y)\s*[:=]\s*-?\d+(?:\.\d+)?\b|坐标|coordinate|coordinates/i
 

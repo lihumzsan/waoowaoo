@@ -1,6 +1,5 @@
 import { aiDesign } from '@/lib/asset-utils/ai-design'
 import type { Locale } from '@/i18n/routing'
-import { formatLocationAvailableSlotsText } from '@/lib/location-available-slots'
 import type { EditAssetRequirement, EditScriptShot, EditScriptStyleBible } from './types'
 
 interface DesignEditAssetRequirementsInput {
@@ -87,14 +86,9 @@ export async function designEditAssetRequirements(
       throw new Error(`EDIT_SCRIPT_ASSET_DESIGN_FAILED:${requirement.kind}:${requirement.name}:${design.error ?? 'empty prompt'}`)
     }
 
-    const slotText = requirement.kind === 'location'
-      ? formatLocationAvailableSlotsText(design.availableSlots ?? [], input.locale === 'en' ? 'en' : 'zh')
-      : ''
-    const description = slotText ? `${design.prompt.trim()}\n${slotText}` : design.prompt.trim()
-
     return {
       ...requirement,
-      description,
+      description: design.prompt.trim(),
       voiceTimbreText: requirement.kind === 'character' ? requirement.voiceTimbreText?.trim() ?? null : null,
     }
   }))

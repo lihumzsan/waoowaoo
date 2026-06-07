@@ -13,10 +13,6 @@ import {
   normalizeOptionalReferenceImagesForGeneration,
 } from '@/lib/media/outbound-image'
 import {
-  type LocationAvailableSlot,
-  stringifyLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   AnyObj,
   parseImageUrls,
 } from './image-task-handler-shared'
@@ -55,7 +51,6 @@ interface GlobalLocationImageRecord {
   id: string
   imageIndex: number
   description: string | null
-  availableSlots?: string | null
   imageUrl: string | null
   previousDescription: string | null
 }
@@ -248,7 +243,6 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
 
     let extractedDescription: {
       prompt: string
-      availableSlots: LocationAvailableSlot[]
     } | null = null
     if (locationImage.description && modifyInstruction && userModels.analysisModel) {
       try {
@@ -283,7 +277,6 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
           : {}),
         ...(extractedDescription ? {
           description: extractedDescription.prompt,
-          availableSlots: stringifyLocationAvailableSlots(extractedDescription.availableSlots),
         } : {}),
       },
     })

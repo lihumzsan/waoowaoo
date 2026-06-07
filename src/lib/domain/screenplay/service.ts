@@ -2,7 +2,6 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { removeLocationPromptSuffix } from '@/lib/constants'
 import { seedProjectLocationBackedImageSlots } from '@/lib/assets/services/location-backed-assets'
-import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 import { assertApprovedDomainMutationContext } from '@/lib/domain/approvals/guard'
 import {
@@ -145,7 +144,6 @@ async function persistAnalyzedLocations(params: {
       locationId: location.id,
       descriptions: cleanDescriptions,
       fallbackDescription: asString(item.summary) || name,
-      availableSlots: normalizeLocationAvailableSlots(item.available_slots),
       locationImageModel: params.tx.locationImage,
     })
 
@@ -188,7 +186,6 @@ async function persistAnalyzedProps(params: {
       locationId: prop.id,
       descriptions: [description],
       fallbackDescription: description,
-      availableSlots: [],
       locationImageModel: params.tx.locationImage,
     })
 

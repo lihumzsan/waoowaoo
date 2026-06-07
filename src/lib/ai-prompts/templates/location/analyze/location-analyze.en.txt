@@ -38,11 +38,6 @@ Output format (JSON only):
       "summary": "short usage summary",
       "has_crowd": false,
       "crowd_description": "",
-      "available_slots": [
-        "the position beneath the throne steps at the center of the palace hall",
-        "the open space between the left column and the long table",
-        "the position against the inner wall beside the rear doorway"
-      ],
       "descriptions": [
         "[location_name] description 1",
         "[location_name] description 2",
@@ -55,10 +50,6 @@ Output format (JSON only):
 Strict constraints:
 1. JSON only.
 2. If no valid location exists, return: {"locations":[]}.
-3. Each location must include 2-6 `available_slots`.
-4. Each `available_slots` item must be a complete descriptive placement phrase, not a short token and not an object.
-5. Slot descriptions must be concrete and reusable, tied to visible anchors such as the outer side of a desk row, the open floor before the blackboard, the inner side of a doorway, the space beside a window wall.
-6. Do not mention character posture, action, or emotion inside `available_slots`. Describe position only.
-7. Every anchor mentioned in `available_slots` must also appear clearly in the location descriptions.
-8. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+3. Each location description must keep clear anchors, visible depth, and nearby usable open space for later character placement, but do not output a separate placement list.
+4. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
   

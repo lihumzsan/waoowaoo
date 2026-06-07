@@ -16,10 +16,6 @@ import {
   normalizeToBase64ForGeneration,
 } from '@/lib/media/outbound-image'
 import {
-  type LocationAvailableSlot,
-  stringifyLocationAvailableSlots,
-} from '@/lib/location-available-slots'
-import {
   AnyObj,
   parseImageUrls,
   pickFirstString,
@@ -39,7 +35,6 @@ interface LocationImageRecord {
   id: string
   locationId: string
   description: string | null
-  availableSlots?: string | null
   imageUrl: string | null
   previousDescription: string | null
   location: {
@@ -232,7 +227,6 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
 
     let extractedDescription: {
       prompt: string
-      availableSlots: LocationAvailableSlot[]
     } | null = null
     if (locationImage.description && modifyInstruction) {
       try {
@@ -272,7 +266,6 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
           : {}),
         ...(extractedDescription ? {
           description: extractedDescription.prompt,
-          availableSlots: stringifyLocationAvailableSlots(extractedDescription.availableSlots),
         } : {}),
       },
     })

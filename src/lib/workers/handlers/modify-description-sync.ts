@@ -6,10 +6,6 @@ import {
   buildCharacterDescriptionFields,
   readIndexedDescription,
 } from '@/lib/assets/description-fields'
-import {
-  type LocationAvailableSlot,
-  normalizeLocationAvailableSlots,
-} from '@/lib/location-available-slots'
 
 export type SyncedAssetType = 'character' | 'location' | 'prop'
 
@@ -30,7 +26,6 @@ function buildImageContext(type: SyncedAssetType, hasReferenceImages: boolean): 
 
 function parseModifiedDescription(responseText: string): {
   prompt: string
-  availableSlots: LocationAvailableSlot[]
 } {
   const parsed = safeParseJsonObject(responseText)
   const prompt = trimText(typeof parsed.prompt === 'string' ? parsed.prompt : '')
@@ -39,7 +34,6 @@ function parseModifiedDescription(responseText: string): {
   }
   return {
     prompt,
-    availableSlots: normalizeLocationAvailableSlots(parsed.available_slots),
   }
 }
 
@@ -58,7 +52,6 @@ export async function generateModifiedAssetDescription(params: {
   projectId?: string
 }): Promise<{
   prompt: string
-  availableSlots: LocationAvailableSlot[]
 }> {
   const hasReferenceImages = Array.isArray(params.referenceImages) && params.referenceImages.length > 0
   const finalPrompt = params.type === 'character'

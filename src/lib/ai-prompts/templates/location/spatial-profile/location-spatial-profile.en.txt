@@ -6,7 +6,7 @@ Original location description (supporting context only; image facts take priorit
 Hard rules:
 1. Describe only spatial facts visible in the final image or directly implied by the visible structure.
 2. Do not make directing decisions. Do not output camera suggestions, blocked zones, camera vantage candidates, or source labels.
-3. Do not output x/y, coordinates, grids, coordinate, blockedZones, cameraVantages, profileSource, placementZones, availableSlots, or available_slots.
+3. Do not output x/y, coordinates, grids, coordinate, blockedZones, cameraVantages, profileSource, or placementZones.
 4. Use natural language for all description fields and describe only spatial anchors, relations between anchors, foreground/midground/background layout, and lighting direction.
 5. anchors must contain at least one entry; each anchor must be clearly visible in the final image or directly implied by the visible structure.
 6. Return only a JSON object. No Markdown and no explanation.

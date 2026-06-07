@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { attachMediaFieldsToGlobalLocation } from '@/lib/media/attach'
 import { isArtStyleValue } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { normalizeLocationAvailableSlots, stringifyLocationAvailableSlots } from '@/lib/location-available-slots'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -108,7 +107,6 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         }
 
         const summary = normalizeString(body.summary) || null
-        const availableSlots = normalizeLocationAvailableSlots(body.availableSlots)
         const count = hasOwn(body, 'count')
           ? normalizeImageGenerationCount('location', body.count)
           : 1
@@ -128,7 +126,6 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
             locationId: location.id,
             imageIndex,
             description: summary || name,
-            availableSlots: stringifyLocationAvailableSlots(availableSlots),
           })),
         })
 

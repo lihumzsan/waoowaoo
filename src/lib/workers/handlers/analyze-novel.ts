@@ -12,7 +12,6 @@ import type { TaskJobData } from '@/lib/task/types'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import { resolveAnalysisModel } from './resolve-analysis-model'
 import { seedProjectLocationBackedImageSlots } from '@/lib/assets/services/location-backed-assets'
-import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 import {
   createProjectCharacterWithAnalyzedAppearances,
@@ -346,12 +345,10 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
     })
 
     const cleanDescriptions = descriptions.map((value) => removeLocationPromptSuffix(value || ''))
-    const availableSlots = normalizeLocationAvailableSlots(item.available_slots)
     await seedProjectLocationBackedImageSlots({
       locationId: created.id,
       descriptions: cleanDescriptions,
       fallbackDescription: readText(item.summary) || name,
-      availableSlots,
     })
 
     createdLocations.push(created)
@@ -389,7 +386,6 @@ export async function handleAnalyzeNovelTask(job: Job<TaskJobData>) {
       locationId: created.id,
       descriptions: [description],
       fallbackDescription: description,
-      availableSlots: [],
     })
     existingPropNameSet.add(normalizedName)
     createdProps.push(created)

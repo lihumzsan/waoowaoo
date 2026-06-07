@@ -35,7 +35,6 @@ interface GlobalCharacterRecord {
 interface GlobalLocationImageRecord {
   id: string
   description: string | null
-  availableSlots?: string | null
 }
 
 interface GlobalLocationRecord {
@@ -151,7 +150,6 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         })
         : buildLocationImagePromptCore({
           description: image.description,
-          availableSlotsRaw: image.availableSlots,
           locale: job.data.locale === 'en' ? 'en' : 'zh',
         })
       const promptWithSuffix = payload.type === 'prop'

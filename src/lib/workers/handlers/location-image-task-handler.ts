@@ -26,7 +26,6 @@ interface LocationImageRecord {
   id: string
   locationId: string
   description: string | null
-  availableSlots?: string | null
   imageIndex: number
   location?: { name: string } | null
 }
@@ -129,7 +128,6 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
       })
       : buildLocationImagePromptCore({
         description: promptBody,
-        availableSlotsRaw: item.availableSlots,
         locale: job.data.locale === 'en' ? 'en' : 'zh',
       })
 

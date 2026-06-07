@@ -251,7 +251,6 @@ describe('worker analyze-novel behavior', () => {
           locationId: 'loc-new-1',
           imageIndex: 0,
           description: '雨夜街道',
-          availableSlots: '[]',
         },
       ],
     })
@@ -261,7 +260,6 @@ describe('worker analyze-novel behavior', () => {
           locationId: 'prop-new-1',
           imageIndex: 0,
           description: '一根黑铁长棍，两端包裹金色金属箍，表面磨损发亮，杆身笔直厚重',
-          availableSlots: '[]',
         },
       ],
     })

@@ -9,7 +9,6 @@ import type { TaskJobData } from '@/lib/task/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
-import { normalizeLocationAvailableSlots } from '@/lib/location-available-slots'
 
 function readRequiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) {
@@ -22,7 +21,6 @@ import { safeParseJsonObject } from '@/lib/json-repair'
 
 function parseJsonPrompt(responseText: string): {
   prompt: string
-  availableSlots: ReturnType<typeof normalizeLocationAvailableSlots>
 } {
   const parsed = safeParseJsonObject(responseText)
   const prompt = typeof parsed.prompt === 'string' ? parsed.prompt.trim() : ''
@@ -31,7 +29,6 @@ function parseJsonPrompt(responseText: string): {
   }
   return {
     prompt,
-    availableSlots: normalizeLocationAvailableSlots(parsed.available_slots),
   }
 }
 
@@ -135,6 +132,5 @@ export async function handleAssetHubAIModifyTask(job: Job<TaskJobData>) {
   return {
     success: true,
     modifiedDescription: parsed.prompt,
-    availableSlots: parsed.availableSlots,
   }
 }

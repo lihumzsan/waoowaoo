@@ -10,7 +10,6 @@ import { useAiCreateProjectLocation, useCreateProjectLocation } from '@/lib/quer
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
-import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 
 interface AddLocationModalProps {
   projectId: string
@@ -59,7 +58,6 @@ export default function AddLocationModal({
   const [description, setDescription] = useState('')
   const [aiInstruction, setAiInstruction] = useState('')
   const [artStyle, setArtStyle] = useState('american-comic')
-  const [availableSlots, setAvailableSlots] = useState<LocationAvailableSlot[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAiDesigning, setIsAiDesigning] = useState(false)
   const aiDesigningState = isAiDesigning
@@ -89,7 +87,6 @@ export default function AddLocationModal({
         userInstruction: aiInstruction,
       })
       setDescription(data.prompt || '')
-      setAvailableSlots(Array.isArray(data.availableSlots) ? data.availableSlots : [])
       setAiInstruction('')
     } catch (error: unknown) {
       if (getErrorStatus(error) === 402) {
@@ -116,7 +113,6 @@ export default function AddLocationModal({
         description: description.trim(),
         artStyle,
         count: locationGenerationCount,
-        availableSlots,
       })
       onSuccess()
       onClose()

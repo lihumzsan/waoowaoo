@@ -6,7 +6,7 @@
 硬性规则：
 1. 只描述最终图片里能看见或能由画面结构直接推断的空间事实。
 2. 不做导演决策，不输出镜头建议、机位候选、禁用区域或来源标记。
-3. 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource、placementZones、availableSlots 或 available_slots。
+3. 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource 或 placementZones。
 4. 所有描述字段使用自然中文，只描述空间锚点、锚点之间的相对关系、前景/中景/背景和光线方向。
 5. anchors 必须至少 1 个；每个 anchor 都必须是最终图片中清楚可见或由画面结构直接推断出的稳定空间参照物。
 6. 只输出 JSON 对象，不要 Markdown，不要解释。

@@ -7,10 +7,6 @@ import { logError as _ulogError } from '@/lib/logging/core'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { withTextBilling } from '@/lib/billing'
 import { safeParseJsonObject } from '@/lib/json-repair'
-import {
-    type LocationAvailableSlot,
-    normalizeLocationAvailableSlots,
-} from '@/lib/location-available-slots'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import type { Locale } from '@/i18n/routing'
 
@@ -31,7 +27,6 @@ export interface AIDesignOptions {
 export interface AIDesignResult {
     success: boolean
     prompt?: string
-    availableSlots?: LocationAvailableSlot[]
     error?: string
 }
 
@@ -130,8 +125,5 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
     return {
         success: true,
         prompt: typeof parsedResponse.prompt === 'string' ? parsedResponse.prompt : '',
-        availableSlots: assetType === 'location'
-            ? normalizeLocationAvailableSlots(parsedResponse.available_slots)
-            : [],
     }
 }

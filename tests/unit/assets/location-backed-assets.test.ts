@@ -63,7 +63,6 @@ describe('location-backed assets service', () => {
           locationId: result.id,
           imageIndex: 0,
           description: 'A bronze dagger with a carved handle and weathered blade',
-          availableSlots: '[]',
         },
       ],
     })
@@ -84,13 +83,11 @@ describe('location-backed assets service', () => {
           locationId: 'location-1',
           imageIndex: 0,
           description: 'Night street',
-          availableSlots: '[]',
         },
         {
           locationId: 'location-1',
           imageIndex: 1,
           description: 'Rainy alley',
-          availableSlots: '[]',
         },
       ],
     })

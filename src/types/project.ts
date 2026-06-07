@@ -1,5 +1,4 @@
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
-import type { LocationAvailableSlot } from '@/lib/location-available-slots'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type ProjectVideoGenerationOptionValue = string | number | boolean
@@ -83,7 +82,6 @@ export interface LocationImage {
   locationId?: string               // 可选，API 响应可能不包含
   imageIndex: number              // 图片索引：0, 1, 2
   description: string | null
-  availableSlots?: LocationAvailableSlot[] | null
   imageUrl: string | null
   spatialProfileJson?: unknown | null
   spatialProfileStatus?: LocationSpatialProfileStatus | null

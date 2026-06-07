@@ -17,16 +17,10 @@ Rules:
 7. Mention lighting direction and atmosphere.
 8. No protagonist actions or dialogue.
 9. If crowd is implied by context, use generic crowd terms only (guests, pedestrians, audience).
-10. Also generate 2-6 fixed `available_slots` as complete descriptive placement phrases tied to concrete scene anchors.
-11. Do not mention posture, action, or emotion in `available_slots`. Describe position only.
-12. Every anchor mentioned in `available_slots` must appear clearly in the scene prompt.
+10. Keep clear anchors and nearby usable open space visible for later character placement, but do not output a separate placement list.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:
 {
-  "prompt": "[Scene Name] environment description",
-  "available_slots": [
-    "the position beside the left edge of the dining table",
-    "the open space just inside the doorway against the wall"
-  ]
+  "prompt": "[Scene Name] environment description"
 }

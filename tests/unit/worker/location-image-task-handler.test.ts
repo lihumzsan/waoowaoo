@@ -103,9 +103,6 @@ describe('worker location-image-task-handler behavior', () => {
       locationId: 'location-1',
       imageIndex: 0,
       description: '雨夜街道',
-      availableSlots: JSON.stringify([
-        '街道左侧靠墙的留白位置',
-      ]),
       location: { name: 'Old Town' },
     })
 
@@ -118,9 +115,6 @@ describe('worker location-image-task-handler behavior', () => {
           locationId: 'location-1',
           imageIndex: 0,
           description: '雨夜街道',
-          availableSlots: JSON.stringify([
-            '街道左侧靠墙的留白位置',
-          ]),
         },
       ],
     })
@@ -156,12 +150,7 @@ describe('worker location-image-task-handler behavior', () => {
     )
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining('自然保留这些落位区域对应的锚物和周边空白'),
-      }),
-    )
-    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: expect.stringContaining('街道左侧靠墙的留白位置'),
+        prompt: expect.stringContaining('为后续人物落位保留清晰稳定的空间锚点'),
       }),
     )
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(

@@ -53,9 +53,6 @@ const sharedMock = vi.hoisted(() => ({
         isSelected: true,
         imageUrl: 'cos/old-town.png',
         description: '老街中央留出明确人物站位',
-        availableSlots: JSON.stringify([
-          '街道左侧靠墙的留白位置',
-        ]),
       }],
     }],
   })),
@@ -204,7 +201,7 @@ describe('worker panel-variant-task-handler behavior', () => {
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
         characters_info: expect.stringContaining('固定位置：街道左侧靠墙的留白位置'),
-        location_asset: expect.stringContaining('街道左侧靠墙的留白位置'),
+        location_asset: expect.stringContaining('场景描述：老街中央留出明确人物站位'),
         reference_images: expect.stringContaining('图 1 = 原始镜头「原始镜头」'),
       }),
     }))
@@ -270,12 +267,12 @@ describe('worker panel-variant-task-handler behavior', () => {
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       locale: 'en',
       variables: expect.objectContaining({
-        location_asset: expect.stringContaining('Available character slots:'),
+        location_asset: expect.stringContaining('Scene description: 老街中央留出明确人物站位'),
       }),
     }))
     expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
-        location_asset: expect.not.stringContaining('可站位置：'),
+        location_asset: expect.not.stringContaining('Available character slots:'),
       }),
     }))
   })
