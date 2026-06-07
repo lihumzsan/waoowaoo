@@ -10,10 +10,6 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-function readOptionalString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 function readImageOptions(value: unknown): { resolution?: string; quality?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const record = value as Record<string, unknown>
@@ -30,14 +26,10 @@ function readImageOptions(value: unknown): { resolution?: string; quality?: stri
 export async function handleScenePromptTestTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const modelId = readRequiredString(payload.imageModel, 'imageModel')
-  const story = readRequiredString(payload.story, 'story')
-  const styleRequest = readOptionalString(payload.styleRequest)
-  const storyDirection = readOptionalString(payload.storyDirection)
+  const sceneInput = readRequiredString(payload.sceneInput, 'sceneInput')
   const imageOptions = readImageOptions(payload.generationOptions)
   const variants = buildScenePromptTestVariants({
-    story,
-    styleRequest,
-    storyDirection,
+    sceneInput,
     locale: job.data.locale,
   })
   const results: Array<{

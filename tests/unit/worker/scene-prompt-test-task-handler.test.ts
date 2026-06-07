@@ -55,9 +55,7 @@ describe('worker scene-prompt-test-task-handler', () => {
   it('generates current baseline plus three story-aware scene prompt variants', async () => {
     const result = await handleScenePromptTestTask(buildJob({
       imageModel: 'location-model-1',
-      story: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。',
-      styleRequest: '低饱和东方武侠电影，晨雾，旧木',
-      storyDirection: '后续会有离别、下山、回望寺门的镜头',
+      sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
     }))
 
     expect(result.variants).toHaveLength(4)
@@ -72,6 +70,7 @@ describe('worker scene-prompt-test-task-handler', () => {
     expect(result.variants[1]?.prompt).toContain('最适合后续分镜继承')
     expect(result.variants[2]?.prompt).toContain('21:9 宽幅构图')
     expect(result.variants[3]?.prompt).toContain('电影化正面主视图、对侧反面视图、美术化顶面视图')
+    expect(result.variants[1]?.prompt).toContain('用户唯一输入')
 
     expect(handlerSharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(4)
     const generationCalls = handlerSharedMock.generateCleanImageToStorage.mock.calls.map((call) => call[0] as GenerationInput)

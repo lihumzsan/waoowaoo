@@ -87,9 +87,7 @@ function taskPhase(status: string | undefined, hasTask: boolean): TaskPresentati
 
 export default function ScenePromptTestPage() {
   const t = useTranslations('workspaceDetail.scenePromptTest')
-  const [story, setStory] = useState('')
-  const [styleRequest, setStyleRequest] = useState('')
-  const [storyDirection, setStoryDirection] = useState('')
+  const [sceneInput, setSceneInput] = useState('')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [task, setTask] = useState<TaskDetail<ScenePromptTaskResult> | null>(null)
   const [busy, setBusy] = useState(false)
@@ -126,8 +124,8 @@ export default function ScenePromptTestPage() {
   }, [pollTask, taskId, t])
 
   const generate = useCallback(async () => {
-    if (!story.trim()) {
-      setError(t('needStory'))
+    if (!sceneInput.trim()) {
+      setError(t('needSceneInput'))
       return
     }
     setBusy(true)
@@ -138,7 +136,7 @@ export default function ScenePromptTestPage() {
       const response = await apiFetch('/api/scene-prompt-test/generate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ story, styleRequest, storyDirection }),
+        body: JSON.stringify({ sceneInput }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('failed')))
       const parsed = parseSubmitResponse(await response.json())
@@ -149,7 +147,7 @@ export default function ScenePromptTestPage() {
     } finally {
       setBusy(false)
     }
-  }, [story, storyDirection, styleRequest, t])
+  }, [sceneInput, t])
 
   const taskState = resolveTaskPresentationState({
     phase: taskPhase(task?.status, Boolean(taskId)),
@@ -176,39 +174,19 @@ export default function ScenePromptTestPage() {
         <section className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
           <div className="flex flex-col gap-4 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-4">
             <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">{t('storyLabel')}</span>
+              <span className="text-sm font-medium">{t('sceneInputLabel')}</span>
               <textarea
-                value={story}
-                onChange={(event) => setStory(event.target.value)}
-                rows={8}
-                placeholder={t('storyPlaceholder')}
-                className="resize-none rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm leading-6 outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">{t('styleLabel')}</span>
-              <textarea
-                value={styleRequest}
-                onChange={(event) => setStyleRequest(event.target.value)}
-                rows={3}
-                placeholder={t('stylePlaceholder')}
-                className="resize-none rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm leading-6 outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">{t('directionLabel')}</span>
-              <textarea
-                value={storyDirection}
-                onChange={(event) => setStoryDirection(event.target.value)}
-                rows={3}
-                placeholder={t('directionPlaceholder')}
+                value={sceneInput}
+                onChange={(event) => setSceneInput(event.target.value)}
+                rows={14}
+                placeholder={t('sceneInputPlaceholder')}
                 className="resize-none rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm leading-6 outline-none"
               />
             </label>
             <button
               type="button"
               onClick={generate}
-              disabled={busy || !story.trim()}
+              disabled={busy || !sceneInput.trim()}
               className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {busy ? t('submitting') : t('generate')}

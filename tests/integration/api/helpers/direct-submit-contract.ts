@@ -470,15 +470,13 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   {
     routeFile: 'src/app/api/scene-prompt-test/generate/route.ts',
     body: {
-      story: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。',
-      styleRequest: '低饱和东方武侠电影，晨雾，旧木，棉麻质感',
-      storyDirection: '后续会有离别、下山、回望寺门的镜头',
+      sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
     },
     expectedTaskType: TASK_TYPE.SCENE_PROMPT_TEST,
     expectedTargetType: 'ScenePromptTest',
     expectedProjectId: 'system',
     expectedPayloadSubset: {
-      story: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。',
+      sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
       imageModel: 'img::location',
       count: 4,
     },

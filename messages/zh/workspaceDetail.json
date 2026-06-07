@@ -9,14 +9,10 @@
   "episode": "剧集",
   "scenePromptTest": {
     "title": "造景 Prompt 对比测试",
-    "subtitle": "输入一个故事，独立生成当前基准和 3 个新造景策略的场景资产图，用来比较是否能根据剧本、风格和故事走向选择更合适的场景。",
+    "subtitle": "只输入一段场景或故事文本，独立生成当前基准和 3 个新造景策略的场景资产图，用来比较 AI 是否能自行分析风格、故事走向并选择更合适的场景。",
     "back": "返回工作区",
-    "storyLabel": "故事 / 剧本",
-    "storyPlaceholder": "例如：少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇，少年回望旧木山门。",
-    "styleLabel": "风格要求",
-    "stylePlaceholder": "例如：低饱和东方武侠电影，晨雾，旧木，棉麻，冷暖交错侧光。",
-    "directionLabel": "故事走向 / 后续用途",
-    "directionPlaceholder": "例如：后续会有离别、下山、回望寺门、师徒关系转折的分镜。",
+    "sceneInputLabel": "场景输入",
+    "sceneInputPlaceholder": "例如：少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇，少年回望旧木山门。后续会有离别、下山、回望寺门、师徒关系转折的分镜。",
     "generate": "生成 4 组造景对比",
     "submitting": "提交中...",
     "results": "造景结果",
@@ -26,7 +22,7 @@
     "prompt": "生成 Prompt",
     "empty": "生成后显示 4 张对比图和完整 prompt。",
     "openImage": "打开图片",
-    "needStory": "请输入故事或剧本。",
+    "needSceneInput": "请输入场景或故事文本。",
     "failed": "造景测试生成失败"
   },
   "sceneReferenceTest": {

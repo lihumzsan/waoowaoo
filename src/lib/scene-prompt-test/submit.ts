@@ -21,10 +21,6 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-function readOptionalString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 function imageModelRequired(model: string | null): string {
   if (!model) {
     throw new ApiError('INVALID_PARAMS', {
@@ -43,9 +39,7 @@ export async function submitScenePromptTestTask(input: {
   const userModelConfig = await getUserModelConfig(input.userId)
   const imageModel = imageModelRequired(userModelConfig.locationModel)
   const payload = {
-    story: readRequiredString(input.body.story, 'story'),
-    styleRequest: readOptionalString(input.body.styleRequest),
-    storyDirection: readOptionalString(input.body.storyDirection),
+    sceneInput: readRequiredString(input.body.sceneInput, 'sceneInput'),
     imageModel,
     count: 4,
   }

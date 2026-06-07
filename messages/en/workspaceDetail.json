@@ -9,14 +9,10 @@
   "episode": "Episode",
   "scenePromptTest": {
     "title": "Scene Prompt Comparison Test",
-    "subtitle": "Enter one story and generate the current baseline plus three new scene-design strategies to compare whether the prompt selects a better reusable scene from script, style, and story direction.",
+    "subtitle": "Enter one scene or story text only, then generate the current baseline plus three new scene-design strategies to compare whether AI can infer style, story direction, and the best reusable scene by itself.",
     "back": "Back to workspace",
-    "storyLabel": "Story / script",
-    "storyPlaceholder": "Example: On the night before a young martial monk leaves the mountain, his master speaks to him in the temple courtyard and sends him to find a missing old friend. Morning mist is heavy, and the mountain road beyond the old wooden gate leads toward an unknown town.",
-    "styleLabel": "Style request",
-    "stylePlaceholder": "Example: low-saturation Eastern wuxia cinema, morning mist, old wood, cotton-linen texture, warm-cool crossed side light.",
-    "directionLabel": "Story direction / later usage",
-    "directionPlaceholder": "Example: later storyboards need farewell, descent from the mountain, looking back at the temple gate, and a mentor-student turning point.",
+    "sceneInputLabel": "Scene input",
+    "sceneInputPlaceholder": "Example: On the night before a young martial monk leaves the mountain, his master speaks to him in the temple courtyard and sends him to find a missing old friend. Morning mist is heavy, and the mountain road beyond the old wooden gate leads toward an unknown town. Later storyboards need farewell, descent from the mountain, looking back at the temple gate, and a mentor-student turning point.",
     "generate": "Generate 4 scene comparisons",
     "submitting": "Submitting...",
     "results": "Scene results",
@@ -26,7 +22,7 @@
     "prompt": "Generation prompt",
     "empty": "Four comparison images and full prompts appear after generation.",
     "openImage": "Open image",
-    "needStory": "Enter a story or script.",
+    "needSceneInput": "Enter scene or story text.",
     "failed": "Scene prompt test generation failed"
   },
   "sceneReferenceTest": {
