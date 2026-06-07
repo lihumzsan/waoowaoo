@@ -70,7 +70,7 @@ export default function ProfilePage() {
   const urlSection = readProfileSectionParam(searchParams.get('section'))
 
   const [activeSection, setActiveSection] = useState<ProfileSection>(urlSection)
-  const [isCloud, setIsCloud] = useState(false)
+  const [isCloud, setIsCloud] = useState<boolean | null>(null)
   const [balance, setBalance] = useState<BalancePayload | null>(null)
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
   const [inviteCode, setInviteCode] = useState('')
@@ -92,7 +92,10 @@ export default function ProfilePage() {
 
     const loadDeployment = async () => {
       const response = await apiFetch('/api/deployment')
-      if (!response.ok) return
+      if (!response.ok) {
+        if (!canceled) setIsCloud(false)
+        return
+      }
       const payload: unknown = await response.json()
       if (!canceled && isDeploymentPayload(payload)) {
         setIsCloud(payload.deployment?.isCloud === true)
@@ -104,6 +107,15 @@ export default function ProfilePage() {
       canceled = true
     }
   }, [session])
+
+  useEffect(() => {
+    if (isCloud !== true || activeSection !== 'apiConfig') return
+    setActiveSection('billing')
+    router.replace(
+      { pathname: '/profile', query: { section: 'billing' } },
+      { scroll: false },
+    )
+  }, [activeSection, isCloud, router])
 
   const loadBalance = async () => {
     const response = await apiFetch('/api/user/balance')
@@ -136,15 +148,19 @@ export default function ProfilePage() {
   }
 
   const noBillingText = t('openSourceNoBilling')
-  const balanceText = isCloud ? formatAmount(balance?.balance, balance?.currency) : noBillingText
+  const balanceText = isCloud === true ? formatAmount(balance?.balance, balance?.currency) : noBillingText
   const sectionItems: Array<{
     section: ProfileSection
     icon: AppIconName
     label: string
-  }> = [
-    { section: 'apiConfig', icon: 'settingsHexAlt', label: t('apiConfig') },
-    { section: 'billing', icon: 'receipt', label: t('billingRecords') },
-  ]
+  }> = isCloud === true
+    ? [
+      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
+    ]
+    : [
+      { section: 'apiConfig', icon: 'settingsHexAlt', label: t('apiConfig') },
+      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
+    ]
 
   const handleSectionChange = (section: ProfileSection) => {
     setActiveSection(section)
@@ -176,7 +192,7 @@ export default function ProfilePage() {
                 <div className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-4">
                   <div className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('availableBalance')}</div>
                   <div className="mt-2 text-base font-semibold text-[var(--glass-text-primary)]">{balanceText}</div>
-                  {isCloud ? (
+                  {isCloud === true ? (
                     <div className="mt-2 space-y-1 text-xs text-[var(--glass-text-tertiary)]">
                       <div>{t('frozen')}: {formatAmount(balance?.frozenAmount, balance?.currency)}</div>
                       <div>{t('totalSpent')}: {formatAmount(balance?.totalSpent, balance?.currency)}</div>
@@ -215,9 +231,13 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="glass-surface-elevated h-full flex flex-col">
 
-              {activeSection === 'apiConfig' ? (
+              {isCloud === null ? (
+                <div className="flex h-full items-center justify-center text-sm text-[var(--glass-text-secondary)]">
+                  {tc('loading')}
+                </div>
+              ) : activeSection === 'apiConfig' && isCloud !== true ? (
                 <ApiConfigTab />
-              ) : isCloud ? (
+              ) : isCloud === true ? (
                 <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
                   <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">
