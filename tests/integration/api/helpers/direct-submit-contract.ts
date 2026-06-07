@@ -524,18 +524,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/character-style-test/route.ts',
-    body: { characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light' },
-    expectedTaskType: TASK_TYPE.CHARACTER_STYLE_TEST,
-    expectedTargetType: 'CharacterStyleTest',
-    expectedProjectId: 'system',
-    expectedPayloadSubset: {
-      characterRequest: 'cold hacker in a black coat, wet neon noir, cold rim light',
-      imageModel: 'img::character',
-      count: 1,
-    },
-  },
-  {
     routeFile: 'src/app/api/scene-reference-test/generate-scenes/route.ts',
     body: {
       sceneDescription: 'rainy temple backyard',

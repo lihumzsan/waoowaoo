@@ -59,7 +59,6 @@ const ROUTE_FILES = [
   'src/app/api/assets/route.ts',
   'src/app/api/auth/[...nextauth]/route.ts',
   'src/app/api/auth/register/route.ts',
-  'src/app/api/character-style-test/route.ts',
   'src/app/api/cos/image/route.ts',
   'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',
@@ -218,7 +217,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   if (
     routeFile.endsWith('/generate-image/route.ts')
     || routeFile.includes('/scene-reference-test/')
-    || routeFile.endsWith('/character-style-test/route.ts')
     || routeFile.endsWith('/generate-bgm/route.ts')
     || routeFile.endsWith('/generate-music/route.ts')
     || routeFile.endsWith('/generate-video/route.ts')
