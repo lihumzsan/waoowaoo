@@ -19,10 +19,10 @@ How Style Bible affects casting and design:
 
 Strong example: how style affects casting
 Character input: martial monk
-If Style Bible says “desaturated Eastern wuxia cinema, morning mist, aged wood, cotton-linen texture, cold-warm mixed light”, do not write “modern gym fighter, black biker jacket, metal necklace”. Write a visual direction like: “Martial monk, about thirty, shaved head or very short hair, clear brow ridge, firm facial planes, lean but strong body. Wears aged cotton-linen monk robes with worn cuffs and hem from long training, plain cloth belt, dark cloth shoes. Grey-brown base with aged-wood and muted-gold details, restrained rough texture aligned with morning mist and temple cold-warm light.”
+If Style Bible says “desaturated Eastern wuxia cinema, morning mist, aged wood, cotton-linen texture, cold-warm mixed light”, do not write “modern gym fighter, black biker jacket, metal necklace”, and do not write “aligned with the Style Bible” or “aligned with morning mist and temple light”. Translate the style into direct image-generation visual words: “Martial monk, about thirty, shaved head or very short hair, clear brow ridge, firm facial planes, lean but strong body. Wears aged cotton-linen monk robes with worn cuffs and hem from long training, plain cloth belt, dark cloth shoes. Low-saturation grey-brown palette, aged-wood and muted-gold details, coarse cotton-linen weave, soft misty cold-warm side light, restrained Eastern wuxia cinema texture.”
 
 Character input: urban programmer
-If Style Bible says “cool cyber-realism, screen glow, metal reflection, low-saturation blue-green”, do not write “sunny campus style, bright sports jacket”. Write a visual direction like: “Programmer, about twenty-eight, slightly messy short hair, subtle under-eye fatigue, slim body. Wears a low-saturation grey-blue hoodie and dark utility pants, matte sneakers, minimal wristwatch. Clothing carries screen-cool reflections and slight wrinkles, restrained silhouette, aligned with a late-night technical workspace.”
+If Style Bible says “cool cyber-realism, screen glow, metal reflection, low-saturation blue-green”, do not write “sunny campus style, bright sports jacket”, and do not write “aligned with a late-night technical workspace”. Translate the style into direct image-generation visual words: “Programmer, about twenty-eight, slightly messy short hair, subtle under-eye fatigue, slim body. Wears a low-saturation grey-blue hoodie and dark utility pants, matte sneakers, minimal wristwatch. Clothing carries cool blue-green screen reflections, subtle metallic edge highlights, and natural wrinkles, restrained silhouette, cool cyber-realistic texture.”
 
 Characters to include:
 - Characters listed in screenplay character lines.
@@ -62,11 +62,12 @@ appearances rules:
 1. Every new character must include appearances.
 2. appearances must include at least one initial appearance.
 3. Every appearance must include descriptions, with 3 candidate visual descriptions preferred.
-4. Each description must be directly usable for character image generation: identity, face/hair/body/outfit/footwear/key wearable accessories, material, color logic, and Style Bible alignment.
+4. Each description must be directly usable for character image generation: identity, face/hair/body/outfit/footwear/key wearable accessories, material, color logic, and concrete visual words translated from the Style Bible.
 5. Do not include plot actions, temporary expressions, fixed story locations, handheld props, furniture, environment objects, or temporary objects attached to the character.
 6. Wearable accessories are allowed; weapons, tools, and temporary held items must not become fixed body assets.
 7. Add sub-appearances only for persistent visible changes in the source text, such as outfit changes, age phases, long-term disguise, or sustained combat outfit.
 8. Sub-appearance descriptions should focus on changed outfit/hair/age details while preserving main identity anchors.
+9. descriptions must not use context-dependent comparison phrases such as “aligned with the Style Bible”, “matches the above style”, “refer to the previous style”, or “aligned with morning mist and temple light”. Write directly executable visual attributes instead, such as “low-saturation grey-brown palette, coarse cotton-linen weave, soft misty cold-warm side light”.
 
 Visual-description freedom:
 - Do not force every character into a full facial-feature checklist.
