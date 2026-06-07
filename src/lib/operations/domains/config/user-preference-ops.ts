@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
+import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -18,6 +20,16 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'musicModel',
   'videoRatio',
 ]
+
+const MODEL_FIELDS = new Set([
+  'analysisModel',
+  'characterModel',
+  'locationModel',
+  'storyboardModel',
+  'editModel',
+  'videoModel',
+  'musicModel',
+])
 
 export function createUserPreferenceOperations(): ProjectAgentOperationRegistryDraft {
   return {
@@ -37,13 +49,29 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx) => {
+        const deployment = getDeploymentConfig()
         const preference = await prisma.userPreference.upsert({
           where: { userId: ctx.userId },
           update: {},
           create: { userId: ctx.userId },
         })
 
-        return { preference }
+        if (deployment.providerCredentialMode === 'platform-key') {
+          const runtimeDefaults = getPlatformDefaultModels()
+          return {
+            preference: {
+              ...preference,
+              ...runtimeDefaults,
+            },
+            deployment: toPublicDeploymentConfig(deployment),
+            runtimeDefaults,
+          }
+        }
+
+        return {
+          preference,
+          deployment: toPublicDeploymentConfig(deployment),
+        }
       },
     }),
 
@@ -67,7 +95,17 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
+        const deployment = getDeploymentConfig()
         const body = isRecord(input) ? input : {}
+        if (deployment.providerCredentialMode === 'platform-key') {
+          const attemptedModelField = Object.keys(body).find((field) => MODEL_FIELDS.has(field))
+          if (attemptedModelField) {
+            throw new ApiError('FORBIDDEN', {
+              code: 'PLATFORM_MODELS_MANAGED_BY_PLATFORM',
+              field: attemptedModelField,
+            })
+          }
+        }
 
         const updateData: Record<string, unknown> = {}
         for (const field of ALLOWED_FIELDS) {

@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getPlatformModels } from '@/lib/platform-models/catalog'
 import {
   type CapabilityValue,
   type ModelCapabilities,
@@ -144,11 +146,37 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
   return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
 }
 
+async function resolveModelSource(userId: string): Promise<{
+  deploymentMode: 'platform-key' | 'user-key'
+  models: StoredModel[]
+  providers: StoredProvider[]
+}> {
+  const deployment = getDeploymentConfig()
+  if (deployment.providerCredentialMode === 'platform-key') {
+    return {
+      deploymentMode: 'platform-key',
+      models: getPlatformModels(),
+      providers: [],
+    }
+  }
+
+  const pref = await prisma.userPreference.findUnique({
+    where: { userId },
+    select: { customModels: true, customProviders: true },
+  })
+
+  return {
+    deploymentMode: 'user-key',
+    models: parseStoredModels(pref?.customModels),
+    providers: parseStoredProviders(pref?.customProviders),
+  }
+}
+
 export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft {
   return {
     list_user_models: {
       id: 'list_user_models',
-      summary: 'List user-enabled models (from userPreference.customModels/customProviders) for config dropdowns.',
+      summary: 'List runtime-enabled models for config dropdowns.',
       intent: 'query',
       effects: {
         writes: false,
@@ -162,17 +190,10 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx) => {
-        const pref = await prisma.userPreference.findUnique({
-          where: { userId: ctx.userId },
-          select: { customModels: true, customProviders: true },
-        })
-
-        const modelsRaw: StoredModel[] = parseStoredModels(pref?.customModels)
-        const providers: StoredProvider[] = parseStoredProviders(pref?.customProviders)
-
+        const modelSource = await resolveModelSource(ctx.userId)
         const providerNameMap = new Map<string, string>()
         const providerIdsWithApiKey = new Set<string>()
-        providers.forEach((provider) => {
+        modelSource.providers.forEach((provider) => {
           const providerId = typeof provider?.id === 'string' ? provider.id.trim() : ''
           if (!providerId) return
 
@@ -189,7 +210,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           music: [],
         }
 
-        for (const model of modelsRaw) {
+        for (const model of modelSource.models) {
           if (!isUnifiedModelType(model.type)) continue
 
           const modelType = model.type
@@ -197,7 +218,8 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           if (!modelKey) continue
 
           const provider = toProvider(model)
-          if (!provider || !providerIdsWithApiKey.has(provider)) continue
+          if (!provider) continue
+          if (modelSource.deploymentMode !== 'platform-key' && !providerIdsWithApiKey.has(provider)) continue
           const modelId = toModelId(model)
           const option: UserModelOption = {
             value: modelKey,

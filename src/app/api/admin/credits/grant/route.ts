@@ -8,7 +8,6 @@ const grantCreditsSchema = z.object({
   userId: z.string().min(1).optional(),
   userName: z.string().min(1).optional(),
   amount: z.number().positive(),
-  operatorId: z.string().min(1),
   reason: z.string().min(1),
   idempotencyKey: z.string().min(1).optional(),
 }).refine((value) => Boolean(value.userId || value.userName), {
@@ -52,6 +51,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  const result = await grantUserCredits(parsed.data)
+  const result = await grantUserCredits({
+    ...parsed.data,
+    operatorId: authResult.session.user.id,
+  })
   return NextResponse.json(result)
 })

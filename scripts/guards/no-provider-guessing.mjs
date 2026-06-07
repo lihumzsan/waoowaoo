@@ -38,15 +38,16 @@ function walk(dir, out = []) {
   return out
 }
 
-const apiConfigPath = path.join(root, 'src/lib/api-config.ts')
-if (!fs.existsSync(apiConfigPath)) {
-  fail('Missing src/lib/api-config.ts')
+const runtimeConfigRelPath = 'src/lib/user-api/runtime-config.ts'
+const runtimeConfigPath = path.join(root, runtimeConfigRelPath)
+if (!fs.existsSync(runtimeConfigPath)) {
+  fail(`Missing ${runtimeConfigRelPath}`)
 }
 const legacyRegistryPath = path.join(root, 'src/lib/model-registry.ts')
 if (fs.existsSync(legacyRegistryPath)) {
   fail('Legacy runtime registry must be removed', ['src/lib/model-registry.ts'])
 }
-const apiConfigText = fs.readFileSync(apiConfigPath, 'utf8')
+const runtimeConfigText = fs.readFileSync(runtimeConfigPath, 'utf8')
 
 const forbiddenApiConfigTokens = [
   'includeAnyType',
@@ -54,12 +55,12 @@ const forbiddenApiConfigTokens = [
   'matches multiple providers across media types',
 ]
 const apiViolations = forbiddenApiConfigTokens
-  .filter((token) => apiConfigText.includes(token))
-  .map((token) => `src/lib/api-config.ts contains forbidden provider-guessing token: ${token}`)
+  .filter((token) => runtimeConfigText.includes(token))
+  .map((token) => `${runtimeConfigRelPath} contains forbidden provider-guessing token: ${token}`)
 
-// 验证 api-config.ts 使用严格 provider.id 精确匹配（不按 type 过滤，不做 providerKey 模糊匹配）
-if (!apiConfigText.includes('pickProviderStrict(')) {
-  apiViolations.push('src/lib/api-config.ts missing strict provider resolution function (pickProviderStrict)')
+// 验证 runtime config 使用严格 provider.id 精确匹配（不按 type 过滤，不做 providerKey 模糊匹配）
+if (!runtimeConfigText.includes('pickProviderStrict(')) {
+  apiViolations.push(`${runtimeConfigRelPath} missing strict provider resolution function (pickProviderStrict)`)
 }
 
 const files = scanRoots.flatMap((scanRoot) => walk(path.join(root, scanRoot)))

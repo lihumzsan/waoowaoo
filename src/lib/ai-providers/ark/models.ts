@@ -1,5 +1,6 @@
 import type { MediaOptionSchemaConfig } from '@/lib/ai-providers/shared/media-option-schema-config'
 import type { AiOptionSchema } from '@/lib/ai-registry/types'
+import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
   buildMediaOptionSchema,
   enumValidator,
@@ -18,6 +19,11 @@ export const ARK_TOKEN_PRICED_VIDEO_MODEL_IDS = [
   'doubao-seedance-2-0-fast-260128',
 ] as const
 export const ARK_DEFAULT_GROUP_VIDEO_MODEL = 'ark::doubao-seedance-2-0-260128'
+
+export const ARK_PLATFORM_MODEL_PRESETS = [
+  { provider: 'ark', modelId: 'doubao-seedance-2-0-260128', name: 'Doubao Seedance 2.0', type: 'video' },
+  { provider: 'ark', modelId: 'doubao-seedance-2-0-fast-260128', name: 'Doubao Seedance 2.0 Fast', type: 'video' },
+] as const satisfies ReadonlyArray<PlatformModelPreset>
 
 export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {

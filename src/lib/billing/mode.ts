@@ -1,4 +1,5 @@
 import type { BillingMode } from './types'
+import { getDeploymentConfig } from '@/lib/deployment/config'
 
 const VALID_MODES: BillingMode[] = ['OFF', 'SHADOW', 'ENFORCE']
 
@@ -10,7 +11,23 @@ function normalizeMode(input: unknown): BillingMode | null {
 }
 
 function getModeFromEnv(): BillingMode {
-  return normalizeMode(process.env.BILLING_MODE) || 'OFF'
+  const deployment = getDeploymentConfig()
+  const rawMode = process.env.BILLING_MODE
+  if (rawMode === undefined || rawMode === null || rawMode.trim() === '') {
+    if (deployment.edition === 'cloud') {
+      throw new Error('BILLING_MODE_REQUIRED_FOR_CLOUD')
+    }
+    return 'OFF'
+  }
+
+  const mode = normalizeMode(rawMode)
+  if (!mode) {
+    throw new Error(`BILLING_MODE_INVALID: ${rawMode}`)
+  }
+  if (deployment.edition === 'cloud' && mode !== 'ENFORCE') {
+    throw new Error(`BILLING_MODE_CLOUD_REQUIRES_ENFORCE: ${mode}`)
+  }
+  return mode
 }
 
 export async function getBillingMode(): Promise<BillingMode> {

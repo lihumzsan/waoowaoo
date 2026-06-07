@@ -17,6 +17,8 @@ import {
 } from '@/lib/ai-registry/selection'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import {
   type WorkflowConcurrencyConfig,
   normalizeWorkflowConcurrencyConfig,
@@ -151,10 +153,31 @@ export async function getProjectModelConfig(
   projectId: string,
   userId: string,
 ): Promise<ProjectModelConfig> {
+  const deployment = getDeploymentConfig()
+  const platformDefaults = deployment.providerCredentialMode === 'platform-key'
+    ? getPlatformDefaultModels()
+    : null
   const [projectData, userPref] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.userPreference.findUnique({ where: { userId } }),
   ])
+
+  if (platformDefaults) {
+    return {
+      analysisModel: extractModelKey(projectData?.analysisModel) || platformDefaults.analysisModel,
+      characterModel: extractModelKey(projectData?.characterModel) || platformDefaults.characterModel,
+      locationModel: extractModelKey(projectData?.locationModel) || platformDefaults.locationModel,
+      storyboardModel: extractModelKey(projectData?.storyboardModel) || platformDefaults.storyboardModel,
+      editModel: extractModelKey(projectData?.editModel) || platformDefaults.editModel,
+      videoModel: extractModelKey(projectData?.videoModel) || platformDefaults.videoModel,
+      singleShotVideoModel: extractModelKey(projectData?.singleShotVideoModel) || extractModelKey(projectData?.videoModel) || platformDefaults.videoModel,
+      sequenceVideoModel: extractModelKey(projectData?.sequenceVideoModel) || platformDefaults.videoModel,
+      musicModel: extractModelKey(projectData?.musicModel) || platformDefaults.musicModel,
+      videoRatio: projectData?.videoRatio || '9:16',
+      capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
+      capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
+    }
+  }
 
   return {
     analysisModel: extractModelKey(projectData?.analysisModel) || extractModelKey(userPref?.analysisModel) || null,
@@ -176,6 +199,26 @@ export async function getProjectModelConfig(
  * 获取用户级模型配置（无项目时使用）
  */
 export async function getUserModelConfig(userId: string): Promise<UserModelConfig> {
+  const deployment = getDeploymentConfig()
+  if (deployment.providerCredentialMode === 'platform-key') {
+    const platformDefaults = getPlatformDefaultModels()
+    const userPref = await prisma.userPreference.findUnique({
+      where: { userId },
+      select: { capabilityDefaults: true },
+    })
+
+    return {
+      analysisModel: platformDefaults.analysisModel,
+      characterModel: platformDefaults.characterModel,
+      locationModel: platformDefaults.locationModel,
+      storyboardModel: platformDefaults.storyboardModel,
+      editModel: platformDefaults.editModel,
+      videoModel: platformDefaults.videoModel,
+      musicModel: platformDefaults.musicModel,
+      capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
+    }
+  }
+
   const userPref = await prisma.userPreference.findUnique({
     where: { userId },
   })

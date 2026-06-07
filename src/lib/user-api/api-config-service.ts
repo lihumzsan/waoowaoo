@@ -134,6 +134,12 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     ? undefined
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)
   const billingMode = await getBillingMode()
+  const deployment = getDeploymentConfig()
+  if (deployment.providerCredentialMode === 'platform-key') {
+    throw new ApiError('FORBIDDEN', {
+      code: 'API_CONFIG_MANAGED_BY_PLATFORM',
+    })
+  }
 
   const updateData: Record<string, unknown> = {}
   const existingPref = await prisma.userPreference.findUnique({

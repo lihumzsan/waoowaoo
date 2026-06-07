@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getProviderConfig, hasApiConfig } from '@/lib/user-api/runtime-config'
+import { getProviderConfig, getUserModels, hasApiConfig, resolveModelSelection } from '@/lib/user-api/runtime-config'
+import { putUserApiConfig } from '@/lib/user-api/api-config-service'
 
 const ORIGINAL_ENV = {
   DEPLOYMENT_EDITION: process.env.DEPLOYMENT_EDITION,
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
   PLATFORM_GOOGLE_API_KEY: process.env.PLATFORM_GOOGLE_API_KEY,
+  BILLING_MODE: process.env.BILLING_MODE,
 }
 
 function restoreEnv() {
@@ -41,5 +43,30 @@ describe('platform provider config', () => {
     delete process.env.PLATFORM_GOOGLE_API_KEY
 
     await expect(getProviderConfig('user-1', 'google')).rejects.toThrow('PLATFORM_PROVIDER_API_KEY_MISSING')
+  })
+
+  it('uses platform models in platform-key mode without user config', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+
+    const models = await getUserModels('user-1')
+    expect(models.map((model) => model.modelKey)).toContain('google::gemini-3-flash-preview')
+    expect(models.map((model) => model.modelKey)).toContain('fal::banana-2')
+
+    await expect(resolveModelSelection('user-1', 'google::gemini-3-flash-preview', 'llm')).resolves.toMatchObject({
+      provider: 'google',
+      modelId: 'gemini-3-flash-preview',
+      mediaType: 'llm',
+    })
+  })
+
+  it('rejects user API config writes in platform-key mode', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    process.env.BILLING_MODE = 'ENFORCE'
+
+    await expect(putUserApiConfig('user-1', {})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
   })
 })

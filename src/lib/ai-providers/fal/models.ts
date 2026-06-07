@@ -1,5 +1,6 @@
 import type { MediaOptionSchemaConfig } from '@/lib/ai-providers/shared/media-option-schema-config'
 import type { AiOptionSchema } from '@/lib/ai-registry/types'
+import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
   buildMediaOptionSchema,
   createFalVideoObjectValidator,
@@ -14,6 +15,7 @@ import {
 } from '@/lib/ai-providers/shared/openai-image'
 
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
+export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = 'fal::banana-2'
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/fast'
@@ -23,6 +25,11 @@ export const FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video
 export const FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video'
 export const FAL_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const
 export const FAL_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as const
+
+export const FAL_PLATFORM_MODEL_PRESETS = [
+  { provider: 'fal', modelId: 'banana-2', name: 'Banana 2', type: 'image' },
+  { provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
+] as const satisfies ReadonlyArray<PlatformModelPreset>
 
 export const FAL_VIDEO_MODEL_IDS = new Set([
   'fal-wan25',

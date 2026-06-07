@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
   findRuntimeModelByKey,
@@ -228,6 +229,16 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
   }
 }
 
+async function getRuntimeModels(userId: string): Promise<CustomModel[]> {
+  const deployment = getDeploymentConfig()
+  if (deployment.providerCredentialMode === 'platform-key') {
+    return getPlatformModels()
+  }
+
+  const { models } = await readUserConfig(userId)
+  return models
+}
+
 function findModelByKey(models: CustomModel[], modelKey: string): CustomModel | null {
   return findRuntimeModelByKey(models, modelKey)
 }
@@ -240,12 +251,12 @@ export async function resolveModelSelection(
   model: string,
   mediaType: ModelMediaType,
 ): Promise<ModelSelection> {
-  const models = await getUserModels(userId)
+  const models = await getRuntimeModels(userId)
   return resolveRuntimeModelSelection(models, model, mediaType)
 }
 
 async function resolveSingleModelSelection(userId: string, mediaType: ModelMediaType): Promise<ModelSelection> {
-  const models = await getUserModels(userId)
+  const models = await getRuntimeModels(userId)
   return resolveSingleRuntimeModelSelection(models, mediaType)
 }
 
@@ -308,12 +319,11 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
 }
 
 export async function getUserModels(userId: string): Promise<CustomModel[]> {
-  const { models } = await readUserConfig(userId)
-  return models
+  return await getRuntimeModels(userId)
 }
 
 export async function getModelProvider(userId: string, model: string): Promise<string | null> {
-  const { models } = await readUserConfig(userId)
+  const models = await getRuntimeModels(userId)
   const matched = findModelByKey(models, model)
   return matched?.provider || null
 }
@@ -329,7 +339,7 @@ export async function resolveModelId(userId: string, model: string): Promise<str
 }
 
 export async function getModelPrice(userId: string, model: string): Promise<number> {
-  const { models } = await readUserConfig(userId)
+  const models = await getRuntimeModels(userId)
   const matched = findModelByKey(models, model)
   if (!matched) {
     throw new Error(`MODEL_NOT_FOUND: ${model}`)

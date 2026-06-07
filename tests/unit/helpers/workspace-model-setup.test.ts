@@ -14,6 +14,24 @@ describe('workspace model setup guidance', () => {
     expect(shouldGuideToModelSetup(payload)).toBe(false)
   })
 
+  it('cloud runtime default analysisModel -> 不需要引导设置', () => {
+    const payload = {
+      preference: {
+        analysisModel: 'google::gemini-3-flash-preview',
+      },
+      deployment: {
+        isCloud: true,
+      },
+      runtimeDefaults: {
+        analysisModel: 'google::gemini-3-flash-preview',
+      },
+    }
+
+    expect(hasConfiguredAnalysisModel(payload)).toBe(true)
+    expect(readConfiguredAnalysisModel(payload)).toBe('google::gemini-3-flash-preview')
+    expect(shouldGuideToModelSetup(payload)).toBe(false)
+  })
+
   it('analysisModel 为空 -> 需要引导设置', () => {
     const payload = {
       preference: {

@@ -1,3 +1,14 @@
+import type { PlatformModelPreset } from '@/lib/platform-models/types'
+
+export const GOOGLE_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = 'google::gemini-3-flash-preview'
+export const GOOGLE_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = 'google::lyria-3-pro-preview'
+
+export const GOOGLE_PLATFORM_MODEL_PRESETS = [
+  { provider: 'google', modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', type: 'llm' },
+  { provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash-Lite', type: 'llm' },
+  { provider: 'google', modelId: 'lyria-3-pro-preview', name: 'Lyria 3 Pro Preview', type: 'music' },
+] as const satisfies ReadonlyArray<PlatformModelPreset>
+
 export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-pro-preview', capabilities: { llm: { reasoningEffortOptions: ['low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
