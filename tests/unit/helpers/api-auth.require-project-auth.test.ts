@@ -83,7 +83,6 @@ describe('requireProjectAuth', () => {
       storyboardModel: null,
       editModel: null,
       videoModel: null,
-      audioModel: null,
     }))
   })
 

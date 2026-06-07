@@ -85,7 +85,6 @@ function buildGlobalCharacter(selectedIndex: number | null): GlobalCharacter {
     id: 'character-1',
     name: 'Hero',
     folderId: 'folder-1',
-    customVoiceUrl: null,
     appearances: [{
       id: 'appearance-1',
       appearanceIndex: 0,
@@ -134,7 +133,6 @@ function buildUnifiedCharacter(selectedIndex: number | null): AssetSummary {
       canRevertRender: true,
       canModifyRender: true,
       canUploadRender: true,
-      canBindVoice: true,
       canCopyFromGlobal: true,
     },
     taskRefs: [],
@@ -162,12 +160,6 @@ function buildUnifiedCharacter(selectedIndex: number | null): AssetSummary {
     introduction: null,
     profileData: null,
     profileConfirmed: null,
-    voice: {
-      voiceType: null,
-      voiceId: null,
-      customVoiceUrl: null,
-      media: null,
-    },
   }
 }
 
@@ -185,7 +177,6 @@ function buildUnifiedLocation(id: string): AssetSummary {
       canRevertRender: true,
       canModifyRender: true,
       canUploadRender: true,
-      canBindVoice: false,
       canCopyFromGlobal: true,
     },
     taskRefs: [],

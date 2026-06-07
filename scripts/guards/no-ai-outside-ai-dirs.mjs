@@ -44,25 +44,17 @@ const FORBIDDEN_SDK_IMPORTS = [
   /from\s+['"]fal-ai['"]/,
   /from\s+['"]@fal-ai\/[a-z0-9/-]+['"]/i,
   /from\s+['"]@volcengine\/[a-z0-9/-]+['"]/i,
-  /from\s+['"]ali-cloud-sdk['"]/i,
 ]
 
 const FORBIDDEN_MODEL_TOKENS = [
   /\bdoubao-[a-z0-9.-]+/i,
   /\bseedream-[a-z0-9.-]+/i,
-  /\bgpt-image-[0-9]/i,
   /['"]fal-ai\/[a-z0-9/-]+['"]/i,
-  /\bMiniMax-[A-Za-z0-9-]+/,
-  /\bvidu(?:1\.5|2\.0|q1|q2)[a-z0-9-]*/i,
   /\bimagen-[0-9](?:\.[0-9])?/i,
   /\bveo-[0-9](?:\.[0-9])?/i,
-  /\bwanx[0-9](?:\.[0-9])?-[a-z0-9-]+/i,
 ]
 
-const FORBIDDEN_LEGACY_USER_API_PROBE_IMPORTS = [
-  /['"]@\/lib\/user-api\/model-llm-protocol-probe['"]/,
-  /['"]@\/lib\/user-api\/model-template\/probe['"]/,
-]
+const FORBIDDEN_LEGACY_USER_API_PROBE_IMPORTS = []
 
 const FORBIDDEN_AI_PROVIDER_IMPORTS = [
   /from\s+['"]@\/lib\/ai-providers(?:\/[^'"]*)?['"]/,

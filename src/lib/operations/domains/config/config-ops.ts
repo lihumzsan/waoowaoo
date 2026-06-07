@@ -21,7 +21,6 @@ const MODEL_FIELDS = [
   'videoModel',
   'singleShotVideoModel',
   'sequenceVideoModel',
-  'audioModel',
   'musicModel',
 ] as const
 
@@ -34,7 +33,6 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
   videoModel: 'video',
   singleShotVideoModel: 'video',
   sequenceVideoModel: 'video',
-  audioModel: 'audio',
   musicModel: 'music',
 }
 
@@ -136,7 +134,6 @@ function getNextProjectModelMap(
     videoModel: string | null
     singleShotVideoModel: string | null
     sequenceVideoModel: string | null
-    audioModel: string | null
     musicModel: string | null
   },
   updates: Record<string, unknown>,
@@ -236,7 +233,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             videoModel: true,
             singleShotVideoModel: true,
             sequenceVideoModel: true,
-            audioModel: true,
             musicModel: true,
           },
         })
@@ -256,7 +252,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           videoModel: projectData.videoModel,
           singleShotVideoModel: projectData.singleShotVideoModel,
           sequenceVideoModel: projectData.sequenceVideoModel,
-          audioModel: projectData.audioModel,
           musicModel: projectData.musicModel,
         }, {})
         const cleanedOverrides = sanitizeCapabilityOverrides(storedOverrides, modelContextMap)
@@ -290,7 +285,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         videoModel: z.string().nullable().optional(),
         singleShotVideoModel: z.string().nullable().optional(),
         sequenceVideoModel: z.string().nullable().optional(),
-        audioModel: z.string().nullable().optional(),
         musicModel: z.string().nullable().optional(),
         videoRatio: z.string().optional(),
         capabilityOverrides: z.unknown().optional(),
@@ -312,7 +306,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             videoModel: true,
             singleShotVideoModel: true,
             sequenceVideoModel: true,
-            audioModel: true,
             musicModel: true,
           },
         })

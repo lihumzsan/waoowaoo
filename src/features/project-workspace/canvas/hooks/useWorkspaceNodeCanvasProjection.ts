@@ -425,8 +425,7 @@ function panelImageAspectRatio(panel: ProjectPanel): number | null {
 }
 
 function panelVideoAspectRatio(panel: ProjectPanel): number | null {
-  return mediaAspectRatio(panel.lipSyncVideoMedia)
-    ?? mediaAspectRatio(panel.videoMedia)
+  return mediaAspectRatio(panel.videoMedia)
     ?? panelImageAspectRatio(panel)
 }
 

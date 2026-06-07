@@ -3,7 +3,6 @@ export type EpisodeArtifactReadiness = {
   hasScript: boolean
   hasStoryboard: boolean
   hasVideo: boolean
-  hasVoice: boolean
 }
 
 type EpisodeClipLike = {
@@ -25,7 +24,6 @@ type EpisodeLike = {
   novelText?: string | null
   clips?: unknown[] | null
   storyboards?: unknown[] | null
-  voiceLines?: unknown[] | null
 }
 
 function hasNonEmptyText(value: string | null | undefined) {
@@ -69,6 +67,5 @@ export function resolveEpisodeArtifactReadiness(episode: EpisodeLike | null | un
     hasScript: hasScriptArtifacts(episode?.clips),
     hasStoryboard: hasStoryboardArtifacts(episode?.storyboards),
     hasVideo: hasVideoArtifacts(episode?.storyboards),
-    hasVoice: Array.isArray(episode?.voiceLines) && episode.voiceLines.length > 0,
   }
 }

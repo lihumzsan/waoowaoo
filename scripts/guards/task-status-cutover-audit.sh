@@ -77,8 +77,8 @@ run_zero_match_check \
   src
 
 run_zero_match_check \
-  "禁止 generatingImage/generatingVideo/generatingLipSync 字段" \
-  "\\bgeneratingImage\\b|\\bgeneratingVideo\\b|\\bgeneratingLipSync\\b" \
+  "禁止 generatingImage/generatingVideo 字段" \
+  "\\bgeneratingImage\\b|\\bgeneratingVideo\\b" \
   src
 
 run_usetasktargetstates_check

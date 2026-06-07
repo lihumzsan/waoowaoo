@@ -156,12 +156,10 @@ async function snapshotTables(backupDir: string) {
     { name: 'projects', tableName: 'projects' },
     { name: 'project_episodes', tableName: 'project_episodes' },
     { name: 'project_panels', tableName: 'project_panels' },
-    { name: 'project_voice_lines', tableName: 'project_voice_lines' },
     { name: 'global_characters', tableName: 'global_characters' },
     { name: 'global_character_appearances', tableName: 'global_character_appearances' },
     { name: 'global_locations', tableName: 'global_locations' },
     { name: 'global_location_images', tableName: 'global_location_images' },
-    { name: 'global_voices', tableName: 'global_voices' },
     { name: 'tasks', tableName: 'tasks' },
     { name: 'task_events', tableName: 'task_events' },
   ]

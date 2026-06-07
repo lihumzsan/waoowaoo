@@ -20,12 +20,3 @@ export function invalidateGlobalLocations(queryClient: QueryClient) {
     episodeId: null,
   })
 }
-
-export function invalidateGlobalVoices(queryClient: QueryClient) {
-  invalidateByTarget({
-    queryClient,
-    projectId: GLOBAL_ASSET_PROJECT_ID,
-    targetType: 'GlobalVoice',
-    episodeId: null,
-  })
-}

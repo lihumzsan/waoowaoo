@@ -25,16 +25,16 @@ describe('task service dedupe + orphan recovery', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.VOICE_LINE,
-        targetType: 'ProjectVoiceLine',
-        targetId: 'line-1',
+        type: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: project.id,
         status: TASK_STATUS.QUEUED,
         payload: {
-          episodeId: 'episode-1',
-          lineId: 'line-1',
+          musicModel: 'google::lyria-3-clip-preview',
+          durationSeconds: 10,
           meta: { locale: 'zh' },
         },
-        dedupeKey: 'voice_line:line-1',
+        dedupeKey: `music_generate:${project.id}`,
         queuedAt: new Date(),
       },
     })
@@ -42,15 +42,15 @@ describe('task service dedupe + orphan recovery', () => {
     const result = await createTask({
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.VOICE_LINE,
-      targetType: 'ProjectVoiceLine',
-      targetId: 'line-1',
+      type: TASK_TYPE.MUSIC_GENERATE,
+      targetType: 'Project',
+      targetId: project.id,
       payload: {
-        episodeId: 'episode-1',
-        lineId: 'line-1',
+        musicModel: 'google::lyria-3-clip-preview',
+        durationSeconds: 10,
         meta: { locale: 'zh' },
       },
-      dedupeKey: 'voice_line:line-1',
+      dedupeKey: `music_generate:${project.id}`,
     })
 
     expect(result.deduped).toBe(true)

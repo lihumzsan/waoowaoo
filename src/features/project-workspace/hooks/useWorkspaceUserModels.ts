@@ -19,8 +19,7 @@ export interface UserModelsPayload {
   llm: UserModelOption[]
   image: UserModelOption[]
   video: UserModelOption[]
-  audio: UserModelOption[]
-  lipsync: UserModelOption[]
+  music: UserModelOption[]
 }
 
 export function useWorkspaceUserModels() {

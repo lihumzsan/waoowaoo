@@ -196,8 +196,6 @@ describe('final video render worker', () => {
         description: 'panel 1',
         videoUrl: null,
         videoMedia: null,
-        lipSyncVideoUrl: null,
-        lipSyncVideoMedia: null,
         photographyRules: JSON.stringify({ source: 'edit_script', editScriptId: 'edit-script-1' }),
         storyboard: {
           id: 'storyboard-1',
@@ -311,8 +309,6 @@ describe('final video render worker', () => {
           storageKey: 'video/source.mp4',
           url: '/m/source-video',
         },
-        lipSyncVideoUrl: null,
-        lipSyncVideoMedia: null,
         photographyRules: JSON.stringify({ source: 'edit_script', editScriptId: 'edit-script-1' }),
         storyboard: {
           id: 'storyboard-1',

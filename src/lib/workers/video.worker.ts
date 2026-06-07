@@ -10,7 +10,6 @@ import { withUserConcurrencyGate } from './user-concurrency-gate'
 import {
   assertTaskActive,
   getProjectModels,
-  resolveLipSyncVideoSource,
   resolveVideoSourceFromGeneration,
   toSignedUrlIfCos,
   uploadVideoSourceToCos,
@@ -710,75 +709,6 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   }
 }
 
-async function handleLipSyncTask(job: Job<TaskJobData>) {
-  const payload = (job.data.payload || {}) as AnyObj
-  const lipSyncModel = typeof payload.lipSyncModel === 'string' && payload.lipSyncModel.trim()
-    ? payload.lipSyncModel.trim()
-    : undefined
-
-  let panel: PanelRecord | null = null
-  if (job.data.targetType === 'ProjectPanel') {
-    panel = await prisma.projectPanel.findUnique({ where: { id: job.data.targetId } })
-  }
-
-  if (
-    !panel &&
-    typeof payload.storyboardId === 'string' &&
-    payload.storyboardId &&
-    payload.panelIndex !== undefined
-  ) {
-    panel = await fetchPanelByStoryboardIndex(payload.storyboardId, Number(payload.panelIndex))
-  }
-
-  if (!panel) throw new Error('Lip-sync panel not found')
-  if (!panel.videoUrl) throw new Error('Panel has no base video')
-
-  const voiceLineId = typeof payload.voiceLineId === 'string' ? payload.voiceLineId : null
-  if (!voiceLineId) throw new Error('Lip-sync task missing voiceLineId')
-
-  const voiceLine = await prisma.projectVoiceLine.findUnique({ where: { id: voiceLineId } })
-  if (!voiceLine || !voiceLine.audioUrl) {
-    throw new Error('Voice line or audioUrl not found')
-  }
-
-  const signedVideoUrl = toSignedUrlIfCos(panel.videoUrl, 7200)
-  const signedAudioUrl = toSignedUrlIfCos(voiceLine.audioUrl, 7200)
-
-  if (!signedVideoUrl || !signedAudioUrl) {
-    throw new Error('Lip-sync input media url invalid')
-  }
-
-  await reportTaskProgress(job, 25, { stage: 'submit_lip_sync' })
-
-  const source = await resolveLipSyncVideoSource(job, {
-    userId: job.data.userId,
-    videoUrl: signedVideoUrl,
-    audioUrl: signedAudioUrl,
-    audioDurationMs: typeof voiceLine.audioDuration === 'number' ? voiceLine.audioDuration : undefined,
-    videoDurationMs: toDurationMs(panel.duration),
-    modelKey: lipSyncModel,
-  })
-
-  await reportTaskProgress(job, 93, { stage: 'persist_lip_sync' })
-
-  const cosKey = await uploadVideoSourceToCos(source, 'lip-sync', panel.id)
-
-  await assertTaskActive(job, 'persist_lip_sync_video')
-  await prisma.projectPanel.update({
-    where: { id: panel.id },
-    data: {
-      lipSyncVideoUrl: cosKey,
-      lipSyncTaskId: null,
-    },
-  })
-
-  return {
-    panelId: panel.id,
-    voiceLineId,
-    lipSyncVideoUrl: cosKey,
-  }
-}
-
 async function processVideoTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
 
@@ -802,8 +732,6 @@ async function processVideoTask(job: Job<TaskJobData>) {
         }
         throw error
       }
-    case TASK_TYPE.LIP_SYNC:
-      return await handleLipSyncTask(job)
     case TASK_TYPE.FINAL_VIDEO_RENDER:
       return await handleFinalVideoRenderTask(job)
     default:

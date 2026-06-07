@@ -10,7 +10,6 @@ export interface ProjectProjectionProgress {
   screenplayClipCount: number
   storyboardCount: number
   panelCount: number
-  voiceLineCount: number
 }
 
 export interface ProjectProjectionLite {

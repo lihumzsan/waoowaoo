@@ -66,15 +66,13 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
   if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.BGM_SCORE_GENERATE) return 'music'
-  if (taskType === TASK_TYPE.VOICE_LINE || taskType === TASK_TYPE.VOICE_DESIGN || taskType === TASK_TYPE.ASSET_HUB_VOICE_DESIGN) return 'audio'
   if (
     taskType === TASK_TYPE.VIDEO_PANEL
     || taskType === TASK_TYPE.VIDEO_GROUP
-    || taskType === TASK_TYPE.LIP_SYNC
     || taskType === TASK_TYPE.FINAL_VIDEO_RENDER
   ) return 'video'
   if (readString(result, 'audioUrl')) return 'audio'
-  if (readString(result, 'videoUrl') || readString(result, 'lipSyncVideoUrl')) return 'video'
+  if (readString(result, 'videoUrl')) return 'video'
   if (readString(result, 'imageUrl')) return 'image'
   return null
 }
@@ -86,7 +84,7 @@ function buildMedia(taskType: string, result: Record<string, unknown> | null): R
   const url = mediaType === 'audio' || mediaType === 'music'
     ? readSafeUrl(result, ['audioUrl', 'url'])
     : mediaType === 'video'
-      ? readSafeUrl(result, ['videoUrl', 'lipSyncVideoUrl', 'outputUrl', 'url'])
+      ? readSafeUrl(result, ['videoUrl', 'outputUrl', 'url'])
       : readSafeUrl(result, ['imageUrl', 'url'])
 
   const mediaId = readString(result, 'mediaId') || readString(result, 'audioMediaId') || readString(result, 'imageMediaId') || readString(result, 'videoMediaId')
@@ -116,8 +114,6 @@ function readModel(payload: Record<string, unknown> | null, result: Record<strin
     || readString(payload, 'model')
     || readString(payload, 'imageModel')
     || readString(payload, 'videoModel')
-    || readString(payload, 'audioModel')
-    || readString(payload, 'lipSyncModel')
     || readString(payload, 'musicModel')
     || readString(payload, 'analysisModel')
 }

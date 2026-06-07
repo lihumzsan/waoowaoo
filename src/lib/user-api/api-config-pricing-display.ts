@@ -6,10 +6,6 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { PricingDisplayMap, PricingDisplayItem, StoredModel } from './api-config-types'
 import { getProviderKey } from './api-config-shared'
 
-const PRICING_PROVIDER_ALIASES: Readonly<Record<string, string>> = {
-  'gemini-compatible': 'google',
-}
-
 export function formatPriceAmount(amount: number): string {
   const fixed = amount.toFixed(4)
   const normalized = fixed.replace(/\.?0+$/, '')
@@ -21,8 +17,6 @@ function pricingApiTypeToModelType(apiType: PricingApiType): UnifiedModelType | 
   if (apiType === 'image') return 'image'
   if (apiType === 'video') return 'video'
   if (apiType === 'music') return 'music'
-  if (apiType === 'voice') return 'audio'
-  if (apiType === 'lip-sync') return 'lipsync'
   return null
 }
 
@@ -151,12 +145,6 @@ function resolvePricingDisplayItem(
     if (fallback) return fallback
   }
 
-  // Fallback: check canonical provider alias (e.g. gemini-compatible → google)
-  const aliasTarget = PRICING_PROVIDER_ALIASES[providerKey]
-  if (aliasTarget) {
-    const aliasFallback = map[composePricingDisplayKey(modelType, aliasTarget, modelId)]
-    if (aliasFallback) return aliasFallback
-  }
   return null
 }
 

@@ -1,6 +1,7 @@
 {
-  "textModel": "anthropic/claude-sonnet-4",
+  "textModel": "openrouter::anthropic/claude-sonnet-4",
   "imageModel": "ark::doubao-seedream-4-5-251128",
-  "videoModel": "doubao-seedance-1-0-pro-fast-251015",
-  "voiceSeconds": 5
+  "videoModel": "ark::doubao-seedance-1-0-pro-fast-251015",
+  "musicModel": "google::lyria-3-clip-preview",
+  "musicSeconds": 5
 }

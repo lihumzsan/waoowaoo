@@ -344,14 +344,6 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedTargetType: 'ProjectEpisode',
     expectedProjectId: 'project-1',
   },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/voice-analyze/route.ts',
-    body: { episodeId: 'episode-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.VOICE_ANALYZE,
-    expectedTargetType: 'ProjectEpisode',
-    expectedProjectId: 'project-1',
-  },
 ]
 
 const FORCE_DYNAMIC_ASSET_HUB_ROUTES = [
@@ -391,7 +383,7 @@ describe('api contract - llm observe routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(ROUTE_CASES.length).toBe(20)
+    expect(ROUTE_CASES.length).toBe(19)
   })
 
   it('marks asset-hub AI routes as force-dynamic to keep app-route build registration stable', async () => {

@@ -9,7 +9,6 @@ export const PROJECT_PHASE = {
   SCRIPT_READY: 'script_ready',
   STORYBOARD_GENERATING: 'storyboard_generating',
   STORYBOARD_READY: 'storyboard_ready',
-  VOICE_READY: 'voice_ready',
 } as const
 
 export type ProjectPhase = (typeof PROJECT_PHASE)[keyof typeof PROJECT_PHASE]
@@ -21,7 +20,6 @@ export interface ProjectPhaseSnapshot {
     screenplayClipCount: number
     storyboardCount: number
     panelCount: number
-    voiceLineCount: number
   }
   activePlanRuns: ProjectContextRunSummary[]
   activePlanRunCount: number
@@ -58,13 +56,8 @@ function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): Proj
           'generate_character_image',
           'generate_location_image',
           'regenerate_panel_image',
-          'generate_episode_voice_audio',
+          'generate_episode_videos',
         ],
-        planMode: [],
-      }
-    case PROJECT_PHASE.VOICE_READY:
-      return {
-        actMode: ['generate_episode_videos'],
         planMode: [],
       }
     default:
@@ -95,7 +88,7 @@ async function resolveStaleArtifactsForEpisode(params: {
   progress: ProjectPhaseSnapshot['progress']
 }): Promise<string[]> {
   const episodeId = params.episodeId
-  const [episode, storyClipMax, screenplayClipMax, storyboardMax, panelMax, voiceLineMax] = await Promise.all([
+  const [episode, storyClipMax, screenplayClipMax, storyboardMax, panelMax] = await Promise.all([
     prisma.projectEpisode.findUnique({
       where: { id: episodeId },
       select: { updatedAt: true },
@@ -125,16 +118,11 @@ async function resolveStaleArtifactsForEpisode(params: {
       },
       _max: { updatedAt: true },
     }),
-    prisma.projectVoiceLine.aggregate({
-      where: { episodeId },
-      _max: { updatedAt: true },
-    }),
   ])
 
   const storyUpdatedAt = maxDate([episode?.updatedAt ?? null, storyClipMax._max.updatedAt])
   const scriptUpdatedAt = screenplayClipMax._max.updatedAt ?? null
   const storyboardUpdatedAt = maxDate([storyboardMax._max.updatedAt, panelMax._max.updatedAt])
-  const voiceUpdatedAt = voiceLineMax._max.updatedAt ?? null
 
   const stale: string[] = []
   if (params.progress.screenplayClipCount > 0 && storyUpdatedAt && scriptUpdatedAt && storyUpdatedAt > scriptUpdatedAt) {
@@ -148,10 +136,6 @@ async function resolveStaleArtifactsForEpisode(params: {
   ) {
     stale.push('storyboard')
   }
-  if (params.progress.voiceLineCount > 0 && storyboardUpdatedAt && voiceUpdatedAt && storyboardUpdatedAt > voiceUpdatedAt) {
-    stale.push('voice')
-  }
-
   return stale
 }
 
@@ -170,9 +154,7 @@ export async function resolveProjectPhase(params: {
 
   let phase: ProjectPhase = PROJECT_PHASE.DRAFT
 
-  if (progress.voiceLineCount > 0) {
-    phase = PROJECT_PHASE.VOICE_READY
-  } else if (progress.storyboardCount > 0 || progress.panelCount > 0) {
+  if (progress.storyboardCount > 0 || progress.panelCount > 0) {
     phase = PROJECT_PHASE.STORYBOARD_READY
   } else if (progress.screenplayClipCount > 0) {
     phase = PROJECT_PHASE.SCRIPT_READY

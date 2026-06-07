@@ -111,7 +111,7 @@ describe('task target state map behavior', () => {
         targetId: 'panel-1',
         phase: 'queued',
         runningTaskId: 'task-ov-2',
-        runningTaskType: 'LIP_SYNC',
+        runningTaskType: 'VIDEO_PANEL',
         intent: 'process',
         hasOutputAtStart: null,
         progress: null,

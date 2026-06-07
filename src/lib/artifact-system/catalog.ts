@@ -29,7 +29,7 @@ const artifactCatalog: Record<ArtifactType, ArtifactDefinition> = {
   [ARTIFACT_TYPES.AUDIO_PLAN]: {
     type: ARTIFACT_TYPES.AUDIO_PLAN,
     scope: 'episode',
-    summary: 'Audio, voice, ambience, or music planning artifact.',
+    summary: 'Music and BGM planning artifact.',
   },
   [ARTIFACT_TYPES.ANALYSIS_CHARACTERS]: {
     type: ARTIFACT_TYPES.ANALYSIS_CHARACTERS,
@@ -80,11 +80,6 @@ const artifactCatalog: Record<ArtifactType, ArtifactDefinition> = {
     type: ARTIFACT_TYPES.STORYBOARD_PANEL_SET,
     scope: 'episode',
     summary: 'Persisted storyboard panel set for the episode.',
-  },
-  [ARTIFACT_TYPES.VOICE_LINES]: {
-    type: ARTIFACT_TYPES.VOICE_LINES,
-    scope: 'episode',
-    summary: 'Voice line output for the episode.',
   },
   [ARTIFACT_TYPES.PANEL_PROMPT]: {
     type: ARTIFACT_TYPES.PANEL_PROMPT,

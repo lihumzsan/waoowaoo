@@ -46,10 +46,10 @@ describe('billing/submitter integration', () => {
       userId: user.id,
       locale: 'en',
       projectId: 'project-a',
-      type: TASK_TYPE.VOICE_LINE,
-      targetType: 'VoiceLine',
-      targetId: 'line-a',
-      payload: { maxSeconds: 5 },
+      type: TASK_TYPE.MUSIC_GENERATE,
+      targetType: 'Project',
+      targetId: 'project-a',
+      payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 5 },
     })
 
     expect(result.success).toBe(true)
@@ -64,7 +64,10 @@ describe('billing/submitter integration', () => {
     const user = await createTestUser()
     await seedBalance(user.id, 0)
 
-    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 10 })
+    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 10,
+    })
     expect(billingInfo?.billable).toBe(true)
 
     await expect(
@@ -72,10 +75,10 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-b',
-        type: TASK_TYPE.VOICE_LINE,
-        targetType: 'VoiceLine',
-        targetId: 'line-b',
-        payload: { maxSeconds: 10 },
+        type: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: 'project-b',
+        payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 10 },
         billingInfo,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
@@ -83,7 +86,7 @@ describe('billing/submitter integration', () => {
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.VOICE_LINE,
+        type: TASK_TYPE.MUSIC_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -156,17 +159,17 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-e',
-        type: TASK_TYPE.VOICE_LINE,
-        targetType: 'VoiceLine',
-        targetId: 'line-e',
-        payload: { maxSeconds: 6 },
+        type: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: 'project-e',
+        payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 6 },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' } satisfies Pick<ApiError, 'code'>)
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.VOICE_LINE,
+        type: TASK_TYPE.MUSIC_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })

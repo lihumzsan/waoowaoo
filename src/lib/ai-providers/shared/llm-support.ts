@@ -280,14 +280,9 @@ export function isLikelyOpenAIReasoningModel(modelId: string): boolean {
 
 export function shouldUseOpenAIReasoningProviderOptions(input: {
   providerKey: string
-  providerApiMode?: 'gemini-sdk' | 'openai-official'
   modelId: string
 }): boolean {
   if (!isLikelyOpenAIReasoningModel(input.modelId)) return false
   const normalizedProviderKey = input.providerKey.trim().toLowerCase()
-  if (normalizedProviderKey === 'openai') return true
-  if (normalizedProviderKey === 'openai-compatible' && input.providerApiMode === 'openai-official') {
-    return true
-  }
-  return false
+  return normalizedProviderKey === 'ark' || normalizedProviderKey === 'openrouter'
 }

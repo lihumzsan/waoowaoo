@@ -23,9 +23,6 @@ export type PricingApiType =
   | 'image'
   | 'video'
   | 'music'
-  | 'voice'
-  | 'voice-design'
-  | 'lip-sync'
 
 export interface BuiltinPricingTier {
   when: Record<string, CapabilityValue>
@@ -58,9 +55,6 @@ function isPricingApiType(value: unknown): value is PricingApiType {
     || value === 'image'
     || value === 'video'
     || value === 'music'
-    || value === 'voice'
-    || value === 'voice-design'
-    || value === 'lip-sync'
 }
 
 function readFiniteNumber(value: unknown): number | null {
@@ -127,7 +121,7 @@ function normalizePricingEntry(raw: unknown, filePath: string, index: number): B
 
   const apiTypeRaw = Reflect.get(raw, 'apiType')
   if (!isPricingApiType(apiTypeRaw)) {
-    throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.apiType must be one of text/image/video/music/voice/voice-design/lip-sync`)
+    throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.apiType must be one of text/image/video/music`)
   }
 
   const provider = readTrimmedString(Reflect.get(raw, 'provider'))
@@ -181,10 +175,6 @@ export function listBuiltinPricingCatalog(): BuiltinPricingCatalogEntry[] {
   return loadPricingCatalog().entries.map(clonePricingEntry)
 }
 
-const PRICING_PROVIDER_ALIASES: Readonly<Record<string, string>> = {
-  'gemini-compatible': 'google',
-}
-
 export function findBuiltinPricingCatalogEntry(
   apiType: PricingApiType,
   provider: string,
@@ -201,13 +191,6 @@ export function findBuiltinPricingCatalogEntry(
     const keyWithProviderKey = `${apiType}::${providerKey}::${modelId}`
     const keyEntry = loaded.exact.get(keyWithProviderKey)
     if (keyEntry) return clonePricingEntry(keyEntry)
-  }
-
-  const aliasTarget = PRICING_PROVIDER_ALIASES[providerKey]
-  if (aliasTarget) {
-    const aliasKey = `${apiType}::${aliasTarget}::${modelId}`
-    const aliasEntry = loaded.exact.get(aliasKey)
-    if (aliasEntry) return clonePricingEntry(aliasEntry)
   }
 
   return null

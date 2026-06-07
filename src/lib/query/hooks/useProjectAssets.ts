@@ -46,10 +46,6 @@ function mapCharacterAssetToProjectCharacter(asset: AssetGroupMap['character'][n
             imageErrorMessage: variant.taskState.lastError?.message ?? null,
             lastError: variant.taskState.lastError ?? asset.taskState.lastError,
         })),
-        voiceType: asset.voice.voiceType,
-        voiceId: asset.voice.voiceId,
-        customVoiceUrl: asset.voice.customVoiceUrl,
-        media: asset.voice.media,
         profileData: asset.profileData,
         profileConfirmed: asset.profileConfirmed ?? undefined,
     }

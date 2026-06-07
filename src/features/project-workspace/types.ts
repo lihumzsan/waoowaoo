@@ -16,7 +16,6 @@ export interface Episode {
   clips?: ProjectClip[]
   storyboards?: ProjectStoryboard[]
   shots?: ProjectShot[]
-  voiceLines?: unknown[]
   createdAt: string
 }
 

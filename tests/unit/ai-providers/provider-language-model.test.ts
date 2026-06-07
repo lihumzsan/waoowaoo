@@ -3,17 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const openAiState = vi.hoisted(() => ({
   createOpenAI: vi.fn((settings: { apiKey?: string; baseURL?: string; name?: string }) => ({
     chat: vi.fn((modelId: string) => ({
-      provider: 'openai',
-      modelId,
-      settings,
-    })),
-  })),
-}))
-
-const anthropicState = vi.hoisted(() => ({
-  createAnthropic: vi.fn((settings: { apiKey?: string; baseURL?: string; name?: string }) => ({
-    chat: vi.fn((modelId: string) => ({
-      provider: 'anthropic',
+      provider: settings.name,
       modelId,
       settings,
     })),
@@ -24,10 +14,6 @@ vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: openAiState.createOpenAI,
 }))
 
-vi.mock('@ai-sdk/anthropic', () => ({
-  createAnthropic: anthropicState.createAnthropic,
-}))
-
 import { createRegisteredLanguageModel } from '@/lib/ai-providers'
 
 describe('ai provider language model registry', () => {
@@ -35,55 +21,55 @@ describe('ai provider language model registry', () => {
     vi.clearAllMocks()
   })
 
-  it('creates OpenAI language models from registered provider configs', () => {
+  it('creates Ark language models from registered provider configs', () => {
     const model = createRegisteredLanguageModel({
-      providerKey: 'openai',
+      providerKey: 'ark',
       selection: {
-        provider: 'openai',
-        modelId: 'gpt-4.1',
-        modelKey: 'openai::gpt-4.1',
+        provider: 'ark',
+        modelId: 'doubao-seed-1-6',
+        modelKey: 'ark::doubao-seed-1-6',
       },
       providerConfig: {
-        id: 'openai',
-        name: 'OpenAI',
-        apiKey: 'sk-openai',
+        id: 'ark',
+        name: 'Volcengine Ark',
+        apiKey: 'sk-ark',
       },
     })
 
     expect(model).toMatchObject({
-      provider: 'openai',
-      modelId: 'gpt-4.1',
+      provider: 'ark',
+      modelId: 'doubao-seed-1-6',
     })
     expect(openAiState.createOpenAI).toHaveBeenCalledWith({
-      apiKey: 'sk-openai',
-      name: 'openai',
+      apiKey: 'sk-ark',
+      name: 'ark',
     })
   })
 
-  it('creates Anthropic language models from registered provider configs', () => {
+  it('creates OpenRouter language models from registered provider configs', () => {
     const model = createRegisteredLanguageModel({
-      providerKey: 'anthropic',
+      providerKey: 'openrouter',
       selection: {
-        provider: 'anthropic',
-        modelId: 'claude-3-5-sonnet-latest',
-        modelKey: 'anthropic::claude-3-5-sonnet-latest',
+        provider: 'openrouter',
+        modelId: 'anthropic/claude-sonnet-4.5',
+        modelKey: 'openrouter::anthropic/claude-sonnet-4.5',
       },
       providerConfig: {
-        id: 'anthropic',
-        name: 'Anthropic',
-        apiKey: 'sk-anthropic',
-        baseUrl: 'https://anthropic.example/v1',
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
       },
     })
 
     expect(model).toMatchObject({
-      provider: 'anthropic',
-      modelId: 'claude-3-5-sonnet-latest',
+      provider: 'openrouter',
+      modelId: 'anthropic/claude-sonnet-4.5',
     })
-    expect(anthropicState.createAnthropic).toHaveBeenCalledWith({
-      apiKey: 'sk-anthropic',
-      baseURL: 'https://anthropic.example/v1',
-      name: 'anthropic',
+    expect(openAiState.createOpenAI).toHaveBeenCalledWith({
+      apiKey: 'sk-openrouter',
+      baseURL: 'https://openrouter.ai/api/v1',
+      name: 'openrouter',
     })
   })
 })

@@ -34,57 +34,21 @@ const PROVIDER_TOKENS = {
     /['"]fal-ai\/[a-z0-9/-]+['"]/i,
     /\bhunyuan-video\b/i,
   ],
-  minimax: [
-    /\bMiniMax-[A-Za-z0-9-]+/,
-    /\b(?:T2V|I2V|S2V)-01[a-z0-9-]*/i,
-    /\bvideo-01[a-z0-9-]*/i,
-    /\bMiniMax-Hailuo-[A-Za-z0-9-]+/,
-  ],
-  vidu: [
-    /\bvidu(?:1\.5|2\.0|q1|q2)[a-z0-9-]*/i,
-    /\bviduq[0-9]+/i,
-  ],
   google: [
     /\bgemini-(?:1\.5|2\.0|2\.5)-[a-z0-9-]+/i,
     /\bimagen-[0-9](?:\.[0-9])?/i,
     /\bveo-[0-9](?:\.[0-9])?/i,
   ],
-  'openai-compatible': [
-    /\bgpt-[345](?:\.[0-9])?-[a-z0-9-]+/i,
-    /\bsora-[0-9]/i,
-    /\bdall-e-[23]/i,
-    /\bgpt-image-[0-9]/i,
-  ],
-  bailian: [
-    /\bwanx[0-9](?:\.[0-9])?-[a-z0-9-]+/i,
-    /\bqwen-(?:image|vl|tts|audio)[a-z0-9-]*/i,
-    /\bcosyvoice[a-z0-9-]*/i,
-  ],
-  siliconflow: [
-    /['"]Pro\/[A-Za-z0-9/-]+['"]/,
-    /['"]Kwai-Kolors\/[A-Za-z0-9/-]+['"]/,
-  ],
 }
 
 const OPENROUTER_UPSTREAM_PROVIDERS = new Set([
   'google',
-  'openai-compatible',
-])
-
-const OPENAI_PROTOCOL_PROVIDER_DIRS = new Set([
-  'openai',
-  'openai-compatible',
 ])
 
 function isAllowedHomeDir(file, providerKey) {
   const rel = file.replaceAll(path.sep, '/')
   if (rel.startsWith('tests/')) return true
   if (rel.startsWith(`src/lib/ai-providers/${providerKey}/`)) return true
-  if (providerKey === 'openai-compatible') {
-    for (const providerDir of OPENAI_PROTOCOL_PROVIDER_DIRS) {
-      if (rel.startsWith(`src/lib/ai-providers/${providerDir}/`)) return true
-    }
-  }
   if (rel.startsWith('src/lib/ai-providers/openrouter/') && OPENROUTER_UPSTREAM_PROVIDERS.has(providerKey)) return true
   return false
 }

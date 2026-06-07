@@ -130,32 +130,6 @@ export async function hasVideoGroupOutput(groupId: string | null | undefined) {
   return isNonEmptyString(group.videoUrl) || !!group.videoMediaId
 }
 
-export async function hasPanelLipSyncOutput(panelId: string | null | undefined) {
-  if (!isNonEmptyString(panelId)) return false
-  const panel = await prisma.projectPanel.findUnique({
-    where: { id: panelId },
-    select: {
-      lipSyncVideoUrl: true,
-      lipSyncVideoMediaId: true,
-    },
-  })
-  if (!panel) return false
-  return isNonEmptyString(panel.lipSyncVideoUrl) || !!panel.lipSyncVideoMediaId
-}
-
-export async function hasVoiceLineAudioOutput(lineId: string | null | undefined) {
-  if (!isNonEmptyString(lineId)) return false
-  const line = await prisma.projectVoiceLine.findUnique({
-    where: { id: lineId },
-    select: {
-      audioUrl: true,
-      audioMediaId: true,
-    },
-  })
-  if (!line) return false
-  return isNonEmptyString(line.audioUrl) || !!line.audioMediaId
-}
-
 export async function hasGlobalCharacterOutput(params: {
   characterId?: string | null
   appearanceIndex?: number | null

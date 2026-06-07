@@ -1,6 +1,5 @@
 'use client'
 
-import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import type { TaskPresentationState } from '@/lib/task/presentation'
@@ -16,7 +15,6 @@ type CharacterCardActionsProps =
     confirmSelectionState: TaskPresentationState | null
     onConfirmSelection?: () => void
     isPrimaryAppearance: boolean
-    voiceSettings: ReactNode
   }
   | {
     mode: 'compact'
@@ -29,7 +27,6 @@ type CharacterCardActionsProps =
     generationCount: number
     onGenerationCountChange: (value: number) => void
     onGenerate: (count?: number) => void
-    voiceSettings: ReactNode
   }
 
 export default function CharacterCardActions(props: CharacterCardActionsProps) {
@@ -61,7 +58,6 @@ export default function CharacterCardActions(props: CharacterCardActionsProps) {
           </div>
         )}
 
-        {props.isPrimaryAppearance && props.voiceSettings}
       </>
     )
   }
@@ -91,8 +87,6 @@ export default function CharacterCardActions(props: CharacterCardActionsProps) {
           />
         )
       )}
-
-      {props.isPrimaryAppearance && props.voiceSettings}
     </>
   )
 }

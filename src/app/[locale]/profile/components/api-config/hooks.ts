@@ -7,7 +7,6 @@ import {
     Provider,
     CustomModel,
     encodeModelKey,
-    getProviderKey,
     isPresetComingSoonModelKey,
     resolvePresetProviderName,
 } from './types'
@@ -46,7 +45,6 @@ interface UseProvidersReturn {
     updateProviderApiKey: (providerId: string, apiKey: string) => void
     updateProviderBaseUrl: (providerId: string, baseUrl: string) => void
     reorderProviders: (activeProviderId: string, overProviderId: string) => void
-    addProvider: (provider: Omit<Provider, 'hasApiKey'>) => void
     deleteProvider: (providerId: string) => void
     updateProviderInfo: (providerId: string, name: string, baseUrl?: string) => void
     toggleModel: (modelKey: string, providerId?: string) => void
@@ -251,29 +249,6 @@ export function useProviders(): UseProvidersReturn {
         })
     }, [performSave])
 
-    const addProvider = useCallback((provider: Omit<Provider, 'hasApiKey'>) => {
-        setProviders(prev => {
-            const normalizedProviderId = provider.id.toLowerCase()
-            if (prev.some((p) => p.id.toLowerCase() === normalizedProviderId)) {
-                alert(t('providerIdExists'))
-                return prev
-            }
-            const newProvider: Provider = { ...provider, hasApiKey: !!provider.apiKey }
-            const next = [...prev, newProvider]
-            latestProvidersRef.current = next
-
-            const providerKey = getProviderKey(provider.id)
-            if (providerKey === 'gemini-compatible') {
-                // 保存后直接 refetch：后端注入带完整 capabilities 的 Google 预设模型（disabled）
-                void performSave().then(() => void reload())
-            } else {
-                void performSave()
-            }
-            return next
-        })
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [t, performSave, reload])
-
     const deleteProvider = useCallback((providerId: string) => {
         if (catalogProviderIdsRef.current.has(providerId)) {
             alert(t('presetProviderCannotDelete'))
@@ -429,7 +404,6 @@ export function useProviders(): UseProvidersReturn {
         updateProviderApiKey,
         updateProviderBaseUrl,
         reorderProviders,
-        addProvider,
         deleteProvider,
         updateProviderInfo,
         toggleModel,

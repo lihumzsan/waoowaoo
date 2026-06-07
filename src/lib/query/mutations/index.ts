@@ -12,7 +12,6 @@ export {
     useUploadCharacterImage,
     useDeleteCharacter,
     useDeleteCharacterAppearance,
-    useUploadCharacterVoice,
     // 场景相关
     useGenerateLocationImage,
     useModifyLocationImage,
@@ -20,8 +19,6 @@ export {
     useUndoLocationImage,
     useUploadLocationImage,
     useDeleteLocation,
-    // 音色相关
-    useDeleteVoice,
     // 编辑相关
     useUpdateCharacterName,
     useUpdateLocationName,
@@ -41,6 +38,5 @@ export * from './useCharacterMutations'
 export * from './useLocationMutations'
 export * from './useStoryboardMutations'
 export * from './useVideoMutations'
-export * from './useVoiceMutations'
 export * from './useProjectConfigMutations'
 export * from './useEpisodeMutations'

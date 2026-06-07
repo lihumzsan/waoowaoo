@@ -26,10 +26,9 @@ const withTaskLifecycleMock = vi.hoisted(() =>
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getProjectModels: vi.fn(async () => ({ videoRatio: '16:9' })),
-  resolveLipSyncVideoSource: vi.fn(async () => 'https://provider.example/lipsync.mp4'),
   resolveVideoSourceFromGeneration: vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(async () => ({ url: 'https://provider.example/video.mp4' })),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
-  uploadVideoSourceToCos: vi.fn(async () => 'cos/lip-sync/video.mp4'),
+  uploadVideoSourceToCos: vi.fn(async () => 'cos/video/video.mp4'),
 }))
 const configServiceMock = vi.hoisted(() => ({
   getUserWorkflowConcurrencyConfig: vi.fn(async () => ({
@@ -75,9 +74,6 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(async () => undefined),
-  },
-  projectVoiceLine: {
-    findUnique: vi.fn(),
   },
   projectVideoGroup: {
     update: vi.fn(async () => undefined),
@@ -136,9 +132,6 @@ vi.mock('@/lib/ai-registry/pricing-catalog', () => ({
   registerBuiltinPricingCatalogEntries: vi.fn(),
 }))
 vi.mock('@/lib/ai-registry/api-config-catalog', () => ({
-  DEFAULT_LIPSYNC_MODEL_KEY: 'fal::lipsync',
-  DEFAULT_VOICE_DESIGN_MODEL_KEY: 'openai::voice-design',
-  DEFAULT_VOICE_MODEL_KEY: 'openai::voice',
   BUILTIN_API_CONFIG_CATALOG: {},
   registerBuiltinApiConfigCatalog: vi.fn(),
 }))
@@ -212,11 +205,6 @@ describe('worker video processor behavior', () => {
 
     prismaMock.projectPanel.findUnique.mockResolvedValue(buildPanel())
     prismaMock.projectPanel.findFirst.mockResolvedValue(buildPanel())
-    prismaMock.projectVoiceLine.findUnique.mockResolvedValue({
-      id: 'line-1',
-      audioUrl: 'cos/line-1.mp3',
-      audioDuration: 1200,
-    })
     prismaMock.project.findUnique.mockResolvedValue({
       analysisModel: 'openai::gpt-4.1',
       videoRatio: '9:16',
@@ -863,7 +851,7 @@ describe('worker video processor behavior', () => {
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: 'openai-compatible:oa-1::sora-2',
+        videoModel: 'fal::veo3/fast',
         generationOptions: {
           duration: 8,
           resolution: '720p',
@@ -953,7 +941,7 @@ describe('worker video processor behavior', () => {
     const result = await processor!(job) as { panelId: string; videoUrl: string; actualVideoTokens: number }
     expect(result).toEqual({
       panelId: 'panel-1',
-      videoUrl: 'cos/lip-sync/video.mp4',
+      videoUrl: 'cos/video/video.mp4',
       actualVideoTokens: 108000,
     })
   })
@@ -992,7 +980,7 @@ describe('worker video processor behavior', () => {
     expect(prismaMock.projectPanel.update).toHaveBeenCalledWith({
       where: { id: 'panel-1' },
       data: {
-        videoUrl: 'cos/lip-sync/video.mp4',
+        videoUrl: 'cos/video/video.mp4',
         videoGenerationMode: 'normal',
         lastVideoGenerationOptions: {
           resolution: '720p',
@@ -1019,59 +1007,6 @@ describe('worker video processor behavior', () => {
     })
 
     await expect(processor!(job)).rejects.toThrow('VIDEO_PANEL_DURATION_REQUIRED:panel-1')
-  })
-
-  it('LIP_SYNC: 缺少 panel 时显式失败', async () => {
-    const processor = workerState.processor
-    expect(processor).toBeTruthy()
-
-    prismaMock.projectPanel.findUnique.mockResolvedValueOnce(null)
-    const job = buildJob({
-      type: TASK_TYPE.LIP_SYNC,
-      payload: { voiceLineId: 'line-1' },
-      targetId: 'panel-missing',
-    })
-
-    await expect(processor!(job)).rejects.toThrow('Lip-sync panel not found')
-  })
-
-  it('LIP_SYNC: 正常路径写回 lipSyncVideoUrl 并清理 lipSyncTaskId', async () => {
-    const processor = workerState.processor
-    expect(processor).toBeTruthy()
-
-    const job = buildJob({
-      type: TASK_TYPE.LIP_SYNC,
-      payload: {
-        voiceLineId: 'line-1',
-        lipSyncModel: 'fal::lipsync-model',
-      },
-      targetId: 'panel-1',
-    })
-
-    const result = await processor!(job) as { panelId: string; voiceLineId: string; lipSyncVideoUrl: string }
-    expect(result).toEqual({
-      panelId: 'panel-1',
-      voiceLineId: 'line-1',
-      lipSyncVideoUrl: 'cos/lip-sync/video.mp4',
-    })
-
-    expect(utilsMock.resolveLipSyncVideoSource).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        userId: 'user-1',
-        modelKey: 'fal::lipsync-model',
-        audioDurationMs: 1200,
-        videoDurationMs: 5000,
-      }),
-    )
-
-    expect(prismaMock.projectPanel.update).toHaveBeenCalledWith({
-      where: { id: 'panel-1' },
-      data: {
-        lipSyncVideoUrl: 'cos/lip-sync/video.mp4',
-        lipSyncTaskId: null,
-      },
-    })
   })
 
   it('未知任务类型: 显式报错', async () => {

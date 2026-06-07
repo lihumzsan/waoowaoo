@@ -125,10 +125,9 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(assetExtractPrompt).toContain('角色资产必须同时生成非空 voiceTimbreText')
-    expect(assetExtractPrompt).toContain('即使角色在当前剪辑表中没有对白、旁白或画外音，也必须')
-    expect(assetExtractPrompt).toContain('character 必须输出非空 voiceTimbreText；location 禁止输出 voiceTimbreText')
-    expect(assetExtractPrompt).toContain('禁止因为当前角色无台词而省略、置空、写 null')
+    expect(assetExtractPrompt).toContain('"kind": "character"')
+    expect(assetExtractPrompt).toContain('"description": "用于图片生成的视觉描述"')
+    expect(assetExtractPrompt).toContain('第一阶段不要提取道具、音频、分镜图、视频')
 
     const videoPromptBlock = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
@@ -152,7 +151,6 @@ describe('edit script block-first prompt flow', () => {
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.sound.soundFilterPrompt')
     expect(videoPromptBlock).toContain('画面滤镜')
     expect(videoPromptBlock).toContain('声音滤镜')
-    expect(videoPromptBlock).toContain('不得改写或替代角色 voiceTimbreText')
     expect(videoPromptBlock).not.toContain('videoPromptBible')
 
     const panelFinalPromptBlock = buildAiPrompt({

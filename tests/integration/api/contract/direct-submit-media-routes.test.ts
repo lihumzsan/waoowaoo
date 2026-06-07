@@ -54,10 +54,6 @@ vi.mock('@/lib/task/has-output', () => hasOutputMock)
 vi.mock('@/lib/billing', () => ({
   buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
 }))
-vi.mock('@/lib/ai-providers/bailian/voice-design', () => ({
-  validateVoicePrompt: vi.fn(() => ({ valid: true })),
-  validatePreviewText: vi.fn(() => ({ valid: true })),
-}))
 vi.mock('@/lib/media/outbound-image', () => ({
   sanitizeImageInputsForTaskPayload: vi.fn((inputs: unknown[]) => ({
     normalized: inputs
@@ -114,7 +110,7 @@ describe('api contract - direct submit media routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(DIRECT_MEDIA_CASES.length).toBe(16)
+    expect(DIRECT_MEDIA_CASES.length).toBe(15)
   })
 
   for (const routeCase of DIRECT_MEDIA_CASES) {

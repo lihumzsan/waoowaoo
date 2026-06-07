@@ -40,7 +40,6 @@ export interface ProjectContextEpisodeSnapshot {
   screenplayClipCount: number
   storyboardCount: number
   panelCount: number
-  voiceLineCount: number
 }
 
 export interface ProjectContextEditScreenplaySnapshot {

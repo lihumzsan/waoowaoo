@@ -10,20 +10,16 @@ export type TaskTypeBehaviorMatrixEntry = {
 }
 
 function resolveChainTestByTaskType(taskType: TaskType): string {
-  if (taskType === 'video_panel' || taskType === 'lip_sync') {
+  if (taskType === 'video_panel' || taskType === 'video_group') {
     return 'tests/integration/chain/video.chain.test.ts'
   }
   if (taskType === 'music_generate' || taskType === 'bgm_score_generate') {
     return 'tests/integration/chain/music.chain.test.ts'
   }
-  if (taskType === 'voice_line' || taskType === 'voice_design' || taskType === 'asset_hub_voice_design') {
-    return 'tests/integration/chain/voice.chain.test.ts'
-  }
   if (
     taskType === 'analyze_novel'
     || taskType === 'clips_build'
     || taskType === 'screenplay_convert'
-    || taskType === 'voice_analyze'
     || taskType === 'analyze_global'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
@@ -49,7 +45,6 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     taskType === 'analyze_novel'
     || taskType === 'clips_build'
     || taskType === 'screenplay_convert'
-    || taskType === 'voice_analyze'
     || taskType === 'analyze_global'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
@@ -72,12 +67,9 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     || taskType === 'image_character'
     || taskType === 'image_location'
     || taskType === 'video_panel'
+    || taskType === 'video_group'
     || taskType === 'music_generate'
     || taskType === 'bgm_score_generate'
-    || taskType === 'lip_sync'
-    || taskType === 'voice_line'
-    || taskType === 'voice_design'
-    || taskType === 'asset_hub_voice_design'
     || taskType === 'insert_panel'
     || taskType === 'panel_variant'
     || taskType === 'modify_asset_image'
@@ -91,13 +83,6 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
       || taskType === 'regenerate_storyboard_text'
     ) {
       return 'tests/integration/api/contract/direct-submit-text-routes.test.ts'
-    }
-    if (
-      taskType === 'voice_line'
-      || taskType === 'voice_design'
-      || taskType === 'asset_hub_voice_design'
-    ) {
-      return 'tests/integration/api/contract/direct-submit-run-routes.test.ts'
     }
     return 'tests/integration/api/contract/direct-submit-media-routes.test.ts'
   }

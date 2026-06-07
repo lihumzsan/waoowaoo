@@ -247,7 +247,6 @@ describe('edit script normalization', () => {
           kind: 'character',
           name: 'Pilot',
           description: 'A quiet astronaut in a minimal pressure suit.',
-          voiceTimbreText: 'young adult neutral voice, clear, soft, mid pitch, low grain, light breathiness',
           shotNumbers: [2, 1, 2],
         },
         {
@@ -264,7 +263,6 @@ describe('edit script normalization', () => {
         kind: 'character',
         name: 'Pilot',
         description: 'A quiet astronaut in a minimal pressure suit.',
-        voiceTimbreText: 'young adult neutral voice, clear, soft, mid pitch, low grain, light breathiness',
         shotNumbers: [1, 2],
         status: 'pending',
         targetId: null,
@@ -274,7 +272,6 @@ describe('edit script normalization', () => {
         kind: 'location',
         name: 'Dock',
         description: 'A sterile orbital docking bay with red warning light.',
-        voiceTimbreText: null,
         shotNumbers: [1],
         status: 'pending',
         targetId: null,
@@ -283,7 +280,7 @@ describe('edit script normalization', () => {
     ])
   })
 
-  it('rejects character assets without fixed voice timbre text', () => {
+  it('accepts character assets with visual description only', () => {
     const shots = normalizeEditScriptCore({
       title: 'Assets',
       durationSec: 4,
@@ -308,7 +305,7 @@ describe('edit script normalization', () => {
       ],
     }).shots
 
-    expect(() => normalizeEditAssetRequirements({
+    const assets = normalizeEditAssetRequirements({
       assets: [
         {
           kind: 'character',
@@ -317,7 +314,13 @@ describe('edit script normalization', () => {
           shotNumbers: [1],
         },
       ],
-    }, shots)).toThrow()
+    }, shots)
+
+    expect(assets[0]).toEqual(expect.objectContaining({
+      kind: 'character',
+      name: 'Pilot',
+      description: 'A quiet astronaut in a minimal pressure suit.',
+    }))
   })
 
   it('splits structure normalization from final video prompt rendering', () => {

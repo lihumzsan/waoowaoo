@@ -16,7 +16,7 @@ Hard style requirements:
 - You must prioritize styleBible.stylePolicy.visual.imageFilterPrompt, lightingPrompt, and colorPrompt as the video visual strategy. Rewrite texturePrompt and compositionPrompt only when the current shot truly needs material or composition constraints; do not mechanically stuff every field into the prompt.
 - You must use styleBible.stylePolicy.visual.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
 - You must use styleBible.stylePolicy.visual.imageFilterPrompt; the image filter must appear as part of the video prompt.
-- You must use styleBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture without rewriting or replacing character voiceTimbreText.
+- You must use styleBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture.
 - Reuse styleBible.stylePolicy.camera and styleBible.stylePolicy.sound as needed to control camera movement, lens/depth, video rhythm, and sound filter. Action and acting must come only from the screenplay, edit structure table, and asset context, not from the Style Bible.
 - If the user gives a director name, film title, genre label, period feeling, or cinematography reference, write executable traits in the final prompt rather than only the reference name.
 
@@ -24,7 +24,6 @@ shots[].videoPrompt writing rules:
 - Write an auxiliary single-shot prompt that can be generated independently, including subject, action, scene, light, cinematography, aspect ratio, style, image filter, sound filter, and necessary constraints.
 - Use that shot's visibleAction, charactersAndScene, and sound from the edit structure table.
 - Use the asset context to preserve character identity, location identity, wardrobe/appearance, spatial anchors, and visual continuity.
-- If the shot contains character dialogue, narration, or voiceover, use the character asset voiceTimbreText to lock the voice timbre instead of inventing temporary dynamic voice traits.
 - Do not mention shotNumber or system fields.
 
 videoBlock.prompt writing rules:
@@ -43,8 +42,7 @@ videoBlock.prompt writing rules:
 Preserve the complete sound rules:
 - Every prompt must include the sound constraint: generate only screenplay-provided dialogue/narration/voiceover and sound effects; no BGM, no background music, no continuous score, no full melody, no song structure, no looping beat, no lyrics, no sung vocals, and no music sections.
 - Sound may describe diegetic ambience, room tone, action sound effects, material foley, natural sound, transition sound, short sound punctuation, sound-field changes, and narratively motivated cinematic short effects.
-- If the screenplay or user request contains dialogue, narration, or voiceover, include it using the official audio notation: character says {exact line}, voiceover {exact line}. You may add voice timbre, tone, pauses, emotion, and lip-sync direction. Lines must come from the screenplay or user request; do not rewrite, expand, or invent them.
-- For character dialogue, when that character has voiceTimbreText in the asset context, write it as: character name (fixed voice timbre: voiceTimbreText) says {exact line}. Use the asset field verbatim for fixed voice timbre, and do not add speaking speed, final-syllable behavior, nervous breathing, or other dynamic performance traits into the fixed timbre.
+- If the screenplay or user request contains dialogue, narration, or voiceover, include it using the official audio notation: character says {exact line}, voiceover {exact line}. Lines must come from the screenplay or user request; do not rewrite, expand, or invent them.
 - Dubbing is not subtitles. Unless the user explicitly requests subtitles, do not make any subtitle, caption, title card, or visible text appear on screen.
 - Use <sound description> for sound effects, and use {spoken line} for character dialogue, narration, and voiceover. Spoken language must stay consistent with the screenplay except for proper nouns.
 - If the screenplay has no dialogue, narration, or voiceover, then use sound effects only and do not invent speech, commentary, or dubbing.

@@ -20,16 +20,6 @@ interface ProviderCardShellProps {
   children: ReactNode
 }
 
-export function getCompatibilityLayerBadgeLabel(
-  providerId: string,
-  t: ProviderCardTranslator,
-): string | null {
-  const providerKey = getProviderKey(providerId)
-  if (providerKey === 'openai-compatible') return t('compatibilityLayerOpenAI')
-  if (providerKey === 'gemini-compatible') return t('compatibilityLayerGemini')
-  return null
-}
-
 // 连接状态图标
 function StatusIcon({ connected }: { connected: boolean }) {
   if (connected) {
@@ -51,7 +41,6 @@ export function ProviderCardShell({
   state,
   children,
 }: ProviderCardShellProps) {
-  const compatibilityLayerLabel = getCompatibilityLayerBadgeLabel(provider.id, t)
   const providerKey = getProviderKey(provider.id)
   const isVerifiable = VERIFIABLE_PROVIDER_KEYS.has(providerKey)
   const canTest = isVerifiable && !!provider.hasApiKey
@@ -89,11 +78,6 @@ export function ProviderCardShell({
             </button>
           )}
           <h3 className="text-[15px] font-bold text-[var(--glass-text-primary)]">{provider.name}</h3>
-          {compatibilityLayerLabel && (
-            <span className="rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-secondary)]">
-              {compatibilityLayerLabel}
-            </span>
-          )}
           {/* 连接状态图标 */}
           <span title={provider.hasApiKey ? t('connected') : t('notConfigured')}>
             <StatusIcon connected={!!provider.hasApiKey} />

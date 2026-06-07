@@ -8,10 +8,7 @@ export interface ProviderCardDefaultModels {
   storyboardModel?: string
   editModel?: string
   videoModel?: string
-  audioModel?: string
   musicModel?: string
-  lipSyncModel?: string
-  voiceDesignModel?: string
 }
 
 export interface ProviderCardProps {
@@ -43,7 +40,7 @@ export interface ModelFormState {
   optionPricesJson?: string
 }
 
-export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'audio' | 'music'
+export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music'
 
 export type ProviderCardGroupedModels = Partial<Record<ProviderCardModelType, CustomModel[]>>
 
@@ -57,7 +54,5 @@ export type ProviderCardTranslator = (
  * UI 层（是否显示"测试连接"按钮）和 逻辑层（保存时是否自动测试）共享此列表
  */
 export const VERIFIABLE_PROVIDER_KEYS = new Set([
-  'ark', 'google', 'openrouter', 'minimax', 'fal', 'vidu',
-  'bailian', 'siliconflow',
-  'openai-compatible', 'gemini-compatible',
+  'ark', 'google', 'openrouter', 'fal',
 ])

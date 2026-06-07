@@ -12,9 +12,8 @@ import {
   OPENAI_IMAGE_OUTPUT_FORMATS,
   OPENAI_OFFICIAL_IMAGE_QUALITIES,
 } from '@/lib/ai-providers/shared/openai-image'
-import { OPENAI_IMAGE_2_MODEL_ID } from '@/lib/ai-providers/openai/models'
 
-export const FAL_GPT_IMAGE_2_MODEL_ID = OPENAI_IMAGE_2_MODEL_ID
+export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/fast'
@@ -157,9 +156,6 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   },
 ] as const
 
-export const FAL_DEFAULT_VOICE_MODEL_KEY = 'fal::fal-ai/index-tts-2/text-to-speech'
-export const FAL_DEFAULT_LIPSYNC_MODEL_KEY = 'fal::fal-ai/kling-video/lipsync/audio-to-video'
-
 export const FAL_API_CONFIG_CATALOG_MODELS = [
   { modelId: 'banana', name: 'Banana Pro', type: 'image', provider: 'fal' },
   { modelId: 'banana-2', name: 'Banana 2', type: 'image', provider: 'fal' },
@@ -175,8 +171,6 @@ export const FAL_API_CONFIG_CATALOG_MODELS = [
   { modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling O3 Pro', type: 'video', provider: 'fal' },
   { modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling 3 Standard', type: 'video', provider: 'fal' },
   { modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID, name: 'Kling 3 Pro', type: 'video', provider: 'fal' },
-  { modelId: 'fal-ai/index-tts-2/text-to-speech', name: 'IndexTTS 2', type: 'audio', provider: 'fal' },
-  { modelId: 'fal-ai/kling-video/lipsync/audio-to-video', name: 'Kling Lip Sync', type: 'lipsync', provider: 'fal' },
 ] as const
 
 function falFlatPricing(flatAmount: number) {
@@ -276,8 +270,6 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
     pricing: falDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
   },
-  { apiType: 'voice', provider: 'fal', modelId: 'fal-ai/index-tts-2/text-to-speech', pricing: falFlatPricing(0.0144) },
-  { apiType: 'lip-sync', provider: 'fal', modelId: 'fal-ai/kling-video/lipsync/audio-to-video', pricing: falFlatPricing(0.5) },
 ] as const
 
 export const FAL_IMAGE_OPTION_SCHEMA_CONFIG = {
@@ -386,5 +378,5 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
       objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
     })
   }
-  return buildMediaOptionSchema('audio')
+  throw new Error(`FAL_MODALITY_UNSUPPORTED:${modality}`)
 }

@@ -60,18 +60,7 @@ export interface Episode {
     srtContent?: string | null
     createdAt: string
     finalVideo?: ProjectFinalVideo | null
-    // 剧集详情数据
-    voiceLines?: VoiceLine[]
     storyboardData?: StoryboardData
-}
-
-interface VoiceLine {
-    id: string
-    text: string
-    speakerId: string
-    audioUrl?: string | null
-    media?: MediaRef | null
-    lineTaskRunning?: boolean
 }
 
 interface StoryboardData {

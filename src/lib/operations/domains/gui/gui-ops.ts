@@ -10,23 +10,13 @@ import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { resolveTaskLocale, resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
-import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue, resolveMediaRef } from '@/lib/media/service'
+import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { deleteObject, uploadObject, generateUniqueKey, getSignedUrl } from '@/lib/storage'
+import { deleteObject } from '@/lib/storage'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
-import {
-  collectBailianManagedVoiceIds,
-  cleanupUnreferencedBailianVoices,
-} from '@/lib/ai-exec/voice-cleanup'
-import {
-  parseSpeakerVoiceMap,
-  type SpeakerVoiceEntry,
-  type SpeakerVoiceMap,
-} from '@/lib/ai-exec/voice-line'
-import { validatePreviewText, validateVoicePrompt } from '@/lib/ai-exec/voice-design'
 import { resolveBuiltinPricing } from '@/lib/ai-registry/pricing-resolution'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
@@ -98,72 +88,6 @@ function resolveStoryboardGroupInsertCreatedAt<T extends { createdAt: Date }>(
   const prevClip = existingClips[insertAt - 1]
   const nextClip = existingClips[insertAt]
   return new Date((prevClip.createdAt.getTime() + nextClip.createdAt.getTime()) / 2)
-}
-
-async function resolveMatchedPanelData(matchedPanelId: string | null | undefined, expectedEpisodeId?: string) {
-  if (matchedPanelId === undefined) {
-    return null
-  }
-
-  if (matchedPanelId === null) {
-    return {
-      matchedPanelId: null,
-      matchedStoryboardId: null,
-      matchedPanelIndex: null,
-    }
-  }
-
-  const panel = await prisma.projectPanel.findUnique({
-    where: { id: matchedPanelId },
-    select: {
-      id: true,
-      storyboardId: true,
-      panelIndex: true,
-      storyboard: {
-        select: {
-          episodeId: true,
-        },
-      },
-    },
-  })
-
-  if (!panel) {
-    throw new ApiError('NOT_FOUND')
-  }
-  if (expectedEpisodeId && panel.storyboard.episodeId !== expectedEpisodeId) {
-    throw new ApiError('INVALID_PARAMS')
-  }
-
-  return {
-    matchedPanelId: panel.id,
-    matchedStoryboardId: panel.storyboardId,
-    matchedPanelIndex: panel.panelIndex,
-  }
-}
-
-async function withVoiceLineMedia<T extends Record<string, unknown>>(line: T) {
-  const audioMedia = await resolveMediaRef(line.audioMediaId, line.audioUrl)
-  const matchedPanel = line.matchedPanel as
-    | {
-      storyboardId?: string | null
-      panelIndex?: number | null
-    }
-    | null
-    | undefined
-  return {
-    ...line,
-    media: audioMedia,
-    audioMedia,
-    audioUrl: audioMedia?.url || line.audioUrl || null,
-    updatedAt:
-      line.updatedAt instanceof Date
-        ? line.updatedAt.toISOString()
-        : typeof line.updatedAt === 'string'
-          ? line.updatedAt
-          : null,
-    matchedStoryboardId: matchedPanel?.storyboardId ?? line.matchedStoryboardId,
-    matchedPanelIndex: matchedPanel?.panelIndex ?? line.matchedPanelIndex,
-  }
 }
 
 export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
@@ -306,11 +230,10 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	    }),
 	    delete_character: defineOperation({
 	      id: 'delete_character',
-	      summary: 'Delete a project character and cascade appearances; also cleanup unreferenced managed voices.',
+      summary: 'Delete a project character and cascade appearances.',
 	      intent: 'act',
 	      effects: {
 	        ...EFFECTS_WRITE_DESTRUCTIVE,
-	        externalSideEffects: true,
 	      },
 	      confirmation: {
 	        required: true,
@@ -327,27 +250,9 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             id: input.characterId,
             projectId: ctx.projectId,
           },
-          select: {
-            id: true,
-            voiceId: true,
-            voiceType: true,
-          },
+          select: { id: true },
         })
         if (!character) throw new ApiError('NOT_FOUND')
-
-        const candidateVoiceIds = collectBailianManagedVoiceIds([
-          {
-            voiceId: character.voiceId,
-            voiceType: character.voiceType,
-          },
-        ])
-        await cleanupUnreferencedBailianVoices({
-          voiceIds: candidateVoiceIds,
-          scope: {
-            userId: ctx.userId,
-            excludeNovelCharacterId: character.id,
-          },
-        })
 
 	        await prisma.projectCharacter.delete({
 	          where: { id: input.characterId },
@@ -597,85 +502,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         })
 
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
-	      },
-	    }),
-	    patch_character_voice: defineOperation({
-	      id: 'patch_character_voice',
-	      summary: 'Update character voice settings (voiceType/voiceId/customVoiceUrl).',
-	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
-	      inputSchema: z.object({
-	        characterId: z.string().min(1),
-	        voiceType: z.string().optional().nullable(),
-	        voiceId: z.string().optional().nullable(),
-        customVoiceUrl: z.string().optional().nullable(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const character = await prisma.projectCharacter.findFirst({
-          where: { id: input.characterId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!character) throw new ApiError('NOT_FOUND')
-
-        const updated = await prisma.projectCharacter.update({
-          where: { id: input.characterId },
-          data: {
-            voiceType: input.voiceType || null,
-            voiceId: input.voiceId || null,
-            customVoiceUrl: input.customVoiceUrl || null,
-          },
-	        })
-	        return { success: true, character: updated }
-	      },
-	    }),
-	    upload_character_voice_audio: defineOperation({
-	      id: 'upload_character_voice_audio',
-	      summary: 'Upload custom character voice audio (base64) or save AI designed voice sample.',
-	      intent: 'act',
-	      effects: {
-	        ...EFFECTS_WRITE_OVERWRITE,
-	        externalSideEffects: true,
-	        longRunning: true,
-	      },
-	      inputSchema: z.object({
-	        characterId: z.string().min(1),
-	        voiceId: z.string().optional(),
-	        voiceType: z.string().optional(),
-        audioBase64: z.string().min(1),
-        ext: z.string().optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const character = await prisma.projectCharacter.findFirst({
-          where: { id: input.characterId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!character) throw new ApiError('NOT_FOUND')
-
-        const buffer = Buffer.from(input.audioBase64, 'base64')
-        const ext = normalizeString(input.ext) || 'wav'
-        const key = generateUniqueKey(`voice/custom/${ctx.projectId}/${input.characterId}`, ext)
-        const storedKey = await uploadObject(buffer, key)
-
-        const updated = await prisma.projectCharacter.update({
-          where: { id: input.characterId },
-          data: {
-            voiceType: input.voiceType || (input.voiceId ? 'qwen-designed' : 'uploaded'),
-            voiceId: input.voiceId || null,
-            customVoiceUrl: storedKey,
-          },
-        })
-
-        const signedAudioUrl = getSignedUrl(storedKey, 7200)
-        return {
-          success: true,
-          audioUrl: signedAudioUrl,
-          character: {
-            ...updated,
-            customVoiceUrl: signedAudioUrl,
-	          },
-	        }
 	      },
 	    }),
 	    create_location: defineOperation({
@@ -1451,363 +1277,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         },
       }),
     }),
-    create_voice_line: defineOperation({
-      id: 'create_voice_line',
-      summary: 'Create a voice line for an episode.',
-      intent: 'act',
-      effects: EFFECTS_WRITE,
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-        content: z.string().min(1),
-        speaker: z.string().min(1),
-        matchedPanelId: z.string().nullable().optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const project = await prisma.project.findUnique({
-          where: { id: ctx.projectId },
-          select: { id: true },
-        })
-        if (!project) throw new ApiError('NOT_FOUND')
-
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const maxLine = await prisma.projectVoiceLine.findFirst({
-          where: { episodeId: input.episodeId },
-          orderBy: { lineIndex: 'desc' },
-          select: { lineIndex: true },
-        })
-        const nextLineIndex = (maxLine?.lineIndex || 0) + 1
-
-        const matchedPanelData = await resolveMatchedPanelData(
-          input.matchedPanelId === undefined ? undefined : input.matchedPanelId,
-          input.episodeId,
-        )
-
-        const created = await prisma.projectVoiceLine.create({
-          data: {
-            episodeId: input.episodeId,
-            lineIndex: nextLineIndex,
-            content: input.content.trim(),
-            speaker: input.speaker.trim(),
-            ...(matchedPanelData || {}),
-          },
-          include: {
-            matchedPanel: {
-              select: { id: true, storyboardId: true, panelIndex: true },
-            },
-          },
-        })
-
-        return { success: true, voiceLine: await withVoiceLineMedia(created as unknown as Record<string, unknown>) }
-      },
-    }),
-    list_voice_line_speakers: defineOperation({
-      id: 'list_voice_line_speakers',
-      summary: 'List distinct speakers that appear in voice lines for this project.',
-      intent: 'query',
-      effects: EFFECTS_QUERY,
-      inputSchema: z.object({}).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx) => {
-        const project = await prisma.project.findUnique({
-          where: { id: ctx.projectId },
-          select: { id: true },
-        })
-        if (!project) throw new ApiError('NOT_FOUND')
-
-        const speakerRows = await prisma.projectVoiceLine.findMany({
-          where: {
-            episode: { projectId: ctx.projectId },
-          },
-          select: { speaker: true },
-          distinct: ['speaker'],
-          orderBy: { speaker: 'asc' },
-        })
-
-        return {
-          speakers: speakerRows.map((item) => item.speaker).filter(Boolean),
-        }
-      },
-    }),
-    list_voice_lines: defineOperation({
-      id: 'list_voice_lines',
-      summary: 'List voice lines for an episode including matched panel info and normalized media fields.',
-      intent: 'query',
-      effects: EFFECTS_QUERY,
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const voiceLines = await prisma.projectVoiceLine.findMany({
-          where: { episodeId: input.episodeId },
-          orderBy: { lineIndex: 'asc' },
-          include: {
-            matchedPanel: {
-              select: {
-                id: true,
-                storyboardId: true,
-                panelIndex: true,
-              },
-            },
-          },
-        })
-
-        const voiceLinesWithUrls = await Promise.all(voiceLines.map(withVoiceLineMedia))
-
-        const speakerStats: Record<string, number> = {}
-        for (const line of voiceLines) {
-          speakerStats[line.speaker] = (speakerStats[line.speaker] || 0) + 1
-        }
-
-        return {
-          voiceLines: voiceLinesWithUrls,
-          count: voiceLines.length,
-          speakerStats,
-        }
-      },
-    }),
-    update_voice_line: defineOperation({
-      id: 'update_voice_line',
-      summary: 'Update a voice line fields including media refs and matched panel mapping.',
-      intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
-      inputSchema: z.object({
-        lineId: z.string().min(1),
-        voicePresetId: z.string().optional().nullable(),
-        emotionPrompt: z.string().optional().nullable(),
-        emotionStrength: z.number().optional().nullable(),
-        content: z.string().optional(),
-        speaker: z.string().optional(),
-        audioUrl: z.unknown().optional(),
-        matchedPanelId: z.string().nullable().optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const currentLine = await prisma.projectVoiceLine.findUnique({
-          where: { id: input.lineId },
-          select: { id: true, episodeId: true, episode: { select: { projectId: true } } },
-        })
-        if (!currentLine || currentLine.episode.projectId !== ctx.projectId) throw new ApiError('NOT_FOUND')
-
-        const updateData: Prisma.ProjectVoiceLineUncheckedUpdateInput = {}
-        if (input.voicePresetId !== undefined) updateData.voicePresetId = input.voicePresetId
-        if (input.emotionPrompt !== undefined) updateData.emotionPrompt = input.emotionPrompt || null
-        if (input.emotionStrength !== undefined) updateData.emotionStrength = input.emotionStrength as number
-        if (input.content !== undefined) {
-          if (!input.content.trim()) throw new ApiError('INVALID_PARAMS')
-          updateData.content = input.content.trim()
-        }
-        if (input.speaker !== undefined) {
-          if (!input.speaker.trim()) throw new ApiError('INVALID_PARAMS')
-          updateData.speaker = input.speaker.trim()
-        }
-        if (input.audioUrl !== undefined) {
-          updateData.audioUrl = input.audioUrl as string | null
-          const media = await resolveMediaRefFromLegacyValue(input.audioUrl)
-          updateData.audioMediaId = media?.id || null
-        }
-        if (input.matchedPanelId !== undefined) {
-          const matchedPanelData = await resolveMatchedPanelData(input.matchedPanelId, currentLine.episodeId)
-          if (matchedPanelData) {
-            updateData.matchedPanelId = matchedPanelData.matchedPanelId
-            updateData.matchedStoryboardId = matchedPanelData.matchedStoryboardId
-            updateData.matchedPanelIndex = matchedPanelData.matchedPanelIndex
-          }
-        }
-
-        const updated = await prisma.projectVoiceLine.update({
-          where: { id: input.lineId },
-          data: updateData,
-          include: {
-            matchedPanel: {
-              select: { id: true, storyboardId: true, panelIndex: true },
-            },
-          },
-        })
-
-        return { success: true, voiceLine: await withVoiceLineMedia(updated as unknown as Record<string, unknown>) }
-      },
-    }),
-    bulk_update_speaker_voice_preset: defineOperation({
-      id: 'bulk_update_speaker_voice_preset',
-      summary: 'Batch update voicePresetId for a speaker within an episode.',
-      intent: 'act',
-      effects: {
-        ...EFFECTS_WRITE_OVERWRITE,
-        bulk: true,
-      },
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-        speaker: z.string().min(1),
-        voicePresetId: z.string().optional().nullable(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const result = await prisma.projectVoiceLine.updateMany({
-          where: { episodeId: input.episodeId, speaker: input.speaker },
-          data: { voicePresetId: input.voicePresetId ?? null },
-        })
-
-        return { success: true, updatedCount: result.count, speaker: input.speaker, voicePresetId: input.voicePresetId ?? null }
-      },
-    }),
-    delete_voice_line: defineOperation({
-      id: 'delete_voice_line',
-      summary: 'Delete a voice line and reindex remaining lineIndex.',
-      intent: 'act',
-      effects: {
-        ...EFFECTS_WRITE_DESTRUCTIVE,
-        overwrite: true,
-        bulk: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将删除该台词并重排 lineIndex。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        lineId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const line = await prisma.projectVoiceLine.findUnique({
-          where: { id: input.lineId },
-          select: { id: true, episodeId: true, episode: { select: { projectId: true } } },
-        })
-        if (!line || line.episode.projectId !== ctx.projectId) throw new ApiError('NOT_FOUND')
-
-        await prisma.projectVoiceLine.delete({ where: { id: input.lineId } })
-        const remaining = await prisma.projectVoiceLine.findMany({
-          where: { episodeId: line.episodeId },
-          orderBy: { lineIndex: 'asc' },
-        })
-        for (let i = 0; i < remaining.length; i++) {
-          if (remaining[i].lineIndex !== i + 1) {
-            await prisma.projectVoiceLine.update({
-              where: { id: remaining[i].id },
-              data: { lineIndex: i + 1 },
-            })
-          }
-        }
-
-        return { success: true, deletedId: input.lineId, remainingCount: remaining.length }
-      },
-    }),
-    set_speaker_voice: defineOperation({
-      id: 'set_speaker_voice',
-      summary: 'Set speaker voice entry for an episode (writes episode.speakerVoices JSON).',
-      intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-        speaker: z.string().min(1),
-        provider: z.enum(['fal', 'bailian']),
-        voiceType: z.string().optional(),
-        audioUrl: z.string().optional(),
-        previewAudioUrl: z.string().optional(),
-        voiceId: z.string().optional(),
-      }),
-      outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true, speakerVoices: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const speakerVoices = parseSpeakerVoiceMap(episode.speakerVoices)
-
-        let nextVoiceEntry: SpeakerVoiceEntry
-        if (input.provider === 'fal') {
-          if (!input.audioUrl) throw new ApiError('INVALID_PARAMS')
-          const resolvedKey = await resolveStorageKeyFromMediaValue(input.audioUrl)
-          nextVoiceEntry = {
-            provider: 'fal',
-            voiceType: input.voiceType || 'uploaded',
-            audioUrl: resolvedKey || input.audioUrl,
-          }
-        } else {
-          if (!input.voiceId) throw new ApiError('INVALID_PARAMS')
-          const previewCandidate = input.previewAudioUrl || input.audioUrl
-          const resolvedPreviewKey = previewCandidate ? await resolveStorageKeyFromMediaValue(previewCandidate) : null
-          const previewToStore = previewCandidate ? (resolvedPreviewKey || previewCandidate) : undefined
-          nextVoiceEntry = {
-            provider: 'bailian',
-            voiceType: input.voiceType || 'uploaded',
-            voiceId: input.voiceId,
-            ...(previewToStore ? { previewAudioUrl: previewToStore } : {}),
-          }
-        }
-
-        speakerVoices[input.speaker] = nextVoiceEntry
-        await prisma.projectEpisode.update({
-          where: { id: input.episodeId },
-          data: { speakerVoices: JSON.stringify(speakerVoices) },
-        })
-        return { success: true }
-      },
-    }),
-    get_speaker_voices: defineOperation({
-      id: 'get_speaker_voices',
-      summary: 'Get speaker voice map for an episode with signed preview urls.',
-      intent: 'query',
-      effects: EFFECTS_QUERY,
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true, speakerVoices: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const storedSpeakerVoices = parseSpeakerVoiceMap(episode.speakerVoices)
-        const speakerVoices: SpeakerVoiceMap = {}
-
-        const signUrlIfNeeded = (url: string) => (url.startsWith('http') ? url : getSignedUrl(url, 7200))
-
-        for (const [speaker, voice] of Object.entries(storedSpeakerVoices)) {
-          if (voice.provider === 'fal') {
-            speakerVoices[speaker] = {
-              provider: 'fal',
-              voiceType: voice.voiceType,
-              audioUrl: signUrlIfNeeded(voice.audioUrl),
-            }
-            continue
-          }
-
-          const previewAudioUrl = voice.previewAudioUrl ? signUrlIfNeeded(voice.previewAudioUrl) : undefined
-          speakerVoices[speaker] = {
-            provider: 'bailian',
-            voiceType: voice.voiceType,
-            voiceId: voice.voiceId,
-            ...(previewAudioUrl ? { previewAudioUrl } : {}),
-          }
-        }
-
-        return { speakerVoices }
-      },
-    }),
     create_episode: defineOperation({
       id: 'create_episode',
       summary: 'Create a new episode in a project and update lastEpisodeId.',
@@ -1868,7 +1337,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_episode_detail: defineOperation({
       id: 'get_episode_detail',
-      summary: 'Get full episode data with storyboards/clips/shots/voice lines and update project.lastEpisodeId.',
+      summary: 'Get full episode data with storyboards/clips/shots and update project.lastEpisodeId.',
       intent: 'act',
       effects: EFFECTS_WRITE_OVERWRITE,
       inputSchema: z.object({
@@ -1889,7 +1358,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               orderBy: { createdAt: 'asc' },
             },
             shots: { orderBy: { shotId: 'asc' } },
-            voiceLines: { orderBy: { lineIndex: 'asc' } },
             videoGroups: {
               orderBy: { createdAt: 'asc' },
             },

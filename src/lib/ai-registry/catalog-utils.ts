@@ -8,9 +8,7 @@ export function isUnifiedModelType(value: unknown): value is UnifiedModelType {
   return value === 'llm'
     || value === 'image'
     || value === 'video'
-    || value === 'audio'
     || value === 'music'
-    || value === 'lipsync'
 }
 
 export function readTrimmedString(value: unknown): string {

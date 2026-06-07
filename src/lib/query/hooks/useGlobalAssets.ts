@@ -33,8 +33,6 @@ export interface GlobalCharacter {
     id: string
     name: string
     folderId: string | null
-    customVoiceUrl: string | null
-    media?: MediaRef | null
     appearances: GlobalCharacterAppearance[]
 }
 
@@ -72,20 +70,6 @@ export interface GlobalProp {
     images: GlobalLocationImage[]
 }
 
-export interface GlobalVoice {
-    id: string
-    name: string
-    description: string | null
-    voiceId: string | null
-    voiceType: string
-    customVoiceUrl: string | null
-    media?: MediaRef | null
-    voicePrompt: string | null
-    gender: string | null
-    language: string
-    folderId: string | null
-}
-
 export interface GlobalFolder {
     id: string
     name: string
@@ -108,8 +92,6 @@ export function useGlobalCharacters(folderId?: string | null) {
             id: asset.id,
             name: asset.name,
             folderId: asset.folderId,
-            customVoiceUrl: asset.voice.customVoiceUrl,
-            media: asset.voice.media,
             appearances: asset.variants.map((variant) => ({
                 id: variant.id,
                 appearanceIndex: variant.index,
@@ -212,33 +194,6 @@ export function useGlobalProps(folderId?: string | null) {
                 }
             }),
         })) as GlobalProp[],
-    }
-}
-
-/**
- * 获取中心资产库音色列表
- */
-export function useGlobalVoices(folderId?: string | null) {
-    const assetsQuery = useAssets({
-        scope: 'global',
-        folderId,
-        kind: 'voice',
-    })
-    return {
-        ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).voice.map((asset) => ({
-            id: asset.id,
-            name: asset.name,
-            description: asset.voiceMeta.description,
-            voiceId: asset.voiceMeta.voiceId,
-            voiceType: asset.voiceMeta.voiceType,
-            customVoiceUrl: asset.voiceMeta.customVoiceUrl,
-            media: asset.voiceMeta.media,
-            voicePrompt: asset.voiceMeta.voicePrompt,
-            gender: asset.voiceMeta.gender,
-            language: asset.voiceMeta.language,
-            folderId: asset.folderId,
-        })) as GlobalVoice[],
     }
 }
 

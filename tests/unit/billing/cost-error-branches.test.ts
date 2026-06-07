@@ -18,9 +18,6 @@ vi.mock('@/lib/ai-registry/capabilities-catalog', () => ({
 }))
 
 vi.mock('@/lib/ai-registry/api-config-catalog', () => ({
-  DEFAULT_LIPSYNC_MODEL_KEY: 'test::lipsync',
-  DEFAULT_VOICE_DESIGN_MODEL_KEY: 'test::voice-design',
-  DEFAULT_VOICE_MODEL_KEY: 'test::voice',
   registerBuiltinApiConfigCatalog: lookupMock.registerBuiltinApiConfigCatalog,
 }))
 
@@ -33,7 +30,7 @@ vi.mock('@/lib/ai-registry/pricing-catalog', () => ({
 }))
 
 
-import { calcImage, calcText, calcVideo, calcVoice } from '@/lib/billing/cost'
+import { calcImage, calcMusic, calcText, calcVideo } from '@/lib/billing/cost'
 
 describe('billing/cost error branches', () => {
   beforeEach(() => {
@@ -87,6 +84,6 @@ describe('billing/cost error branches', () => {
     expect(calcText('text-model', 1_000_000, Number.NaN)).toBeCloseTo(10, 8)
     expect(calcImage('image-model', Number.NaN)).toBe(1)
     expect(calcVideo('video-model', '720p', Number.NaN)).toBe(5)
-    expect(calcVoice(Number.NaN)).toBe(0)
+    expect(calcMusic('music-model', Number.NaN)).toBe(0)
   })
 })

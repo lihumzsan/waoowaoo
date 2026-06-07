@@ -332,9 +332,9 @@ describe('api specific - unified assets routes', () => {
       path: '/api/projects/project-1/copy-from-global',
       method: 'POST',
       body: {
-        type: 'voice',
+        type: 'character',
         targetId: 'character-1',
-        globalAssetId: 'voice-1',
+        globalAssetId: 'global-character-1',
       },
     })
 
@@ -345,9 +345,9 @@ describe('api specific - unified assets routes', () => {
 
     expect(res.status).toBe(200)
     expect(copyAssetFromGlobalMock).toHaveBeenCalledWith({
-      kind: 'voice',
+      kind: 'character',
       targetId: 'character-1',
-      globalAssetId: 'voice-1',
+      globalAssetId: 'global-character-1',
       access: {
         userId: 'user-1',
         projectId: 'project-1',

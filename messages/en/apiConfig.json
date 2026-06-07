@@ -7,8 +7,6 @@
   "notConfigured": "Not configured",
   "configure": "Configure",
   "connect": "Connect",
-  "compatibilityLayerOpenAI": "OpenAI Compatible Layer",
-  "compatibilityLayerGemini": "Gemini Compatible Layer",
   "show": "Show",
   "hide": "Hide",
   "capability": "Models",
@@ -30,11 +28,6 @@
   "pricingEnableCustom": "Enable custom pricing (optional)",
   "pricingOptionPricesPlaceholder": "Option pricing JSON (optional), e.g. {\"resolution\":{\"1024x1024\":0.12}}",
   "modelIdExists": "Model ID already exists",
-  "flushConfigFailed": "Failed to save provider settings. Please save API key/Base URL first.",
-  "probeLlmProtocolFailed": "Model protocol probe failed. Please try again.",
-  "probeAuthFailed": "Model protocol probe authentication failed. Please check API key.",
-  "probeInconclusive": "Model protocol probe is inconclusive (rate limit or provider error). Please retry later.",
-  "probeRequestFailed": "Model protocol probe request failed. Please try again.",
   "modelDisplayName": "Display Name (for your reference)",
   "modelActualId": "Actual Model ID (API parameter)",
   "noModelsForProvider": "No models configured for this provider",
@@ -45,9 +38,7 @@
   "storyboardDefault": "Storyboard Model",
   "editDefault": "Edit Model",
   "videoDefault": "Video Model",
-  "audioDefault": "Voice Model",
   "musicDefault": "Music Model",
-  "lipsyncDefault": "Lip Sync Model",
   "selectDefault": "Select",
   "defaultModelDesc": {
     "analysisModel": "Handles script analysis, storyboard construction and full-pipeline text reasoning.",
@@ -56,10 +47,7 @@
     "locationModel": "Generate scene environments and spatial references from script descriptions",
     "storyboardModel": "Generate shot frames and visual references from storyboard scripts",
     "editModel": "Perform localized edits, style adjustments and refinements on existing images",
-    "audioModel": "Convert text dialogue into natural and fluent speech audio",
-    "musicModel": "Generate background music and scoring assets for project edits",
-    "lipSyncModel": "Precisely synchronize speech audio with video character lip movements",
-    "voiceDesignModel": "Design custom voice tones and speech style profiles for characters"
+    "musicModel": "Generate background music and scoring assets for project edits"
   },
   "defaultModelSection": {
     "coreFoundation": "Text Analysis & Video",
@@ -75,11 +63,7 @@
     "pipelineLocation": "Scene Gen",
     "pipelineStoryboard": "Shot Gen",
     "pipelineEdit": "Image Edit",
-    "extLipSync": "Lip Sync",
-    "extAudio": "Audio",
-    "extTTS": "Speech Synthesis",
     "extMusic": "Music / Score",
-    "extVoiceDesign": "Voice Design",
     "corePlaceholder": "Required",
     "extPlaceholder": "Not enabled"
   },
@@ -92,16 +76,9 @@
     "imageDescription": "Go to the provider pool below, configure an image model, and enable it first.",
     "videoTitle": "No video models available",
     "videoDescription": "Go to the provider pool below, configure a video model, and enable it first.",
-    "audioTitle": "No audio models available",
-    "audioDescription": "Go to the provider pool below, configure an audio model, and enable it first.",
     "musicTitle": "No music models available",
-    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first.",
-    "lipsyncTitle": "No lip-sync models available",
-    "lipsyncDescription": "Go to the provider pool below, configure a lip-sync model, and enable it first.",
-    "voiceDesignTitle": "No voice design models available",
-    "voiceDesignDescription": "Go to the provider pool below, configure a voice design model, and enable it first."
+    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first."
   },
-  "customProviderTip": "This project is currently in beta. Due to varying custom API formats across providers, custom API compatibility is still limited. We recommend using the built-in official APIs. Future updates will expand compatibility with more providers.",
   "providerPool": "Provider Pool",
   "dragToSort": "Drag to sort",
   "dragToSortHint": "Drag the top-left handle on each card to reorder providers",
@@ -116,7 +93,6 @@
   "confirmDeleteProvider": "Are you sure you want to delete this provider?",
   "presetModelCannotDelete": "Preset models cannot be deleted",
   "confirmDeleteModel": "Are you sure you want to delete this model?",
-  "addGeminiProvider": "Add Model Provider",
   "baseUrl": "Base URL",
   "configureBaseUrl": "Configure URL",
   "addModel": "Add Model",
@@ -125,20 +101,12 @@
   "typeText": "Text",
   "typeImage": "Image",
   "typeVideo": "Video",
-  "typeAudio": "Audio",
   "typeMusic": "Music / Score",
-  "audioSubAll": "All",
-  "audioSubSpeech": "Speech",
   "audioSubMusic": "Music",
-  "audioSubLipSync": "Lip sync",
   "apiKeyLabel": "API Key",
   "apiType": "API Type",
-  "apiTypeGeminiCompatible": "Gemini Compatible",
-  "apiTypeOpenAICompatible": "OpenAI Compatible",
   "apiTypeGeminiHint": "Uses Google SDK",
   "otherProviders": "Other Settings",
-  "audioCategory": "Audio",
-  "audioAndLipsync": "Audio & Lip Sync",
   "configureApiKey": "Configure API Key",
   "enterApiKey": "Enter API Key",
   "testConnection": "Test Connection",
@@ -153,22 +121,18 @@
     "textGen": "Text Generation",
     "imageGen": "Image Generation",
     "credits": "Credits Check",
-    "audioGen": "Audio Generation",
     "skipped": "Skipped"
   },
   "tabs": {
     "llm": "Text Models",
     "image": "Image Models",
     "video": "Video Models",
-    "audio": "Audio Models",
     "other": "Other"
   },
   "sections": {
     "llmApiKeys": "Text Model API Keys",
     "imageApiKeys": "Image Model API Keys",
-    "videoApiKeys": "Video Model API Keys",
-    "audioApiKey": "Audio Model API Key",
-    "lipsyncApiKey": "Lip Sync API Key"
+    "videoApiKeys": "Video Model API Keys"
   },
   "defaultModel": {
     "title": "Default Model",
@@ -199,13 +163,7 @@
       "ark_step2": "On the model management page, click 'Enable All Models' button in the top right corner",
       "openrouter_step1": "Go to OpenRouter platform and create an API Key (must select models with image capabilities)",
       "fal_step1": "Go to FAL platform and create an API Key",
-      "google_step1": "Go to Google AI Studio and create an API Key",
-      "minimax_step1": "Go to MiniMax platform and get an API Key",
-      "vidu_step1": "Go to the Vidu platform and click 'Create API Key'",
-      "openai_compatible_step1": "Enter any OpenAI-compatible service Base URL and API key",
-      "gemini_compatible_step1": "Enter any Gemini-compatible service Base URL and API key",
-      "bailian_step1": "Go to Alibaba Cloud Bailian console and get an API Key",
-      "siliconflow_step1": "Go to SiliconFlow console and create an API Key"
+      "google_step1": "Go to Google AI Studio and create an API Key"
     }
   }
 }

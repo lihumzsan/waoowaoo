@@ -11,16 +11,7 @@ interface ProviderBaseFieldsProps {
 }
 
 export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsProps) {
-  const baseUrlPlaceholder = (() => {
-    switch (state.providerKey) {
-      case 'gemini-compatible':
-        return 'https://your-api-domain.com'
-      case 'openai-compatible':
-        return 'https://api.openai.com/v1'
-      default:
-        return 'http://localhost:8000'
-    }
-  })()
+  const baseUrlPlaceholder = provider.baseUrl || 'https://api.example.com'
 
   return (
     <>

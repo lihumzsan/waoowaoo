@@ -1,11 +1,10 @@
 import { prisma } from '@/lib/prisma'
-import { attachMediaFieldsToGlobalCharacter, attachMediaFieldsToGlobalLocation, attachMediaFieldsToGlobalVoice, attachMediaFieldsToProject } from '@/lib/media/attach'
+import { attachMediaFieldsToGlobalCharacter, attachMediaFieldsToGlobalLocation, attachMediaFieldsToProject } from '@/lib/media/attach'
 import {
   filterAssetsByKind as filterMappedAssetsByKind,
   mapGlobalCharacterToAsset,
   mapGlobalLocationToAsset,
   mapGlobalPropToAsset,
-  mapGlobalVoiceToAsset,
   mapProjectCharacterToAsset,
   mapProjectLocationToAsset,
   mapProjectPropToAsset,
@@ -61,7 +60,7 @@ async function readGlobalAssets(input: { folderId?: string | null; userId: strin
     userId: input.userId,
     ...folderFilter,
   }
-  const [characters, locations, props, voices] = await Promise.all([
+  const [characters, locations, props] = await Promise.all([
     prisma.globalCharacter.findMany({
       where,
       include: {
@@ -81,24 +80,18 @@ async function readGlobalAssets(input: { folderId?: string | null; userId: strin
       folderId: input.folderId,
       kind: 'prop',
     }),
-    prisma.globalVoice.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
-    }),
   ])
 
-  const [globalCharacters, globalLocations, globalProps, globalVoices] = await Promise.all([
+  const [globalCharacters, globalLocations, globalProps] = await Promise.all([
     Promise.all(characters.map((character) => attachMediaFieldsToGlobalCharacter(character))),
     Promise.all(locations.map((location) => attachMediaFieldsToGlobalLocation(location))),
     Promise.all(props.map((prop) => attachMediaFieldsToGlobalLocation(prop))),
-    Promise.all(voices.map((voice) => attachMediaFieldsToGlobalVoice(voice))),
   ])
 
   return [
     ...(globalCharacters as unknown as Parameters<typeof mapGlobalCharacterToAsset>[0][]).map(mapGlobalCharacterToAsset),
     ...(globalLocations as unknown as Parameters<typeof mapGlobalLocationToAsset>[0][]).map(mapGlobalLocationToAsset),
     ...(globalProps as unknown as Parameters<typeof mapGlobalPropToAsset>[0][]).map(mapGlobalPropToAsset),
-    ...(globalVoices as unknown as Parameters<typeof mapGlobalVoiceToAsset>[0][]).map(mapGlobalVoiceToAsset),
   ]
 }
 

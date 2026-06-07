@@ -53,7 +53,6 @@ export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceP
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.editScript(projectId, episodeId) }))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.storyboards.all(episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.voiceLines.all(episodeId) }))
     }
 
     await Promise.all(promises)

@@ -11,7 +11,7 @@ const COMMAND_SKILLS: Record<CommandSkillId, SkillDefinition> = {
     requiresApproval: true,
     inputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET],
     outputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET, ARTIFACT_TYPES.PANEL_PROMPT],
-    invalidates: [ARTIFACT_TYPES.PANEL_IMAGE, ARTIFACT_TYPES.PANEL_VIDEO, ARTIFACT_TYPES.VOICE_LINES],
+    invalidates: [ARTIFACT_TYPES.PANEL_IMAGE, ARTIFACT_TYPES.PANEL_VIDEO],
     mutationKind: 'generate',
   },
   panel_variant: {
@@ -33,7 +33,7 @@ const COMMAND_SKILLS: Record<CommandSkillId, SkillDefinition> = {
     requiresApproval: true,
     inputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET],
     outputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET],
-    invalidates: [ARTIFACT_TYPES.PANEL_PROMPT, ARTIFACT_TYPES.PANEL_IMAGE, ARTIFACT_TYPES.PANEL_VIDEO, ARTIFACT_TYPES.VOICE_LINES],
+    invalidates: [ARTIFACT_TYPES.PANEL_PROMPT, ARTIFACT_TYPES.PANEL_IMAGE, ARTIFACT_TYPES.PANEL_VIDEO],
     mutationKind: 'generate',
   },
   modify_shot_prompt: {

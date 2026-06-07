@@ -57,10 +57,6 @@ export const TASK_TYPE = {
   FINAL_VIDEO_RENDER: 'final_video_render',
   VIDEO_PANEL: 'video_panel',
   VIDEO_GROUP: 'video_group',
-  LIP_SYNC: 'lip_sync',
-  VOICE_LINE: 'voice_line',
-  VOICE_DESIGN: 'voice_design',
-  ASSET_HUB_VOICE_DESIGN: 'asset_hub_voice_design',
   REGENERATE_STORYBOARD_TEXT: 'regenerate_storyboard_text',
   INSERT_PANEL: 'insert_panel',
   PANEL_VARIANT: 'panel_variant',
@@ -71,7 +67,6 @@ export const TASK_TYPE = {
   ANALYZE_NOVEL: 'analyze_novel',
   CLIPS_BUILD: 'clips_build',
   SCREENPLAY_CONVERT: 'screenplay_convert',
-  VOICE_ANALYZE: 'voice_analyze',
   ANALYZE_GLOBAL: 'analyze_global',
   EDIT_SCRIPT_GENERATE: 'edit_script_generate',
   AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
@@ -93,7 +88,7 @@ export const TASK_TYPE = {
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
 
-export type QueueType = 'image' | 'video' | 'music' | 'voice' | 'text'
+export type QueueType = 'image' | 'video' | 'music' | 'text'
 
 export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'
 
@@ -107,7 +102,7 @@ export type TaskBillingInfo =
     billable: true
     source: 'task'
     taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music' | 'voice' | 'voice-design' | 'lip-sync'
+    apiType: 'text' | 'image' | 'video' | 'music'
     model: string
     quantity: number
     unit: 'token' | 'image' | 'video' | 'second' | 'call'

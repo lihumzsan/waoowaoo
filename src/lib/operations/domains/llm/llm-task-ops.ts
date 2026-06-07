@@ -185,47 +185,6 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
         })
       },
     }),
-    generate_voice_lines: defineOperation({
-      id: 'generate_voice_lines',
-      summary: 'Generate structured voice line artifacts for an episode.',
-      intent: 'act',
-      effects: EFFECTS_BILLABLE_LONG_RUNNING,
-      confirmation: {
-        required: true,
-        summary: '将生成台词结果（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        episodeId: z.string().min(1),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const modelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
-        if (!modelConfig.analysisModel) {
-          throw new ApiError('MISSING_CONFIG')
-        }
-        const payload: Record<string, unknown> = {
-          ...(input as unknown as Record<string, unknown>),
-          analysisModel: modelConfig.analysisModel,
-          displayMode: 'detail',
-        }
-        return await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: input.episodeId,
-          type: TASK_TYPE.VOICE_ANALYZE,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-          operationId: 'generate_voice_lines',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload,
-          dedupeKey: `generate_voice_lines:${input.episodeId}`,
-          priority: 1,
-        })
-      },
-    }),
     ai_modify_appearance: defineOperation({
       id: 'ai_modify_appearance',
       summary: 'Submit AI modify appearance task.',

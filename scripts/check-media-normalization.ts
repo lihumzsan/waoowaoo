@@ -4,7 +4,6 @@ const TARGETS = ['src/app/api', 'src/lib']
 
 const EXTRACT_ALLOWLIST = new Set<string>([
   'src/lib/media/service.ts',
-  'src/lib/voice/generate-voice-line.ts',
 ])
 
 const FETCH_MEDIA_ALLOWLIST = new Set<string>([
@@ -13,8 +12,6 @@ const FETCH_MEDIA_ALLOWLIST = new Set<string>([
   'src/lib/workers/utils.ts',
   'src/app/api/projects/[projectId]/download-images/route.ts',
   'src/app/api/projects/[projectId]/download-videos/route.ts',
-  'src/app/api/projects/[projectId]/download-voices/route.ts',
-  'src/app/api/projects/[projectId]/voice-generate/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
 ])
 

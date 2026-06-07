@@ -4,17 +4,13 @@ import { logError as _ulogError } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
 import { prisma } from '@/lib/prisma'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { DEFAULT_LIPSYNC_MODEL_KEY, DEFAULT_VOICE_DESIGN_MODEL_KEY, DEFAULT_VOICE_MODEL_KEY } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
   calcImage,
-  calcLipSync,
   calcMusic,
   calcText,
   calcVideo,
   calcVideoByTokens,
-  calcVoice,
-  calcVoiceDesign,
   type ModelCustomPricing,
 } from './cost'
 import {
@@ -111,12 +107,6 @@ function resolveCost(input: CostInput) {
     }
     case 'music':
       return asMoney(calcMusic(input.model, input.quantity, input.metadata, input.customPricing))
-    case 'voice':
-      return asMoney(calcVoice(input.quantity))
-    case 'voice-design':
-      return asMoney(calcVoiceDesign())
-    case 'lip-sync':
-      return asMoney(calcLipSync(input.model))
     default:
       throw new BillingOperationError('BILLING_INVALID_API_TYPE', `Unsupported billing apiType: ${String(input.apiType)}`, {
         apiType: input.apiType,
@@ -706,79 +696,6 @@ export async function withVideoBilling<T>(
       unit: 'video',
       metadata: { ...recordParams.metadata, resolution },
       customPricing,
-    },
-    recordParams,
-    generateFn,
-  )
-}
-
-export async function withVoiceBilling<T>(
-  userId: string,
-  maxFreezeSeconds: number,
-  recordParams: BillingRecordParams,
-  generateFn: () => Promise<T>,
-): Promise<T> {
-  return await withSyncBillingCore(
-    {
-      userId,
-      projectId: recordParams.projectId,
-      action: recordParams.action,
-      apiType: 'voice',
-      model: DEFAULT_VOICE_MODEL_KEY,
-      quantity: maxFreezeSeconds,
-      unit: 'second',
-      metadata: recordParams.metadata,
-      maxCost: calcVoice(maxFreezeSeconds),
-      extractActualQuantity: (result) => {
-        if (!result || typeof result !== 'object') return null
-        const value =
-          (result as Record<string, unknown>).actualDurationSeconds
-          ?? (result as Record<string, unknown>).actualSeconds
-        return asNumber(value)
-      },
-    },
-    recordParams,
-    generateFn,
-  )
-}
-
-export async function withVoiceDesignBilling<T>(
-  userId: string,
-  recordParams: BillingRecordParams,
-  generateFn: () => Promise<T>,
-): Promise<T> {
-  return await withSyncBillingCore(
-    {
-      userId,
-      projectId: recordParams.projectId,
-      action: recordParams.action,
-      apiType: 'voice-design',
-      model: DEFAULT_VOICE_DESIGN_MODEL_KEY,
-      quantity: 1,
-      unit: 'call',
-      metadata: recordParams.metadata,
-    },
-    recordParams,
-    generateFn,
-  )
-}
-
-export async function withLipSyncBilling<T>(
-  userId: string,
-  recordParams: BillingRecordParams,
-  model = DEFAULT_LIPSYNC_MODEL_KEY,
-  generateFn: () => Promise<T>,
-): Promise<T> {
-  return await withSyncBillingCore(
-    {
-      userId,
-      projectId: recordParams.projectId,
-      action: recordParams.action,
-      apiType: 'lip-sync',
-      model,
-      quantity: 1,
-      unit: 'call',
-      metadata: recordParams.metadata,
     },
     recordParams,
     generateFn,

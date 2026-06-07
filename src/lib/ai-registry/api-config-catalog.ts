@@ -26,16 +26,8 @@ export interface ApiConfigServerCatalog {
   models: ApiConfigCatalogModel[]
 }
 
-export const DEFAULT_LIPSYNC_MODEL_KEY = 'fal::fal-ai/kling-video/lipsync/audio-to-video'
-export const DEFAULT_VOICE_MODEL_KEY = 'fal::fal-ai/index-tts-2/text-to-speech'
-export const DEFAULT_VOICE_DESIGN_MODEL_KEY = 'bailian::qwen-voice-design'
-
 interface BuiltinApiConfigCatalogRegistration {
   models: readonly unknown[]
-  googleCompatibleModels: readonly ApiConfigCatalogModel[]
-  defaultLipSyncModelKey: string
-  defaultVoiceModelKey: string
-  defaultVoiceDesignModelKey: string
 }
 
 let registeredApiConfigCatalog: BuiltinApiConfigCatalogRegistration | null = null
@@ -53,27 +45,11 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
   return registeredApiConfigCatalog
 }
 
-export function getDefaultLipSyncModelKey(): string {
-  return registeredApiConfigCatalog?.defaultLipSyncModelKey ?? DEFAULT_LIPSYNC_MODEL_KEY
-}
-
-export function getDefaultVoiceModelKey(): string {
-  return registeredApiConfigCatalog?.defaultVoiceModelKey ?? DEFAULT_VOICE_MODEL_KEY
-}
-
-export function getDefaultVoiceDesignModelKey(): string {
-  return registeredApiConfigCatalog?.defaultVoiceDesignModelKey ?? DEFAULT_VOICE_DESIGN_MODEL_KEY
-}
-
 export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
-  { id: 'openai', name: 'OpenAI' },
   { id: 'ark', name: 'Volcengine Ark' },
-  { id: 'google', name: 'Google AI Studio' },
-  { id: 'bailian', name: 'Alibaba Bailian' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
-  { id: 'minimax', name: 'MiniMax Hailuo', baseUrl: 'https://api.minimaxi.com/v1' },
-  { id: 'vidu', name: 'Vidu' },
   { id: 'fal', name: 'FAL' },
+  { id: 'google', name: 'Google AI Studio' },
 ]
 
 const CATALOG_PROVIDER_ORDER = new Map(API_CONFIG_CATALOG_PROVIDERS.map((provider, index) => [provider.id, index]))
@@ -81,9 +57,7 @@ const CATALOG_TYPE_ORDER: Readonly<Record<UnifiedModelType, number>> = {
   llm: 0,
   image: 1,
   video: 2,
-  audio: 3,
-  music: 4,
-  lipsync: 5,
+  music: 3,
 }
 
 function normalizeApiConfigCatalogModel(raw: unknown, index: number): ApiConfigCatalogModel {
@@ -181,10 +155,6 @@ export function matchesApiConfigModelKey(key: string | undefined | null, provide
 
 const ZH_PROVIDER_NAME_MAP: Readonly<Record<string, string>> = {
   ark: '火山引擎 Ark',
-  minimax: '海螺 MiniMax',
-  vidu: '生数科技 Vidu',
-  bailian: '阿里云百炼',
-  siliconflow: '硅基流动',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -202,11 +172,6 @@ export function getApiConfigProviderDisplayName(providerId?: string, locale?: st
   const provider = API_CONFIG_CATALOG_PROVIDERS.find((candidate) => candidate.id === providerKey)
   if (!provider) return providerId
   return resolveApiConfigCatalogProviderName(provider.id, provider.name, locale)
-}
-
-export function getGoogleCompatibleApiConfigPresetModels(providerId: string): ApiConfigCatalogModel[] {
-  return requireBuiltinApiConfigCatalog().googleCompatibleModels
-    .map((model) => ({ ...model, provider: providerId }))
 }
 
 export function buildApiConfigServerCatalog(input?: {

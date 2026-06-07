@@ -44,16 +44,12 @@ async function attachMediaFieldsToAppearance<T extends Record<string, unknown>>(
 }
 
 export async function attachMediaFieldsToGlobalCharacter<T extends Record<string, unknown>>(character: T) {
-  const customVoiceMedia = await resolveMediaRef(character.customVoiceMediaId, character.customVoiceUrl)
   const appearances = await Promise.all(
     ((character.appearances as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToAppearance),
   )
 
   return {
     ...character,
-    media: customVoiceMedia,
-    customVoiceMedia,
-    customVoiceUrl: customVoiceMedia?.url || character.customVoiceUrl || null,
     appearances,
   }
 }
@@ -80,20 +76,9 @@ export async function attachMediaFieldsToGlobalLocation<T extends Record<string,
   }
 }
 
-export async function attachMediaFieldsToGlobalVoice<T extends Record<string, unknown>>(voice: T) {
-  const customVoiceMedia = await resolveMediaRef(voice.customVoiceMediaId, voice.customVoiceUrl)
-  return {
-    ...voice,
-    media: customVoiceMedia,
-    customVoiceMedia,
-    customVoiceUrl: customVoiceMedia?.url || voice.customVoiceUrl || null,
-  }
-}
-
 async function attachMediaFieldsToPanel<T extends Record<string, unknown>>(panel: T) {
   const imageMedia = await resolveMediaRef(panel.imageMediaId, panel.imageUrl)
   const videoMedia = await resolveMediaRef(panel.videoMediaId, panel.videoUrl)
-  const lipSyncVideoMedia = await resolveMediaRef(panel.lipSyncVideoMediaId, panel.lipSyncVideoUrl)
   const sketchImageMedia = await resolveMediaRef(panel.sketchImageMediaId, panel.sketchImageUrl)
   const previousImageMedia = await resolveMediaRef(panel.previousImageMediaId, panel.previousImageUrl)
 
@@ -113,12 +98,10 @@ async function attachMediaFieldsToPanel<T extends Record<string, unknown>>(panel
     media: imageMedia,
     imageMedia,
     videoMedia,
-    lipSyncVideoMedia,
     sketchImageMedia,
     previousImageMedia,
     imageUrl: imageMedia?.url || panel.imageUrl || null,
     videoUrl: videoMedia?.url || panel.videoUrl || null,
-    lipSyncVideoUrl: lipSyncVideoMedia?.url || panel.lipSyncVideoUrl || null,
     sketchImageUrl: sketchImageMedia?.url || panel.sketchImageUrl || null,
     previousImageUrl: previousImageMedia?.url || panel.previousImageUrl || null,
     candidateImages: candidateRaw.length > 0 ? JSON.stringify(candidateMediaUrls) : panel.candidateImages,
@@ -153,15 +136,11 @@ async function attachMediaFieldsToStoryboard<T extends Record<string, unknown>>(
 }
 
 async function attachMediaFieldsToProjectCharacter<T extends Record<string, unknown>>(character: T) {
-  const customVoiceMedia = await resolveMediaRef(character.customVoiceMediaId, character.customVoiceUrl)
   const appearances = await Promise.all(
     ((character.appearances as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToAppearance),
   )
   return {
     ...character,
-    media: customVoiceMedia,
-    customVoiceMedia,
-    customVoiceUrl: customVoiceMedia?.url || character.customVoiceUrl || null,
     appearances,
   }
 }
@@ -205,16 +184,6 @@ async function attachMediaFieldsToShot<T extends Record<string, unknown>>(shot: 
   }
 }
 
-async function attachMediaFieldsToVoiceLine<T extends Record<string, unknown>>(line: T) {
-  const audioMedia = await resolveMediaRef(line.audioMediaId, line.audioUrl)
-  return {
-    ...line,
-    media: audioMedia,
-    audioMedia,
-    audioUrl: audioMedia?.url || line.audioUrl || null,
-  }
-}
-
 async function attachMediaFieldsToVideoGroup<T extends Record<string, unknown>>(group: T) {
   const referenceImageMedia = await resolveMediaRef(group.referenceImageMediaId, group.referenceImageUrl)
   const videoMedia = await resolveMediaRef(group.videoMediaId, group.videoUrl)
@@ -244,9 +213,6 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
   const storyboards = await Promise.all(
     ((projectLike.storyboards as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToStoryboard),
   )
-  const voiceLines = await Promise.all(
-    ((projectLike.voiceLines as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVoiceLine),
-  )
   const videoGroups = await Promise.all(
     ((projectLike.videoGroups as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVideoGroup),
   )
@@ -261,7 +227,6 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
     props,
     shots,
     storyboards,
-    voiceLines,
     videoGroups,
   }
 }

@@ -4,7 +4,6 @@ export type AssetKindRegistration = {
   kind: AssetKind
   family: AssetFamily
   supportsMultipleVariants: boolean
-  supportsVoiceBinding: boolean
   editorSchema: AssetKind
   promptAssembler: AssetKind
   capabilities: AssetCapabilityMap
@@ -15,7 +14,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
     kind: 'character',
     family: 'visual',
     supportsMultipleVariants: true,
-    supportsVoiceBinding: true,
     editorSchema: 'character',
     promptAssembler: 'character',
     capabilities: {
@@ -24,7 +22,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
       canRevertRender: true,
       canModifyRender: true,
       canUploadRender: true,
-      canBindVoice: true,
       canCopyFromGlobal: true,
     },
   },
@@ -32,7 +29,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
     kind: 'location',
     family: 'visual',
     supportsMultipleVariants: true,
-    supportsVoiceBinding: false,
     editorSchema: 'location',
     promptAssembler: 'location',
     capabilities: {
@@ -41,7 +37,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
       canRevertRender: true,
       canModifyRender: true,
       canUploadRender: true,
-      canBindVoice: false,
       canCopyFromGlobal: true,
     },
   },
@@ -49,7 +44,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
     kind: 'prop',
     family: 'visual',
     supportsMultipleVariants: true,
-    supportsVoiceBinding: false,
     editorSchema: 'prop',
     promptAssembler: 'prop',
     capabilities: {
@@ -58,24 +52,6 @@ const assetKindRegistryMap: Record<AssetKind, AssetKindRegistration> = {
       canRevertRender: true,
       canModifyRender: true,
       canUploadRender: true,
-      canBindVoice: false,
-      canCopyFromGlobal: true,
-    },
-  },
-  voice: {
-    kind: 'voice',
-    family: 'audio',
-    supportsMultipleVariants: false,
-    supportsVoiceBinding: false,
-    editorSchema: 'voice',
-    promptAssembler: 'voice',
-    capabilities: {
-      canGenerate: false,
-      canSelectRender: false,
-      canRevertRender: false,
-      canModifyRender: false,
-      canUploadRender: false,
-      canBindVoice: false,
       canCopyFromGlobal: true,
     },
   },

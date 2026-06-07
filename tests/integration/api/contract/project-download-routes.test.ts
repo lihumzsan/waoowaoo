@@ -62,7 +62,6 @@ vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMo
 
 import { GET as downloadImagesGet } from '@/app/api/projects/[projectId]/download-images/route'
 import { POST as downloadVideosPost } from '@/app/api/projects/[projectId]/download-videos/route'
-import { GET as downloadVoicesGet } from '@/app/api/projects/[projectId]/download-voices/route'
 
 describe('api contract - project download routes (operation adapter)', () => {
   beforeEach(() => {
@@ -112,25 +111,4 @@ describe('api contract - project download routes (operation adapter)', () => {
     expect(storageMock.getObjectBuffer).toHaveBeenCalledWith('k.mp4')
   })
 
-  it('GET /api/projects/[projectId]/download-voices -> uses list_download_voices plan', async () => {
-    apiAdapterMock.executeProjectAgentOperationFromApi.mockResolvedValueOnce({
-      projectName: 'Project',
-      files: [{ fileName: '001_speaker_line.mp3', storageKey: 'k.mp3' }],
-    })
-
-    const res = await downloadVoicesGet(
-      buildMockRequest({ path: '/api/projects/project-1/download-voices', method: 'GET' }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('application/zip')
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'list_download_voices',
-      projectId: 'project-1',
-      userId: 'user-1',
-    }))
-    expect(storageMock.getObjectBuffer).toHaveBeenCalledWith('k.mp3')
-  })
 })
-

@@ -10,7 +10,7 @@ type ToastType = 'success' | 'warning' | 'error'
 type ShowToast = (message: string, type?: ToastType, duration?: number) => void
 
 export type GlobalCopyTarget = {
-  type: 'character' | 'location' | 'prop' | 'voice'
+  type: 'character' | 'location' | 'prop'
   targetId: string
 }
 
@@ -21,6 +21,15 @@ interface UseAssetsCopyFromHubParams {
 }
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+function resolveCopySuccessMessage(
+  t: ReturnType<typeof useTranslations>,
+  type: GlobalCopyTarget['type'],
+): string {
+  if (type === 'character') return t('assetLibrary.copySuccessCharacter')
+  if (type === 'location') return t('assetLibrary.copySuccessLocation')
+  return t('assetLibrary.copySuccessProp')
+}
 
 export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAssetsCopyFromHubParams) {
   const t = useTranslations('assets')
@@ -40,10 +49,6 @@ export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAss
     setCopyFromGlobalTarget({ type: 'prop', targetId: propId })
   }, [])
 
-  const handleVoiceSelectFromHub = useCallback((characterId: string) => {
-    setCopyFromGlobalTarget({ type: 'voice', targetId: characterId })
-  }, [])
-
   const handleCloseCopyPicker = useCallback(() => {
     setCopyFromGlobalTarget(null)
   }, [])
@@ -59,14 +64,7 @@ export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAss
         globalAssetId,
       })
 
-      const successMsg = copyFromGlobalTarget.type === 'character'
-        ? t('assetLibrary.copySuccessCharacter')
-        : copyFromGlobalTarget.type === 'location'
-          ? t('assetLibrary.copySuccessLocation')
-          : copyFromGlobalTarget.type === 'prop'
-            ? t('assetLibrary.copySuccessProp')
-          : t('assetLibrary.copySuccessVoice')
-      showToast(successMsg, 'success')
+      showToast(resolveCopySuccessMessage(t, copyFromGlobalTarget.type), 'success')
       setCopyFromGlobalTarget(null)
       await Promise.resolve(onRefresh())
     } catch (error: unknown) {
@@ -84,7 +82,6 @@ export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAss
     handleCopyFromGlobal,
     handleCopyLocationFromGlobal,
     handleCopyPropFromGlobal,
-    handleVoiceSelectFromHub,
     handleConfirmCopyFromGlobal,
     handleCloseCopyPicker,
   }

@@ -152,7 +152,7 @@ export function buildBgmScorePlanPrompt(input: {
 
   return [
     'You are a professional film composer designing only the continuous BGM score for an AI-generated video.',
-    'The video model already produces dialogue, character sounds, environment sounds, and event sound effects. Do not design Foley, voice, ambience replacement, literal ambience, or literal sound effects.',
+    'The video model already produces dialogue, character sounds, environment sounds, and event sound effects. Do not design Foley, spoken-performance replacement, literal ambience, or literal sound effects.',
     'The final output will be generated as one single complete instrumental BGM track, not separate rendered stems.',
     '',
     'First create a flexible score design, then condense that design into one excellent music-generation prompt.',

@@ -31,7 +31,7 @@ interface UserModelsPayload {
   llm: UserModelOption[]
   image: UserModelOption[]
   video: UserModelOption[]
-  audio: UserModelOption[]
+  music: UserModelOption[]
 }
 
 interface WorkspaceHeaderShellProps {
@@ -49,7 +49,7 @@ interface WorkspaceHeaderShellProps {
   videoModel: string | null | undefined
   singleShotVideoModel: string | null | undefined
   sequenceVideoModel: string | null | undefined
-  audioModel: string | null | undefined
+  musicModel: string | null | undefined
   capabilityOverrides: CapabilitySelections
   videoRatio: string | null | undefined
   onUpdateConfig: (key: string, value: unknown) => Promise<void>
@@ -85,7 +85,7 @@ export default function WorkspaceHeaderShell({
   videoModel,
   singleShotVideoModel,
   sequenceVideoModel,
-  audioModel,
+  musicModel,
   capabilityOverrides,
   videoRatio,
   onUpdateConfig,
@@ -127,7 +127,7 @@ export default function WorkspaceHeaderShell({
         videoModel={videoModel ?? undefined}
         singleShotVideoModel={singleShotVideoModel ?? videoModel ?? undefined}
         sequenceVideoModel={sequenceVideoModel ?? undefined}
-        audioModel={audioModel ?? undefined}
+        musicModel={musicModel ?? undefined}
         videoRatio={videoRatio ?? undefined}
         capabilityOverrides={capabilityOverrides}
         onAnalysisModelChange={(value) => { onUpdateConfig('analysisModel', value) }}
@@ -138,7 +138,7 @@ export default function WorkspaceHeaderShell({
         onVideoModelChange={(value) => { onUpdateConfig('videoModel', value) }}
         onSingleShotVideoModelChange={(value) => { onUpdateConfig('singleShotVideoModel', value) }}
         onSequenceVideoModelChange={(value) => { onUpdateConfig('sequenceVideoModel', value) }}
-        onAudioModelChange={(value) => { onUpdateConfig('audioModel', value) }}
+        onMusicModelChange={(value) => { onUpdateConfig('musicModel', value) }}
         onVideoRatioChange={(value) => { onUpdateConfig('videoRatio', value) }}
         onCapabilityOverridesChange={handleCapabilityOverridesChange}
         onConfigPatch={handleConfigPatch}
@@ -164,7 +164,6 @@ export default function WorkspaceHeaderShell({
                 novelText: null,
                 clips: ep.clips || [],
                 storyboards: ep.storyboards || [],
-                voiceLines: [],
               })
               return {
                 id: ep.id,

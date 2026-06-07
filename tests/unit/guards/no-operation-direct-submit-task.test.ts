@@ -37,9 +37,9 @@ describe('no operation direct submitTask guard', () => {
     `
 
     expect(
-      inspectOperationDirectSubmitTask('src/lib/operations/domains/voice/voice-ops.ts', content),
+      inspectOperationDirectSubmitTask('src/lib/operations/domains/media/video-ops.ts', content),
     ).toEqual([
-      'src/lib/operations/domains/voice/voice-ops.ts calls submitTask directly; use submitOperationTask instead',
+      'src/lib/operations/domains/media/video-ops.ts calls submitTask directly; use submitOperationTask instead',
     ])
   })
 })

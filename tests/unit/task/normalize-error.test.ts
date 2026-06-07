@@ -47,9 +47,9 @@ describe('normalizeAnyError provider-specific mapping', () => {
     expect(normalized.retryable).toBe(true)
   })
 
-  it('maps openai-compatible video template mismatch to VIDEO_API_FORMAT_UNSUPPORTED', () => {
+  it('maps explicit video API format errors to VIDEO_API_FORMAT_UNSUPPORTED', () => {
     const normalized = normalizeAnyError(
-      new Error('VIDEO_API_FORMAT_UNSUPPORTED: OPENAI_COMPAT_VIDEO_TEMPLATE_TASK_ID_NOT_FOUND'),
+      new Error('VIDEO_API_FORMAT_UNSUPPORTED: provider response did not include a task id'),
     )
     expect(normalized.code).toBe('VIDEO_API_FORMAT_UNSUPPORTED')
     expect(normalized.retryable).toBe(false)

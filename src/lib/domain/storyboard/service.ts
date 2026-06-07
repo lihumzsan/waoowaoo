@@ -30,17 +30,6 @@ export type PersistedStoryboardResult = {
   }>
 }
 
-function toPositiveInt(value: unknown): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  const n = Math.floor(value)
-  return n >= 0 ? n : null
-}
-
-function asJsonRecord(value: unknown): StoryboardJsonRecord | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  return value as StoryboardJsonRecord
-}
-
 function assertMutationContext(input: DomainMutationContext) {
   if (!input.runId?.trim()) {
     throw new DomainValidationError('mutation runId is required')
@@ -112,96 +101,9 @@ async function replaceStoryboards(params: {
   }
 }
 
-async function replaceVoiceLines(params: {
-  tx: Prisma.TransactionClient
-  episodeId: string
-  voiceLineRows: StoryboardJsonRecord[]
-  panelIdByStoryboardRef: Map<string, string>
-  storyboardIdByRef: Map<string, string>
-}) {
-  const repository = createProjectRepository(params.tx)
-  const createdVoiceLines: Array<{ id: string }> = []
-
-  for (let index = 0; index < params.voiceLineRows.length; index += 1) {
-    const row = params.voiceLineRows[index] || {}
-    const matchedPanel = asJsonRecord(row.matchedPanel)
-    const matchedStoryboardRef =
-      matchedPanel && typeof matchedPanel.storyboardId === 'string'
-        ? matchedPanel.storyboardId.trim()
-        : null
-    const matchedPanelIndex = matchedPanel ? toPositiveInt(matchedPanel.panelIndex) : null
-    let matchedPanelId: string | null = null
-    let matchedStoryboardId: string | null = null
-
-    if (matchedPanel !== null) {
-      if (!matchedStoryboardRef || matchedPanelIndex === null) {
-        throw new DomainValidationError(`voice line ${index + 1} has invalid matchedPanel reference`)
-      }
-      matchedStoryboardId = params.storyboardIdByRef.get(matchedStoryboardRef) || null
-      if (!matchedStoryboardId) {
-        throw new DomainValidationError(
-          `voice line ${index + 1} references non-existent storyboard ${matchedStoryboardRef}`,
-        )
-      }
-      matchedPanelId = params.panelIdByStoryboardRef.get(`${matchedStoryboardRef}:${matchedPanelIndex}`) || null
-      if (!matchedPanelId) {
-        throw new DomainValidationError(
-          `voice line ${index + 1} references non-existent panel ${matchedStoryboardRef}:${matchedPanelIndex}`,
-        )
-      }
-    }
-
-    if (typeof row.emotionStrength !== 'number' || !Number.isFinite(row.emotionStrength)) {
-      throw new DomainValidationError(`voice line ${index + 1} is missing valid emotionStrength`)
-    }
-    if (typeof row.lineIndex !== 'number' || !Number.isFinite(row.lineIndex)) {
-      throw new DomainValidationError(`voice line ${index + 1} is missing valid lineIndex`)
-    }
-    if (typeof row.speaker !== 'string' || !row.speaker.trim()) {
-      throw new DomainValidationError(`voice line ${index + 1} is missing valid speaker`)
-    }
-    if (typeof row.content !== 'string' || !row.content.trim()) {
-      throw new DomainValidationError(`voice line ${index + 1} is missing valid content`)
-    }
-
-    const lineIndex = Math.floor(row.lineIndex)
-    if (lineIndex <= 0) {
-      throw new DomainValidationError(`voice line ${index + 1} has invalid lineIndex`)
-    }
-
-    const created = await repository.upsertVoiceLine({
-      episodeId: params.episodeId,
-      lineIndex,
-      speaker: row.speaker.trim(),
-      content: row.content,
-      emotionStrength: Math.min(1, Math.max(0.1, row.emotionStrength)),
-      matchedPanelId,
-      matchedStoryboardId,
-      matchedPanelIndex,
-    })
-    createdVoiceLines.push(created)
-  }
-
-  const nextLineIndexes = params.voiceLineRows
-    .map((row) => (typeof row.lineIndex === 'number' && Number.isFinite(row.lineIndex) ? Math.floor(row.lineIndex) : -1))
-    .filter((value) => value > 0)
-
-  if (nextLineIndexes.length === 0) {
-    await repository.deleteVoiceLinesForEpisode(params.episodeId)
-  } else {
-    await repository.deleteVoiceLinesNotIn({
-      episodeId: params.episodeId,
-      lineIndexes: nextLineIndexes,
-    })
-  }
-
-  return createdVoiceLines.length
-}
-
 export async function persistStoryboardWorkflowOutputs(input: {
   episodeId: string
   clipPanels: StoryboardClipPanelsResult[]
-  voiceLineRows: StoryboardJsonRecord[] | null
   mutation: DomainMutationContext
 }) {
   assertMutationContext(input.mutation)
@@ -214,17 +116,9 @@ export async function persistStoryboardWorkflowOutputs(input: {
       episodeId: input.episodeId,
       clipPanels: input.clipPanels,
     })
-    const voiceLineCount = await replaceVoiceLines({
-      tx,
-      episodeId: input.episodeId,
-      voiceLineRows: input.voiceLineRows ?? [],
-      panelIdByStoryboardRef: storyboardResult.panelIdByStoryboardRef,
-      storyboardIdByRef: storyboardResult.storyboardIdByRef,
-    })
 
     return {
       persistedStoryboards: storyboardResult.persistedStoryboards,
-      voiceLineCount,
     }
   }, { timeout: 30000 })
 }

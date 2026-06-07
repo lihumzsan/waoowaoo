@@ -2,10 +2,9 @@ import type OpenAI from 'openai'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 
-export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'audio' | 'music' | 'lipsync'
+export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
-export type AiLipSyncProviderKey = 'fal' | 'vidu' | 'bailian'
 
 export type AiOptionValidationResult =
   | { ok: true }
@@ -181,34 +180,11 @@ export type AiVisionStepExecutionResult = {
   completion: OpenAI.Chat.Completions.ChatCompletion
 }
 
-export interface AiLipSyncResult {
-  videoUrl?: string
-  requestId: string
-  externalId?: string
-  async?: boolean
-}
-
-export interface AiLipSyncParams {
-  videoUrl: string
-  audioUrl: string
-  audioDurationMs?: number | null
-  videoDurationMs?: number | null
-}
-
-export interface AiLipSyncSubmitContext {
-  userId: string
-  providerId: string
-  modelId: string
-  modelKey: string
-}
-
 export type AiLlmProviderConfig = {
   id: string
   name: string
   apiKey: string
   baseUrl?: string
-  apiMode?: 'gemini-sdk' | 'openai-official'
-  gatewayRoute?: 'official' | 'openai-compat'
 }
 
 export type AiLlmExecutionInput = {
@@ -237,7 +213,7 @@ export type AiLlmExecutionResult = {
   successDetails?: AiUnknownObject
 }
 
-export type UnifiedModelType = 'llm' | 'image' | 'video' | 'audio' | 'music' | 'lipsync'
+export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music'
 export type CapabilityValue = string | number | boolean
 export type CapabilityOptionValue = CapabilityValue
 export type CapabilitySelections = Record<string, Record<string, CapabilityValue>>
@@ -285,12 +261,6 @@ export interface VideoCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
-export interface AudioCapabilities {
-  voiceOptions?: string[]
-  rateOptions?: string[]
-  fieldI18n?: CapabilityFieldI18nMap
-}
-
 export interface MusicCapabilities {
   durationSecondsOptions?: number[]
   vocalModeOptions?: string[]
@@ -299,27 +269,18 @@ export interface MusicCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
-export interface LipSyncCapabilities {
-  modeOptions?: string[]
-  fieldI18n?: CapabilityFieldI18nMap
-}
-
 export interface ModelCapabilities {
   llm?: LLMCapabilities
   image?: ImageCapabilities
   video?: VideoCapabilities
-  audio?: AudioCapabilities
   music?: MusicCapabilities
-  lipsync?: LipSyncCapabilities
 }
 
 const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
   'llm',
   'image',
   'video',
-  'audio',
   'music',
-  'lipsync',
 ])
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
@@ -344,22 +305,11 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'fieldI18n',
 ])
 
-const AUDIO_ALLOWED_FIELDS = new Set<keyof AudioCapabilities>([
-  'voiceOptions',
-  'rateOptions',
-  'fieldI18n',
-])
-
 const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'durationSecondsOptions',
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
-  'fieldI18n',
-])
-
-const LIPSYNC_ALLOWED_FIELDS = new Set<keyof LipSyncCapabilities>([
-  'modeOptions',
   'fieldI18n',
 ])
 
@@ -629,33 +579,6 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
   })
 }
 
-function validateAudioCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
-  if (!isRecord(raw)) return
-
-  const voiceOptions = raw.voiceOptions
-  if (voiceOptions !== undefined && !isStringArray(voiceOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.audio.voiceOptions',
-      message: 'voiceOptions must be a non-empty string array',
-    })
-  }
-
-  const rateOptions = raw.rateOptions
-  if (rateOptions !== undefined && !isStringArray(rateOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.audio.rateOptions',
-      message: 'rateOptions must be a non-empty string array',
-    })
-  }
-
-  validateFieldI18nMap(issues, 'audio', raw.fieldI18n, {
-    voice: isStringArray(voiceOptions) ? voiceOptions : undefined,
-    rate: isStringArray(rateOptions) ? rateOptions : undefined,
-  })
-}
-
 function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
@@ -700,22 +623,6 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
     vocalMode: isStringArray(vocalModeOptions) ? vocalModeOptions : undefined,
     outputFormat: isStringArray(outputFormatOptions) ? outputFormatOptions : undefined,
     bpm: isNumberArray(bpmOptions) ? bpmOptions : undefined,
-  })
-}
-
-function validateLipSyncCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
-  if (!isRecord(raw)) return
-  const modeOptions = raw.modeOptions
-  if (modeOptions !== undefined && !isStringArray(modeOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.lipsync.modeOptions',
-      message: 'modeOptions must be a non-empty string array',
-    })
-  }
-
-  validateFieldI18nMap(issues, 'lipsync', raw.fieldI18n, {
-    mode: isStringArray(modeOptions) ? modeOptions : undefined,
   })
 }
 
@@ -779,23 +686,17 @@ export function validateModelCapabilities(
   validateNamespaceShape(issues, 'llm', (capabilities as ModelCapabilities).llm)
   validateNamespaceShape(issues, 'image', (capabilities as ModelCapabilities).image)
   validateNamespaceShape(issues, 'video', (capabilities as ModelCapabilities).video)
-  validateNamespaceShape(issues, 'audio', (capabilities as ModelCapabilities).audio)
   validateNamespaceShape(issues, 'music', (capabilities as ModelCapabilities).music)
-  validateNamespaceShape(issues, 'lipsync', (capabilities as ModelCapabilities).lipsync)
 
   validateNamespaceAllowedFields(issues, 'llm', (capabilities as ModelCapabilities).llm, LLM_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'image', (capabilities as ModelCapabilities).image, IMAGE_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'video', (capabilities as ModelCapabilities).video, VIDEO_ALLOWED_FIELDS)
-  validateNamespaceAllowedFields(issues, 'audio', (capabilities as ModelCapabilities).audio, AUDIO_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'music', (capabilities as ModelCapabilities).music, MUSIC_ALLOWED_FIELDS)
-  validateNamespaceAllowedFields(issues, 'lipsync', (capabilities as ModelCapabilities).lipsync, LIPSYNC_ALLOWED_FIELDS)
 
   validateLLMCapabilities(issues, (capabilities as ModelCapabilities).llm)
   validateImageCapabilities(issues, (capabilities as ModelCapabilities).image)
   validateVideoCapabilities(issues, (capabilities as ModelCapabilities).video)
-  validateAudioCapabilities(issues, (capabilities as ModelCapabilities).audio)
   validateMusicCapabilities(issues, (capabilities as ModelCapabilities).music)
-  validateLipSyncCapabilities(issues, (capabilities as ModelCapabilities).lipsync)
 
   return issues
 }

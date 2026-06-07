@@ -74,7 +74,6 @@ describe('assembleProjectContext', () => {
           },
         },
       ],
-      voiceLines: [],
     })
     planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
     planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])

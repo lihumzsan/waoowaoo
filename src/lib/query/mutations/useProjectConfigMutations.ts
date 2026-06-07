@@ -58,7 +58,7 @@ export function useCopyProjectAssetFromGlobal(projectId: string) {
             targetId,
             globalAssetId,
         }: {
-            type: 'character' | 'location' | 'prop' | 'voice'
+            type: 'character' | 'location' | 'prop'
             targetId: string
             globalAssetId: string
         }) => {

@@ -32,8 +32,6 @@ export interface FinalRenderPanelInput {
   readonly description?: string | null
   readonly videoUrl?: string | null
   readonly videoMedia?: FinalRenderMediaRefInput | null
-  readonly lipSyncVideoUrl?: string | null
-  readonly lipSyncVideoMedia?: FinalRenderMediaRefInput | null
   readonly photographyRules?: string | null
   readonly storyboard: FinalRenderStoryboardInput
 }
@@ -143,8 +141,6 @@ function isFinalRenderMediaRef(value: unknown): value is FinalRenderMediaRefInpu
 }
 
 function resolvePanelVideoSource(panel: FinalRenderPanelInput): string | FinalRenderMediaRefInput | null {
-  if (isFinalRenderMediaRef(panel.lipSyncVideoMedia)) return panel.lipSyncVideoMedia
-  if (normalizeString(panel.lipSyncVideoUrl)) return normalizeString(panel.lipSyncVideoUrl)
   if (isFinalRenderMediaRef(panel.videoMedia)) return panel.videoMedia
   if (normalizeString(panel.videoUrl)) return normalizeString(panel.videoUrl)
   return null

@@ -25,15 +25,11 @@ export interface StoryboardPanel {
     imageUrl: string | null
     media?: MediaRef | null
     motionPrompt: string | null
-    voiceText: string | null
-    voiceUrl: string | null
-    voiceMedia?: MediaRef | null
     videoUrl: string | null
     videoGenerationMode?: 'normal' | 'firstlastframe' | null
     videoMedia?: MediaRef | null
     imageTaskRunning?: boolean
     videoTaskRunning?: boolean
-    lipSyncTaskRunning?: boolean
     errorMessage: string | null
     candidates: PanelCandidate[]
     pendingCandidateCount: number
@@ -475,63 +471,4 @@ export function useRefreshStoryboards(episodeId: string | null) {
         }
         return Promise.resolve()
     }
-}
-
-/**
- * 🔥 口型同步生成（乐观更新）
- */
-export function useLipSync(projectId: string | null, episodeId: string | null) {
-    const queryClient = useQueryClient()
-
-    return useMutation({
-        mutationFn: async (params: {
-            storyboardId: string
-            panelIndex: number
-            voiceLineId: string
-            panelId?: string
-        }) => {
-            const res = await apiFetch(`/api/projects/${projectId}/lip-sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    storyboardId: params.storyboardId,
-                    panelIndex: params.panelIndex,
-                    voiceLineId: params.voiceLineId
-                })
-            })
-
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Lip sync failed'))
-            }
-
-            return res.json()
-        },
-        onMutate: async ({ panelId }) => {
-            if (!projectId) return
-            await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
-            if (!panelId) return
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectPanel',
-                targetId: panelId,
-                intent: 'generate',
-            })
-        },
-        onError: (_error, { panelId }) => {
-            if (!projectId || !panelId) return
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectPanel',
-                targetId: panelId,
-            })
-        },
-        onSettled: () => {
-            // 请求完成后刷新数据
-            if (projectId && episodeId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
-                queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(episodeId) })
-            }
-        }
-    })
 }

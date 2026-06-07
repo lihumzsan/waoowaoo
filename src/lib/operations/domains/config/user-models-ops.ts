@@ -7,7 +7,6 @@ import {
   type UnifiedModelType,
 } from '@/lib/ai-registry/types'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { DEFAULT_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
@@ -43,28 +42,15 @@ interface UserModelsPayload {
   llm: UserModelOption[]
   image: UserModelOption[]
   video: UserModelOption[]
-  audio: UserModelOption[]
   music: UserModelOption[]
-  lipsync: UserModelOption[]
 }
-
-const DEFAULT_VOICE_DESIGN_MODEL_ID = parseModelKeyStrict(DEFAULT_VOICE_DESIGN_MODEL_KEY)?.modelId
-if (!DEFAULT_VOICE_DESIGN_MODEL_ID) {
-  throw new Error('DEFAULT_VOICE_DESIGN_MODEL_KEY_INVALID')
-}
-
-const AUDIO_MODEL_EXCLUDED_IDS = new Set([
-  DEFAULT_VOICE_DESIGN_MODEL_ID,
-])
 
 function isUnifiedModelType(type: unknown): type is UnifiedModelType {
   return (
     type === 'llm'
     || type === 'image'
     || type === 'video'
-    || type === 'audio'
     || type === 'music'
-    || type === 'lipsync'
   )
 }
 
@@ -158,12 +144,6 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
   return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
 }
 
-function isUserSelectableModel(model: StoredModel): boolean {
-  if (model.type !== 'audio') return true
-  const modelId = toModelId(model)
-  return !AUDIO_MODEL_EXCLUDED_IDS.has(modelId)
-}
-
 export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft {
   return {
     list_user_models: {
@@ -206,14 +186,11 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           llm: [],
           image: [],
           video: [],
-          audio: [],
           music: [],
-          lipsync: [],
         }
 
         for (const model of modelsRaw) {
           if (!isUnifiedModelType(model.type)) continue
-          if (!isUserSelectableModel(model)) continue
 
           const modelType = model.type
           const modelKey = toModelKey(model)
@@ -250,9 +227,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           llm: dedupeByModelKey(grouped.llm),
           image: dedupeByModelKey(grouped.image),
           video: dedupeByModelKey(grouped.video),
-          audio: dedupeByModelKey(grouped.audio),
           music: dedupeByModelKey(grouped.music),
-          lipsync: dedupeByModelKey(grouped.lipsync),
         } satisfies UserModelsPayload
       },
     },

@@ -4,12 +4,11 @@ import { installYunwuFetchTraceIfEnabled } from '@/lib/http/fetch-trace'
 import { createImageWorker } from './image.worker'
 import { createMusicWorker } from './music.worker'
 import { createVideoWorker } from './video.worker'
-import { createVoiceWorker } from './voice.worker'
 import { createTextWorker } from './text.worker'
 
 installYunwuFetchTraceIfEnabled()
 
-const workers = [createImageWorker(), createVideoWorker(), createMusicWorker(), createVoiceWorker(), createTextWorker()]
+const workers = [createImageWorker(), createVideoWorker(), createMusicWorker(), createTextWorker()]
 
 _ulogInfo('[Workers] started:', workers.length)
 

@@ -17,7 +17,7 @@
 - 必须优先使用 styleBible.stylePolicy.visual.imageFilterPrompt、lightingPrompt、colorPrompt 作为视频视觉策略；texturePrompt 与 compositionPrompt 只在当前镜头确实需要材质或构图约束时按需转写，不要机械塞满。
 - 必须使用 styleBible.stylePolicy.visual.negativePrompt 作为负向视觉约束，把它转写进 prompt 的“避免/禁止”部分；不要只依赖默认禁用项。
 - 必须使用 styleBible.stylePolicy.visual.imageFilterPrompt；画面滤镜要作为视频提示词的一部分出现。
-- 必须使用 styleBible.stylePolicy.sound.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感，不得改写或替代角色 voiceTimbreText。
+- 必须使用 styleBible.stylePolicy.sound.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感。
 - 必须按需使用 styleBible.stylePolicy.camera 和 styleBible.stylePolicy.sound 的字段来控制运镜、镜头景深、视频节奏和声音滤镜；动作与表演只来自剧本、剪辑结构表和资产上下文，不从 Style Bible 读取。
 - 如果用户给出导演名、影片名、流派名、年代感或摄影风格参考，最终 prompt 中应写可执行风格特征，而不是只写参考名。
 
@@ -25,7 +25,6 @@ shots[].videoPrompt 写作规则：
 - 写成该单镜头可独立生成的辅助提示，包含主体、动作、场景、光线、摄影、画幅、风格、画面滤镜、声音滤镜和必要约束。
 - 必须使用当前 shot 的 dramaticPurpose、visibleAction、audienceFocus、viewpoint、revealPlan、performanceBeat、continuityIn、continuityOut、charactersAndScene、sound。
 - 必须结合资产上下文保持角色身份、场景身份、服装/外貌、空间锚点和视觉连续性。
-- 如果该 shot 包含角色对白、旁白或画外音，必须结合角色资产 voiceTimbreText 固定音色，不得临时发明动态音色。
 - 不要提及 shotNumber 或系统字段。
 
 videoBlock.prompt 写作规则：
@@ -44,8 +43,7 @@ videoBlock.prompt 写作规则：
 声音规则必须完整保留：
 - 每个 prompt 必须包含声音约束：只生成剧本已有对白/旁白/画外音和音效，不要生成 BGM、背景音乐、持续配乐、完整旋律、歌曲结构、循环鼓点、歌词、人声演唱或音乐段落。
 - 声音可以写画面内环境声、空间底噪、动作音效、材质拟音、自然声、转场声、短促声音标点、声场变化，以及有叙事目的的电影化短音效。
-- 如果剧本或用户需求包含对白、旁白或画外音，必须按官方音频写法写入 prompt：角色说{台词原文}、画外音{台词原文}，可以补充音色、语气、停顿、情绪和口型同步；台词必须来自剧本或用户需求，不得改写、扩写或新增。
-- 对角色对白，若资产上下文中该角色存在 voiceTimbreText，必须写成：角色名（固定音色：voiceTimbreText）说{台词原文}。固定音色必须逐字使用资产字段，不得加入语速、尾音、紧张呼吸等动态表演项。
+- 如果剧本或用户需求包含对白、旁白或画外音，必须按官方音频写法写入 prompt：角色说{台词原文}、画外音{台词原文}；台词必须来自剧本或用户需求，不得改写、扩写或新增。
 - 生成配音不等于生成字幕；除非用户明确要求字幕，不要让画面出现字幕、花字或任何文字。
 - 音效使用 <音效描述>，角色台词、旁白和画外音使用 {台词内容}；台词语言必须与剧本保持一致，避免中英文混用，专有名词除外。
 - 如果剧本没有对白、旁白或画外音，prompt 才写“仅保留音效”，不要凭空添加人物说话、解说或配音。

@@ -21,7 +21,6 @@ export function ProviderCard({
   onDeleteProvider,
   onToggleProviderHidden,
   onAddModel,
-  onFlushConfig,
   hideProviderLabel,
   showProviderLabel,
 }: ProviderCardProps) {
@@ -36,7 +35,6 @@ export function ProviderCard({
     onUpdateBaseUrl,
     onUpdateModel,
     onAddModel,
-    onFlushConfig,
     t,
   })
 

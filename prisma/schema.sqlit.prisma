@@ -86,11 +86,6 @@ model ProjectCharacter {
   aliases                 String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @default(now()) @updatedAt
-  customVoiceUrl          String?
-  customVoiceMediaId      String?
-  customVoiceMedia        MediaObject?          @relation("ProjectCharacterVoiceMedia", fields: [customVoiceMediaId], references: [id], onDelete: SetNull)
-  voiceId                 String?
-  voiceType               String?
   profileData             String?
   profileConfirmed        Boolean               @default(false)
   introduction            String? // 角色介绍（身份、关系、称呼映射，如"我"对应此角色）
@@ -99,7 +94,6 @@ model ProjectCharacter {
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
-  @@index([customVoiceMediaId])
   @@map("project_characters")
 }
 
@@ -131,12 +125,10 @@ model ProjectEpisode {
   srtContent              String?
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
-  speakerVoices           String?
   clips                   ProjectClip[]
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   shots                   ProjectShot[]
   storyboards             ProjectStoryboard[]
-  voiceLines              ProjectVoiceLine[]
   editorProject           VideoEditorProject?
   editScreenplay          ProjectEditScreenplay?
   editStylePreviews       ProjectEditStylePreview[]
@@ -392,10 +384,6 @@ model ProjectPanel {
   sceneType         String?
   candidateImages   String?
   linkedToNextPanel Boolean                   @default(false)
-  lipSyncTaskId     String?
-  lipSyncVideoUrl   String?
-  lipSyncVideoMediaId String?
-  lipSyncVideoMedia MediaObject?              @relation("ProjectPanelLipSyncVideoMedia", fields: [lipSyncVideoMediaId], references: [id], onDelete: SetNull)
   sketchImageUrl    String?
   sketchImageMediaId String?
   sketchImageMedia  MediaObject?              @relation("ProjectPanelSketchMedia", fields: [sketchImageMediaId], references: [id], onDelete: SetNull)
@@ -405,13 +393,11 @@ model ProjectPanel {
   previousImageMediaId String?
   previousImageMedia MediaObject?             @relation("ProjectPanelPreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
   storyboard        ProjectStoryboard  @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
-  matchedVoiceLines ProjectVoiceLine[]
 
   @@unique([storyboardId, panelIndex])
   @@index([storyboardId])
   @@index([imageMediaId])
   @@index([videoMediaId])
-  @@index([lipSyncVideoMediaId])
   @@index([sketchImageMediaId])
   @@index([previousImageMediaId])
   @@map("project_panels")
@@ -530,7 +516,6 @@ model Project {
   videoModel         String?
   singleShotVideoModel String?
   sequenceVideoModel String?
-  audioModel         String?
   musicModel         String?
   videoRatio         String                 @default("9:16")
   globalAssetText    String?
@@ -616,7 +601,6 @@ model User {
   globalAssetFolders GlobalAssetFolder[]
   globalCharacters   GlobalCharacter[]
   globalLocations    GlobalLocation[]
-  globalVoices       GlobalVoice[]
   tasks              Task[]
   taskEvents         TaskEvent[]
   inviteRedemptions  InviteRedemption[]
@@ -633,10 +617,7 @@ model UserPreference {
   storyboardModel String? // 用户配置的分镜图片模型
   editModel       String? // 用户配置的修图模型
   videoModel      String? // 用户配置的视频模型
-  audioModel      String? // 用户配置的语音模型
   musicModel      String? // 用户配置的音乐/配乐模型
-  lipSyncModel    String? // 用户配置的口型同步模型
-  voiceDesignModel String? // 用户配置的音色设计模型
   analysisConcurrency Int? // 分析流程并发上限
   imageConcurrency Int? // 图像流程并发上限
   videoConcurrency Int? // 视频流程并发上限
@@ -650,10 +631,9 @@ model UserPreference {
   // API Key 配置（极简版）
   llmBaseUrl  String? @default("https://openrouter.ai/api/v1")
   llmApiKey   String? // 加密存储
-  falApiKey   String? // FAL（图片+视频+语音）
+  falApiKey   String? // FAL（图片+视频）
   googleAiKey String? // Google AI（Gemini 图片）
   arkApiKey   String? // 火山引擎（Seedream+Seedance）
-  qwenApiKey  String? // 阿里百炼（声音设计）
 
   // 自定义模型列表 + 价格（JSON）
   customModels String?
@@ -673,49 +653,6 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verificationtoken")
-}
-
-model ProjectVoiceLine {
-  id                  String                @id @default(uuid())
-  episodeId           String
-  lineIndex           Int
-  speaker             String
-  content             String
-  voicePresetId       String?
-  audioUrl            String?
-  audioMediaId        String?
-  audioMedia          MediaObject?          @relation("ProjectVoiceLineAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @default(now()) @updatedAt
-  emotionPrompt       String?
-  emotionStrength     Float?                @default(0.4)
-  matchedPanelIndex   Int?
-  matchedStoryboardId String?
-  audioDuration       Int?
-  matchedPanelId      String?
-  episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  matchedPanel        ProjectPanel?  @relation(fields: [matchedPanelId], references: [id])
-
-  @@unique([episodeId, lineIndex])
-  @@index([episodeId])
-  @@index([matchedPanelId])
-  @@index([audioMediaId])
-  @@map("project_voice_lines")
-}
-
-model VoicePreset {
-  id          String   @id @default(uuid())
-  name        String
-  audioUrl    String
-  audioMediaId String?
-  audioMedia  MediaObject? @relation("VoicePresetAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
-  description String?
-  gender      String?
-  isSystem    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-
-  @@index([audioMediaId])
-  @@map("voice_presets")
 }
 
 model UserBalance {
@@ -881,7 +818,6 @@ model GlobalAssetFolder {
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   characters GlobalCharacter[]
   locations  GlobalLocation[]
-  voices     GlobalVoice[]
 
   @@index([userId])
   @@map("global_asset_folders")
@@ -896,12 +832,6 @@ model GlobalCharacter {
   aliases          String?
   profileData      String?
   profileConfirmed Boolean  @default(false)
-  voiceId          String?
-  voiceType        String?
-  customVoiceUrl   String?
-  customVoiceMediaId String?
-  customVoiceMedia MediaObject? @relation("GlobalCharacterVoiceMedia", fields: [customVoiceMediaId], references: [id], onDelete: SetNull)
-  globalVoiceId    String? // 绑定的全局音色 ID
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -911,7 +841,6 @@ model GlobalCharacter {
 
   @@index([userId])
   @@index([folderId])
-  @@index([customVoiceMediaId])
   @@map("global_characters")
 }
 
@@ -996,33 +925,6 @@ model GlobalLocationImage {
   @@map("global_location_images")
 }
 
-// 全局音色库
-model GlobalVoice {
-  id             String   @id @default(uuid())
-  userId         String
-  folderId       String?
-  name           String // 音色名称
-  description    String? // 详细描述
-  voiceId        String? // qwen-tts-vd 的 voice ID
-  voiceType      String   @default("qwen-designed") // qwen-designed | custom
-  customVoiceUrl String? // 上传的音频 URL（预览用）
-  customVoiceMediaId String?
-  customVoiceMedia MediaObject? @relation("GlobalVoiceCustomVoiceMedia", fields: [customVoiceMediaId], references: [id], onDelete: SetNull)
-  voicePrompt    String? // AI 设计时的提示词
-  gender         String? // male | female | neutral
-  language       String   @default("zh")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  folder GlobalAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([folderId])
-  @@index([customVoiceMediaId])
-  @@map("global_voices")
-}
-
 model MediaObject {
   id         String   @id @default(uuid())
   publicId   String   @unique
@@ -1038,11 +940,9 @@ model MediaObject {
 
   characterAppearanceImages             CharacterAppearance[]       @relation("CharacterAppearanceImageMedia")
   locationImages                        LocationImage[]             @relation("LocationImageMedia")
-  projectCharacterVoices         ProjectCharacter[]   @relation("ProjectCharacterVoiceMedia")
   projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
   projectPanelImages             ProjectPanel[]       @relation("ProjectPanelImageMedia")
   projectPanelVideos             ProjectPanel[]       @relation("ProjectPanelVideoMedia")
-  projectPanelLipSyncVideos      ProjectPanel[]       @relation("ProjectPanelLipSyncVideoMedia")
   projectPanelSketchImages       ProjectPanel[]       @relation("ProjectPanelSketchMedia")
   projectPanelPreviousImages     ProjectPanel[]       @relation("ProjectPanelPreviousImageMedia")
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
@@ -1050,15 +950,10 @@ model MediaObject {
   projectStoryboardBlockingArtifactImages ProjectStoryboardBlockingArtifact[] @relation("ProjectStoryboardBlockingArtifactImageMedia")
   projectShotImages              ProjectShot[]        @relation("ProjectShotImageMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
-  projectVoiceLineAudios         ProjectVoiceLine[]   @relation("ProjectVoiceLineAudioMedia")
-  voicePresetAudios                     VoicePreset[]               @relation("VoicePresetAudioMedia")
-  globalCharacterVoices                 GlobalCharacter[]           @relation("GlobalCharacterVoiceMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]       @relation("GlobalLocationImageMedia")
   globalLocationImagePreviousImages     GlobalLocationImage[]       @relation("GlobalLocationImagePreviousImageMedia")
-  globalVoiceCustomVoices               GlobalVoice[]               @relation("GlobalVoiceCustomVoiceMedia")
-
   @@index([createdAt])
   @@map("media_objects")
 }

@@ -255,7 +255,6 @@ describe('episode artifact readiness', () => {
           }],
         },
       ],
-      voiceLines: [{ id: 'voice-1' }],
     })
 
     expect(readiness).toEqual({
@@ -263,7 +262,6 @@ describe('episode artifact readiness', () => {
       hasScript: true,
       hasStoryboard: true,
       hasVideo: true,
-      hasVoice: true,
     })
   })
 })

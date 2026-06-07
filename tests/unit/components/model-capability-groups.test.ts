@@ -9,7 +9,7 @@ describe('model capability provider grouping', () => {
     { value: 'ark::doubao-lite', provider: 'ark', providerName: '火山引擎 Ark' },
     { value: 'ark::doubao-pro', provider: 'ark', providerName: '火山引擎 Ark' },
     { value: 'google::gemini-flash', provider: 'google', providerName: 'Google AI Studio' },
-    { value: 'bailian::wan', provider: 'bailian', providerName: '阿里云百炼' },
+    { value: 'fal::kling', provider: 'fal', providerName: 'FAL' },
   ]
 
   it('keeps model options grouped by provider display name in source order', () => {
@@ -18,7 +18,7 @@ describe('model capability provider grouping', () => {
     expect(groups.map(([providerLabel]) => providerLabel)).toEqual([
       '火山引擎 Ark',
       'Google AI Studio',
-      '阿里云百炼',
+      'FAL',
     ])
     expect(groups[0]?.[1].map((model) => model.value)).toEqual([
       'ark::doubao-lite',

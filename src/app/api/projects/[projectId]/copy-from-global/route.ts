@@ -4,7 +4,7 @@ import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 
 type LegacyCopyBody = {
-  type?: 'character' | 'location' | 'voice'
+  type?: 'character' | 'location' | 'prop'
   targetId?: string
   globalAssetId?: string
 }
@@ -28,7 +28,7 @@ export const POST = apiHandler(async (
     })
   }
   if (
-    (body.type !== 'character' && body.type !== 'location' && body.type !== 'voice')
+    (body.type !== 'character' && body.type !== 'location' && body.type !== 'prop')
     || typeof body.targetId !== 'string'
     || body.targetId.trim().length === 0
     || typeof body.globalAssetId !== 'string'

@@ -20,7 +20,7 @@ describe('no-cross-provider-model-data guard', () => {
     const tmpFile = path.join(tmpDir, `no-cross-provider-model-data.${Date.now()}.ts`)
 
     mkdirSync(tmpDir, { recursive: true })
-    writeFileSync(tmpFile, "export const bad = 'gpt-4.1-mini' as const\n", 'utf8')
+    writeFileSync(tmpFile, "export const bad = 'doubao-seedream-4-0-250828' as const\n", 'utf8')
 
     try {
       const failing = runNoCrossProviderModelDataGuard()

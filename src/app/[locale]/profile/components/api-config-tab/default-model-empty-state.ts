@@ -2,10 +2,7 @@ export type DefaultModelEmptyStateType =
   | 'llm'
   | 'image'
   | 'video'
-  | 'audio'
   | 'music'
-  | 'lipsync'
-  | 'voicedesign'
 
 type Translator = (key: string) => string
 
@@ -22,17 +19,8 @@ const EMPTY_STATE_TRANSLATION_KEYS: Record<
   video: {
     description: 'defaultModelEmptyState.videoDescription',
   },
-  audio: {
-    description: 'defaultModelEmptyState.audioDescription',
-  },
   music: {
     description: 'defaultModelEmptyState.musicDescription',
-  },
-  lipsync: {
-    description: 'defaultModelEmptyState.lipsyncDescription',
-  },
-  voicedesign: {
-    description: 'defaultModelEmptyState.voiceDesignDescription',
   },
 }
 

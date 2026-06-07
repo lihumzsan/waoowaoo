@@ -4,7 +4,6 @@ const getProviderConfigMock = vi.hoisted(() => vi.fn(async () => ({
   id: 'fal',
   name: 'fal',
   apiKey: 'fal-key',
-  gatewayRoute: 'official' as const,
 })))
 
 const normalizeToBase64ForGenerationMock = vi.hoisted(() => vi.fn(async (url: string) => (

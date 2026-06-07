@@ -110,12 +110,6 @@ function inferTaskContractFromOperation(params: {
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
-    case 'lip_sync':
-      return {
-        type: TASK_TYPE.LIP_SYNC,
-        targetType: 'ProjectPanel',
-        targetId: 'panel-1',
-      }
     case 'modify_character_image':
       return {
         type: TASK_TYPE.MODIFY_ASSET_IMAGE,
@@ -151,25 +145,6 @@ function inferTaskContractFromOperation(params: {
         type: input.type === 'location' ? TASK_TYPE.IMAGE_LOCATION : TASK_TYPE.IMAGE_CHARACTER,
         targetType: input.type === 'location' ? 'ProjectLocation' : 'CharacterAppearance',
         targetId: typeof input.id === 'string' ? input.id : 'asset-1',
-      }
-    case 'asset_hub_voice_design':
-      return {
-        type: TASK_TYPE.ASSET_HUB_VOICE_DESIGN,
-        targetType: 'GlobalAssetHubVoiceDesign',
-        targetId: 'global-asset-hub',
-      }
-    case 'voice_design':
-      return {
-        type: TASK_TYPE.VOICE_DESIGN,
-        targetType: 'Project',
-        targetId: params.projectId,
-      }
-    case 'generate_voice_line_audio':
-    case 'generate_episode_voice_audio':
-      return {
-        type: TASK_TYPE.VOICE_LINE,
-        targetType: 'ProjectVoiceLine',
-        targetId: typeof input.lineId === 'string' ? input.lineId : 'line-1',
       }
     case 'regenerate_storyboard_text':
       return {
@@ -232,32 +207,23 @@ export const hasOutputMock = {
   hasGlobalLocationImageOutput: vi.fn(async () => false),
   hasCharacterAppearanceOutput: vi.fn(async () => false),
   hasLocationImageOutput: vi.fn(async () => false),
-  hasPanelLipSyncOutput: vi.fn(async () => false),
   hasPanelImageOutput: vi.fn(async () => false),
   hasPanelVideoOutput: vi.fn(async () => false),
-  hasVoiceLineAudioOutput: vi.fn(async () => false),
 }
 
 export const prismaMock = {
   project: {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
-      audioModel: 'fal::audio-model',
       musicModel: 'google::lyria-3-clip-preview',
       artStyle: 'american-comic',
       visualStylePresetSource: 'system',
       visualStylePresetId: 'american-comic',
-      characters: [
-        {
-          name: 'Narrator',
-          customVoiceUrl: 'https://voice.example/narrator.mp3',
-          voiceId: 'voice-1',
-        },
-      ],
+      characters: [{ name: 'Narrator' }],
     })),
   },
   userPreference: {
-    findUnique: vi.fn(async () => ({ lipSyncModel: 'fal::lipsync-model', musicModel: 'google::lyria-3-clip-preview' })),
+    findUnique: vi.fn(async () => ({ musicModel: 'google::lyria-3-clip-preview' })),
   },
   projectStoryboard: {
     findFirst: vi.fn(async () => ({ id: 'storyboard-1' })),
@@ -325,7 +291,6 @@ export const prismaMock = {
   projectEpisode: {
     findFirst: vi.fn(async () => ({
       id: 'episode-1',
-      speakerVoices: '{}',
       editScript: { durationSec: 30 },
     })),
   },
@@ -344,16 +309,6 @@ export const prismaMock = {
           },
         },
       }),
-    })),
-  },
-  projectVoiceLine: {
-    findMany: vi.fn(async () => [
-      { id: 'line-1', speaker: 'Narrator', content: 'hello world voice line' },
-    ]),
-    findFirst: vi.fn(async () => ({
-      id: 'line-1',
-      speaker: 'Narrator',
-      content: 'hello world voice line',
     })),
   },
   $transaction: vi.fn(async (fn: (tx: {
@@ -417,17 +372,6 @@ export function resetDirectSubmitMocks() {
       targetId: contract.targetId,
       payload: params.input,
     })
-
-    if (params.operationId === 'lip_sync') {
-      return {
-        ...task,
-        panelId: contract.targetId,
-        lipSyncModel: typeof (params.input as { lipSyncModel?: unknown })?.lipSyncModel === 'string'
-          ? (params.input as { lipSyncModel: string }).lipSyncModel
-          : 'fal::lipsync-model',
-        mutationBatchId: 'mutation-batch-1',
-      }
-    }
 
     return task
   })
@@ -626,19 +570,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     },
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/lip-sync/route.ts',
-    body: {
-      storyboardId: 'storyboard-1',
-      panelIndex: 0,
-      voiceLineId: 'line-1',
-      lipSyncModel: 'fal::lip-model',
-    },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.LIP_SYNC,
-    expectedTargetType: 'ProjectPanel',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/modify-asset-image/route.ts',
     body: {
       type: 'character',
@@ -693,29 +624,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
 ]
 
 export const DIRECT_TEXT_CASES: ReadonlyArray<DirectRouteCase> = [
-  {
-    routeFile: 'src/app/api/asset-hub/voice-design/route.ts',
-    body: { voicePrompt: 'female calm narrator', previewText: '你好世界' },
-    expectedTaskType: TASK_TYPE.ASSET_HUB_VOICE_DESIGN,
-    expectedTargetType: 'GlobalAssetHubVoiceDesign',
-    expectedProjectId: 'global-asset-hub',
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/voice-design/route.ts',
-    body: { voicePrompt: 'warm female voice', previewText: 'This is preview text' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.VOICE_DESIGN,
-    expectedTargetType: 'Project',
-    expectedProjectId: 'project-1',
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/voice-generate/route.ts',
-    body: { episodeId: 'episode-1', lineId: 'line-1', audioModel: 'fal::audio-model' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.VOICE_LINE,
-    expectedTargetType: 'ProjectVoiceLine',
-    expectedProjectId: 'project-1',
-  },
   {
     routeFile: 'src/app/api/projects/[projectId]/regenerate-storyboard-text/route.ts',
     body: { storyboardId: 'storyboard-1' },

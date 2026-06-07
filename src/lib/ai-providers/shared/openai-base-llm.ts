@@ -36,7 +36,6 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   modelId: string
   baseUrl: string
   apiKey: string
-  apiMode?: 'gemini-sdk' | 'openai-official'
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
   temperature: number
   reasoning: boolean
@@ -52,7 +51,6 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
     })
     const isNativeOpenAIReasoning = shouldUseOpenAIReasoningProviderOptions({
       providerKey: input.providerKey,
-      providerApiMode: input.apiMode,
       modelId: input.modelId,
     })
     const aiSdkProviderOptions = input.reasoning && isNativeOpenAIReasoning
@@ -133,7 +131,6 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     })
     const isNativeOpenAIReasoning = shouldUseOpenAIReasoningProviderOptions({
       providerKey: input.providerKey,
-      providerApiMode: input.providerConfig.apiMode,
       modelId: input.selection.modelId,
     })
     const aiSdkProviderOptions = (input.options.reasoning ?? true) && isNativeOpenAIReasoning

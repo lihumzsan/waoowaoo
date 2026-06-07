@@ -9,11 +9,8 @@ export {
   rollbackTaskBilling,
   settleTaskBilling,
   withImageBilling,
-  withLipSyncBilling,
   withTextBilling,
   withVideoBilling,
-  withVoiceBilling,
-  withVoiceDesignBilling,
 } from './service'
 export { buildDefaultTaskBillingInfo, isBillableTaskType } from './task-policy'
 export type { BillingMode, BillingRecordParams, BillingStatus, TaskBillingInfo } from './types'

@@ -117,7 +117,6 @@
       "picker": "Picker",
       "character": "Character",
       "location": "Location",
-      "voice": "Voice",
       "ungrouped": "Ungrouped"
     }
   },
@@ -127,7 +126,6 @@
     "clips": "Clips {count}",
     "screenplays": "Screenplays {count}",
     "storyboards": "Storyboards {count}",
-    "voice": "Voice {count}",
     "projectContext": "Project Context",
     "skillLabels": {
       "unnamed": "Unnamed Skill",
@@ -154,7 +152,6 @@
     "totalLabel": "Total",
     "screenplayPreview": "Screenplay Preview",
     "storyboardPreview": "Storyboard Preview",
-    "voiceLinesLabel": "Voice Lines",
     "panelsLabel": "Panels {count}",
     "maxSteps": "Maximum steps reached",
     "stepUsage": "Current steps {stepCount} / limit {maxSteps}",

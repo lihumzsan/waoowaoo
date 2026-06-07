@@ -39,11 +39,10 @@ async function resolveEpisodeProgress(episodeId: string | null): Promise<Project
       screenplayClipCount: 0,
       storyboardCount: 0,
       panelCount: 0,
-      voiceLineCount: 0,
     }
   }
 
-  const [clipCount, screenplayClipCount, storyboardCount, panelCount, voiceLineCount] = await Promise.all([
+  const [clipCount, screenplayClipCount, storyboardCount, panelCount] = await Promise.all([
     prisma.projectClip.count({ where: { episodeId } }),
     prisma.projectClip.count({
       where: {
@@ -63,7 +62,6 @@ async function resolveEpisodeProgress(episodeId: string | null): Promise<Project
         },
       },
     }),
-    prisma.projectVoiceLine.count({ where: { episodeId } }),
   ])
 
   return {
@@ -71,7 +69,6 @@ async function resolveEpisodeProgress(episodeId: string | null): Promise<Project
     screenplayClipCount,
     storyboardCount,
     panelCount,
-    voiceLineCount,
   }
 }
 

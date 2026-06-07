@@ -1,8 +1,8 @@
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
-import type { AiUnknownObject, ModelCapabilities } from '@/lib/ai-registry/types'
-import type { AiModality, AiResolvedLlmSelection, AiResolvedSelection } from '@/lib/ai-registry/types'
+import type { AiResolvedSelection, AiUnknownObject, ModelCapabilities } from '@/lib/ai-registry/types'
+import type { AiModality, AiResolvedLlmSelection } from '@/lib/ai-registry/types'
 
-function resolveCapabilityModelType(modality: AiModality): 'llm' | 'image' | 'video' | 'audio' | 'music' | 'lipsync' {
+function resolveCapabilityModelType(modality: AiModality): 'llm' | 'image' | 'video' | 'music' {
   if (modality === 'vision') return 'llm'
   return modality
 }
@@ -28,18 +28,6 @@ export function resolveAiContractsForDescriptor(input: {
       : undefined
     if (llmProtocol === 'responses' || llmProtocol === 'chat-completions') {
       contracts.llmProtocol = llmProtocol
-    }
-  }
-
-  if (input.modality === 'image' || input.modality === 'video' || input.modality === 'audio') {
-    const mediaSelection = selection as AiResolvedSelection | null | undefined
-    const variantData = mediaSelection?.variantData
-    const compatMediaTemplate = variantData && typeof variantData === 'object'
-      ? (variantData.compatMediaTemplate as { mode?: 'sync' | 'async' } | undefined)
-      : undefined
-    const mode = compatMediaTemplate?.mode
-    if (mode) {
-      contracts.compatMediaTemplateMode = mode
     }
   }
 

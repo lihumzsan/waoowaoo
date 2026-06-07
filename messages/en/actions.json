@@ -10,9 +10,5 @@
   "clips": "Clip Splitting",
   "storyboard_text_plan": "Storyboard Planning",
   "storyboard_text_detail": "Storyboard Details",
-  "tts": "Text-to-Speech",
-  "regenerate": "Regenerate",
-  "voice-generate": "Voice Generation",
-  "voice-design": "Voice Design",
-  "lip-sync": "Lip Sync"
+  "regenerate": "Regenerate"
 }

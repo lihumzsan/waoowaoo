@@ -650,7 +650,6 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
       taskTargetType: resolvedAsset?.taskTargetType ?? null,
       taskTargetId: resolvedAsset?.taskTargetId ?? null,
       errorMessage: status === 'failed' ? taskFailure || requirement.errorMessage : null,
-      voiceTimbreText: null,
       previewImageUrl: resolvedAsset?.previewImageUrl ?? null,
       spatialProfileJson: resolvedAsset?.spatialProfileJson ?? null,
       spatialProfileStatus: resolvedAsset?.spatialProfileStatus ?? null,

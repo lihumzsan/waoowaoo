@@ -100,7 +100,6 @@ export interface EditAssetRequirement {
   readonly kind: EditAssetKind
   readonly name: string
   readonly description: string
-  readonly voiceTimbreText?: string | null
   readonly shotNumbers: readonly number[]
   readonly status?: EditAssetStatus
   readonly targetId?: string | null
@@ -359,24 +358,7 @@ export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
   name: z.string().trim().min(1),
   description: z.string().trim().min(1),
-  voiceTimbreText: z.string().trim().min(1).optional().nullable(),
   shotNumbers: z.array(z.number().int().positive()).min(1),
-}).superRefine((asset, context) => {
-  const voiceTimbreText = asset.voiceTimbreText?.trim()
-  if (asset.kind === 'character' && !voiceTimbreText) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['voiceTimbreText'],
-      message: 'Character assets must include fixed voice timbre text.',
-    })
-  }
-  if (asset.kind === 'location' && voiceTimbreText) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['voiceTimbreText'],
-      message: 'Location assets must not include voice timbre text.',
-    })
-  }
 })
 
 export const editAssetExtractionSchema = z.object({

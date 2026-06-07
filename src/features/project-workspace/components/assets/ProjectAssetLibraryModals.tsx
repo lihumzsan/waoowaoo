@@ -2,7 +2,6 @@
 
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import ImageEditModal from './ImageEditModal'
-import VoiceDesignDialog from '../voice/VoiceDesignDialog'
 import {
   CharacterCreationModal,
   CharacterEditModal,
@@ -46,11 +45,6 @@ interface CharacterImageEditModalState {
   characterName: string
 }
 
-interface VoiceDesignCharacterState {
-  name: string
-  hasExistingVoice: boolean
-}
-
 interface ProjectAssetLibraryModalsProps {
   projectId: string
   onRefresh: () => void
@@ -60,8 +54,6 @@ interface ProjectAssetLibraryModalsProps {
   handleUpdateLocationDescription: (newDescription: string) => Promise<void>
   handleLocationImageEdit: (modifyPrompt: string, extraImageUrls?: string[]) => Promise<void>
   handleCharacterImageEdit: (modifyPrompt: string, extraImageUrls?: string[]) => Promise<void>
-  handleCloseVoiceDesign: () => void
-  handleVoiceDesignSave: (voiceId: string, audioBase64: string) => Promise<void>
   handleCloseCopyPicker: () => void
   handleConfirmCopyFromGlobal: (globalAssetId: string) => Promise<void>
   closeEditingAppearance: () => void
@@ -81,7 +73,6 @@ interface ProjectAssetLibraryModalsProps {
   showAddCharacter: boolean
   showAddLocation: boolean
   showAddProp: boolean
-  voiceDesignCharacter: VoiceDesignCharacterState | null
   copyFromGlobalTarget: GlobalCopyTarget | null
   isGlobalCopyInFlight: boolean
 }
@@ -95,8 +86,6 @@ export default function ProjectAssetLibraryModals({
   handleUpdateLocationDescription,
   handleLocationImageEdit,
   handleCharacterImageEdit,
-  handleCloseVoiceDesign,
-  handleVoiceDesignSave,
   handleCloseCopyPicker,
   handleConfirmCopyFromGlobal,
   closeEditingAppearance,
@@ -116,7 +105,6 @@ export default function ProjectAssetLibraryModals({
   showAddCharacter,
   showAddLocation,
   showAddProp,
-  voiceDesignCharacter,
   copyFromGlobalTarget,
   isGlobalCopyInFlight,
 }: ProjectAssetLibraryModalsProps) {
@@ -204,17 +192,6 @@ export default function ProjectAssetLibraryModals({
             closeAddProp()
             onRefresh()
           }}
-        />
-      )}
-
-      {voiceDesignCharacter && (
-        <VoiceDesignDialog
-          isOpen={!!voiceDesignCharacter}
-          speaker={voiceDesignCharacter.name}
-          hasExistingVoice={voiceDesignCharacter.hasExistingVoice}
-          projectId={projectId}
-          onClose={handleCloseVoiceDesign}
-          onSave={handleVoiceDesignSave}
         />
       )}
 

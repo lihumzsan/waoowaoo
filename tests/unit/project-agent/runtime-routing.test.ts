@@ -78,7 +78,6 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
       screenplayClipCount: 1,
       storyboardCount: 1,
       panelCount: 1,
-      voiceLineCount: 0,
     },
     activePlanRuns: [],
     activePlanRunCount: 0,

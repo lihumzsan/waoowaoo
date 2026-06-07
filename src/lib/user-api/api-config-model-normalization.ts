@@ -3,10 +3,8 @@ import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selectio
 import { getCapabilityOptionFields, resolveBuiltinModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry, type PricingApiType } from '@/lib/ai-registry/pricing-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import type { OpenAICompatMediaTemplate, OpenAICompatMediaTemplateSource } from '@/lib/ai-registry/openai-compatible-template'
-import { validateOpenAICompatMediaTemplate } from '@/lib/user-api/model-template/validator'
-import type { LlmProtocolType, StoredModel, StoredProvider } from './api-config-types'
-import { getProviderKey, isLlmProtocol, isMediaTemplateSource, isRecord, isUnifiedModelType, readTrimmedString } from './api-config-shared'
+import type { StoredModel, StoredProvider } from './api-config-types'
+import { isRecord, isUnifiedModelType, readTrimmedString } from './api-config-shared'
 import { resolveProviderByIdOrKey } from './api-config-provider-normalization'
 import { resolveBuiltinCapabilities } from './api-config-pricing-display'
 import { hasCustomPricingForType, normalizeCustomPricing } from './api-config-custom-pricing'
@@ -15,17 +13,8 @@ const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type
   llm: 'text',
   image: 'image',
   video: 'video',
-  audio: 'voice',
   music: 'music',
-  lipsync: 'lip-sync',
 }
-
-const OPTIONAL_PRICING_PROVIDER_KEYS = new Set([
-  'openai-compatible',
-  'gemini-compatible',
-  'bailian',
-  'siliconflow',
-])
 
 export function withBuiltinCapabilities(model: StoredModel): StoredModel {
   const capabilities = resolveBuiltinCapabilities(model.type, model.provider, model.modelId)
@@ -87,55 +76,12 @@ function normalizeStoredModel(raw: unknown, index: number, options?: { strictCus
     field: `models[${index}].customPricing`,
   })
 
-  const llmProtocolRaw = raw.llmProtocol
-  let llmProtocol: LlmProtocolType | undefined
-  if (llmProtocolRaw !== undefined && llmProtocolRaw !== null) {
-    if (!isLlmProtocol(llmProtocolRaw)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_LLM_PROTOCOL_INVALID',
-        field: `models[${index}].llmProtocol`,
-      })
-    }
-    llmProtocol = llmProtocolRaw
-  }
-  const llmProtocolCheckedAt = readTrimmedString(raw.llmProtocolCheckedAt) || undefined
-
-  const compatMediaTemplateRaw = raw.compatMediaTemplate
-  let compatMediaTemplate: OpenAICompatMediaTemplate | undefined
-  if (compatMediaTemplateRaw !== undefined && compatMediaTemplateRaw !== null) {
-    const validated = validateOpenAICompatMediaTemplate(compatMediaTemplateRaw)
-    if (!validated.ok || !validated.template) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_COMPAT_MEDIA_TEMPLATE_INVALID',
-        field: `models[${index}].compatMediaTemplate`,
-      })
-    }
-    compatMediaTemplate = validated.template
-  }
-  const compatMediaTemplateCheckedAt = readTrimmedString(raw.compatMediaTemplateCheckedAt) || undefined
-  const compatMediaTemplateSourceRaw = raw.compatMediaTemplateSource
-  let compatMediaTemplateSource: OpenAICompatMediaTemplateSource | undefined
-  if (compatMediaTemplateSourceRaw !== undefined && compatMediaTemplateSourceRaw !== null) {
-    if (!isMediaTemplateSource(compatMediaTemplateSourceRaw)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_COMPAT_MEDIA_TEMPLATE_SOURCE_INVALID',
-        field: `models[${index}].compatMediaTemplateSource`,
-      })
-    }
-    compatMediaTemplateSource = compatMediaTemplateSourceRaw
-  }
-
   return {
     modelId,
     modelKey,
     name: modelName,
     type: modelType,
     provider,
-    ...(llmProtocol ? { llmProtocol } : {}),
-    ...(llmProtocolCheckedAt ? { llmProtocolCheckedAt } : {}),
-    ...(compatMediaTemplate ? { compatMediaTemplate } : {}),
-    ...(compatMediaTemplateCheckedAt ? { compatMediaTemplateCheckedAt } : {}),
-    ...(compatMediaTemplateSource ? { compatMediaTemplateSource } : {}),
     price: 0,
     ...(customPricing ? { customPricing } : {}),
   }
@@ -167,19 +113,8 @@ export function validateModelProviderConsistency(models: StoredModel[], provider
 }
 
 export function validateModelProviderTypeSupport(models: StoredModel[], providers: StoredProvider[]) {
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index]
-    const matchedProvider = resolveProviderByIdOrKey(providers, model.provider)
-    if (!matchedProvider) continue
-
-    const providerKey = getProviderKey(matchedProvider.id)
-    if (model.type === 'lipsync' && providerKey !== 'fal' && providerKey !== 'vidu' && providerKey !== 'bailian') {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_PROVIDER_TYPE_UNSUPPORTED',
-        field: `models[${index}].provider`,
-      })
-    }
-  }
+  void models
+  void providers
 }
 
 export function validateCustomPricingCapabilityMappings(models: StoredModel[]) {
@@ -240,7 +175,6 @@ export function validateBillableModelPricing(models: StoredModel[]) {
 
     // Skip validation if user provided custom pricing
     if (hasCustomPricingForType(model)) continue
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(model.provider))) continue
 
     if (!hasBuiltinPricingForModel(apiType, model.provider, model.modelId)) {
       throw new ApiError('INVALID_PARAMS', {

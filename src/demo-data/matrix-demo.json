@@ -5,8 +5,8 @@
     "id": "79242138-9e41-4857-8577-4414d8adf677",
     "name": "黑客帝国",
     "videoRatio": "16:9",
-    "videoModel": "bailian::wan2.6-i2v",
-    "singleShotVideoModel": "bailian::wan2.6-i2v",
+    "videoModel": "ark::seedance-1-0-pro",
+    "singleShotVideoModel": "ark::seedance-1-0-pro",
     "sequenceVideoModel": "fal::bytedance/seedance-2.0/fast"
   },
   "episode": {
@@ -83,9 +83,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":1,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:1\",\"sourceVideoBlockIndex\":0,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"全景 (Wide Shot)\",\"cameraPosition\":\"大厅北侧，面向南方拍摄零的正面\",\"cameraHeight\":\"视平线高度 (Eye-level)\",\"cameraAngle\":\"平角度 (Neutral Angle)，微带低仰角以增强压迫感\",\"composition\":\"对称与三分法构图，零居于画面中央，两侧水泥圆柱建立纵深，右侧背景为绿色代码光带墙壁\",\"cameraMovement\":\"微幅手持呼吸感微颤 (Micro-handheld breathing)，保持整体静止以营造死寂前的压抑感\",\"lensAndDepth\":\"35mm电影镜头，中等景深，保持零与背景石柱、绿色光带细节清晰\",\"screenDirection\":\"零面向北方（正对镜头），静立不动\",\"aestheticIntent\":\"通过大范围冷暗废墟与微弱绿色代码光影对比，营造黑客帝国式的冷酷、压抑与大战前的死寂氛围\",\"emotionalEffect\":\"压抑、神秘、屏息以待的张力\",\"continuityNote\":\"零位于大厅中央(8,5)，面向北方。右侧墙壁的绿色代码光带作为恒定空间锚点，风衣自然下垂\"}}}",
@@ -117,7 +114,6 @@
             "updatedAt": "2026-05-20T09:33:34.196Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": {
             "id": "fa9143e9-9379-4766-b8f5-1c29e6641147",
@@ -165,9 +161,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":2,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:1\",\"sourceVideoBlockIndex\":0,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"特写 (Close-up)\",\"cameraPosition\":\"正前方，同轴推近 (Axis cut / Push-in)\",\"cameraHeight\":\"视平线高度 (Eye-level)\",\"cameraAngle\":\"平角度 (Neutral Angle)\",\"composition\":\"紧凑的面部特写构图，零的黑色窄框墨镜占据画面核心，右手手指位于画面一侧，形成强烈的局部视觉焦点\",\"cameraMovement\":\"固定机位，无明显位移，焦点精准锁定\",\"lensAndDepth\":\"50mm微距镜头，超浅景深 (Shallow DoF)，精准聚焦于墨镜镜片及推墨镜的手指关节皮套上，背景大厅与石柱完全虚化\",\"screenDirection\":\"零面向北方（正对镜头），右手从下方抬起推墨镜\",\"aestheticIntent\":\"通过极近距离的特写和超浅景深，将观众的注意力完全凝聚在零冷峻的面部细节和墨镜上反射的绿色代码雨，暗示其对矩阵代码的掌控力\",\"emotionalEffect\":\"冷酷、专注、绝对掌控的自信\",\"continuityNote\":\"承接上一镜头的同轴机位，零的面部朝向保持不变。墨镜镜片上反射的绿色代码雨流向与右侧墙壁的锚点光源一致\"}}}",
@@ -199,7 +192,6 @@
             "updatedAt": "2026-05-20T07:58:53.103Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": {
             "id": "4362d235-169e-475a-b9b5-b0e8d928b145",
@@ -247,9 +239,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":3,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:2\",\"sourceVideoBlockIndex\":1,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"位于大厅中央偏北，镜头面向北方大门\",\"cameraHeight\":\"与特工视线等高\",\"cameraAngle\":\"平拍\",\"composition\":\"对称构图，两名特工并排居中，大门在背景中居中，右侧墙壁有绿色数字光带作为空间锚点\",\"cameraMovement\":\"极速推镜头 (Push-in)\",\"lensAndDepth\":\"35mm标准电影镜头，中等景深，保证特工和背景铁门碎裂细节清晰\",\"screenDirection\":\"特工面向南方（屏幕下方/朝向镜头），枪口指向镜头\",\"aestheticIntent\":\"展现特工突入的冰冷压迫感与机械般的秩序感\",\"emotionalEffect\":\"紧张、危机一触即发\",\"continuityNote\":\"严格遵守南北轴线，特工位于北方朝南瞄准，右侧背景需露出水泥墙面流淌的幽绿色矩阵数字光带\"}}}",
@@ -281,7 +270,6 @@
             "updatedAt": "2026-05-20T07:58:37.734Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": {
             "id": "8c2159c4-8521-45b2-b5b5-5ff2642eb984",
@@ -329,9 +317,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":4,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:2\",\"sourceVideoBlockIndex\":1,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"位于大厅中央偏南，侧向机位\",\"cameraHeight\":\"低角度\",\"cameraAngle\":\"仰角\",\"composition\":\"侧身三分法构图，零位于画面一侧向北疾奔，背景深处是开火的特工，形成强烈的纵深对峙\",\"cameraMovement\":\"横移跟拍 (Tracking Shot)，紧贴零的侧影快速移动\",\"lensAndDepth\":\"35mm电影镜头，中等景深，保持零的动作与背景枪火、飞灰的清晰度\",\"screenDirection\":\"零从大厅中央全速向北冲锋，在屏幕上从一侧向另一侧疾驰，风衣向南（身后）剧烈鼓动\",\"aestheticIntent\":\"展现零无畏冲锋的速度感与风衣的动态美学\",\"emotionalEffect\":\"极速、热血、炫酷\",\"continuityNote\":\"承接上镜，零向北冲锋，特工在北侧开火。右侧背景的水泥墙壁上持续闪烁幽绿色矩阵数字光带\"}}}",
@@ -363,7 +348,6 @@
             "updatedAt": "2026-05-20T07:58:57.337Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": {
             "id": "817b3031-d475-4288-ab02-5ec0cfa45419",
@@ -411,9 +395,6 @@
           "sceneType": null,
           "candidateImages": "[\"/demo-assets/matrix-demo/b9aad4eb7fc4a601.jpg\"]",
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":5,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:3\",\"sourceVideoBlockIndex\":2,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"左侧石柱侧下方\",\"cameraHeight\":\"低机位\",\"cameraAngle\":\"仰角\",\"composition\":\"失重旋转倾斜构图，利用石柱建立斜向对角线透视\",\"cameraMovement\":\"失重旋转运镜（Roll Camera），跟随角色奔跑轨迹自转\",\"lensAndDepth\":\"35mm电影镜头，中等景深，保持角色与石柱细节清晰\",\"screenDirection\":\"零从左向右（向东）在石柱上飞奔\",\"aestheticIntent\":\"打破常规重力透视，展现代码世界的虚幻感与角色的超凡身手\",\"emotionalEffect\":\"极强的速度感、失重感与视觉冲击力\",\"continuityNote\":\"承接上一个镜头零向前冲锋的动能，零在左侧石柱向右（东）狂奔，保持右侧背景有幽绿矩阵数字光带作为空间锚点\"}}}",
@@ -445,7 +426,6 @@
             "updatedAt": "2026-05-20T05:40:10.355Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": {
             "id": "6529f71c-b009-42d7-86b8-84be4ad2163f",
@@ -493,9 +473,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":6,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:3\",\"sourceVideoBlockIndex\":2,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"局部特写\",\"cameraPosition\":\"紧贴水泥石柱表面\",\"cameraHeight\":\"低机位\",\"cameraAngle\":\"平角（相对于柱面）\",\"composition\":\"局部特写，对角线构图，子弹弹道与碎石飞溅充满画面\",\"cameraMovement\":\"横向摆拍/跟拍（Tracking Shot），紧跟子弹追逐足部的轨迹\",\"lensAndDepth\":\"35mm电影镜头，超浅景深，精准聚焦于子弹击中水泥的爆裂瞬间，背景虚化\",\"screenDirection\":\"子弹从右向左（西向东追击）射入石柱，碎屑向四周飞溅\",\"aestheticIntent\":\"展现子弹与石柱碰撞的物理破坏力，通过极具动感的碎石与火花营造千钧一发的危机感\",\"emotionalEffect\":\"紧张、爆裂、极速\",\"continuityNote\":\"承接上镜零在石柱上的奔跑轨迹，子弹紧咬其后跟，保持石柱材质与碎裂粒子的一致性\"}}}",
@@ -527,7 +504,6 @@
             "updatedAt": "2026-05-20T05:42:46.332Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -564,9 +540,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":7,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:4\",\"sourceVideoBlockIndex\":3,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"侧前方，环绕机位\",\"cameraHeight\":\"悬空机位，与角色等高\",\"cameraAngle\":\"平拍微仰\",\"composition\":\"绝对居中构图，零处于画面中心，右侧背景保留幽绿光带作为空间锚点\",\"cameraMovement\":\"360度子弹时间水平环绕轨道镜头\",\"lensAndDepth\":\"35mm标准镜头，中等偏深景深，确保角色、子弹与空气涟漪皆清晰\",\"screenDirection\":\"零在半空面向北方（画面深处），子弹从北方飞向南方（画面前景）\",\"aestheticIntent\":\"展现时空凝固的科幻奇观，突出零对矩阵物理法则的掌控\",\"emotionalEffect\":\"震撼、优雅、屏息凝神\",\"continuityNote\":\"承接前一镜头从石柱跃起的动能，零处于空中(8,4)位置，面向北方，右侧背景保留幽绿色矩阵数字光带\"}}}",
@@ -598,7 +571,6 @@
             "updatedAt": "2026-05-20T05:41:56.208Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -635,9 +607,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":8,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:4\",\"sourceVideoBlockIndex\":3,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"近景特写\",\"cameraPosition\":\"侧面，环绕推近机位\",\"cameraHeight\":\"悬空机位，微仰视\",\"cameraAngle\":\"仰角\",\"composition\":\"居中构图，聚焦零的躯干与面部，风衣向两侧展开呈对称羽翼状\",\"cameraMovement\":\"360度慢速环绕轨道运行并渐渐推近\",\"lensAndDepth\":\"35mm镜头，中等景深，焦点锁定面部与风衣纹理\",\"screenDirection\":\"零面向北方，身体向侧后方拧转，子弹擦身而过\",\"aestheticIntent\":\"展现极致的优雅与反重力美学，强化零作为觉醒者的超凡身手\",\"emotionalEffect\":\"优雅、冷酷、惊叹\",\"continuityNote\":\"保持子弹时间的时空凝固感，零依然在空中(8,4)位置，风衣完全展开，右侧背景保持幽绿色矩阵光带\"}}}",
@@ -669,7 +638,6 @@
             "updatedAt": "2026-05-20T05:42:03.178Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -706,9 +674,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":9,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:5\",\"sourceVideoBlockIndex\":4,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"前方偏右机位，面向大厅中央位置(8,5)\",\"cameraHeight\":\"极低机位，贴近地面\",\"cameraAngle\":\"仰拍\",\"composition\":\"居中构图，将零置于画面视觉中心，利用背景水泥圆柱和右侧墙面数字光带建立纵深透视\",\"cameraMovement\":\"纵向重力顿挫震动，模拟落地时的强劲冲击力\",\"lensAndDepth\":\"35mm电影镜头，中等景深，确保零、地面激起的尘土以及背景石柱同时清晰\",\"screenDirection\":\"零面向北方（画面内侧/斜上方）落地\",\"aestheticIntent\":\"展现零从子弹时间极慢动作瞬间恢复至正常高爆发速度的重力释放，强调其力量感与掌控力\",\"emotionalEffect\":\"震撼、充满力量感、紧迫感\",\"continuityNote\":\"零在中央位置(8,5)落地，面向北方。右侧墙壁的幽绿色矩阵数字光带作为恒定空间锚点，确保与前后的视觉连续性\"}}}",
@@ -740,7 +705,6 @@
             "updatedAt": "2026-05-20T05:42:15.383Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -777,9 +741,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":10,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:5\",\"sourceVideoBlockIndex\":4,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"侧面机位，面向对峙的两人\",\"cameraHeight\":\"低机位，与蹲伏的零视线齐平\",\"cameraAngle\":\"微微仰拍\",\"composition\":\"双人对峙构图，严格遵守180度轴线原则，特工在左侧向右下方出拳，零在右侧向左下方使出扫堂腿\",\"cameraMovement\":\"快速横向鞭甩镜头（Whip Pan），紧紧追踪特工的拳头和零的扫堂腿动作轨迹\",\"lensAndDepth\":\"35mm电影镜头，中等景深，保持格斗双方动作细节及背景空间清晰\",\"screenDirection\":\"特工从左向右（向南）攻击，零从右向左（向北）防守反击，特工被绊倒后向左侧后方摔倒\",\"aestheticIntent\":\"通过极速的肢体冲突与镜头鞭甩，展现矩阵世界中高超的武术格斗美学与动能转换\",\"emotionalEffect\":\"紧张、刺激、动感十足\",\"continuityNote\":\"严格保护大厅的南北轴线，特工在北，零在南。背景右侧的水泥墙面数字光带保持方向一致性\"}}}",
@@ -811,7 +772,6 @@
             "updatedAt": "2026-05-20T05:42:14.952Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -848,9 +808,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":11,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:6\",\"sourceVideoBlockIndex\":5,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"逆光中景\",\"cameraPosition\":\"越过右侧特工肩膀的越肩机位\",\"cameraHeight\":\"视线高度偏低\",\"cameraAngle\":\"微俯角\",\"composition\":\"越肩构图，特工在右侧前景虚化，零在左侧中景聚焦，子弹弹道由右向左贯穿画面\",\"cameraMovement\":\"极速推近\",\"lensAndDepth\":\"35mm镜头，中等景深\",\"screenDirection\":\"特工在右侧面向左开枪，零在左侧单膝跪地\",\"aestheticIntent\":\"通过越肩推镜头强化特工突袭的压迫感与子弹逼近的危机感，展现动能爆发的瞬间\",\"emotionalEffect\":\"紧张、压迫、一触即发\",\"continuityNote\":\"严格遵守180度轴线，特工在右，零在左，背景右侧保留绿色代码光带作为空间锚点\"}}}",
@@ -882,7 +839,6 @@
             "updatedAt": "2026-05-20T05:44:16.293Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -919,9 +875,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":12,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:6\",\"sourceVideoBlockIndex\":5,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"俯拍特写转大中景\",\"cameraPosition\":\"零的正上方偏前机位\",\"cameraHeight\":\"高机位俯拍\",\"cameraAngle\":\"俯角\",\"composition\":\"放射状向心构图，零的手掌位于画面中心，绿色代码波纹呈同心圆向四周扩散\",\"cameraMovement\":\"极速拉宽\",\"lensAndDepth\":\"35mm镜头，较深景深\",\"screenDirection\":\"能量波纹从中心向四周360度扩散\",\"aestheticIntent\":\"展现超能力觉醒的瞬间，将物理撞击转化为数字能量，打破黑暗\",\"emotionalEffect\":\"震撼、觉醒、能量爆发\",\"continuityNote\":\"零依然在中央，手掌击地。绿色代码波纹的源头在零的手掌下\"}}}",
@@ -953,7 +906,6 @@
             "updatedAt": "2026-05-20T05:44:11.373Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -990,9 +942,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":13,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:6\",\"sourceVideoBlockIndex\":5,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"侧面水平机位\",\"cameraHeight\":\"视线高度\",\"cameraAngle\":\"平视\",\"composition\":\"横向分割构图，左侧为静止子弹与代码网，右侧为特工射击方向，背景为虚化的大厅\",\"cameraMovement\":\"水平横移\",\"lensAndDepth\":\"50mm电影镜头，中等偏深景深\",\"screenDirection\":\"子弹从右向左飞行并静止在中间\",\"aestheticIntent\":\"展现“子弹时间”的绝对静止与优雅，科技感与暴力美学的完美融合\",\"emotionalEffect\":\"屏息、震撼、绝对掌控\",\"continuityNote\":\"保持子弹从右向左的运动趋势在静止时的方向一致性。背景右侧仍有微弱的绿色代码光带\"}}}",
@@ -1024,7 +973,6 @@
             "updatedAt": "2026-05-20T05:44:38.981Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1063,9 +1011,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":14,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:7\",\"sourceVideoBlockIndex\":6,\"sourceVideoBlockKind\":\"single\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"正前方，面向南方（逆着零的前进方向）\",\"cameraHeight\":\"视线高度\",\"cameraAngle\":\"平拍\",\"composition\":\"绝对居中构图，前景子弹与背景人物形成纵深透视\",\"cameraMovement\":\"平缓向前推进（Push-in）\",\"lensAndDepth\":\"35mm电影镜头，超浅景深（Shallow DoF），焦点在指尖与子弹之间，背景极致虚化\",\"screenDirection\":\"零从背景中央向前景移动，面向北方（镜头方向）\",\"aestheticIntent\":\"通过极度克制和缓慢的镜头推进，展现零对时空的绝对掌控力，营造暴风雨前夕的优雅与神圣感\",\"emotionalEffect\":\"极致的静谧、悬念拉满、冷酷而优雅的张力\",\"continuityNote\":\"保持零的黑色真皮风衣、窄框墨镜及黑色皮手套资产一致。右侧背景墙壁上的幽绿矩阵数字瀑布作为恒定空间锚点，半空中悬浮子弹的静止状态需与前一Block无缝衔接。\"}}}",
@@ -1108,7 +1053,6 @@
             "durationMs": null,
             "updatedAt": "2026-05-20T06:45:40.456Z"
           },
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1147,9 +1091,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":15,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:8\",\"sourceVideoBlockIndex\":7,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"特写 (Close-up)\",\"cameraPosition\":\"右侧斜前方微距机位\",\"cameraHeight\":\"与指尖及子弹等高\",\"cameraAngle\":\"平拍 (Eye-level)\",\"composition\":\"黄金分割构图，指尖与子弹接触点位于画面右侧三分之一处，背景极致虚化以突出细节\",\"cameraMovement\":\"固定微距拍摄 (Static Macro)\",\"lensAndDepth\":\"微距镜头，超浅景深 (Shallow DoF)，焦点死锁在指尖与子弹的接触面上\",\"screenDirection\":\"零的手指从左侧向右伸出，触碰右侧悬浮的铜色子弹\",\"aestheticIntent\":\"通过极度细腻的微观视角，展现超能力触碰瞬间物理实体向数字代码转化的奇妙裂变过程，动静对比强烈\",\"emotionalEffect\":\"屏息凝神的静谧感，彰显零对矩阵代码的绝对掌控力\",\"continuityNote\":\"承接前一镜头零伸出手指的动作，保持零戴黑色真皮手套、子弹为铜色、背景隐约有绿光闪烁的资产一致性\"}}}",
@@ -1181,7 +1122,6 @@
             "updatedAt": "2026-05-20T05:44:40.712Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1218,9 +1158,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":16,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:8\",\"sourceVideoBlockIndex\":7,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"全景 (Wide Shot)\",\"cameraPosition\":\"正后方轴线机位\",\"cameraHeight\":\"低机位仰拍 (Low Angle)\",\"cameraAngle\":\"微仰拍\",\"composition\":\"绝对居中对称构图，零位于画面正中央，漫天绿色粒子呈放射状环绕其身侧\",\"cameraMovement\":\"同轴向后极速拉开 (Pull-out / Zoom-out)\",\"lensAndDepth\":\"35mm标准镜头，中等景深，确保零的背影轮廓与漫天飘落的粒子同时清晰可见\",\"screenDirection\":\"零面向正北背对镜头静立，粒子向四周及下方呈雨状飘散\",\"aestheticIntent\":\"展现连锁反应下子弹彻底消解的壮丽视觉，通过后拉镜头拉开空间纵深，渲染零作为觉醒者的孤独与冷酷美学\",\"emotionalEffect\":\"震撼、优雅、充满仪式感的暴力美学收尾\",\"continuityNote\":\"零位于大厅中央，面向北方。右侧墙壁的绿色数字光带作为恒定空间锚点，确保多镜头拼接时的方向一致性\"}}}",
@@ -1252,7 +1189,6 @@
             "updatedAt": "2026-05-20T05:46:32.338Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1289,9 +1225,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":17,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:9\",\"sourceVideoBlockIndex\":8,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"中景\",\"cameraPosition\":\"零的后方偏左，面向东侧墙壁\",\"cameraHeight\":\"与肩同高\",\"cameraAngle\":\"平拍微仰\",\"composition\":\"纵深透视构图，零位于中景偏左，右侧东墙撕裂开的绿光门形成强烈的视觉焦点与逆光过曝\",\"cameraMovement\":\"慢速推进 (Push-in)\",\"lensAndDepth\":\"35mm电影镜头，中等景深，确保零的背影与撕裂墙壁的绿色代码门边缘均清晰\",\"screenDirection\":\"零面向右侧（东方）走去，动作与视线向右延伸\",\"aestheticIntent\":\"展现零对矩阵代码的绝对掌控，通过撕裂空间的视觉奇观完成优雅退场的序幕\",\"emotionalEffect\":\"震撼、神秘、充满仪式感\",\"continuityNote\":\"零位于右侧（东方）墙壁前，面向东方。背景保留斑驳的水泥墙面和残存的幽绿数字光带\"}}}",
@@ -1323,7 +1256,6 @@
             "updatedAt": "2026-05-20T05:46:23.533Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1360,9 +1292,6 @@
           "sceneType": null,
           "candidateImages": null,
           "linkedToNextPanel": false,
-          "lipSyncTaskId": null,
-          "lipSyncVideoUrl": null,
-          "lipSyncVideoMediaId": null,
           "sketchImageUrl": null,
           "sketchImageMediaId": null,
           "photographyRules": "{\"source\":\"edit_script\",\"sourceType\":\"editScriptShot\",\"editScriptId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827\",\"sourceShotNumber\":18,\"sourceVideoBlockId\":\"a37d2191-ed39-4188-a70e-f9e68acaf827:videoBlock:9\",\"sourceVideoBlockIndex\":8,\"sourceVideoBlockKind\":\"group\",\"consistencyMode\":\"spatial_text_blocking\",\"consistencyMetadata\":{\"source\":\"camera_plan\",\"strategy\":\"spatial_text_blocking\",\"cameraPlan\":{\"shotScale\":\"全景\",\"cameraPosition\":\"正对东侧墙壁，大厅中央偏西\",\"cameraHeight\":\"视平线\",\"cameraAngle\":\"平拍\",\"composition\":\"居中对称构图，东侧墙壁占据画面主体，大门闭合的线条处于视觉中心\",\"cameraMovement\":\"固定镜头 (Static)\",\"lensAndDepth\":\"35mm电影镜头，深景深，展现空旷大厅的荒凉与死寂\",\"screenDirection\":\"零向东（画面深处/右侧）迈步跨入，随后大门向心闭合\",\"aestheticIntent\":\"喧嚣散去，通过空间的复原和光芒的熄灭，宣告主角的完美离去，回归最初的死寂\",\"emotionalEffect\":\"孤寂、余韵悠长、冷酷\",\"continuityNote\":\"零完全走入东侧墙壁的代码门中，大门闭合，墙壁完好如初\"}}}",
@@ -1394,7 +1323,6 @@
             "updatedAt": "2026-05-20T05:46:31.215Z"
           },
           "videoMedia": null,
-          "lipSyncVideoMedia": null,
           "sketchImageMedia": null,
           "previousImageMedia": null,
           "imageTaskRunning": false,
@@ -1765,7 +1693,6 @@
         "taskTargetType": "CharacterAppearance",
         "taskTargetId": "d8a8ca46-de38-4df0-9b14-e84e4af0e11b",
         "errorMessage": null,
-        "voiceTimbreText": null,
         "previewImageUrl": "/demo-assets/matrix-demo/384dd79d97dc76ec.jpg"
       },
       {
@@ -1795,7 +1722,6 @@
         "taskTargetType": "CharacterAppearance",
         "taskTargetId": "9dc42112-29fa-40da-b5a7-3226eaaa0ed3",
         "errorMessage": null,
-        "voiceTimbreText": null,
         "previewImageUrl": "/demo-assets/matrix-demo/5fe6bad734fd389d.jpg"
       },
       {
@@ -1828,7 +1754,6 @@
         "taskTargetType": "LocationImage",
         "taskTargetId": "491c865c-36d1-4694-8871-07c94baeee33",
         "errorMessage": null,
-        "voiceTimbreText": null,
         "previewImageUrl": "/demo-assets/matrix-demo/9fe9bd5806e35540.jpg"
       }
     ]

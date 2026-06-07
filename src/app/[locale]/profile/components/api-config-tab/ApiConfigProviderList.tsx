@@ -29,9 +29,7 @@ interface DefaultModels {
   storyboardModel?: string
   editModel?: string
   videoModel?: string
-  audioModel?: string
   musicModel?: string
-  lipSyncModel?: string
 }
 
 interface ApiConfigProviderListProps {
@@ -39,7 +37,6 @@ interface ApiConfigProviderListProps {
   allModels: CustomModel[]
   defaultModels: DefaultModels
   getModelsForProvider: (providerId: string) => CustomModel[]
-  onAddGeminiProvider: () => void
   onToggleModel: (modelKey: string, providerId: string) => void
   onUpdateApiKey: (providerId: string, apiKey: string) => void
   onUpdateBaseUrl: (providerId: string, baseUrl: string) => void
@@ -59,7 +56,6 @@ interface ApiConfigProviderListProps {
     showHiddenProviders: string
     hideHiddenProviders: string
     hiddenProvidersPrefix: string
-    addGeminiProvider: string
   }
 }
 
@@ -68,7 +64,6 @@ export function ApiConfigProviderList({
   allModels,
   defaultModels,
   getModelsForProvider,
-  onAddGeminiProvider,
   onToggleModel,
   onUpdateApiKey,
   onUpdateBaseUrl,
@@ -134,12 +129,6 @@ export function ApiConfigProviderList({
               <p className="text-[12px] text-[var(--glass-text-tertiary)]">{labels.dragToSortHint}</p>
             </div>
           </div>
-          <button
-            onClick={onAddGeminiProvider}
-            className="glass-btn-base glass-btn-primary cursor-pointer px-3 py-1.5 text-sm font-semibold"
-          >
-            {labels.addGeminiProvider}
-          </button>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={visibleProviders.map((provider) => provider.id)} strategy={rectSortingStrategy}>

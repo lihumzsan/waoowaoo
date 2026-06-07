@@ -51,10 +51,6 @@ vi.mock('@/lib/billing', () => ({
   buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
   isBillableTaskType: vi.fn(() => true),
 }))
-vi.mock('@/lib/ai-providers/bailian/voice-design', () => ({
-  validateVoicePrompt: vi.fn(() => ({ valid: true })),
-  validatePreviewText: vi.fn(() => ({ valid: true })),
-}))
 vi.mock('@/lib/media/outbound-image', () => ({
   sanitizeImageInputsForTaskPayload: vi.fn((inputs: unknown[]) => ({
     normalized: inputs,
@@ -77,7 +73,7 @@ vi.mock('@/lib/ai-registry/capabilities-catalog', () => ({
   })),
 }))
 vi.mock('@/lib/user-api/runtime-config', () => ({
-  getProviderConfig: vi.fn(async () => ({ apiKey: 'bailian-key' })),
+  getProviderConfig: vi.fn(async () => ({ apiKey: 'provider-key' })),
   resolveModelSelection: vi.fn(async () => ({
     provider: 'ark',
     modelId: 'stub',
@@ -88,7 +84,7 @@ vi.mock('@/lib/user-api/runtime-config', () => ({
   resolveModelSelectionOrSingle: vi.fn(async (_userId: string, model: string | null | undefined) => {
     const modelKey = typeof model === 'string' && model.trim().length > 0
       ? model.trim()
-      : 'fal::audio-model'
+      : 'ark::stub'
     const separator = modelKey.indexOf('::')
     const provider = separator === -1 ? modelKey : modelKey.slice(0, separator)
     const modelId = separator === -1 ? modelKey : modelKey.slice(separator + 2)
@@ -96,7 +92,7 @@ vi.mock('@/lib/user-api/runtime-config', () => ({
       provider,
       modelId,
       modelKey,
-      mediaType: 'audio',
+      mediaType: 'llm',
     }
   }),
 }))
@@ -110,7 +106,7 @@ describe('api contract - direct submit text routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(DIRECT_TEXT_CASES.length).toBe(4)
+    expect(DIRECT_TEXT_CASES.length).toBe(1)
   })
 
   for (const routeCase of DIRECT_TEXT_CASES) {
@@ -137,10 +133,6 @@ describe('api contract - direct submit text routes (behavior)', () => {
       }
 
       const json = await res.json() as Record<string, unknown>
-      const isVoiceGenerateRoute = routeCase.routeFile.endsWith('/voice-generate/route.ts')
-      if (isVoiceGenerateRoute) {
-        expect(json.success).toBe(true)
-      }
       expect(json.async).toBe(true)
       expect(typeof json.taskId).toBe('string')
     })

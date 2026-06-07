@@ -136,11 +136,3 @@ export function useVideoTaskPresentation(
 ) {
   return useTaskPresentationInternal(projectId, targets, options)
 }
-
-export function useVoiceTaskPresentation(
-  projectId: string | null | undefined,
-  targets: TaskPresentationTarget[],
-  options: TaskPresentationOptions = true,
-) {
-  return useTaskPresentationInternal(projectId, targets, options)
-}

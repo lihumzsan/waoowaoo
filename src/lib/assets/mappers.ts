@@ -7,7 +7,6 @@ import {
   type CharacterAssetSummary,
   type LocationAssetSummary,
   type PropAssetSummary,
-  type VoiceAssetSummary,
 } from '@/lib/assets/contracts'
 import { getAssetKindRegistration } from '@/lib/assets/kinds/registry'
 import type { MediaRef } from '@/types/project'
@@ -34,10 +33,6 @@ type ProjectCharacterRecord = {
   name: string
   introduction?: string | null
   profileData?: string | null
-  voiceType?: 'custom' | 'qwen-designed' | 'uploaded' | null
-  voiceId?: string | null
-  customVoiceUrl?: string | null
-  media?: MediaRef | null
   profileConfirmed?: boolean | null
   appearances: CharacterAppearanceRecord[]
 }
@@ -46,8 +41,6 @@ type GlobalCharacterRecord = {
   id: string
   name: string
   folderId: string | null
-  customVoiceUrl: string | null
-  media?: MediaRef | null
   appearances: Array<{
     id: string
     appearanceIndex: number
@@ -111,20 +104,6 @@ type GlobalPropRecord = {
   images: LocationImageRecord[]
 }
 
-type GlobalVoiceRecord = {
-  id: string
-  name: string
-  description: string | null
-  voiceId: string | null
-  voiceType: string
-  customVoiceUrl: string | null
-  media?: MediaRef | null
-  voicePrompt: string | null
-  gender: string | null
-  language: string
-  folderId: string | null
-}
-
 function createRender(params: {
   id: string
   index: number
@@ -171,11 +150,6 @@ function createVariant(params: {
 
 export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): CharacterAssetSummary {
   const registration = getAssetKindRegistration('character')
-  const normalizedVoiceType = character.voiceType === 'custom'
-    || character.voiceType === 'qwen-designed'
-    || character.voiceType === 'uploaded'
-    ? character.voiceType
-    : null
   const variants = character.appearances.map((appearance) => {
     const imageMedias = appearance.imageMedias ?? []
     const previousImageMedias = appearance.previousImageMedias ?? []
@@ -228,12 +202,6 @@ export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): C
     introduction: character.introduction ?? null,
     profileData: character.profileData ?? null,
     profileConfirmed: character.profileConfirmed ?? null,
-    voice: {
-      voiceType: normalizedVoiceType,
-      voiceId: character.voiceId ?? null,
-      customVoiceUrl: character.customVoiceUrl ?? null,
-      media: character.media ?? null,
-    },
   }
 }
 
@@ -291,12 +259,6 @@ export function mapGlobalCharacterToAsset(character: GlobalCharacterRecord): Cha
     introduction: null,
     profileData: null,
     profileConfirmed: null,
-    voice: {
-      voiceType: null,
-      voiceId: null,
-      customVoiceUrl: character.customVoiceUrl,
-      media: character.media ?? null,
-    },
   }
 }
 
@@ -421,31 +383,6 @@ export function mapProjectPropToAsset(prop: ProjectPropRecord): PropAssetSummary
 
 export function mapGlobalPropToAsset(prop: GlobalPropRecord): PropAssetSummary {
   return mapLocationLikeGlobalAsset('prop', prop) as PropAssetSummary
-}
-
-export function mapGlobalVoiceToAsset(voice: GlobalVoiceRecord): VoiceAssetSummary {
-  const registration = getAssetKindRegistration('voice')
-  return {
-    id: voice.id,
-    scope: 'global',
-    kind: 'voice',
-    family: 'audio',
-    name: voice.name,
-    folderId: voice.folderId,
-    capabilities: registration.capabilities,
-    taskRefs: [],
-    taskState: createIdleTaskState(),
-    voiceMeta: {
-      description: voice.description,
-      voiceId: voice.voiceId,
-      voiceType: voice.voiceType,
-      customVoiceUrl: voice.customVoiceUrl,
-      media: voice.media ?? null,
-      voicePrompt: voice.voicePrompt,
-      gender: voice.gender,
-      language: voice.language,
-    },
-  }
 }
 
 export function filterAssetsByKind(

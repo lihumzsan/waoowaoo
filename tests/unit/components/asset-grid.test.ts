@@ -34,10 +34,6 @@ vi.mock('@/app/[locale]/workspace/asset-hub/components/LocationCard', () => ({
   LocationCard: () => null,
 }))
 
-vi.mock('@/app/[locale]/workspace/asset-hub/components/VoiceCard', () => ({
-  VoiceCard: () => null,
-}))
-
 vi.mock('@/components/task/TaskStatusInline', () => ({
   default: () => null,
 }))
@@ -48,24 +44,21 @@ const messages = {
     characters: '角色',
     locations: '场景',
     props: '道具',
-    voices: '音色',
     addAsset: '新建资产',
     addCharacter: '新建角色',
     addLocation: '新建场景',
     addProp: '新建道具',
-    addVoice: '新建音色',
     downloadAll: '打包下载',
     downloadAllTitle: '下载全部图片资产',
     downloading: '打包中...',
     emptyState: '暂无资产',
-    emptyStateHint: '点击右上角「新建资产」按钮添加角色、场景、道具或音色',
+    emptyStateHint: '点击右上角「新建资产」按钮添加角色、场景或道具',
     filteredEmptyHint: '点击新建资产添加资产',
     filteredEmpty: {
       all: '暂无资产，点击「新建资产」添加',
       character: '暂无角色',
       location: '暂无场景',
       prop: '暂无道具',
-      voice: '暂无音色',
     },
     pagination: {
       previous: '上一页',
@@ -98,7 +91,6 @@ describe('AssetGrid', () => {
         onAddCharacter: () => undefined,
         onAddLocation: () => undefined,
         onAddProp: () => undefined,
-        onAddVoice: () => undefined,
         onDownloadAll: () => undefined,
         isDownloading: false,
         selectedFolderId: null,
@@ -130,7 +122,6 @@ describe('AssetGrid', () => {
               canRevertRender: false,
               canModifyRender: false,
               canUploadRender: false,
-              canBindVoice: false,
               canCopyFromGlobal: false,
             },
             taskRefs: [],
@@ -139,19 +130,12 @@ describe('AssetGrid', () => {
             introduction: null,
             profileData: null,
             profileConfirmed: null,
-            voice: {
-              voiceType: null,
-              voiceId: null,
-              customVoiceUrl: null,
-              media: null,
-            },
           },
         ],
         loading: false,
         onAddCharacter: () => undefined,
         onAddLocation: () => undefined,
         onAddProp: () => undefined,
-        onAddVoice: () => undefined,
         onDownloadAll: () => undefined,
         isDownloading: false,
         selectedFolderId: null,

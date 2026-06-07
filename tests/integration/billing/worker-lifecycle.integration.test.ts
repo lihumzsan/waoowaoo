@@ -15,14 +15,17 @@ vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: vi.fn(async () => ({})),
 }))
 
-async function createPreparedVoiceTask() {
+async function createPreparedMusicTask() {
   process.env.BILLING_MODE = 'ENFORCE'
   const user = await createTestUser()
   const project = await createTestProject(user.id)
   await seedBalance(user.id, 10)
 
   const taskId = randomUUID()
-  const raw = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 5 })
+  const raw = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    musicModel: 'google::lyria-3-clip-preview',
+    durationSeconds: 5,
+  })
   if (!raw || !raw.billable) {
     throw new Error('failed to build billing info fixture')
   }
@@ -38,19 +41,19 @@ async function createPreparedVoiceTask() {
     id: taskId,
     userId: user.id,
     projectId: project.id,
-    type: TASK_TYPE.VOICE_LINE,
-    targetType: 'VoiceLine',
-    targetId: 'line-1',
+    type: TASK_TYPE.MUSIC_GENERATE,
+    targetType: 'Project',
+    targetId: project.id,
     billingInfo,
   })
 
   const jobData: TaskJobData = {
     taskId,
-    type: TASK_TYPE.VOICE_LINE,
+    type: TASK_TYPE.MUSIC_GENERATE,
     locale: 'en',
     projectId: project.id,
-    targetType: 'VoiceLine',
-    targetId: 'line-1',
+    targetType: 'Project',
+    targetId: project.id,
     billingInfo,
     userId: user.id,
     payload: {},
@@ -58,7 +61,7 @@ async function createPreparedVoiceTask() {
 
   const job = {
     data: jobData,
-    queueName: 'voice',
+    queueName: 'music',
     opts: {
       attempts: 5,
       backoff: {
@@ -78,7 +81,7 @@ describe('billing/worker lifecycle integration', () => {
   })
 
   it('settles billing and marks task completed on success', async () => {
-    const fixture = await createPreparedVoiceTask()
+    const fixture = await createPreparedMusicTask()
 
     await withTaskLifecycle(fixture.job, async () => ({ actualDurationSeconds: 2 }))
 
@@ -90,7 +93,7 @@ describe('billing/worker lifecycle integration', () => {
   })
 
   it('rolls back billing and marks task failed on error', async () => {
-    const fixture = await createPreparedVoiceTask()
+    const fixture = await createPreparedMusicTask()
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {
@@ -105,7 +108,7 @@ describe('billing/worker lifecycle integration', () => {
   })
 
   it('keeps task active for queue retry on retryable worker error', async () => {
-    const fixture = await createPreparedVoiceTask()
+    const fixture = await createPreparedMusicTask()
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {
@@ -120,7 +123,7 @@ describe('billing/worker lifecycle integration', () => {
   })
 
   it('rolls back billing on cancellation path', async () => {
-    const fixture = await createPreparedVoiceTask()
+    const fixture = await createPreparedMusicTask()
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {

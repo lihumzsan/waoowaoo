@@ -108,7 +108,6 @@ export interface ProjectModelConfig {
   videoModel: string | null
   singleShotVideoModel: string | null
   sequenceVideoModel: string | null
-  audioModel: string | null
   musicModel: string | null
   videoRatio: string | null
   capabilityDefaults: CapabilitySelections
@@ -122,7 +121,6 @@ export interface UserModelConfig {
   storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
-  audioModel: string | null
   musicModel: string | null
   capabilityDefaults: CapabilitySelections
 }
@@ -167,7 +165,6 @@ export async function getProjectModelConfig(
     videoModel: extractModelKey(projectData?.videoModel) || null,
     singleShotVideoModel: extractModelKey(projectData?.singleShotVideoModel) || extractModelKey(projectData?.videoModel) || null,
     sequenceVideoModel: extractModelKey(projectData?.sequenceVideoModel) || null,
-    audioModel: extractModelKey(projectData?.audioModel) || extractModelKey(userPref?.audioModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     videoRatio: projectData?.videoRatio || '9:16',
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
@@ -190,7 +187,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     storyboardModel: extractModelKey(userPref?.storyboardModel) || null,
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
-    audioModel: extractModelKey(userPref?.audioModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
   }
@@ -263,7 +259,7 @@ export function checkRequiredModels(
     videoModel: '视频模型',
     singleShotVideoModel: '单镜头视频模型',
     sequenceVideoModel: '编排视频模型',
-    audioModel: '语音合成模型',
+    musicModel: '音乐模型',
   }
 
   for (const field of requiredFields) {

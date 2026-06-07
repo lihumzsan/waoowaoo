@@ -65,8 +65,8 @@ describe('billing/ledger integration', () => {
       {
         projectId: project.id,
         action: 'integration_confirm',
-        apiType: 'voice',
-        model: 'fal::fal-ai/index-tts-2/text-to-speech',
+        apiType: 'music',
+        model: 'google::lyria-3-clip-preview',
         quantity: 2,
         unit: 'second',
       },
@@ -147,8 +147,8 @@ describe('billing/ledger integration', () => {
       {
         projectId: project.id,
         action: 'integration_confirm',
-        apiType: 'voice',
-        model: 'fal::fal-ai/index-tts-2/text-to-speech',
+        apiType: 'music',
+        model: 'google::lyria-3-clip-preview',
         quantity: 5,
         unit: 'second',
       },

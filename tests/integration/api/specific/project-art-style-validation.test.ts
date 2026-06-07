@@ -29,7 +29,7 @@ const prismaMock = vi.hoisted(() => ({
       storyboardModel: 'img::storyboard',
       editModel: 'img::edit',
       videoModel: 'video::model',
-      audioModel: 'audio::model',
+      musicModel: 'google::lyria-3-clip-preview',
     })),
     update: vi.fn(async () => ({
       id: 'project-1',
@@ -114,13 +114,13 @@ describe('api specific - project config art style validation', () => {
     expect(prismaMock.userPreference.upsert).not.toHaveBeenCalled()
   })
 
-  it('accepts audioModel and keeps user preference unchanged', async () => {
+  it('accepts musicModel and keeps user preference unchanged', async () => {
     const mod = await import('@/app/api/projects/[projectId]/config/route')
     const req = buildMockRequest({
       path: '/api/projects/project-1/config',
       method: 'PATCH',
       body: {
-        audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
+        musicModel: 'google::lyria-3-clip-preview',
       },
     })
 
@@ -129,7 +129,7 @@ describe('api specific - project config art style validation', () => {
     expect(prismaMock.project.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          audioModel: 'bailian::qwen3-tts-vd-2026-01-26',
+          musicModel: 'google::lyria-3-clip-preview',
         }),
       }),
     )

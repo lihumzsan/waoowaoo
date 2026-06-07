@@ -40,10 +40,6 @@ const TypeIcon = ({
       return (
         <AppIcon name="video" className={className} />
       )
-    case 'audio':
-      return (
-        <AppIcon name="audioWave" className={className} />
-      )
     case 'music':
       return (
         <AppIcon name="audioWave" className={className} />
@@ -59,75 +55,32 @@ const typeLabel = (type: ProviderCardModelType, t: ProviderCardTranslator) => {
       return t('typeImage')
     case 'video':
       return t('typeVideo')
-    case 'audio':
-      return t('typeAudio')
     case 'music':
       return t('typeMusic')
   }
 }
 
-type ProviderCardVisibleType = Exclude<ProviderCardModelType, 'music'>
-type AudioSubType = 'speech' | 'music' | 'lipsync'
+type ProviderCardVisibleType = ProviderCardModelType
 
-const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'audio']
+const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'music']
 
 export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
-  if (providerKey === 'openai-compatible') return ['llm', 'image', 'video']
-  if (providerKey === 'gemini-compatible') return ['llm', 'image', 'video', 'audio']
-  return ['llm', 'image', 'video', 'audio', 'music']
-}
-
-export function shouldShowOpenAICompatVideoHint(
-  providerId: string,
-  type: ProviderCardModelType | null,
-): boolean {
-  return getProviderKey(providerId) === 'openai-compatible' && type === 'video'
-}
-
-function shouldShowDefaultTabs(providerId: string): boolean {
-  const providerKey = getProviderKey(providerId)
-  return providerKey === 'openai-compatible' || providerKey === 'gemini-compatible'
-}
-
-function getDefaultVisibleModelTypes(providerId: string): ProviderCardVisibleType[] {
-  const providerKey = getProviderKey(providerId)
-  if (providerKey === 'openai-compatible') return ['llm', 'image', 'video']
-  if (providerKey === 'gemini-compatible') return ['llm', 'image', 'video', 'audio']
-  return [...MODEL_TYPES]
+  if (providerKey === 'openrouter') return ['llm']
+  if (providerKey === 'fal') return ['image', 'video']
+  if (providerKey === 'google') return ['llm', 'image', 'video', 'music']
+  if (providerKey === 'ark') return ['llm', 'image', 'video']
+  return []
 }
 
 export function getVisibleModelTypesForProvider(
   providerId: string,
   groupedModels: Partial<Record<ProviderCardModelType, CustomModel[]>>,
 ): ProviderCardVisibleType[] {
-  const shouldShowAllTabs = shouldShowDefaultTabs(providerId)
-  if (shouldShowAllTabs) {
-    return getDefaultVisibleModelTypes(providerId)
-  }
-
   return MODEL_TYPES.filter((type) => {
     const modelsOfType = groupedModels[type]
     return Array.isArray(modelsOfType) && modelsOfType.length > 0
   })
-}
-
-function getAudioSubType(model: CustomModel): AudioSubType | null {
-  if (model.type === 'audio') return 'speech'
-  if (model.type === 'music') return 'music'
-  if (model.type === 'lipsync') return 'lipsync'
-  return null
-}
-
-function audioSubTypeLabel(type: AudioSubType, t: ProviderCardTranslator): string {
-  switch (type) {
-    case 'speech':
-      return t('audioSubSpeech')
-    case 'music':
-      return t('audioSubMusic')
-    case 'lipsync':
-      return t('audioSubLipSync')
-  }
 }
 
 function formatPriceAmount(amount: number): string {
@@ -191,21 +144,6 @@ export function ProviderAdvancedFields({
 
   const currentType = activeType ?? visibleTypes[0] ?? null
   const currentModels = currentType ? (state.groupedModels[currentType] ?? []) : []
-  const audioSubTypeOptions = useMemo(() => {
-    if (currentType !== 'audio') return [] as Array<{ type: AudioSubType; count: number }>
-    const counts: Record<AudioSubType, number> = {
-      speech: 0,
-      music: 0,
-      lipsync: 0,
-    }
-    for (const model of currentModels) {
-      const subtype = getAudioSubType(model)
-      if (subtype) counts[subtype] += 1
-    }
-    return (['speech', 'music', 'lipsync'] as const)
-      .filter((type) => counts[type] > 0)
-      .map((type) => ({ type, count: counts[type] }))
-  }, [currentModels, currentType])
   const visibleCurrentModels = currentModels
   const currentAddType: ProviderCardModelType | null = currentType
   const shouldShowAddButton =
@@ -213,8 +151,7 @@ export function ProviderAdvancedFields({
     && addableModelTypes.has(currentAddType)
     && state.showAddForm !== currentAddType
   const defaultAddType: ProviderCardModelType = providerKey === 'openrouter' ? 'llm' : 'image'
-  const useTabbedLayout = state.hasModels || shouldShowDefaultTabs(provider.id)
-  const shouldShowVideoHint = shouldShowOpenAICompatVideoHint(provider.id, currentType)
+  const useTabbedLayout = state.hasModels
   const segmentedControlOptions = useMemo(
     () =>
       visibleTypes.map((type) => ({
@@ -250,20 +187,6 @@ export function ProviderAdvancedFields({
               {t('add')}
             </button>
           )}
-        </div>
-      )}
-
-      {currentType === 'audio' && audioSubTypeOptions.length > 0 && (
-        <div className="flex items-center gap-4 px-1 text-[12px] font-semibold text-[var(--glass-text-primary)]">
-          {audioSubTypeOptions.map((option) => (
-            <span
-              key={option.type}
-              className="inline-flex items-center gap-1"
-            >
-              {audioSubTypeLabel(option.type, t)}
-              <span className="text-[var(--glass-text-secondary)]">{option.count}</span>
-            </span>
-          ))}
         </div>
       )}
 
@@ -307,11 +230,6 @@ export function ProviderAdvancedFields({
               {state.isModelSavePending ? t('saving') : t('save')}
             </button>
           </div>
-          {shouldShowVideoHint && (
-            <p className="mt-2 text-xs text-[var(--glass-text-tertiary)]">
-              {t('openaiCompatVideoOnlyHint')}
-            </p>
-          )}
           {currentAddType === 'video' && provider.id === 'ark' && (
             <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--glass-bg-muted)] px-2 py-2">
               <button
@@ -402,11 +320,6 @@ export function ProviderAdvancedFields({
               {state.isModelSavePending ? t('saving') : t('save')}
             </button>
           </div>
-          {shouldShowOpenAICompatVideoHint(provider.id, state.showAddForm) && (
-            <p className="mt-2 text-xs text-[var(--glass-text-tertiary)]">
-              {t('openaiCompatVideoOnlyHint')}
-            </p>
-          )}
         </div>
       )}
     </div>

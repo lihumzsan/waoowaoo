@@ -51,7 +51,7 @@ describe('processMediaResult', () => {
   })
 
   it('throws when downloading non-video URL sources returns non-2xx', async () => {
-    storageMock.generateUniqueKey.mockReturnValueOnce('voice/line-1.mp3')
+    storageMock.generateUniqueKey.mockReturnValueOnce('music/line-1.mp3')
     storageMock.toFetchableUrl.mockImplementationOnce((url) => url)
 
     ;(globalThis.fetch as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce(
@@ -61,7 +61,7 @@ describe('processMediaResult', () => {
     await expect(processMediaResult({
       source: 'https://example.com/audio.mp3',
       type: 'audio',
-      keyPrefix: 'voice',
+      keyPrefix: 'music',
       targetId: 'line-1',
     })).rejects.toThrow(/Failed to download audio: 404/i)
   })

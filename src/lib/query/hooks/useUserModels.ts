@@ -19,9 +19,7 @@ export interface UserModelsPayload {
     llm: UserModelOption[]
     image: UserModelOption[]
     video: UserModelOption[]
-    audio: UserModelOption[]
     music: UserModelOption[]
-    lipsync: UserModelOption[]
 }
 
 export function useUserModels() {
@@ -37,9 +35,7 @@ export function useUserModels() {
                 llm: Array.isArray(data?.llm) ? data.llm : [],
                 image: Array.isArray(data?.image) ? data.image : [],
                 video: Array.isArray(data?.video) ? data.video : [],
-                audio: Array.isArray(data?.audio) ? data.audio : [],
                 music: Array.isArray(data?.music) ? data.music : [],
-                lipsync: Array.isArray(data?.lipsync) ? data.lipsync : [],
             } as UserModelsPayload
         },
     })

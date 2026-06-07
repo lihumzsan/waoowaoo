@@ -13,7 +13,7 @@ describe('ai-registry/selection', () => {
     expect(getProviderKey(undefined)).toBe('')
     expect(getProviderKey('')).toBe('')
     expect(getProviderKey('google')).toBe('google')
-    expect(getProviderKey('gemini-compatible:uuid-1')).toBe('gemini-compatible')
+    expect(getProviderKey('openrouter:team-1')).toBe('openrouter')
   })
 
   it('parses modelKey strictly and composes modelKey', () => {
@@ -27,12 +27,11 @@ describe('ai-registry/selection', () => {
   })
 
   it('resolves selection with providerKey derived from provider', () => {
-    expect(resolveSelection('gemini-compatible:uuid-1::gemini-3.1')).toEqual({
-      provider: 'gemini-compatible:uuid-1',
-      modelId: 'gemini-3.1',
-      modelKey: 'gemini-compatible:uuid-1::gemini-3.1',
-      providerKey: 'gemini-compatible',
+    expect(resolveSelection('openrouter:team-1::anthropic/claude-sonnet-4.5')).toEqual({
+      provider: 'openrouter:team-1',
+      modelId: 'anthropic/claude-sonnet-4.5',
+      modelKey: 'openrouter:team-1::anthropic/claude-sonnet-4.5',
+      providerKey: 'openrouter',
     })
   })
 })
-

@@ -3,12 +3,11 @@
 import { useTranslations } from 'next-intl'
 /**
  * 项目资产库 - 小说推文模式专用
- * 包含TTS生成和资产分析
+ * 包含资产生成和资产分析
  * 
  * 重构说明 v2:
  * - 角色和场景操作函数已提取到 hooks/useCharacterActions 和 hooks/useLocationActions
  * - 批量生成逻辑已提取到 hooks/useBatchGeneration
- * - TTS/音色逻辑已提取到 hooks/useTTSGeneration
  * - 弹窗状态已提取到 hooks/useAssetModals
  * - UI已拆分为 CharacterSection, LocationSection, AssetToolbar, AssetModals 组件
  */
@@ -34,7 +33,6 @@ import {
 import { useCharacterActions } from './assets/hooks/useCharacterActions'
 import { useLocationActions } from './assets/hooks/useLocationActions'
 import { useBatchGeneration } from './assets/hooks/useBatchGeneration'
-import { useTTSGeneration } from './assets/hooks/useTTSGeneration'
 import { useAssetModals } from './assets/hooks/useAssetModals'
 import { useAssetsCopyFromHub } from './assets/hooks/useAssetsCopyFromHub'
 import { useAssetsGlobalActions } from './assets/hooks/useAssetsGlobalActions'
@@ -230,7 +228,6 @@ export default function ProjectAssetLibrary({
     handleCopyFromGlobal,
     handleCopyLocationFromGlobal,
     handleCopyPropFromGlobal,
-    handleVoiceSelectFromHub,
     handleConfirmCopyFromGlobal,
     handleCloseCopyPicker,
   } = useAssetsCopyFromHub({
@@ -273,17 +270,6 @@ export default function ProjectAssetLibrary({
     projectId,
     assetType: 'prop',
     showToast,
-  })
-
-  // TTS/音色
-  const {
-    voiceDesignCharacter,
-    handleVoiceChange,
-    handleOpenVoiceDesign,
-    handleVoiceDesignSave,
-    handleCloseVoiceDesign
-  } = useTTSGeneration({
-    projectId
   })
 
   // 弹窗状态
@@ -399,9 +385,6 @@ export default function ProjectAssetLibrary({
             onUndo={handleUndoCharacter}
             onImageClick={setPreviewImage}
             onImageEdit={(charId, appIdx, imgIdx, name) => handleOpenCharacterImageEdit(charId, appIdx, imgIdx, name)}
-            onVoiceChange={(characterId, customVoiceUrl) => handleVoiceChange(characterId, 'custom', characterId, customVoiceUrl)}
-            onVoiceDesign={handleOpenVoiceDesign}
-            onVoiceSelectFromHub={handleVoiceSelectFromHub}
             onCopyFromGlobal={handleCopyFromGlobal}
             getAppearances={getAppearances}
             filterIds={episodeAssetIds?.charIds ?? null}
@@ -464,8 +447,6 @@ export default function ProjectAssetLibrary({
         handleUpdateLocationDescription={handleUpdateLocationDescription}
         handleLocationImageEdit={handleLocationImageEdit}
         handleCharacterImageEdit={handleCharacterImageEdit}
-        handleCloseVoiceDesign={handleCloseVoiceDesign}
-        handleVoiceDesignSave={handleVoiceDesignSave}
         handleCloseCopyPicker={handleCloseCopyPicker}
         handleConfirmCopyFromGlobal={handleConfirmCopyFromGlobal}
         closeEditingAppearance={closeEditingAppearance}
@@ -485,7 +466,6 @@ export default function ProjectAssetLibrary({
         showAddCharacter={showAddCharacter}
         showAddLocation={showAddLocation}
         showAddProp={showAddProp}
-        voiceDesignCharacter={voiceDesignCharacter}
         copyFromGlobalTarget={copyFromGlobalTarget}
         isGlobalCopyInFlight={isGlobalCopyInFlight}
       />

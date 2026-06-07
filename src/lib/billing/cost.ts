@@ -14,13 +14,10 @@ export const MARKUP = {
   image: 1.0,
   video: 1.0,
   music: 1.0,
-  voice: 1.0,
-  voiceDesign: 1.0,
-  lipSync: 1.0,
 } as const
 
 export type MarkupCategory = keyof typeof MARKUP
-export type ApiType = 'text' | 'image' | 'video' | 'music' | 'voice' | 'voice-design' | 'lip-sync'
+export type ApiType = 'text' | 'image' | 'video' | 'music'
 export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
 
 export interface LlmCustomPricing {
@@ -46,9 +43,6 @@ export const PRODUCT_CREDIT_PRICING = {
   videoPerSecond: 1,
   videoMinimumPerClip: 5,
   musicPerSecond: 0.2,
-  voicePerSecond: 0.05,
-  voiceDesignPerCall: 1,
-  lipSyncPerCall: 2,
 } as const
 
 type BillingMetadata = { [field: string]: unknown }
@@ -135,16 +129,4 @@ export function calcMusic(
   _customPricing?: ModelCustomPricing | null,
 ): number {
   return roundCredits(normalizePositiveNumber(durationSeconds) * PRODUCT_CREDIT_PRICING.musicPerSecond)
-}
-
-export function calcVoice(durationSeconds: number): number {
-  return roundCredits(normalizePositiveNumber(durationSeconds) * PRODUCT_CREDIT_PRICING.voicePerSecond)
-}
-
-export function calcVoiceDesign(): number {
-  return PRODUCT_CREDIT_PRICING.voiceDesignPerCall
-}
-
-export function calcLipSync(_model: string): number {
-  return PRODUCT_CREDIT_PRICING.lipSyncPerCall
 }

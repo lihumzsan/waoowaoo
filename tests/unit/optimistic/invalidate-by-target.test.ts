@@ -48,19 +48,6 @@ describe('invalidateByTarget', () => {
     expect(hasInvalidation(testClient, (arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.voiceLines.all('episode-1')[0]
-        && key[1] === 'episode-1'
-    })).toBe(true)
-    expect(hasInvalidation(testClient, (arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.voiceLines.matched('project-1', 'episode-1')[0]
-        && key[1] === 'project-1'
-        && key[2] === 'episode-1'
-    })).toBe(true)
-    expect(hasInvalidation(testClient, (arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
         && key[0] === queryKeys.project.editScript('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
         && key[2] === 'edit-script'
@@ -143,30 +130,6 @@ describe('invalidateByTarget', () => {
         && key[1] === 'project-1'
         && key[2] === 'edit-script'
         && key[3] === 'episode-1'
-    })).toBe(true)
-  })
-
-  it('GlobalVoice invalidates global voice asset queries', () => {
-    const testClient = createQueryClient()
-
-    invalidateByTarget({
-      queryClient: testClient.queryClient,
-      projectId: 'global-asset-hub',
-      targetType: 'GlobalVoice',
-      episodeId: null,
-    })
-
-    expect(hasInvalidation(testClient, (arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.globalAssets.voices()[0]
-        && key[1] === 'voices'
-    })).toBe(true)
-    expect(hasInvalidation(testClient, (arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.assets.all('global')[0]
-        && key[1] === 'unified'
     })).toBe(true)
   })
 

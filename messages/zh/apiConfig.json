@@ -7,8 +7,6 @@
   "notConfigured": "未配置 Key",
   "configure": "配置",
   "connect": "连接",
-  "compatibilityLayerOpenAI": "OpenAI 兼容层",
-  "compatibilityLayerGemini": "Gemini 兼容层",
   "show": "显示",
   "hide": "隐藏",
   "capability": "能力",
@@ -30,11 +28,6 @@
   "pricingEnableCustom": "启用自定义价格（可选）",
   "pricingOptionPricesPlaceholder": "参数价格 JSON（可选），示例：{\"resolution\":{\"1024x1024\":0.12}}",
   "modelIdExists": "模型 ID 已存在",
-  "flushConfigFailed": "保存厂商配置失败，请先检查并保存 API Key / Base URL",
-  "probeLlmProtocolFailed": "模型协议探测失败，请稍后重试",
-  "probeAuthFailed": "模型协议探测鉴权失败，请检查 API Key",
-  "probeInconclusive": "模型协议探测结果不确定（可能限流或服务异常），请稍后重试",
-  "probeRequestFailed": "模型协议探测请求失败，请稍后重试",
   "modelDisplayName": "外显名称（你自己看的）",
   "modelActualId": "实际调用 ID（模型参数）",
   "noModelsForProvider": "该厂商暂无配置模型",
@@ -45,9 +38,7 @@
   "storyboardDefault": "分镜模型",
   "editDefault": "修图模型",
   "videoDefault": "视频模型",
-  "audioDefault": "语音模型",
   "musicDefault": "音乐/配乐模型",
-  "lipsyncDefault": "口型同步模型",
   "selectDefault": "请选择",
   "defaultModelDesc": {
     "analysisModel": "负责剧本解析、分镜构建等全流程文本分析能力。",
@@ -56,10 +47,7 @@
     "locationModel": "根据剧本描述生成场景环境与空间参考图",
     "storyboardModel": "根据分镜脚本生成对应的镜头画面参考图",
     "editModel": "对已有图片进行局部修改、风格调整与精修",
-    "audioModel": "将文本台词转化为自然流畅的语音音频",
-    "musicModel": "为剪辑生成背景音乐与配乐素材",
-    "lipSyncModel": "将语音与视频角色的口型进行精准同步",
-    "voiceDesignModel": "为角色定制专属音色与语音风格特征"
+    "musicModel": "为剪辑生成背景音乐与配乐素材"
   },
   "defaultModelSection": {
     "coreFoundation": "文本分析与视频能力",
@@ -75,11 +63,7 @@
     "pipelineLocation": "场景生成",
     "pipelineStoryboard": "镜头生成",
     "pipelineEdit": "编辑图片",
-    "extLipSync": "口型同步",
-    "extAudio": "音频",
-    "extTTS": "语音合成",
     "extMusic": "音乐/配乐",
-    "extVoiceDesign": "音色设计",
     "corePlaceholder": "必选配置",
     "extPlaceholder": "暂不启用"
   },
@@ -92,16 +76,9 @@
     "imageDescription": "请先去下方厂商资源池配置图像模型并开启模型。",
     "videoTitle": "暂无可选视频模型",
     "videoDescription": "请先去下方厂商资源池配置视频模型并开启模型。",
-    "audioTitle": "暂无可选语音模型",
-    "audioDescription": "请先去下方厂商资源池配置语音模型并开启模型。",
     "musicTitle": "暂无可选音乐模型",
-    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。",
-    "lipsyncTitle": "暂无可选口型同步模型",
-    "lipsyncDescription": "请先去下方厂商资源池配置口型同步模型并开启模型。",
-    "voiceDesignTitle": "暂无可选音色设计模型",
-    "voiceDesignDescription": "请先去下方厂商资源池配置音色设计模型并开启模型。"
+    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。"
   },
-  "customProviderTip": "项目目前为测试版，由于市面上各厂商自定义 API 格式差异较大，自定义 API 兼容性尚不完善，建议优先使用官方内置 API。后续版本将持续更新以兼容更多厂商。",
   "providerPool": "厂商资源池",
   "dragToSort": "拖拽排序",
   "dragToSortHint": "按住左上角拖拽手柄可调整厂商顺序",
@@ -116,7 +93,6 @@
   "confirmDeleteProvider": "确定删除这个提供商吗？",
   "presetModelCannotDelete": "预设模型不能删除",
   "confirmDeleteModel": "确定删除这个模型吗？",
-  "addGeminiProvider": "新增模型服务商",
   "baseUrl": "Base URL",
   "configureBaseUrl": "配置地址",
   "addModel": "添加模型",
@@ -125,20 +101,12 @@
   "typeText": "文本",
   "typeImage": "图像",
   "typeVideo": "视频",
-  "typeAudio": "音频等",
   "typeMusic": "音乐/配乐",
-  "audioSubAll": "全部",
-  "audioSubSpeech": "语音",
   "audioSubMusic": "音乐",
-  "audioSubLipSync": "口型",
   "apiKeyLabel": "API Key",
   "apiType": "API 类型",
-  "apiTypeGeminiCompatible": "Gemini 兼容",
-  "apiTypeOpenAICompatible": "OpenAI 兼容",
   "apiTypeGeminiHint": "使用 Google SDK",
   "otherProviders": "其他配置",
-  "audioCategory": "音频",
-  "audioAndLipsync": "语音与唇形同步",
   "configureApiKey": "配置 API Key",
   "enterApiKey": "请输入 API Key",
   "testConnection": "测试连接",
@@ -153,22 +121,18 @@
     "textGen": "文本生成",
     "imageGen": "图像生成",
     "credits": "余额检查",
-    "audioGen": "音频生成",
     "skipped": "已跳过"
   },
   "tabs": {
     "llm": "文本模型",
     "image": "图片模型",
     "video": "视频模型",
-    "audio": "音频等模型",
     "other": "其他"
   },
   "sections": {
     "llmApiKeys": "文本模型 API Keys",
     "imageApiKeys": "图片模型 API Keys",
-    "videoApiKeys": "视频模型 API Keys",
-    "audioApiKey": "音频模型 API Key",
-    "lipsyncApiKey": "唇形同步 API Key"
+    "videoApiKeys": "视频模型 API Keys"
   },
   "defaultModel": {
     "title": "默认模型",
@@ -199,13 +163,7 @@
       "ark_step2": "在模型管理页面，点击右上角「一键开通所有模型」",
       "openrouter_step1": "进入 OpenRouter 平台，创建 API Key（必须选择带有图像功能的模型）",
       "fal_step1": "进入 FAL 平台，创建 API Key",
-      "google_step1": "进入 Google AI Studio，创建 API Key",
-      "minimax_step1": "进入海螺 MiniMax 平台，获取 API Key",
-      "vidu_step1": "进入生数科技 Vidu 平台，点击「新建 API Key」",
-      "openai_compatible_step1": "填写任意 OpenAI 协议兼容服务的 Base URL 与 API Key",
-      "gemini_compatible_step1": "填写任意 Gemini 协议兼容服务的 Base URL 与 API Key",
-      "bailian_step1": "进入阿里云百炼平台，获取 API Key",
-      "siliconflow_step1": "进入硅基流动控制台，创建 API Key"
+      "google_step1": "进入 Google AI Studio，创建 API Key"
     }
   }
 }

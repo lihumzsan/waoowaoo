@@ -5,7 +5,6 @@ const getProviderConfigMock = vi.hoisted(() => vi.fn(async () => ({
   id: 'fal',
   name: 'fal',
   apiKey: 'fal-key',
-  gatewayRoute: 'official' as const,
 })))
 
 vi.mock('@/lib/user-api/runtime-config', () => ({

@@ -8,8 +8,7 @@
 import { prisma } from '@/lib/prisma'
 import { encryptApiKey, decryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
-import { composeModelKey } from '@/lib/ai-registry/selection'
-import { buildApiConfigServerCatalog, DEFAULT_LIPSYNC_MODEL_KEY, getGoogleCompatibleApiConfigPresetModels } from '@/lib/ai-registry/api-config-catalog'
+import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
 import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
@@ -25,10 +24,6 @@ import {
   validateModelProviderConsistency,
   validateModelProviderTypeSupport,
 } from './api-config-model-normalization'
-import {
-  resolveStoredLlmProtocols,
-  resolveStoredMediaTemplates,
-} from './api-config-openai-compatible-models'
 import {
   buildPricingDisplayMap,
   resolveBuiltinCapabilities,
@@ -63,10 +58,7 @@ export async function getUserApiConfig(userId: string) {
       storyboardModel: true,
       editModel: true,
       videoModel: true,
-      audioModel: true,
       musicModel: true,
-      lipSyncModel: true,
-      voiceDesignModel: true,
       capabilityDefaults: true,
       analysisConcurrency: true,
       imageConcurrency: true,
@@ -86,28 +78,6 @@ export async function getUserApiConfig(userId: string) {
   const pricingDisplay = buildPricingDisplayMap()
   const pricedModels = models.map((model) => withDisplayPricing(model, pricingDisplay))
 
-  const savedModelKeys = new Set(pricedModels.map((m) => m.modelKey))
-  const disabledPresets: (StoredModel & { enabled: false })[] = []
-  for (const p of providers) {
-    if (getProviderKey(p.id) !== 'gemini-compatible') continue
-    for (const preset of getGoogleCompatibleApiConfigPresetModels(p.id)) {
-      const modelKey = composeModelKey(p.id, preset.modelId)
-      if (!modelKey || savedModelKeys.has(modelKey)) continue
-      savedModelKeys.add(modelKey)
-      const base: StoredModel = {
-        modelId: preset.modelId,
-        modelKey,
-        name: preset.name,
-        type: preset.type,
-        provider: p.id,
-        price: 0,
-        // alias 回退自动从 google catalog 获取 capabilities
-        capabilities: resolveBuiltinCapabilities(preset.type, p.id, preset.modelId),
-      }
-      disabledPresets.push({ ...withDisplayPricing(base, pricingDisplay), enabled: false })
-    }
-  }
-
   const rawDefaults: DefaultModelsPayload = {
     analysisModel: pref?.analysisModel || '',
     characterModel: pref?.characterModel || '',
@@ -115,10 +85,7 @@ export async function getUserApiConfig(userId: string) {
     storyboardModel: pref?.storyboardModel || '',
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
-    audioModel: pref?.audioModel || '',
     musicModel: pref?.musicModel || '',
-    lipSyncModel: pref?.lipSyncModel || DEFAULT_LIPSYNC_MODEL_KEY,
-    voiceDesignModel: pref?.voiceDesignModel || '',
   }
   const defaultModels = billingMode === 'OFF'
     ? rawDefaults
@@ -126,7 +93,7 @@ export async function getUserApiConfig(userId: string) {
   const enabledDefaultModels = sanitizeDefaultModelsAgainstModels(defaultModels, models)
   const capabilityDefaults = sanitizeCapabilitySelectionsAgainstModels(
     parseStoredCapabilitySelections(pref?.capabilityDefaults, 'capabilityDefaults'),
-    [...models, ...disabledPresets],
+    models,
   )
   const workflowConcurrency = normalizeWorkflowConcurrencyConfig({
     analysis: pref?.analysisConcurrency,
@@ -135,7 +102,7 @@ export async function getUserApiConfig(userId: string) {
   })
 
   return {
-    models: [...pricedModels, ...disabledPresets],
+    models: pricedModels,
     providers,
     catalog: buildApiConfigServerCatalog({
       resolveCapabilities: (model) => resolveBuiltinCapabilities(model.type, model.provider, model.modelId),
@@ -180,17 +147,12 @@ export async function putUserApiConfig(userId: string, body: unknown) {
       storyboardModel: true,
       editModel: true,
       videoModel: true,
-      audioModel: true,
       musicModel: true,
-      lipSyncModel: true,
-      voiceDesignModel: true,
     },
   })
   const existingProviders = parseStoredProviders(existingPref?.customProviders)
   const existingModels = parseStoredModels(existingPref?.customModels)
-  const normalizedModels = normalizedModelsInput === undefined
-    ? undefined
-    : resolveStoredMediaTemplates(resolveStoredLlmProtocols(normalizedModelsInput, existingModels), existingModels)
+  const normalizedModels = normalizedModelsInput
 
   const providerSourceForValidation = normalizedProviders ?? existingProviders
   if (normalizedModels !== undefined) {
@@ -226,8 +188,6 @@ export async function putUserApiConfig(userId: string, body: unknown) {
         name: provider.name,
         baseUrl: provider.baseUrl,
         hidden: finalHidden,
-        apiMode: provider.apiMode,
-        gatewayRoute: provider.gatewayRoute,
         apiKey: finalApiKey,
       }
     })
@@ -260,17 +220,8 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     if (normalizedDefaults.videoModel !== undefined) {
       updateData.videoModel = normalizedDefaults.videoModel || null
     }
-    if (normalizedDefaults.audioModel !== undefined) {
-      updateData.audioModel = normalizedDefaults.audioModel || null
-    }
     if (normalizedDefaults.musicModel !== undefined) {
       updateData.musicModel = normalizedDefaults.musicModel || null
-    }
-    if (normalizedDefaults.lipSyncModel !== undefined) {
-      updateData.lipSyncModel = normalizedDefaults.lipSyncModel || null
-    }
-    if (normalizedDefaults.voiceDesignModel !== undefined) {
-      updateData.voiceDesignModel = normalizedDefaults.voiceDesignModel || null
     }
   }
 
@@ -285,10 +236,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
       storyboardModel: existingPref?.storyboardModel || '',
       editModel: existingPref?.editModel || '',
       videoModel: existingPref?.videoModel || '',
-      audioModel: existingPref?.audioModel || '',
       musicModel: existingPref?.musicModel || '',
-      lipSyncModel: existingPref?.lipSyncModel || '',
-      voiceDesignModel: existingPref?.voiceDesignModel || '',
     }
     const nextDefaults = {
       ...existingDefaults,

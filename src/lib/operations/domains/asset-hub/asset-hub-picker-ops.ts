@@ -14,7 +14,7 @@ export function createAssetHubPickerOperations(): ProjectAgentOperationRegistryD
   return {
     asset_hub_picker: {
       id: 'asset_hub_picker',
-      summary: 'List global assets for picker (character/location/voice) with preview URLs.',
+      summary: 'List global assets for picker (character/location) with preview URLs.',
       intent: 'query',
       effects: {
         writes: false,
@@ -26,7 +26,7 @@ export function createAssetHubPickerOperations(): ProjectAgentOperationRegistryD
         longRunning: false,
       },
       inputSchema: z.object({
-        type: z.enum(['character', 'location', 'voice']).optional(),
+        type: z.enum(['character', 'location']).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -63,7 +63,6 @@ export function createAssetHubPickerOperations(): ProjectAgentOperationRegistryD
               folderName: char.folder?.name || null,
               previewUrl,
               appearanceCount: char.appearances.length,
-              hasVoice: !!(char.voiceId || char.customVoiceUrl),
             }
           }))
 
@@ -99,36 +98,6 @@ export function createAssetHubPickerOperations(): ProjectAgentOperationRegistryD
           }))
 
           return { locations: processedLocations }
-        }
-
-        if (type === 'voice') {
-          const voices = await prisma.globalVoice.findMany({
-            where: { userId: ctx.userId },
-            include: { folder: true },
-            orderBy: { updatedAt: 'desc' },
-          })
-
-          const processedVoices = await Promise.all(voices.map(async (voice) => {
-            let previewUrl: string | null = null
-            if (voice.customVoiceUrl) {
-              const media = await resolveMediaRefFromLegacyValue(voice.customVoiceUrl)
-              previewUrl = media?.url || voice.customVoiceUrl
-            }
-
-            return {
-              id: voice.id,
-              name: voice.name,
-              description: voice.description,
-              folderName: voice.folder?.name || null,
-              previewUrl,
-              voiceId: voice.voiceId,
-              voiceType: voice.voiceType,
-              gender: voice.gender,
-              language: voice.language,
-            }
-          }))
-
-          return { voices: processedVoices }
         }
 
         throw new ApiError('INVALID_PARAMS')

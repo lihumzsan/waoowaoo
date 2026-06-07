@@ -26,13 +26,10 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/generate(?:-|\/|$)/,
   /\/regenerate(?:-|\/|$)/,
   /\/analyze(?:-|\/|$)/,
-  /\/tts(?:\/|$)/,
-  /\/lip-sync(?:\/|$)/,
   /\/screenplay-conversion(?:\/|$)/,
-  /\/voice-(?:analyze|design|generate)(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
   /\/modify-(?:asset|storyboard)-image(?:\/|$)/,
-  /\/asset-hub\/(?:generate-image|modify-image|voice-design)(?:\/|$)/,
+  /\/asset-hub\/(?:generate-image|modify-image)(?:\/|$)/,
 ]
 
 function isGenerationOperationPath(pathname: string): boolean {

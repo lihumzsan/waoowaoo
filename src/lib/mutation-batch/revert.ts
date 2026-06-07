@@ -140,9 +140,6 @@ async function restoreDeletedPanel(params: {
         sceneType: typeof panel.sceneType === 'string' ? panel.sceneType : null,
         candidateImages: typeof panel.candidateImages === 'string' ? panel.candidateImages : null,
         linkedToNextPanel: panel.linkedToNextPanel === true,
-        lipSyncTaskId: typeof panel.lipSyncTaskId === 'string' ? panel.lipSyncTaskId : null,
-        lipSyncVideoUrl: typeof panel.lipSyncVideoUrl === 'string' ? panel.lipSyncVideoUrl : null,
-        lipSyncVideoMediaId: typeof panel.lipSyncVideoMediaId === 'string' ? panel.lipSyncVideoMediaId : null,
         sketchImageUrl: typeof panel.sketchImageUrl === 'string' ? panel.sketchImageUrl : null,
         sketchImageMediaId: typeof panel.sketchImageMediaId === 'string' ? panel.sketchImageMediaId : null,
         photographyRules: typeof panel.photographyRules === 'string' ? panel.photographyRules : null,
@@ -405,18 +402,6 @@ export async function revertMutationEntry(entry: {
       })
       return
     }
-    case 'voice_line_restore': {
-      const previousAudioUrl = payload.previousAudioUrl === null || typeof payload.previousAudioUrl === 'string'
-        ? payload.previousAudioUrl
-        : null
-      await prisma.projectVoiceLine.update({
-        where: { id: entry.targetId },
-        data: {
-          audioUrl: previousAudioUrl,
-        },
-      })
-      return
-    }
     case 'panel_video_restore': {
       const previousVideoUrl = payload.previousVideoUrl === null || typeof payload.previousVideoUrl === 'string'
         ? payload.previousVideoUrl
@@ -434,18 +419,6 @@ export async function revertMutationEntry(entry: {
           ...(previousLastVideoGenerationOptions !== undefined
             ? { lastVideoGenerationOptions: previousLastVideoGenerationOptions ?? Prisma.DbNull }
             : {}),
-        },
-      })
-      return
-    }
-    case 'panel_lipsync_restore': {
-      const previousLipSyncVideoUrl = payload.previousLipSyncVideoUrl === null || typeof payload.previousLipSyncVideoUrl === 'string'
-        ? payload.previousLipSyncVideoUrl
-        : null
-      await prisma.projectPanel.update({
-        where: { id: entry.targetId },
-        data: {
-          lipSyncVideoUrl: previousLipSyncVideoUrl,
         },
       })
       return

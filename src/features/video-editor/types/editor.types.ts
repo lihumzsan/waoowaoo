@@ -54,13 +54,12 @@ export interface VideoClip {
 }
 
 /**
- * 片段附属内容 (配音 + 字幕)
+ * 片段附属内容
  */
 export interface ClipAttachment {
     audio?: {
         src: string
         volume: number
-        voiceLineId?: string
     }
     subtitle?: {
         text: string

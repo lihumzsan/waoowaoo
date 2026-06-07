@@ -16,7 +16,7 @@ export const POST = apiHandler(async (
 ) => {
   const { assetId } = await context.params
   const body = await request.json() as CopyBody
-  if (!body.projectId || !body.globalAssetId || (body.kind !== 'character' && body.kind !== 'location' && body.kind !== 'prop' && body.kind !== 'voice')) {
+  if (!body.projectId || !body.globalAssetId || (body.kind !== 'character' && body.kind !== 'location' && body.kind !== 'prop')) {
     throw new ApiError('INVALID_PARAMS')
   }
   const authResult = await requireProjectAuthLight(body.projectId)

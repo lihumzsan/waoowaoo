@@ -13,7 +13,6 @@ import { createVideoGenerationOperations } from './domains/media/video-generatio
 import { createMusicGenerationOperations } from './domains/media/music-generation-ops'
 import { createFinalRenderOperations } from './domains/media/final-render-ops'
 import { createEditScriptOperations } from './domains/media/edit-script-ops'
-import { createLipSyncOperations } from './domains/media/lipsync-ops'
 import { createDownloadOperations } from './domains/media/download-ops'
 import { createConfigOperations } from './domains/config/config-ops'
 import { createProjectDataOperations } from './domains/project/project-data-ops'
@@ -23,10 +22,7 @@ import { createPlanRunOperations } from './domains/run/run-ops'
 import { createTaskOperations } from './domains/task/task-ops'
 import { createSseOperations } from './domains/debug/sse-ops'
 import { createAssetHubLlmOperations } from './domains/asset-hub/asset-hub-llm-ops'
-import { createAssetHubVoiceOperations } from './domains/asset-hub/asset-hub-voice-ops'
 import { createAssetHubFolderOperations } from './domains/asset-hub/asset-hub-folder-ops'
-import { createAssetHubVoiceLibraryOperations } from './domains/asset-hub/asset-hub-voice-library-ops'
-import { createAssetHubVoiceUploadOperations } from './domains/asset-hub/asset-hub-voice-upload-ops'
 import { createAssetHubCharacterLibraryOperations } from './domains/asset-hub/asset-hub-character-library-ops'
 import { createAssetHubCharacterAppearanceOperations } from './domains/asset-hub/asset-hub-character-appearance-ops'
 import { createAssetHubLocationLibraryOperations } from './domains/asset-hub/asset-hub-location-library-ops'
@@ -38,7 +34,6 @@ import { createUserApiConfigOperations } from './domains/config/user-api-config-
 import { createAuthOperations } from './domains/auth/auth-ops'
 import { createAlwaysOnOperations } from './domains/ui/always-on-ops'
 import { createAssetImageOperations } from './domains/asset/asset-image-ops'
-import { createVoiceOperations } from './domains/voice/voice-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -116,26 +111,8 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createAssetHubVoiceOperations(), {
-      groupPath: ['asset-hub', 'voice'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createAssetHubFolderOperations(), {
       groupPath: ['asset-hub', 'folder'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssetHubVoiceLibraryOperations(), {
-      groupPath: ['asset-hub', 'voice-library'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssetHubVoiceUploadOperations(), {
-      groupPath: ['asset-hub', 'voice-upload'],
       channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
@@ -212,12 +189,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createLipSyncOperations(), {
-      groupPath: ['media', 'lipsync'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createDownloadOperations(), {
       groupPath: ['media', 'download'],
       channels: CHANNELS_TOOL_API,
@@ -278,12 +249,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createAssetImageOperations(), {
       groupPath: ['asset'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createVoiceOperations(), {
-      groupPath: ['voice'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

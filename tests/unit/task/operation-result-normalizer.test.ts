@@ -73,33 +73,14 @@ describe('normalizeTaskOperationResult', () => {
     expect(result?.model).toBe('openai::image-model')
   })
 
-  it('normalizes completed video and lip-sync urls', () => {
+  it('normalizes completed video urls', () => {
     const video = normalizeTaskOperationResult(buildTask({
       type: TASK_TYPE.VIDEO_PANEL,
       operationId: 'generate_panel_video',
       result: { videoUrl: 'videos/panel.mp4' },
     }))
-    const lipSync = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.LIP_SYNC,
-      operationId: 'lip_sync',
-      result: { lipSyncVideoUrl: 'videos/lip-sync.mp4' },
-    }))
 
     expect(video?.media).toEqual({ mediaType: 'video', url: 'videos/panel.mp4' })
-    expect(lipSync?.media).toEqual({ mediaType: 'video', url: 'videos/lip-sync.mp4' })
-  })
-
-  it('normalizes voice audio model from payload', () => {
-    const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.VOICE_LINE,
-      operationId: 'generate_voice_line_audio',
-      payload: { audioModel: 'bailian::cosyvoice' },
-      result: { audioUrl: 'voices/line.mp3' },
-    }))
-
-    expect(result?.media).toEqual({ mediaType: 'audio', url: 'voices/line.mp3' })
-    expect(result?.model).toBe('bailian::cosyvoice')
-    expect(result?.provider).toBe('bailian')
   })
 
   it('normalizes failed task error from task columns', () => {

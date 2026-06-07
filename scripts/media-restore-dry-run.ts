@@ -42,12 +42,10 @@ async function currentCounts(): Promise<CountMap> {
     ['projects', 'projects'],
     ['project_episodes', 'project_episodes'],
     ['project_panels', 'project_panels'],
-    ['project_voice_lines', 'project_voice_lines'],
     ['global_characters', 'global_characters'],
     ['global_character_appearances', 'global_character_appearances'],
     ['global_locations', 'global_locations'],
     ['global_location_images', 'global_location_images'],
-    ['global_voices', 'global_voices'],
     ['tasks', 'tasks'],
     ['task_events', 'task_events'],
   ]

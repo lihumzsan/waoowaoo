@@ -13,26 +13,21 @@ import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared
 import { hasBuiltinPricingForModel } from './api-config-model-normalization'
 import { hasCustomPricingForType } from './api-config-custom-pricing'
 
-const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'text' | 'image' | 'video' | 'voice' | 'music' | 'lip-sync'>> = {
+const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'text' | 'image' | 'video' | 'music'>> = {
   analysisModel: 'text',
   characterModel: 'image',
   locationModel: 'image',
   storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
-  audioModel: 'voice',
   musicModel: 'music',
-  lipSyncModel: 'lip-sync',
-  voiceDesignModel: 'voice',
 }
 
 const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type'], PricingApiType | null>> = {
   llm: 'text',
   image: 'image',
   video: 'video',
-  audio: 'voice',
   music: 'music',
-  lipsync: 'lip-sync',
 }
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
@@ -42,18 +37,10 @@ const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredMode
   storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
-  audioModel: 'audio',
   musicModel: 'music',
-  lipSyncModel: 'lipsync',
-  voiceDesignModel: 'audio',
 }
 
-const OPTIONAL_PRICING_PROVIDER_KEYS = new Set([
-  'openai-compatible',
-  'gemini-compatible',
-  'bailian',
-  'siliconflow',
-])
+const OPTIONAL_PRICING_PROVIDER_KEYS = new Set<string>()
 
 function validateDefaultModelKey(field: DefaultModelField, value: unknown): string | null {
   // Contract anchor: default model key must be provider::modelId

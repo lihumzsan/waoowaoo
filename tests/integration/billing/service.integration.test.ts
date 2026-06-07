@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { calcVoice } from '@/lib/billing/cost'
+import { calcMusic } from '@/lib/billing/cost'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
 import { prepareTaskBilling, rollbackTaskBilling, settleTaskBilling } from '@/lib/billing/service'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
@@ -27,7 +27,10 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 5 })!
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 5,
+    })!
     const result = await prepareTaskBilling({
       id: randomUUID(),
       userId: user.id,
@@ -45,7 +48,10 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 5 })!
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 5,
+    })!
     const taskId = randomUUID()
     const prepared = expectBillableInfo(await prepareTaskBilling({
       id: taskId,
@@ -80,7 +86,10 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 5 })!
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 5,
+    })!
     const taskId = randomUUID()
     const prepared = expectBillableInfo(await prepareTaskBilling({
       id: taskId,
@@ -102,10 +111,10 @@ describe('billing/service integration', () => {
     }))
 
     expect(settled.status).toBe('settled')
-    expect(settled.chargedCost).toBeCloseTo(calcVoice(2), 8)
+    expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 2), 8)
 
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
-    expect(balance?.totalSpent).toBeCloseTo(calcVoice(2), 8)
+    expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 2), 8)
     expect(balance?.frozenAmount).toBeCloseTo(0, 8)
   })
 
@@ -115,7 +124,10 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.VOICE_LINE, { maxSeconds: 5 })!
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 5,
+    })!
     const taskId = randomUUID()
     const prepared = expectBillableInfo(await prepareTaskBilling({
       id: taskId,

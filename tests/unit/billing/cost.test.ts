@@ -2,13 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   PRODUCT_CREDIT_PRICING,
   calcImage,
-  calcLipSync,
   calcMusic,
   calcText,
   calcVideo,
   calcVideoByTokens,
-  calcVoice,
-  calcVoiceDesign,
 } from '@/lib/billing/cost'
 
 describe('billing/cost product credits', () => {
@@ -31,10 +28,7 @@ describe('billing/cost product credits', () => {
     expect(calcVideoByTokens('any-video-model', 120_000, { duration: 6, resolution: '720p' })).toBe(6)
   })
 
-  it('charges music, voice, voice design, and lip sync from product credits', () => {
+  it('charges music from product credits', () => {
     expect(calcMusic('any-music-model', 30)).toBe(6)
-    expect(calcVoice(20)).toBe(1)
-    expect(calcVoiceDesign()).toBe(1)
-    expect(calcLipSync('any-lipsync-model')).toBe(2)
   })
 })

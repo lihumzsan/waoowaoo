@@ -13,9 +13,6 @@ import { CharacterCreationModal, LocationCreationModal, PropCreationModal, Chara
 import { FolderModal } from './components/FolderModal'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import ImageEditModal from '@/features/project-workspace/components/assets/ImageEditModal'
-import VoiceDesignDialog from './components/VoiceDesignDialog'
-import VoiceCreationModal from './components/VoiceCreationModal'
-import VoicePickerDialog from './components/VoicePickerDialog'
 import {
     useAssets,
     useAssetActions,
@@ -66,15 +63,6 @@ export default function AssetHubPage() {
         appearanceIndex?: number
     } | null>(null)
 
-    const [voiceDesignCharacter, setVoiceDesignCharacter] = useState<{
-        id: string
-        name: string
-        hasExistingVoice: boolean
-    } | null>(null)
-
-    // 音色库弹窗状态
-    const [showAddVoice, setShowAddVoice] = useState(false)
-    const [voicePickerCharacterId, setVoicePickerCharacterId] = useState<string | null>(null)
     const [isDownloading, setIsDownloading] = useState(false)
 
 
@@ -202,48 +190,6 @@ export default function AssetHubPage() {
         }
     }
 
-    // 打开 AI 声音设计对话框
-    const handleOpenVoiceDesign = (characterId: string, characterName: string) => {
-        const character = assets.find((asset) => asset.kind === 'character' && asset.id === characterId)
-        setVoiceDesignCharacter({
-            id: characterId,
-            name: characterName,
-            hasExistingVoice: character?.kind === 'character' ? !!character.voice.customVoiceUrl : false,
-        })
-    }
-
-    // 保存 AI 设计的声音
-    const handleVoiceDesignSave = async (voiceId: string, audioBase64: string) => {
-        if (!voiceDesignCharacter) return
-
-        try {
-            const res = await apiFetch('/api/asset-hub/character-voice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    characterId: voiceDesignCharacter.id,
-                    voiceId,
-                    audioBase64
-                })
-            })
-
-            if (res.ok) {
-                alert(t('voiceDesignSaved', { name: voiceDesignCharacter.name }))
-                refreshAssets()
-            } else {
-                const data = await res.json()
-                alert(
-                    typeof data.error === 'string'
-                        ? t('saveVoiceFailedDetail', { error: data.error })
-                        : t('saveVoiceFailed'),
-                )
-            }
-        } catch (error) {
-            _ulogError('保存声音失败:', error)
-            alert(t('saveVoiceFailed'))
-        }
-    }
-
     // 打开角色编辑弹窗
     const handleOpenCharacterEdit = (character: unknown, appearance: unknown) => {
         const typedCharacter = character as {
@@ -336,24 +282,6 @@ export default function AssetHubPage() {
             refreshAssets()
         } catch (error) {
             _ulogError('触发生成失败:', error)
-        }
-    }
-
-    // 从音色库选择后绑定到角色
-    const handleVoiceSelect = async (voice: { id: string; customVoiceUrl: string | null }) => {
-        if (!voicePickerCharacterId) return
-
-        try {
-            await characterActions.bindVoice({
-                characterId: voicePickerCharacterId,
-                globalVoiceId: voice.id,
-                customVoiceUrl: voice.customVoiceUrl,
-            })
-            refreshAssets()
-            setVoicePickerCharacterId(null)
-        } catch (error) {
-            _ulogError('绑定音色失败:', error)
-            alert(t('bindVoiceFailed'))
         }
     }
 
@@ -483,17 +411,14 @@ export default function AssetHubPage() {
                         onAddCharacter={() => setShowAddCharacter(true)}
                         onAddLocation={() => setShowAddLocation(true)}
                         onAddProp={() => setShowAddProp(true)}
-                        onAddVoice={() => setShowAddVoice(true)}
                         onDownloadAll={handleDownloadAll}
                         isDownloading={isDownloading}
                         selectedFolderId={selectedFolderId}
                         onImageClick={setPreviewImage}
                         onImageEdit={handleOpenImageEdit}
-                        onVoiceDesign={handleOpenVoiceDesign}
                         onCharacterEdit={handleOpenCharacterEdit}
                         onLocationEdit={handleOpenLocationEdit}
                         onPropEdit={handleOpenPropEdit}
-                        onVoiceSelect={(characterId) => setVoicePickerCharacterId(characterId)}
                     />
                 </div>
             </div>
@@ -572,17 +497,6 @@ export default function AssetHubPage() {
                 />
             )}
 
-            {/* AI 声音设计对话框 */}
-            {voiceDesignCharacter && (
-                <VoiceDesignDialog
-                    isOpen={!!voiceDesignCharacter}
-                    speaker={voiceDesignCharacter.name}
-                    hasExistingVoice={voiceDesignCharacter.hasExistingVoice}
-                    onClose={() => setVoiceDesignCharacter(null)}
-                    onSave={handleVoiceDesignSave}
-                />
-            )}
-
             {/* 角色编辑弹窗 */}
             {characterEditModal && (
                 <CharacterEditModal
@@ -625,27 +539,6 @@ export default function AssetHubPage() {
                 />
             )}
 
-            {/* 新建音色弹窗 */}
-            {showAddVoice && (
-                <VoiceCreationModal
-                    isOpen={showAddVoice}
-                    folderId={selectedFolderId}
-                    onClose={() => setShowAddVoice(false)}
-                    onSuccess={() => {
-                        setShowAddVoice(false)
-                        refreshAssets()
-                    }}
-                />
-            )}
-
-            {/* 从音色库选择弹窗 */}
-            {voicePickerCharacterId && (
-                <VoicePickerDialog
-                    isOpen={!!voicePickerCharacterId}
-                    onClose={() => setVoicePickerCharacterId(null)}
-                    onSelect={handleVoiceSelect}
-                />
-            )}
         </div>
     )
 }

@@ -7,7 +7,7 @@ function buildCompletion(content: string): OpenAI.Chat.Completions.ChatCompletio
     id: 'chatcmpl_test',
     object: 'chat.completion',
     created: 1,
-    model: 'minimax-m2.5',
+    model: 'openrouter::deepseek/deepseek-r1',
     choices: [
       {
         index: 0,

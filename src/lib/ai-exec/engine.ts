@@ -1,16 +1,8 @@
 import OpenAI from 'openai'
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
-import type {
-  AiProviderVoiceLineBinding,
-  AiProviderVoiceLineResult,
-  GenerateResult,
-} from '@/lib/ai-providers/runtime-types'
+import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type {
   AiModality,
-  AiLipSyncParams,
-  AiLipSyncProviderKey,
-  AiLipSyncResult,
-  AiResolvedSelection,
   AiStepExecutionInput,
   AiStepExecutionResult,
   AiVisionStepExecutionInput,
@@ -19,8 +11,7 @@ import type {
   ChatCompletionStreamCallbacks,
   ChatMessage,
 } from '@/lib/ai-registry/types'
-import { getProviderKey } from '@/lib/ai-registry/selection'
-import { resolveModelSelection, resolveModelSelectionOrSingle } from '@/lib/user-api/runtime-config'
+import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { runChatCompletion } from '@/lib/ai-exec/llm/completion-runner'
@@ -31,9 +22,8 @@ import {
 } from '@/lib/ai-exec/llm/vision-runner'
 import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
 import { toAiRuntimeError } from '@/lib/ai-exec/governance'
-import { preprocessLipSyncParams } from '@/lib/ai-exec/lipsync-preprocess'
 
-export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'audio' | 'music'>
+export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music'>
 
 export type AiImageExecutionOptions = {
   referenceImages?: string[]
@@ -59,11 +49,6 @@ export type AiVideoExecutionOptions = {
   lastFrameImageUrl?: string
   referenceImages?: string[]
   [key: string]: string | number | boolean | string[] | undefined
-}
-
-export type AiAudioExecutionOptions = {
-  voice?: string
-  rate?: number
 }
 
 export type AiMusicExecutionOptions = {
@@ -116,47 +101,11 @@ export type AiMediaExecutionInput =
     options?: AiVideoExecutionOptions
   }
   | {
-    modality: 'audio'
-    userId: string
-    modelKey: string
-    text: string
-    options?: AiAudioExecutionOptions
-  }
-  | {
     modality: 'music'
     userId: string
     modelKey: string
     prompt: string
     options?: AiMusicExecutionOptions
-  }
-
-export type AiLipSyncExecutionInput = {
-  userId: string
-  modelKey?: string | null
-  params: AiLipSyncParams
-}
-
-export type AiVoiceLineExecutionInput = {
-  userId: string
-  selection: AiResolvedSelection & {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  text: string
-  emotionPrompt?: string | null
-  emotionStrength?: number | null
-  binding: AiProviderVoiceLineBinding
-}
-
-const LIPSYNC_PROVIDER_KEYS = new Set<AiLipSyncProviderKey>(['fal', 'vidu', 'bailian'])
-
-function requireLipSyncProviderKey(providerId: string): AiLipSyncProviderKey {
-  const providerKey = getProviderKey(providerId).toLowerCase()
-  if (LIPSYNC_PROVIDER_KEYS.has(providerKey as AiLipSyncProviderKey)) {
-    return providerKey as AiLipSyncProviderKey
-  }
-  throw new Error(`LIPSYNC_PROVIDER_UNSUPPORTED: ${providerId}`)
 }
 
 export async function executeMediaGeneration(input: AiMediaExecutionInput): Promise<GenerateResult> {
@@ -200,24 +149,6 @@ export async function executeMediaGeneration(input: AiMediaExecutionInput): Prom
         options: input.options,
       })
     }
-    case 'audio': {
-      const modalityAdapter = adapter[input.modality]
-      if (!modalityAdapter) {
-        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
-      }
-      const descriptor = modalityAdapter.describe(selection)
-      validateAiOptions({
-        schema: descriptor.optionSchema,
-        options: input.options,
-        context: `${input.modality}:${selection.modelKey}`,
-      })
-      return await modalityAdapter.execute({
-        userId: input.userId,
-        selection,
-        text: input.text,
-        options: input.options,
-      })
-    }
     case 'music': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
@@ -237,30 +168,6 @@ export async function executeMediaGeneration(input: AiMediaExecutionInput): Prom
       })
     }
   }
-}
-
-export async function executeLipSyncGeneration(input: AiLipSyncExecutionInput): Promise<AiLipSyncResult> {
-  const selection = await resolveModelSelectionOrSingle(input.userId, input.modelKey, 'lipsync')
-  const providerKey = requireLipSyncProviderKey(selection.provider)
-  const adapter = resolveAiProviderAdapter(selection.provider)
-  if (!adapter.lipsync) {
-    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:lipsync`)
-  }
-
-  const { params } = await preprocessLipSyncParams(input.params, { providerKey })
-  return await adapter.lipsync.execute({
-    userId: input.userId,
-    selection,
-    params,
-  })
-}
-
-export async function executeVoiceLineGeneration(input: AiVoiceLineExecutionInput): Promise<AiProviderVoiceLineResult> {
-  const adapter = resolveAiProviderAdapter(input.selection.provider)
-  if (!adapter.voiceLine) {
-    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${input.selection.provider}:voiceLine`)
-  }
-  return await adapter.voiceLine.execute(input)
 }
 
 export async function executeLlmCompletion(input: AiLlmExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -362,21 +269,6 @@ export async function generateVideo(
   })
 }
 
-export async function generateAudio(
-  userId: string,
-  modelKey: string,
-  text: string,
-  options?: AiAudioExecutionOptions,
-): Promise<GenerateResult> {
-  return await executeMediaGeneration({
-    modality: 'audio',
-    userId,
-    modelKey,
-    text,
-    options,
-  })
-}
-
 export async function generateMusic(
   userId: string,
   modelKey: string,
@@ -389,18 +281,6 @@ export async function generateMusic(
     modelKey,
     prompt,
     options,
-  })
-}
-
-export async function generateLipSync(
-  params: AiLipSyncParams,
-  userId: string,
-  modelKey?: string | null,
-): Promise<AiLipSyncResult> {
-  return await executeLipSyncGeneration({
-    userId,
-    modelKey,
-    params,
   })
 }
 

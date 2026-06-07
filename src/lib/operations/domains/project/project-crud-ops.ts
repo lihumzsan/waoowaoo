@@ -5,10 +5,6 @@ import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { logError } from '@/lib/logging/core'
-import {
-  collectProjectBailianManagedVoiceIds,
-  cleanupUnreferencedBailianVoices,
-} from '@/lib/ai-exec/voice-cleanup'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
   formatProjectValidationIssue,
@@ -128,22 +124,8 @@ async function collectProjectStorageKeys(projectId: string): Promise<string[]> {
         const videoKey = await resolveStorageKeyFromMediaValue(panel.videoUrl)
         if (videoKey) keys.push(videoKey)
 
-        const lipSyncKey = await resolveStorageKeyFromMediaValue((panel as unknown as { lipSyncVideoUrl?: unknown }).lipSyncVideoUrl)
-        if (lipSyncKey) keys.push(lipSyncKey)
       }
     }
-  }
-
-  const voiceLines = await prisma.projectVoiceLine.findMany({
-    where: {
-      episode: { projectId },
-      audioUrl: { not: null },
-    },
-    select: { audioUrl: true },
-  })
-  for (const line of voiceLines) {
-    const key = await resolveStorageKeyFromMediaValue(line.audioUrl)
-    if (key) keys.push(key)
   }
 
   return keys
@@ -257,15 +239,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       execute: async (ctx) => {
         const project = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
 
-        const projectVoiceIds = await collectProjectBailianManagedVoiceIds(ctx.projectId)
-        const voiceCleanupResult = await cleanupUnreferencedBailianVoices({
-          voiceIds: projectVoiceIds,
-          scope: {
-            userId: ctx.userId,
-            excludeProjectId: ctx.projectId,
-          },
-        })
-
         const keys = await collectProjectStorageKeys(ctx.projectId)
         const cosKeys = Array.from(new Set(keys.filter(Boolean)))
 
@@ -287,8 +260,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
             projectName: project.name,
             cosFilesDeleted: cosResult.success,
             cosFilesFailed: cosResult.failed,
-            bailianVoicesDeleted: voiceCleanupResult.deletedVoiceIds.length,
-            bailianVoicesSkippedReferenced: voiceCleanupResult.skippedReferencedVoiceIds.length,
           },
         )
 
@@ -296,8 +267,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           success: true,
           cosFilesDeleted: cosResult.success,
           cosFilesFailed: cosResult.failed,
-          bailianVoicesDeleted: voiceCleanupResult.deletedVoiceIds.length,
-          bailianVoicesSkippedReferenced: voiceCleanupResult.skippedReferencedVoiceIds.length,
         }
       },
     },

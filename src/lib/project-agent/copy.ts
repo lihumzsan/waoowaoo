@@ -7,8 +7,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'List global asset folders for the current user.',
   },
   asset_hub_picker: {
-    zh: '列出可供选择器使用的全局资产（角色/场景/音色），并返回预览链接。',
-    en: 'List global assets for picker use (character/location/voice) with preview URLs.',
+    zh: '列出可供选择器使用的全局资产（角色/场景），并返回预览链接。',
+    en: 'List global assets for picker use (character/location) with preview URLs.',
   },
   asset_hub_list_characters: {
     zh: '列出当前用户的全局角色，可按 folderId 过滤。',
@@ -25,14 +25,6 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
   asset_hub_get_location: {
     zh: '按 id 获取单个全局场景。',
     en: 'Get a global location by id.',
-  },
-  asset_hub_list_voices: {
-    zh: '列出当前用户的全局音色，可按 folderId 过滤。',
-    en: 'List global voices for the current user, optionally filtered by folderId.',
-  },
-  asset_hub_get_voice: {
-    zh: '按 id 获取单个全局音色。',
-    en: 'Get a global voice by id.',
   },
 }
 

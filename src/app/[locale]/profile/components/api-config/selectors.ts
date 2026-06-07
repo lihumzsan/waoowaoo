@@ -21,10 +21,7 @@ export interface DefaultModels {
   storyboardModel?: string
   editModel?: string
   videoModel?: string
-  audioModel?: string
   musicModel?: string
-  lipSyncModel?: string
-  voiceDesignModel?: string
 }
 
 export interface CapabilityFieldDefaults {
@@ -39,10 +36,7 @@ export const DEFAULT_MODEL_FIELDS = [
   'storyboardModel',
   'editModel',
   'videoModel',
-  'audioModel',
   'musicModel',
-  'lipSyncModel',
-  'voiceDesignModel',
 ] as const satisfies ReadonlyArray<keyof DefaultModels>
 
 export function createInitialProviders(presetProviders: Provider[]): Provider[] {
@@ -78,17 +72,12 @@ export function mergeProvidersForDisplay(
     const matchedPreset = presetProviders.find((presetProvider) => presetProvider.id === providerKey)
     if (matchedPreset) {
       const apiKey = savedProvider.apiKey || ''
-      const providerBaseUrl = providerKey === 'minimax'
-        ? matchedPreset.baseUrl
-        : (savedProvider.baseUrl || matchedPreset.baseUrl)
       merged.push({
         ...matchedPreset,
         apiKey,
         hasApiKey: apiKey.length > 0,
         hidden: savedProvider.hidden === true,
-        baseUrl: providerBaseUrl,
-        apiMode: savedProvider.apiMode,
-        gatewayRoute: savedProvider.gatewayRoute,
+        baseUrl: savedProvider.baseUrl || matchedPreset.baseUrl,
       })
       seenPresetKeys.add(providerKey)
       continue
@@ -159,10 +148,6 @@ export function parseWorkflowConcurrency(raw: unknown): WorkflowConcurrency {
   }
 }
 
-const PRICING_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
-  'gemini-compatible': 'google',
-}
-
 export function resolvePricingDisplay(
   map: PricingDisplayMap,
   type: CustomModel['type'],
@@ -178,11 +163,6 @@ export function resolvePricingDisplay(
     if (fallback) return fallback
   }
 
-  const aliasTarget = PRICING_DISPLAY_ALIASES[providerKey]
-  if (aliasTarget) {
-    const aliasFallback = map[composePricingDisplayKey(type, aliasTarget, modelId)]
-    if (aliasFallback) return aliasFallback
-  }
   return null
 }
 
@@ -236,13 +216,12 @@ export function mergeModelsForDisplay(
   const presetModels = catalogModels.map((preset) => {
     const presetModelKey = encodeModelKey(preset.provider, preset.modelId)
     const saved = savedModels.find((model) => model.modelKey === presetModelKey)
-    const alwaysEnabledPreset = preset.type === 'lipsync'
     const mergedPreset: CustomModel = {
       ...preset,
       modelKey: presetModelKey,
       enabled: isPresetComingSoonModelKey(presetModelKey)
         ? false
-        : (hasSavedModels ? (alwaysEnabledPreset || !!saved) : false),
+        : (hasSavedModels ? !!saved : false),
       price: 0,
       capabilities: saved?.capabilities ?? preset.capabilities,
     }

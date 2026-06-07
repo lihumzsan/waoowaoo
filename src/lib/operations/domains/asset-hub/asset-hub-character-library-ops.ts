@@ -256,7 +256,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
 
     asset_hub_update_character: defineOperation({
       id: 'asset_hub_update_character',
-      summary: 'Update a global character (name, folder, voice binding, profile fields).',
+      summary: 'Update a global character (name, folder, profile fields).',
       intent: 'act',
       effects: {
         writes: true,
@@ -291,16 +291,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         if (body.aliases !== undefined) updateData.aliases = body.aliases
         if (body.profileData !== undefined) updateData.profileData = body.profileData
         if (body.profileConfirmed !== undefined) updateData.profileConfirmed = body.profileConfirmed
-        if (body.voiceId !== undefined) updateData.voiceId = body.voiceId
-        if (body.voiceType !== undefined) updateData.voiceType = body.voiceType
-        if (body.globalVoiceId !== undefined) updateData.globalVoiceId = body.globalVoiceId
-
-        if (body.customVoiceUrl !== undefined) {
-          const value = typeof body.customVoiceUrl === 'string' ? body.customVoiceUrl : null
-          const media = await resolveMediaRefFromLegacyValue(value)
-          updateData.customVoiceUrl = value
-          updateData.customVoiceMediaId = media?.id || null
-        }
 
         if (body.folderId !== undefined) {
           const folderId = normalizeString(body.folderId) || null
@@ -327,7 +317,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
 
     asset_hub_delete_character: defineOperation({
       id: 'asset_hub_delete_character',
-      summary: 'Delete a global character and cleanup unreferenced provider resources.',
+      summary: 'Delete a global character.',
       intent: 'act',
       effects: {
         writes: true,
@@ -335,7 +325,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         destructive: true,
         overwrite: false,
         bulk: false,
-        externalSideEffects: true,
+        externalSideEffects: false,
         longRunning: false,
       },
       confirmation: {
@@ -350,22 +340,10 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       execute: async (ctx, input) => {
         const character = await prisma.globalCharacter.findUnique({
           where: { id: input.characterId },
-          select: { id: true, userId: true, voiceId: true, voiceType: true },
+          select: { id: true, userId: true },
         })
         if (!character) throw new ApiError('NOT_FOUND')
         if (character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
-
-        const { collectBailianManagedVoiceIds, cleanupUnreferencedBailianVoices } = await import('@/lib/ai-exec/voice-cleanup')
-        const candidateVoiceIds = collectBailianManagedVoiceIds([
-          { voiceId: character.voiceId, voiceType: character.voiceType },
-        ])
-        await cleanupUnreferencedBailianVoices({
-          voiceIds: candidateVoiceIds,
-          scope: {
-            userId: ctx.userId,
-            excludeGlobalCharacterId: character.id,
-          },
-        })
 
         await prisma.globalCharacter.delete({ where: { id: input.characterId } })
         return { success: true }

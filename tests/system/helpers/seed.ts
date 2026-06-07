@@ -87,31 +87,6 @@ export async function seedMinimalDomainState() {
     },
   })
 
-  const voiceLine = await prisma.projectVoiceLine.create({
-    data: {
-      episodeId: episode.id,
-      lineIndex: 1,
-      speaker: 'Narrator',
-      content: 'Hello world',
-      matchedPanelId: panel.id,
-      matchedStoryboardId: storyboard.id,
-      matchedPanelIndex: panel.panelIndex,
-    },
-  })
-
-  await prisma.projectEpisode.update({
-    where: { id: episode.id },
-    data: {
-      speakerVoices: JSON.stringify({
-        Narrator: {
-          provider: 'fal',
-          voiceType: 'uploaded',
-          audioUrl: 'https://provider.example/reference.wav',
-        },
-      }),
-    },
-  })
-
   const secondaryPanel = await prisma.projectPanel.create({
     data: {
       storyboardId: storyboard.id,
@@ -176,6 +151,5 @@ export async function seedMinimalDomainState() {
     appearance,
     location,
     locationImage,
-    voiceLine,
   }
 }

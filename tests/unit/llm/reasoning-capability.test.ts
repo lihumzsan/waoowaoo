@@ -11,30 +11,28 @@ describe('llm/reasoning-capability', () => {
     expect(isLikelyOpenAIReasoningModel('claude-sonnet-4-6')).toBe(false)
   })
 
-  it('enables reasoning provider options for native openai provider', () => {
+  it('enables reasoning provider options for supported OpenAI-style providers', () => {
     expect(shouldUseOpenAIReasoningProviderOptions({
-      providerKey: 'openai',
+      providerKey: 'openrouter',
+      modelId: 'gpt-5.2',
+    })).toBe(true)
+
+    expect(shouldUseOpenAIReasoningProviderOptions({
+      providerKey: 'ark',
       modelId: 'gpt-5.2',
     })).toBe(true)
   })
 
-  it('enables reasoning provider options for openai-compatible only when apiMode is openai-official', () => {
+  it('disables reasoning provider options for unsupported providers', () => {
     expect(shouldUseOpenAIReasoningProviderOptions({
-      providerKey: 'openai-compatible',
-      providerApiMode: 'openai-official',
-      modelId: 'gpt-5.2',
-    })).toBe(true)
-
-    expect(shouldUseOpenAIReasoningProviderOptions({
-      providerKey: 'openai-compatible',
+      providerKey: 'unsupported-provider',
       modelId: 'gpt-5.2',
     })).toBe(false)
   })
 
-  it('disables reasoning provider options for non-openai models even on openai-compatible gateways', () => {
+  it('disables reasoning provider options for non-openai reasoning model ids', () => {
     expect(shouldUseOpenAIReasoningProviderOptions({
-      providerKey: 'openai-compatible',
-      providerApiMode: 'openai-official',
+      providerKey: 'openrouter',
       modelId: 'claude-sonnet-4-6',
     })).toBe(false)
   })

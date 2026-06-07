@@ -5,12 +5,6 @@ export type AsyncExternalIdProvider =
   | 'ARK'
   | 'GEMINI'
   | 'GOOGLE'
-  | 'MINIMAX'
-  | 'VIDU'
-  | 'OPENAI'
-  | 'OCOMPAT'
-  | 'BAILIAN'
-  | 'SILICONFLOW'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'BATCH'
 
@@ -48,7 +42,6 @@ export interface FormatAsyncExternalIdInput {
 export interface AsyncUserModelForPolling {
   modelKey: string
   modelId: string
-  compatMediaTemplate?: unknown
 }
 
 export interface AsyncTaskPollContext {
@@ -69,4 +62,3 @@ export interface AsyncTaskProviderRegistration {
   formatExternalId: (input: FormatAsyncExternalIdInput) => string
   poll: (input: AsyncTaskPollInput) => Promise<AsyncPollResult>
 }
-

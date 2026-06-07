@@ -17,8 +17,6 @@ function invalidateEpisodeScoped(params: {
   if (!params.episodeId) return
   params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(params.episodeId) })
-  params.queryClient.invalidateQueries({ queryKey: queryKeys.voiceLines.all(params.episodeId) })
-  params.queryClient.invalidateQueries({ queryKey: queryKeys.voiceLines.matched(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
@@ -26,7 +24,7 @@ function invalidateEpisodeScoped(params: {
 
 function invalidateGlobalAssetLists(params: {
   queryClient: QueryClient
-  kind?: 'character' | 'location' | 'voice' | null
+  kind?: 'character' | 'location' | null
 }) {
   params.queryClient.invalidateQueries({ queryKey: queryKeys.assets.all('global') })
   if (params.kind === 'character') {
@@ -35,10 +33,6 @@ function invalidateGlobalAssetLists(params: {
   }
   if (params.kind === 'location') {
     params.queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.locations() })
-    return
-  }
-  if (params.kind === 'voice') {
-    params.queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.voices() })
     return
   }
   params.queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
@@ -74,10 +68,6 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
       invalidateGlobalAssetLists({ queryClient: params.queryClient, kind: 'location' })
       return
     }
-    if (params.targetType?.startsWith('GlobalVoice')) {
-      invalidateGlobalAssetLists({ queryClient: params.queryClient, kind: 'voice' })
-      return
-    }
     invalidateGlobalAssetLists({ queryClient: params.queryClient })
     return
   }
@@ -106,10 +96,6 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
       projectId: params.projectId,
       episodeId: params.episodeId,
     })
-    return
-  }
-  if (params.targetType === 'ProjectVoiceLine') {
-    invalidateEpisodeScoped(params)
     return
   }
   if (

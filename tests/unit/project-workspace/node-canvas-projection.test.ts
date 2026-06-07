@@ -91,10 +91,6 @@ function createPanel(input: Partial<ProjectPanel> & Pick<ProjectPanel, 'id' | 'p
     videoGenerationMode: input.videoGenerationMode ?? null,
     lastVideoGenerationOptions: input.lastVideoGenerationOptions ?? null,
     videoMedia: input.videoMedia ?? null,
-    lipSyncVideoUrl: input.lipSyncVideoUrl ?? null,
-    lipSyncVideoMedia: input.lipSyncVideoMedia ?? null,
-    lipSyncErrorCode: input.lipSyncErrorCode ?? null,
-    lipSyncErrorMessage: input.lipSyncErrorMessage ?? null,
     linkedToNextPanel: input.linkedToNextPanel ?? null,
     sketchImageUrl: input.sketchImageUrl ?? null,
     sketchImageMedia: input.sketchImageMedia ?? null,
@@ -1322,7 +1318,7 @@ describe('workspace node canvas projection', () => {
     })
   })
 
-  it('projects full non-voice business details into typed node data', () => {
+  it('projects full visual business details into typed node data', () => {
     const screenplay = JSON.stringify({
       scenes: [
         {
@@ -1372,7 +1368,6 @@ describe('workspace node canvas projection', () => {
       videoUrl: 'https://example.com/video.mp4',
       videoGenerationMode: 'firstlastframe',
       lastVideoGenerationOptions: { duration: 5, enhance: true },
-      lipSyncVideoUrl: 'https://example.com/lip.mp4',
       videoModel: 'video-model',
       linkedToNextPanel: true,
       photographyRules: JSON.stringify({
@@ -1386,7 +1381,6 @@ describe('workspace node canvas projection', () => {
       actingNotes: 'acting notes',
       imageErrorMessage: 'image failed',
       videoErrorMessage: 'video failed',
-      lipSyncErrorMessage: 'lip failed',
     })
 
     const projection = buildWorkspaceNodeCanvasProjection({
@@ -1484,7 +1478,6 @@ describe('workspace node canvas projection', () => {
       totalDuration: 2,
     })
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(true)
-    expect(projection.nodes.some((node) => String(node.id).startsWith('voice:'))).toBe(false)
   })
 
   it('projects edit-first table and required asset nodes on the canvas', () => {

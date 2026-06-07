@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -9,18 +9,16 @@ import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import type {
-  AssetSummary,
   CharacterAssetSummary,
   LocationAssetSummary,
   PropAssetSummary,
-  VoiceAssetSummary,
 } from '@/lib/assets/contracts'
 
 interface GlobalAssetPickerProps {
     isOpen: boolean
     onClose: () => void
     onSelect: (globalAssetId: string) => void
-    type: 'character' | 'location' | 'prop' | 'voice'
+    type: 'character' | 'location' | 'prop'
     loading?: boolean
 }
 
@@ -72,10 +70,6 @@ const CheckCircleIcon = ({ className }: { className?: string }) => (
 )
 
 
-const MicrophoneIcon = ({ className }: { className?: string }) => (
-    <AppIcon name="mic" className={className} />
-)
-
 export default function GlobalAssetPicker({
     isOpen,
     onClose,
@@ -116,33 +110,19 @@ export default function GlobalAssetPicker({
         },
         enabled: type === 'prop',
     })
-    const voicesQuery = useQuery({
-        queryKey: ['global-assets', 'voices'],
-        queryFn: async () => {
-            const res = await apiFetch('/api/assets?scope=global&kind=voice')
-            if (!res.ok) throw new Error('Failed to fetch voices')
-            const data = await res.json()
-            return data.assets as VoiceAssetSummary[]
-        },
-        enabled: type === 'voice',
-    })
-
     const characters = (charactersQuery.data || []) as CharacterAssetSummary[]
     const locations = (locationsQuery.data || []) as LocationAssetSummary[]
     const props = (propsQuery.data || []) as PropAssetSummary[]
-    const voices = (voicesQuery.data || []) as VoiceAssetSummary[]
     const isLoading = type === 'character'
         ? charactersQuery.isFetching
         : type === 'location'
             ? locationsQuery.isFetching
-            : type === 'prop'
-                ? propsQuery.isFetching
-            : voicesQuery.isFetching
+            : propsQuery.isFetching
     const loadingState = isLoading
         ? resolveTaskPresentationState({
             phase: 'processing',
             intent: 'process',
-            resource: type === 'voice' ? 'audio' : 'image',
+            resource: 'image',
             hasOutput: false,
         })
         : null
@@ -150,33 +130,18 @@ export default function GlobalAssetPicker({
         ? resolveTaskPresentationState({
             phase: 'processing',
             intent: 'process',
-            resource: type === 'voice' ? 'audio' : 'image',
+            resource: 'image',
             hasOutput: false,
         })
         : null
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [previewImage, setPreviewImage] = useState<string | null>(null)
-    const [previewAudio, setPreviewAudio] = useState<string | null>(null)
-    const [isPlayingAudio, setIsPlayingAudio] = useState(false)
-    const audioRef = useRef<HTMLAudioElement | null>(null)
 
     // 提取稳定的 refetch 引用，避免 useEffect 无限循环
     const refetchCharacters = charactersQuery.refetch
     const refetchLocations = locationsQuery.refetch
     const refetchProps = propsQuery.refetch
-    const refetchVoices = voicesQuery.refetch
-
-    // 停止音频播放的辅助函数
-    const stopAudio = () => {
-        if (audioRef.current) {
-            audioRef.current.pause()
-            audioRef.current.currentTime = 0
-            audioRef.current = null
-        }
-        setIsPlayingAudio(false)
-        setPreviewAudio(null)
-    }
 
     useEffect(() => {
         if (isOpen) {
@@ -188,19 +153,13 @@ export default function GlobalAssetPicker({
                 refetchLocations()
             } else if (type === 'prop') {
                 refetchProps()
-            } else {
-                refetchVoices()
             }
-        } else {
-            // 关闭对话框时停止播放
-            stopAudio()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, type])
 
     const handleConfirm = () => {
         if (selectedId) {
-            stopAudio()  // 确认复制时停止音频播放
             onSelect(selectedId)
         }
     }
@@ -217,58 +176,18 @@ export default function GlobalAssetPicker({
         l.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    const filteredVoices = voices.filter(v =>
-        v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (v.voiceMeta.description && v.voiceMeta.description.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-
-    // 播放/暂停音频预览
-    const handlePlayAudio = (audioUrl: string, e: React.MouseEvent) => {
-        e.stopPropagation()
-
-        // 如果点击的是当前正在播放的音频，则暂停
-        if (previewAudio === audioUrl && isPlayingAudio) {
-            stopAudio()
-            return
-        }
-
-        // 停止之前的播放
-        stopAudio()
-
-        // 开始播放新音频
-        setIsPlayingAudio(true)
-        setPreviewAudio(audioUrl)
-        const audio = new Audio(audioUrl)
-        audioRef.current = audio
-        audio.play()
-        audio.onended = () => {
-            setIsPlayingAudio(false)
-            setPreviewAudio(null)
-            audioRef.current = null
-        }
-        audio.onerror = () => {
-            setIsPlayingAudio(false)
-            setPreviewAudio(null)
-            audioRef.current = null
-        }
-    }
-
     if (!isOpen) return null
 
     const items = type === 'character'
         ? filteredCharacters
         : type === 'location'
             ? filteredLocations
-            : type === 'prop'
-                ? filteredProps
-                : filteredVoices
+            : filteredProps
     const hasNoAssets = type === 'character'
         ? characters.length === 0
         : type === 'location'
             ? locations.length === 0
-            : type === 'prop'
-                ? props.length === 0
-                : voices.length === 0
+            : props.length === 0
 
     return (
         <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50">
@@ -276,7 +195,7 @@ export default function GlobalAssetPicker({
                 {/* 头部 */}
                 <div className="flex items-center justify-between px-6 py-4">
                     <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">
-                        {type === 'character' ? t('selectCharacter') : type === 'location' ? t('selectLocation') : type === 'prop' ? t('selectProp') : t('selectVoice')}
+                        {type === 'character' ? t('selectCharacter') : type === 'location' ? t('selectLocation') : t('selectProp')}
                     </h2>
                     <button onClick={onClose} className="glass-btn-base glass-btn-soft text-[var(--glass-text-tertiary)]">
                         <XMarkIcon className="w-5 h-5" />
@@ -307,10 +226,8 @@ export default function GlobalAssetPicker({
                         <div className="flex flex-col items-center justify-center h-40 text-[var(--glass-text-tertiary)]">
                             {type === 'character' ? (
                                 <UserIcon className="w-12 h-12 mb-2" />
-                            ) : type === 'location' || type === 'prop' ? (
-                                <PhotoIcon className="w-12 h-12 mb-2" />
                             ) : (
-                                <MicrophoneIcon className="w-12 h-12 mb-2" />
+                                <PhotoIcon className="w-12 h-12 mb-2" />
                             )}
                             <p>{t('noAssets')}</p>
                             <p className="text-sm mt-1">{t('createInAssetHub')}</p>
@@ -454,73 +371,7 @@ export default function GlobalAssetPicker({
                                         </div>
                                     )
                                 })
-                            ) : (
-                                // 音色列表渲染 - 与资产中心 VoiceCard 风格统一
-                                filteredVoices.map((voice) => {
-                                    const genderIcon = voice.voiceMeta.gender === 'male' ? 'M' : voice.voiceMeta.gender === 'female' ? 'F' : ''
-                                    const previewVoiceUrl = voice.voiceMeta.customVoiceUrl
-                                    const isVoicePlaying = previewAudio === previewVoiceUrl && isPlayingAudio
-                                    return (
-                                        <div
-                                            key={voice.id}
-                                            onClick={() => setSelectedId(voice.id)}
-                                            className={`relative cursor-pointer glass-surface overflow-hidden transition-all hover:shadow-md ${selectedId === voice.id
-                                                ? 'ring-2 ring-[var(--glass-stroke-focus)]'
-                                                : 'hover:ring-2 hover:ring-[var(--glass-focus-ring-strong)]'
-                                                }`}
-                                        >
-                                            {/* 选中标记 */}
-                                            {selectedId === voice.id && (
-                                                <div className="absolute top-2 right-2 w-6 h-6 glass-chip glass-chip-info rounded-full flex items-center justify-center z-10 p-0">
-                                                    <AppIcon name="checkSolid" className="w-4 h-4 text-white" />
-                                                </div>
-                                            )}
-
-                                            {/* 音色图标区域 - 与 VoiceCard 统一 */}
-                                            <div className="relative bg-[var(--glass-bg-muted)] p-6 flex items-center justify-center">
-                                                <div className="w-16 h-16 rounded-full glass-surface-soft flex items-center justify-center">
-                                                    <MicrophoneIcon className="w-8 h-8 text-[var(--glass-tone-info-fg)]" />
-                                                </div>
-
-                                                {/* 性别标签 */}
-                                                {genderIcon && (
-                                                    <div className="absolute top-2 left-2 glass-chip glass-chip-neutral text-xs px-2 py-0.5 rounded-full">
-                                                        {genderIcon}
-                                                    </div>
-                                                )}
-
-                                                {/* 试听按钮 - 圆形，与 VoiceCard 统一 */}
-                                                {previewVoiceUrl && (
-                                                    <button
-                                                        onClick={(e) => handlePlayAudio(previewVoiceUrl, e)}
-                                                        className={`absolute bottom-2 right-2 w-10 h-10 rounded-full glass-btn-base flex items-center justify-center transition-all ${isVoicePlaying
-                                                            ? 'glass-btn-tone-info animate-pulse'
-                                                            : 'glass-btn-secondary text-[var(--glass-tone-info-fg)]'
-                                                            }`}
-                                                    >
-                                                        {isVoicePlaying ? (
-                                                            <AppIcon name="pause" className="w-5 h-5" />
-                                                        ) : (
-                                                            <AppIcon name="play" className="w-5 h-5" />
-                                                        )}
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            {/* 信息区域 */}
-                                            <div className="p-3">
-                                                <h3 className="font-medium text-[var(--glass-text-primary)] text-sm truncate">{voice.name}</h3>
-                                                {voice.voiceMeta.description && (
-                                                    <p className="mt-1 text-xs text-[var(--glass-text-secondary)] line-clamp-2">{voice.voiceMeta.description}</p>
-                                                )}
-                                                {voice.voiceMeta.voicePrompt && !voice.voiceMeta.description && (
-                                                    <p className="mt-1 text-xs text-[var(--glass-text-tertiary)] line-clamp-2 italic">{voice.voiceMeta.voicePrompt}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })
-                            )}
+                            ) : null}
                         </div>
                     )}
                 </div>

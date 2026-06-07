@@ -119,7 +119,8 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     priority: 'P0',
     tests: [
       'tests/integration/provider/fal-provider.contract.test.ts',
-      'tests/integration/provider/openai-compat-provider.contract.test.ts',
+      'tests/integration/provider/fal-video-provider.contract.test.ts',
+      'tests/unit/ai-providers/provider-scope.test.ts',
       'tests/unit/task/async-poll-external-id.test.ts',
     ],
   },

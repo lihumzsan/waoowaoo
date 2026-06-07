@@ -146,7 +146,6 @@ function persistedRequirementsForPrompt(script: PersistedEditScript): readonly E
       kind: requirement.kind,
       name: requirement.name,
       description: requirement.description,
-      voiceTimbreText: null,
       shotNumbers: readShotNumbers(requirement.shotIndexes),
       status: normalizeStoredStatus(requirement.status),
       targetId: requirement.targetId,
@@ -357,7 +356,6 @@ function buildVideoPromptAssetContext(requirements: readonly EditAssetRequiremen
       kind: requirement.kind,
       name: requirement.name,
       description: requirement.description,
-      voiceTimbreText: requirement.kind === 'character' ? requirement.voiceTimbreText?.trim() || null : null,
       shotNumbers: requirement.shotNumbers,
     })),
     rules: [

@@ -30,9 +30,9 @@ const RULES = [
   },
   {
     name: 'provider',
-    source: /^src\/lib\/(generator-api|generators|model-gateway|lipsync|providers)\//,
-    tests: [/^tests\/unit\/(providers|model-gateway|llm)\//, /^tests\/integration\/provider\//, /^tests\/system\//, /^tests\/regression\//],
-    message: 'changing provider/gateway code requires provider contract, system, or regression test change',
+    source: /^src\/lib\/(ai-providers|ai-registry|ai-exec)\//,
+    tests: [/^tests\/unit\/(ai-providers|llm)\//, /^tests\/integration\/provider\//, /^tests\/system\//, /^tests\/regression\//],
+    message: 'changing provider/catalog code requires provider contract, system, or regression test change',
   },
 ]
 

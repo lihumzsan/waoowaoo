@@ -15,21 +15,10 @@ function sanitizeFilenamePart(value: string): string {
   return value.slice(0, 50).replace(/[\\/:*?"<>|]/g, '_')
 }
 
-function readPanelPreferences(value: unknown): Record<string, boolean> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const record = value as Record<string, unknown>
-  const output: Record<string, boolean> = {}
-  for (const [key, item] of Object.entries(record)) {
-    if (typeof item === 'boolean') output[key] = item
-  }
-  return output
-}
-
 type VideoPanel = {
   panelIndex: number | null
   description: string | null
   videoUrl: string | null
-  lipSyncVideoUrl: string | null
 }
 
 type VideoStoryboard = {
@@ -56,7 +45,6 @@ async function loadVideoEpisodes(params: { projectId: string; episodeId: string 
                 panelIndex: true,
                 description: true,
                 videoUrl: true,
-                lipSyncVideoUrl: true,
               },
             },
           },
@@ -88,7 +76,6 @@ async function loadVideoEpisodes(params: { projectId: string; episodeId: string 
                   panelIndex: true,
                   description: true,
                   videoUrl: true,
-                  lipSyncVideoUrl: true,
                 },
               },
             },
@@ -126,12 +113,10 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({
         episodeId: z.string().optional(),
-        panelPreferences: z.record(z.boolean()).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const episodeId = normalizeString(input.episodeId) || null
-        const panelPreferences = readPanelPreferences(input.panelPreferences)
         const episodes = await loadVideoEpisodes({ projectId: ctx.projectId, episodeId })
 
         if (episodes.length === 0) {
@@ -155,12 +140,7 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
         for (const storyboard of storyboards) {
           const clipIndex = clips.findIndex((clip) => clip.id === storyboard.clipId)
           for (const panel of storyboard.panels || []) {
-            const panelKey = `${storyboard.id}-${panel.panelIndex || 0}`
-            const preferLipSync = panelPreferences[panelKey] ?? true
-
-            const videoKey = preferLipSync
-              ? (panel.lipSyncVideoUrl || panel.videoUrl)
-              : (panel.videoUrl || panel.lipSyncVideoUrl)
+            const videoKey = panel.videoUrl
 
             if (!videoKey) continue
 
@@ -254,12 +234,10 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({
         episodeId: z.string().optional(),
-        panelPreferences: z.record(z.boolean()).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const episodeId = normalizeString(input.episodeId) || null
-        const panelPreferences = readPanelPreferences(input.panelPreferences)
         const episodes = await loadVideoEpisodes({ projectId: ctx.projectId, episodeId })
 
         if (episodes.length === 0) {
@@ -283,11 +261,7 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
         for (const storyboard of storyboards) {
           const clipIndex = clips.findIndex((clip) => clip.id === storyboard.clipId)
           for (const panel of storyboard.panels || []) {
-            const panelKey = `${storyboard.id}-${panel.panelIndex || 0}`
-            const preferLipSync = panelPreferences[panelKey] ?? true
-            const videoValue = preferLipSync
-              ? (panel.lipSyncVideoUrl || panel.videoUrl)
-              : (panel.videoUrl || panel.lipSyncVideoUrl)
+            const videoValue = panel.videoUrl
             if (!videoValue) continue
             candidates.push({
               clipIndex: clipIndex >= 0 ? clipIndex : 999,

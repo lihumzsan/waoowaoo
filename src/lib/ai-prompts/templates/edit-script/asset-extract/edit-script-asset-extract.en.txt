@@ -4,7 +4,6 @@ Use the mature asset-library analysis rules:
 - Character selection follows the character analysis rules: extract only visible characters or non-human roles that appear on screen, act in shots, and need reusable visual consistency.
 - Location selection follows the location analysis rules: extract only concrete spaces where visible action happens and a reusable background asset is needed.
 - This step does not write final image prompts. The description is asset-identification evidence; the existing character/create or location/create prompts will generate the final asset description later.
-- Character assets must also generate non-empty voiceTimbreText to lock the character's base voice timbre in text. Even when the character has no dialogue, narration, or voiceover in the current edit table, design a reusable real voice timbre from age, gender impression, and visual identity. Location assets must not output voiceTimbreText.
 
 Edit table JSON:
 {{edit_script_json}}
@@ -16,7 +15,6 @@ Output format:
       "kind": "character",
       "name": "stable asset name",
       "description": "visual description for image generation",
-      "voiceTimbreText": "fixed voice timbre text",
       "shotNumbers": [1, 2]
     },
     {
@@ -33,9 +31,6 @@ Rules:
 - Do not extract props, audio, storyboard images, videos, or final film in phase one.
 - name must be short, stable, and reusable.
 - description must objectively state why this asset is needed and include visible identity, space, era, material, or key visual evidence from the edit table.
-- character must output non-empty voiceTimbreText; location must not output voiceTimbreText.
-- voiceTimbreText describes only fixed vocal identity, not dynamic performance. Allowed details: age range, gender impression, pitch range, brightness/darkness, clarity/roughness, breathiness ratio, raspiness, grain, nasal/oral/chest resonance, vocal-fold closure, and overall texture. Forbidden details: speaking speed, final syllable behavior, nervous breathing, crying changes, pauses, emotion intensity, or current-line delivery.
-- voiceTimbreText must be detailed enough to keep all later dialogue consistent. Do not omit it, leave it empty, write null, or use placeholder text such as "silent", "no dialogue", or "does not speak" just because the current character has no lines. Example: young female voice, clear and soft, slightly breathy, mid-high pitch range, light vocal-fold closure, bright oral resonance, very weak nasality, low grain, clean overall texture with subtle fragility.
 - shotNumbers must come from the edit table shot numbers.
 - Do not extract unnamed featureless extras, pure background crowds, mentioned-only entities, abstract concepts, or narration objects as characters.
 - Merge aliases of the same character into one stable name.

@@ -71,7 +71,6 @@ describe('project agent presentation', () => {
           screenplayClipCount: 2,
           storyboardCount: 1,
           panelCount: 3,
-          voiceLineCount: 1,
         },
         editScreenplay: {
           id: 'screenplay-1',

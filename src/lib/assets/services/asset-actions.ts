@@ -794,9 +794,6 @@ export async function copyAssetFromGlobal(input: AssetCopyInput) {
   if (input.kind === 'location' || input.kind === 'prop') {
     return copyLocationFromGlobal(input)
   }
-  if (input.kind === 'voice') {
-    return copyVoiceFromGlobal(input)
-  }
   throw new ApiError('INVALID_PARAMS')
 }
 
@@ -837,9 +834,6 @@ async function copyCharacterFromGlobal(input: AssetCopyInput) {
     data: {
       sourceGlobalCharacterId: input.globalAssetId,
       profileConfirmed: true,
-      voiceId: globalCharacter.voiceId,
-      voiceType: globalCharacter.voiceType,
-      customVoiceUrl: globalCharacter.customVoiceUrl,
     },
     include: { appearances: true },
   })
@@ -897,22 +891,6 @@ async function copyLocationFromGlobal(input: AssetCopyInput) {
   return { success: true, location }
 }
 
-async function copyVoiceFromGlobal(input: AssetCopyInput) {
-  const globalVoice = await prisma.globalVoice.findFirst({
-    where: { id: input.globalAssetId, userId: input.access.userId },
-  })
-  if (!globalVoice) throw new ApiError('NOT_FOUND')
-  const character = await prisma.projectCharacter.update({
-    where: { id: input.targetId },
-    data: {
-      voiceId: globalVoice.voiceId,
-      voiceType: globalVoice.voiceType,
-      customVoiceUrl: globalVoice.customVoiceUrl,
-    },
-  })
-  return { success: true, character }
-}
-
 export async function updateAsset(input: AssetUpdateInput) {
   if (input.access.scope === 'global') {
     return updateGlobalAsset(input)
@@ -927,10 +905,6 @@ async function updateGlobalAsset(input: AssetUpdateInput) {
     if (input.body.aliases !== undefined) updateData.aliases = input.body.aliases
     if (input.body.profileData !== undefined) updateData.profileData = input.body.profileData
     if (input.body.profileConfirmed !== undefined) updateData.profileConfirmed = input.body.profileConfirmed
-    if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
-    if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
-    if (input.body.globalVoiceId !== undefined) updateData.globalVoiceId = input.body.globalVoiceId
     if (input.body.folderId !== undefined) updateData.folderId = normalizeString(input.body.folderId) || null
     const character = await prisma.globalCharacter.update({
       where: { id: input.assetId },
@@ -960,21 +934,7 @@ async function updateGlobalAsset(input: AssetUpdateInput) {
     })
     return { success: true, prop }
   }
-  const updateData: Record<string, unknown> = {}
-  if (input.body.name !== undefined) updateData.name = normalizeString(input.body.name)
-  if (input.body.description !== undefined) updateData.description = normalizeString(input.body.description) || null
-  if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
-  if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-  if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
-  if (input.body.voicePrompt !== undefined) updateData.voicePrompt = input.body.voicePrompt
-  if (input.body.gender !== undefined) updateData.gender = input.body.gender
-  if (input.body.language !== undefined) updateData.language = input.body.language
-  if (input.body.folderId !== undefined) updateData.folderId = normalizeString(input.body.folderId) || null
-  const voice = await prisma.globalVoice.update({
-    where: { id: input.assetId },
-    data: updateData,
-  })
-  return { success: true, voice }
+  throw new ApiError('INVALID_PARAMS')
 }
 
 async function updateProjectAsset(input: AssetUpdateInput) {
@@ -982,9 +942,6 @@ async function updateProjectAsset(input: AssetUpdateInput) {
     const updateData: Record<string, unknown> = {}
     if (input.body.name !== undefined) updateData.name = normalizeString(input.body.name)
     if (input.body.introduction !== undefined) updateData.introduction = normalizeString(input.body.introduction)
-    if (input.body.voiceId !== undefined) updateData.voiceId = input.body.voiceId
-    if (input.body.voiceType !== undefined) updateData.voiceType = input.body.voiceType
-    if (input.body.customVoiceUrl !== undefined) updateData.customVoiceUrl = input.body.customVoiceUrl
     if (input.body.profileConfirmed !== undefined) updateData.profileConfirmed = input.body.profileConfirmed
     const character = await prisma.projectCharacter.update({
       where: { id: input.assetId },

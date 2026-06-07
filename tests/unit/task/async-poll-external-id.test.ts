@@ -19,35 +19,23 @@ describe('async poll externalId contract', () => {
     expect(() => formatExternalId('FAL', 'VIDEO', 'req_123')).toThrow(/requires endpoint/)
   })
 
-  it('parses OPENAI video externalId with provider token', () => {
-    const parsed = parseExternalId('OPENAI:VIDEO:b3BlbmFpLWNvbXBhdGlibGU6b2EtMQ:vid_123')
-    expect(parsed.provider).toBe('OPENAI')
-    expect(parsed.type).toBe('VIDEO')
-    expect(parsed.providerToken).toBe('b3BlbmFpLWNvbXBhdGlibGU6b2EtMQ')
-    expect(parsed.requestId).toBe('vid_123')
-  })
-
-  it('requires provider token when formatting OPENAI externalId', () => {
-    expect(() => formatExternalId('OPENAI', 'VIDEO', 'vid_123')).toThrow(/providerToken/)
-  })
-
-  it('parses and formats BAILIAN externalId', () => {
-    const externalId = formatExternalId('BAILIAN', 'VIDEO', 'task_123')
-    expect(externalId).toBe('BAILIAN:VIDEO:task_123')
+  it('parses and formats ARK externalId', () => {
+    const externalId = formatExternalId('ARK', 'VIDEO', 'task_123')
+    expect(externalId).toBe('ARK:VIDEO:task_123')
 
     const parsed = parseExternalId(externalId)
-    expect(parsed.provider).toBe('BAILIAN')
+    expect(parsed.provider).toBe('ARK')
     expect(parsed.type).toBe('VIDEO')
     expect(parsed.requestId).toBe('task_123')
   })
 
-  it('parses and formats SILICONFLOW externalId', () => {
-    const externalId = formatExternalId('SILICONFLOW', 'IMAGE', 'task_456')
-    expect(externalId).toBe('SILICONFLOW:IMAGE:task_456')
+  it('parses and formats GOOGLE video externalId', () => {
+    const externalId = formatExternalId('GOOGLE', 'VIDEO', 'task_456')
+    expect(externalId).toBe('GOOGLE:VIDEO:task_456')
 
     const parsed = parseExternalId(externalId)
-    expect(parsed.provider).toBe('SILICONFLOW')
-    expect(parsed.type).toBe('IMAGE')
+    expect(parsed.provider).toBe('GOOGLE')
+    expect(parsed.type).toBe('VIDEO')
     expect(parsed.requestId).toBe('task_456')
   })
 })

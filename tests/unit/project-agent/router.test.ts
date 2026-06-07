@@ -24,7 +24,6 @@ function buildPhaseSnapshot(): ProjectPhaseSnapshot {
       screenplayClipCount: 1,
       storyboardCount: 1,
       panelCount: 10,
-      voiceLineCount: 0,
     },
     activePlanRuns: [],
     activePlanRunCount: 0,

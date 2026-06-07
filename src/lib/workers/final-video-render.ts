@@ -252,7 +252,6 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { storyboard: { episodeId } },
         include: {
           videoMedia: true,
-          lipSyncVideoMedia: true,
           storyboard: {
             select: {
               id: true,

@@ -11,7 +11,7 @@ Core goals:
 - The nine cells must come from different key moments or emotional phases in the screenplay, covering setup, progression, turn, and ending beat. Do not promise final shot numbers or write a shot list.
 - Do not output director names, film names, genre labels, or era labels as labels. Convert them into executable lighting, color, texture, composition, camera, and sound rules.
 - visual.imageFilterPrompt must be a single compact visual-filter phrase that can be appended to image or video prompts.
-- sound.soundFilterPrompt must be one sound-texture filter sentence. Do not write concrete sound sources, sound effects, or character voice timbre.
+- sound.soundFilterPrompt must be one sound-texture filter sentence. Do not write concrete sound sources or sound effects.
 - hardBans are chain-wide hard bans and must cover text, subtitles, watermarks, logos, and strong style conflicts.
 
 Default candidate structure:

@@ -3,14 +3,13 @@ import { logInfo as _ulogInfo } from '@/lib/logging/core'
 
 import { useTranslations } from 'next-intl'
 /**
- * 角色卡片组件 - 支持多图片选择和音色设置
+ * 角色卡片组件 - 支持多图片选择
  * 布局：上面名字+描述，下面三张图片（每张图片有独立的编辑和重新生成按钮）
  */
 
 import { useState, useRef } from 'react'
 import { Character, CharacterAppearance } from '@/types/project'
 import { shouldShowError } from '@/lib/error-utils'
-import VoiceSettings from './VoiceSettings'
 import { useUploadProjectCharacterImage } from '@/lib/query/mutations'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
@@ -44,10 +43,6 @@ interface CharacterCardProps {
   primaryAppearanceSelected?: boolean
   projectId: string
   onConfirmSelection?: (characterId: string, appearanceId: string) => void  // 确认选择
-  // 音色相关
-  onVoiceChange?: (characterId: string, customVoiceUrl?: string) => void
-  onVoiceDesign?: (characterId: string, characterName: string) => void  // AI 声音设计
-  onVoiceSelectFromHub?: (characterId: string) => void  // 从资产中心选择音色
 }
 
 export default function CharacterCard({
@@ -69,9 +64,6 @@ export default function CharacterCard({
   primaryAppearanceSelected = false,
   projectId,
   onConfirmSelection,
-  onVoiceChange,
-  onVoiceDesign,
-  onVoiceSelectFromHub
 }: CharacterCardProps) {
   // 🔥 使用 mutation
   const uploadImage = useUploadProjectCharacterImage(projectId)
@@ -131,8 +123,6 @@ export default function CharacterCard({
       }
     )
   }
-
-  // 音色设置由 VoiceSettings 组件处理
 
   // 获取图片数组（已经是数组，不需要 JSON 解析）
   const rawImageUrls = appearance.imageUrls || []
@@ -259,18 +249,6 @@ export default function CharacterCard({
       </>
     )
 
-    const selectionVoiceSettings = (
-      <VoiceSettings
-        characterId={character.id}
-        characterName={character.name}
-        customVoiceUrl={character.customVoiceUrl}
-        projectId={projectId}
-        onVoiceChange={onVoiceChange}
-        onVoiceDesign={onVoiceDesign}
-        onSelectFromHub={onVoiceSelectFromHub}
-      />
-    )
-
     return (
       <div className="col-span-3 bg-[var(--glass-bg-surface)] rounded-lg border-2 border-[var(--glass-stroke-base)] p-4 shadow-sm transition-all">
         <input
@@ -314,7 +292,6 @@ export default function CharacterCard({
             onConfirmSelection?.(character.id, appearance.id)
           }}
           isPrimaryAppearance={isPrimaryAppearance}
-          voiceSettings={selectionVoiceSettings}
         />
       </div>
     )
@@ -426,19 +403,6 @@ export default function CharacterCard({
     </>
   )
 
-  const compactVoiceSettings = (
-    <VoiceSettings
-      characterId={character.id}
-      characterName={character.name}
-      customVoiceUrl={character.customVoiceUrl}
-      projectId={projectId}
-      onVoiceChange={onVoiceChange}
-      onVoiceDesign={onVoiceDesign}
-      onSelectFromHub={onVoiceSelectFromHub}
-      compact={true}
-    />
-  )
-
   return (
     <div className="flex flex-col gap-2">
       <input
@@ -483,7 +447,6 @@ export default function CharacterCard({
         generationCount={generationCount}
         onGenerationCountChange={setGenerationCount}
         onGenerate={onGenerate}
-        voiceSettings={compactVoiceSettings}
       />
     </div>
   )

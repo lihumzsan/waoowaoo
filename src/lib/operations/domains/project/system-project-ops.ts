@@ -242,7 +242,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               videoModel: userPreference.videoModel,
               singleShotVideoModel: userPreference.videoModel,
               sequenceVideoModel: DEFAULT_GROUP_VIDEO_MODEL,
-              audioModel: userPreference.audioModel,
               musicModel: userPreference.musicModel,
               videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,

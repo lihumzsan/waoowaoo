@@ -105,12 +105,13 @@ describe('billing/task-policy', () => {
     expect(info.quantity).toBe(1)
   })
 
-  it('uses explicit lip sync model from payload', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.LIP_SYNC, {
-      lipSyncModel: 'vidu::vidu-lipsync',
+  it('uses explicit music model from payload', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-clip-preview',
+      durationSeconds: 30,
     }))
-    expect(info.apiType).toBe('lip-sync')
-    expect(info.model).toBe('vidu::vidu-lipsync')
-    expect(info.quantity).toBe(1)
+    expect(info.apiType).toBe('music')
+    expect(info.model).toBe('google::lyria-3-clip-preview')
+    expect(info.quantity).toBe(30)
   })
 })

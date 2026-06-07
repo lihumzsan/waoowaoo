@@ -18,7 +18,6 @@ describe('useProjectAssets adapters', () => {
         canRevertRender: true,
         canModifyRender: true,
         canUploadRender: true,
-        canBindVoice: true,
         canCopyFromGlobal: true,
       },
       taskRefs: [],
@@ -30,12 +29,6 @@ describe('useProjectAssets adapters', () => {
       introduction: '主角',
       profileData: JSON.stringify({ archetype: 'lead' }),
       profileConfirmed: true,
-      voice: {
-        voiceType: null,
-        voiceId: null,
-        customVoiceUrl: null,
-        media: null,
-      },
     })
 
     const data = mapAssetGroupsToProjectAssetsData(groups)

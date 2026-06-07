@@ -9,9 +9,7 @@ export type UserPreferenceSnapshot = {
   storyboardModel?: string | null
   editModel?: string | null
   videoModel?: string | null
-  audioModel?: string | null
-  lipSyncModel?: string | null
-  voiceDesignModel?: string | null
+  musicModel?: string | null
   capabilityDefaults?: string | null
   analysisConcurrency?: number | null
   imageConcurrency?: number | null
@@ -24,8 +22,6 @@ export type SavedProvider = {
   baseUrl?: string
   apiKey?: string
   hidden?: boolean
-  apiMode?: 'gemini-sdk' | 'openai-official'
-  gatewayRoute?: 'official' | 'openai-compat'
 }
 
 export const prismaMock = {

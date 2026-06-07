@@ -15,7 +15,7 @@ function isAssetScope(value: unknown): value is AssetScope {
 }
 
 function isAssetKind(value: unknown): value is AssetKind {
-  return value === 'character' || value === 'location' || value === 'prop' || value === 'voice'
+  return value === 'character' || value === 'location' || value === 'prop'
 }
 
 export const PATCH = apiHandler(async (

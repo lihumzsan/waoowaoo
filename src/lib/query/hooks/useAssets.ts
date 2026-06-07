@@ -24,16 +24,12 @@ import type {
   LocationAssetSummary,
   PropAssetSummary,
   ReadAssetsResponse,
-  VoiceAssetSummary,
 } from '@/lib/assets/contracts'
 
 function flattenTaskRefs(assets: AssetSummary[]): AssetTaskRef[] {
   const refs: AssetTaskRef[] = []
   for (const asset of assets) {
     refs.push(...asset.taskRefs)
-    if (asset.kind === 'voice') {
-      continue
-    }
     for (const variant of asset.variants) {
       refs.push(...variant.taskRefs)
       for (const render of variant.renders) {
@@ -83,14 +79,6 @@ function withTaskStateVariant(variant: AssetVariantSummary, byKey: Map<string, {
 }
 
 function withTaskStateAsset(asset: AssetSummary, byKey: Map<string, { phase: string | null; lastError: { code: string; message: string } | null }>): AssetSummary {
-  if (asset.kind === 'voice') {
-    const voiceAsset: VoiceAssetSummary = {
-      ...asset,
-      taskState: resolveTaskState(asset.taskRefs, byKey),
-    }
-    return voiceAsset
-  }
-
   const variants = asset.variants.map((variant) => withTaskStateVariant(variant, byKey))
   if (asset.kind === 'character') {
     const characterAsset: CharacterAssetSummary = {
@@ -243,7 +231,6 @@ function resolveAssetTargetType(input: AssetActionScopeInput): string {
   if (input.scope === 'global') {
     if (input.kind === 'character') return 'GlobalCharacter'
     if (input.kind === 'location') return 'GlobalLocation'
-    if (input.kind === 'voice') return 'GlobalVoice'
     return 'GlobalAsset'
   }
   if (input.kind === 'character') return 'ProjectCharacter'
@@ -443,25 +430,6 @@ export function useAssetActions(input: AssetActionScopeInput) {
     return response.json()
   }
 
-  const bindVoice = async (payload: Record<string, unknown>) => {
-    const characterId = String(payload.characterId)
-    const response = await apiFetch(`/api/assets/${characterId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scope: input.scope,
-        kind: 'character',
-        projectId: input.projectId,
-        ...payload,
-      }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to bind voice')
-    }
-    invalidateScopeQueries(queryClient, input)
-    return response.json()
-  }
-
   const updateVariant = async (assetId: string, variantId: string, payload: Record<string, unknown>) => {
     const response = await apiFetch(`/api/assets/${assetId}/variants/${variantId}`, {
       method: 'PATCH',
@@ -490,6 +458,5 @@ export function useAssetActions(input: AssetActionScopeInput) {
     revertRender,
     modifyRender,
     copyFromGlobal,
-    bindVoice,
   }
 }

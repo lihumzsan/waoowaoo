@@ -150,7 +150,7 @@ function shouldTryMediaString(value: string): boolean {
   if (!trimmed || isDemoPublicAssetPath(trimmed) || trimmed.startsWith('PENDING:')) return false
   if (trimmed.startsWith('/m/')) return true
   if (trimmed.startsWith('/api/files/') || trimmed.startsWith('/api/storage/sign')) return true
-  if (/^(images|image|videos|video|audio|voice|voices|music|uploads|tmp)\//i.test(trimmed)) {
+  if (/^(images|image|videos|video|audio|music|uploads|tmp)\//i.test(trimmed)) {
     return MEDIA_FILE_EXTENSION_PATTERN.test(trimmed)
   }
   if (/^https?:\/\//i.test(trimmed)) {

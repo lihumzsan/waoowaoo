@@ -17,16 +17,9 @@ import {
   normalizeProviderRuntimeBaseUrl,
   resolveRuntimeModelSelection,
   resolveSingleRuntimeModelSelection,
-  type RuntimeGatewayRouteType,
-  type RuntimeLlmProtocolType,
   type RuntimeModelMediaType,
   type RuntimeModelSelection,
 } from '@/lib/ai-registry/runtime-selection'
-import type {
-  OpenAICompatMediaTemplate,
-  OpenAICompatMediaTemplateSource,
-} from '@/lib/ai-registry/openai-compatible-template'
-import { validateOpenAICompatMediaTemplate } from '@/lib/user-api/model-template/validator'
 
 export interface CustomModel {
   modelId: string
@@ -34,35 +27,26 @@ export interface CustomModel {
   name: string
   type: UnifiedModelType
   provider: string
-  llmProtocol?: 'responses' | 'chat-completions'
-  llmProtocolCheckedAt?: string
-  compatMediaTemplate?: OpenAICompatMediaTemplate
-  compatMediaTemplateCheckedAt?: string
-  compatMediaTemplateSource?: OpenAICompatMediaTemplateSource
   // Non-authoritative display field; billing uses unified server pricing catalog.
   price: number
 }
 
 export type ModelMediaType = RuntimeModelMediaType
-export type ModelSelection = RuntimeModelSelection<OpenAICompatMediaTemplate>
-
-type GatewayRouteType = RuntimeGatewayRouteType
+export type ModelSelection = RuntimeModelSelection
 
 interface CustomProvider {
   id: string
   name: string
   baseUrl?: string
   apiKey?: string
-  apiMode?: 'gemini-sdk' | 'openai-official'
-  gatewayRoute?: GatewayRouteType
 }
-
-type LlmProtocolType = RuntimeLlmProtocolType
 
 type PlatformProviderEnv = {
   apiKey: string
   baseUrl?: string
 }
+
+const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google'])
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -87,23 +71,13 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   const envPrefix = (() => {
     switch (providerFamily) {
       case 'google':
-      case 'gemini-compatible':
         return 'PLATFORM_GOOGLE'
       case 'fal':
         return 'PLATFORM_FAL'
       case 'ark':
         return 'PLATFORM_ARK'
-      case 'bailian':
-        return 'PLATFORM_BAILIAN'
-      case 'openai':
-      case 'openai-compatible':
-        return 'PLATFORM_OPENAI'
       case 'openrouter':
         return 'PLATFORM_OPENROUTER'
-      case 'minimax':
-        return 'PLATFORM_MINIMAX'
-      case 'vidu':
-        return 'PLATFORM_VIDU'
       default:
         throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
     }
@@ -126,18 +100,8 @@ function isUnifiedModelType(value: unknown): value is UnifiedModelType {
     value === 'llm'
     || value === 'image'
     || value === 'video'
-    || value === 'audio'
     || value === 'music'
-    || value === 'lipsync'
   )
-}
-
-function isGatewayRoute(value: unknown): value is GatewayRouteType {
-  return value === 'official' || value === 'openai-compat'
-}
-
-function isLlmProtocol(value: unknown): value is LlmProtocolType {
-  return value === 'responses' || value === 'chat-completions'
 }
 
 function assertModelKey(value: string, field: string): { provider: string; modelId: string; modelKey: string } {
@@ -174,20 +138,17 @@ function parseCustomProviders(rawProviders: string | null | undefined): CustomPr
     if (!id || !name) {
       throw new Error(`PROVIDER_PAYLOAD_INVALID: customProviders[${index}] id/name required`)
     }
+    if (!SUPPORTED_PROVIDER_IDS.has(id)) {
+      throw new Error(`PROVIDER_UNSUPPORTED: ${id}`)
+    }
 
     const baseUrl = readTrimmedString(Reflect.get(raw, 'baseUrl')) || undefined
     const apiKey = readTrimmedString(Reflect.get(raw, 'apiKey')) || undefined
-    const apiModeRaw = Reflect.get(raw, 'apiMode')
-    const apiMode = apiModeRaw === 'gemini-sdk' || apiModeRaw === 'openai-official' ? apiModeRaw : undefined
-    const gatewayRoute = isGatewayRoute(Reflect.get(raw, 'gatewayRoute')) ? Reflect.get(raw, 'gatewayRoute') as GatewayRouteType : undefined
-
     providers.push({
       id,
       name,
       ...(baseUrl ? { baseUrl } : {}),
       ...(apiKey ? { apiKey } : {}),
-      ...(apiMode ? { apiMode } : {}),
-      ...(gatewayRoute ? { gatewayRoute } : {}),
     })
   }
 
@@ -204,34 +165,14 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
 
   const modelId = parsed.modelId
   const provider = parsed.provider
+  if (!SUPPORTED_PROVIDER_IDS.has(provider)) {
+    throw new Error(`MODEL_PROVIDER_UNSUPPORTED: customModels[${index}].provider`)
+  }
 
   const typeRaw = Reflect.get(raw, 'type')
   if (!isUnifiedModelType(typeRaw)) {
-    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/audio/music/lipsync`)
+    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/music`)
   }
-
-  const llmProtocolRaw = Reflect.get(raw, 'llmProtocol')
-  const llmProtocol = isLlmProtocol(llmProtocolRaw) ? llmProtocolRaw : undefined
-  const llmProtocolCheckedAtRaw = readTrimmedString(Reflect.get(raw, 'llmProtocolCheckedAt'))
-  const llmProtocolCheckedAt = llmProtocolCheckedAtRaw ? llmProtocolCheckedAtRaw : undefined
-
-  const compatMediaTemplateRaw = Reflect.get(raw, 'compatMediaTemplate')
-  const compatMediaTemplate = compatMediaTemplateRaw
-    ? validateOpenAICompatMediaTemplate(compatMediaTemplateRaw).template
-    : undefined
-
-  const compatMediaTemplateCheckedAtRaw = readTrimmedString(Reflect.get(raw, 'compatMediaTemplateCheckedAt'))
-  const compatMediaTemplateCheckedAt = compatMediaTemplateCheckedAtRaw ? compatMediaTemplateCheckedAtRaw : undefined
-
-  const compatMediaTemplateSourceRaw = readTrimmedString(Reflect.get(raw, 'compatMediaTemplateSource'))
-  const compatMediaTemplateSource: OpenAICompatMediaTemplateSource | undefined =
-    compatMediaTemplateSourceRaw === 'ai' || compatMediaTemplateSourceRaw === 'manual'
-      ? compatMediaTemplateSourceRaw
-      : compatMediaTemplateSourceRaw === 'generated'
-          ? 'ai'
-          : compatMediaTemplateSourceRaw === 'user'
-              ? 'manual'
-              : undefined
 
   return {
     modelId,
@@ -239,11 +180,6 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
     provider,
     type: typeRaw,
     name: readTrimmedString(Reflect.get(raw, 'name')) || modelId,
-    ...(llmProtocol ? { llmProtocol } : {}),
-    ...(llmProtocolCheckedAt ? { llmProtocolCheckedAt } : {}),
-    ...(compatMediaTemplate ? { compatMediaTemplate } : {}),
-    ...(compatMediaTemplateCheckedAt ? { compatMediaTemplateCheckedAt } : {}),
-    ...(compatMediaTemplateSource ? { compatMediaTemplateSource } : {}),
     price: 0,
   }
 }
@@ -332,7 +268,7 @@ export async function resolveModelSelectionOrSingle(
  * Provider 配置
  *
  * 返回 provider 的完整连接信息（apiKey 已解密）。
- * baseUrl 和 apiMode 为可选——不同 provider 需求不同，由调用方自行校验。
+ * baseUrl 为可选，不同 provider 需求不同，由调用方自行校验。
  *
  * ⚠️ 调用方必须先通过 resolveModelSelection 校验模型归属，
  * 再使用 selection.provider 调用本函数，禁止直接传入未校验的 providerId。
@@ -342,8 +278,6 @@ export interface ProviderConfig {
   name: string
   apiKey: string
   baseUrl?: string
-  apiMode?: 'gemini-sdk' | 'openai-official'
-  gatewayRoute?: GatewayRouteType
 }
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
@@ -370,8 +304,6 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
     name: provider.name,
     apiKey: decryptApiKey(provider.apiKey),
     baseUrl: normalizeProviderRuntimeBaseUrl(provider.id, provider.baseUrl),
-    apiMode: provider.apiMode,
-    gatewayRoute: provider.gatewayRoute,
   }
 }
 
@@ -403,16 +335,6 @@ export async function getModelPrice(userId: string, model: string): Promise<numb
     throw new Error(`MODEL_NOT_FOUND: ${model}`)
   }
   return matched.price
-}
-
-export async function getAudioApiKey(userId: string, model?: string | null): Promise<string> {
-  const selection = await resolveModelSelectionOrSingle(userId, model, 'audio')
-  return (await getProviderConfig(userId, selection.provider)).apiKey
-}
-
-export async function getLipSyncApiKey(userId: string, model?: string | null): Promise<string> {
-  const selection = await resolveModelSelectionOrSingle(userId, model, 'lipsync')
-  return (await getProviderConfig(userId, selection.provider)).apiKey
 }
 
 export async function hasApiConfig(userId: string): Promise<boolean> {

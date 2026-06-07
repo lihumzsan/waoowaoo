@@ -15,9 +15,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'storyboardModel',
   'editModel',
   'videoModel',
-  'audioModel',
   'musicModel',
-  'lipSyncModel',
   'videoRatio',
 ]
 

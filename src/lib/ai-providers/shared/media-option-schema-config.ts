@@ -8,9 +8,6 @@ export type MediaOptionValidatorConfig =
 
 export type MediaOptionObjectValidatorKind =
   | 'falVideoModel'
-  | 'minimaxVideo'
-  | 'viduVideo'
-  | 'openAiCompatibleVideo'
 
 export type MediaOptionSchemaConfig = {
   allowedKeys?: readonly string[]

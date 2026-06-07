@@ -12,7 +12,7 @@ import {
 } from './default-model-empty-state'
 
 // ---------- types ----------
-type ModelType = 'llm' | 'image' | 'video' | 'audio' | 'music' | 'lipsync' | 'voicedesign'
+type ModelType = 'llm' | 'image' | 'video' | 'music'
 
 interface ModelOption {
     modelKey: string
@@ -29,10 +29,7 @@ type DefaultModelField =
     | 'storyboardModel'
     | 'editModel'
     | 'videoModel'
-    | 'audioModel'
     | 'musicModel'
-    | 'lipSyncModel'
-    | 'voiceDesignModel'
 
 interface DefaultModelCardsProps {
     t: (key: string) => string
@@ -43,10 +40,7 @@ interface DefaultModelCardsProps {
         storyboardModel?: string
         editModel?: string
         videoModel?: string
-        audioModel?: string
         musicModel?: string
-        lipSyncModel?: string
-        voiceDesignModel?: string
     }
     getEnabledModelsByType: (type: ModelType) => ModelOption[]
     parseModelKey: (key: string | undefined | null) => { provider: string; modelId: string } | null
@@ -152,7 +146,7 @@ function EmptyModelState({
 
 // ---------- sub-components ----------
 
-/** Smart model selector: ModelCapabilityDropdown for llm/image/video, native select for others */
+/** Smart model selector: ModelCapabilityDropdown for llm/image/video, native select for music */
 function SmartSelector({
     field,
     modelType,
@@ -226,7 +220,7 @@ function SmartSelector({
         )
     }
 
-    // Native select for audio / music / lipsync / voicedesign
+    // Native select for music.
     return (
         <div className="relative">
             <select
@@ -357,10 +351,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     // Resolve all models
     const textModel = resolveModel('analysisModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const videoModel = resolveModel('videoModel', 'video', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
-    const audioModel = resolveModel('audioModel', 'audio', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const musicModel = resolveModel('musicModel', 'music', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
-    const lipsyncModel = resolveModel('lipSyncModel', 'lipsync', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
-    const voiceDesignModel = resolveModel('voiceDesignModel', 'voicedesign', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
 
     const pipelineItems: Array<{
         field: DefaultModelField
@@ -531,43 +522,13 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                     <AppIcon name="cube" className="w-5 h-5 text-emerald-500" />
                     {t('defaultModelSection.extensions')}
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                    {/* Lip Sync */}
-                    <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
-                        <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extLipSync')}</h4>
-                        <SmartSelector
-                            field="lipSyncModel" modelType="lipsync"
-                            options={lipsyncModel.options} normalizedKey={lipsyncModel.normalizedKey} current={lipsyncModel.current}
-                            placeholder={t('defaultModelSection.extPlaceholder')}
-                            locale={locale} t={t} props={allProps}
-                        />
-                    </div>
-                    {/* TTS */}
-                    <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
-                        <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extTTS')}</h4>
-                        <SmartSelector
-                            field="audioModel" modelType="audio"
-                            options={audioModel.options} normalizedKey={audioModel.normalizedKey} current={audioModel.current}
-                            placeholder={t('defaultModelSection.extPlaceholder')}
-                            locale={locale} t={t} props={allProps}
-                        />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     {/* Music */}
                     <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
                         <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extMusic')}</h4>
                         <SmartSelector
                             field="musicModel" modelType="music"
                             options={musicModel.options} normalizedKey={musicModel.normalizedKey} current={musicModel.current}
-                            placeholder={t('defaultModelSection.extPlaceholder')}
-                            locale={locale} t={t} props={allProps}
-                        />
-                    </div>
-                    {/* Voice Design */}
-                    <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
-                        <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extVoiceDesign')}</h4>
-                        <SmartSelector
-                            field="voiceDesignModel" modelType="voicedesign"
-                            options={voiceDesignModel.options} normalizedKey={voiceDesignModel.normalizedKey} current={voiceDesignModel.current}
                             placeholder={t('defaultModelSection.extPlaceholder')}
                             locale={locale} t={t} props={allProps}
                         />

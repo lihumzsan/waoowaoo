@@ -16,7 +16,6 @@ export {
     useGlobalCharacters,
     useGlobalLocations,
     useGlobalProps,
-    useGlobalVoices,
     useGlobalFolders,
     useCreateFolder,
     useUpdateFolder,
@@ -27,7 +26,6 @@ export {
     type GlobalLocation,
     type GlobalLocationImage,
     type GlobalProp,
-    type GlobalVoice,
     type GlobalFolder,
 } from './useGlobalAssets'
 export {
@@ -38,14 +36,12 @@ export {
     useUploadCharacterImage,
     useDeleteCharacter,
     useDeleteCharacterAppearance,
-    useUploadCharacterVoice,
     useGenerateLocationImage,
     useModifyLocationImage,
     useSelectLocationImage,
     useUndoLocationImage,
     useUploadLocationImage,
     useDeleteLocation,
-    useDeleteVoice,
     useUpdateCharacterName,
     useUpdateLocationName,
     useUpdateCharacterAppearanceDescription,
@@ -53,9 +49,6 @@ export {
     useAiModifyCharacterDescription,
     useAiModifyLocationDescription,
     useAiModifyPropDescription,
-    useDesignAssetHubVoice,
-    useSaveDesignedAssetHubVoice,
-    useUploadAssetHubVoice,
     useAiDesignLocation,
     useCreateAssetHubLocation,
     useUploadAssetHubTempMedia,
@@ -84,7 +77,6 @@ export {
     useDeleteProjectCharacter,
     useDeleteProjectAppearance,
     useUpdateProjectCharacterName,
-    useUploadProjectCharacterVoice,
     useGenerateProjectLocationImage,
     useModifyProjectLocationImage,
     useRegenerateLocationGroup,
@@ -131,18 +123,9 @@ export {
     useInsertProjectPanel,
     useConfirmProjectCharacterSelection,
     useConfirmProjectLocationSelection,
-    useUpdateProjectCharacterVoiceSettings,
-    useSaveProjectDesignedVoice,
     useUpdateProjectClip,
-    useAnalyzeProjectVoice,
-    useGenerateProjectVoice,
-    useCreateProjectVoiceLine,
-    useUpdateProjectVoiceLine,
-    useDeleteProjectVoiceLine,
-    useDownloadProjectVoices,
     useBatchGenerateCharacterImages,
     useBatchGenerateLocationImages,
-    useDesignProjectVoice,
     useAnalyzeProjectShotVariants,
     useUpdateProjectPhotographyPlan,
     useUpdateProjectPanelActingNotes,
@@ -155,7 +138,6 @@ export {
     useDownloadRemoteBlob,
     useCreateProjectPanelVariant,
     useClearProjectStoryboardError,
-    useUpdateSpeakerVoice,
 } from '../mutations/useProjectMutations'
 
 export type {
@@ -182,20 +164,6 @@ export {
     type PanelCandidate,
 } from './useStoryboards'
 
-// 语音
-export {
-    useVoiceLines,
-    useMatchedVoiceLines,
-    useGenerateVoice,
-    useBatchGenerateVoices,
-    useUpdateVoiceText,
-    useRefreshVoiceLines,
-    type VoiceLine,
-    type MatchedVoiceLine,
-    type VoiceLinesData,
-    type MatchedVoiceLinesData,
-} from './useVoiceLines'
-
 // 实时任务
 export {
     useSSE,
@@ -205,7 +173,6 @@ export {
     useAssetTaskPresentation,
     useStoryboardTaskPresentation,
     useVideoTaskPresentation,
-    useVoiceTaskPresentation,
     type TaskPresentationTarget,
 } from './useTaskPresentation'
 

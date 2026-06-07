@@ -1,15 +1,11 @@
 import {
   calcImage,
-  calcLipSync,
   calcMusic,
   calcText,
   calcVideo,
-  calcVoice,
-  calcVoiceDesign,
 } from './cost'
 import { BillingOperationError } from './errors'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
-import { DEFAULT_LIPSYNC_MODEL_KEY, DEFAULT_VOICE_DESIGN_MODEL_KEY, DEFAULT_VOICE_MODEL_KEY } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type { TaskBillingInfo } from './types'
@@ -29,10 +25,6 @@ const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.BGM_SCORE_GENERATE,
   TASK_TYPE.VIDEO_PANEL,
   TASK_TYPE.VIDEO_GROUP,
-  TASK_TYPE.LIP_SYNC,
-  TASK_TYPE.VOICE_LINE,
-  TASK_TYPE.VOICE_DESIGN,
-  TASK_TYPE.ASSET_HUB_VOICE_DESIGN,
   TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
   TASK_TYPE.INSERT_PANEL,
   TASK_TYPE.PANEL_VARIANT,
@@ -43,7 +35,6 @@ const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.ANALYZE_NOVEL,
   TASK_TYPE.CLIPS_BUILD,
   TASK_TYPE.SCREENPLAY_CONVERT,
-  TASK_TYPE.VOICE_ANALYZE,
   TASK_TYPE.ANALYZE_GLOBAL,
   TASK_TYPE.AI_MODIFY_APPEARANCE,
   TASK_TYPE.AI_MODIFY_LOCATION,
@@ -240,40 +231,6 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   }
 }
 
-function buildVoiceTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo {
-  const maxSeconds = Math.max(1, Math.floor(toNumber(payload?.maxSeconds, 5)))
-  return {
-    billable: true,
-    source: 'task',
-    taskType,
-    apiType: 'voice',
-    model: DEFAULT_VOICE_MODEL_KEY,
-    quantity: maxSeconds,
-    unit: 'second',
-    maxFrozenCost: calcVoice(maxSeconds),
-    pricingVersion: BUILTIN_PRICING_VERSION,
-    action: String(taskType),
-    metadata: { maxSeconds },
-    status: 'quoted',
-  }
-}
-
-function buildVoiceDesignTaskInfo(taskType: TaskType): TaskBillingInfo {
-  return {
-    billable: true,
-    source: 'task',
-    taskType,
-    apiType: 'voice-design',
-    model: DEFAULT_VOICE_DESIGN_MODEL_KEY,
-    quantity: 1,
-    unit: 'call',
-    maxFrozenCost: calcVoiceDesign(),
-    pricingVersion: BUILTIN_PRICING_VERSION,
-    action: String(taskType),
-    status: 'quoted',
-  }
-}
-
 export function isBillableTaskType(taskType: TaskType) {
   return BILLABLE_TASK_TYPES.has(taskType)
 }
@@ -299,27 +256,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
     case TASK_TYPE.MUSIC_GENERATE:
     case TASK_TYPE.BGM_SCORE_GENERATE:
       return buildMusicTaskInfo(taskType, payload)
-    case TASK_TYPE.LIP_SYNC: {
-      const lipSyncModel = pickFirstString([payload?.lipSyncModel]) || DEFAULT_LIPSYNC_MODEL_KEY
-      return {
-        billable: true,
-        source: 'task',
-        taskType,
-        apiType: 'lip-sync',
-        model: lipSyncModel,
-        quantity: 1,
-        unit: 'call',
-        maxFrozenCost: calcLipSync(lipSyncModel),
-        pricingVersion: BUILTIN_PRICING_VERSION,
-        action: String(taskType),
-        status: 'quoted',
-      }
-    }
-    case TASK_TYPE.VOICE_LINE:
-      return buildVoiceTaskInfo(taskType, payload)
-    case TASK_TYPE.VOICE_DESIGN:
-    case TASK_TYPE.ASSET_HUB_VOICE_DESIGN:
-      return buildVoiceDesignTaskInfo(taskType)
     case TASK_TYPE.REGENERATE_STORYBOARD_TEXT:
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE:
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
@@ -327,7 +263,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
     case TASK_TYPE.ANALYZE_NOVEL:
     case TASK_TYPE.CLIPS_BUILD:
     case TASK_TYPE.SCREENPLAY_CONVERT:
-    case TASK_TYPE.VOICE_ANALYZE:
     case TASK_TYPE.ANALYZE_GLOBAL:
     case TASK_TYPE.AI_MODIFY_APPEARANCE:
     case TASK_TYPE.AI_MODIFY_LOCATION:

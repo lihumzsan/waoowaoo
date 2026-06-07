@@ -16,7 +16,7 @@ export function composeModelKey(provider: string, modelId: string): string {
 }
 
 /**
- * 提取提供商主键（用于多实例场景，如 gemini-compatible:uuid）
+ * 提取提供商主键（用于多实例场景，如 provider:instance）
  */
 export function getProviderKey(providerId?: string): string {
   if (!providerId) return ''

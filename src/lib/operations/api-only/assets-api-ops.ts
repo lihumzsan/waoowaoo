@@ -7,7 +7,7 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 const ASSET_SCOPES = ['global', 'project'] as const
-const ASSET_KINDS = ['character', 'location', 'prop', 'voice'] as const
+const ASSET_KINDS = ['character', 'location', 'prop'] as const
 const ASSET_MUTABLE_KINDS = ['character', 'location', 'prop'] as const
 const ASSET_CREATABLE_KINDS = ['location', 'prop'] as const
 

@@ -17,7 +17,6 @@ vi.mock('@/lib/query/mutations', () => ({
   useUploadCharacterImage: () => idleMutation,
   useDeleteCharacter: () => idleMutation,
   useDeleteCharacterAppearance: () => idleMutation,
-  useUploadCharacterVoice: () => idleMutation,
   useGenerateLocationImage: () => idleMutation,
   useSelectLocationImage: () => idleMutation,
   useUndoLocationImage: () => idleMutation,
@@ -62,10 +61,6 @@ vi.mock('@/lib/image-generation/use-image-generation-count', () => ({
 
 vi.mock('@/lib/image-generation/count', () => ({
   getImageGenerationCountOptions: () => [{ value: 1, label: '1' }],
-}))
-
-vi.mock('@/app/[locale]/workspace/asset-hub/components/VoiceSettings', () => ({
-  default: () => createElement('div', null, 'voice-settings'),
 }))
 
 const messages = {
@@ -218,7 +213,6 @@ describe('asset hub card aspect ratio', () => {
           id: 'character-1',
           name: '沈烬',
           folderId: null,
-          customVoiceUrl: null,
           appearances: [
             {
               id: 'appearance-1',

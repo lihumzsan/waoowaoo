@@ -10,7 +10,6 @@ const singlePlaceholderPattern = /\{([A-Za-z0-9_]+)\}/g
 const doublePlaceholderPattern = /\{\{([A-Za-z0-9_]+)\}\}/g
 
 const criticalTemplateTokens = new Map([
-  ['project-workflow/voice_analysis', ['"lineIndex"', '"speaker"', '"content"', '"emotionStrength"', '"matchedPanel"']],
   ['project-workflow/agent_storyboard_plan', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],
   ['project-workflow/agent_storyboard_detail', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],
   ['project-workflow/agent_storyboard_insert', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],

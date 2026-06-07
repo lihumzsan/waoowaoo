@@ -17,7 +17,6 @@ export type ProjectAgentDomain =
   | 'storyboard'
   | 'asset'
   | 'asset-hub'
-  | 'voice'
   | 'config'
   | 'billing'
   | 'governance'
@@ -46,7 +45,6 @@ const routerSchema = z.object({
     'storyboard',
     'asset',
     'asset-hub',
-    'voice',
     'config',
     'billing',
     'governance',

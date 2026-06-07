@@ -21,11 +21,6 @@ export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
     fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
   },
   {
-    model: 'projectCharacter',
-    tableName: 'project_characters',
-    fields: [{ legacyField: 'customVoiceUrl', mediaIdField: 'customVoiceMediaId' }],
-  },
-  {
     model: 'projectEpisode',
     tableName: 'project_episodes',
     fields: [{ legacyField: 'audioUrl', mediaIdField: 'audioMediaId' }],
@@ -36,7 +31,6 @@ export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
     fields: [
       { legacyField: 'imageUrl', mediaIdField: 'imageMediaId' },
       { legacyField: 'videoUrl', mediaIdField: 'videoMediaId' },
-      { legacyField: 'lipSyncVideoUrl', mediaIdField: 'lipSyncVideoMediaId' },
       { legacyField: 'sketchImageUrl', mediaIdField: 'sketchImageMediaId' },
       { legacyField: 'previousImageUrl', mediaIdField: 'previousImageMediaId' },
     ],
@@ -50,21 +44,6 @@ export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
     model: 'supplementaryPanel',
     tableName: 'supplementary_panels',
     fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
-  },
-  {
-    model: 'projectVoiceLine',
-    tableName: 'project_voice_lines',
-    fields: [{ legacyField: 'audioUrl', mediaIdField: 'audioMediaId' }],
-  },
-  {
-    model: 'voicePreset',
-    tableName: 'voice_presets',
-    fields: [{ legacyField: 'audioUrl', mediaIdField: 'audioMediaId' }],
-  },
-  {
-    model: 'globalCharacter',
-    tableName: 'global_characters',
-    fields: [{ legacyField: 'customVoiceUrl', mediaIdField: 'customVoiceMediaId' }],
   },
   {
     model: 'globalCharacterAppearance',
@@ -81,10 +60,5 @@ export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
       { legacyField: 'imageUrl', mediaIdField: 'imageMediaId' },
       { legacyField: 'previousImageUrl', mediaIdField: 'previousImageMediaId' },
     ],
-  },
-  {
-    model: 'globalVoice',
-    tableName: 'global_voices',
-    fields: [{ legacyField: 'customVoiceUrl', mediaIdField: 'customVoiceMediaId' }],
   },
 ]

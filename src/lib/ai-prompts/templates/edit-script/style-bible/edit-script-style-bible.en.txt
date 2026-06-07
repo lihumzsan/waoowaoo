@@ -9,7 +9,7 @@ Core rules:
 - visual.negativePrompt should only describe style drift and visual-quality problems. Do not repeat subtitles, watermarks, or logos there; absolute bans belong in hardBans.
 - visual.imageFilterPrompt must be one phrase that can be inserted directly into image or video prompts.
 - camera.videoRhythmPrompt should only describe video rhythm, long takes, fast/slow editing, pauses, and cut tendency. Do not repeat camera movement or lens details there.
-- sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must never override character voiceTimbreText; it must not include negative sound constraints; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
+- sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not include negative sound constraints; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
 - hardBans are whole-chain hard bans and must cover text, subtitles, watermarks, logos, and strong style conflicts.
 
 Field usage:

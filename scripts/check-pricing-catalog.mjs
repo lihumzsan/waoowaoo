@@ -3,7 +3,7 @@ import path from 'node:path'
 
 const CATALOG_DIR = path.resolve(process.cwd(), 'standards/pricing')
 const CAPABILITY_CATALOG_FILE = path.resolve(process.cwd(), 'standards/capabilities/image-video.catalog.json')
-const API_TYPES = new Set(['text', 'image', 'video', 'voice', 'voice-design', 'lip-sync'])
+const API_TYPES = new Set(['text', 'image', 'video', 'music'])
 const PRICING_MODES = new Set(['flat', 'capability'])
 const TEXT_TOKEN_TYPES = new Set(['input', 'output'])
 
@@ -259,7 +259,7 @@ async function main() {
       }
 
       if (!isNonEmptyString(item.apiType) || !API_TYPES.has(item.apiType)) {
-        pushIssue(issues, filePath, index, 'apiType', 'apiType must be one of text/image/video/voice/voice-design/lip-sync')
+        pushIssue(issues, filePath, index, 'apiType', 'apiType must be one of text/image/video/music')
       }
       if (!isNonEmptyString(item.provider)) {
         pushIssue(issues, filePath, index, 'provider', 'provider must be non-empty string')

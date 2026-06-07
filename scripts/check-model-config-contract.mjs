@@ -10,8 +10,8 @@ const MODEL_FIELDS = [
   'videoModel',
 ]
 const MAX_SAMPLES = 200
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'audio', 'music', 'lipsync'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
   image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
@@ -23,9 +23,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'supportGenerateAudio',
     'fieldI18n',
   ]),
-  audio: new Set(['voiceOptions', 'rateOptions', 'fieldI18n']),
   music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
-  lipsync: new Set(['modeOptions', 'fieldI18n']),
 }
 
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
@@ -41,18 +39,11 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     fps: 'fpsOptions',
     resolution: 'resolutionOptions',
   },
-  audio: {
-    voice: 'voiceOptions',
-    rate: 'rateOptions',
-  },
   music: {
     durationSeconds: 'durationSecondsOptions',
     vocalMode: 'vocalModeOptions',
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
-  },
-  lipsync: {
-    mode: 'modeOptions',
   },
 }
 
@@ -193,7 +184,7 @@ function validateFieldI18nMap(issues, namespace, namespaceValue) {
 function validateCapabilities(modelType, capabilities) {
   const issues = []
   if (!MODEL_TYPES.has(modelType)) {
-    pushIssue(issues, 'type', 'type must be llm/image/video/audio/lipsync')
+    pushIssue(issues, 'type', 'type must be llm/image/video/music')
     return issues
   }
   if (capabilities === undefined || capabilities === null) return issues
@@ -266,22 +257,6 @@ function validateCapabilities(modelType, capabilities) {
     }
   }
 
-  const audio = capabilities.audio
-  if (audio !== undefined) {
-    if (!isRecord(audio)) {
-      pushIssue(issues, 'capabilities.audio', 'audio capabilities must be an object')
-    } else {
-      validateAllowedFields(issues, 'audio', audio)
-      if (audio.voiceOptions !== undefined && !isStringArray(audio.voiceOptions)) {
-        pushIssue(issues, 'capabilities.audio.voiceOptions', 'must be string array')
-      }
-      if (audio.rateOptions !== undefined && !isStringArray(audio.rateOptions)) {
-        pushIssue(issues, 'capabilities.audio.rateOptions', 'must be string array')
-      }
-      validateFieldI18nMap(issues, 'audio', audio)
-    }
-  }
-
   const music = capabilities.music
   if (music !== undefined) {
     if (!isRecord(music)) {
@@ -301,19 +276,6 @@ function validateCapabilities(modelType, capabilities) {
         pushIssue(issues, 'capabilities.music.bpmOptions', 'must be number array')
       }
       validateFieldI18nMap(issues, 'music', music)
-    }
-  }
-
-  const lipsync = capabilities.lipsync
-  if (lipsync !== undefined) {
-    if (!isRecord(lipsync)) {
-      pushIssue(issues, 'capabilities.lipsync', 'lipsync capabilities must be an object')
-    } else {
-      validateAllowedFields(issues, 'lipsync', lipsync)
-      if (lipsync.modeOptions !== undefined && !isStringArray(lipsync.modeOptions)) {
-        pushIssue(issues, 'capabilities.lipsync.modeOptions', 'must be string array')
-      }
-      validateFieldI18nMap(issues, 'lipsync', lipsync)
     }
   }
 

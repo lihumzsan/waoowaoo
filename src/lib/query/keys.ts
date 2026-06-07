@@ -19,7 +19,7 @@ export const queryKeys = {
             scope: 'global' | 'project'
             projectId?: string | null
             folderId?: string | null
-            kind?: 'character' | 'location' | 'voice' | 'prop' | null
+            kind?: 'character' | 'location' | 'prop' | null
         }) => [
             ...unifiedAssetsRoot(params.scope, params.projectId),
             params.folderId ?? '',
@@ -34,8 +34,6 @@ export const queryKeys = {
             folderId ? ['global-assets', 'characters', folderId] as const : ['global-assets', 'characters'] as const,
         locations: (folderId?: string | null) =>
             folderId ? ['global-assets', 'locations', folderId] as const : ['global-assets', 'locations'] as const,
-        voices: (folderId?: string | null) =>
-            folderId ? ['global-assets', 'voices', folderId] as const : ['global-assets', 'voices'] as const,
         folders: () => ['global-assets', 'folders'] as const,
     },
 
@@ -58,14 +56,6 @@ export const queryKeys = {
     videos: {
         all: (episodeId: string) => ['videos', episodeId] as const,
         panels: (episodeId: string) => ['videos', episodeId, 'panels'] as const,
-    },
-
-    // ============ 语音（Voice）============
-    voiceLines: {
-        all: (episodeId: string) => ['voice-lines', episodeId] as const,
-        list: (episodeId: string) => ['voice-lines', episodeId, 'list'] as const,
-        matched: (projectId: string, episodeId: string) =>
-            ['voice-lines', projectId, episodeId, 'matched'] as const,
     },
 
     // ============ 用户模型 ============

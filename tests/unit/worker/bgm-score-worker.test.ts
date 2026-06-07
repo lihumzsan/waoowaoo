@@ -120,8 +120,6 @@ function mockCompleteTimeline(): void {
       description: 'panel 1',
       videoUrl: 'https://example.com/panel-1.mp4',
       videoMedia: null,
-      lipSyncVideoUrl: null,
-      lipSyncVideoMedia: null,
       photographyRules: JSON.stringify({ editScriptId: 'edit-script-1' }),
       storyboard: {
         id: 'storyboard-1',
@@ -212,8 +210,6 @@ describe('bgm score worker', () => {
         description: 'panel 1',
         videoUrl: null,
         videoMedia: null,
-        lipSyncVideoUrl: null,
-        lipSyncVideoMedia: null,
         photographyRules: JSON.stringify({ editScriptId: 'edit-script-1' }),
         storyboard: {
           id: 'storyboard-1',

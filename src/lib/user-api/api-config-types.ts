@@ -1,9 +1,4 @@
 import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
-import type { OpenAICompatMediaTemplate, OpenAICompatMediaTemplateSource } from '@/lib/ai-registry/openai-compatible-template'
-
-export type ApiModeType = 'gemini-sdk' | 'openai-official'
-export type GatewayRouteType = 'official' | 'openai-compat'
-export type LlmProtocolType = 'responses' | 'chat-completions'
 export type DefaultModelField =
   | 'analysisModel'
   | 'characterModel'
@@ -11,10 +6,7 @@ export type DefaultModelField =
   | 'storyboardModel'
   | 'editModel'
   | 'videoModel'
-  | 'audioModel'
   | 'musicModel'
-  | 'lipSyncModel'
-  | 'voiceDesignModel'
 
 export interface StoredProvider {
   id: string
@@ -22,8 +14,6 @@ export interface StoredProvider {
   baseUrl?: string
   apiKey?: string
   hidden?: boolean
-  apiMode?: ApiModeType
-  gatewayRoute?: GatewayRouteType
 }
 
 export interface StoredModelLlmCustomPricing {
@@ -49,11 +39,6 @@ export interface StoredModel {
   name: string
   type: UnifiedModelType
   provider: string
-  llmProtocol?: LlmProtocolType
-  llmProtocolCheckedAt?: string
-  compatMediaTemplate?: OpenAICompatMediaTemplate
-  compatMediaTemplateCheckedAt?: string
-  compatMediaTemplateSource?: OpenAICompatMediaTemplateSource
   // Non-authoritative display field; billing always uses server pricing catalog.
   price: number
   priceMin?: number
@@ -82,10 +67,7 @@ export interface DefaultModelsPayload {
   storyboardModel?: string
   editModel?: string
   videoModel?: string
-  audioModel?: string
   musicModel?: string
-  lipSyncModel?: string
-  voiceDesignModel?: string
 }
 
 export interface WorkflowConcurrencyPayload {
@@ -109,16 +91,11 @@ export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
   'storyboardModel',
   'editModel',
   'videoModel',
-  'audioModel',
   'musicModel',
-  'lipSyncModel',
-  'voiceDesignModel',
 ]
 export const CAPABILITY_MODEL_TYPES: readonly UnifiedModelType[] = [
   'image',
   'video',
   'llm',
-  'audio',
   'music',
-  'lipsync',
 ]

@@ -153,12 +153,6 @@ export async function assembleProjectContext(params: {
                 },
               },
             },
-            voiceLines: {
-              orderBy: { lineIndex: 'asc' },
-              select: {
-                id: true,
-              },
-            },
           },
         })
       : Promise.resolve(null),
@@ -314,7 +308,6 @@ export async function assembleProjectContext(params: {
             screenplayClipCount,
             storyboardCount,
             panelCount,
-            voiceLineCount: episode.voiceLines.length,
           }
         : null,
       editScreenplay: editScreenplay

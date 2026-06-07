@@ -27,7 +27,7 @@ interface UserModels {
     llm: ModelOption[]
     image: ModelOption[]
     video: ModelOption[]
-    audio: ModelOption[]
+    music: ModelOption[]
 }
 
 export interface CapabilityFieldDefinition {
@@ -55,7 +55,7 @@ interface SettingsModalProps {
     videoModel?: string
     singleShotVideoModel?: string
     sequenceVideoModel?: string
-    audioModel?: string
+    musicModel?: string
     videoRatio?: string
     capabilityOverrides?: CapabilitySelections
     onAnalysisModelChange?: (value: string) => void
@@ -67,7 +67,7 @@ interface SettingsModalProps {
     onVideoModelChange?: (value: string) => void
     onSingleShotVideoModelChange?: (value: string) => void
     onSequenceVideoModelChange?: (value: string) => void
-    onAudioModelChange?: (value: string) => void
+    onMusicModelChange?: (value: string) => void
     onVideoRatioChange?: (value: string) => void
     onCapabilityOverridesChange?: (value: CapabilitySelections) => void
     onConfigPatch?: (value: Record<string, unknown>) => void
@@ -93,7 +93,7 @@ function parseBySample(input: string, sample: CapabilityValue): CapabilityValue 
 
 function extractCapabilityFields(
     capabilities: ModelCapabilities | undefined,
-    namespace: 'llm' | 'image' | 'video' | 'audio',
+    namespace: 'llm' | 'image' | 'video' | 'music',
 ): CapabilityFieldDefinition[] {
     const rawNamespace = capabilities?.[namespace]
     if (!isRecord(rawNamespace)) return []
@@ -201,7 +201,7 @@ export function SettingsModal({
     videoModel,
     singleShotVideoModel,
     sequenceVideoModel,
-    audioModel,
+    musicModel,
     videoRatio = '9:16',
     capabilityOverrides,
     onAnalysisModelChange,
@@ -212,7 +212,7 @@ export function SettingsModal({
     onVideoModelChange,
     onSingleShotVideoModelChange,
     onSequenceVideoModelChange,
-    onAudioModelChange,
+    onMusicModelChange,
     onVideoRatioChange,
     onCapabilityOverridesChange,
     onConfigPatch,
@@ -224,7 +224,7 @@ export function SettingsModal({
         llm: Array.isArray(availableModels?.llm) ? availableModels.llm : [],
         image: Array.isArray(availableModels?.image) ? availableModels.image : [],
         video: Array.isArray(availableModels?.video) ? availableModels.video : [],
-        audio: Array.isArray(availableModels?.audio) ? availableModels.audio : [],
+        music: Array.isArray(availableModels?.music) ? availableModels.music : [],
     }), [availableModels])
     const normalVideoModels = useMemo<ModelOption[]>(
         () => filterNormalVideoModelOptions(userModels.video),
@@ -245,9 +245,9 @@ export function SettingsModal({
         () => userModels.llm.find((model) => model.value === analysisModel) || null,
         [userModels.llm, analysisModel],
     )
-    const selectedAudioModelOption = useMemo(
-        () => userModels.audio.find((model) => model.value === audioModel) || null,
-        [userModels.audio, audioModel],
+    const selectedMusicModelOption = useMemo(
+        () => userModels.music.find((model) => model.value === musicModel) || null,
+        [userModels.music, musicModel],
     )
 
     const singleShotVideoCapabilityFields = useMemo(
@@ -262,9 +262,9 @@ export function SettingsModal({
         () => extractCapabilityFields(selectedAnalysisModelOption?.capabilities, 'llm'),
         [selectedAnalysisModelOption],
     )
-    const audioCapabilityFields = useMemo(
-        () => extractCapabilityFields(selectedAudioModelOption?.capabilities, 'audio'),
-        [selectedAudioModelOption],
+    const musicCapabilityFields = useMemo(
+        () => extractCapabilityFields(selectedMusicModelOption?.capabilities, 'music'),
+        [selectedMusicModelOption],
     )
     const selectedCharacterModelOption = useMemo(
         () => userModels.image.find((model) => model.value === characterModel) || null,
@@ -308,9 +308,9 @@ export function SettingsModal({
     const selectedAnalysisOverrides = useMemo<Record<string, CapabilityValue>>(() => {
         return readCapabilitySelectionForModel(capabilityOverrides, analysisModel)
     }, [capabilityOverrides, analysisModel])
-    const selectedAudioOverrides = useMemo<Record<string, CapabilityValue>>(() => {
-        return readCapabilitySelectionForModel(capabilityOverrides, audioModel)
-    }, [capabilityOverrides, audioModel])
+    const selectedMusicOverrides = useMemo<Record<string, CapabilityValue>>(() => {
+        return readCapabilitySelectionForModel(capabilityOverrides, musicModel)
+    }, [capabilityOverrides, musicModel])
     const selectedCharacterOverrides = useMemo<Record<string, CapabilityValue>>(() => {
         return readCapabilitySelectionForModel(capabilityOverrides, characterModel)
     }, [capabilityOverrides, characterModel])
@@ -334,7 +334,7 @@ export function SettingsModal({
             { modelKey: editModel, fields: editCapabilityFields },
             { modelKey: effectiveSingleShotVideoModel, fields: singleShotVideoCapabilityFields },
             { modelKey: sequenceVideoModel, fields: sequenceVideoCapabilityFields },
-            { modelKey: audioModel, fields: audioCapabilityFields },
+            { modelKey: musicModel, fields: musicCapabilityFields },
         ]
         const defaultsSignature = JSON.stringify({
             capabilityOverrides: capabilityOverrides || {},
@@ -372,8 +372,8 @@ export function SettingsModal({
         singleShotVideoCapabilityFields,
         sequenceVideoModel,
         sequenceVideoCapabilityFields,
-        audioModel,
-        audioCapabilityFields,
+        musicModel,
+        musicCapabilityFields,
     ])
 
     const applyCapabilityOverride = (modelKey: string | undefined, field: string, value: string, sample: CapabilityValue) => {
@@ -409,7 +409,7 @@ export function SettingsModal({
     const handleModelChange = (
         modelKey: string,
         modelOptions: ModelOption[],
-        namespace: 'llm' | 'image' | 'video' | 'audio',
+        namespace: 'llm' | 'image' | 'video' | 'music',
         configPatch: Record<string, unknown>,
         onModelChangeFn?: (v: string) => void,
     ) => {
@@ -622,15 +622,15 @@ export function SettingsModal({
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('audioModel')}</label>
+                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('musicModel')}</label>
                                 <ModelCapabilityDropdown
-                                    models={userModels.audio}
-                                    value={audioModel}
-                                    onModelChange={(v) => handleModelChange(v, userModels.audio, 'audio', { audioModel: v }, onAudioModelChange)}
-                                    capabilityFields={audioCapabilityFields}
-                                    capabilityOverrides={selectedAudioOverrides}
+                                    models={userModels.music}
+                                    value={musicModel}
+                                    onModelChange={(v) => handleModelChange(v, userModels.music, 'music', { musicModel: v }, onMusicModelChange)}
+                                    capabilityFields={musicCapabilityFields}
+                                    capabilityOverrides={selectedMusicOverrides}
                                     onCapabilityChange={(field, rawValue, sample) => {
-                                        applyCapabilityOverride(audioModel, field, rawValue, sample)
+                                        applyCapabilityOverride(musicModel, field, rawValue, sample)
                                     }}
                                     placeholder={t('pleaseSelect')}
                                 />

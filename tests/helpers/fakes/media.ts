@@ -5,7 +5,7 @@ const state: {
 } = {
   nextImageUrl: 'images/fake-image.jpg',
   nextVideoUrl: 'video/fake-video.mp4',
-  nextAudioUrl: 'voice/fake-audio.mp3',
+  nextAudioUrl: 'music/fake-audio.mp3',
 }
 
 export function configureFakeMedia(params: {
@@ -21,7 +21,7 @@ export function configureFakeMedia(params: {
 export function resetFakeMedia() {
   state.nextImageUrl = 'images/fake-image.jpg'
   state.nextVideoUrl = 'video/fake-video.mp4'
-  state.nextAudioUrl = 'voice/fake-audio.mp3'
+  state.nextAudioUrl = 'music/fake-audio.mp3'
 }
 
 export async function fakeGenerateImage() {

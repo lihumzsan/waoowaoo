@@ -111,14 +111,6 @@ function buildCapabilityCache(entries: BuiltinCapabilityCatalogEntry[], signatur
   return { signature, entries, exact, byProviderKey }
 }
 
-/**
- * Provider keys that share capability catalogs with a canonical provider.
- * gemini-compatible uses the same models as google.
- */
-const CAPABILITY_PROVIDER_ALIASES: Readonly<Record<string, string>> = {
-  'gemini-compatible': 'google',
-}
-
 function loadCapabilityCatalog(): CapabilityCatalogCache {
   if (capabilityCache) return capabilityCache
   ensureBuiltinCatalogEntriesRegistered()
@@ -162,18 +154,6 @@ export function findBuiltinCapabilityCatalogEntry(
     return {
       ...fallback,
       capabilities: cloneCapabilities(fallback.capabilities),
-    }
-  }
-
-  const aliasTarget = CAPABILITY_PROVIDER_ALIASES[providerKey]
-  if (aliasTarget) {
-    const aliasKey = `${modelType}::${aliasTarget}::${modelId}`
-    const aliasMatch = loaded.byProviderKey.get(aliasKey)
-    if (aliasMatch) {
-      return {
-        ...aliasMatch,
-        capabilities: cloneCapabilities(aliasMatch.capabilities),
-      }
     }
   }
 

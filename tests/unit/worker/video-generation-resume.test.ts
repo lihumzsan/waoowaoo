@@ -19,7 +19,6 @@ const asyncPollMock = vi.hoisted(() => ({
 
 const generatorApiMock = vi.hoisted(() => ({
   generateImage: vi.fn(),
-  generateLipSync: vi.fn(),
   generateVideo: vi.fn(),
 }))
 
@@ -69,19 +68,16 @@ describe('worker utils video generation resume', () => {
   })
 
   it('continues polling from existing externalId without re-submitting generation', async () => {
-    const externalId = 'OPENAI:VIDEO:b3BlbmFpLWNvbXBhdGlibGU6b2EtMQ:vid_123'
+    const externalId = 'FAL:VIDEO:fal-ai/kling-video/v2.1/master/image-to-video:req_123'
     prismaMock.task.findUnique.mockResolvedValueOnce({ externalId })
     asyncPollMock.pollAsyncTask.mockResolvedValueOnce({
       status: 'completed',
-      resultUrl: 'https://oa.test/v1/videos/vid_123/content',
-      downloadHeaders: {
-        Authorization: 'Bearer oa-key',
-      },
+      resultUrl: 'https://fal.test/videos/req_123.mp4',
     })
 
     const result = await resolveVideoSourceFromGeneration(buildJob(), {
       userId: 'user-1',
-      modelId: 'openai-compatible:oa-1::sora-2',
+      modelId: 'fal::fal-ai/kling-video/v2.1/master/image-to-video',
       imageUrl: 'data:image/png;base64,QQ==',
       options: {
         prompt: 'animate this frame',
@@ -89,10 +85,7 @@ describe('worker utils video generation resume', () => {
     })
 
     expect(result).toEqual({
-      url: 'https://oa.test/v1/videos/vid_123/content',
-      downloadHeaders: {
-        Authorization: 'Bearer oa-key',
-      },
+      url: 'https://fal.test/videos/req_123.mp4',
     })
     expect(asyncPollMock.pollAsyncTask).toHaveBeenCalledWith(externalId, 'user-1')
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()

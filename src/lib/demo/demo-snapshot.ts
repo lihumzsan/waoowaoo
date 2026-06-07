@@ -54,7 +54,7 @@ const PRIVATE_MEDIA_PATH_PREFIXES = [
   '/api/storage/sign',
 ]
 
-const STORAGE_KEY_PREFIX_PATTERN = /^(images|image|videos|video|audio|voice|voices|music|uploads|tmp)\//i
+const STORAGE_KEY_PREFIX_PATTERN = /^(images|image|videos|video|audio|music|uploads|tmp)\//i
 const MEDIA_FILE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|mp4|mov|webm|mp3|wav|m4a)(?:[?#].*)?$/i
 const LOCAL_URL_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?\//i
 

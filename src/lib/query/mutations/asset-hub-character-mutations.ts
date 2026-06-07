@@ -568,22 +568,3 @@ export function useDeleteCharacterAppearance() {
     onSuccess: invalidateCharacters,
   })
 }
-
-export function useUploadCharacterVoice() {
-  const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({ file, characterId }: { file: File; characterId: string }) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('characterId', characterId)
-
-      return await requestJsonWithError('/api/asset-hub/character-voice', {
-        method: 'POST',
-        body: formData,
-      }, 'Failed to upload voice')
-    },
-    onSuccess: invalidateCharacters,
-  })
-}

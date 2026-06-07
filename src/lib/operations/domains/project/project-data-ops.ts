@@ -86,7 +86,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
         longRunning: false,
       },
       inputSchema: z.object({
-        type: z.enum(['character', 'location', 'voice']),
+        type: z.enum(['character', 'location']),
         targetId: z.string().min(1),
         globalAssetId: z.string().min(1),
       }),

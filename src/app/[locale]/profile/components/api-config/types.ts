@@ -7,10 +7,6 @@ import {
     type UnifiedModelType,
 } from '@/lib/ai-registry/types'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import type {
-    OpenAICompatMediaTemplate,
-    OpenAICompatMediaTemplateSource,
-} from '@/lib/ai-registry/openai-compatible-template'
 
 export interface ApiConfigCatalogProvider {
     id: string
@@ -39,8 +35,6 @@ export interface Provider {
     apiKey?: string
     hasApiKey?: boolean
     hidden?: boolean
-    apiMode?: 'gemini-sdk' | 'openai-official'
-    gatewayRoute?: 'official' | 'openai-compat'
 }
 
 export interface LlmCustomPricing {
@@ -63,16 +57,11 @@ export interface CustomModelPricing {
 
 // 模型接口
 export interface CustomModel {
-    modelId: string       // 唯一标识符（如 anthropic/claude-sonnet-4.5）
+    modelId: string       // 唯一标识符
     modelKey: string      // 唯一主键（provider::modelId）
     name: string          // 显示名称
     type: UnifiedModelType
     provider: string
-    llmProtocol?: 'responses' | 'chat-completions'
-    llmProtocolCheckedAt?: string
-    compatMediaTemplate?: OpenAICompatMediaTemplate
-    compatMediaTemplateCheckedAt?: string
-    compatMediaTemplateSource?: OpenAICompatMediaTemplateSource
     price: number
     priceMin?: number
     priceMax?: number
@@ -106,10 +95,7 @@ export interface ApiConfig {
         storyboardModel?: string
         editModel?: string
         videoModel?: string
-        audioModel?: string
         musicModel?: string
-        lipSyncModel?: string
-        voiceDesignModel?: string
     }
     capabilityDefaults?: CapabilitySelections
     workflowConcurrency?: {
@@ -164,10 +150,9 @@ export function isPresetComingSoonModelKey(modelKey: string): boolean {
 
 const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
     ark: '火山引擎 Ark',
-    minimax: '海螺 MiniMax',
-    vidu: '生数科技 Vidu',
-    bailian: '阿里云百炼',
-    siliconflow: '硅基流动',
+    google: 'Google',
+    fal: 'FAL',
+    openrouter: 'OpenRouter',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -241,58 +226,6 @@ export const PROVIDER_TUTORIALS: ProviderTutorial[] = [
             }
         ]
     },
-    {
-        providerId: 'minimax',
-        steps: [
-            {
-                text: 'minimax_step1',
-                url: 'https://platform.minimaxi.com/user-center/basic-information/interface-key'
-            }
-        ]
-    },
-    {
-        providerId: 'vidu',
-        steps: [
-            {
-                text: 'vidu_step1',
-                url: 'https://platform.vidu.cn/api-keys'
-            }
-        ]
-    },
-    {
-        providerId: 'gemini-compatible',
-        steps: [
-            {
-                text: 'gemini_compatible_step1'
-            }
-        ]
-    },
-    {
-        providerId: 'openai-compatible',
-        steps: [
-            {
-                text: 'openai_compatible_step1'
-            }
-        ]
-    },
-    {
-        providerId: 'bailian',
-        steps: [
-            {
-                text: 'bailian_step1',
-                url: 'https://bailian.console.aliyun.com/cn-beijing/?tab=model#/api-key'
-            }
-        ]
-    },
-    {
-        providerId: 'siliconflow',
-        steps: [
-            {
-                text: 'siliconflow_step1',
-                url: 'https://cloud.siliconflow.cn/account/ak'
-            }
-        ]
-    },
 ]
 
 /**
@@ -304,10 +237,3 @@ export function getProviderTutorial(providerId: string): ProviderTutorial | unde
     const providerKey = getProviderKey(providerId)
     return PROVIDER_TUTORIALS.find(t => t.providerId === providerKey)
 }
-
-/**
- * 获取 Google 官方模型列表的克隆副本，provider 替换为指定 ID。
- * 用于 gemini-compatible 新增时自动预设模型。
- * 排除 batch 模型（Google 特有的异步批量处理）。
- */
-export { getGoogleCompatibleApiConfigPresetModels as getGoogleCompatiblePresetModels } from '@/lib/ai-registry/api-config-catalog'

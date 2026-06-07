@@ -208,20 +208,6 @@ describe('sse invalidation behavior', () => {
         && key[1] === 'episode-1'
     })).toBe(true)
 
-    expect(hasInvalidation((arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.voiceLines.all('episode-1')[0]
-        && key[1] === 'episode-1'
-    })).toBe(true)
-
-    expect(hasInvalidation((arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.voiceLines.matched('project-1', 'episode-1')[0]
-        && key[1] === 'project-1'
-        && key[2] === 'episode-1'
-    })).toBe(true)
   })
 
   it('resource.changed 事件按资源名称触发 query invalidation', async () => {

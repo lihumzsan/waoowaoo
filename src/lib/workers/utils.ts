@@ -1,7 +1,7 @@
 import { type Job } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
-import { generateImage, generateLipSync, generateVideo } from '@/lib/ai-exec/engine'
+import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
 import { pollAsyncTask } from '@/lib/ai-exec/async-poll'
 import { getSignedUrl } from '@/lib/storage'
 import { processMediaResult } from '@/lib/media-process'
@@ -650,82 +650,6 @@ export async function resolveVideoSourceFromGeneration(
   }
 }
 
-export async function resolveLipSyncVideoSource(
-  job: Job<TaskJobData>,
-  params: {
-    userId: string
-    videoUrl: string
-    audioUrl: string
-    audioDurationMs?: number | null
-    videoDurationMs?: number | null
-    modelKey?: string
-    pollProgress?: { start?: number; end?: number }
-  },
-): Promise<string> {
-  const logger = scopedWorkerUtilLogger(job, 'worker.video.lip_sync')
-  const startedAt = Date.now()
-
-  // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询，不重新提交（避免重复扣费）
-  const resumeExternalId = await getTaskExistingExternalId(job.data.taskId)
-  if (resumeExternalId) {
-    logger.info({
-      message: 'lip sync generation resumed from existing external id',
-      details: { externalId: resumeExternalId },
-    })
-    const polled = await waitExternalResult(job, resumeExternalId, params.userId, {
-      progressStart: params.pollProgress?.start ?? 45,
-      progressEnd: params.pollProgress?.end ?? 94,
-    })
-    logger.info({
-      message: 'lip sync generation completed (resumed)',
-      durationMs: Date.now() - startedAt,
-      details: { externalId: resumeExternalId },
-    })
-    return polled.url
-  }
-
-  logger.info({
-    message: 'lip sync generation started',
-  })
-
-  const result = await generateLipSync(
-    {
-      videoUrl: params.videoUrl,
-      audioUrl: params.audioUrl,
-      audioDurationMs: params.audioDurationMs,
-      videoDurationMs: params.videoDurationMs,
-    },
-    params.userId,
-    params.modelKey,
-  )
-
-  if (!result.requestId) {
-    throw new Error('Lip sync request id missing')
-  }
-
-  const externalId = typeof result.externalId === 'string'
-    ? result.externalId.trim()
-    : ''
-  if (!externalId) {
-    throw new Error('Lip sync external id missing')
-  }
-
-  const polled = await waitExternalResult(job, externalId, params.userId, {
-    progressStart: params.pollProgress?.start ?? 45,
-    progressEnd: params.pollProgress?.end ?? 94,
-  })
-
-  logger.info({
-    message: 'lip sync generation completed',
-    durationMs: Date.now() - startedAt,
-    details: {
-      externalId,
-    },
-  })
-
-  return polled.url
-}
-
 export async function uploadImageSourceToCos(source: string | Buffer, keyPrefix: string, targetId: string) {
   return await processMediaResult({
     source,
@@ -761,7 +685,7 @@ export async function uploadAudioSourceToCos(source: string | Buffer, keyPrefix:
 
 export function toSignedUrlIfCos(keyOrUrl: string | null | undefined, ttlSeconds = 3600) {
   if (!keyOrUrl) return null
-  return keyOrUrl.startsWith('images/') || keyOrUrl.startsWith('voice/') || keyOrUrl.startsWith('video/')
+  return keyOrUrl.startsWith('images/') || keyOrUrl.startsWith('audio/') || keyOrUrl.startsWith('music/') || keyOrUrl.startsWith('video/')
     ? getSignedUrl(keyOrUrl, ttlSeconds)
     : keyOrUrl
 }

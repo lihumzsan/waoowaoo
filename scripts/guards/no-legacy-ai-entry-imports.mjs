@@ -33,8 +33,6 @@ const LEGACY_IMPORT_PATTERNS = [
   { label: '@/lib/ark-api',                       pattern: /['"]@\/lib\/ark-api['"]/ },
   { label: '@/lib/ark-llm',                       pattern: /['"]@\/lib\/ark-llm['"]/ },
   { label: '@/lib/llm-client',                    pattern: /['"]@\/lib\/llm-client['"]/ },
-  { label: '@/lib/openai-compat-template-runtime', pattern: /['"]@\/lib\/openai-compat-template-runtime['"]/ },
-  { label: '@/lib/openai-compat-media-template',   pattern: /['"]@\/lib\/openai-compat-media-template['"]/ },
   { label: '@/lib/gemini-batch-utils',             pattern: /['"]@\/lib\/gemini-batch-utils['"]/ },
   { label: '@/lib/model-config-contract',          pattern: /['"]@\/lib\/model-config-contract['"]/ },
 

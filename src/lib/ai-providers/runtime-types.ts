@@ -5,15 +5,8 @@ import type {
   AiResolvedSelection,
   AiVariantDescriptor,
   AiLlmProviderConfig,
-  AiLipSyncParams,
-  AiLipSyncResult,
 } from '@/lib/ai-registry/types'
 import type { ProviderChatCompletionOptions, ProviderChatCompletionStreamCallbacks } from '@/lib/ai-providers/shared/llm-support'
-import type {
-  CharacterVoiceFields,
-  SpeakerVoiceEntry,
-  VoiceLineBindingSource,
-} from '@/lib/ai-registry/voice-line'
 
 export type GenerateResult = {
   success: boolean
@@ -117,21 +110,6 @@ export type AiProviderVideoExecutionContext = {
   }
 }
 
-export type AiProviderAudioExecutionContext = {
-  userId: string
-  selection: AiResolvedSelection & {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  text: string
-  options?: {
-    voice?: string
-    rate?: number
-    [key: string]: unknown
-  }
-}
-
 export type AiProviderMusicExecutionContext = {
   userId: string
   selection: AiResolvedSelection & {
@@ -151,72 +129,15 @@ export type AiProviderMusicExecutionContext = {
   }
 }
 
-export type AiProviderLipSyncExecutionContext = {
-  userId: string
-  selection: AiResolvedSelection & {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  params: AiLipSyncParams
-}
-
-export type AiProviderVoiceLineBinding =
-  | {
-    provider: 'fal'
-    source: VoiceLineBindingSource
-    referenceAudioUrl: string
-  }
-  | {
-    provider: 'bailian'
-    source: VoiceLineBindingSource
-    voiceId: string
-  }
-
-export type AiProviderVoiceLineBindingInput = {
-  character?: CharacterVoiceFields | null
-  speakerVoice?: SpeakerVoiceEntry | null
-}
-
-export type AiProviderVoiceLineExecutionContext = {
-  userId: string
-  selection: AiResolvedSelection & {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  text: string
-  emotionPrompt?: string | null
-  emotionStrength?: number | null
-  binding: AiProviderVoiceLineBinding
-}
-
-export type AiProviderVoiceLineResult = {
-  audioData: Buffer
-  audioDuration: number
-}
-
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'audio' | 'music'> = {
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'> = {
   describe: (selection: AiResolvedSelection) => AiVariantDescriptor
   execute: (
     input: M extends 'image'
       ? AiProviderImageExecutionContext
       : M extends 'video'
         ? AiProviderVideoExecutionContext
-        : M extends 'audio'
-          ? AiProviderAudioExecutionContext
-          : AiProviderMusicExecutionContext,
+        : AiProviderMusicExecutionContext,
   ) => Promise<GenerateResult>
-}
-
-export type AiProviderLipSyncModalityAdapter = {
-  execute: (input: AiProviderLipSyncExecutionContext) => Promise<AiLipSyncResult>
-}
-
-export type AiProviderVoiceLineModalityAdapter = {
-  resolveBinding: (input: AiProviderVoiceLineBindingInput) => AiProviderVoiceLineBinding | null
-  createMissingBindingError: (input: AiProviderVoiceLineBindingInput) => Error
-  execute: (input: AiProviderVoiceLineExecutionContext) => Promise<AiProviderVoiceLineResult>
 }
 
 export type AiProviderLanguageModelAdapter = {
@@ -227,10 +148,7 @@ export interface AiProviderAdapter {
   readonly providerKey: string
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
-  audio?: AiProviderMediaModalityAdapter<'audio'>
   music?: AiProviderMediaModalityAdapter<'music'>
-  lipsync?: AiProviderLipSyncModalityAdapter
-  voiceLine?: AiProviderVoiceLineModalityAdapter
   languageModel?: AiProviderLanguageModelAdapter
   completeLlm?: (input: AiLlmExecutionInput) => Promise<AiProviderLlmResult>
   streamLlm?: (input: AiProviderLlmStreamContext) => Promise<AiProviderLlmResult>

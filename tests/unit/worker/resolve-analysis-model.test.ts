@@ -16,28 +16,28 @@ describe('resolveAnalysisModel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.userPreference.findUnique.mockResolvedValue({
-      analysisModel: 'openai-compatible:pref::gpt-4.1-mini',
+      analysisModel: 'openrouter::openai/gpt-4.1-mini',
     })
   })
 
   it('uses inputModel override when provided', async () => {
     const result = await resolveAnalysisModel({
       userId: 'user-1',
-      inputModel: 'openai-compatible:input::gpt-4.1',
-      projectAnalysisModel: 'openai-compatible:project::gpt-4.1',
+      inputModel: 'openrouter::openai/gpt-4.1',
+      projectAnalysisModel: 'openrouter::anthropic/claude-sonnet-4.5',
     })
 
-    expect(result).toBe('openai-compatible:input::gpt-4.1')
+    expect(result).toBe('openrouter::openai/gpt-4.1')
     expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
   })
 
   it('uses project analysisModel when inputModel is missing', async () => {
     const result = await resolveAnalysisModel({
       userId: 'user-1',
-      projectAnalysisModel: 'openai-compatible:project::gpt-4.1',
+      projectAnalysisModel: 'openrouter::anthropic/claude-sonnet-4.5',
     })
 
-    expect(result).toBe('openai-compatible:project::gpt-4.1')
+    expect(result).toBe('openrouter::anthropic/claude-sonnet-4.5')
     expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
   })
 
@@ -47,7 +47,7 @@ describe('resolveAnalysisModel', () => {
       projectAnalysisModel: null,
     })
 
-    expect(result).toBe('openai-compatible:pref::gpt-4.1-mini')
+    expect(result).toBe('openrouter::openai/gpt-4.1-mini')
     expect(prismaMock.userPreference.findUnique).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
       select: { analysisModel: true },
@@ -61,7 +61,7 @@ describe('resolveAnalysisModel', () => {
       projectAnalysisModel: 'invalid-model-key',
     })
 
-    expect(result).toBe('openai-compatible:pref::gpt-4.1-mini')
+    expect(result).toBe('openrouter::openai/gpt-4.1-mini')
     expect(prismaMock.userPreference.findUnique).toHaveBeenCalledTimes(1)
   })
 

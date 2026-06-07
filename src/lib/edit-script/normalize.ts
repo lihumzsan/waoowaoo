@@ -216,7 +216,6 @@ export function normalizeEditAssetRequirements(
       kind: asset.kind,
       name,
       description: asset.description.trim(),
-      voiceTimbreText: asset.kind === 'character' ? asset.voiceTimbreText?.trim() ?? null : null,
       shotNumbers,
       status: 'pending',
       targetId: null,

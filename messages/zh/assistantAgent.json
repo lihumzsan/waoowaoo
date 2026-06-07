@@ -117,7 +117,6 @@
       "picker": "选择器",
       "character": "角色",
       "location": "场景",
-      "voice": "音色",
       "ungrouped": "未分组"
     }
   },
@@ -127,7 +126,6 @@
     "clips": "Clips {count}",
     "screenplays": "剧本 {count}",
     "storyboards": "分镜 {count}",
-    "voice": "配音 {count}",
     "projectContext": "项目上下文",
     "skillLabels": {
       "unnamed": "未命名技能",
@@ -154,7 +152,6 @@
     "totalLabel": "总数",
     "screenplayPreview": "剧本预览",
     "storyboardPreview": "分镜预览",
-    "voiceLinesLabel": "配音行",
     "panelsLabel": "分镜 {count}",
     "maxSteps": "已达到最大步数",
     "stepUsage": "当前步数 {stepCount} / 上限 {maxSteps}",

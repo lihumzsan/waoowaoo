@@ -6,7 +6,7 @@ import {
   integerRangeValidator,
   nonEmptyStringValidator,
 } from '@/lib/ai-providers/shared/option-schema'
-import { executeGeminiCompatibleImageGeneration, executeGoogleImageGeneration } from './image'
+import { executeGoogleImageGeneration } from './image'
 import { createGoogleSdkLanguageModel } from './language-model'
 import { runGoogleLlmCompletion, runGoogleLlmStream, runGoogleVisionCompletion } from './llm'
 import { executeGoogleMusicGeneration } from './music'
@@ -40,18 +40,6 @@ function describeGoogleMediaVariant(
   })
 }
 
-function describeGeminiCompatibleMediaVariant(
-  modality: 'image' | 'video',
-  selection: Parameters<NonNullable<AiProviderAdapter['image']>['describe']>[0],
-) {
-  return describeMediaVariantBase({
-    modality,
-    selection,
-    executionMode: modality === 'video' ? 'async' : 'sync',
-    optionSchema: buildMediaOptionSchema(modality),
-  })
-}
-
 export const googleAdapter: AiProviderAdapter = {
   providerKey: 'google',
   image: {
@@ -75,33 +63,6 @@ export const googleAdapter: AiProviderAdapter = {
     reasoning: input.reasoning,
     reasoningEffort: input.reasoningEffort,
     logProvider: 'google',
-  }),
-  languageModel: {
-    create: createGoogleSdkLanguageModel,
-  },
-  streamLlm: runGoogleLlmStream,
-  completeVision: runGoogleVisionCompletion,
-}
-
-export const geminiCompatibleAdapter: AiProviderAdapter = {
-  providerKey: 'gemini-compatible',
-  image: {
-    describe: (selection) => describeGeminiCompatibleMediaVariant('image', selection),
-    execute: executeGeminiCompatibleImageGeneration,
-  },
-  video: {
-    describe: (selection) => describeGeminiCompatibleMediaVariant('video', selection),
-    execute: executeGoogleVideoGeneration,
-  },
-  completeLlm: (input) => runGoogleLlmCompletion({
-    apiKey: input.providerConfig.apiKey,
-    baseUrl: input.providerConfig.baseUrl,
-    modelId: input.selection.modelId,
-    messages: input.messages,
-    temperature: input.temperature,
-    reasoning: input.reasoning,
-    reasoningEffort: input.reasoningEffort,
-    logProvider: 'gemini-compatible',
   }),
   languageModel: {
     create: createGoogleSdkLanguageModel,

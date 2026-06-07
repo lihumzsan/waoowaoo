@@ -13,7 +13,6 @@ export interface AppLike {
 
 export interface CharacterLike {
   appearances?: AppLike[]
-  customVoiceUrl?: string | null
   [key: string]: unknown
 }
 
@@ -37,7 +36,6 @@ export interface PanelLike {
   imageUrl: string | null
   sketchImageUrl: string | null
   videoUrl: string | null
-  lipSyncVideoUrl: string | null
   candidateImages: string | null
   panelImageHistory?: string | null
   imageHistory?: string | null
@@ -100,7 +98,6 @@ export function addSignedUrlsToCharacter(character: CharacterLike) {
   return {
     ...character,
     appearances,
-    customVoiceUrl: character.customVoiceUrl ? keyToSignedUrl(character.customVoiceUrl) : null,
   }
 }
 
@@ -177,9 +174,6 @@ export function addSignedUrlsToStoryboard(storyboard: StoryboardLike) {
         videoUrl: dbPanel.videoUrl && !dbPanel.videoUrl.startsWith('http')
           ? getSignedUrl(dbPanel.videoUrl, 7200)
           : dbPanel.videoUrl,
-        lipSyncVideoUrl: dbPanel.lipSyncVideoUrl && !dbPanel.lipSyncVideoUrl.startsWith('http')
-          ? getSignedUrl(dbPanel.lipSyncVideoUrl, 7200)
-          : dbPanel.lipSyncVideoUrl,
         candidateImages: signedCandidateImages,
         historyCount: panelHistoryCount,
       }

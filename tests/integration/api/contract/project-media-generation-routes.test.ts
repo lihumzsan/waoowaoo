@@ -30,7 +30,6 @@ vi.mock('@/lib/api-auth', () => {
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 
 import { POST as modifyAssetImagePost } from '@/app/api/projects/[projectId]/modify-asset-image/route'
-import { POST as voiceGeneratePost } from '@/app/api/projects/[projectId]/voice-generate/route'
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
@@ -146,39 +145,6 @@ describe('api contract - project media generation routes (operation adapter)', (
 
     expect(res.status).toBe(400)
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()
-  })
-
-  it('POST /api/projects/[projectId]/voice-generate -> routes single/batch to explicit operations', async () => {
-    apiAdapterMock.executeProjectAgentOperationFromApi
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-
-    const singleRes = await voiceGeneratePost(
-      buildMockRequest({
-        path: '/api/projects/project-1/voice-generate',
-        method: 'POST',
-        body: { episodeId: 'episode-1', lineId: 'line-1' },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    const batchRes = await voiceGeneratePost(
-      buildMockRequest({
-        path: '/api/projects/project-1/voice-generate',
-        method: 'POST',
-        body: { episodeId: 'episode-1', all: true },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(singleRes.status).toBe(200)
-    expect(batchRes.status).toBe(200)
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      operationId: 'generate_voice_line_audio',
-    }))
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      operationId: 'generate_episode_voice_audio',
-    }))
   })
 
   it('POST /api/projects/[projectId]/generate-video -> routes single/batch to explicit operations', async () => {

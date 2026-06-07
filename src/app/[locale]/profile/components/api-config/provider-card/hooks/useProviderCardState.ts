@@ -39,7 +39,6 @@ interface UseProviderCardStateParams {
   onUpdateBaseUrl: ProviderCardProps['onUpdateBaseUrl']
   onUpdateModel: ProviderCardProps['onUpdateModel']
   onAddModel: ProviderCardProps['onAddModel']
-  onFlushConfig: ProviderCardProps['onFlushConfig']
   t: ProviderCardTranslator
 }
 
@@ -71,82 +70,7 @@ type BuildCustomPricingResult =
 interface ProviderConnectionPayload {
   apiType: string
   apiKey: string
-  baseUrl?: string
   llmModel?: string
-}
-
-type LlmProtocolType = 'responses' | 'chat-completions'
-
-type ProbeModelLlmProtocolSuccessResponse = {
-  success: true
-  protocol: LlmProtocolType
-  checkedAt: string
-}
-
-type ProbeModelLlmProtocolFailureResponse = {
-  success: false
-  code?: string
-}
-
-function isLlmProtocol(value: unknown): value is LlmProtocolType {
-  return value === 'responses' || value === 'chat-completions'
-}
-
-function readProbeFailureCode(value: unknown): string {
-  return typeof value === 'string' ? value : 'PROBE_INCONCLUSIVE'
-}
-
-export function shouldProbeModelLlmProtocol(params: {
-  providerId: string
-  modelType: ProviderCardModelType
-}): boolean {
-  return getProviderKey(params.providerId) === 'openai-compatible' && params.modelType === 'llm'
-}
-
-export function shouldReprobeModelLlmProtocol(params: {
-  providerId: string
-  originalModel: CustomModel
-  nextModelId: string
-}): boolean {
-  if (!shouldProbeModelLlmProtocol({ providerId: params.providerId, modelType: 'llm' })) return false
-  if (params.originalModel.type !== 'llm') return false
-  if (getProviderKey(params.originalModel.provider) !== 'openai-compatible') return false
-  return params.originalModel.modelId !== params.nextModelId || params.originalModel.provider !== params.providerId
-}
-
-export async function probeModelLlmProtocolViaApi(params: {
-  providerId: string
-  modelId: string
-}): Promise<{ llmProtocol: LlmProtocolType; llmProtocolCheckedAt: string }> {
-  const response = await apiFetch('/api/user/api-config/probe-model-llm-protocol', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      providerId: params.providerId,
-      modelId: params.modelId,
-    }),
-  })
-  if (!response.ok) {
-    throw new Error('MODEL_LLM_PROTOCOL_PROBE_REQUEST_FAILED')
-  }
-
-  const payload = await response.json() as ProbeModelLlmProtocolSuccessResponse | ProbeModelLlmProtocolFailureResponse
-  if (!payload.success) {
-    throw new Error(readProbeFailureCode(payload.code))
-  }
-
-  if (!isLlmProtocol(payload.protocol)) {
-    throw new Error('MODEL_LLM_PROTOCOL_PROBE_INVALID_PROTOCOL')
-  }
-
-  const checkedAt = typeof payload.checkedAt === 'string' && payload.checkedAt.trim().length > 0
-    ? payload.checkedAt.trim()
-    : new Date().toISOString()
-
-  return {
-    llmProtocol: payload.protocol,
-    llmProtocolCheckedAt: checkedAt,
-  }
 }
 
 function pickConfiguredLlmModel(params: {
@@ -162,23 +86,10 @@ function pickConfiguredLlmModel(params: {
 export function buildProviderConnectionPayload(params: {
   providerKey: string
   apiKey: string
-  baseUrl?: string
   llmModel?: string
 }): ProviderConnectionPayload {
   const apiKey = params.apiKey.trim()
-  const compatibleBaseUrl = params.baseUrl?.trim()
   const llmModel = params.llmModel?.trim()
-  const isCompatibleProvider =
-    params.providerKey === 'openai-compatible' || params.providerKey === 'gemini-compatible'
-
-  if (isCompatibleProvider && compatibleBaseUrl) {
-    return {
-      apiType: params.providerKey,
-      apiKey,
-      baseUrl: compatibleBaseUrl,
-      ...(llmModel ? { llmModel } : {}),
-    }
-  }
 
   return {
     apiType: params.providerKey,
@@ -275,9 +186,7 @@ export function buildCustomPricingFromModelForm(
 }
 
 function toProviderCardModelType(type: CustomModel['type']): ProviderCardModelType | null {
-  if (type === 'llm' || type === 'image' || type === 'video' || type === 'audio') return type
-  if (type === 'music') return 'audio'
-  if (type === 'lipsync') return 'audio'
+  if (type === 'llm' || type === 'image' || type === 'video' || type === 'music') return type
   return null
 }
 
@@ -354,7 +263,6 @@ export function useProviderCardState({
   onUpdateBaseUrl,
   onUpdateModel,
   onAddModel,
-  onFlushConfig,
   t,
 }: UseProviderCardStateParams): UseProviderCardStateResult {
   const [isEditing, setIsEditing] = useState(false)
@@ -374,9 +282,7 @@ export function useProviderCardState({
 
   const providerKey = getProviderKey(provider.id)
   const isPresetProvider = !provider.id.includes(':')
-  const showBaseUrlEdit =
-    ['gemini-compatible', 'openai-compatible'].includes(providerKey) &&
-    Boolean(onUpdateBaseUrl)
+  const showBaseUrlEdit = Boolean(onUpdateBaseUrl)
   const tutorial = getProviderTutorial(provider.id)
 
   const groupedModels = useMemo(
@@ -403,15 +309,7 @@ export function useProviderCardState({
       return true
     }
 
-    if (model.type === 'audio' && matchesModelKey(defaultModels.audioModel, model.provider, model.modelId)) {
-      return true
-    }
-
     if (model.type === 'music' && matchesModelKey(defaultModels.musicModel, model.provider, model.modelId)) {
-      return true
-    }
-
-    if (model.type === 'lipsync' && matchesModelKey(defaultModels.lipSyncModel, model.provider, model.modelId)) {
       return true
     }
 
@@ -452,7 +350,6 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: tempKey,
-        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -476,7 +373,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, providerKey, tempKey])
+  }, [defaultModels.analysisModel, doSaveKey, models, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -494,7 +391,6 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: provider.apiKey || '',
-        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -509,7 +405,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, models, provider.apiKey, provider.baseUrl, providerKey])
+  }, [defaultModels.analysisModel, models, provider.apiKey, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')
@@ -546,25 +442,6 @@ export function useProviderCardState({
     setEditModel(EMPTY_MODEL_FORM)
   }
 
-  const resolveProbeFailureMessage = (error: unknown): string => {
-    const code = error instanceof Error ? error.message : ''
-    if (code === 'PROBE_AUTH_FAILED') return t('probeAuthFailed')
-    if (code === 'PROBE_INCONCLUSIVE') return t('probeInconclusive')
-    if (code === 'MODEL_LLM_PROTOCOL_PROBE_REQUEST_FAILED') return t('probeRequestFailed')
-    return t('probeLlmProtocolFailed')
-  }
-
-  const flushConfigBeforeProbe = useCallback(async (): Promise<boolean> => {
-    if (!onFlushConfig) return true
-    try {
-      await onFlushConfig()
-      return true
-    } catch {
-      alert(t('flushConfigFailed'))
-      return false
-    }
-  }, [onFlushConfig, t])
-
   const handleSaveModel = async (originalModelKey: string): Promise<void> => {
     if (isModelSavePending) return
     if (!editModel.name || !editModel.modelId) {
@@ -587,31 +464,9 @@ export function useProviderCardState({
 
     setIsModelSavePending(true)
     try {
-      const originalModel = all.find((model) => model.modelKey === originalModelKey)
-      let protocolUpdates: Pick<CustomModel, 'llmProtocol' | 'llmProtocolCheckedAt'> | null = null
-      if (originalModel && shouldReprobeModelLlmProtocol({
-        providerId: provider.id,
-        originalModel,
-        nextModelId: editModel.modelId,
-      })) {
-        const flushed = await flushConfigBeforeProbe()
-        if (!flushed) return
-
-        try {
-          protocolUpdates = await probeModelLlmProtocolViaApi({
-            providerId: provider.id,
-            modelId: editModel.modelId,
-          })
-        } catch (error) {
-          alert(resolveProbeFailureMessage(error))
-          return
-        }
-      }
-
       onUpdateModel?.(originalModelKey, {
         name: editModel.name,
         modelId: editModel.modelId,
-        ...(protocolUpdates ? protocolUpdates : {}),
       })
 
       handleCancelEditModel()
@@ -646,22 +501,6 @@ export function useProviderCardState({
 
     setIsModelSavePending(true)
     try {
-      let protocolFields: Pick<CustomModel, 'llmProtocol' | 'llmProtocolCheckedAt'> | null = null
-      if (shouldProbeModelLlmProtocol({ providerId: provider.id, modelType: type })) {
-        const flushed = await flushConfigBeforeProbe()
-        if (!flushed) return
-
-        try {
-          protocolFields = await probeModelLlmProtocolViaApi({
-            providerId: provider.id,
-            modelId: finalModelId,
-          })
-        } catch (error) {
-          alert(resolveProbeFailureMessage(error))
-          return
-        }
-      }
-
       onAddModel({
         modelId: finalModelId,
         modelKey: finalModelKey,
@@ -669,7 +508,6 @@ export function useProviderCardState({
         type,
         provider: provider.id,
         price: 0,
-        ...(protocolFields ? protocolFields : {}),
       })
 
       setNewModel(EMPTY_MODEL_FORM)

@@ -34,7 +34,6 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
       kind: input.requirement.kind,
       name: input.requirement.name,
       extractionNotes: input.requirement.description,
-      fixedVoiceTimbreText: input.requirement.voiceTimbreText ?? null,
       linkedShotNumbers: input.requirement.shotNumbers,
     },
     linkedShots: linkedShotContext(input.requirement, input.shots).map((shot) => ({
@@ -57,7 +56,6 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
       'Use styleBible.stylePolicy.visual as the only asset-level visual policy.',
       'The asset description must include stable lighting, color palette, material texture, composition, image-filter traits, and visual bans from the Style Bible that can directly guide image generation.',
       'Do not describe transient shot action, facial expression, camera movement, dialogue, sound, or plot function inside the asset appearance.',
-      'For character assets, preserve fixedVoiceTimbreText exactly as a stable voice identity field. It is not part of the image prompt.',
       'For character assets, describe the character itself without background or pose.',
       'For location assets, describe the empty reusable environment with clear layout anchors and no named main characters.',
     ],
@@ -89,7 +87,6 @@ export async function designEditAssetRequirements(
     return {
       ...requirement,
       description: design.prompt.trim(),
-      voiceTimbreText: requirement.kind === 'character' ? requirement.voiceTimbreText?.trim() ?? null : null,
     }
   }))
 }

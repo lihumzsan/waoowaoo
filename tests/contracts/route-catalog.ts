@@ -33,7 +33,6 @@ const ROUTE_FILES = [
   'src/app/api/asset-hub/ai-modify-location/route.ts',
   'src/app/api/asset-hub/ai-modify-prop/route.ts',
   'src/app/api/asset-hub/appearances/route.ts',
-  'src/app/api/asset-hub/character-voice/route.ts',
   'src/app/api/asset-hub/characters/[characterId]/appearances/[appearanceIndex]/route.ts',
   'src/app/api/asset-hub/characters/[characterId]/route.ts',
   'src/app/api/asset-hub/characters/route.ts',
@@ -45,10 +44,6 @@ const ROUTE_FILES = [
   'src/app/api/asset-hub/reference-to-character/route.ts',
   'src/app/api/asset-hub/upload-image/route.ts',
   'src/app/api/asset-hub/upload-temp/route.ts',
-  'src/app/api/asset-hub/voice-design/route.ts',
-  'src/app/api/asset-hub/voices/[id]/route.ts',
-  'src/app/api/asset-hub/voices/route.ts',
-  'src/app/api/asset-hub/voices/upload/route.ts',
   'src/app/api/assets/[assetId]/copy/route.ts',
   'src/app/api/assets/[assetId]/generate/route.ts',
   'src/app/api/assets/[assetId]/modify-render/route.ts',
@@ -75,7 +70,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/analyze/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/canvas-layout/route.ts',
-  'src/app/api/projects/[projectId]/character-voice/route.ts',
   'src/app/api/projects/[projectId]/character/appearance/route.ts',
   'src/app/api/projects/[projectId]/character/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/character/route.ts',
@@ -85,7 +79,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/copy-from-global/route.ts',
   'src/app/api/projects/[projectId]/download-images/route.ts',
   'src/app/api/projects/[projectId]/download-videos/route.ts',
-  'src/app/api/projects/[projectId]/download-voices/route.ts',
   'src/app/api/projects/[projectId]/editor/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
@@ -106,7 +99,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/generate-music/route.ts',
   'src/app/api/projects/[projectId]/generate-video/route.ts',
   'src/app/api/projects/[projectId]/insert-panel/route.ts',
-  'src/app/api/projects/[projectId]/lip-sync/route.ts',
   'src/app/api/projects/[projectId]/location/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/location/route.ts',
   'src/app/api/projects/[projectId]/modify-asset-image/route.ts',
@@ -127,7 +119,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/screenplay-conversion/route.ts',
   'src/app/api/projects/[projectId]/select-character-image/route.ts',
   'src/app/api/projects/[projectId]/select-location-image/route.ts',
-  'src/app/api/projects/[projectId]/speaker-voice/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/copy/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/route.ts',
   'src/app/api/projects/[projectId]/storyboards/route.ts',
@@ -138,10 +129,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/upload-asset-image/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
   'src/app/api/projects/[projectId]/video-urls/route.ts',
-  'src/app/api/projects/[projectId]/voice-analyze/route.ts',
-  'src/app/api/projects/[projectId]/voice-design/route.ts',
-  'src/app/api/projects/[projectId]/voice-generate/route.ts',
-  'src/app/api/projects/[projectId]/voice-lines/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/log/route.ts',
@@ -171,7 +158,6 @@ const ROUTE_FILES = [
   'src/app/api/tasks/route.ts',
   'src/app/api/user-preference/route.ts',
   'src/app/api/user/api-config/route.ts',
-  'src/app/api/user/api-config/probe-model-llm-protocol/route.ts',
   'src/app/api/user/api-config/test-connection/route.ts',
   'src/app/api/user/api-config/test-provider/route.ts',
   'src/app/api/user/balance/route.ts',
@@ -207,7 +193,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.includes('/reference-to-character/')
     || routeFile.endsWith('/clips/route.ts')
     || routeFile.endsWith('/episodes/split/route.ts')
-    || routeFile.endsWith('/voice-analyze/route.ts')
   ) {
     return 'llm-observe-routes'
   }
@@ -221,9 +206,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/generate/route.ts')
     || routeFile.endsWith('/modify-image/route.ts')
     || routeFile.endsWith('/modify-render/route.ts')
-    || routeFile.endsWith('/voice-design/route.ts')
     || routeFile.endsWith('/insert-panel/route.ts')
-    || routeFile.endsWith('/lip-sync/route.ts')
     || routeFile.endsWith('/modify-asset-image/route.ts')
     || routeFile.endsWith('/modify-storyboard-image/route.ts')
     || routeFile.endsWith('/panel-variant/route.ts')
@@ -231,7 +214,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/regenerate-panel-image/route.ts')
     || routeFile.endsWith('/regenerate-single-image/route.ts')
     || routeFile.endsWith('/regenerate-storyboard-text/route.ts')
-    || routeFile.endsWith('/voice-generate/route.ts')
   ) {
     return 'direct-submit-routes'
   }

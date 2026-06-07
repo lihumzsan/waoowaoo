@@ -68,7 +68,7 @@ const logger = createScopedLogger({
 const NEXT_IMAGE_PATH = '/_next/image'
 const MAX_NEXT_IMAGE_UNWRAP_DEPTH = 6
 const SIGNED_URL_TTL_SECONDS = 3600
-const STORAGE_KEY_PREFIXES = ['images/', 'video/', 'voice/'] as const
+const STORAGE_KEY_PREFIXES = ['images/', 'video/'] as const
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream'
 
 const MIME_BY_EXT: Record<string, string> = {

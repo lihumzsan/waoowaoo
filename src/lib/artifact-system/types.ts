@@ -15,7 +15,6 @@ export const ARTIFACT_TYPES = {
   STORYBOARD_PHASE2_ACTING: 'storyboard.phase2.acting',
   STORYBOARD_PHASE3_DETAIL: 'storyboard.phase3.detail',
   STORYBOARD_PANEL_SET: 'storyboard.panel_set',
-  VOICE_LINES: 'voice.lines',
   PANEL_PROMPT: 'panel.prompt',
   PANEL_IMAGE: 'panel.image',
   PANEL_VIDEO: 'panel.video',

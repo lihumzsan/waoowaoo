@@ -363,5 +363,5 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
       },
     })
   }
-  return buildMediaOptionSchema('audio')
+  throw new Error(`ARK_OPTION_SCHEMA_UNSUPPORTED_MODALITY:${modality}`)
 }

@@ -3,9 +3,9 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 
 export type AssetScope = 'global' | 'project'
 
-export type AssetKind = 'character' | 'location' | 'prop' | 'voice'
+export type AssetKind = 'character' | 'location' | 'prop'
 
-export type AssetFamily = 'visual' | 'audio'
+export type AssetFamily = 'visual'
 
 export type AssetTaskError = {
   code: string
@@ -23,7 +23,6 @@ export type AssetCapabilityMap = {
   canRevertRender: boolean
   canModifyRender: boolean
   canUploadRender: boolean
-  canBindVoice: boolean
   canCopyFromGlobal: boolean
 }
 
@@ -82,12 +81,6 @@ export type CharacterAssetSummary = BaseAssetSummary & {
   introduction: string | null
   profileData: string | null
   profileConfirmed: boolean | null
-  voice: {
-    voiceType: 'custom' | 'qwen-designed' | 'uploaded' | null
-    voiceId: string | null
-    customVoiceUrl: string | null
-    media: MediaRef | null
-  }
 }
 
 export type LocationAssetSummary = BaseAssetSummary & {
@@ -106,28 +99,12 @@ export type PropAssetSummary = BaseAssetSummary & {
   selectedVariantId: string | null
 }
 
-export type VoiceAssetSummary = BaseAssetSummary & {
-  kind: 'voice'
-  family: 'audio'
-  voiceMeta: {
-    description: string | null
-    voiceId: string | null
-    voiceType: string
-    customVoiceUrl: string | null
-    media: MediaRef | null
-    voicePrompt: string | null
-    gender: string | null
-    language: string
-  }
-}
-
 export type VisualAssetSummary = CharacterAssetSummary | LocationAssetSummary | PropAssetSummary
 
 export type AssetSummary =
   | CharacterAssetSummary
   | LocationAssetSummary
   | PropAssetSummary
-  | VoiceAssetSummary
 
 export type AssetQueryInput = {
   scope: AssetScope

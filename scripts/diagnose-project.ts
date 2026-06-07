@@ -152,7 +152,7 @@ async function diagnoseProject(projectId: string) {
     console.log(`  场景模型: ${userPreference.locationModel || '未设置'}`)
     console.log(`  视频模型: ${userPreference.videoModel || '未设置'}`)
     console.log(`  编辑模型: ${userPreference.editModel || '未设置'}`)
-    console.log(`  口型同步模型: ${userPreference.lipSyncModel || '未设置'}`)
+    console.log(`  音乐模型: ${userPreference.musicModel || '未设置'}`)
     console.log(`  分析模型: ${userPreference.analysisModel || '未设置'}`)
   }
 

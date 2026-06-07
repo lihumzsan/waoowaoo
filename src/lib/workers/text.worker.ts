@@ -22,7 +22,6 @@ import {
 import { getProjectModelConfig } from '@/lib/config-service'
 import { reportTaskProgress, reportTaskStreamChunk, withTaskLifecycle } from './shared'
 import { assertTaskActive } from './utils'
-import { handleVoiceAnalyzeTask } from './handlers/voice-analyze'
 import { handleAssetHubAIDesignTask } from './handlers/asset-hub-ai-design'
 import { handleClipsBuildTask } from './handlers/clips-build'
 import { handleAnalyzeNovelTask } from './handlers/analyze-novel'
@@ -660,8 +659,6 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEditScriptStoryboardPrepareTask(job)
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
-    case TASK_TYPE.VOICE_ANALYZE:
-      return await handleVoiceAnalyzeTask(job)
     case TASK_TYPE.ANALYZE_NOVEL:
       return await handleAnalyzeNovelTask(job)
     case TASK_TYPE.CLIPS_BUILD:
