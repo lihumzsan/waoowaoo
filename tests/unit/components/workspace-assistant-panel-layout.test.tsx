@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createTranslator } from 'use-intl/core'
-import { WorkspaceAssistantPanelHeader } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelHeader'
+import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import { WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
@@ -67,10 +67,12 @@ describe('workspace assistant panel layout', () => {
     })
   })
 
-  it('renders explicit collapse and expand controls for the sidebar rail', () => {
-    const headerHtml = renderToStaticMarkup(
-      createElement(WorkspaceAssistantPanelHeader, {
+  it('renders explicit floating collapse and expand controls for the sidebar rail', () => {
+    const collapseHandleHtml = renderToStaticMarkup(
+      createElement(WorkspaceAssistantCollapseHandle, {
         collapseLabel: 'Collapse AI assistant sidebar',
+        panelWidthPx: 520,
+        topOffset: '4rem',
         onCollapse: () => undefined,
       }),
     )
@@ -81,19 +83,20 @@ describe('workspace assistant panel layout', () => {
       }),
     )
 
-    expect(headerHtml).toContain('Collapse AI assistant sidebar')
-    expect(headerHtml).toContain('lucide-chevron-right')
-    expect(headerHtml).not.toContain('Workspace Chat')
-    expect(headerHtml).not.toContain('View full raw context')
-    expect(headerHtml).not.toContain('Download Log')
-    expect(headerHtml).not.toContain('lucide-file-text')
-    expect(headerHtml).not.toContain('lucide-download')
-    expect(headerHtml).toContain('bg-transparent')
-    expect(headerHtml).not.toContain('bg-white/70')
-    expect(headerHtml).not.toContain('sticky')
-    expect(headerHtml).not.toContain('top-0')
-    expect(headerHtml).not.toContain('z-10')
-    expect(headerHtml).not.toContain('backdrop-blur')
+    expect(collapseHandleHtml).toContain('Collapse AI assistant sidebar')
+    expect(collapseHandleHtml).toContain('lucide-chevron-right')
+    expect(collapseHandleHtml).toContain('fixed')
+    expect(collapseHandleHtml).toContain('pointer-events-auto')
+    expect(collapseHandleHtml).toContain('right:calc(1rem + 520px - 1.25rem)')
+    expect(collapseHandleHtml).not.toContain('shrink-0')
+    expect(collapseHandleHtml).not.toContain('Workspace Chat')
+    expect(collapseHandleHtml).not.toContain('View full raw context')
+    expect(collapseHandleHtml).not.toContain('Download Log')
+    expect(collapseHandleHtml).not.toContain('lucide-file-text')
+    expect(collapseHandleHtml).not.toContain('lucide-download')
+    expect(collapseHandleHtml).not.toContain('sticky')
+    expect(collapseHandleHtml).not.toContain('top-0')
+    expect(collapseHandleHtml).not.toContain('z-10')
     expect(railHtml).toContain('Expand AI assistant sidebar')
     expect(railHtml).toContain('lucide-chevron-left')
     expect(railHtml).not.toContain('Workspace Chat')

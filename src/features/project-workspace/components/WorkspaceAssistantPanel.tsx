@@ -19,7 +19,7 @@ import { createAssistantMessage } from './workspace-assistant/assistant-messages
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { apiFetch } from '@/lib/api-fetch'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
-import { WorkspaceAssistantPanelHeader } from './workspace-assistant/WorkspaceAssistantPanelHeader'
+import { WorkspaceAssistantCollapseHandle } from './workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from './workspace-assistant/WorkspaceAssistantPanelRail'
 import { WorkspaceAssistantThinkingIndicator } from './workspace-assistant/WorkspaceAssistantThinkingIndicator'
 import {
@@ -456,6 +456,14 @@ export default function WorkspaceAssistantPanel({
       style={{ width: `${layout.occupiedWidthPx}px` }}
       data-state={layout.state}
     >
+      {!isCollapsed ? (
+        <WorkspaceAssistantCollapseHandle
+          collapseLabel={t('panel.collapse')}
+          panelWidthPx={layout.panelWidthPx}
+          topOffset={WORKSPACE_ASSISTANT_TOP_OFFSET}
+          onCollapse={onToggleCollapsed}
+        />
+      ) : null}
       <div
         className={`pointer-events-auto fixed right-4 z-20 overflow-hidden rounded-[34px] border border-white/80 bg-white/82 ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl ${isResizing ? '' : 'transition-[width] duration-300 ease-out'}`}
         style={{
@@ -480,35 +488,30 @@ export default function WorkspaceAssistantPanel({
         >
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
-              <WorkspaceAssistantPanelHeader
-                collapseLabel={t('panel.collapse')}
-                onCollapse={onToggleCollapsed}
-              />
+              <ThreadPrimitive.Viewport
+                autoScroll
+                className="flex-1 overflow-y-auto px-5 pb-4 pt-4"
+                style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
+              >
+                <div className="space-y-3">
+                  <ThreadPrimitive.Messages>
+                    {() => (
+                      <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />
+                    )}
+                  </ThreadPrimitive.Messages>
+                  <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status} />
+                </div>
+              </ThreadPrimitive.Viewport>
 
-            <ThreadPrimitive.Viewport
-              autoScroll
-              className="flex-1 overflow-y-auto px-5 pb-4 pt-2"
-              style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
-            >
-              <div className="space-y-3">
-                <ThreadPrimitive.Messages>
-                  {() => (
-                    <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />
-                  )}
-                </ThreadPrimitive.Messages>
-                <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status} />
+              <div className="mx-4 mb-3 shrink-0 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
+                <WorkspaceAssistantComposer
+                  value={composerText}
+                  error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
+                  pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                  onChange={setComposerText}
+                  onSubmit={handleComposerSubmit}
+                />
               </div>
-            </ThreadPrimitive.Viewport>
-
-            <div className="mx-4 mb-3 shrink-0 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
-              <WorkspaceAssistantComposer
-                value={composerText}
-                error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
-                pending={assistantRuntime.pending || assistantRuntime.storageLoading}
-                onChange={setComposerText}
-                onSubmit={handleComposerSubmit}
-              />
-            </div>
             </ThreadPrimitive.Root>
           </AssistantRuntimeProvider>
         </div>
