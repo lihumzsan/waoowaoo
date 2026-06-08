@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
@@ -26,6 +26,12 @@ type ScenePromptTaskResult = {
   variants?: ScenePromptVariantResult[]
 }
 
+type ScenePromptPreset = {
+  id: string
+  title: string
+  story: string
+}
+
 type TaskDetail<T> = {
   id: string
   status: string
@@ -40,6 +46,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function parsePreset(value: unknown): ScenePromptPreset | null {
+  if (!isRecord(value)) return null
+  const id = readString(value.id)
+  const title = readString(value.title)
+  const story = readString(value.story)
+  if (!id || !title || !story) return null
+  return { id, title, story }
+}
+
+function parsePresets(value: unknown): ScenePromptPreset[] {
+  if (!Array.isArray(value)) return []
+  return value.map(parsePreset).filter((preset): preset is ScenePromptPreset => Boolean(preset))
 }
 
 function parseSubmitResponse(value: unknown): SubmitResponse {
@@ -87,12 +107,18 @@ function taskPhase(status: string | undefined, hasTask: boolean): TaskPresentati
 
 export default function ScenePromptTestPage() {
   const t = useTranslations('workspaceDetail.scenePromptTest')
-  const [sceneInput, setSceneInput] = useState('')
+  const presets = useMemo(() => parsePresets(t.raw('presets')), [t])
+  const [selectedPresetId, setSelectedPresetId] = useState('')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [task, setTask] = useState<TaskDetail<ScenePromptTaskResult> | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const result = task?.result ?? null
+  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null
+
+  useEffect(() => {
+    if (!selectedPresetId && presets[0]) setSelectedPresetId(presets[0].id)
+  }, [presets, selectedPresetId])
 
   const pollTask = useCallback(async (id: string) => {
     const response = await apiFetch(`/api/tasks/${id}`)
@@ -124,7 +150,7 @@ export default function ScenePromptTestPage() {
   }, [pollTask, taskId, t])
 
   const generate = useCallback(async () => {
-    if (!sceneInput.trim()) {
+    if (!selectedPreset) {
       setError(t('needSceneInput'))
       return
     }
@@ -136,7 +162,7 @@ export default function ScenePromptTestPage() {
       const response = await apiFetch('/api/scene-prompt-test/generate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sceneInput }),
+        body: JSON.stringify({ sceneInput: selectedPreset.story }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('failed')))
       const parsed = parseSubmitResponse(await response.json())
@@ -147,7 +173,7 @@ export default function ScenePromptTestPage() {
     } finally {
       setBusy(false)
     }
-  }, [sceneInput, t])
+  }, [selectedPreset, t])
 
   const taskState = resolveTaskPresentationState({
     phase: taskPhase(task?.status, Boolean(taskId)),
@@ -173,20 +199,37 @@ export default function ScenePromptTestPage() {
 
         <section className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
           <div className="flex flex-col gap-4 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-4">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">{t('sceneInputLabel')}</span>
-              <textarea
-                value={sceneInput}
-                onChange={(event) => setSceneInput(event.target.value)}
-                rows={14}
-                placeholder={t('sceneInputPlaceholder')}
-                className="resize-none rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] px-3 py-2 text-sm leading-6 outline-none"
-              />
-            </label>
+            <div className="grid gap-2">
+              <div>
+                <h2 className="text-sm font-medium">{t('presetLabel')}</h2>
+                <p className="mt-1 text-xs leading-5 text-[var(--glass-text-secondary)]">{t('presetHint')}</p>
+              </div>
+              <div className="grid max-h-[620px] gap-2 overflow-auto pr-1">
+                {presets.map((preset) => (
+                  <label
+                    key={preset.id}
+                    className="grid cursor-pointer gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] p-3 text-sm has-[:checked]:border-[var(--glass-accent-from)] has-[:checked]:bg-[var(--glass-accent-from)]/10"
+                  >
+                    <span className="flex items-start gap-2">
+                      <input
+                        type="radio"
+                        name="scene-prompt-preset"
+                        value={preset.id}
+                        checked={selectedPresetId === preset.id}
+                        onChange={() => setSelectedPresetId(preset.id)}
+                        className="mt-1"
+                      />
+                      <span className="font-semibold">{preset.title}</span>
+                    </span>
+                    <span className="pl-6 text-xs leading-5 text-[var(--glass-text-secondary)]">{preset.story}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <button
               type="button"
               onClick={generate}
-              disabled={busy || !sceneInput.trim()}
+              disabled={busy || !selectedPreset}
               className="rounded-lg bg-[var(--glass-accent-from)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {busy ? t('submitting') : t('generate')}

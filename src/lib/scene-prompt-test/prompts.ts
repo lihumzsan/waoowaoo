@@ -31,14 +31,26 @@ function outputRule(locale: Locale): string {
       'Output JSON only: {"prompt":"final image-generation prompt"}.',
       'The prompt value must be the final image prompt only. It must not include analysis notes, strategy names, hidden reasoning, the original full input, or instructions to choose a scene.',
       'The prompt must describe one empty reusable scene asset image directly: visible space, production design, lighting, color, material, atmosphere, composition, anchors, and usable standing areas.',
+      'The final image must use centered composition and a full wide scene view, like a reusable scene asset reference, not a storyboard frame or narrative beat.',
       'No named main characters, dialogue, readable text, subtitles, labels, arrows, watermark, or logo.',
     ].join('\n')
     : [
       '只输出 JSON：{"prompt":"最终图片生成提示词"}。',
       'prompt 字段必须只包含最终图片提示词，不得包含分析说明、策略名称、隐藏推理、完整原始输入或“选择场景”这类任务指令。',
       'prompt 必须直接描述一张空场景资产图：可见空间、美术造景、灯光、色彩、材质、空气感、构图、稳定锚点和可落位区域。',
+      '最终图片必须是居中构图、展示全景的场景资产参考图，不要像分镜截图或叙事瞬间。',
       '不要出现有名主角、对白、可读文字、字幕、标签、箭头、水印或 Logo。',
     ].join('\n')
+}
+
+export function appendScenePromptTestCompositionRule(input: {
+  readonly prompt: string
+  readonly locale: Locale
+}): string {
+  const rule = input.locale === 'en'
+    ? 'Centered composition, full wide establishing view, reusable empty scene asset reference, not a storyboard frame or narrative moment.'
+    : '居中构图，展示全景，可复用空场景资产参考图，不要像分镜截图或叙事瞬间。'
+  return joinLines([input.prompt.trim(), rule])
 }
 
 function zhSharedContext(sceneInput: string): string[] {

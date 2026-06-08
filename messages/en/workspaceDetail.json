@@ -9,8 +9,62 @@
   "episode": "Episode",
   "scenePromptTest": {
     "title": "Scene Prompt Comparison Test",
-    "subtitle": "Enter one scene or story text only, then generate the current baseline plus three new scene-design strategies to compare whether AI can infer style, story direction, and the best reusable scene by itself.",
+    "subtitle": "Choose one of 10 single-scene story presets, then generate the current baseline plus three new scene-design strategies to compare how well each strategy handles scene selection, set design, texture, and wide asset composition.",
     "back": "Back to workspace",
+    "presetLabel": "Choose test story",
+    "presetHint": "Each preset contains only one scene, making it easier to compare scene choice, production design, texture, and full-scene asset framing.",
+    "presets": [
+      {
+        "id": "late-night-office-ghost",
+        "title": "Midnight Office Horror",
+        "story": "At midnight in an old office building, only one row of desks is still lit. Amin hears keyboard sounds from the corner where a former coworker used to sit, while cold monitor light falls across messy desks and a half-open pantry door."
+      },
+      {
+        "id": "mountain-temple-farewell",
+        "title": "Mountain Temple Farewell",
+        "story": "Morning mist rests over the front courtyard of a mountain temple. A young martial monk is about to leave through the old wooden gate, with stone steps, an incense burner, fallen ginkgo leaves, and the distant mountain road carrying the weight of farewell."
+      },
+      {
+        "id": "nineties-video-store",
+        "title": "1990s Video Store",
+        "story": "In 1993, a small county video store is closing late at night. Faded posters, wooden shelves of VHS tapes, plastic chairs, and a snowy television create a humid yellow space where the owner has just found an unlabeled tape."
+      },
+      {
+        "id": "alien-checkpoint",
+        "title": "Alien Border Checkpoint",
+        "story": "A border checkpoint on an alien colony is half-lit inside a sandstorm. Alloy gates, a life-scan chamber, red warning lights, and transparent observation windows imply that an abnormal traveler has just been stopped."
+      },
+      {
+        "id": "hospital-corridor-secret",
+        "title": "Hospital Corridor Secret",
+        "story": "In the old inpatient wing of a hospital at dawn, only the nurses' station lamp remains on. Yellowed walls, half-open ward doors, cold reflective flooring, and warm light leaking under one sealed room create a wrong, quiet tension."
+      },
+      {
+        "id": "subway-platform-breakup",
+        "title": "Rainy Subway Platform",
+        "story": "On a rainy night, the last-train subway platform is empty and damp. Backlit ads, wet footprints, the yellow platform line, and tunnel lights in the distance form cold-warm layers after the final sentence of a breakup has just landed."
+      },
+      {
+        "id": "underwater-archive",
+        "title": "Underwater Archive",
+        "story": "A near-future underwater archive has a circular reading hall surrounded by blue-green ocean light. Fish pass beyond the transparent dome, while sealed bookcases and old paper files imply a history that should not be public."
+      },
+      {
+        "id": "rural-wedding-banquet",
+        "title": "Village Wedding Unease",
+        "story": "After a winter village wedding banquet, the ancestral hall is left with red plastic stools, leftover round tables, wedding paper cutouts, coal stove smoke, and memorial tablets. The bride's empty chair turns celebration into unease."
+      },
+      {
+        "id": "fashion-backstage",
+        "title": "Fashion Backstage Collapse",
+        "story": "Ten minutes before a luxury fashion show begins, backstage falls into chaos. Makeup mirror bulbs, a narrow rack-filled corridor, scattered heels, and a half-open curtain frame the sudden absence of the lead model."
+      },
+      {
+        "id": "desert-gas-station",
+        "title": "Desert Road Gas Station",
+        "story": "At dusk, an isolated gas station beside a desert highway is surrounded by windblown sand. Old pumps, convenience-store neon, empty parking spaces, and headlights at the far end of the road make it feel like a pause before a chase."
+      }
+    ],
     "sceneInputLabel": "Scene input",
     "sceneInputPlaceholder": "Example: On the night before a young martial monk leaves the mountain, his master speaks to him in the temple courtyard and sends him to find a missing old friend. Morning mist is heavy, and the mountain road beyond the old wooden gate leads toward an unknown town. Later storyboards need farewell, descent from the mountain, looking back at the temple gate, and a mentor-student turning point.",
     "generate": "Generate 4 scene comparisons",

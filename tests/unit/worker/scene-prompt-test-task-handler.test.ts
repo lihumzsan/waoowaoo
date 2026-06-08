@@ -72,6 +72,8 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => handlerSharedM
 
 import { handleScenePromptTestTask } from '@/lib/workers/handlers/scene-prompt-test-task-handler'
 
+const zhCompositionRule = '居中构图，展示全景，可复用空场景资产参考图，不要像分镜截图或叙事瞬间。'
+
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     data: {
@@ -120,10 +122,10 @@ describe('worker scene-prompt-test-task-handler', () => {
     ])
     expect(result.variants.map((variant) => variant.aspectRatio)).toEqual(['16:9', '16:9', '16:9', '21:9'])
     expect(result.variants.map((variant) => variant.prompt)).toEqual([
-      '最终办公室惊悚空场景提示词 1',
-      '最终办公室惊悚空场景提示词 2',
-      '最终办公室惊悚空场景提示词 3',
-      '最终办公室惊悚空场景提示词 4',
+      `最终办公室惊悚空场景提示词 1\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 2\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 3\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 4\n${zhCompositionRule}`,
     ])
     expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(4)
     expect(textEngineMock.executeAiTextStep.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
@@ -147,10 +149,10 @@ describe('worker scene-prompt-test-task-handler', () => {
     ])
     expect(generationCalls.map((call) => call.allowTaskExternalIdResume)).toEqual([false, false, false, false])
     expect(generationCalls.map((call) => call.prompt)).toEqual([
-      '最终办公室惊悚空场景提示词 1',
-      '最终办公室惊悚空场景提示词 2',
-      '最终办公室惊悚空场景提示词 3',
-      '最终办公室惊悚空场景提示词 4',
+      `最终办公室惊悚空场景提示词 1\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 2\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 3\n${zhCompositionRule}`,
+      `最终办公室惊悚空场景提示词 4\n${zhCompositionRule}`,
     ])
     expect(generationCalls.map((call) => call.options?.aspectRatio)).toEqual(['16:9', '16:9', '16:9', '21:9'])
   })

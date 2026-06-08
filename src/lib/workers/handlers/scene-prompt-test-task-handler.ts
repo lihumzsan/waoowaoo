@@ -4,7 +4,11 @@ import { safeParseJsonObject } from '@/lib/json-repair'
 import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
-import { buildScenePromptTestStrategies, type ScenePromptStrategy } from '@/lib/scene-prompt-test/prompts'
+import {
+  appendScenePromptTestCompositionRule,
+  buildScenePromptTestStrategies,
+  type ScenePromptStrategy,
+} from '@/lib/scene-prompt-test/prompts'
 import { generateCleanImageToStorage } from './image-task-handler-shared'
 
 function readRequiredString(value: unknown, field: string): string {
@@ -47,7 +51,10 @@ async function generateFinalImagePrompt(input: {
   const parsed = safeParseJsonObject(completion.text)
   const prompt = typeof parsed.prompt === 'string' ? parsed.prompt.trim() : ''
   if (!prompt) throw new Error(`SCENE_PROMPT_TEST_EMPTY_FINAL_PROMPT:${input.strategy.id}`)
-  return prompt
+  return appendScenePromptTestCompositionRule({
+    prompt,
+    locale: input.job.data.locale,
+  })
 }
 
 export async function handleScenePromptTestTask(job: Job<TaskJobData>) {
