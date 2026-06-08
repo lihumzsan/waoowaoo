@@ -60,32 +60,25 @@ export async function handleScenePromptTestTask(job: Job<TaskJobData>) {
     sceneInput,
     locale: job.data.locale,
   })
-  const results: Array<{
-    id: string
-    label: string
-    aspectRatio: string
-    prompt: string
-    imageKey: string
-    imageUrl: string
-  }> = []
 
-  for (let index = 0; index < strategies.length; index++) {
-    const strategy = strategies[index]
-    await reportTaskProgress(job, 10 + Math.floor((index / Math.max(strategies.length, 1)) * 35), {
-      stage: 'scene_prompt_test_draft',
-      stageLabel: job.data.locale === 'en' ? `Drafting ${strategy.label}` : `生成${strategy.label}最终提示词`,
-      variantId: strategy.id,
-    })
-    const prompt = await generateFinalImagePrompt({
+  await reportTaskProgress(job, 10, {
+    stage: 'scene_prompt_test_draft',
+    stageLabel: job.data.locale === 'en' ? 'Drafting final scene prompts' : '并行生成最终场景提示词',
+  })
+  const promptResults = await Promise.all(strategies.map(async (strategy) => ({
+    strategy,
+    prompt: await generateFinalImagePrompt({
       job,
       strategy,
       analysisModel,
-    })
-    await reportTaskProgress(job, 45 + Math.floor((index / Math.max(strategies.length, 1)) * 45), {
-      stage: 'scene_prompt_test_generate',
-      stageLabel: job.data.locale === 'en' ? `Generating ${strategy.label}` : `生成${strategy.label}`,
-      variantId: strategy.id,
-    })
+    }),
+  })))
+
+  await reportTaskProgress(job, 45, {
+    stage: 'scene_prompt_test_generate',
+    stageLabel: job.data.locale === 'en' ? 'Generating scene reference images' : '并行生成场景参考图',
+  })
+  const results = await Promise.all(promptResults.map(async ({ strategy, prompt }) => {
     const imageKey = await generateCleanImageToStorage({
       job,
       userId: job.data.userId,
@@ -99,15 +92,15 @@ export async function handleScenePromptTestTask(job: Job<TaskJobData>) {
         ...imageOptions,
       },
     })
-    results.push({
+    return {
       id: strategy.id,
       label: strategy.label,
       aspectRatio: strategy.aspectRatio,
       prompt,
       imageKey,
       imageUrl: getSignedUrl(imageKey, 7 * 24 * 3600),
-    })
-  }
+    }
+  }))
 
   await reportTaskProgress(job, 95, {
     stage: 'scene_prompt_test_done',
