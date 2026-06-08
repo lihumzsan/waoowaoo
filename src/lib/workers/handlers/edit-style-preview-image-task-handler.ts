@@ -3,10 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
+import {
+  EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO,
+  EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
+} from '@/lib/edit-script/style-preview-image-constants'
 import { generateCleanImageToStorage } from './image-task-handler-shared'
 
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY = 'style_preview_ready'
-const EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO = '1:1'
 
 function readRequiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) {
@@ -15,7 +18,7 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-function readGenerationOptions(value: unknown): { resolution?: string; quality?: string; size?: string } {
+function readGenerationOptions(value: unknown): { resolution?: string; quality?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const record = value as Record<string, unknown>
   return {
@@ -24,9 +27,6 @@ function readGenerationOptions(value: unknown): { resolution?: string; quality?:
       : {}),
     ...(typeof record.quality === 'string' && record.quality.trim()
       ? { quality: record.quality.trim() }
-      : {}),
-    ...(typeof record.size === 'string' && record.size.trim()
-      ? { size: record.size.trim() }
       : {}),
   }
 }
@@ -121,6 +121,7 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
       imageUrl: getSignedUrl(imageKey, 7 * 24 * 3600),
       prompt,
       aspectRatio: EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO,
+      targetResolution: EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
     }
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught)

@@ -82,7 +82,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
       stylePreviewId: 'preview-1',
       imageModel: 'storyboard-image-model',
       prompt: 'single image, 3x3 grid, nine cinematic frames',
-      generationOptions: { resolution: '1024x1024', quality: 'high' },
+      generationOptions: { resolution: '1K', quality: 'high', size: '1024x1024' },
     })
 
     const result = await handleEditStylePreviewImageTask(job)
@@ -95,8 +95,8 @@ describe('worker edit-style-preview-image-task-handler', () => {
       targetId: 'preview-1',
       keyPrefix: 'edit-style-preview',
       options: {
-        aspectRatio: '1:1',
-        resolution: '1024x1024',
+        aspectRatio: '16:9',
+        resolution: '1K',
         quality: 'high',
       },
     }))
@@ -117,7 +117,8 @@ describe('worker edit-style-preview-image-task-handler', () => {
       imageKey: 'edit-style-preview/preview-1.png',
       imageUrl: 'https://signed.example/edit-style-preview/preview-1.png',
       prompt: 'single image, 3x3 grid, nine cinematic frames',
-      aspectRatio: '1:1',
+      aspectRatio: '16:9',
+      targetResolution: '1920x1080',
     })
   })
 

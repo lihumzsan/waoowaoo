@@ -478,6 +478,9 @@ describe('edit script generation status persistence', () => {
       type: 'edit_style_preview_image',
       targetType: 'ProjectEditStylePreview',
       targetId: 'style-preview-style_a',
+      payload: expect.objectContaining({
+        aspectRatio: '16:9',
+      }),
     }))
     expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
   })

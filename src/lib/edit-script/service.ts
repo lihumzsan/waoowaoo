@@ -15,6 +15,7 @@ import { getSignedUrl } from '@/lib/storage'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
+import { EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO } from '@/lib/edit-script/style-preview-image-constants'
 import type { Locale } from '@/i18n/routing'
 import {
   normalizeDirectorDecoupage,
@@ -239,7 +240,6 @@ interface ExistingAssetRef {
 
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING = 'style_preview_generating'
 const EDIT_SCREENPLAY_STATUS_FAILED = 'failed'
-const EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO = '1:1'
 
 function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
   if (value === 'generating' || value === 'completed' || value === 'confirmed' || value === 'failed') return value
