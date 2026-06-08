@@ -56,12 +56,12 @@ export const CHARACTER_IMAGE_BANANA_RATIO = CHARACTER_ASSET_IMAGE_RATIO
 // 道具图片生成比例（道具仍使用紧凑设定图，不跟随角色资产板比例）
 export const PROP_IMAGE_RATIO = '3:2'
 
-// 场景图片生成比例（1:1 正方形单张场景）
-export const LOCATION_IMAGE_RATIO = '1:1'
-// 场景图片尺寸（用于Seedream API）- 4K
-export const LOCATION_IMAGE_SIZE = '4096x4096'  // 1:1 正方形 4K
+// 场景图片生成比例（4:3 横版完整场景资产图）
+export const LOCATION_IMAGE_RATIO = '4:3'
+// 场景图片尺寸（用于Seedream API）- 4:3 4K
+export const LOCATION_IMAGE_SIZE = '4096x3072'
 // 场景图片尺寸（用于Banana API）
-export const LOCATION_IMAGE_BANANA_RATIO = '1:1'
+export const LOCATION_IMAGE_BANANA_RATIO = LOCATION_IMAGE_RATIO
 
 // 从提示词中移除角色系统后缀（用于显示给用户）
 export function removeCharacterPromptSuffix(prompt: string): string {

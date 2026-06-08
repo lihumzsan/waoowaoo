@@ -4,6 +4,14 @@ import { CHARACTER_ASSET_IMAGE_RATIO, addCharacterPromptSuffix, PRIMARY_APPEARAN
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { executeAiTextStep } from '@/lib/ai-exec/engine'
+import { safeParseJsonObject } from '@/lib/json-repair'
+import type { EditScriptStyleBible } from '@/lib/edit-script/types'
+import {
+  buildCharacterCandidatePromptInstruction,
+  CHARACTER_CANDIDATE_PROMPT_COUNT,
+  parseCharacterCandidatePrompts,
+} from '@/lib/asset-generation/character-candidate-prompts'
 import { reportTaskProgress } from '../shared'
 import {
   assertTaskActive,
@@ -51,6 +59,36 @@ interface PrimaryAppearanceRecord {
   imageUrl: string | null
   imageUrls: string | null
   selectedIndex: number | null
+}
+
+async function generateCharacterCandidatePrompts(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly analysisModel: string
+  readonly description: string
+  readonly locale: 'zh' | 'en'
+  readonly styleBible: EditScriptStyleBible | null
+}): Promise<string[]> {
+  const instruction = buildCharacterCandidatePromptInstruction({
+    description: input.description,
+    locale: input.locale,
+    styleBible: input.styleBible,
+  })
+  const completion = await executeAiTextStep({
+    userId: input.userId,
+    model: input.analysisModel,
+    messages: [{ role: 'user', content: instruction }],
+    temperature: 0.75,
+    projectId: input.projectId,
+    action: 'character_candidate_prompts',
+    meta: {
+      stepId: 'character_candidate_prompts',
+      stepTitle: '角色候选提示词',
+      stepIndex: 1,
+      stepTotal: 1,
+    },
+  })
+  return parseCharacterCandidatePrompts(safeParseJsonObject(completion.text))
 }
 
 interface CharacterImageDb {
@@ -132,17 +170,37 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   })
 
   const singleIndex = payload.imageIndex ?? payload.descriptionIndex
-  const count = normalizeImageGenerationCount('character', payload.count)
+  const count = singleIndex !== undefined
+    ? normalizeImageGenerationCount('character', 1)
+    : CHARACTER_CANDIDATE_PROMPT_COUNT
   const indexes = singleIndex !== undefined
     ? [Number(singleIndex)]
     : Array.from({ length: count }, (_value, index) => index)
 
   const imageUrls = parseImageUrls(appearance.imageUrls, 'characterAppearance.imageUrls')
   const nextImageUrls = [...imageUrls]
+  const generatedCandidateDescriptions = singleIndex === undefined
+    ? await (async () => {
+      const analysisModel = models.analysisModel
+      if (!analysisModel) throw new Error('CHARACTER_CANDIDATE_PROMPT_MODEL_REQUIRED')
+      await reportTaskProgress(job, 12, {
+        stage: 'generate_character_candidate_prompts',
+      })
+      return await generateCharacterCandidatePrompts({
+        userId,
+        projectId,
+        analysisModel,
+        description: baseDescriptions[0] || appearance.description || '',
+        locale: job.data.locale === 'en' ? 'en' : 'zh',
+        styleBible,
+      })
+    })()
+    : null
+  const effectiveDescriptions = generatedCandidateDescriptions || baseDescriptions
 
   for (let i = 0; i < indexes.length; i++) {
     const index = indexes[i]
-    const raw = baseDescriptions[index] || baseDescriptions[0]
+    const raw = effectiveDescriptions[index] || effectiveDescriptions[0]
     const promptBase = addCharacterPromptSuffix(raw)
     const prompt = appendStyleBiblePromptBlock({
       prompt: promptBase,
@@ -194,6 +252,9 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
     data: {
       imageUrls: encodeImageUrls(nextImageUrls),
       imageUrl: mainImage || null,
+      ...(generatedCandidateDescriptions
+        ? { descriptions: JSON.stringify(generatedCandidateDescriptions) }
+        : {}),
     },
   })
 

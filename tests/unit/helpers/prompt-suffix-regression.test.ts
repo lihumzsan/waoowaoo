@@ -4,6 +4,7 @@ import {
   addPropPromptSuffix,
   CHARACTER_ASSET_IMAGE_RATIO,
   CHARACTER_PROMPT_SUFFIX,
+  LOCATION_IMAGE_RATIO,
   PROP_IMAGE_RATIO,
   PROP_PROMPT_SUFFIX,
   removeCharacterPromptSuffix,
@@ -30,6 +31,10 @@ describe('character prompt suffix regression', () => {
   it('uses a 16:9 character asset board without changing prop ratio', () => {
     expect(CHARACTER_ASSET_IMAGE_RATIO).toBe('16:9')
     expect(PROP_IMAGE_RATIO).toBe('3:2')
+  })
+
+  it('uses 4:3 for complete reusable location asset images', () => {
+    expect(LOCATION_IMAGE_RATIO).toBe('4:3')
   })
 
   it('removes suffix text from prompt', () => {

@@ -32,8 +32,27 @@ const sharedMock = vi.hoisted(() => ({
   parseJsonStringArray: vi.fn(() => []),
 }))
 
+const textEngineMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(async (input: { messages?: Array<{ content?: string }> }) => {
+    const content = input.messages?.[0]?.content || ''
+    if (content.includes('"prompts"')) {
+      return {
+        text: JSON.stringify({
+          prompts: [
+            '全局候选角色A，身份轮廓清晰',
+            '全局候选角色B，服装材质清晰',
+            '全局候选角色C，分镜动作语境清晰',
+          ],
+        }),
+      }
+    }
+    return { text: JSON.stringify({ prompt: '全局候选场景 prompt，完整空场景资产图' }) }
+  }),
+}))
+
 vi.mock('@/lib/workers/utils', () => workersUtilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/ai-exec/engine', () => textEngineMock)
 vi.mock('@/lib/location-spatial-profile/service', () => ({
   analyzeAndPersistGlobalLocationImageSpatialProfile: vi.fn(async () => ({
     schemaVersion: 1,
@@ -121,7 +140,7 @@ describe('asset hub character image prompt suffix regression', () => {
     const callArg = generationCall?.[0]
     const prompt = callArg?.prompt || ''
 
-    expect(prompt).toContain('主角，黑发，冷静')
+    expect(prompt).toContain('全局候选角色A，身份轮廓清晰')
     expect(prompt).toContain(CHARACTER_PROMPT_SUFFIX)
     expect(prompt).toContain('画面固定为单张完整 16:9 横版角色资产板')
     expect(prompt).toContain('主全身照必须只有人物本体')
@@ -129,6 +148,17 @@ describe('asset hub character image prompt suffix regression', () => {
     expect(countOccurrences(prompt, CHARACTER_PROMPT_SUFFIX)).toBe(1)
     expect(callArg?.options).toEqual(expect.objectContaining({ aspectRatio: CHARACTER_ASSET_IMAGE_RATIO }))
     expect(callArg?.label).toBeUndefined()
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(1)
+    expect(prismaMock.globalCharacterAppearance.update).toHaveBeenCalledWith({
+      where: { id: 'appearance-1' },
+      data: expect.objectContaining({
+        descriptions: JSON.stringify([
+          '全局候选角色A，身份轮廓清晰',
+          '全局候选角色B，服装材质清晰',
+          '全局候选角色C，分镜动作语境清晰',
+        ]),
+      }),
+    })
   })
 
   it('honors requested count for global location generation', async () => {
@@ -154,6 +184,7 @@ describe('asset hub character image prompt suffix regression', () => {
       imageCount: 1,
     })
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(1)
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(1)
     expect(prismaMock.globalLocationImage.update).toHaveBeenCalledTimes(1)
     expect(prismaMock.globalLocationImage.update).toHaveBeenCalledWith({
       where: { id: 'global-location-image-1' },

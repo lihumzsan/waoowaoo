@@ -52,8 +52,15 @@ const spatialProfileServiceMock = vi.hoisted(() => ({
   })),
 }))
 
+const textEngineMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(async () => ({
+    text: JSON.stringify({ prompt: '雨夜街道候选最终 prompt，完整空场景资产图' }),
+  })),
+}))
+
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/ai-exec/engine', () => textEngineMock)
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
@@ -140,7 +147,7 @@ describe('worker location-image-task-handler behavior', () => {
 
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining('雨夜街道'),
+        prompt: expect.stringContaining('雨夜街道候选最终 prompt'),
         targetId: 'location-image-1',
         options: expect.objectContaining({ aspectRatio: LOCATION_IMAGE_RATIO }),
       }),
@@ -163,6 +170,12 @@ describe('worker location-image-task-handler behavior', () => {
     expect(generationInput.prompt).not.toContain('美式漫画风格')
     expect(generationInput.prompt).not.toContain('日式动漫风格')
     expect(generationInput.prompt).not.toContain('写实电影风格')
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'analysis-model-1',
+        action: 'location_candidate_prompt',
+      }),
+    )
 
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
@@ -230,6 +243,7 @@ describe('worker location-image-task-handler behavior', () => {
       locationIds: ['location-1'],
     })
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(1)
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(1)
     expect(prismaMock.locationImage.update).toHaveBeenCalledTimes(1)
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },

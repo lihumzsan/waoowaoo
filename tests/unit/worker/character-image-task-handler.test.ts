@@ -6,7 +6,7 @@ import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bibl
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
-  getProjectModels: vi.fn(async () => ({ characterModel: 'image-model-1' })),
+  getProjectModels: vi.fn(async () => ({ characterModel: 'image-model-1', analysisModel: 'analysis-model-1' })),
   toSignedUrlIfCos: vi.fn((url: string | null | undefined) => (url ? `https://signed.example/${url}` : null)),
 }))
 
@@ -41,9 +41,22 @@ const sharedMock = vi.hoisted(() => ({
   }) => Promise<string>>(async () => 'cos/character-generated-0.png'),
 }))
 
+const textEngineMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(async () => ({
+    text: JSON.stringify({
+      prompts: [
+        '候选角色提示词A，身份轮廓清晰',
+        '候选角色提示词B，服装材质清晰',
+        '候选角色提示词C，分镜动作语境清晰',
+      ],
+    }),
+  })),
+}))
+
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/media/outbound-image', () => outboundMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/ai-exec/engine', () => textEngineMock)
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
@@ -108,7 +121,7 @@ describe('worker character-image-task-handler behavior', () => {
   })
 
   it('characterModel not configured -> explicit error', async () => {
-    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '' })
+    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: '', analysisModel: 'analysis-model-1' })
     await expect(handleCharacterImageTask(buildJob({}))).rejects.toThrow('Character model not configured')
   })
 
@@ -208,15 +221,17 @@ describe('worker character-image-task-handler behavior', () => {
       .mockResolvedValueOnce('cos/character-generated-0.png')
       .mockResolvedValueOnce('cos/character-generated-1.png')
       .mockResolvedValueOnce('cos/character-generated-2.png')
-      .mockResolvedValueOnce('cos/character-generated-3.png')
-      .mockResolvedValueOnce('cos/character-generated-4.png')
 
     const result = await handleCharacterImageTask(buildJob({ count: 5 }))
 
-    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(5)
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(1)
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(3)
+    const textCalls = textEngineMock.executeAiTextStep.mock.calls as unknown as Array<[{ messages?: Array<{ content?: string }> }]>
+    const promptRequest = textCalls[0]?.[0]
+    expect(promptRequest?.messages?.[0]?.content).toContain('三条不同的最终图片生成提示词')
     expect(result).toEqual({
       appearanceId: 'appearance-2',
-      imageCount: 5,
+      imageCount: 3,
       imageUrl: 'cos/character-generated-0.png',
     })
     expect(prismaMock.characterAppearance.update).toHaveBeenCalledWith({
@@ -226,11 +241,23 @@ describe('worker character-image-task-handler behavior', () => {
           'cos/character-generated-0.png',
           'cos/character-generated-1.png',
           'cos/character-generated-2.png',
-          'cos/character-generated-3.png',
-          'cos/character-generated-4.png',
         ]),
         imageUrl: 'cos/character-generated-0.png',
+        descriptions: JSON.stringify([
+          '候选角色提示词A，身份轮廓清晰',
+          '候选角色提示词B，服装材质清晰',
+          '候选角色提示词C，分镜动作语境清晰',
+        ]),
       },
     })
+  })
+
+  it('grouped character generation requires analysis model for candidate prompts', async () => {
+    utilsMock.getProjectModels.mockResolvedValueOnce({ characterModel: 'image-model-1', analysisModel: '' })
+
+    await expect(handleCharacterImageTask(buildJob({ count: 3 }))).rejects.toThrow(
+      'CHARACTER_CANDIDATE_PROMPT_MODEL_REQUIRED',
+    )
+    expect(sharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
   })
 })

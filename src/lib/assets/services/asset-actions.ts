@@ -10,6 +10,8 @@ import { getProjectModelConfig, getUserModelConfig, buildImageBillingPayload, bu
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { ensureGlobalLocationImageSlots, ensureProjectLocationImageSlots } from '@/lib/image-generation/location-slots'
+import { CHARACTER_CANDIDATE_PROMPT_COUNT } from '@/lib/asset-generation/character-candidate-prompts'
+import { LOCATION_CANDIDATE_PROMPT_COUNT } from '@/lib/asset-generation/location-candidate-prompts'
 import { hasCharacterAppearanceOutput, hasGlobalCharacterAppearanceOutput, hasGlobalLocationImageOutput, hasGlobalLocationOutput, hasLocationImageOutput } from '@/lib/task/has-output'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix, removePropPromptSuffix } from '@/lib/constants'
@@ -144,10 +146,11 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const appearanceIndex = toNumber(input.body.appearanceIndex) ?? PRIMARY_APPEARANCE_INDEX
   const normalizedKind = normalizeLocationBackedKind(input.kind)
+  const imageIndex = toNumber(input.body.imageIndex)
   const count = normalizedKind === 'character'
-    ? normalizeImageGenerationCount('character', input.body.count)
-    : normalizeImageGenerationCount('location', input.body.count)
-  if (normalizedKind === 'location' && toNumber(input.body.imageIndex) === null) {
+    ? (imageIndex === null ? CHARACTER_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('character', input.body.count))
+    : (imageIndex === null ? LOCATION_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('location', input.body.count))
+  if (normalizedKind === 'location' && imageIndex === null) {
     const location = await prisma.globalLocation.findFirst({
       where: { id: input.assetId, userId: input.access.userId },
       select: {
@@ -252,7 +255,7 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     targetType,
     targetId,
     payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
-    dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${targetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${toNumber(input.body.imageIndex) === null ? count : `single:${toNumber(input.body.imageIndex)}`}`,
+    dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${targetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${imageIndex === null ? count : `single:${imageIndex}`}`,
     billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_IMAGE, billingPayload),
   })
 }
@@ -262,11 +265,11 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
   const projectId = requireProjectId(input.access)
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const normalizedKind = normalizeLocationBackedKind(input.kind)
-  const count = normalizedKind === 'character'
-    ? normalizeImageGenerationCount('character', input.body.count)
-    : normalizeImageGenerationCount('location', input.body.count)
   const appearanceId = normalizeString(input.body.appearanceId)
   const imageIndex = toNumber(input.body.imageIndex)
+  const count = normalizedKind === 'character'
+    ? (imageIndex === null ? CHARACTER_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('character', input.body.count))
+    : (imageIndex === null ? LOCATION_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('location', input.body.count))
 
   if (normalizedKind === 'location' && imageIndex === null) {
     const location = await prisma.projectLocation.findUnique({

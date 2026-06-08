@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
-import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { CHARACTER_CANDIDATE_PROMPT_COUNT } from '@/lib/asset-generation/character-candidate-prompts'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 
 function toObject(value: unknown): Record<string, unknown> {
@@ -28,7 +28,7 @@ export const POST = apiHandler(async (
   const bodyMeta = toObject(body.meta)
   const characterId = normalizeString(body.characterId)
   const appearanceId = normalizeString(body.appearanceId)
-  const count = normalizeImageGenerationCount('character', body.count)
+  const count = CHARACTER_CANDIDATE_PROMPT_COUNT
 
   if (Object.prototype.hasOwnProperty.call(body, 'artStyle')) {
     throw new ApiError('INVALID_PARAMS', {

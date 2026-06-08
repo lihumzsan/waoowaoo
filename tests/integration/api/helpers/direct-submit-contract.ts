@@ -469,55 +469,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/scene-prompt-test/generate/route.ts',
-    body: {
-      sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
-    },
-    expectedTaskType: TASK_TYPE.SCENE_PROMPT_TEST,
-    expectedTargetType: 'ScenePromptTest',
-    expectedProjectId: 'system',
-    expectedPayloadSubset: {
-      sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
-      analysisModel: 'llm::analysis',
-      imageModel: 'img::location',
-      count: 4,
-    },
-  },
-  {
-    routeFile: 'src/app/api/scene-reference-test/generate-scenes/route.ts',
-    body: {
-      sceneDescription: 'rainy temple backyard',
-      styleRequest: 'low saturation wuxia film',
-    },
-    expectedTaskType: TASK_TYPE.SCENE_REFERENCE_TEST,
-    expectedTargetType: 'SceneReferenceTest',
-    expectedProjectId: 'system',
-    expectedPayloadSubset: {
-      sceneDescription: 'rainy temple backyard',
-      imageModel: 'img::location',
-      count: 2,
-    },
-  },
-  {
-    routeFile: 'src/app/api/scene-reference-test/run-comparison/route.ts',
-    body: {
-      characterImageUrl: 'https://example.com/character.png',
-      singleSceneImageUrl: 'https://example.com/single.png',
-      storyboardPrompt: 'monk standing in a rainy temple backyard',
-      aspectRatio: '16:9',
-      pairCount: 2,
-      variants: [{ id: 'three_view', label: 'Standard three-view scene board', imageUrl: 'https://example.com/multi.png' }],
-    },
-    expectedTaskType: TASK_TYPE.SCENE_REFERENCE_COMPARISON_TEST,
-    expectedTargetType: 'SceneReferenceComparisonTest',
-    expectedProjectId: 'system',
-    expectedPayloadSubset: {
-      characterImageUrl: 'https://example.com/character.png',
-      imageModel: 'img::storyboard',
-      count: 4,
-    },
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/generate-video/route.ts',
     body: {
       videoModel: 'ark::doubao-seedance-2-0-260128',
