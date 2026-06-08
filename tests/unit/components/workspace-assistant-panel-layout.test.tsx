@@ -70,13 +70,7 @@ describe('workspace assistant panel layout', () => {
   it('renders explicit collapse and expand controls for the sidebar rail', () => {
     const headerHtml = renderToStaticMarkup(
       createElement(WorkspaceAssistantPanelHeader, {
-        eyebrow: 'AI Assistant',
-        title: 'Workspace Chat',
-        rawContextLabel: 'View full raw context',
-        downloadLabel: 'Download Log',
-        downloadHref: '/api/projects/project-1/assistant/chat/log',
         collapseLabel: 'Collapse AI assistant sidebar',
-        onOpenRawContext: () => undefined,
         onCollapse: () => undefined,
       }),
     )
@@ -88,8 +82,12 @@ describe('workspace assistant panel layout', () => {
     )
 
     expect(headerHtml).toContain('Collapse AI assistant sidebar')
-    expect(headerHtml).toContain('View full raw context')
-    expect(headerHtml).toContain('Download Log')
+    expect(headerHtml).toContain('lucide-chevron-right')
+    expect(headerHtml).not.toContain('Workspace Chat')
+    expect(headerHtml).not.toContain('View full raw context')
+    expect(headerHtml).not.toContain('Download Log')
+    expect(headerHtml).not.toContain('lucide-file-text')
+    expect(headerHtml).not.toContain('lucide-download')
     expect(headerHtml).toContain('bg-transparent')
     expect(headerHtml).not.toContain('bg-white/70')
     expect(headerHtml).not.toContain('sticky')
@@ -97,7 +95,9 @@ describe('workspace assistant panel layout', () => {
     expect(headerHtml).not.toContain('z-10')
     expect(headerHtml).not.toContain('backdrop-blur')
     expect(railHtml).toContain('Expand AI assistant sidebar')
+    expect(railHtml).toContain('lucide-chevron-left')
     expect(railHtml).not.toContain('Workspace Chat')
+    expect(railHtml).not.toContain('lucide-sparkles')
   })
 
   it('keeps user messages as flat gray bubbles without border or shadow', () => {

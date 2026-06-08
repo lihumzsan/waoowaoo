@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import type { UIMessage } from 'ai'
@@ -21,7 +21,6 @@ import { apiFetch } from '@/lib/api-fetch'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantPanelHeader } from './workspace-assistant/WorkspaceAssistantPanelHeader'
 import { WorkspaceAssistantPanelRail } from './workspace-assistant/WorkspaceAssistantPanelRail'
-import { WorkspaceAssistantRawContextDialog } from './workspace-assistant/WorkspaceAssistantRawContextDialog'
 import { WorkspaceAssistantThinkingIndicator } from './workspace-assistant/WorkspaceAssistantThinkingIndicator'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -146,7 +145,6 @@ export default function WorkspaceAssistantPanel({
     currentWidth: number
   } | null>(null)
   const layout = buildWorkspaceAssistantPanelLayout(isCollapsed, assistantPanelWidth)
-  const [rawContextOpen, setRawContextOpen] = useState(false)
   const [composerText, setComposerText] = useState('')
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
@@ -406,12 +404,6 @@ export default function WorkspaceAssistantPanel({
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
   })
-  const downloadHref = useMemo(() => {
-    const search = new URLSearchParams()
-    if (episodeId) search.set('episodeId', episodeId)
-    return `/api/projects/${projectId}/assistant/chat/log?${search.toString()}`
-  }, [episodeId, projectId])
-
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
     event.preventDefault()
@@ -489,38 +481,8 @@ export default function WorkspaceAssistantPanel({
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantPanelHeader
-                eyebrow={t('panel.eyebrow')}
-                title={t('panel.title')}
-                rawContextLabel={t('panel.rawContext')}
-                downloadLabel={t('panel.downloadLog')}
-                downloadHref={downloadHref}
                 collapseLabel={t('panel.collapse')}
-                onOpenRawContext={() => setRawContextOpen(true)}
                 onCollapse={onToggleCollapsed}
-              />
-              <WorkspaceAssistantRawContextDialog
-                open={rawContextOpen}
-                messages={assistantRuntime.rawContextMessages}
-                storageError={assistantRuntime.rawContextStorageError}
-                labels={{
-                  title: t('debugContext.title'),
-                  subtitle: t('debugContext.subtitle'),
-                  close: t('debugContext.close'),
-                  copy: t('debugContext.copy'),
-                  copied: t('debugContext.copied'),
-                  messageCount: t('debugContext.messageCount', { count: assistantRuntime.rawContextMessages.length }),
-                  empty: t('debugContext.empty'),
-                  messageId: t('debugContext.messageId'),
-                  role: t('debugContext.role'),
-                  parts: t('debugContext.parts'),
-                  storageError: t('debugContext.storageError'),
-                  dialogueTitle: t('debugContext.dialogueTitle'),
-                  runtimeTitle: t('debugContext.runtimeTitle'),
-                  runtimeSummary: t('debugContext.runtimeSummary'),
-                  selectedTools: t('debugContext.selectedTools'),
-                  rawJsonTitle: t('debugContext.rawJsonTitle'),
-                }}
-                onClose={() => setRawContextOpen(false)}
               />
 
             <ThreadPrimitive.Viewport
