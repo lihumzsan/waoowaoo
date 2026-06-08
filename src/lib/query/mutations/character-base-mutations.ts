@@ -167,12 +167,13 @@ export function useUploadProjectCharacterImage(projectId: string) {
         }) => {
             const formData = new FormData()
             formData.append('file', file)
-            formData.append('type', 'character')
-            formData.append('id', characterId)
+            formData.append('scope', 'project')
+            formData.append('kind', 'character')
+            formData.append('projectId', projectId)
             formData.append('appearanceId', appearanceId)
             if (imageIndex !== undefined) formData.append('imageIndex', imageIndex.toString())
 
-            return await requestJsonWithError(`/api/projects/${projectId}/upload-asset-image`, {
+            return await requestJsonWithError(`/api/assets/${characterId}/upload-render`, {
                 method: 'POST',
                 body: formData
             }, 'Failed to upload image')

@@ -48,7 +48,7 @@ vi.mock('@/lib/storage', () => ({
 
 describe('api contract - asset crud routes (behavior)', () => {
   const assetRoutes = crudRoutes.filter((entry) =>
-    entry.routeFile.includes('/asset-hub/') || entry.routeFile.includes('/select-character-image/') || entry.routeFile.includes('/select-location-image/'),
+    entry.routeFile.includes('/asset-hub/') || entry.routeFile.startsWith('src/app/api/assets/'),
   )
 
   beforeEach(() => {
@@ -133,60 +133,4 @@ describe('api contract - asset crud routes (behavior)', () => {
     expect(forbiddenRes.status).toBe(403)
   })
 
-  it('POST /projects/[projectId]/select-character-image writes selectedIndex and imageUrl key', async () => {
-    authState.authenticated = true
-    const mod = await import('@/app/api/projects/[projectId]/select-character-image/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/select-character-image',
-      method: 'POST',
-      body: {
-        characterId: 'character-1',
-        appearanceId: 'appearance-1',
-        selectedIndex: 1,
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    expect(prismaMock.characterAppearance.update).toHaveBeenCalledWith({
-      where: { id: 'appearance-1' },
-      data: {
-        selectedIndex: 1,
-        imageUrl: 'cos/char-1.png',
-      },
-    })
-
-    const payload = await res.json() as { success: boolean }
-    expect(payload).toEqual({
-      success: true,
-    })
-  })
-
-  it('POST /projects/[projectId]/select-location-image toggles selected state and selectedImageId', async () => {
-    authState.authenticated = true
-    const mod = await import('@/app/api/projects/[projectId]/select-location-image/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/select-location-image',
-      method: 'POST',
-      body: {
-        locationId: 'location-1',
-        selectedIndex: 1,
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    expect(prismaMock.locationImage.updateMany).toHaveBeenCalledWith({
-      where: { locationId: 'location-1' },
-      data: { isSelected: false },
-    })
-    expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
-      where: { locationId_imageIndex: { locationId: 'location-1', imageIndex: 1 } },
-      data: { isSelected: true },
-    })
-    expect(prismaMock.projectLocation.update).toHaveBeenCalledWith({
-      where: { id: 'location-1' },
-      data: { selectedImageId: 'img-1' },
-    })
-  })
 })

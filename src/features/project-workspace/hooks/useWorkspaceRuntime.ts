@@ -11,7 +11,6 @@ import type {
 
 interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
-  isSubmittingTTS: boolean
   isTransitioning: boolean
   isConfirmingAssets: boolean
   isStartingPlan: boolean
@@ -76,7 +75,6 @@ interface UseWorkspaceRuntimeParams {
 
 export function useWorkspaceRuntime({
   assetsLoading,
-  isSubmittingTTS,
   isTransitioning,
   isConfirmingAssets,
   isStartingPlan,
@@ -121,7 +119,6 @@ export function useWorkspaceRuntime({
 
   return useMemo<WorkspaceRuntimeValue>(() => ({
     assetsLoading,
-    isSubmittingTTS,
     isTransitioning,
     isConfirmingAssets,
     isStartingPlan,
@@ -193,7 +190,6 @@ export function useWorkspaceRuntime({
     handleUpdateVideoPrompt,
     isConfirmingAssets,
     isStartingPlan,
-    isSubmittingTTS,
     isTransitioning,
     openAssetLibrary,
     onRequestAssistantPlan,

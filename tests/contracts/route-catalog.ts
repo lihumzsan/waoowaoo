@@ -50,6 +50,7 @@ const ROUTE_FILES = [
   'src/app/api/assets/[assetId]/revert-render/route.ts',
   'src/app/api/assets/[assetId]/route.ts',
   'src/app/api/assets/[assetId]/select-render/route.ts',
+  'src/app/api/assets/[assetId]/upload-render/route.ts',
   'src/app/api/assets/[assetId]/variants/[variantId]/route.ts',
   'src/app/api/assets/route.ts',
   'src/app/api/auth/[...nextauth]/route.ts',
@@ -76,7 +77,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/cleanup-unselected-images/route.ts',
   'src/app/api/projects/[projectId]/clips/[clipId]/route.ts',
   'src/app/api/projects/[projectId]/clips/route.ts',
-  'src/app/api/projects/[projectId]/copy-from-global/route.ts',
   'src/app/api/projects/[projectId]/download-images/route.ts',
   'src/app/api/projects/[projectId]/download-videos/route.ts',
   'src/app/api/projects/[projectId]/editor/route.ts',
@@ -94,14 +94,11 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/episodes/split/route.ts',
   'src/app/api/projects/[projectId]/final-video-render/route.ts',
   'src/app/api/projects/[projectId]/generate-bgm/route.ts',
-  'src/app/api/projects/[projectId]/generate-character-image/route.ts',
-  'src/app/api/projects/[projectId]/generate-image/route.ts',
   'src/app/api/projects/[projectId]/generate-music/route.ts',
   'src/app/api/projects/[projectId]/generate-video/route.ts',
   'src/app/api/projects/[projectId]/insert-panel/route.ts',
   'src/app/api/projects/[projectId]/location/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/location/route.ts',
-  'src/app/api/projects/[projectId]/modify-asset-image/route.ts',
   'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
   'src/app/api/projects/[projectId]/panel-link/route.ts',
   'src/app/api/projects/[projectId]/panel-variant/route.ts',
@@ -111,22 +108,16 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/panel/select-candidate/route.ts',
   'src/app/api/projects/[projectId]/photography-plan/route.ts',
   'src/app/api/projects/[projectId]/reference-to-character/route.ts',
-  'src/app/api/projects/[projectId]/regenerate-group/route.ts',
   'src/app/api/projects/[projectId]/regenerate-panel-image/route.ts',
-  'src/app/api/projects/[projectId]/regenerate-single-image/route.ts',
   'src/app/api/projects/[projectId]/regenerate-storyboard-text/route.ts',
   'src/app/api/projects/[projectId]/config/route.ts',
   'src/app/api/projects/[projectId]/screenplay-conversion/route.ts',
-  'src/app/api/projects/[projectId]/select-character-image/route.ts',
-  'src/app/api/projects/[projectId]/select-location-image/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/copy/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/route.ts',
   'src/app/api/projects/[projectId]/storyboards/route.ts',
-  'src/app/api/projects/[projectId]/undo-regenerate/route.ts',
   'src/app/api/projects/[projectId]/update-appearance/route.ts',
   'src/app/api/projects/[projectId]/update-location/route.ts',
   'src/app/api/projects/[projectId]/update-prompt/route.ts',
-  'src/app/api/projects/[projectId]/upload-asset-image/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
   'src/app/api/projects/[projectId]/video-urls/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
@@ -195,21 +186,16 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     return 'llm-observe-routes'
   }
   if (
-    routeFile.endsWith('/generate-image/route.ts')
-    || routeFile.endsWith('/generate-bgm/route.ts')
+    routeFile.endsWith('/generate-bgm/route.ts')
     || routeFile.endsWith('/generate-music/route.ts')
     || routeFile.endsWith('/generate-video/route.ts')
     || routeFile.endsWith('/final-video-render/route.ts')
     || routeFile.endsWith('/generate/route.ts')
-    || routeFile.endsWith('/modify-image/route.ts')
     || routeFile.endsWith('/modify-render/route.ts')
     || routeFile.endsWith('/insert-panel/route.ts')
-    || routeFile.endsWith('/modify-asset-image/route.ts')
     || routeFile.endsWith('/modify-storyboard-image/route.ts')
     || routeFile.endsWith('/panel-variant/route.ts')
-    || routeFile.endsWith('/regenerate-group/route.ts')
     || routeFile.endsWith('/regenerate-panel-image/route.ts')
-    || routeFile.endsWith('/regenerate-single-image/route.ts')
     || routeFile.endsWith('/regenerate-storyboard-text/route.ts')
   ) {
     return 'direct-submit-routes'

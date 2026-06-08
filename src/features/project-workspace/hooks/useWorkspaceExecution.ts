@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useAnalyzeProjectAssets } from '@/lib/query/hooks'
 import { dispatchWorkspaceAssistantMessage } from '../components/workspace-assistant/assistant-send-event'
@@ -33,15 +33,10 @@ export function useWorkspaceExecution({
 }: UseWorkspaceExecutionParams) {
   const analyzeProjectAssetsMutation = useAnalyzeProjectAssets(projectId)
 
-  const [isSubmittingTTS] = useState(false)
   const [isAssetAnalysisRunning, setIsAssetAnalysisRunning] = useState(false)
   const [isConfirmingAssets] = useState(false)
   const [isTransitioning] = useState(false)
   const [transitionProgress] = useState({ message: '', step: '' })
-
-  const handleGenerateTTS = useCallback(async () => {
-    _ulogInfo('[ProjectWorkspace] TTS is disabled, skip generate request')
-  }, [])
 
   const handleAnalyzeAssets = useCallback(async () => {
     if (!episodeId) return
@@ -73,12 +68,10 @@ export function useWorkspaceExecution({
   }, [episodeId, projectId, t])
 
   return {
-    isSubmittingTTS,
     isAssetAnalysisRunning,
     isConfirmingAssets,
     isTransitioning,
     transitionProgress,
-    handleGenerateTTS,
     handleAnalyzeAssets,
     requestAssistantPlan,
     showCreatingToast: false,

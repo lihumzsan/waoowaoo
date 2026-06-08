@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
 import { buildMockRequest } from '../../../helpers/request'
 
 const authMock = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const removeAssetMock = vi.hoisted(() => vi.fn())
 const updateAssetVariantMock = vi.hoisted(() => vi.fn())
 const selectAssetRenderMock = vi.hoisted(() => vi.fn())
 const revertAssetRenderMock = vi.hoisted(() => vi.fn())
+const uploadProjectAssetRenderMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/assets/services/read-assets', () => ({
@@ -41,6 +43,17 @@ vi.mock('@/lib/assets/services/asset-actions', () => ({
   selectAssetRender: selectAssetRenderMock,
   revertAssetRender: revertAssetRenderMock,
 }))
+vi.mock('@/lib/assets/services/project-upload-render', () => ({
+  uploadProjectAssetRender: uploadProjectAssetRenderMock,
+}))
+
+function buildFormRequest(path: string, formData: FormData) {
+  return new NextRequest(new URL(path, 'http://localhost:3000'), {
+    method: 'POST',
+    headers: { 'Accept-Language': 'zh' },
+    body: formData,
+  })
+}
 
 describe('api specific - unified assets routes', () => {
   beforeEach(() => {
@@ -54,6 +67,7 @@ describe('api specific - unified assets routes', () => {
     updateAssetVariantMock.mockResolvedValue({ success: true })
     selectAssetRenderMock.mockResolvedValue({ success: true })
     revertAssetRenderMock.mockResolvedValue({ success: true })
+    uploadProjectAssetRenderMock.mockResolvedValue({ success: true, imageKey: 'upload.jpg', imageIndex: 0 })
   })
 
   it('GET /api/assets reads global assets with the authenticated user scope', async () => {
@@ -326,36 +340,6 @@ describe('api specific - unified assets routes', () => {
     expect(body).toEqual({ success: true })
   })
 
-  it('POST /api/projects/[projectId]/copy-from-global delegates to the centralized copy service', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/copy-from-global/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/copy-from-global',
-      method: 'POST',
-      body: {
-        type: 'character',
-        targetId: 'character-1',
-        globalAssetId: 'global-character-1',
-      },
-    })
-
-    const res = await mod.POST(req, {
-      params: Promise.resolve({ projectId: 'project-1' }),
-    })
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(copyAssetFromGlobalMock).toHaveBeenCalledWith({
-      kind: 'character',
-      targetId: 'character-1',
-      globalAssetId: 'global-character-1',
-      access: {
-        userId: 'user-1',
-        projectId: 'project-1',
-      },
-    })
-    expect(body).toEqual({ success: true })
-  })
-
   it('POST /api/assets/[assetId]/copy delegates prop copy to the centralized copy service', async () => {
     const mod = await import('@/app/api/assets/[assetId]/copy/route')
     const req = buildMockRequest({
@@ -384,5 +368,75 @@ describe('api specific - unified assets routes', () => {
       },
     })
     expect(body).toEqual({ success: true })
+  })
+
+  it('POST /api/assets/[assetId]/upload-render uploads a project character render', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/upload-render/route')
+    const formData = new FormData()
+    formData.append('scope', 'project')
+    formData.append('kind', 'character')
+    formData.append('projectId', 'project-1')
+    formData.append('appearanceId', 'appearance-1')
+    formData.append('imageIndex', '0')
+    formData.append('file', new Blob(['image-bytes'], { type: 'image/png' }), 'character.png')
+
+    const res = await mod.POST(buildFormRequest('/api/assets/character-1/upload-render', formData), {
+      params: Promise.resolve({ assetId: 'character-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(authMock.requireProjectAuthLight).toHaveBeenCalledWith('project-1')
+    expect(uploadProjectAssetRenderMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      projectId: 'project-1',
+      kind: 'character',
+      assetId: 'character-1',
+      imageBuffer: expect.any(Buffer),
+      appearanceId: 'appearance-1',
+      imageIndex: 0,
+    }))
+    expect(body).toEqual({ success: true, imageKey: 'upload.jpg', imageIndex: 0 })
+  })
+
+  it('POST /api/assets/[assetId]/upload-render uploads a project location render', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/upload-render/route')
+    const formData = new FormData()
+    formData.append('scope', 'project')
+    formData.append('kind', 'location')
+    formData.append('projectId', 'project-1')
+    formData.append('imageIndex', '2')
+    formData.append('file', new Blob(['image-bytes'], { type: 'image/png' }), 'location.png')
+
+    const res = await mod.POST(buildFormRequest('/api/assets/location-1/upload-render', formData), {
+      params: Promise.resolve({ assetId: 'location-1' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(uploadProjectAssetRenderMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      projectId: 'project-1',
+      kind: 'location',
+      assetId: 'location-1',
+      imageIndex: 2,
+    }))
+  })
+
+  it('POST /api/assets/[assetId]/upload-render rejects missing character appearanceId', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/upload-render/route')
+    const formData = new FormData()
+    formData.append('scope', 'project')
+    formData.append('kind', 'character')
+    formData.append('projectId', 'project-1')
+    formData.append('file', new Blob(['image-bytes'], { type: 'image/png' }), 'character.png')
+
+    const res = await mod.POST(buildFormRequest('/api/assets/character-1/upload-render', formData), {
+      params: Promise.resolve({ assetId: 'character-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.error.code).toBe('INVALID_PARAMS')
+    expect(uploadProjectAssetRenderMock).not.toHaveBeenCalled()
   })
 })

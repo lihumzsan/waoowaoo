@@ -216,7 +216,7 @@ async function flushTaskTargetStateBatch(projectId: string) {
 
     // 合并所有分片的结果到统一索引
     // 用 taskRuntimeTargetQueryKey（含 types）做精确索引，避免同一 (targetType, targetId)
-    // 的不同 types 的状态互相覆盖（例如 image 的 processing 被 lip_sync 的 idle 覆盖）
+    // 的不同 types 的状态互相覆盖（例如 image 的 processing 被 video 的 idle 覆盖）
     const byTargetQueryKey = new Map<string, TaskTargetState>()
     for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
       const chunkTargets = chunks[chunkIdx]

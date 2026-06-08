@@ -213,7 +213,6 @@ export function useProjectWorkspaceController({
 
   const workspaceRuntime = useWorkspaceRuntime({
     assetsLoading,
-    isSubmittingTTS: execution.isSubmittingTTS,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
     isStartingPlan: createEditScreenplay.isPending || confirmEditStylePreview.isPending || createEditDirectorDecoupage.isPending || createEditScript.isPending || createEditCinematographyShotPlan.isPending,
@@ -273,13 +272,11 @@ export function useProjectWorkspaceController({
   }
 
   const executionState = {
-    isSubmittingTTS: execution.isSubmittingTTS,
     isAssetAnalysisRunning: execution.isAssetAnalysisRunning,
     isConfirmingAssets: execution.isConfirmingAssets,
     isTransitioning: execution.isTransitioning,
     isStartingPlan: false,
     transitionProgress: execution.transitionProgress,
-    handleGenerateTTS: execution.handleGenerateTTS,
     handleAnalyzeAssets: execution.handleAnalyzeAssets,
     requestAssistantPlan: execution.requestAssistantPlan,
     showCreatingToast: execution.showCreatingToast,

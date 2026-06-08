@@ -23,7 +23,6 @@ export interface WorkspaceVideoBlockArrangementBlock {
 
 export interface WorkspaceRuntimeValue {
   assetsLoading: boolean
-  isSubmittingTTS: boolean
   isTransitioning: boolean
   isConfirmingAssets: boolean
   isStartingPlan: boolean

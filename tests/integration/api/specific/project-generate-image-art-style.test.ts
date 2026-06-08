@@ -89,39 +89,41 @@ describe('api specific - novel promotion generate image art style', () => {
     vi.clearAllMocks()
   })
 
-  it('accepts valid artStyle and forwards it into task payload', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+  it('rejects legacy artStyle on the unified asset generate route', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const req = buildMockRequest({
-      path: '/api/projects/project-1/generate-image',
+      path: '/api/assets/character-1/generate',
       method: 'POST',
       body: {
-        type: 'character',
-        id: 'character-1',
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
         appearanceId: 'appearance-1',
         artStyle: 'realistic',
       },
     })
 
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-
-    const submitArg = submitTaskMock.mock.calls[0]?.[0] as { payload?: Record<string, unknown> } | undefined
-    expect(submitArg?.payload?.artStyle).toBe('realistic')
+    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
+    const body = await res.json()
+    expect(res.status).toBe(400)
+    expect(body.error.code).toBe('INVALID_PARAMS')
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('does not inject american-comic when artStyle is omitted', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const req = buildMockRequest({
-      path: '/api/projects/project-1/generate-image',
+      path: '/api/assets/character-1/generate',
       method: 'POST',
       body: {
-        type: 'character',
-        id: 'character-1',
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
         appearanceId: 'appearance-1',
       },
     })
 
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
     expect(res.status).toBe(200)
 
     const submitArg = submitTaskMock.mock.calls[0]?.[0] as { payload?: Record<string, unknown> } | undefined
@@ -129,46 +131,48 @@ describe('api specific - novel promotion generate image art style', () => {
   })
 
   it('rejects invalid artStyle with invalid params', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const req = buildMockRequest({
-      path: '/api/projects/project-1/generate-image',
+      path: '/api/assets/character-1/generate',
       method: 'POST',
       body: {
-        type: 'character',
-        id: 'character-1',
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
         appearanceId: 'appearance-1',
         artStyle: 'anime',
       },
     })
 
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
     const body = await res.json()
     expect(res.status).toBe(400)
     expect(body.error.code).toBe('INVALID_PARAMS')
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
-  it('forwards requested count into task payload and dedupe key', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+  it('uses the project character candidate count for multi-candidate generation', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const req = buildMockRequest({
-      path: '/api/projects/project-1/generate-image',
+      path: '/api/assets/character-1/generate',
       method: 'POST',
       body: {
-        type: 'character',
-        id: 'character-1',
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
         appearanceId: 'appearance-1',
         count: 6,
       },
     })
 
-    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
     expect(res.status).toBe(200)
 
     const submitArg = submitTaskMock.mock.calls[0]?.[0] as {
       payload?: Record<string, unknown>
       dedupeKey?: string
     } | undefined
-    expect(submitArg?.payload?.count).toBe(6)
-    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:6:project:system:japanese-anime')
+    expect(submitArg?.payload?.count).toBe(3)
+    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:3:style-bible:none')
   })
 })

@@ -2,9 +2,12 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { createAsset, copyAssetFromGlobal, removeAsset, revertAssetRender, selectAssetRender, submitAssetGenerateTask, submitAssetModifyTask, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
+import { uploadProjectAssetRender } from '@/lib/assets/services/project-upload-render'
+import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 
 const ASSET_SCOPES = ['global', 'project'] as const
 const ASSET_KINDS = ['character', 'location', 'prop'] as const
@@ -56,6 +59,16 @@ const EFFECTS_LONG_RUNNING = {
   longRunning: true,
 } as const
 
+const EFFECTS_UPLOAD_OVERWRITE = {
+  writes: true,
+  billable: false,
+  destructive: false,
+  overwrite: true,
+  bulk: false,
+  externalSideEffects: true,
+  longRunning: true,
+} as const
+
 function requireProjectId(scope: AssetScope, projectId: unknown): string {
   if (scope !== 'project') return ''
   if (typeof projectId === 'string' && projectId.trim()) return projectId.trim()
@@ -75,6 +88,16 @@ function omitBodyKeys(input: unknown, keys: ReadonlyArray<string>): Record<strin
     delete body[key]
   }
   return body
+}
+
+function isProjectUploadRenderInput(value: unknown): value is ProjectUploadRenderInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<ProjectUploadRenderInput>
+  return typeof record.assetId === 'string'
+    && record.scope === 'project'
+    && (record.kind === 'character' || record.kind === 'location')
+    && typeof record.projectId === 'string'
+    && !!record.file
 }
 
 export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft {
@@ -234,6 +257,35 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
+        })
+      },
+    }),
+
+    api_assets_upload_render: defineOperation({
+      id: 'api_assets_upload_render',
+      summary: 'API-only: Upload a project asset render into character/location image slots.',
+      intent: 'act',
+      effects: EFFECTS_UPLOAD_OVERWRITE,
+      inputSchema: z.custom<ProjectUploadRenderInput>(isProjectUploadRenderInput),
+      outputSchema: z.unknown(),
+      execute: async (ctx, input) => {
+        const projectId = requireProjectId(input.scope, input.projectId)
+        const imageBuffer = Buffer.from(await input.file.arrayBuffer())
+        return await uploadProjectAssetRender({
+          userId: ctx.userId,
+          projectId,
+          kind: input.kind,
+          assetId: input.assetId,
+          imageBuffer,
+          locale: resolveRequiredTaskLocale(ctx.request, {
+            scope: input.scope,
+            kind: input.kind,
+            projectId,
+            assetId: input.assetId,
+            imageIndex: input.imageIndex,
+          }),
+          ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
+          ...(input.imageIndex !== undefined ? { imageIndex: input.imageIndex } : {}),
         })
       },
     }),

@@ -60,18 +60,19 @@ describe('system - generate image', () => {
     mockAuthenticated(seeded.user.id)
     workers = await startSystemWorkers(['image'])
 
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const response = await callRoute(
       mod.POST,
       'POST',
       {
+        scope: 'project',
+        kind: 'character',
+        projectId: seeded.project.id,
         locale: 'zh',
-        type: 'character',
-        id: seeded.character.id,
         appearanceId: seeded.appearance.id,
         count: 1,
       },
-      { params: { projectId: seeded.project.id } },
+      { params: { assetId: seeded.character.id } },
     )
 
     expect(response.status).toBe(200)
@@ -110,18 +111,19 @@ describe('system - generate image', () => {
       select: { imageUrl: true, imageUrls: true, selectedIndex: true },
     })
 
-    const mod = await import('@/app/api/projects/[projectId]/generate-image/route')
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const response = await callRoute(
       mod.POST,
       'POST',
       {
+        scope: 'project',
+        kind: 'character',
+        projectId: seeded.project.id,
         locale: 'zh',
-        type: 'character',
-        id: seeded.character.id,
         appearanceId: seeded.appearance.id,
         count: 1,
       },
-      { params: { projectId: seeded.project.id } },
+      { params: { assetId: seeded.character.id } },
     )
 
     expect(response.status).toBe(200)

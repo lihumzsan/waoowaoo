@@ -383,42 +383,6 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
       },
     }),
 
-    modify_asset_image: defineOperation({
-      id: 'modify_asset_image',
-      summary: 'Modify an asset image (character/location) using edit model (async task submission).',
-      intent: 'act',
-      groupPath: ['asset', 'edit'],
-      channels: { tool: false, api: true },
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: true,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将修改资源图片（可能覆盖现有结果且可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        type: z.enum(['character', 'location']),
-        characterId: z.string().min(1).optional(),
-        locationId: z.string().min(1).optional(),
-      }).passthrough(),
-      outputSchema: taskSubmitOutputWithMutationBatch({
-        assetId: z.string().min(1),
-      }),
-      execute: async (ctx, input) => executeAssetImageModificationOperation({
-        ctx,
-        input: input as Record<string, unknown>,
-        operationId: 'modify_asset_image',
-        kind: input.type,
-      }),
-    }),
-
     modify_character_image: defineOperation({
       id: 'modify_character_image',
       summary: 'Modify a project character image using the edit model.',

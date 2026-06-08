@@ -31,7 +31,7 @@ describe('project agent operation registry', () => {
     const registry = createProjectAgentOperationRegistry()
 
     expect(registry.mutate_storyboard).toBeUndefined()
-    expect(registry.modify_asset_image?.channels).toEqual({ tool: false, api: true })
+    expect(registry.modify_asset_image).toBeUndefined()
     expect(registry.generate_video).toBeUndefined()
     expect(registry.delete_storyboard_panel?.channels?.tool ?? true).toBe(true)
     expect(registry.update_storyboard_panel_prompt?.channels?.tool ?? true).toBe(true)

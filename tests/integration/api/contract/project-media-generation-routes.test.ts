@@ -29,7 +29,6 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 
-import { POST as modifyAssetImagePost } from '@/app/api/projects/[projectId]/modify-asset-image/route'
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
@@ -38,39 +37,6 @@ describe('api contract - project media generation routes (operation adapter)', (
   beforeEach(() => {
     authState.authenticated = true
     vi.clearAllMocks()
-  })
-
-  it('POST /api/projects/[projectId]/modify-asset-image -> routes character/location to explicit operations', async () => {
-    apiAdapterMock.executeProjectAgentOperationFromApi
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-
-    const characterRes = await modifyAssetImagePost(
-      buildMockRequest({
-        path: '/api/projects/project-1/modify-asset-image',
-        method: 'POST',
-        body: { type: 'character', characterId: 'character-1' },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    const locationRes = await modifyAssetImagePost(
-      buildMockRequest({
-        path: '/api/projects/project-1/modify-asset-image',
-        method: 'POST',
-        body: { type: 'location', locationId: 'location-1' },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(characterRes.status).toBe(200)
-    expect(locationRes.status).toBe(200)
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      operationId: 'modify_character_image',
-    }))
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      operationId: 'modify_location_image',
-    }))
   })
 
   it('POST /api/projects/[projectId]/regenerate-panel-image -> forwards reference image usage notes', async () => {

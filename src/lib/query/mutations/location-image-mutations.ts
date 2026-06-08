@@ -147,11 +147,12 @@ export function useUploadProjectLocationImage(projectId: string) {
         }) => {
             const formData = new FormData()
             formData.append('file', file)
-            formData.append('type', 'location')
-            formData.append('id', locationId)
+            formData.append('scope', 'project')
+            formData.append('kind', 'location')
+            formData.append('projectId', projectId)
             if (imageIndex !== undefined) formData.append('imageIndex', imageIndex.toString())
 
-            return await requestJsonWithError(`/api/projects/${projectId}/upload-asset-image`, {
+            return await requestJsonWithError(`/api/assets/${locationId}/upload-render`, {
                 method: 'POST',
                 body: formData
             }, 'Failed to upload image')

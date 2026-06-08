@@ -66,13 +66,11 @@ interface BuildWorkspaceControllerViewModelParams {
     handleAcceptRebuildConfirm: () => void
   }
   executionState: {
-    isSubmittingTTS: boolean
     isAssetAnalysisRunning: boolean
     isConfirmingAssets: boolean
     isTransitioning: boolean
     isStartingPlan: boolean
     transitionProgress: { step?: string; total?: number; current?: number }
-    handleGenerateTTS: () => Promise<void>
     handleAnalyzeAssets: () => Promise<void>
     requestAssistantPlan: () => Promise<void>
     showCreatingToast: boolean

@@ -44,7 +44,7 @@ export function useAiModifyProjectShotPrompt(projectId: string) {
 }
 
 /**
- * 设计音色（项目）
+ * 分析镜头提示词变体（项目）
  */
 
 export function useAnalyzeProjectShotVariants(projectId: string) {

@@ -461,14 +461,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/generate-image/route.ts',
-    body: { type: 'character', id: 'character-1', appearanceId: 'appearance-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.IMAGE_CHARACTER,
-    expectedTargetType: 'CharacterAppearance',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/generate-video/route.ts',
     body: {
       videoModel: 'ark::doubao-seedance-2-0-260128',
@@ -537,20 +529,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     },
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/modify-asset-image/route.ts',
-    body: {
-      type: 'character',
-      characterId: 'character-1',
-      appearanceId: 'appearance-1',
-      modifyPrompt: 'enhance texture',
-      extraImageUrls: ['https://example.com/ref-b.png'],
-    },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
-    expectedTargetType: 'CharacterAppearance',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
     body: {
       storyboardId: 'storyboard-1',
@@ -565,27 +543,11 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/regenerate-group/route.ts',
-    body: { type: 'character', id: 'character-1', appearanceId: 'appearance-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.REGENERATE_GROUP,
-    expectedTargetType: 'CharacterAppearance',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/regenerate-panel-image/route.ts',
     body: { panelId: 'panel-1', count: 1 },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.IMAGE_PANEL,
     expectedTargetType: 'ProjectPanel',
-    expectedProjectId: 'project-1',
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/regenerate-single-image/route.ts',
-    body: { type: 'character', id: 'character-1', appearanceId: 'appearance-1', imageIndex: 0 },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.IMAGE_CHARACTER,
-    expectedTargetType: 'CharacterAppearance',
     expectedProjectId: 'project-1',
   },
 ]

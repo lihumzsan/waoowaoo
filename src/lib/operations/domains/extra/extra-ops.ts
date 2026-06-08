@@ -1,20 +1,14 @@
 import { z } from 'zod'
-import sharp from 'sharp'
 import { createHash } from 'crypto'
-import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { detectEpisodeMarkers, splitByMarkers } from '@/lib/episode-marker-detector'
-import { uploadObject, generateUniqueKey } from '@/lib/storage'
-import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
-import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 function parseReferenceImages(body: Record<string, unknown>): string[] {
   const list = Array.isArray(body.referenceImageUrls)
@@ -326,149 +320,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           confidence: markerResult.confidence,
           episodes,
         }
-      },
-    }),
-    upload_asset_image: defineOperation({
-      id: 'upload_asset_image',
-      summary: 'Upload a custom image as character/location asset (adds label bar), and update corresponding records.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        billable: false,
-        destructive: true,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将上传并覆盖/新增资产图片（可能影响当前选择）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        type: z.enum(['character', 'location']),
-        id: z.string().min(1),
-        appearanceId: z.string().nullable().optional(),
-        imageIndex: z.number().int().min(0).max(50).nullable().optional(),
-        imageBase64: z.string().min(1),
-        filename: z.string().optional(),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const buffer = Buffer.from(input.imageBase64, 'base64')
-        const processed = await sharp(buffer)
-          .jpeg({ quality: 90, mozjpeg: true })
-          .toBuffer()
-
-        // We always re-encode to JPEG, so ensure the storage key extension matches the bytes.
-        const ext = 'jpg'
-        const keyPrefix = input.type === 'character'
-          ? `char-${input.id}-${input.appearanceId || 'unknown'}-upload`
-          : `loc-${input.id}-upload`
-        const key = generateUniqueKey(keyPrefix, ext)
-        await uploadObject(processed, key, undefined, 'image/jpeg')
-
-        if (input.type === 'character' && input.appearanceId) {
-          const appearance = await prisma.characterAppearance.findFirst({
-            where: {
-              id: input.appearanceId,
-              character: { projectId: ctx.projectId },
-            },
-            select: {
-              id: true,
-              imageUrls: true,
-              selectedIndex: true,
-            },
-          })
-          if (!appearance) throw new ApiError('NOT_FOUND')
-
-          const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'characterAppearance.imageUrls')
-          const targetIndex = input.imageIndex !== null && input.imageIndex !== undefined ? input.imageIndex : imageUrls.length
-          while (imageUrls.length <= targetIndex) imageUrls.push('')
-          imageUrls[targetIndex] = key
-
-          const selectedIndex = appearance.selectedIndex
-          const shouldUpdateImageUrl =
-            selectedIndex === targetIndex
-            || (selectedIndex === null && targetIndex === 0)
-            || imageUrls.filter((u) => !!u).length === 1
-
-          const updateData: Record<string, unknown> = {
-            imageUrls: encodeImageUrls(imageUrls),
-          }
-          if (shouldUpdateImageUrl) {
-            updateData.imageUrl = key
-          }
-
-          await prisma.characterAppearance.update({
-            where: { id: appearance.id },
-            data: updateData,
-          })
-
-          return { success: true, imageKey: key, imageIndex: targetIndex }
-        }
-
-        if (input.type === 'location') {
-          const location = await prisma.projectLocation.findFirst({
-            where: { id: input.id, projectId: ctx.projectId },
-            include: { images: { orderBy: { imageIndex: 'asc' } } },
-          })
-          if (!location) throw new ApiError('NOT_FOUND')
-
-          const targetImageIndex = input.imageIndex !== null && input.imageIndex !== undefined
-            ? input.imageIndex
-            : (location.images?.length || 0)
-          const existingImage = location.images?.find((img) => img.imageIndex === targetImageIndex)
-          const modelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
-          if (!modelConfig.analysisModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-
-          let imageId: string
-          if (existingImage) {
-            const updated = await prisma.locationImage.update({
-              where: { id: existingImage.id },
-              data: {
-                imageUrl: key,
-                spatialProfileStatus: 'stale',
-                spatialProfileError: null,
-              },
-              select: { id: true },
-            })
-            imageId = updated.id
-          } else {
-            const created = await prisma.locationImage.create({
-              data: {
-                locationId: input.id,
-                imageIndex: targetImageIndex,
-                imageUrl: key,
-                spatialProfileStatus: 'stale',
-                description: null,
-                isSelected: targetImageIndex === 0,
-              },
-              select: { id: true },
-            })
-            imageId = created.id
-          }
-
-          if (!location.selectedImageId) {
-            await prisma.projectLocation.update({
-              where: { id: input.id },
-              data: { selectedImageId: imageId },
-            })
-          }
-
-          await analyzeAndPersistProjectLocationImageSpatialProfile({
-            imageId,
-            userId: ctx.userId,
-            projectId: ctx.projectId,
-            model: modelConfig.analysisModel,
-            locale: resolveRequiredTaskLocale(ctx.request, input as Record<string, unknown>),
-          })
-
-          return { success: true, imageKey: key, imageIndex: targetImageIndex }
-        }
-
-        throw new ApiError('INVALID_PARAMS')
       },
     }),
   }
