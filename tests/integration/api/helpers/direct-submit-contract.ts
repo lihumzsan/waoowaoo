@@ -171,6 +171,7 @@ function inferTaskContractFromOperation(params: {
 
 export const configServiceMock = {
   getUserModelConfig: vi.fn(async () => ({
+    analysisModel: 'llm::analysis',
     characterModel: 'img::character',
     locationModel: 'img::location',
     storyboardModel: 'img::storyboard',
@@ -477,6 +478,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'system',
     expectedPayloadSubset: {
       sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
+      analysisModel: 'llm::analysis',
       imageModel: 'img::location',
       count: 4,
     },

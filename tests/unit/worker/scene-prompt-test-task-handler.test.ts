@@ -2,6 +2,11 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
+type TextStepInput = {
+  model: string
+  action: string
+}
+
 const sharedMock = vi.hoisted(() => ({
   reportTaskProgress: vi.fn(async () => undefined),
 }))
@@ -14,6 +19,13 @@ const handlerSharedMock = vi.hoisted(() => ({
   generateCleanImageToStorage: vi.fn(async (input: GenerationInput) => `${input.keyPrefix}/${input.targetId}.jpg`),
 }))
 
+const textEngineMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn<(input: TextStepInput) => Promise<{ text: string }>>(
+    async () => ({ text: '{"prompt":"最终办公室惊悚空场景提示词"}' }),
+  ),
+}))
+
+vi.mock('@/lib/ai-exec/engine', () => textEngineMock)
 vi.mock('@/lib/workers/shared', () => sharedMock)
 vi.mock('@/lib/storage', () => storageMock)
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => handlerSharedMock)
@@ -55,6 +67,7 @@ describe('worker scene-prompt-test-task-handler', () => {
   it('generates current baseline plus three story-aware scene prompt variants', async () => {
     const result = await handleScenePromptTestTask(buildJob({
       imageModel: 'location-model-1',
+      analysisModel: 'analysis-model-1',
       sceneInput: '少年武僧下山前夜，师父在山寺庭院交代他去寻找失踪的旧友。清晨雾气很重，寺门外的山路通向未知的城镇。',
     }))
 
@@ -65,12 +78,18 @@ describe('worker scene-prompt-test-task-handler', () => {
       'spatial_wide',
       'multi_view_board',
     ])
-    expect(result.variants.map((variant) => variant.aspectRatio)).toEqual(['16:9', '16:9', '21:9', '16:9'])
-    expect(result.variants[0]?.prompt).toContain('当前宽广环境参考图逻辑')
-    expect(result.variants[1]?.prompt).toContain('最适合后续分镜继承')
-    expect(result.variants[2]?.prompt).toContain('21:9 宽幅构图')
-    expect(result.variants[3]?.prompt).toContain('电影化正面主视图、对侧反面视图、美术化顶面视图')
-    expect(result.variants[1]?.prompt).toContain('用户唯一输入')
+    expect(result.variants.map((variant) => variant.aspectRatio)).toEqual(['16:9', '16:9', '16:9', '21:9'])
+    expect(result.variants.map((variant) => variant.prompt)).toEqual([
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+    ])
+    expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(4)
+    expect(textEngineMock.executeAiTextStep.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      model: 'analysis-model-1',
+      action: 'scene_prompt_test_draft',
+    }))
 
     expect(handlerSharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(4)
     const generationCalls = handlerSharedMock.generateCleanImageToStorage.mock.calls.map((call) => call[0] as GenerationInput)
@@ -87,6 +106,12 @@ describe('worker scene-prompt-test-task-handler', () => {
       'scene-prompt-test',
     ])
     expect(generationCalls.map((call) => call.allowTaskExternalIdResume)).toEqual([false, false, false, false])
-    expect(generationCalls.map((call) => call.options?.aspectRatio)).toEqual(['16:9', '16:9', '21:9', '16:9'])
+    expect(generationCalls.map((call) => call.prompt)).toEqual([
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+      '最终办公室惊悚空场景提示词',
+    ])
+    expect(generationCalls.map((call) => call.options?.aspectRatio)).toEqual(['16:9', '16:9', '16:9', '21:9'])
   })
 })

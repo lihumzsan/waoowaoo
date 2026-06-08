@@ -21,11 +21,11 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-function imageModelRequired(model: string | null): string {
+function requiredModel(model: string | null, code: string, message: string): string {
   if (!model) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'USER_LOCATION_MODEL_REQUIRED',
-      message: 'User location image model is required before scene prompt testing',
+      code,
+      message,
     })
   }
   return model
@@ -37,9 +37,19 @@ export async function submitScenePromptTestTask(input: {
   readonly body: Record<string, unknown>
 }) {
   const userModelConfig = await getUserModelConfig(input.userId)
-  const imageModel = imageModelRequired(userModelConfig.locationModel)
+  const imageModel = requiredModel(
+    userModelConfig.locationModel,
+    'USER_LOCATION_MODEL_REQUIRED',
+    'User location image model is required before scene prompt testing',
+  )
+  const analysisModel = requiredModel(
+    userModelConfig.analysisModel,
+    'USER_ANALYSIS_MODEL_REQUIRED',
+    'User analysis model is required before scene prompt testing',
+  )
   const payload = {
     sceneInput: readRequiredString(input.body.sceneInput, 'sceneInput'),
+    analysisModel,
     imageModel,
     count: 4,
   }

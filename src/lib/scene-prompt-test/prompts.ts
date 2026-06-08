@@ -1,4 +1,5 @@
 import type { Locale } from '@/i18n/routing'
+import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 
 export const SCENE_PROMPT_TEST_PROJECT_ID = 'system'
 export const SCENE_PROMPT_TEST_TARGET_ID = 'scene-prompt-test'
@@ -9,135 +10,139 @@ export type ScenePromptVariantId =
   | 'spatial_wide'
   | 'multi_view_board'
 
-export type ScenePromptVariant = {
+export type ScenePromptStrategy = {
   readonly id: ScenePromptVariantId
   readonly label: string
   readonly aspectRatio: string
-  readonly prompt: string
+  readonly draftInstruction: string
 }
 
 function normalize(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function joinLines(lines: ReadonlyArray<string | null>): string {
-  return lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0).join('\n')
+function joinLines(lines: ReadonlyArray<string>): string {
+  return lines.filter((line) => line.trim().length > 0).join('\n')
+}
+
+function outputRule(locale: Locale): string {
+  return locale === 'en'
+    ? [
+      'Output JSON only: {"prompt":"final image-generation prompt"}.',
+      'The prompt value must be the final image prompt only. It must not include analysis notes, strategy names, hidden reasoning, the original full input, or instructions to choose a scene.',
+      'The prompt must describe one empty reusable scene asset image directly: visible space, production design, lighting, color, material, atmosphere, composition, anchors, and usable standing areas.',
+      'No named main characters, dialogue, readable text, subtitles, labels, arrows, watermark, or logo.',
+    ].join('\n')
+    : [
+      '只输出 JSON：{"prompt":"最终图片生成提示词"}。',
+      'prompt 字段必须只包含最终图片提示词，不得包含分析说明、策略名称、隐藏推理、完整原始输入或“选择场景”这类任务指令。',
+      'prompt 必须直接描述一张空场景资产图：可见空间、美术造景、灯光、色彩、材质、空气感、构图、稳定锚点和可落位区域。',
+      '不要出现有名主角、对白、可读文字、字幕、标签、箭头、水印或 Logo。',
+    ].join('\n')
 }
 
 function zhSharedContext(sceneInput: string): string[] {
   return [
-    `用户唯一输入：${normalize(sceneInput)}`,
-    '必须只从用户唯一输入中分析：场景身份、故事阶段、潜在风格、情绪走向、后续分镜用途和可复用空间需求。不要假设存在额外 Style Bible、项目风格或外部剧情。',
+    `用户输入：${normalize(sceneInput)}`,
+    '只能从用户输入中推断场景身份、故事阶段、隐含风格、情绪走向、后续分镜用途和可复用空间需求。不要假设额外 Style Bible、项目风格或外部剧情。',
   ]
 }
 
 function enSharedContext(sceneInput: string): string[] {
   return [
-    `Only user input: ${normalize(sceneInput)}`,
-    'Analyze scene identity, story phase, implied style, emotional direction, later storyboard usage, and reusable spatial needs only from this single input. Do not assume an external Style Bible, project style, or hidden story context.',
+    `User input: ${normalize(sceneInput)}`,
+    'Infer scene identity, story phase, implied style, emotional direction, later storyboard usage, and reusable spatial needs only from this input. Do not assume an external Style Bible, project style, or hidden story context.',
   ]
 }
 
 function buildCurrentBaselinePrompt(input: {
   readonly sceneInput: string
   readonly locale: Locale
-}): ScenePromptVariant {
+}): ScenePromptStrategy {
   const label = input.locale === 'en' ? 'Current baseline' : '当前基准'
-  const prompt = input.locale === 'en'
-    ? joinLines([
-      'Generate one empty scene asset image using the current broad environment-reference style.',
-      ...enSharedContext(input.sceneInput),
-      'Select one concrete location that appears in the story. Prioritize a wide establishing view of the location itself.',
-      'Do not perform deep story-aware scene selection. Treat implied style as secondary; focus on visible layout, foreground, midground, background, spatial boundaries, anchor objects, material details, lighting direction, and open standing areas.',
-      'No named main characters. No story action. No text labels, numbers, UI marks, watermark, or logo.',
-    ])
-    : joinLines([
-      '使用当前宽广环境参考图逻辑，生成一张空场景资产图。',
-      ...zhSharedContext(input.sceneInput),
-      '从故事中选择一个具体出现过的地点，优先生成该地点的广角建立视角。',
-      '不要做深度故事导向选景，隐含风格只作为次要参考；重点展示可见布局、前景/中景/背景、空间边界、关键锚点、材质细节、光线方向和可落人空地。',
-      '不要出现有名主角，不要表现剧情动作，不要文字标签、编号、UI 标记、水印或 Logo。',
-    ])
-  return { id: 'current_baseline', label, aspectRatio: '16:9', prompt }
+  const draftInstruction = buildAiPrompt({
+    promptId: AI_PROMPT_IDS.LOCATION_CREATE,
+    locale: input.locale,
+    variables: {
+      user_input: input.sceneInput,
+    },
+  })
+  return { id: 'current_baseline', label, aspectRatio: '16:9', draftInstruction }
 }
 
 function buildStoryCoreSinglePrompt(input: {
   readonly sceneInput: string
   readonly locale: Locale
-}): ScenePromptVariant {
-  const label = input.locale === 'en' ? 'Story-core scene' : '故事核心单视图'
-  const prompt = input.locale === 'en'
+}): ScenePromptStrategy {
+  const label = input.locale === 'en' ? 'Narrative core set' : '叙事核心造景'
+  const draftInstruction = input.locale === 'en'
     ? joinLines([
-      'Generate one reusable cinematic scene asset image by first choosing the single most useful scene for later storyboard generation.',
+      'You are a film production designer and story-aware location designer. Convert the user input into one final image-generation prompt.',
       ...enSharedContext(input.sceneInput),
-      'Internal decision rule: infer the location that best supports the protagonist conflict, the central turning point, repeated future shots, and the input-implied style. Do not choose a random mentioned place.',
-      'Translate story era, genre, emotional direction, and implied style into direct visual traits: architecture, material aging, color palette, lighting source, image filter, atmosphere, and stable negative constraints.',
-      'The image must be one coherent empty environment, not a collage. Show a readable main viewpoint with clear entry/exit points, 3-5 stable anchors, foreground/midground/background depth, and unblocked floor areas for one or more characters.',
-      'Do not include named main characters, temporary plot action, subtitles, labels, arrows, watermark, or logo.',
+      'Strategy: choose the single location that best carries the story conflict, reveal, reversal, or recurring dramatic pressure. The final prompt must make that choice visible through set design, not through explanatory text.',
+      'Use cinematic mise-en-scene: architecture, negative space, object placement, lighting motivation, color contrast, material aging, and atmosphere should imply the story tension.',
+      outputRule(input.locale),
     ])
     : joinLines([
-      '生成一张可复用的电影化场景资产图，必须先从故事中选择最适合后续分镜继承的单一场景。',
+      '你是电影美术指导和故事导向的选景设计师。请把用户输入转换成一条最终图片生成提示词。',
       ...zhSharedContext(input.sceneInput),
-      '内部选择规则：推断最能承载主角冲突、核心转折、后续反复出镜和输入隐含风格的地点，不能随便挑一个被提到的地点。',
-      '把故事时代、类型、情绪走向和隐含风格转译成直接可见的视觉属性：建筑结构、材质新旧、色彩方案、灯光来源、画面滤镜、空气氛围和稳定禁用项。',
-      '画面必须是一张连贯空场景，不要拼贴。使用清晰主视角，展示入口/出口、3-5 个稳定锚点、前景/中景/背景纵深，以及可供一个或多个角色落位的无遮挡地面。',
-      '不要出现有名主角、临时剧情动作、字幕、标签、箭头、水印或 Logo。',
+      '策略：选择最能承载故事冲突、揭示、反转或反复戏剧压力的单一地点。最终 prompt 要通过造景本身体现这个选择，不要写解释文字。',
+      '使用电影场面调度和造景思维：建筑结构、负空间、物件摆放、灯光动机、色彩对比、材质新旧和空气氛围都要暗示故事张力。',
+      outputRule(input.locale),
     ])
-  return { id: 'story_core_single', label, aspectRatio: '16:9', prompt }
+  return { id: 'story_core_single', label, aspectRatio: '16:9', draftInstruction }
 }
 
 function buildSpatialWidePrompt(input: {
   readonly sceneInput: string
   readonly locale: Locale
-}): ScenePromptVariant {
-  const label = input.locale === 'en' ? 'Spatial staging wide' : '空间调度宽幅'
-  const prompt = input.locale === 'en'
+}): ScenePromptStrategy {
+  const label = input.locale === 'en' ? 'Production texture set' : '电影美术质感造景'
+  const draftInstruction = input.locale === 'en'
     ? joinLines([
-      'Generate one wide cinematic environment asset optimized for character blocking and repeated storyboard staging.',
+      'You are a senior film art director specializing in texture, atmosphere, and production design. Convert the user input into one final image-generation prompt.',
       ...enSharedContext(input.sceneInput),
-      'First infer the best reusable location from the story arc, then design a wide horizontal view that can support entrances, exits, confrontations, pauses, and shot/reverse-shot continuity.',
-      'Make the scene style concrete: lighting strategy, palette, filter, material texture, weather/air quality, and production-design era must come from the single input.',
-      'Use a 21:9 wide composition. Keep the camera far enough to reveal the full usable space. Clearly reserve empty standing zones near meaningful anchors such as doorway edge, table side, wall recess, steps, railing, window light, altar front, machine console, or courtyard center.',
-      'Do not fill every area with objects. Do not include named main characters, action beats, text, labels, arrows, watermark, or logo.',
+      'Strategy: prioritize atmosphere and set-detail quality. Infer the genre, era, class texture, emotional temperature, and visual subtext from the input, then turn them into concrete set dressing, surfaces, decay/use traces, practical light sources, palette, haze, reflections, and shadow design.',
+      'The final prompt should feel art-directed and story-specific, not a generic location description.',
+      outputRule(input.locale),
     ])
     : joinLines([
-      '生成一张适合人物调度和反复分镜使用的宽幅电影化环境资产图。',
+      '你是擅长质感、氛围和美术造景的资深电影美术指导。请把用户输入转换成一条最终图片生成提示词。',
       ...zhSharedContext(input.sceneInput),
-      '先根据故事走向推断最值得复用的地点，再设计一个能支持入场、离场、对峙、停顿和正反打连续性的横向宽视角。',
-      '场景风格必须具体：灯光策略、色彩、滤镜、材质质感、天气/空气感和美术年代感都要来自用户唯一输入。',
-      '使用 21:9 宽幅构图。镜头要足够远，能看到完整可用空间。必须在有意义的锚点附近保留空地，例如门边、桌侧、墙龛、台阶、栏杆、窗光下、祭坛前、机器控制台、庭院中央。',
-      '不要把所有区域都塞满物体。不要出现有名主角、剧情动作、文字、标签、箭头、水印或 Logo。',
+      '策略：优先追求氛围和美术质感。根据输入推断类型、年代、阶层质感、情绪温度和视觉潜台词，再转译成具体陈设、表面材质、使用痕迹、实景光源、色彩、雾气/反光和阴影设计。',
+      '最终 prompt 必须像经过电影美术设计的专属场景，而不是泛泛的地点描述。',
+      outputRule(input.locale),
     ])
-  return { id: 'spatial_wide', label, aspectRatio: '21:9', prompt }
+  return { id: 'spatial_wide', label, aspectRatio: '16:9', draftInstruction }
 }
 
 function buildMultiViewBoardPrompt(input: {
   readonly sceneInput: string
   readonly locale: Locale
-}): ScenePromptVariant {
-  const label = input.locale === 'en' ? 'Story-aware multi-view board' : '三视图造景板'
-  const prompt = input.locale === 'en'
+}): ScenePromptStrategy {
+  const label = input.locale === 'en' ? 'Blocking-ready wide set' : '分镜调度宽幅造景'
+  const draftInstruction = input.locale === 'en'
     ? joinLines([
-      'Generate one story-aware multi-view scene design board for later storyboard reference.',
+      'You are a cinematographer and production designer building a reusable scene asset for storyboard blocking. Convert the user input into one final image-generation prompt.',
       ...enSharedContext(input.sceneInput),
-      'First select the one location that best serves the inferred story arc and input-implied style. Then show the same selected location in a single image with three coordinated view regions: main cinematic front view, reverse/back view from the opposite side, and art-directed top-down view.',
-      'All regions must depict the same location, same architecture, same materials, same lighting logic, and same color/filter treatment. The top-down view must reveal entrances, exits, anchor objects, and clear standing zones; it must not look like an engineering blueprint.',
-      'Use subtle panel boundaries if needed, but no text labels, numbers, arrows, UI marks, watermark, or logo. No named main characters and no temporary plot action.',
+      'Strategy: design a 21:9 wide empty set that can support later character placement, entrances, exits, confrontation angles, shoulder-space, reverse shots, and camera reframing. The image must still be visually rich and story-specific.',
+      'Final prompt must include clear foreground/midground/background, 4-6 reusable anchors, motivated lighting, readable open standing zones, and no object clutter that blocks characters.',
+      outputRule(input.locale),
     ])
     : joinLines([
-      '生成一张用于后续分镜参考的故事导向多视图场景设定板。',
+      '你是为分镜调度搭建可复用场景资产的摄影指导和电影美术指导。请把用户输入转换成一条最终图片生成提示词。',
       ...zhSharedContext(input.sceneInput),
-      '先选择最能服务推断出的故事走向和输入隐含风格的单一地点，再在同一张图里展示同一场景的三个协调区域：电影化正面主视图、对侧反面视图、美术化顶面视图。',
-      '三个区域必须是同一地点、同一建筑结构、同一材质、同一灯光逻辑、同一色彩与滤镜处理。顶面视图必须展示入口出口、关键锚点和清晰可站区域，但不要像工程蓝图。',
-      '必要时可以有轻微分区边界，但不要文字标签、编号、箭头、UI 标记、水印或 Logo。不要出现有名主角，不要表现临时剧情动作。',
+      '策略：设计一张 21:9 宽幅空场景，便于后续人物落位、入场、离场、对峙角度、肩后空间、反打镜头和重新构图；同时必须保持有故事内涵和美术质感。',
+      '最终 prompt 必须包含清晰前景/中景/背景、4-6 个可复用锚点、有动机的灯光、可读的空置站位区，并避免物件堆满导致角色无法进入。',
+      outputRule(input.locale),
     ])
-  return { id: 'multi_view_board', label, aspectRatio: '16:9', prompt }
+  return { id: 'multi_view_board', label, aspectRatio: '21:9', draftInstruction }
 }
 
-export function buildScenePromptTestVariants(input: {
+export function buildScenePromptTestStrategies(input: {
   readonly sceneInput: string
   readonly locale: Locale
-}): ScenePromptVariant[] {
+}): ScenePromptStrategy[] {
   return [
     buildCurrentBaselinePrompt(input),
     buildStoryCoreSinglePrompt(input),
