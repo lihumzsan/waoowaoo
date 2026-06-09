@@ -54,6 +54,8 @@ describe('edit script block-first prompt flow', () => {
     })
 
     expect(screenplayPrompt).toContain('AI 可控短片剧本')
+    expect(screenplayPrompt).toContain('剧本必须适配不超过 120 秒的短片')
+    expect(screenplayPrompt).toContain('禁止真人类型')
     expect(screenplayPrompt).not.toContain('画幅')
     expect(screenplayPrompt).not.toContain('aspect_ratio')
     expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
@@ -75,6 +77,8 @@ describe('edit script block-first prompt flow', () => {
 
     expect(stylePreviewPrompt).toContain('基于同一份剧本生成 3 个可供用户选择的 Style Bible 候选')
     expect(stylePreviewPrompt).toContain('三个候选必须都忠于用户需求和剧本事实')
+    expect(stylePreviewPrompt).toContain('候选风格不得是真人类型、实拍真人、真人演员、写实真人')
+    expect(stylePreviewPrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
     expect(stylePreviewPrompt).toContain('九宫格')
     expect(stylePreviewPrompt).toContain('3x3')
     expect(stylePreviewPrompt).toContain('1920x1080')
@@ -114,6 +118,9 @@ describe('edit script block-first prompt flow', () => {
     expect(primaryPrompt).toContain('剪辑结构整理器')
     expect(primaryPrompt).toContain('Style Bible 是唯一风格来源')
     expect(primaryPrompt).toContain('Director Decoupage 是 shot 创作事实')
+    expect(primaryPrompt).toContain('剪辑先行表总时长不得超过 120 秒')
+    expect(primaryPrompt).toContain('不得引入真人类型、实拍真人、真人演员、写实真人')
+    expect(primaryPrompt).toContain('顶层 durationSec 必须小于或等于 120')
     expect(primaryPrompt).toContain('videoBlocks 是技术生成主结构')
     expect(primaryPrompt).toContain('本阶段只做结构整理、时长合法化和 videoBlock 分组')
     expect(primaryPrompt).toContain('禁止输出 camera、shotScale、lens、cameraPosition、depthOfField、imagePrompt、videoPrompt')
@@ -207,6 +214,8 @@ describe('edit script block-first prompt flow', () => {
     })
 
     expect(englishPrimaryPrompt).toContain('Style Bible is the only style source')
+    expect(englishPrimaryPrompt).toContain('edit script total duration must not exceed 120 seconds')
+    expect(englishPrimaryPrompt).toContain('do not introduce real-person, live-action real human, human actor')
     expect(englishPrimaryPrompt).toContain('The 15-second group limit is the highest-priority hard ceiling')
     expect(englishPrimaryPrompt).toContain('Director Decoupage is the shot creation truth')
   })

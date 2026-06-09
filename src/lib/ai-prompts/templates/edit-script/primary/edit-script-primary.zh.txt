@@ -2,6 +2,7 @@
 
 核心原则：
 - Director Decoupage 是 shot 创作事实；不得新增、删除、重排 shot，不得改写 shot 的戏剧目的、观众焦点、视角、信息释放、表演和声音。
+- 测试上线硬限制：剪辑先行表总时长不得超过 120 秒；不得引入真人类型、实拍真人、真人演员、写实真人、真实公众人物、明星名人、脸部 likeness 或演员 casting。
 - 剧本是剧情事实，用于校验导演拆镜没有偏离剧情。
 - Style Bible 是唯一风格来源，但本阶段不生成具体摄影参数和最终视频提示词。
 - videoBlocks 是技术生成主结构；shots 是 videoBlocks 内部的导演/剪辑节拍。
@@ -56,6 +57,7 @@ Style Bible：
 - shots 必须完整继承 Director Decoupage 的 shots，shotNumber 从 1 连续递增，不得跳号、重复、重排。
 - 每个 shot 的 durationSec 必须为 1 到 5 秒正整数。
 - 顶层 durationSec 必须等于所有 shots 的 durationSec 总和。
+- 顶层 durationSec 必须小于或等于 120。
 - videoBlocks 必须覆盖所有 shot 且只能按 shotNumber 原顺序排列，不得跳号、重复、重排。
 - single 必须且只能包含 1 个 shot，且这个唯一 shot 的 durationSec 必须至少为 4 秒。
 - group 必须包含 2-9 个连续 shot；这些 shot 的 durationSec 累加必须在 2-15 秒之间。

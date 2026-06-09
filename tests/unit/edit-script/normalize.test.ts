@@ -420,4 +420,13 @@ describe('edit script normalization', () => {
       durationSeconds: 60,
     })
   })
+
+  it('caps edit-first test launch duration requests to 120 seconds', () => {
+    expect(resolveEditScriptDefaults('给我一个3分钟科幻短片')).toEqual({
+      durationSeconds: 120,
+    })
+    expect(resolveEditScriptDefaults('make a 300 seconds sci-fi short')).toEqual({
+      durationSeconds: 120,
+    })
+  })
 })
