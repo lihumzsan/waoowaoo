@@ -15,6 +15,7 @@ const queueState = vi.hoisted(() => ({
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getUserModels: vi.fn(async () => ({
+    analysisModel: 'analysis-model-1',
     characterModel: 'model-character-1',
     locationModel: 'model-location-1',
   })),
@@ -64,6 +65,20 @@ vi.mock('bullmq', () => ({
 vi.mock('@/lib/redis', () => ({ queueRedis: {} }))
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+vi.mock('@/lib/ai-exec/engine', () => ({
+  executeAiTextStep: vi.fn(async () => ({
+    text: JSON.stringify({
+      prompts: [
+        'identity-focused character asset prompt',
+        'wardrobe-focused character asset prompt',
+        'storyboard-energy character asset prompt',
+      ],
+    }),
+    reasoning: '',
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    completion: { id: 'completion-1' },
+  })),
+}))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
     '@/lib/workers/handlers/image-task-handler-shared',
@@ -173,6 +188,11 @@ describe('chain contract - image queue behavior', () => {
     expect(prismaMock.globalCharacterAppearance.update).toHaveBeenCalledWith({
       where: { id: 'appearance-1' },
       data: {
+        descriptions: JSON.stringify([
+          'identity-focused character asset prompt',
+          'wardrobe-focused character asset prompt',
+          'storyboard-energy character asset prompt',
+        ]),
         imageUrls: JSON.stringify(['cos/global-character-generated.png', 'cos/global-character-generated.png', 'cos/global-character-generated.png']),
         imageUrl: 'cos/global-character-generated.png',
         selectedIndex: null,

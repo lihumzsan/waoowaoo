@@ -8,6 +8,6 @@ export const visualContinuitySkill: AgentSkillManifest = {
   triggers: ['视觉一致性', '角色一致', '场景一致', '画风', 'style continuity', 'visual consistency'],
   riskLevel: 'medium',
   requiresApproval: true,
-  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'get_project_assets', 'modify_character_image', 'modify_location_image', 'modify_asset_image', 'regenerate_panel_image', 'panel_variant'],
+  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'get_project_assets', 'modify_character_image', 'modify_location_image', 'regenerate_panel_image', 'panel_variant'],
   documentPath: 'skills/agent/visual-continuity/SKILL.md',
 }

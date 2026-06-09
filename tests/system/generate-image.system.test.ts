@@ -36,6 +36,21 @@ vi.mock('@/lib/media/outbound-image', async () => {
   }
 })
 
+vi.mock('@/lib/ai-exec/engine', () => ({
+  executeAiTextStep: vi.fn(async () => ({
+    text: JSON.stringify({
+      prompts: [
+        'identity-focused character asset prompt',
+        'wardrobe-focused character asset prompt',
+        'storyboard-energy character asset prompt',
+      ],
+    }),
+    reasoning: '',
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    completion: { id: 'completion-1' },
+  })),
+}))
+
 describe('system - generate image', () => {
   let workers: SystemWorkers = {}
 
@@ -87,11 +102,16 @@ describe('system - generate image', () => {
 
     const appearance = await prisma.characterAppearance.findUnique({
       where: { id: seeded.appearance.id },
-      select: { imageUrl: true, imageUrls: true, selectedIndex: true },
+      select: { descriptions: true, imageUrl: true, imageUrls: true, selectedIndex: true },
     })
     expect(appearance).toEqual({
+      descriptions: JSON.stringify([
+        'identity-focused character asset prompt',
+        'wardrobe-focused character asset prompt',
+        'storyboard-energy character asset prompt',
+      ]),
       imageUrl: imageState.cosKey,
-      imageUrls: JSON.stringify([imageState.cosKey]),
+      imageUrls: JSON.stringify([imageState.cosKey, imageState.cosKey, imageState.cosKey]),
       selectedIndex: 0,
     })
 

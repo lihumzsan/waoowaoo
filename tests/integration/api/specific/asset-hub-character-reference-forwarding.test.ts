@@ -80,7 +80,6 @@ describe('api specific - asset hub character reference forwarding', () => {
       },
       body: {
         name: 'Hero',
-        artStyle: 'realistic',
         generateFromReference: true,
         referenceImageUrl: 'https://example.com/ref.png',
         customDescription: '冷静，黑发',
@@ -111,7 +110,6 @@ describe('api specific - asset hub character reference forwarding', () => {
       locale?: string
       meta?: { locale?: string }
       customDescription?: string
-      artStyle?: string
       referenceImageUrls?: string[]
       analysisModel?: string
       appearanceId?: string
@@ -122,7 +120,7 @@ describe('api specific - asset hub character reference forwarding', () => {
     expect(forwarded.locale).toBe('zh')
     expect(forwarded.meta?.locale).toBe('zh')
     expect(forwarded.customDescription).toBe('冷静，黑发')
-    expect(forwarded.artStyle).toBe('realistic')
+    expect(forwarded).not.toHaveProperty('artStyle')
     expect(forwarded.referenceImageUrls).toEqual(['https://example.com/ref.png'])
     expect(forwarded.analysisModel).toBeUndefined()
     expect(forwarded.characterId).toBe('character-1')

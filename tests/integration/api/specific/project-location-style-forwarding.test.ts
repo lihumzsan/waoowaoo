@@ -49,7 +49,6 @@ describe('api specific - novel promotion location style forwarding', () => {
       body: {
         name: 'Old Town',
         description: '雨夜街道',
-        artStyle: 'realistic',
       },
     })
 
@@ -100,7 +99,6 @@ describe('api specific - novel promotion location style forwarding', () => {
       body: {
         name: 'Old Town',
         description: '雨夜街道',
-        artStyle: 'realistic',
         count: 5,
       },
     })

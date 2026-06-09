@@ -52,7 +52,6 @@ describe('api specific - novel promotion character style forwarding', () => {
       body: {
         name: 'Hero',
         description: '主角设定',
-        artStyle: 'realistic',
         count: 4,
       },
     })
@@ -90,7 +89,7 @@ describe('api specific - novel promotion character style forwarding', () => {
     expect(body).not.toHaveProperty('artStyle')
   })
 
-  it('forwards explicit artStyle override when creating from reference', async () => {
+  it('rejects explicit artStyle override when creating from reference', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     )
@@ -110,9 +109,10 @@ describe('api specific - novel promotion character style forwarding', () => {
     })
 
     const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body || '{}')) as Record<string, unknown>
-    expect(body.artStyle).toBe('realistic')
+    const body = await res.json()
+    expect(res.status).toBe(400)
+    expect(body.error.code).toBe('INVALID_PARAMS')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('rejects invalid artStyle before creating character', async () => {

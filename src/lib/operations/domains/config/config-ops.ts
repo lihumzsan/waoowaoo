@@ -41,6 +41,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function assertNoLegacyStyleFields(body: Record<string, unknown>) {
+  for (const field of ['artStyle', 'visualStylePreset'] as const) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'LEGACY_STYLE_CONFIG_REMOVED',
+      field,
+      message: 'legacy visual style config is no longer supported; use the AI-generated Style Bible workflow.',
+    })
+  }
+}
+
 function normalizeCapabilitySelectionsInput(
   raw: unknown,
   options?: { allowLegacyAspectRatio?: boolean },
@@ -311,6 +322,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const body = input as unknown as Record<string, unknown>
+        assertNoLegacyStyleFields(body)
 
         const currentProjectConfig = await prisma.project.findUnique({
           where: { id: ctx.projectId },

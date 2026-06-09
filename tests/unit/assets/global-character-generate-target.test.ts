@@ -57,7 +57,6 @@ describe('global character generate task target', () => {
         scope: 'global',
         kind: 'character',
         appearanceIndex: 0,
-        artStyle: 'realistic',
         count: 2,
         meta: { locale: 'zh' },
       },

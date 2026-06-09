@@ -8,6 +8,6 @@ export const audioDirectionSkill: AgentSkillManifest = {
   triggers: ['声音', '配音', '音乐', '氛围声', 'lip sync', 'voice', 'music', 'audio'],
   riskLevel: 'medium',
   requiresApproval: true,
-  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'create_voice_line', 'update_voice_line', 'generate_voice_lines', 'generate_voice_line_audio', 'generate_episode_voice_audio', 'voice_design', 'generate_project_music', 'lip_sync'],
+  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'generate_project_music'],
   documentPath: 'skills/agent/audio-direction/SKILL.md',
 }

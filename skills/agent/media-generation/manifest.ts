@@ -8,6 +8,6 @@ export const mediaGenerationSkill: AgentSkillManifest = {
   triggers: ['生成图片', '生成视频', '生成音乐', '重生成', 'image', 'video', 'music', 'generate'],
   riskLevel: 'high',
   requiresApproval: true,
-  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'generate_character_image', 'generate_location_image', 'modify_character_image', 'modify_location_image', 'regenerate_panel_image', 'panel_variant', 'generate_panel_video', 'generate_episode_videos', 'generate_project_music', 'generate_voice_line_audio', 'generate_episode_voice_audio', 'lip_sync'],
+  allowedOperationIds: ['get_project_context', 'get_project_snapshot', 'generate_character_image', 'generate_location_image', 'modify_character_image', 'modify_location_image', 'regenerate_panel_image', 'panel_variant', 'generate_panel_video', 'generate_episode_videos', 'generate_project_music'],
   documentPath: 'skills/agent/media-generation/SKILL.md',
 }

@@ -44,7 +44,6 @@ describe('api specific - asset hub location create', () => {
       body: {
         name: 'Old Town',
         summary: '雨夜街道',
-        artStyle: 'realistic',
       },
     })
 

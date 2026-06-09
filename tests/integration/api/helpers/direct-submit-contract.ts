@@ -410,7 +410,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       kind: 'character',
       appearanceId: 'appearance-1',
       appearanceIndex: 0,
-      artStyle: 'realistic',
     },
     params: { assetId: 'global-character-1' },
     expectedTaskType: TASK_TYPE.ASSET_HUB_IMAGE,

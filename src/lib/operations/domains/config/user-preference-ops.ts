@@ -10,6 +10,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function assertNoLegacyArtStyle(body: Record<string, unknown>) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'LEGACY_ART_STYLE_REMOVED',
+    field: 'artStyle',
+    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
+}
+
 const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'analysisModel',
   'characterModel',
@@ -108,6 +117,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         }
 
         const updateData: Record<string, unknown> = {}
+        assertNoLegacyArtStyle(body)
         for (const field of ALLOWED_FIELDS) {
           if (!Object.prototype.hasOwnProperty.call(body, field)) continue
           const value = body[field]
