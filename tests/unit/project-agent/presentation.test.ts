@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildAssistantProjectContextSnapshot } from '@/lib/project-agent/presentation'
 import type { ProjectContextSnapshot } from '@/lib/project-context/types'
+import { EDIT_FIRST_WORKFLOW_EMPTY_STATE } from '@/lib/project-workflow/edit-first'
 
 describe('project agent presentation', () => {
   it('builds assistant project context snapshot from policy config', () => {
@@ -21,16 +22,33 @@ describe('project agent presentation', () => {
         analysisModel: 'google::gemini-3.1-flash-lite-preview',
         overrides: {},
       },
+      editFirstWorkflow: EDIT_FIRST_WORKFLOW_EMPTY_STATE,
     } satisfies ProjectContextSnapshot)
 
     expect(snapshot.config).toEqual({
       analysisModel: 'google::gemini-3.1-flash-lite-preview',
       videoRatio: '9:16',
     })
-    expect('workflow' in snapshot).toBe(false)
+    expect(snapshot.editFirstWorkflow).toEqual(EDIT_FIRST_WORKFLOW_EMPTY_STATE)
   })
 
-  it('does not pass workflow snapshot into assistant context', () => {
+  it('passes workflow snapshot into assistant context', () => {
+    const editFirstWorkflow = {
+      ...EDIT_FIRST_WORKFLOW_EMPTY_STATE,
+      active: true,
+      stage: 'ready_to_generate_assets' as const,
+      blocking: {
+        kind: 'needs_confirmation' as const,
+        reason: null,
+      },
+      nextAction: {
+        id: 'generate_edit_script_assets',
+        operationId: 'generate_edit_script_assets' as const,
+        title: 'Generate required assets',
+        requiresUserConfirmation: true,
+      },
+      allowedOperationIds: ['generate_edit_script_assets' as const],
+    }
     const snapshot = buildAssistantProjectContextSnapshot({
       projectId: 'project-1',
       projectName: 'a',
@@ -64,6 +82,7 @@ describe('project agent presentation', () => {
         analysisModel: 'google::gemini-3.1-flash-lite-preview',
         overrides: {},
       },
+      editFirstWorkflow,
       episodeDetail: {
         episode: {
           novelText: 'text',
@@ -122,7 +141,7 @@ describe('project agent presentation', () => {
       },
     } satisfies ProjectContextSnapshot)
 
-    expect('workflow' in snapshot).toBe(false)
+    expect(snapshot.editFirstWorkflow).toEqual(editFirstWorkflow)
     expect(snapshot.editScreenplay?.id).toBe('screenplay-1')
     expect(snapshot.editScript?.groupBlockCount).toBe(1)
     expect(snapshot.recentOperationResults[0]?.media?.url).toBe('https://audio.example/music.mp3')

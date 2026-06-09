@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
+import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveProjectContextPolicy } from './policy'
 import type { ProjectContextSnapshot } from './types'
 
@@ -120,7 +121,7 @@ export async function assembleProjectContext(params: {
   selectedClipId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editScreenplay, editScript, runs, latestArtifacts, approvals, activeOperationTasks, recentOperationResults] = await Promise.all([
+  const [project, episode, editScreenplay, editScript, runs, latestArtifacts, approvals, activeOperationTasks, recentOperationResults, editFirstWorkflow] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
     }),
@@ -233,6 +234,11 @@ export async function assembleProjectContext(params: {
       statuses: ['completed', 'failed', 'canceled'],
       limit: 10,
     }),
+    resolveEditFirstWorkflowState({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId || null,
+    }),
   ])
 
   if (!project) {
@@ -300,6 +306,7 @@ export async function assembleProjectContext(params: {
     activeOperationTasks,
     recentOperationResults,
     policy,
+    editFirstWorkflow,
     episodeDetail: {
       episode: episode
         ? {

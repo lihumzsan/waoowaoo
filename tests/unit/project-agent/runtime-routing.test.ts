@@ -28,6 +28,33 @@ const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
+const phaseState = vi.hoisted(() => ({
+  editFirstWorkflow: {
+    active: false,
+    stage: 'not_started',
+    blocking: {
+      kind: 'none',
+      reason: null,
+    },
+    nextAction: null,
+    allowedOperationIds: [],
+  } as {
+    active: boolean
+    stage: string
+    blocking: {
+      kind: string
+      reason: string | null
+    }
+    nextAction: {
+      id: string
+      operationId: string
+      title: string
+      requiresUserConfirmation: boolean
+    } | null
+    allowedOperationIds: string[]
+  },
+}))
+
 vi.mock('ai', async () => {
   const actual = await vi.importActual<typeof import('ai')>('ai')
   return {
@@ -87,6 +114,7 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
       actMode: [],
       planMode: [],
     },
+    editFirstWorkflow: phaseState.editFirstWorkflow,
   })),
 }))
 
@@ -144,6 +172,16 @@ describe('project agent runtime tool routing', () => {
     streamState.capturedSystem = ''
     streamState.writerEvents = []
     loggerState.info.mockReset()
+    phaseState.editFirstWorkflow = {
+      active: false,
+      stage: 'not_started',
+      blocking: {
+        kind: 'none',
+        reason: null,
+      },
+      nextAction: null,
+      allowedOperationIds: [],
+    }
     registryState.registry = {
       get_character_detail: makeTestOperation({
         id: 'get_character_detail',
@@ -160,6 +198,42 @@ describe('project agent runtime tool routing', () => {
         summary: 'Regenerate panel image',
         intent: 'act',
         groupPath: ['media'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
+      generate_edit_screenplay: makeTestOperation({
+        id: 'generate_edit_screenplay',
+        summary: 'Generate edit screenplay',
+        intent: 'act',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
+      generate_edit_director_decoupage: makeTestOperation({
+        id: 'generate_edit_director_decoupage',
+        summary: 'Generate director decoupage',
+        intent: 'act',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
+      generate_edit_script: makeTestOperation({
+        id: 'generate_edit_script',
+        summary: 'Generate edit core table',
+        intent: 'act',
+        groupPath: ['edit-script'],
         prerequisites: { episodeId: 'required' },
         effects: EFFECTS_BILLABLE,
         confirmation: { required: true, summary: 'billable operation' },
@@ -371,5 +445,85 @@ describe('project agent runtime tool routing', () => {
     await flushAsyncWork()
 
     expect(streamState.capturedToolNames).toContain('regenerate_panel_image')
+  })
+
+  it('blocks edit-first act tools while style previews are still generating', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'style_preview_generating',
+      blocking: {
+        kind: 'processing',
+        reason: 'style preview images are still generating',
+      },
+      nextAction: null,
+      allowedOperationIds: [],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user wants the next edit-first step'],
+      latestUserText: '同意，下一步',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '同意，下一步' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('get_project_phase')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
+  it('injects only the workflow immediate next edit-first act tool', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'ready_to_generate_director_decoupage',
+      blocking: {
+        kind: 'needs_confirmation',
+        reason: null,
+      },
+      nextAction: {
+        id: 'generate_edit_director_decoupage',
+        operationId: 'generate_edit_director_decoupage',
+        title: 'Generate director decoupage',
+        requiresUserConfirmation: true,
+      },
+      allowedOperationIds: ['generate_edit_director_decoupage'],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user wants the next edit-first step'],
+      latestUserText: '同意，下一步',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '同意，下一步' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 })

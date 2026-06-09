@@ -2,6 +2,7 @@ import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { prisma } from '@/lib/prisma'
 import type { ProjectContextRunSummary } from '@/lib/project-context/types'
+import { resolveEditFirstWorkflowState, type EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
 export const PROJECT_PHASE = {
   DRAFT: 'draft',
@@ -29,6 +30,7 @@ export interface ProjectPhaseSnapshot {
     actMode: string[]
     planMode: string[]
   }
+  editFirstWorkflow: EditFirstWorkflowState
 }
 
 function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): ProjectPhaseSnapshot['availableActions'] {
@@ -160,7 +162,7 @@ export async function resolveProjectPhase(params: {
     phase = PROJECT_PHASE.SCRIPT_READY
   }
 
-  const [recentFailedRuns, staleArtifacts] = await Promise.all([
+  const [recentFailedRuns, staleArtifacts, editFirstWorkflow] = await Promise.all([
     listPlanRuns({
       userId: params.userId,
       projectId: params.projectId,
@@ -174,6 +176,11 @@ export async function resolveProjectPhase(params: {
           progress,
         })
       : Promise.resolve([] as string[]),
+    resolveEditFirstWorkflowState({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: projection.episodeId || null,
+    }),
   ])
 
   const failedItems = recentFailedRuns
@@ -192,5 +199,6 @@ export async function resolveProjectPhase(params: {
     failedItems,
     staleArtifacts,
     availableActions: resolveAvailableActions(phase, !!projection.episodeId),
+    editFirstWorkflow,
   }
 }

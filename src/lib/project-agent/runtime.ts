@@ -22,6 +22,7 @@ import { createProjectAgentStopController } from './stop-conditions'
 import type { AgentDebugPartData, AgentRuntimeContextPartData, ProjectAgentStopPartData } from './types'
 import { routeProjectAgentRequest } from './router'
 import { selectProjectAgentOperationsByGroups } from './operation-injection'
+import type { OperationIntent, ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
 import { compressMessages } from './message-compression'
@@ -141,6 +142,37 @@ function readToolNamesAndHashes(step: unknown): Array<{ toolName: string; argsHa
   })
 }
 
+function routeRequestsEditFirstWorkflow(requestedGroups: ReadonlyArray<ReadonlyArray<string>>): boolean {
+  return requestedGroups.some((groupPath) => groupPath[0] === 'edit-script')
+}
+
+function constrainOperationIdsForEditFirstWorkflow(params: {
+  registry: ProjectAgentOperationRegistry
+  operationIds: string[]
+  allowedIntents: ReadonlyArray<OperationIntent>
+  workflow: Awaited<ReturnType<typeof resolveProjectPhase>>['editFirstWorkflow']
+  requestedGroups: ReadonlyArray<ReadonlyArray<string>>
+}): string[] {
+  const workflowApplies = params.workflow.active || routeRequestsEditFirstWorkflow(params.requestedGroups)
+  if (!workflowApplies) return params.operationIds
+
+  const allowedIntents = new Set<OperationIntent>(params.allowedIntents)
+  const allowedWorkflowOperations = new Set<string>(params.workflow.allowedOperationIds)
+  const constrained = params.operationIds.filter((operationId) => {
+    const operation = params.registry[operationId]
+    if (!operation) return false
+    if (operation.intent !== 'act') return true
+    return allowedWorkflowOperations.has(operationId)
+  })
+
+  const nextOperationId = params.workflow.nextAction?.operationId ?? null
+  if (!nextOperationId || constrained.includes(nextOperationId)) return constrained
+  const nextOperation = params.registry[nextOperationId]
+  if (!nextOperation?.channels.tool) return constrained
+  if (!allowedIntents.has(nextOperation.intent)) return constrained
+  return [...constrained, nextOperationId]
+}
+
 export async function createProjectAgentChatResponse(input: {
   request: NextRequest
   userId: string
@@ -258,7 +290,14 @@ export async function createProjectAgentChatResponse(input: {
         maxTools: 45,
         allowedIntents,
       })
-      const toolEntries = selection.operationIds.map((operationId) => {
+      const operationIds = constrainOperationIdsForEditFirstWorkflow({
+        registry: operations,
+        operationIds: selection.operationIds,
+        allowedIntents,
+        workflow: phase.editFirstWorkflow,
+        requestedGroups: route.requestedGroups,
+      })
+      const toolEntries = operationIds.map((operationId) => {
         const operation = operations[operationId]
         const description = localizeSelectableToolDescription(operationId, operation.summary, locale)
         const definition: Tool<unknown, unknown> = {
@@ -307,6 +346,7 @@ export async function createProjectAgentChatResponse(input: {
         },
         contextTokenEstimate: estimateContextTokens(modelMessages),
         route,
+        editFirstWorkflow: phase.editFirstWorkflow,
         selectedTools: toolEntries.map((item) => item.debugTool),
       })
       if (agentDebug) {
@@ -318,7 +358,8 @@ export async function createProjectAgentChatResponse(input: {
           `effectiveIntent=${executionMode.effectiveIntent}`,
           `requestedGroups=${JSON.stringify(route.requestedGroups)}`,
           `alwaysOn=${String(selection.alwaysOnOperationIds.length)}`,
-          `tools=${String(selection.operationIds.length)}`,
+          `tools=${String(operationIds.length)}`,
+          `editFirstStage=${phase.editFirstWorkflow.stage}`,
         ].join('\n'))
         writeOperationDataPart<AgentDebugPartData>(writer, 'data-agent-debug', {
           requestId,
@@ -327,7 +368,7 @@ export async function createProjectAgentChatResponse(input: {
           effectiveIntent: executionMode.effectiveIntent,
           requestedGroups: route.requestedGroups,
           alwaysOnOperationIds: selection.alwaysOnOperationIds,
-          operationIds: selection.operationIds,
+          operationIds,
         })
       }
       projectAgentLogger.info({
@@ -342,7 +383,8 @@ export async function createProjectAgentChatResponse(input: {
           effectiveIntent: executionMode.effectiveIntent,
           requestedGroups: selection.requestedGroups,
           toolChannelCount: Object.values(operations).filter((operation) => operation.channels.tool).length,
-          operationIds: selection.operationIds,
+          editFirstWorkflow: phase.editFirstWorkflow,
+          operationIds,
         },
       })
       const stopController = createProjectAgentStopController(tools)

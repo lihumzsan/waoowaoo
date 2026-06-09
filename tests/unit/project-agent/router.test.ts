@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
 import { PROJECT_PHASE, type ProjectPhaseSnapshot } from '@/lib/project-agent/project-phase'
+import { EDIT_FIRST_WORKFLOW_EMPTY_STATE } from '@/lib/project-workflow/edit-first'
 
 const aiMock = vi.hoisted(() => ({
   generateObject: vi.fn(),
@@ -33,6 +34,7 @@ function buildPhaseSnapshot(): ProjectPhaseSnapshot {
       actMode: ['regenerate_panel_image'],
       planMode: [],
     },
+    editFirstWorkflow: EDIT_FIRST_WORKFLOW_EMPTY_STATE,
   }
 }
 

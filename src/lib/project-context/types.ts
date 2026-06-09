@@ -1,4 +1,5 @@
 import type { RecentOperationResult } from '@/lib/task/operation-result-types'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
 export interface ProjectPolicySnapshot {
   projectId: string
@@ -111,5 +112,6 @@ export interface ProjectContextSnapshot {
   activeOperationTasks: RecentOperationResult[]
   recentOperationResults: RecentOperationResult[]
   policy: ProjectPolicySnapshot
+  editFirstWorkflow: EditFirstWorkflowState
   episodeDetail?: ProjectContextEpisodeDetailSnapshot
 }

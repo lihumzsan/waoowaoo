@@ -4,6 +4,7 @@ import type {
   ProjectContextEditScriptSnapshot,
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { PlanValidationIssue } from '@/lib/agent-skills/types'
 
@@ -108,6 +109,7 @@ export interface AgentRuntimeContextPartData {
   }
   contextTokenEstimate: number | null
   route: unknown
+  editFirstWorkflow: EditFirstWorkflowState
   selectedTools: Array<{
     operationId: string
     description: string
@@ -164,6 +166,7 @@ export interface ProjectAssistantContextSnapshot {
   latestArtifacts: ProjectContextSnapshot['latestArtifacts']
   editScreenplay?: ProjectContextEditScreenplaySnapshot | null
   editScript?: ProjectContextEditScriptSnapshot | null
+  editFirstWorkflow: EditFirstWorkflowState
   config: {
     analysisModel?: string | null
     videoRatio: string

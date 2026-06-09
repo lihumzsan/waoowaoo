@@ -32,6 +32,19 @@ const planRunRuntimeMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/plan-run-runtime/service', () => planRunRuntimeMock)
 
+vi.mock('@/lib/project-workflow/edit-first', () => ({
+  resolveEditFirstWorkflowState: vi.fn(async () => ({
+    active: false,
+    stage: 'not_started',
+    blocking: {
+      kind: 'none',
+      reason: null,
+    },
+    nextAction: null,
+    allowedOperationIds: [],
+  })),
+}))
+
 describe('assembleProjectContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()

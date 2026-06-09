@@ -155,6 +155,9 @@ function buildPhaseSummary(phase: ProjectPhaseSnapshot): string {
     `staleArtifacts=${phase.staleArtifacts.join(';') || '-'}`,
     `actions.plan=${phase.availableActions.planMode.join(',') || '-'}`,
     `actions.act=${phase.availableActions.actMode.join(',') || '-'}`,
+    `editFirst.stage=${phase.editFirstWorkflow.stage}`,
+    `editFirst.blocking=${phase.editFirstWorkflow.blocking.kind}`,
+    `editFirst.nextAction=${phase.editFirstWorkflow.nextAction?.operationId ?? '-'}`,
   ].join('\n')
 }
 
