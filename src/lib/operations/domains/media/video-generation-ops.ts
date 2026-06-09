@@ -16,6 +16,9 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { resolveBuiltinPricing } from '@/lib/ai-registry/pricing-resolution'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { DEFAULT_GROUP_VIDEO_MODEL } from '@/lib/ai-exec/video-defaults'
+import { ApiError } from '@/lib/api-errors'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import type {
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
@@ -106,6 +109,51 @@ function requireVideoModelKeyFromPayload(payload: unknown): string {
     throw new Error('PROJECT_AGENT_VIDEO_MODEL_REQUIRED')
   }
   return payload.videoModel
+}
+
+async function applyCloudSystemVideoModel(params: {
+  payload: UnknownObject
+  projectId: string
+  userId: string
+}): Promise<void> {
+  if (getDeploymentConfig().edition !== 'cloud') return
+
+  const systemVideoModel = await resolveSystemModelKey({
+    userId: params.userId,
+    projectId: params.projectId,
+    purpose: 'video',
+  })
+
+  const providedVideoModel = normalizeString(params.payload.videoModel)
+  if (providedVideoModel && providedVideoModel !== systemVideoModel) {
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
+      field: 'videoModel',
+    })
+  }
+
+  const providedGroupVideoModel = normalizeString(params.payload.groupVideoModel)
+  if (providedGroupVideoModel && providedGroupVideoModel !== systemVideoModel) {
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
+      field: 'groupVideoModel',
+    })
+  }
+
+  const firstLast = isRecord(params.payload.firstLastFrame) ? params.payload.firstLastFrame : null
+  const providedFirstLastModel = normalizeString(firstLast?.flModel)
+  if (providedFirstLastModel && providedFirstLastModel !== systemVideoModel) {
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
+      field: 'firstLastFrame.flModel',
+    })
+  }
+
+  params.payload.videoModel = systemVideoModel
+  params.payload.groupVideoModel = systemVideoModel
+  if (firstLast) {
+    firstLast.flModel = systemVideoModel
+  }
 }
 
 function validateFirstLastFrameModel(input: unknown) {
@@ -247,6 +295,11 @@ async function validateVideoTaskPayloadOrThrow(params: {
   userId: string
   lastVideoGenerationOptions?: unknown
 }) {
+  await applyCloudSystemVideoModel({
+    payload: params.payload,
+    projectId: params.projectId,
+    userId: params.userId,
+  })
   requireVideoModelKeyFromPayload(params.payload)
   validateFirstLastFrameModel(params.payload.firstLastFrame)
   const resolvedOptions = await resolveVideoCapabilityOptions({

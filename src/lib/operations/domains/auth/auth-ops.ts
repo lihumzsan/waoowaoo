@@ -7,6 +7,7 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { getPrismaErrorCode } from '@/lib/prisma-error'
 import { AUTH_REGISTER_RESULT_CODES, type AuthRegisterResultCode } from '@/lib/auth/register-result-codes'
+import { createRegisteredUser } from '@/lib/auth/register-gate'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -26,6 +27,12 @@ function normalizeName(value: unknown): string {
 
 function normalizePassword(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
 }
 
 export function createAuthOperations(): ProjectAgentOperationRegistryDraft {
@@ -59,6 +66,7 @@ export function createAuthOperations(): ProjectAgentOperationRegistryDraft {
 
         const name = normalizeName(input.name)
         const password = normalizePassword(input.password)
+        const inviteCode = normalizeOptionalString(input.inviteCode)
 
         if (!name) {
           logAuthAction('REGISTER', 'unknown', { error: 'Missing username' })
@@ -86,23 +94,11 @@ export function createAuthOperations(): ProjectAgentOperationRegistryDraft {
 
         const user = await prisma.$transaction(async (tx) => {
           try {
-            const newUser = await tx.user.create({
-              data: {
-                name,
-                password: hashedPassword,
-              },
+            return await createRegisteredUser(tx, {
+              name,
+              hashedPassword,
+              inviteCode,
             })
-
-            await tx.userBalance.create({
-              data: {
-                userId: newUser.id,
-                balance: 0,
-                frozenAmount: 0,
-                totalSpent: 0,
-              },
-            })
-
-            return newUser
           } catch (error) {
             if (getPrismaErrorCode(error) === 'P2002') {
               logAuthAction('REGISTER', name, { error: 'User already exists' })

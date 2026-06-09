@@ -11,6 +11,7 @@ import {
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { resolveBuiltinModelContext, getCapabilityOptionFields, validateCapabilitySelectionsPayload, type CapabilityModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -218,9 +219,19 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({}),
       outputSchema: z.object({
+        configurable: z.boolean(),
         capabilityOverrides: z.record(z.record(z.union([z.string(), z.number(), z.boolean()]))),
-      }),
+      }).passthrough(),
       execute: async (ctx) => {
+        const deployment = getDeploymentConfig()
+        if (deployment.edition === 'cloud') {
+          return {
+            configurable: false,
+            capabilityOverrides: {},
+            deployment: toPublicDeploymentConfig(deployment),
+          }
+        }
+
         const projectData = await prisma.project.findUnique({
           where: { id: ctx.projectId },
             select: {
@@ -257,7 +268,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         const cleanedOverrides = sanitizeCapabilityOverrides(storedOverrides, modelContextMap)
 
         return {
+          configurable: true,
           capabilityOverrides: cleanedOverrides,
+          deployment: toPublicDeploymentConfig(deployment),
         }
       },
     },
@@ -291,6 +304,12 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
+        if (getDeploymentConfig().edition === 'cloud') {
+          throw new ApiError('FORBIDDEN', {
+            code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
+          })
+        }
+
         const body = input as unknown as Record<string, unknown>
 
         const currentProjectConfig = await prisma.project.findUnique({

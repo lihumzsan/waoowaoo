@@ -32,6 +32,7 @@ import type {
   TaskBillingInfo,
 } from './types'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
+import { assertPositiveChargeForBillingMode } from './billing-policy'
 
 type CostInput = {
   apiType: ApiType
@@ -396,6 +397,11 @@ async function withSyncBillingCore<T>(
   })
 
   if (quotedCost <= 0) {
+    assertPositiveChargeForBillingMode(mode, quotedCost, {
+      taskType: params.action,
+      apiType: params.apiType,
+      model: params.model,
+    })
     return await execute()
   }
 
@@ -761,6 +767,7 @@ export async function prepareTaskBilling(task: {
   }
 
   if (quotedCost <= 0) {
+    assertPositiveChargeForBillingMode(mode, quotedCost, next)
     next.status = 'skipped'
     return next
   }

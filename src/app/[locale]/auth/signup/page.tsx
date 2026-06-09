@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslations } from 'next-intl'
 import Navbar from "@/components/Navbar"
 import PasswordInput from "@/components/auth/PasswordInput"
@@ -10,15 +10,55 @@ import { AUTH_REGISTER_RESULT_CODES, type AuthRegisterResultCode } from '@/lib/a
 import { readAuthRegisterResultCode } from '@/lib/auth/register-result-response'
 import { Link, useRouter } from '@/i18n/navigation'
 
+function readServerDetailCode(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const error = Reflect.get(value, 'error')
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null
+  const details = Reflect.get(error, 'details')
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null
+  const code = Reflect.get(details, 'code')
+  return typeof code === 'string' ? code : null
+}
+
 export default function SignUp() {
   const [name, setName] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [inviteCode, setInviteCode] = useState("")
+  const [inviteCodeRequired, setInviteCodeRequired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const router = useRouter()
   const t = useTranslations('auth')
+
+  useEffect(() => {
+    let canceled = false
+
+    const loadDeployment = async () => {
+      const response = await apiFetch('/api/deployment')
+      if (!response.ok) return
+      const payload: unknown = await response.json()
+      if (
+        !canceled
+        && payload
+        && typeof payload === 'object'
+        && !Array.isArray(payload)
+      ) {
+        const deployment = Reflect.get(payload, 'deployment')
+        const isCloud = !!deployment
+          && typeof deployment === 'object'
+          && !Array.isArray(deployment)
+          && Reflect.get(deployment, 'isCloud') === true
+        setInviteCodeRequired(isCloud)
+      }
+    }
+
+    void loadDeployment()
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   const resolveRegisterResultMessage = (code: AuthRegisterResultCode): string => {
     switch (code) {
@@ -43,7 +83,16 @@ export default function SignUp() {
 
   const resolveSignupErrorMessage = (data: unknown): string => {
     const code = readAuthRegisterResultCode(data)
-    if (!code) return t('signupFailed')
+    if (!code) {
+      const detailCode = readServerDetailCode(data)
+      if (detailCode === 'INVITE_CODE_REQUIRED') return t('serverErrors.inviteCodeRequired')
+      if (detailCode === 'INVITE_CODE_INVALID') return t('serverErrors.inviteCodeInvalid')
+      if (detailCode === 'INVITE_CODE_DISABLED') return t('serverErrors.inviteCodeDisabled')
+      if (detailCode === 'INVITE_CODE_EXPIRED') return t('serverErrors.inviteCodeExpired')
+      if (detailCode === 'INVITE_CODE_EXHAUSTED') return t('serverErrors.inviteCodeExhausted')
+      if (detailCode === 'INVITE_CODE_UNAVAILABLE') return t('serverErrors.inviteCodeUnavailable')
+      return t('signupFailed')
+    }
     return resolveRegisterResultMessage(code)
   }
 
@@ -65,16 +114,24 @@ export default function SignUp() {
       return
     }
 
+    if (inviteCodeRequired && !inviteCode.trim()) {
+      setError(t('serverErrors.inviteCodeRequired'))
+      setLoading(false)
+      return
+    }
+
     try {
+      const payload = {
+        name,
+        password,
+        ...(inviteCodeRequired ? { inviteCode: inviteCode.trim() } : {}),
+      }
       const response = await apiFetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name,
-          password,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -159,6 +216,25 @@ export default function SignUp() {
                   hideLabel={t('hidePassword')}
                 />
               </div>
+
+              {inviteCodeRequired && (
+                <div>
+                  <label htmlFor="inviteCode" className="glass-field-label block mb-2">
+                    {t('inviteCode')}
+                  </label>
+                  <input
+                    id="inviteCode"
+                    name="inviteCode"
+                    type="text"
+                    autoComplete="off"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    required
+                    className="glass-input-base w-full px-4 py-3"
+                    placeholder={t('inviteCodePlaceholder')}
+                  />
+                </div>
+              )}
 
               {error && (
                 <div className="bg-[var(--glass-tone-danger-bg)] border border-[color:color-mix(in_srgb,var(--glass-tone-danger-fg)_22%,transparent)] text-[var(--glass-tone-danger-fg)] px-4 py-3 rounded-lg text-sm">

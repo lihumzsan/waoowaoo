@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { grantUserCredits } from '@/lib/billing/invite-codes'
+import { requireAdminUserId } from '@/lib/admin/admin-auth'
 
 const grantCreditsSchema = z.object({
   userId: z.string().min(1).optional(),
@@ -31,6 +32,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
 
+  requireAdminUserId(authResult.session.user.id)
   requireAdminCreditToken(request)
 
   let body: unknown

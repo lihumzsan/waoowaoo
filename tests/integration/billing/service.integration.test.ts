@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { calcMusic } from '@/lib/billing/cost'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
 import { prepareTaskBilling, rollbackTaskBilling, settleTaskBilling } from '@/lib/billing/service'
+import { BillingOperationError } from '@/lib/billing/errors'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
@@ -116,6 +117,39 @@ describe('billing/service integration', () => {
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
     expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 2), 8)
     expect(balance?.frozenAmount).toBeCloseTo(0, 8)
+  })
+
+  it('rejects zero quoted task cost in ENFORCE mode instead of skipping billing', async () => {
+    process.env.BILLING_MODE = 'ENFORCE'
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    await seedBalance(user.id, 10)
+
+    const info: Extract<TaskBillingInfo, { billable: true }> = {
+      billable: true,
+      source: 'task',
+      taskType: TASK_TYPE.MUSIC_GENERATE,
+      apiType: 'music',
+      model: 'google::lyria-3-clip-preview',
+      quantity: 0,
+      unit: 'second',
+      maxFrozenCost: 0,
+      action: TASK_TYPE.MUSIC_GENERATE,
+      status: 'quoted',
+    }
+
+    await expect(prepareTaskBilling({
+      id: randomUUID(),
+      userId: user.id,
+      projectId: project.id,
+      billingInfo: info,
+    })).rejects.toMatchObject({
+      code: 'BILLING_INVALID_CHARGED_AMOUNT',
+    } satisfies Partial<BillingOperationError>)
+
+    const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
+    expect(balance?.balance).toBeCloseTo(10, 8)
+    expect(await prisma.balanceFreeze.count()).toBe(0)
   })
 
   it('rolls back frozen billing in ENFORCE mode', async () => {

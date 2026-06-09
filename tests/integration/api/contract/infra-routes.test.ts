@@ -122,7 +122,21 @@ describe('api contract - infra routes (behavior)', () => {
     expect(res.headers.get('location')).toBe('http://localhost:3000/api/storage/sign?key=folder%2Fa.png&expires=7200')
   })
 
-  it('GET /api/storage/sign redirects to signed object url with default ttl', async () => {
+  it('GET /api/storage/sign rejects unauthenticated requests', async () => {
+    const mod = await import('@/app/api/storage/sign/route')
+    const req = buildMockRequest({
+      path: '/api/storage/sign?key=folder/a.png',
+      method: 'GET',
+    })
+
+    const res = await mod.GET(req, { params: Promise.resolve({}) })
+
+    expect(res.status).toBe(401)
+    expect(storageMock.getSignedObjectUrl).not.toHaveBeenCalled()
+  })
+
+  it('GET /api/storage/sign redirects to signed object url with default ttl when authenticated', async () => {
+    authState.authenticated = true
     const mod = await import('@/app/api/storage/sign/route')
     const req = buildMockRequest({
       path: '/api/storage/sign?key=folder/a.png',

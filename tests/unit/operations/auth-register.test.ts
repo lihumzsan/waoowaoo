@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { AUTH_REGISTER_RESULT_CODES } from '@/lib/auth/register-result-codes'
@@ -9,6 +9,13 @@ const prismaMock = vi.hoisted(() => {
       create: vi.fn(),
     },
     userBalance: {
+      create: vi.fn(),
+    },
+    inviteCode: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    inviteRedemption: {
       create: vi.fn(),
     },
   }
@@ -37,6 +44,14 @@ type RegisterInput = {
   password?: unknown
 }
 
+type RegisterResult = {
+  message: string
+  user: {
+    id: string
+    name: string
+  }
+}
+
 function buildContext() {
   return {
     request: new Request('http://localhost/api/auth/register') as unknown as NextRequest,
@@ -54,8 +69,13 @@ async function executeRegister(input: RegisterInput | unknown) {
 }
 
 describe('auth register operation', () => {
+  const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
+  const originalProviderCredentialMode = process.env.PROVIDER_CREDENTIAL_MODE
+
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.DEPLOYMENT_EDITION
+    delete process.env.PROVIDER_CREDENTIAL_MODE
     prismaMock.user.findUnique.mockResolvedValue(null)
     prismaMock.__tx.user.create.mockResolvedValue({ id: 'user-1', name: 'alice' })
     prismaMock.__tx.userBalance.create.mockResolvedValue({
@@ -64,10 +84,32 @@ describe('auth register operation', () => {
       frozenAmount: 0,
       totalSpent: 0,
     })
+    prismaMock.__tx.inviteCode.findUnique.mockResolvedValue({
+      id: 'invite-1',
+      disabledAt: null,
+      expiresAt: null,
+      maxRedemptions: 5,
+      redeemedCount: 0,
+    })
+    prismaMock.__tx.inviteCode.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.__tx.inviteRedemption.create.mockResolvedValue({ id: 'redemption-1' })
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock.__tx) => Promise<unknown>) => await callback(prismaMock.__tx),
     )
     bcryptMock.hash.mockResolvedValue('hashed-password')
+  })
+
+  afterEach(() => {
+    if (originalDeploymentEdition === undefined) {
+      delete process.env.DEPLOYMENT_EDITION
+    } else {
+      process.env.DEPLOYMENT_EDITION = originalDeploymentEdition
+    }
+    if (originalProviderCredentialMode === undefined) {
+      delete process.env.PROVIDER_CREDENTIAL_MODE
+    } else {
+      process.env.PROVIDER_CREDENTIAL_MODE = originalProviderCredentialMode
+    }
   })
 
   it('[重复用户名注册] -> 返回稳定的 CONFLICT 业务码', async () => {
@@ -175,6 +217,10 @@ describe('auth register operation', () => {
         name: 'alice',
         password: 'hashed-password',
       },
+      select: {
+        id: true,
+        name: true,
+      },
     })
     expect(prismaMock.__tx.userBalance.create).toHaveBeenCalledWith({
       data: {
@@ -182,6 +228,60 @@ describe('auth register operation', () => {
         balance: 0,
         frozenAmount: 0,
         totalSpent: 0,
+      },
+    })
+    expect(prismaMock.__tx.inviteRedemption.create.mock.calls).toEqual([])
+  })
+
+  it('[cloud 注册缺少邀请码] -> 拒绝创建用户', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+
+    const promise = executeRegister({ name: 'alice', password: 'secret1' })
+
+    await expect(promise).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: expect.objectContaining({
+        code: 'INVITE_CODE_REQUIRED',
+        field: 'inviteCode',
+      }),
+    })
+    expect(prismaMock.__tx.user.create.mock.calls).toEqual([])
+    expect(prismaMock.__tx.userBalance.create.mock.calls).toEqual([])
+  })
+
+  it('[cloud 注册带邀请码] -> 同一事务内创建用户、余额并消耗邀请码', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+
+    const result = await executeRegister({ name: 'alice', password: 'secret1', inviteCode: ' beta-1 ' }) as RegisterResult
+
+    expect(result.user).toEqual({ id: 'user-1', name: 'alice' })
+    expect(prismaMock.__tx.user.create).toHaveBeenCalledWith({
+      data: {
+        name: 'alice',
+        password: 'hashed-password',
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    })
+    expect(prismaMock.__tx.inviteCode.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'invite-1',
+        disabledAt: null,
+        redeemedCount: { lt: 5 },
+      },
+      data: {
+        redeemedCount: { increment: 1 },
+      },
+    })
+    expect(prismaMock.__tx.inviteRedemption.create).toHaveBeenCalledWith({
+      data: {
+        inviteCodeId: 'invite-1',
+        userId: 'user-1',
+        amount: 0,
       },
     })
   })

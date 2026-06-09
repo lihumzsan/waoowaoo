@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 interface WorkspaceTopActionsProps {
   onOpenAssetLibrary: () => void
   onOpenSettings: () => void
+  showSettings: boolean
   onRefresh: () => Promise<void> | void
   assetLibraryLabel: string
   settingsLabel: string
@@ -16,6 +17,7 @@ interface WorkspaceTopActionsProps {
 export default function WorkspaceTopActions({
   onOpenAssetLibrary,
   onOpenSettings,
+  showSettings,
   onRefresh,
   assetLibraryLabel,
   settingsLabel,
@@ -51,13 +53,15 @@ export default function WorkspaceTopActions({
         <AppIcon name="package" className="h-5 w-5" />
         <span className="font-semibold text-sm hidden md:inline tracking-[0.01em]">{assetLibraryLabel}</span>
       </button>
-      <button
-        onClick={onOpenSettings}
-        className="glass-btn-base glass-btn-secondary flex items-center gap-2 px-4 py-3 rounded-3xl text-[var(--glass-text-primary)]"
-      >
-        <AppIcon name="settingsHexMinor" className="h-5 w-5" />
-        <span className="font-semibold text-sm hidden md:inline tracking-[0.01em]">{settingsLabel}</span>
-      </button>
+      {showSettings && (
+        <button
+          onClick={onOpenSettings}
+          className="glass-btn-base glass-btn-secondary flex items-center gap-2 px-4 py-3 rounded-3xl text-[var(--glass-text-primary)]"
+        >
+          <AppIcon name="settingsHexMinor" className="h-5 w-5" />
+          <span className="font-semibold text-sm hidden md:inline tracking-[0.01em]">{settingsLabel}</span>
+        </button>
+      )}
       <button
         onClick={handleRefreshClick}
         className={`glass-btn-base glass-btn-secondary flex items-center gap-2 px-4 py-3 rounded-3xl text-[var(--glass-text-primary)] ${

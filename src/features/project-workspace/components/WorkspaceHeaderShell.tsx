@@ -64,6 +64,7 @@ interface WorkspaceHeaderShellProps {
   onEpisodeDelete?: (episodeId: string) => void
   onOpenAssetLibrary: () => void
   onOpenSettingsModal: () => void
+  projectConfigurable: boolean
   onRefresh: () => void
   assetLibraryLabel: string
   settingsLabel: string
@@ -100,6 +101,7 @@ export default function WorkspaceHeaderShell({
   onEpisodeDelete,
   onOpenAssetLibrary,
   onOpenSettingsModal,
+  projectConfigurable,
   onRefresh,
   assetLibraryLabel,
   settingsLabel,
@@ -114,35 +116,37 @@ export default function WorkspaceHeaderShell({
 
   return (
     <>
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={onCloseSettingsModal}
-        availableModels={availableModels}
-        modelsLoaded={modelsLoaded}
-        analysisModel={analysisModel ?? undefined}
-        characterModel={characterModel ?? undefined}
-        locationModel={locationModel ?? undefined}
-        imageModel={storyboardModel ?? undefined}
-        editModel={editModel ?? undefined}
-        videoModel={videoModel ?? undefined}
-        singleShotVideoModel={singleShotVideoModel ?? videoModel ?? undefined}
-        sequenceVideoModel={sequenceVideoModel ?? undefined}
-        musicModel={musicModel ?? undefined}
-        videoRatio={videoRatio ?? undefined}
-        capabilityOverrides={capabilityOverrides}
-        onAnalysisModelChange={(value) => { onUpdateConfig('analysisModel', value) }}
-        onCharacterModelChange={(value) => { onUpdateConfig('characterModel', value) }}
-        onLocationModelChange={(value) => { onUpdateConfig('locationModel', value) }}
-        onImageModelChange={(value) => { onUpdateConfig('storyboardModel', value) }}
-        onEditModelChange={(value) => { onUpdateConfig('editModel', value) }}
-        onVideoModelChange={(value) => { onUpdateConfig('videoModel', value) }}
-        onSingleShotVideoModelChange={(value) => { onUpdateConfig('singleShotVideoModel', value) }}
-        onSequenceVideoModelChange={(value) => { onUpdateConfig('sequenceVideoModel', value) }}
-        onMusicModelChange={(value) => { onUpdateConfig('musicModel', value) }}
-        onVideoRatioChange={(value) => { onUpdateConfig('videoRatio', value) }}
-        onCapabilityOverridesChange={handleCapabilityOverridesChange}
-        onConfigPatch={handleConfigPatch}
-      />
+      {projectConfigurable && (
+        <SettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={onCloseSettingsModal}
+          availableModels={availableModels}
+          modelsLoaded={modelsLoaded}
+          analysisModel={analysisModel ?? undefined}
+          characterModel={characterModel ?? undefined}
+          locationModel={locationModel ?? undefined}
+          imageModel={storyboardModel ?? undefined}
+          editModel={editModel ?? undefined}
+          videoModel={videoModel ?? undefined}
+          singleShotVideoModel={singleShotVideoModel ?? videoModel ?? undefined}
+          sequenceVideoModel={sequenceVideoModel ?? undefined}
+          musicModel={musicModel ?? undefined}
+          videoRatio={videoRatio ?? undefined}
+          capabilityOverrides={capabilityOverrides}
+          onAnalysisModelChange={(value) => { onUpdateConfig('analysisModel', value) }}
+          onCharacterModelChange={(value) => { onUpdateConfig('characterModel', value) }}
+          onLocationModelChange={(value) => { onUpdateConfig('locationModel', value) }}
+          onImageModelChange={(value) => { onUpdateConfig('storyboardModel', value) }}
+          onEditModelChange={(value) => { onUpdateConfig('editModel', value) }}
+          onVideoModelChange={(value) => { onUpdateConfig('videoModel', value) }}
+          onSingleShotVideoModelChange={(value) => { onUpdateConfig('singleShotVideoModel', value) }}
+          onSequenceVideoModelChange={(value) => { onUpdateConfig('sequenceVideoModel', value) }}
+          onMusicModelChange={(value) => { onUpdateConfig('musicModel', value) }}
+          onVideoRatioChange={(value) => { onUpdateConfig('videoRatio', value) }}
+          onCapabilityOverridesChange={handleCapabilityOverridesChange}
+          onConfigPatch={handleConfigPatch}
+        />
+      )}
 
       <WorldContextModal
         isOpen={isWorldContextModalOpen}
@@ -187,6 +191,7 @@ export default function WorkspaceHeaderShell({
       <WorkspaceTopActions
         onOpenAssetLibrary={onOpenAssetLibrary}
         onOpenSettings={onOpenSettingsModal}
+        showSettings={projectConfigurable}
         onRefresh={onRefresh}
         assetLibraryLabel={assetLibraryLabel}
         settingsLabel={settingsLabel}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { getDeploymentConfig } from '@/lib/deployment/config'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -15,18 +16,19 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const body = await request.json()
-  const videoModel = isRecord(body) && typeof body.videoModel === 'string' ? body.videoModel.trim() : ''
-  if (!videoModel) {
+  const bodyUnknown: unknown = await request.json()
+  const body = isRecord(bodyUnknown) ? bodyUnknown : {}
+  const deployment = getDeploymentConfig()
+  const videoModel = typeof body.videoModel === 'string' ? body.videoModel.trim() : ''
+  if (deployment.edition !== 'cloud' && !videoModel) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'VIDEO_MODEL_REQUIRED',
       field: 'videoModel',
     })
   }
 
-  const input: Record<string, unknown> = {
-    videoModel,
-  }
+  const input: Record<string, unknown> = {}
+  if (videoModel) input.videoModel = videoModel
   if (body.all === true) input.all = true
   if (body.mode === 'grid') input.mode = 'grid'
   if (body.mode === 'auto') input.mode = 'auto'
