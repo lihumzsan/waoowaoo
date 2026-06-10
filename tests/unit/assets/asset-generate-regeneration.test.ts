@@ -1,30 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMockRequest } from '../../helpers/request'
 import { TASK_TYPE } from '@/lib/task/types'
+import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
 
 const configServiceMock = vi.hoisted(() => ({
   getProjectModelConfig: vi.fn(async () => ({
-    characterModel: 'image::character-1',
-    locationModel: 'image::location-1',
-    storyboardModel: null,
-    editModel: null,
-    videoModel: null,
-    audioModel: null,
-    analysisModel: null,
+    characterModel: 'image::character-1' as string | null,
+    locationModel: 'image::location-1' as string | null,
+    storyboardModel: null as string | null,
+    editModel: null as string | null,
+    videoModel: null as string | null,
+    audioModel: null as string | null,
+    analysisModel: null as string | null,
     videoRatio: '16:9',
     artStyle: 'realistic',
     capabilityDefaults: {},
     capabilityOverrides: {},
   })),
   getUserModelConfig: vi.fn(async () => ({
-    characterModel: 'image::character-1',
-    locationModel: 'image::location-1',
-    storyboardModel: null,
-    editModel: null,
-    videoModel: null,
-    audioModel: null,
-    analysisModel: null,
-    voiceDesignModel: null,
+    characterModel: 'image::character-1' as string | null,
+    locationModel: 'image::location-1' as string | null,
+    storyboardModel: null as string | null,
+    editModel: null as string | null,
+    videoModel: null as string | null,
+    audioModel: null as string | null,
+    analysisModel: null as string | null,
+    voiceDesignModel: null as string | null,
     capabilityDefaults: {},
   })),
   buildImageTaskPayload: vi.fn(async (input: {
@@ -143,6 +144,116 @@ describe('asset generate regeneration task payload', () => {
         count: 3,
         regenerationToken: payload.regenerationToken,
       }),
+    }))
+  })
+
+  it('passes Codex Image into project character generation task payloads', async () => {
+    configServiceMock.getProjectModelConfig.mockResolvedValueOnce({
+      characterModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      storyboardModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      videoModel: null,
+      audioModel: null,
+      analysisModel: null,
+      videoRatio: '16:9',
+      artStyle: 'realistic',
+      capabilityDefaults: {},
+      capabilityOverrides: {},
+    })
+
+    const request = buildMockRequest({
+      path: '/api/assets/character-1/generate',
+      method: 'POST',
+      body: {
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
+        appearanceId: 'appearance-1',
+        count: 1,
+        locale: 'zh',
+      },
+    })
+
+    await submitAssetGenerateTask({
+      request,
+      kind: 'character',
+      assetId: 'character-1',
+      body: {
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
+        appearanceId: 'appearance-1',
+        count: 1,
+        locale: 'zh',
+      },
+      access: {
+        scope: 'project',
+        userId: 'user-1',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(configServiceMock.buildImageTaskPayload).toHaveBeenCalledWith(expect.objectContaining({
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    }))
+    expect(submitTaskMock.mock.calls[0]?.[0].payload).toEqual(expect.objectContaining({
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    }))
+  })
+
+  it('passes Codex Image into project location single-image regeneration payloads', async () => {
+    configServiceMock.getProjectModelConfig.mockResolvedValueOnce({
+      characterModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      storyboardModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      videoModel: null,
+      audioModel: null,
+      analysisModel: null,
+      videoRatio: '16:9',
+      artStyle: 'realistic',
+      capabilityDefaults: {},
+      capabilityOverrides: {},
+    })
+
+    const request = buildMockRequest({
+      path: '/api/assets/location-1/generate',
+      method: 'POST',
+      body: {
+        scope: 'project',
+        kind: 'location',
+        projectId: 'project-1',
+        imageIndex: 0,
+        count: 1,
+        locale: 'zh',
+      },
+    })
+
+    await submitAssetGenerateTask({
+      request,
+      kind: 'location',
+      assetId: 'location-1',
+      body: {
+        scope: 'project',
+        kind: 'location',
+        projectId: 'project-1',
+        imageIndex: 0,
+        count: 1,
+        locale: 'zh',
+      },
+      access: {
+        scope: 'project',
+        userId: 'user-1',
+        projectId: 'project-1',
+      },
+    })
+
+    expect(configServiceMock.buildImageTaskPayload).toHaveBeenCalledWith(expect.objectContaining({
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    }))
+    expect(submitTaskMock.mock.calls[0]?.[0].payload).toEqual(expect.objectContaining({
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
     }))
   })
 })

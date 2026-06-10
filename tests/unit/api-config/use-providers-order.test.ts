@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyCodexPresetDefaults,
   applyCodexTextPresetDefault,
   applyComfyUiPresetDefaults,
   mergeProvidersForDisplay,
@@ -7,6 +8,7 @@ import {
 import type { Provider } from '@/app/[locale]/profile/components/api-config/types'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_IMAGE_MODEL_KEY,
   CODEX_DEFAULT_MODEL_KEY,
   CODEX_PROVIDER_KEY,
 } from '@/lib/providers/codex/constants'
@@ -137,6 +139,64 @@ describe('useProviders provider order merge', () => {
     })
     expect(skipped.changed).toBe(false)
     expect(skipped.defaultModels.analysisModel).toBe('openrouter::openai/gpt-5.4')
+  })
+
+  it('migrates image generation defaults from ComfyUI workflows to Codex Image', () => {
+    const result = applyCodexPresetDefaults({
+      models: [
+        {
+          modelId: 'gpt-image-2',
+          modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+          name: 'Codex Image',
+          type: 'image',
+          provider: CODEX_PROVIDER_KEY,
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {
+        characterModel: 'comfyui::baseimage/图片生成/Flux2Klein文生图',
+        locationModel: 'comfyui::baseimage/图片生成/ZImageTurbo造相',
+        storyboardModel: 'comfyui::baseimage/图片分镜/Qwen剧情分镜制作',
+        editModel: 'comfyui::baseimage/图片编辑/qwen单图编辑',
+      },
+      shouldAutoSelectText: false,
+    })
+
+    expect(result.changed).toBe(true)
+    expect(result.defaultModels).toMatchObject({
+      characterModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      storyboardModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    })
+    expect(result.models[0]?.enabled).toBe(true)
+  })
+
+  it('keeps an explicit non-ComfyUI image default when enabling Codex Image', () => {
+    const result = applyCodexPresetDefaults({
+      models: [
+        {
+          modelId: 'gpt-image-2',
+          modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+          name: 'Codex Image',
+          type: 'image',
+          provider: CODEX_PROVIDER_KEY,
+          price: 0,
+          enabled: false,
+        },
+      ],
+      defaultModels: {
+        characterModel: 'fal::banana',
+      },
+      shouldAutoSelectText: false,
+    })
+
+    expect(result.defaultModels.characterModel).toBe('fal::banana')
+    expect(result.defaultModels.locationModel).toBe(CODEX_DEFAULT_IMAGE_MODEL_KEY)
+    expect(result.defaultModels.storyboardModel).toBe(CODEX_DEFAULT_IMAGE_MODEL_KEY)
+    expect(result.defaultModels.editModel).toBe(CODEX_DEFAULT_IMAGE_MODEL_KEY)
+    expect(result.models[0]?.enabled).toBe(true)
   })
 
   it('applies comfyui fallback defaults and enables the default workflows', () => {

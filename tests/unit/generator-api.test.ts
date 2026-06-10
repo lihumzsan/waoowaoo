@@ -134,6 +134,44 @@ describe('generator-api gateway routing', () => {
     expect(result).toEqual({ success: true, imageUrl: 'official-image' })
   })
 
+  it('routes codex image requests to the local codex image generator', async () => {
+    resolveModelSelectionMock.mockResolvedValueOnce({
+      provider: 'codex',
+      modelId: 'gpt-image-2',
+      modelKey: 'codex::gpt-image-2',
+      mediaType: 'image',
+    })
+    getProviderConfigMock.mockResolvedValueOnce({
+      id: 'codex',
+      name: 'Codex (Local)',
+      apiKey: '',
+      baseUrl: 'C:\\codex.exe',
+      apiMode: undefined,
+      gatewayRoute: 'official',
+    })
+    resolveModelGatewayRouteMock.mockReturnValueOnce('official')
+
+    const result = await generateImage('user-1', 'codex::gpt-image-2', 'draw a city', {
+      referenceImages: ['data:image/png;base64,QQ=='],
+      aspectRatio: '1:1',
+    })
+
+    expect(createImageGeneratorMock).toHaveBeenCalledWith('codex', 'gpt-image-2')
+    expect(imageGeneratorGenerateMock).toHaveBeenCalledWith({
+      userId: 'user-1',
+      prompt: 'draw a city',
+      referenceImages: ['data:image/png;base64,QQ=='],
+      options: {
+        provider: 'codex',
+        modelId: 'gpt-image-2',
+        modelKey: 'codex::gpt-image-2',
+        aspectRatio: '1:1',
+      },
+    })
+    expect(generateImageViaOpenAICompatMock).not.toHaveBeenCalled()
+    expect(result).toEqual({ success: true, imageUrl: 'official-image' })
+  })
+
   it('routes gemini-compatible image to official generator', async () => {
     resolveModelSelectionMock.mockResolvedValueOnce({
       provider: 'gemini-compatible:gm-1',

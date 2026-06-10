@@ -19,6 +19,7 @@ import {
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/model-pricing/catalog'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
+import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
 
 type StoredModelType = UnifiedModelType | string
@@ -236,6 +237,9 @@ function getProviderKey(providerId?: string): string {
 }
 
 function hasStoredProviderConnection(provider: StoredProvider): boolean {
+  if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) {
+    return true
+  }
   if (typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0) {
     return true
   }

@@ -5,6 +5,12 @@ import {
   mockAuthenticated,
   resetAuthMockState,
 } from '../../../helpers/auth'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_IMAGE_MODEL_ID,
+  CODEX_DEFAULT_IMAGE_MODEL_KEY,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/providers/codex/constants'
 
 type UserPreferenceSnapshot = {
   customProviders: string | null
@@ -37,6 +43,9 @@ const prismaMock = vi.hoisted(() => ({
   userPreference: {
     findUnique: vi.fn<(...args: unknown[]) => Promise<UserPreferenceSnapshot | null>>(),
     upsert: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  },
+  novelPromotionProject: {
+    updateMany: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
   },
 }))
 
@@ -103,6 +112,7 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
       customModels: null,
     })
     prismaMock.userPreference.upsert.mockResolvedValue({ id: 'pref-1' })
+    prismaMock.novelPromotionProject.updateMany.mockResolvedValue({ count: 0 })
   })
 
   it('allows multiple providers with the same api type when provider ids differ', async () => {
@@ -408,6 +418,104 @@ describe('api specific - user api-config PUT provider uniqueness', () => {
     const res = await route.PUT(req, routeContext)
     expect(res.status).toBe(200)
     expect(prismaMock.userPreference.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts codex image models and persists them without an api key', async () => {
+    installAuthMocks()
+    mockAuthenticated('user-1')
+    const route = await import('@/app/api/user/api-config/route')
+
+    const req = buildMockRequest({
+      path: '/api/user/api-config',
+      method: 'PUT',
+      body: {
+        providers: [
+          {
+            id: CODEX_PROVIDER_KEY,
+            name: 'Codex (Local)',
+            baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH,
+          },
+        ],
+        models: [
+          {
+            type: 'image',
+            provider: CODEX_PROVIDER_KEY,
+            modelId: CODEX_DEFAULT_IMAGE_MODEL_ID,
+            modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+            name: 'Codex Image',
+          },
+        ],
+      },
+    })
+
+    const res = await route.PUT(req, routeContext)
+    expect(res.status).toBe(200)
+    expect(prismaMock.userPreference.upsert).toHaveBeenCalledTimes(1)
+
+    const savedModels = readSavedModelsFromUpsert()
+    expect(savedModels).toHaveLength(1)
+    expect(savedModels[0]).toMatchObject({
+      type: 'image',
+      provider: CODEX_PROVIDER_KEY,
+      modelId: CODEX_DEFAULT_IMAGE_MODEL_ID,
+      modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    })
+  })
+
+  it('migrates existing project ComfyUI image defaults when saving Codex Image defaults', async () => {
+    installAuthMocks()
+    mockAuthenticated('user-1')
+    const route = await import('@/app/api/user/api-config/route')
+
+    const req = buildMockRequest({
+      path: '/api/user/api-config',
+      method: 'PUT',
+      body: {
+        providers: [
+          {
+            id: CODEX_PROVIDER_KEY,
+            name: 'Codex (Local)',
+            baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH,
+          },
+        ],
+        models: [
+          {
+            type: 'image',
+            provider: CODEX_PROVIDER_KEY,
+            modelId: CODEX_DEFAULT_IMAGE_MODEL_ID,
+            modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+            name: 'Codex Image',
+          },
+        ],
+        defaultModels: {
+          characterModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+          locationModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+          storyboardModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+          editModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+        },
+      },
+    })
+
+    const res = await route.PUT(req, routeContext)
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.novelPromotionProject.updateMany).toHaveBeenCalledTimes(4)
+    expect(prismaMock.novelPromotionProject.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ project: { userId: 'user-1' } }),
+      data: { characterModel: CODEX_DEFAULT_IMAGE_MODEL_KEY },
+    }))
+    expect(prismaMock.novelPromotionProject.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ project: { userId: 'user-1' } }),
+      data: { locationModel: CODEX_DEFAULT_IMAGE_MODEL_KEY },
+    }))
+    expect(prismaMock.novelPromotionProject.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ project: { userId: 'user-1' } }),
+      data: { storyboardModel: CODEX_DEFAULT_IMAGE_MODEL_KEY },
+    }))
+    expect(prismaMock.novelPromotionProject.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ project: { userId: 'user-1' } }),
+      data: { editModel: CODEX_DEFAULT_IMAGE_MODEL_KEY },
+    }))
   })
 
   it('requires llmProtocol when adding a new openai-compatible llm model', async () => {

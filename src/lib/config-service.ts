@@ -128,6 +128,13 @@ function parseCapabilitySelections(raw: string | null | undefined): CapabilitySe
   }
 }
 
+function resolveProjectScopedModel(
+  projectModel: string | null | undefined,
+  userModel: string | null | undefined,
+): string | null {
+  return extractModelKey(projectModel) || extractModelKey(userModel) || null
+}
+
 export interface ProjectModelConfig {
   analysisModel: string | null
   characterModel: string | null
@@ -187,10 +194,10 @@ export async function getProjectModelConfig(
 
   return {
     analysisModel: await resolveEnabledAnalysisModel(userId, projectData?.analysisModel, userPref?.analysisModel),
-    characterModel: extractModelKey(projectData?.characterModel) || null,
-    locationModel: extractModelKey(projectData?.locationModel) || null,
-    storyboardModel: extractModelKey(projectData?.storyboardModel) || null,
-    editModel: extractModelKey(projectData?.editModel) || null,
+    characterModel: resolveProjectScopedModel(projectData?.characterModel, userPref?.characterModel),
+    locationModel: resolveProjectScopedModel(projectData?.locationModel, userPref?.locationModel),
+    storyboardModel: resolveProjectScopedModel(projectData?.storyboardModel, userPref?.storyboardModel),
+    editModel: resolveProjectScopedModel(projectData?.editModel, userPref?.editModel),
     videoModel: extractModelKey(projectData?.videoModel) || null,
     audioModel: extractModelKey(projectData?.audioModel) || extractModelKey(userPref?.audioModel) || null,
     videoRatio: projectData?.videoRatio || '16:9',

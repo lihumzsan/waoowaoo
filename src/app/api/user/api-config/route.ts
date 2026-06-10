@@ -41,6 +41,7 @@ import type {
 import { validateOpenAICompatMediaTemplate } from '@/lib/user-api/model-template/validator'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_IMAGE_MODEL_KEY,
   CODEX_PROVIDER_KEY,
 } from '@/lib/providers/codex/constants'
 
@@ -153,6 +154,12 @@ const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
   'lipSyncModel',
   'voiceDesignModel',
 ]
+const PROJECT_IMAGE_MODEL_FIELDS = [
+  'characterModel',
+  'locationModel',
+  'storyboardModel',
+  'editModel',
+] as const
 const CAPABILITY_MODEL_TYPES: readonly UnifiedModelType[] = [
   'image',
   'video',
@@ -570,6 +577,29 @@ function validateDefaultModelsEnabled(
       })
     }
   }
+}
+
+async function migrateCodexImageDefaultsToProjects(
+  userId: string,
+  defaultModels: DefaultModelsPayload,
+) {
+  await Promise.all(PROJECT_IMAGE_MODEL_FIELDS.map(async (field) => {
+    const modelKey = defaultModels[field]
+    if (modelKey !== CODEX_DEFAULT_IMAGE_MODEL_KEY) return
+
+    await prisma.novelPromotionProject.updateMany({
+      where: {
+        project: { userId },
+        OR: [
+          { [field]: null },
+          { [field]: { startsWith: 'comfyui::' } },
+        ],
+      },
+      data: {
+        [field]: modelKey,
+      },
+    })
+  }))
 }
 
 function withBuiltinCapabilities(model: StoredModel): StoredModel {
@@ -1003,7 +1033,7 @@ function validateModelProviderTypeSupport(models: StoredModel[], providers: Stor
     if (!matchedProvider) continue
 
     const providerKey = getProviderKey(matchedProvider.id)
-    if (providerKey === CODEX_PROVIDER_KEY && model.type !== 'llm') {
+    if (providerKey === CODEX_PROVIDER_KEY && model.type !== 'llm' && model.type !== 'image') {
       throw new ApiError('INVALID_PARAMS', {
         code: 'MODEL_PROVIDER_TYPE_UNSUPPORTED',
         field: `models[${index}].provider`,
@@ -1834,6 +1864,10 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     update: updateData,
     create: { userId, ...updateData },
   })
+
+  if (normalizedDefaults !== undefined) {
+    await migrateCodexImageDefaultsToProjects(userId, normalizedDefaults)
+  }
 
   return NextResponse.json({ success: true })
 })

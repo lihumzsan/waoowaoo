@@ -13,6 +13,7 @@ import type {
 } from '@/lib/openai-compat-media-template'
 import {
     CODEX_DEFAULT_EXECUTABLE_PATH,
+    CODEX_DEFAULT_IMAGE_MODEL_ID,
     CODEX_DEFAULT_MODEL_ID,
     CODEX_PROVIDER_KEY,
 } from '@/lib/providers/codex/constants'
@@ -132,6 +133,7 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'MiniMax-M2', name: 'MiniMax M2', type: 'llm', provider: 'minimax' },
 
     // 图像模型
+    { modelId: CODEX_DEFAULT_IMAGE_MODEL_ID, name: 'Codex Image', type: 'image', provider: CODEX_PROVIDER_KEY },
     { modelId: 'banana', name: 'Banana Pro', type: 'image', provider: 'fal' },
     { modelId: 'banana-2', name: 'Banana 2', type: 'image', provider: 'fal' },
     { modelId: 'doubao-seedream-4-5-251128', name: 'Seedream 4.5', type: 'image', provider: 'ark' },

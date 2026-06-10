@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMockRequest } from '../../../helpers/request'
+import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
 
 const authMock = vi.hoisted(() => ({
   requireProjectAuthLight: vi.fn(async () => ({
@@ -96,6 +97,30 @@ describe('api specific - regenerate panel image route', () => {
     expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
         imageModel: 'comfyui::baseimage/图片生成/ZImageTurbo造相',
+      }),
+    }))
+  })
+
+  it('submits Codex Image when the UI sends the Codex workflow selection', async () => {
+    const res = await invokeRoute({
+      panelId: 'panel-1',
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    })
+
+    expect(res.status).toBe(200)
+    expect(resolveModelSelectionMock).toHaveBeenCalledWith(
+      'user-1',
+      CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      'image',
+    )
+    expect(configMock.resolveProjectModelCapabilityGenerationOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      }),
+    )
+    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
       }),
     }))
   })

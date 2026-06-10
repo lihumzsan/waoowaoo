@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
+import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +25,24 @@ export interface CodexCompletionParams {
 }
 
 export interface CodexCompletionResult {
+  text: string
+  stdout: string
+  stderr: string
+}
+
+export interface CodexImageGenerationParams {
+  codexPath?: string
+  model?: string
+  prompt: string
+  imagePaths?: string[]
+  cwd?: string
+  timeoutMs?: number
+}
+
+export interface CodexImageGenerationResult {
+  imagePath: string
+  imageBase64: string
+  mimeType: string
   text: string
   stdout: string
   stderr: string
@@ -70,6 +89,7 @@ type SpawnResult = {
 const DEFAULT_CODEX_EXEC_TIMEOUT_MS = 20 * 60 * 1000
 const CODEX_FORCE_KILL_GRACE_MS = 5000
 const OUTPUT_TRUNCATE_LIMIT = 4000
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 
 function readTimeoutMs(raw: string | undefined): number {
   if (!raw) return DEFAULT_CODEX_EXEC_TIMEOUT_MS
@@ -112,13 +132,16 @@ export function buildCodexPrompt(messages: CodexChatMessage[]): string {
 export function buildCodexExecArgs(params: {
   model?: string
   outputPath: string
-  prompt: string
   imagePaths?: string[]
 }): string[] {
   const args = [
     'exec',
     '--ephemeral',
     '--json',
+    '--config',
+    'approval_policy="never"',
+    '--color',
+    'never',
     '--sandbox',
     'read-only',
     '--skip-git-repo-check',
@@ -140,7 +163,47 @@ export function buildCodexExecArgs(params: {
     args.push('-i', imagePath)
   }
 
-  args.push(params.prompt)
+  args.push('-')
+  return args
+}
+
+export function buildCodexImageExecArgs(params: {
+  model?: string
+  outputPath: string
+  imagePaths?: string[]
+}): string[] {
+  const args = [
+    'exec',
+    '--ephemeral',
+    '--json',
+    '--config',
+    'approval_policy="never"',
+    '--color',
+    'never',
+    '--enable',
+    'image_generation',
+    '--sandbox',
+    'danger-full-access',
+    '--skip-git-repo-check',
+    '--disable',
+    'plugins',
+    '--disable',
+    'memories',
+    '--disable',
+    'apps',
+    '--disable',
+    'shell_snapshot',
+    '-m',
+    params.model || CODEX_DEFAULT_MODEL_ID,
+    '--output-last-message',
+    params.outputPath,
+  ]
+
+  for (const imagePath of params.imagePaths || []) {
+    args.push('-i', imagePath)
+  }
+
+  args.push('-')
   return args
 }
 
@@ -158,7 +221,7 @@ async function assertCodexExecutableExists(executablePath: string): Promise<void
 function spawnCodex(
   executablePath: string,
   args: string[],
-  options: { cwd?: string; timeoutMs: number },
+  options: { cwd?: string; timeoutMs: number; stdin?: string },
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let child: ReturnType<typeof spawn>
@@ -167,7 +230,7 @@ function spawnCodex(
         cwd: options.cwd || process.cwd(),
         shell: false,
         windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       })
     } catch (error) {
       reject(error)
@@ -267,6 +330,10 @@ function spawnCodex(
     child.stderr?.on('data', (chunk: string) => {
       stderr += chunk
     })
+    child.stdin?.once('error', () => undefined)
+    if (options.stdin !== undefined) {
+      child.stdin?.end(options.stdin, 'utf8')
+    }
     child.once('error', (error) => {
       if (timedOut) {
         rejectOnce(buildTimeoutError(null, null))
@@ -296,7 +363,6 @@ export async function runCodexTextCompletion(
   const args = buildCodexExecArgs({
     model: params.model,
     outputPath,
-    prompt,
     imagePaths: params.imagePaths,
   })
   const timeoutMs = params.timeoutMs ?? readTimeoutMs(process.env.CODEX_LLM_TIMEOUT_MS)
@@ -305,6 +371,7 @@ export async function runCodexTextCompletion(
     const result = await spawnCodex(executablePath, args, {
       cwd: params.cwd,
       timeoutMs,
+      stdin: prompt,
     }).catch((error) => {
       if (error instanceof CodexExecError) throw error
       throw new CodexExecError(
@@ -342,6 +409,345 @@ export async function runCodexTextCompletion(
     }
 
     return {
+      text,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+function inferImageMimeType(buffer: Buffer, filePath: string): string {
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png'
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg'
+  }
+  if (
+    buffer.length >= 12
+    && buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp'
+  }
+  if (buffer.length >= 6) {
+    const header = buffer.subarray(0, 6).toString('ascii')
+    if (header === 'GIF87a' || header === 'GIF89a') {
+      return 'image/gif'
+    }
+  }
+
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.webp':
+      return 'image/webp'
+    case '.gif':
+      return 'image/gif'
+    default:
+      return 'image/png'
+  }
+}
+
+function collectStringValues(value: unknown, output: string[] = []): string[] {
+  if (typeof value === 'string') {
+    output.push(value)
+    return output
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringValues(item, output)
+    return output
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '')
+      if (
+        normalizedKey === 'imagepath'
+        || normalizedKey === 'outputpath'
+        || normalizedKey === 'filepath'
+        || normalizedKey === 'localpath'
+        || normalizedKey === 'localfilepath'
+        || normalizedKey === 'artifactpath'
+        || normalizedKey === 'imageurl'
+        || normalizedKey === 'path'
+        || normalizedKey === 'url'
+        || normalizedKey === 'b64json'
+        || normalizedKey === 'base64'
+        || normalizedKey === 'imagebase64'
+      ) {
+        collectStringValues(nested, output)
+      } else if (
+        normalizedKey === 'image'
+        || normalizedKey === 'images'
+        || normalizedKey === 'imagepaths'
+        || normalizedKey === 'imageurls'
+        || normalizedKey === 'output'
+        || normalizedKey === 'outputs'
+        || normalizedKey === 'result'
+        || normalizedKey === 'results'
+        || normalizedKey === 'item'
+        || normalizedKey === 'items'
+        || normalizedKey === 'content'
+        || normalizedKey === 'contents'
+        || normalizedKey === 'data'
+        || normalizedKey === 'artifact'
+        || normalizedKey === 'artifacts'
+        || normalizedKey === 'file'
+        || normalizedKey === 'files'
+      ) {
+        collectStringValues(nested, output)
+      }
+    }
+  }
+  return output
+}
+
+function extractJsonObjects(text: string): unknown[] {
+  const candidates: unknown[] = []
+  const trimmed = text.trim()
+  if (!trimmed) return candidates
+
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
+  const directText = fenced?.[1]?.trim() || trimmed
+  try {
+    candidates.push(JSON.parse(directText))
+    return candidates
+  } catch {
+    // Fall through to scan line-delimited and embedded JSON objects.
+  }
+
+  for (const line of directText.split(/\r?\n/)) {
+    const trimmedLine = line.trim()
+    if (!trimmedLine || (!trimmedLine.startsWith('{') && !trimmedLine.startsWith('['))) {
+      continue
+    }
+    try {
+      candidates.push(JSON.parse(trimmedLine))
+    } catch {
+      // Ignore non-JSON log lines and continue scanning.
+    }
+  }
+  if (candidates.length > 0) {
+    return candidates
+  }
+
+  const objectMatches = directText.match(/\{[\s\S]*?\}/g) || []
+  for (const match of objectMatches) {
+    try {
+      candidates.push(JSON.parse(match))
+    } catch {
+      // Ignore malformed snippets and continue scanning.
+    }
+  }
+  return candidates
+}
+
+function extractImagePathCandidates(text: string): string[] {
+  const candidates: string[] = []
+  for (const parsed of extractJsonObjects(text)) {
+    candidates.push(...collectStringValues(parsed))
+  }
+
+  const dataUrls = text.matchAll(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi)
+  for (const match of dataUrls) {
+    if (match[0]) candidates.push(match[0])
+  }
+
+  const markdownLinks = text.matchAll(/!\[[^\]]*]\(([^)]+)\)/g)
+  for (const match of markdownLinks) {
+    if (match[1]) candidates.push(match[1])
+  }
+
+  const loosePaths = text.matchAll(/(?:file:\/\/\/)?(?:[A-Za-z]:[\\/][^\s"'<>|]+|\.{0,2}[\\/][^\s"'<>|]+|[^\s"'<>|]+?\.(?:png|jpe?g|webp|gif))/gi)
+  for (const match of loosePaths) {
+    if (match[0]) candidates.push(match[0])
+  }
+
+  return Array.from(new Set(candidates.map((candidate) => candidate.trim()).filter(Boolean)))
+}
+
+async function existingImagePath(rawCandidate: string, roots: string[]): Promise<string | null> {
+  let candidate = rawCandidate.replace(/^["']|["']$/g, '')
+  if (candidate.startsWith('file:')) {
+    try {
+      candidate = fileURLToPath(candidate)
+    } catch {
+      return null
+    }
+  }
+
+  const candidatePaths = path.isAbsolute(candidate)
+    ? [candidate]
+    : roots.map((root) => path.resolve(root, candidate))
+
+  for (const candidatePath of candidatePaths) {
+    const ext = path.extname(candidatePath).toLowerCase()
+    if (!IMAGE_EXTENSIONS.has(ext)) continue
+    try {
+      const stat = await fs.stat(candidatePath)
+      if (stat.isFile() && stat.size > 0) return candidatePath
+    } catch {
+      // Try the next candidate path.
+    }
+  }
+
+  return null
+}
+
+function normalizeComparablePath(filePath: string): string {
+  const resolved = path.resolve(filePath)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+async function resolveImageCandidate(
+  rawCandidate: string,
+  roots: string[],
+  tempDir: string,
+  excludedPaths: Set<string>,
+): Promise<string | null> {
+  const candidate = rawCandidate.trim().replace(/^["']|["']$/g, '')
+  if (candidate.startsWith('data:image/')) {
+    return await writeDataUrlImage(candidate, tempDir)
+  }
+  const imagePath = await existingImagePath(candidate, roots)
+  if (!imagePath) return null
+  if (excludedPaths.has(normalizeComparablePath(imagePath))) return null
+  return imagePath
+}
+
+async function findNewestImageFile(root: string): Promise<string | null> {
+  const pending: string[] = [root]
+  let newest: { path: string; mtimeMs: number } | null = null
+  let visited = 0
+
+  while (pending.length > 0 && visited < 500) {
+    const current = pending.shift()
+    if (!current) break
+    visited += 1
+
+    let entries: Dirent[]
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        pending.push(entryPath)
+        continue
+      }
+      if (!entry.isFile() || !IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        continue
+      }
+
+      try {
+        const stat = await fs.stat(entryPath)
+        if (stat.size <= 0) continue
+        if (!newest || stat.mtimeMs > newest.mtimeMs) {
+          newest = { path: entryPath, mtimeMs: stat.mtimeMs }
+        }
+      } catch {
+        // Ignore files that disappear while scanning.
+      }
+    }
+  }
+
+  return newest?.path || null
+}
+
+async function resolveCodexGeneratedImagePath(params: {
+  text: string
+  extraTexts?: string[]
+  excludePaths?: string[]
+  cwd: string
+  tempDir: string
+}): Promise<string | null> {
+  const roots = Array.from(new Set([params.cwd, params.tempDir]))
+  const excludedPaths = new Set((params.excludePaths || []).map(normalizeComparablePath))
+  const searchText = [params.text, ...(params.extraTexts || [])].filter(Boolean).join('\n')
+  for (const candidate of extractImagePathCandidates(searchText)) {
+    const imagePath = await resolveImageCandidate(candidate, roots, params.tempDir, excludedPaths)
+    if (imagePath) return imagePath
+  }
+
+  return await findNewestImageFile(params.tempDir)
+}
+
+export async function runCodexImageGeneration(
+  params: CodexImageGenerationParams,
+): Promise<CodexImageGenerationResult> {
+  const executablePath = resolveCodexExecutablePath(params.codexPath)
+  await assertCodexExecutableExists(executablePath)
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-codex-image-'))
+  const outputPath = path.join(tempDir, 'last-message.json')
+  const cwd = params.cwd || tempDir
+  const args = buildCodexImageExecArgs({
+    model: params.model,
+    outputPath,
+    imagePaths: params.imagePaths,
+  })
+  const timeoutMs = params.timeoutMs ?? readTimeoutMs(process.env.CODEX_IMAGE_TIMEOUT_MS || process.env.CODEX_LLM_TIMEOUT_MS)
+
+  try {
+    const result = await spawnCodex(executablePath, args, {
+      cwd,
+      timeoutMs,
+      stdin: params.prompt,
+    }).catch((error) => {
+      if (error instanceof CodexExecError) throw error
+      throw new CodexExecError(
+        'CODEX_EXEC_FAILED',
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+
+    if (result.exitCode !== 0) {
+      throw new CodexExecError(
+        'CODEX_EXEC_FAILED',
+        `Codex exec exited with code ${result.exitCode ?? 'null'}`,
+        {
+          exitCode: result.exitCode,
+          signal: result.signal,
+          stdout: truncateForError(result.stdout),
+          stderr: truncateForError(result.stderr),
+        },
+      )
+    }
+
+    const output = await fs.readFile(outputPath, 'utf8').catch(() => '')
+    const text = output.trimEnd()
+    const imagePath = await resolveCodexGeneratedImagePath({
+      text,
+      extraTexts: [result.stdout, result.stderr],
+      excludePaths: params.imagePaths,
+      cwd,
+      tempDir,
+    })
+    if (!imagePath) {
+      throw new CodexExecError(
+        'CODEX_IMAGE_OUTPUT_NOT_FOUND',
+        'Codex image generation completed without a readable image path',
+        {
+          exitCode: result.exitCode,
+          signal: result.signal,
+          stdout: truncateForError(result.stdout),
+          stderr: truncateForError(result.stderr),
+        },
+      )
+    }
+
+    const imageBytes = await fs.readFile(imagePath)
+    const mimeType = inferImageMimeType(imageBytes, imagePath)
+    return {
+      imagePath,
+      imageBase64: imageBytes.toString('base64'),
+      mimeType,
       text,
       stdout: result.stdout,
       stderr: result.stderr,

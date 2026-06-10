@@ -2,6 +2,7 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { getArtStylePrompt } from '@/lib/constants'
+import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
 
 const SINGLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen单图编辑'
 const DOUBLE_EDIT_MODEL = 'comfyui::baseimage/图片编辑/qwen双图编辑'
@@ -481,6 +482,23 @@ describe('worker panel-image-task-handler behavior', () => {
       expect.anything(),
       expect.objectContaining({
         modelId: 'comfyui::baseimage/图片生成/ZImageTurbo造像',
+      }),
+    )
+  })
+
+  it('passes Codex storyboard payloads through to image generation with normalized references', async () => {
+    await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      imageModel: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+        options: expect.objectContaining({
+          referenceImages: ['normalized:https://signed.example/ref-1.png'],
+        }),
       }),
     )
   })

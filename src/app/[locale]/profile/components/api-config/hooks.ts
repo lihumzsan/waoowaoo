@@ -26,6 +26,7 @@ import {
 import { isBailianCodingPlanApiKey } from '@/lib/providers/bailian/base-url'
 import { isBailianCodingPlanSupportedModel } from '@/lib/providers/bailian/coding-plan'
 import {
+    CODEX_DEFAULT_IMAGE_MODEL_KEY,
     CODEX_DEFAULT_MODEL_KEY,
     CODEX_PROVIDER_KEY,
 } from '@/lib/providers/codex/constants'
@@ -158,8 +159,19 @@ const COMFYUI_REQUIRED_IMAGE_HELPER_MODEL_IDS = [
     'baseimage/图片编辑/Flux2多图编辑',
 ] as const
 
+const CODEX_IMAGE_DEFAULT_FIELDS = [
+    'characterModel',
+    'locationModel',
+    'storyboardModel',
+    'editModel',
+] as const
+
 function hasComfyUiPresetDefaultField(field: string): field is keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS {
     return Object.prototype.hasOwnProperty.call(COMFYUI_PRESET_DEFAULT_MODEL_IDS, field)
+}
+
+function isComfyUiModelKey(modelKey: string | undefined): boolean {
+    return typeof modelKey === 'string' && getProviderKey(modelKey) === 'comfyui'
 }
 
 function matchesComfyUiPresetDefaultModel(field: keyof typeof COMFYUI_PRESET_DEFAULT_MODEL_IDS, model: CustomModel, modelId: string): boolean {
@@ -255,6 +267,56 @@ export function applyCodexTextPresetDefault(params: {
         analysisModel: CODEX_DEFAULT_MODEL_KEY,
     }
     let changed = params.defaultModels.analysisModel !== CODEX_DEFAULT_MODEL_KEY
+    const targetModel = nextModels[modelIndex]
+    if (targetModel && !targetModel.enabled) {
+        nextModels[modelIndex] = {
+            ...targetModel,
+            enabled: true,
+        }
+        changed = true
+    }
+
+    return {
+        models: nextModels,
+        defaultModels: nextDefaultModels,
+        changed,
+    }
+}
+
+export function applyCodexPresetDefaults(params: {
+    models: CustomModel[]
+    defaultModels: DefaultModels
+    shouldAutoSelectText: boolean
+}): { models: CustomModel[]; defaultModels: DefaultModels; changed: boolean } {
+    const textResolved = applyCodexTextPresetDefault({
+        models: params.models,
+        defaultModels: params.defaultModels,
+        shouldAutoSelect: params.shouldAutoSelectText,
+    })
+
+    const modelIndex = textResolved.models.findIndex((model) =>
+        model.modelKey === CODEX_DEFAULT_IMAGE_MODEL_KEY
+        && getProviderKey(model.provider) === CODEX_PROVIDER_KEY
+        && model.type === 'image',
+    )
+    if (modelIndex < 0) {
+        return textResolved
+    }
+
+    const nextModels = [...textResolved.models]
+    const nextDefaultModels: DefaultModels = { ...textResolved.defaultModels }
+    let changed = textResolved.changed
+
+    for (const field of CODEX_IMAGE_DEFAULT_FIELDS) {
+        const currentModelKey = nextDefaultModels[field]
+        if (!currentModelKey || isComfyUiModelKey(currentModelKey)) {
+            if (currentModelKey !== CODEX_DEFAULT_IMAGE_MODEL_KEY) {
+                nextDefaultModels[field] = CODEX_DEFAULT_IMAGE_MODEL_KEY
+                changed = true
+            }
+        }
+    }
+
     const targetModel = nextModels[modelIndex]
     if (targetModel && !targetModel.enabled) {
         nextModels[modelIndex] = {
@@ -543,10 +605,10 @@ export function useProviders(): UseProvidersReturn {
                     changed: false,
                 }
 
-            const codexResolved = applyCodexTextPresetDefault({
+            const codexResolved = applyCodexPresetDefaults({
                 models: comfyUiResolved.models,
                 defaultModels: comfyUiResolved.defaultModels,
-                shouldAutoSelect: !hasSavedCodexConfig,
+                shouldAutoSelectText: !hasSavedCodexConfig,
             })
 
             setModels(codexResolved.models)

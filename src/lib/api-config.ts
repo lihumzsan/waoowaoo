@@ -21,6 +21,8 @@ import type {
 import { validateOpenAICompatMediaTemplate } from './user-api/model-template/validator'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_DEFAULT_IMAGE_MODEL_ID,
+  CODEX_DEFAULT_IMAGE_MODEL_KEY,
   CODEX_DEFAULT_MODEL_ID,
   CODEX_DEFAULT_MODEL_KEY,
   CODEX_PROVIDER_KEY,
@@ -130,6 +132,14 @@ const CODEX_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
     modelKey: CODEX_DEFAULT_MODEL_KEY,
     name: 'Codex GPT-5.4',
     type: 'llm',
+    provider: CODEX_PROVIDER_KEY,
+    price: 0,
+  },
+  {
+    modelId: CODEX_DEFAULT_IMAGE_MODEL_ID,
+    modelKey: CODEX_DEFAULT_IMAGE_MODEL_KEY,
+    name: 'Codex Image',
+    type: 'image',
     provider: CODEX_PROVIDER_KEY,
     price: 0,
   },
