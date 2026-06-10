@@ -33,6 +33,7 @@ import {
   isWorkspaceAssistantSendMessageEvent,
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
+import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
 import {
   createTaskBatchSubmittedDataFromOperationPayload,
   createTaskSubmittedDataFromOperationPayload,
@@ -45,7 +46,6 @@ import {
 } from '@/lib/query/resource-change-sync'
 import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
@@ -115,27 +115,6 @@ function readAssistantToolOutput(part: unknown): unknown | null {
   if (type !== 'dynamic-tool' && !type.startsWith('tool-')) return null
   if (part.state !== 'output-available') return null
   return 'output' in part ? part.output : null
-}
-
-function isProjectAgentChoiceCardPartData(value: unknown): value is ProjectAgentChoiceCardPartData {
-  if (!isRecord(value)) return false
-  return typeof value.cardId === 'string'
-    && typeof value.title === 'string'
-    && Array.isArray(value.groups)
-    && typeof value.submitLabel === 'string'
-    && isRecord(value.submit)
-    && typeof value.submit.kind === 'string'
-}
-
-function readChoiceCardPart(part: unknown): ProjectAgentChoiceCardPartData | null {
-  if (!isRecord(part)) return null
-  if (part.type !== 'data-assistant-choice-card') return null
-  return isProjectAgentChoiceCardPartData(part.data) ? part.data : null
-}
-
-interface ActiveChoiceCard {
-  key: string
-  data: ProjectAgentChoiceCardPartData
 }
 
 function readStoredAssistantPanelWidth(): number {
@@ -470,20 +449,7 @@ export default function WorkspaceAssistantPanel({
     await assistantRuntime.sendMessage(params.message)
   }
   const activeChoiceCard = useMemo(() => {
-    for (let messageIndex = assistantRuntime.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const message = assistantRuntime.messages[messageIndex]
-      if (!message || message.role !== 'assistant') continue
-      for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
-        const card = readChoiceCardPart(message.parts[partIndex])
-        const key = `${message.id}:part:${String(partIndex)}:${card?.cardId ?? 'unknown'}`
-        if (!card || dismissedChoiceCardKeys.has(key)) continue
-        return {
-          key,
-          data: card,
-        } satisfies ActiveChoiceCard
-      }
-    }
-    return null
+    return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
   }, [assistantRuntime.messages, dismissedChoiceCardKeys])
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
