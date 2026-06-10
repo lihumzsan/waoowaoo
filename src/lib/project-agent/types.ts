@@ -134,6 +134,8 @@ export type ProjectAgentChoiceCardSubmit =
     successMessageTemplate: string
   }
 
+export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm_or_reply'
+
 export interface ProjectAgentChoiceCardOption {
   value: string
   label: string
@@ -151,11 +153,16 @@ export interface ProjectAgentChoiceCardGroup {
 
 export interface ProjectAgentChoiceCardPartData {
   cardId: string
+  variant?: ProjectAgentChoiceCardVariant
   title: string
   description?: string | null
   groups: ProjectAgentChoiceCardGroup[]
   submitLabel: string
   submit: ProjectAgentChoiceCardSubmit
+  replyLabel?: string | null
+  replyPlaceholder?: string | null
+  replySubmitLabel?: string | null
+  replyMessageTemplate?: string | null
 }
 
 export interface ConfirmationRequestPartData {

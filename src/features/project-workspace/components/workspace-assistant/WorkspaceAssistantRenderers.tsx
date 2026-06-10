@@ -290,14 +290,36 @@ export function AssistantChoiceCardView(props: {
   const card = props.data
   const [selections, setSelections] = useState<ChoiceCardSelections>({})
   const [activeGroupIndex, setActiveGroupIndex] = useState(0)
+  const [replyText, setReplyText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isConfirmOrReply = card.variant === 'confirm_or_reply'
   const ready = isChoiceCardSubmitReady(card.groups, selections)
   const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
   const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
   const isStylePreviewGroup = activeGroup?.key === 'stylePreviewId'
+
+  const handleReplySubmit = async () => {
+    const trimmedReply = replyText.trim()
+    const template = card.replyMessageTemplate?.trim()
+    if (!template || !trimmedReply || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await props.onSendChoiceMessage(
+        interpolateChoiceCardTemplate(template, selections, card.groups, {
+          replyText: trimmedReply,
+        }),
+      )
+      props.onSubmitted?.(card.cardId)
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : String(submitError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleSubmit = async () => {
     if (!ready || submitting) return
@@ -371,7 +393,41 @@ export function AssistantChoiceCardView(props: {
         ) : null}
       </div>
       {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
-      {activeGroup ? (
+      {isConfirmOrReply ? (
+        <div className="mt-3 space-y-2">
+          <button
+            type="button"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            onClick={() => { void handleSubmit() }}
+            disabled={!ready || submitting}
+          >
+            {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
+          </button>
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
+              {card.replyLabel || t('cards.choiceReplyLabel')}
+            </div>
+            <textarea
+              value={replyText}
+              onChange={(event) => {
+                setReplyText(event.target.value)
+                setError(null)
+              }}
+              placeholder={card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
+              className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-[var(--glass-accent-from)] focus:bg-white"
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              className="inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-[var(--glass-text-tertiary)] disabled:opacity-70"
+              onClick={() => { void handleReplySubmit() }}
+              disabled={submitting || !replyText.trim() || !card.replyMessageTemplate?.trim()}
+            >
+              {submitting ? t('cards.choiceSubmitting') : card.replySubmitLabel || t('cards.choiceReplySubmit')}
+            </button>
+          </div>
+        </div>
+      ) : activeGroup ? (
         <div className="mt-2 space-y-2">
           <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
           <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : isStylePreviewGroup ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
@@ -423,15 +479,19 @@ export function AssistantChoiceCardView(props: {
         </div>
       ) : null}
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
-      <button
-        type="button"
-        className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
-        onClick={() => { void handleSubmit() }}
-        disabled={!ready || submitting}
-      >
-        {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
-      </button>
-      {!ready ? <div className="mt-1.5 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
+      {!isConfirmOrReply ? (
+        <>
+          <button
+            type="button"
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            onClick={() => { void handleSubmit() }}
+            disabled={!ready || submitting}
+          >
+            {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
+          </button>
+          {!ready ? <div className="mt-1.5 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
+        </>
+      ) : null}
     </div>
   )
 }

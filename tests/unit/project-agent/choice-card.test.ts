@@ -102,6 +102,42 @@ describe('edit-first assistant choice cards', () => {
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=needs_style_choice')
   })
 
+  it('builds a screenplay review card after screenplay generation', async () => {
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('screenplay_ready_for_review'),
+      choiceType: 'screenplay_review',
+    })
+
+    expect(card).toMatchObject({
+      cardId: 'edit-first-screenplay-review',
+      variant: 'confirm_or_reply',
+      title: '审核剧本',
+      groups: [],
+      submitLabel: '确认',
+      submit: {
+        kind: 'send_message',
+        messageTemplate: expect.stringContaining('确认当前剪辑先行剧本'),
+      },
+      replyLabel: '其他想法',
+      replyMessageTemplate: '我对当前剪辑先行剧本有修改意见：{replyText}',
+    })
+  })
+
+  it('rejects screenplay review cards outside the screenplay review stage', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('ready_to_generate_screenplay'),
+      choiceType: 'screenplay_review',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=ready_to_generate_screenplay')
+  })
+
   it('builds a style card only after three style previews are ready', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       videoRatio: '16:9',

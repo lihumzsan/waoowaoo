@@ -59,7 +59,7 @@ const generateEditStylePreviewsInputSchema = z.object({
 
 const requestEditFirstChoiceInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'style']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -111,7 +111,7 @@ const editScreenplayOutputSchema = z.object({
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'style']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -354,7 +354,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     request_edit_first_choice: defineOperation({
       id: 'request_edit_first_choice',
-      summary: 'Request a fixed assistant choice card for edit-first production. Use duration_and_aspect_ratio before screenplay generation, then use style after screenplay-based style previews are ready.',
+      summary: 'Request a fixed assistant choice card for edit-first production. Use duration_and_aspect_ratio before screenplay generation, screenplay_review after screenplay generation, then style after screenplay-based style previews are ready.',
       intent: 'query',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_NONE,

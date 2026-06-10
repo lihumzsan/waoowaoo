@@ -42,4 +42,15 @@ describe('workspace assistant choice card actions', () => {
 
     expect(message).toBe('已选择风格 A · 硬核写实科幻风格 / style-a，画面比例 16:9。')
   })
+
+  it('interpolates extra reply values into submit messages', () => {
+    const message = interpolateChoiceCardTemplate(
+      '我对当前剧本有修改意见：{replyText}',
+      {},
+      [],
+      { replyText: '更克苏鲁一些' },
+    )
+
+    expect(message).toBe('我对当前剧本有修改意见：更克苏鲁一些')
+  })
 })

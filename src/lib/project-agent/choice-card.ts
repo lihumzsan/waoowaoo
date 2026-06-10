@@ -12,7 +12,7 @@ const STYLE_PREVIEW_COUNT = 3
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
-export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'style'
+export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
 
 export function readEditFirstDurationSeconds(text: string): number | null {
   const normalized = text.trim().toLowerCase()
@@ -220,6 +220,40 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 }
 
+function buildScreenplayReviewChoiceCard(params: {
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+}): ProjectAgentChoiceCardPartData {
+  if (params.workflow.stage !== 'screenplay_ready_for_review') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=${params.workflow.stage}`)
+  }
+  const isEnglish = params.locale === 'en'
+  return {
+    cardId: 'edit-first-screenplay-review',
+    variant: 'confirm_or_reply',
+    title: isEnglish ? 'Review Screenplay' : '审核剧本',
+    description: isEnglish
+      ? 'Confirm to continue to visual style candidates, or send notes for a screenplay revision.'
+      : '确认后继续生成视觉风格候选；也可以提交其他想法来修改剧本。',
+    groups: [],
+    submitLabel: isEnglish ? 'Confirm' : '确认',
+    submit: {
+      kind: 'send_message',
+      messageTemplate: isEnglish
+        ? 'I approve the current edit-first screenplay. Read the latest project state and continue with the immediate next step: generate visual style candidates.'
+        : '我确认当前剪辑先行剧本，请读取最新项目状态，并继续当前唯一下一步：生成视觉风格候选图。',
+    },
+    replyLabel: isEnglish ? 'Other ideas' : '其他想法',
+    replyPlaceholder: isEnglish
+      ? 'Describe what you want changed in the screenplay...'
+      : '输入你希望修改的剧情、氛围、角色、结尾或表达方向...',
+    replySubmitLabel: isEnglish ? 'Submit notes' : '提交想法',
+    replyMessageTemplate: isEnglish
+      ? 'I have revision notes for the current edit-first screenplay: {replyText}'
+      : '我对当前剪辑先行剧本有修改意见：{replyText}',
+  }
+}
+
 export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
@@ -235,6 +269,13 @@ export async function buildEditFirstAssistantChoiceCard(params: {
     return buildDurationAndAspectRatioChoiceCard({
       locale: params.locale,
       projectId: params.projectId,
+    })
+  }
+
+  if (params.choiceType === 'screenplay_review') {
+    return buildScreenplayReviewChoiceCard({
+      locale: params.locale,
+      workflow: params.workflow,
     })
   }
 
