@@ -1,0 +1,49 @@
+{
+  "eyebrow": "Merchant",
+  "title": "Contact and Merchant Information",
+  "description": "This page shows the public information that payment providers and customers expect to find on the website. Sensitive documents, director details, UBO details, and bank information are not published here and are uploaded only inside Stripe or Airwallex onboarding portals.",
+  "publicInfo": {
+    "title": "Information to display publicly",
+    "fields": {
+      "companyName": {
+        "label": "Legal English company name",
+        "value": "To be provided (Hong Kong registered company)"
+      },
+      "registrationRegion": {
+        "label": "Registration region",
+        "value": "Hong Kong"
+      },
+      "registrationNumber": {
+        "label": "Company registration number / business registration number",
+        "value": "To be provided"
+      },
+      "registeredAddress": {
+        "label": "Registered address",
+        "value": "To be provided"
+      },
+      "supportEmail": {
+        "label": "Support email",
+        "value": "To be provided; support@yourdomain is recommended"
+      },
+      "supportPhone": {
+        "label": "Support phone",
+        "value": "To be provided; a real reachable phone number is recommended"
+      },
+      "supportHours": {
+        "label": "Support hours",
+        "value": "To be provided; Hong Kong business hours are recommended"
+      }
+    }
+  },
+  "portalOnly": {
+    "title": "Documents uploaded only in payment provider portals",
+    "description": "These items are usually used for KYC/KYB review and should not be published as website content.",
+    "items": {
+      "certificate": "Certificate of incorporation scan",
+      "businessRegistration": "Business registration certificate scan",
+      "directors": "Director identity documents, proof of address, and personal KYC information",
+      "owners": "Ultimate beneficial owner information and ownership structure",
+      "bank": "Bank account proof, settlement account details, or other supporting documents requested by the payment provider"
+    }
+  }
+}

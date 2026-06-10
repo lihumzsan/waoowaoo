@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
 import { useRouter } from '@/i18n/navigation'
 import Navbar from '@/components/Navbar'
+import PublicFooter from '@/components/PublicFooter'
 import { Link } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 
@@ -100,6 +101,9 @@ export default function Home() {
           </div>
         </section>
       </main>
+      <div className="relative z-10">
+        <PublicFooter />
+      </div>
     </div>
   )
 }

@@ -1,0 +1,45 @@
+{
+  "eyebrow": "Pricing",
+  "title": "Pricing and Credits",
+  "description": "The official waoowaoo cloud edition will use credits for AI text, image, video, and music generation. These are beta placeholder prices and can be updated before paid launch.",
+  "betaNotice": "Self-service top-up is not available during the official beta. Users can receive trial credits through invite codes or manual admin grants. The prices below describe the planned paid version for payment review and do not mean checkout is currently enabled.",
+  "plans": {
+    "starter": {
+      "label": "Personal starter",
+      "name": "Starter",
+      "price": "US$9",
+      "status": "Planned paid-launch package",
+      "details": {
+        "credits": "Includes 1,000 credits",
+        "usage": "Usable for text, image, video, and music generation",
+        "support": "Basic email support"
+      }
+    },
+    "creator": {
+      "label": "Creator",
+      "name": "Creator",
+      "price": "US$29",
+      "status": "Planned paid-launch package",
+      "details": {
+        "credits": "Includes 4,000 credits",
+        "usage": "For ongoing projects and multi-asset generation",
+        "support": "Priority email support"
+      }
+    },
+    "studio": {
+      "label": "Studio",
+      "name": "Studio",
+      "price": "US$99",
+      "status": "Planned paid-launch package",
+      "details": {
+        "credits": "Includes 15,000 credits",
+        "usage": "For team projects and frequent video generation",
+        "support": "Priority support and manual credit assistance"
+      }
+    }
+  },
+  "creditPolicy": {
+    "title": "Credit rules",
+    "body": "Credits are in-platform AI generation units. They are not cash, cannot be withdrawn, cannot be transferred, and cannot be used outside the platform. Actual deductions depend on task type, model, resolution, duration, and other factors. When paid checkout launches, final pricing, currency, taxes, and checkout entry points will be shown."
+  }
+}

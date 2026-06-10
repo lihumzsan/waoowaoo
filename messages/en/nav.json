@@ -1,6 +1,7 @@
 {
     "workspace": "Workspace",
     "assetHub": "Asset Hub",
+    "pricing": "Pricing",
     "profile": "Settings",
     "settingsMenu": {
         "apiConfig": "API Configuration",

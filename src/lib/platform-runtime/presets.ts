@@ -48,11 +48,6 @@ function addStringOption(target: Record<string, CapabilityValue>, field: string,
   if (value !== null) target[field] = value
 }
 
-function addBooleanOption(target: Record<string, CapabilityValue>, field: string, envName: string): void {
-  const value = readEnvBoolean(envName)
-  if (value !== null) target[field] = value
-}
-
 function platformImageOptions(): Record<string, CapabilityValue> {
   const options: Record<string, CapabilityValue> = {}
   addStringOption(options, 'resolution', 'PLATFORM_IMAGE_RESOLUTION')

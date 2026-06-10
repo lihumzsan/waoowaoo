@@ -280,6 +280,12 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
               ) : (
                 <>
                   <Link
+                    href={{ pathname: '/pricing' }}
+                    className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
+                  >
+                    {t('pricing')}
+                  </Link>
+                  <Link
                     href={{ pathname: '/auth/signin' }}
                     className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
                   >

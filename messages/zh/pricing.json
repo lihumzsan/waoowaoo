@@ -1,0 +1,45 @@
+{
+  "eyebrow": "Pricing",
+  "title": "价格与额度",
+  "description": "waoowaoo 官方云端版将按额度消耗提供 AI 文本、图片、视频和音乐生成。当前为内测占位价格，正式上线前可按你的商业策略调整。",
+  "betaNotice": "当前官方内测期间，自助充值暂未开放。用户可通过邀请码或联系管理员获取体验额度。以下价格用于支付审核和正式付费版本说明，不代表当前已开放付款。",
+  "plans": {
+    "starter": {
+      "label": "个人入门",
+      "name": "Starter",
+      "price": "US$9",
+      "status": "预计正式上线套餐",
+      "details": {
+        "credits": "包含 1,000 credits",
+        "usage": "可用于文本、图片、视频和音乐生成",
+        "support": "基础邮件支持"
+      }
+    },
+    "creator": {
+      "label": "创作者",
+      "name": "Creator",
+      "price": "US$29",
+      "status": "预计正式上线套餐",
+      "details": {
+        "credits": "包含 4,000 credits",
+        "usage": "适合连续项目创作和多资产生成",
+        "support": "优先邮件支持"
+      }
+    },
+    "studio": {
+      "label": "工作室",
+      "name": "Studio",
+      "price": "US$99",
+      "status": "预计正式上线套餐",
+      "details": {
+        "credits": "包含 15,000 credits",
+        "usage": "适合团队项目和高频视频生成",
+        "support": "优先支持与人工额度协助"
+      }
+    }
+  },
+  "creditPolicy": {
+    "title": "额度规则",
+    "body": "credits 是平台内 AI 生成额度，不是现金余额，不能提现、不可转让、不可用于平台外交易。实际扣除会根据任务类型、模型、分辨率、时长等因素确定。正式付款上线后，页面会展示最终价格、币种、税费和 checkout 入口。"
+  }
+}
