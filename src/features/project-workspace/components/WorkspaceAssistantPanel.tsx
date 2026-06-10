@@ -30,7 +30,10 @@ import {
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
 import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
-import { findActiveStylePreviewGenerationCard } from './workspace-assistant/active-style-preview-generation'
+import {
+  buildStylePreviewGenerationCardFromScreenplay,
+  findActiveStylePreviewGenerationCard,
+} from './workspace-assistant/active-style-preview-generation'
 import {
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
@@ -474,13 +477,18 @@ export default function WorkspaceAssistantPanel({
   const activeStylePreviewGenerationCard = useMemo(() => {
     return findActiveStylePreviewGenerationCard(assistantRuntime.messages)
   }, [assistantRuntime.messages])
+  const activeStylePreviewEpisodeId = activeStylePreviewGenerationCard?.data.episodeId ?? episodeId ?? null
   const activeStylePreviewScreenplay = useProjectEditScreenplay(
     projectId,
-    activeStylePreviewGenerationCard?.data.episodeId ?? null,
+    activeStylePreviewEpisodeId,
   )
+  const recoveredStylePreviewGenerationCard = useMemo(() => {
+    return buildStylePreviewGenerationCardFromScreenplay(activeStylePreviewScreenplay.data ?? null)
+  }, [activeStylePreviewScreenplay.data])
+  const displayedStylePreviewGenerationCard = activeStylePreviewGenerationCard ?? recoveredStylePreviewGenerationCard
   const activeStylePreviewConfirmed = (activeStylePreviewScreenplay.data?.stylePreviews ?? [])
     .some((preview) => preview.status === 'confirmed')
-  const shouldDockStylePreviewGenerationCard = Boolean(activeStylePreviewGenerationCard && !activeStylePreviewConfirmed)
+  const shouldDockStylePreviewGenerationCard = Boolean(displayedStylePreviewGenerationCard && !activeStylePreviewConfirmed)
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
       const next = new Set(current)
@@ -597,12 +605,12 @@ export default function WorkspaceAssistantPanel({
                       )}
                     </ThreadPrimitive.Messages>
                     <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
-                    {activeStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
+                    {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
                       <EditStylePreviewGenerationDataCard
                         type="data"
                         name="edit-style-preview-generation"
                         status={{ type: 'complete' }}
-                        data={activeStylePreviewGenerationCard.data}
+                        data={displayedStylePreviewGenerationCard.data}
                       />
                     ) : null}
                   </div>

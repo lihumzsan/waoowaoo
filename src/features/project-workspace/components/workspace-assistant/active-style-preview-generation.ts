@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai'
 import type { EditStylePreviewGenerationPartData } from '@/lib/project-agent/types'
+import type { ProjectEditScreenplay } from '@/types/project'
 
 interface ActiveStylePreviewGenerationCard {
   key: string
@@ -63,4 +64,34 @@ export function findActiveStylePreviewGenerationCard(
     }
   }
   return null
+}
+
+export function buildStylePreviewGenerationCardFromScreenplay(
+  screenplay: ProjectEditScreenplay | null | undefined,
+): ActiveStylePreviewGenerationCard | null {
+  if (!screenplay) return null
+  const stylePreviews = screenplay.stylePreviews ?? []
+  if (stylePreviews.some((preview) => preview.status === 'confirmed')) return null
+  const items = stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
+    if (!preview.taskId) return []
+    return [{
+      id: preview.id,
+      styleKey: preview.styleKey,
+      title: preview.title,
+      summary: preview.summary,
+      taskId: preview.taskId,
+      aspectRatio: preview.aspectRatio,
+    }]
+  })
+  if (items.length === 0) return null
+  return {
+    key: `screenplay:${screenplay.id}:style-previews`,
+    data: {
+      operationId: 'generate_edit_style_previews',
+      projectId: screenplay.projectId,
+      episodeId: screenplay.episodeId,
+      screenplayId: screenplay.id,
+      items,
+    },
+  }
 }

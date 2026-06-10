@@ -5,7 +5,10 @@ import {
   interpolateChoiceCardTemplate,
   isChoiceCardSubmitReady,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
-import { findActiveStylePreviewGenerationCard } from '@/features/project-workspace/components/workspace-assistant/active-style-preview-generation'
+import {
+  buildStylePreviewGenerationCardFromScreenplay,
+  findActiveStylePreviewGenerationCard,
+} from '@/features/project-workspace/components/workspace-assistant/active-style-preview-generation'
 
 const groups: ProjectAgentChoiceCardGroup[] = [
   {
@@ -94,5 +97,39 @@ describe('workspace assistant choice card actions', () => {
 
     expect(active?.data.screenplayId).toBe('screenplay-1')
     expect(active?.data.items.map((item) => item.id)).toEqual(['preview-1'])
+  })
+
+  it('recovers a style preview generation card from screenplay state after refresh', () => {
+    const active = buildStylePreviewGenerationCardFromScreenplay({
+      id: 'screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: 'prompt',
+      screenplayText: 'screenplay',
+      status: 'style_preview_generating',
+      styleBible: null,
+      stylePreviews: [
+        {
+          id: 'preview-1',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          screenplayId: 'screenplay-1',
+          styleKey: 'style_a',
+          aspectRatio: '16:9',
+          title: '暗黑风格',
+          summary: '暗黑摘要',
+          styleBible: {},
+          gridImagePrompt: 'prompt',
+          imageKey: null,
+          imageUrl: null,
+          status: 'generating',
+          taskId: 'task-1',
+          errorMessage: null,
+        },
+      ],
+    })
+
+    expect(active?.data.items).toHaveLength(1)
+    expect(active?.data.items[0]?.taskId).toBe('task-1')
   })
 })
