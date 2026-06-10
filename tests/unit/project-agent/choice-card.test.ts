@@ -288,6 +288,9 @@ describe('edit-first assistant choice cards', () => {
       },
       replyLabel: '其他想法',
     })
+    expect(card.submit.kind).toBe('send_message')
+    if (card.submit.kind !== 'send_message') throw new Error('EXPECTED_SEND_MESSAGE_SUBMIT')
+    expect(card.submit.messageTemplate).toContain('confirmed=true')
   })
 
   it('rejects generic next-step cards when a dedicated edit-first card is required', async () => {

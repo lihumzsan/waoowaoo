@@ -604,7 +604,7 @@ describe('project agent runtime tool routing', () => {
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
   })
 
-  it('injects only the workflow immediate next edit-first act tool', async () => {
+  it('requires the next-step confirmation card before later edit-first act tools', async () => {
     phaseState.editFirstWorkflow = {
       active: true,
       stage: 'ready_to_generate_director_decoupage',
@@ -641,10 +641,65 @@ describe('project agent runtime tool routing', () => {
     })
     await flushAsyncWork()
 
-    expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
+  it('injects the workflow immediate next edit-first act tool after hidden card confirmation', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'ready_to_generate_edit_script',
+      blocking: {
+        kind: 'needs_confirmation',
+        reason: null,
+      },
+      nextAction: {
+        id: 'generate_edit_script',
+        operationId: 'generate_edit_script',
+        title: 'Generate edit core table',
+        requiresUserConfirmation: true,
+      },
+      allowedOperationIds: ['generate_edit_script'],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['choice card confirmed the next edit-first step'],
+      latestUserText: '我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：generate_edit_script。调用该 operation 时传入 confirmed=true。',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          metadata: {
+            custom: {
+              workspaceAssistantHidden: true,
+            },
+          },
+          parts: [{
+            type: 'text',
+            text: '我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：generate_edit_script。调用该 operation 时传入 confirmed=true。',
+          }],
+        },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('generate_edit_script')
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
   })
 
   it('injects style preview regeneration during style choice without exposing later edit-first act tools', async () => {

@@ -317,8 +317,8 @@ function buildNextStepConfirmationChoiceCard(params: {
     submit: {
       kind: 'send_message',
       messageTemplate: isEnglish
-        ? `I confirm the immediate next edit-first step. Read the latest project state and execute the current next operation: ${nextAction.operationId}.`
-        : `我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：${nextAction.operationId}。`,
+        ? `I confirm the immediate next edit-first step. Read the latest project state and execute the current next operation: ${nextAction.operationId}. When calling that operation, pass confirmed=true.`
+        : `我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：${nextAction.operationId}。调用该 operation 时传入 confirmed=true。`,
     },
     replyLabel: isEnglish ? 'Other ideas' : '其他想法',
     replyPlaceholder: isEnglish
