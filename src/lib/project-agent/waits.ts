@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { TASK_EVENT_TYPE, type TaskLifecycleEventType } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
@@ -43,6 +43,11 @@ interface ProjectAgentWaitRow {
   resolvedAt: Date | null
 }
 
+export interface ProjectAgentWaitTaskSnapshot {
+  id: string
+  status: string
+}
+
 export interface ProjectAgentWaitFollowUp {
   waitId: string
   followUpKey: string
@@ -81,6 +86,43 @@ function parseStringArray(value: unknown): string[] {
 
 function buildFollowUpKey(waitId: string, terminalStatus: ProjectAgentWaitTerminalStatus): string {
   return `project-agent-wait:${waitId}:${terminalStatus}`
+}
+
+function readTerminalLifecycleTypeFromTaskStatus(status: string): TaskLifecycleEventType | null {
+  if (status === TASK_STATUS.COMPLETED) return TASK_EVENT_TYPE.COMPLETED
+  if (status === TASK_STATUS.FAILED || status === TASK_STATUS.CANCELED) return TASK_EVENT_TYPE.FAILED
+  return null
+}
+
+export function applyProjectAgentWaitTaskSnapshot(input: {
+  taskIds: string[]
+  tasks: ProjectAgentWaitTaskSnapshot[]
+}): ApplyProjectAgentWaitTerminalEventResult {
+  const taskIds = normalizeTaskIds(input.taskIds)
+  let terminalTaskIds: string[] = []
+  let failedTaskIds: string[] = []
+  let terminalStatus: ProjectAgentWaitTerminalStatus | null = null
+
+  for (const task of input.tasks) {
+    const lifecycleType = readTerminalLifecycleTypeFromTaskStatus(task.status)
+    if (!lifecycleType) continue
+    const result = applyProjectAgentWaitTerminalEvent({
+      taskId: task.id,
+      lifecycleType,
+      taskIds,
+      terminalTaskIds,
+      failedTaskIds,
+    })
+    terminalTaskIds = result.terminalTaskIds
+    failedTaskIds = result.failedTaskIds
+    terminalStatus = result.terminalStatus
+  }
+
+  return {
+    terminalTaskIds,
+    failedTaskIds,
+    terminalStatus,
+  }
 }
 
 function buildWaitScope(input: ProjectAgentWaitScopeInput): {
@@ -131,6 +173,12 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
       NOW(3)
     )
   `
+  await resolveNewProjectAgentWaitFromCurrentTasks({
+    waitId: id,
+    projectId: input.projectId,
+    userId: input.userId,
+    taskIds,
+  })
   return id
 }
 
@@ -171,6 +219,51 @@ export function applyProjectAgentWaitTerminalEvent(
     failedTaskIds,
     terminalStatus: allTerminal ? (failedTaskIds.length > 0 ? 'failed' : 'completed') : null,
   }
+}
+
+async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
+  waitId: string
+  projectId: string
+  userId: string
+  taskIds: string[]
+}): Promise<void> {
+  const tasks = await prisma.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
+    SELECT id, status
+    FROM tasks
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND id IN (${Prisma.join(input.taskIds)})
+  `)
+  const result = applyProjectAgentWaitTaskSnapshot({
+    taskIds: input.taskIds,
+    tasks,
+  })
+  if (result.terminalTaskIds.length === 0 && result.failedTaskIds.length === 0) return
+
+  if (!result.terminalStatus) {
+    await prisma.$executeRaw`
+      UPDATE project_agent_waits
+      SET terminalTaskIds = ${JSON.stringify(result.terminalTaskIds)},
+          failedTaskIds = ${JSON.stringify(result.failedTaskIds)},
+          updatedAt = NOW(3)
+      WHERE id = ${input.waitId}
+        AND status = 'pending'
+    `
+    return
+  }
+
+  await prisma.$executeRaw`
+    UPDATE project_agent_waits
+    SET status = 'resolved',
+        terminalStatus = ${result.terminalStatus},
+        terminalTaskIds = ${JSON.stringify(result.terminalTaskIds)},
+        failedTaskIds = ${JSON.stringify(result.failedTaskIds)},
+        followUpKey = ${buildFollowUpKey(input.waitId, result.terminalStatus)},
+        resolvedAt = NOW(3),
+        updatedAt = NOW(3)
+    WHERE id = ${input.waitId}
+      AND status = 'pending'
+  `
 }
 
 export async function resolveProjectAgentWaitsForTaskEvent(input: {

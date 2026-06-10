@@ -398,6 +398,14 @@ describe('edit-script operations', () => {
     })
   })
 
+  it('accepts next-step confirmation as a structured request choice type', () => {
+    const operations = createEditScriptOperations()
+
+    expect(operations.request_edit_first_choice.inputSchema.safeParse({
+      choiceType: 'next_step_confirmation',
+    }).success).toBe(true)
+  })
+
   it('submits style preview generation after screenplay review', async () => {
     const operations = createEditScriptOperations()
     const writerEvents: Record<string, unknown>[] = []

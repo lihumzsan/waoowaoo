@@ -11,7 +11,45 @@ import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from '@/lib/e
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
-export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'next_step_confirmation'
+
+const NEXT_STEP_CONFIRMATION_BLOCKED_STAGES = new Set<EditFirstWorkflowState['stage']>([
+  'ready_to_generate_screenplay',
+  'screenplay_ready_for_review',
+  'style_preview_generating',
+  'needs_style_choice',
+])
+
+const NEXT_STEP_ACTION_COPY: Record<string, { zh: string; en: string }> = {
+  generate_edit_director_decoupage: {
+    zh: '生成导演拆镜',
+    en: 'Generate Director Decoupage',
+  },
+  generate_edit_script: {
+    zh: '生成剪辑先行表',
+    en: 'Generate Edit Core Table',
+  },
+  generate_edit_script_assets: {
+    zh: '生成需求资产与空间档案',
+    en: 'Generate Required Assets and Spatial Profiles',
+  },
+  generate_edit_cinematography_shot_plan: {
+    zh: '生成摄影 Shot Plan',
+    en: 'Generate Cinematography Shot Plan',
+  },
+  generate_edit_script_storyboard: {
+    zh: '生成分镜',
+    en: 'Generate Storyboard',
+  },
+  generate_episode_videos: {
+    zh: '生成视频片段',
+    en: 'Generate Video Clips',
+  },
+  render_final_video: {
+    zh: '生成最终成片',
+    en: 'Render Final Video',
+  },
+}
 
 export function readEditFirstDurationSeconds(text: string): number | null {
   const normalized = text.trim().toLowerCase()
@@ -253,6 +291,46 @@ function buildScreenplayReviewChoiceCard(params: {
   }
 }
 
+function buildNextStepConfirmationChoiceCard(params: {
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+}): ProjectAgentChoiceCardPartData {
+  const nextAction = params.workflow.nextAction
+  if (!nextAction) {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=next_step_confirmation:stage=${params.workflow.stage}:nextAction=missing`)
+  }
+  if (NEXT_STEP_CONFIRMATION_BLOCKED_STAGES.has(params.workflow.stage)) {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=next_step_confirmation:stage=${params.workflow.stage}`)
+  }
+
+  const isEnglish = params.locale === 'en'
+  const actionTitle = NEXT_STEP_ACTION_COPY[nextAction.operationId]?.[params.locale] ?? nextAction.title
+  return {
+    cardId: `edit-first-next-step:${params.workflow.stage}:${nextAction.operationId}`,
+    variant: 'confirm_or_reply',
+    title: isEnglish ? 'Confirm Next Step' : '确认下一步',
+    description: isEnglish
+      ? `Confirm to continue with: ${actionTitle}. You can also send notes before continuing.`
+      : `确认后继续：${actionTitle}。也可以先提交其他想法。`,
+    groups: [],
+    submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
+    submit: {
+      kind: 'send_message',
+      messageTemplate: isEnglish
+        ? `I confirm the immediate next edit-first step. Read the latest project state and execute the current next operation: ${nextAction.operationId}.`
+        : `我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：${nextAction.operationId}。`,
+    },
+    replyLabel: isEnglish ? 'Other ideas' : '其他想法',
+    replyPlaceholder: isEnglish
+      ? 'Send notes or adjustments before continuing...'
+      : '输入继续下一步前想补充或调整的内容...',
+    replySubmitLabel: isEnglish ? 'Submit notes' : '提交想法',
+    replyMessageTemplate: isEnglish
+      ? 'Before continuing the current edit-first next step, I have these notes: {replyText}'
+      : '在继续当前剪辑先行下一步前，我有这些想法：{replyText}',
+  }
+}
+
 export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
@@ -273,6 +351,13 @@ export async function buildEditFirstAssistantChoiceCard(params: {
 
   if (params.choiceType === 'screenplay_review') {
     return buildScreenplayReviewChoiceCard({
+      locale: params.locale,
+      workflow: params.workflow,
+    })
+  }
+
+  if (params.choiceType === 'next_step_confirmation') {
+    return buildNextStepConfirmationChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
     })

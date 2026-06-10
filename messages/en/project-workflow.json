@@ -504,6 +504,7 @@
         },
         "fields": {
           "summary": "Summary",
+          "duration": "Duration",
           "originalClip": "Original Clip",
           "screenplay": "Screenplay JSON",
           "locations": "Locations",

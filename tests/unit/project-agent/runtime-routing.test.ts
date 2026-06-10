@@ -224,7 +224,7 @@ describe('project agent runtime tool routing', () => {
         groupPath: ['edit-script'],
         prerequisites: { episodeId: 'required' },
         effects: EFFECTS_NONE,
-        inputSchema: z.object({ choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']) }),
+        inputSchema: z.object({ choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'next_step_confirmation']) }),
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),

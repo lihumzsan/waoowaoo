@@ -28,7 +28,10 @@ import {
   readEditFirstDurationSeconds,
 } from '@/lib/project-agent/choice-card'
 
-function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
+function workflow(
+  stage: EditFirstWorkflowState['stage'],
+  nextAction: EditFirstWorkflowState['nextAction'] = null,
+): EditFirstWorkflowState {
   return {
     active: true,
     stage,
@@ -36,8 +39,8 @@ function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowStat
       kind: stage === 'needs_style_choice' ? 'needs_user_choice' : 'needs_confirmation',
       reason: null,
     },
-    nextAction: null,
-    allowedOperationIds: [],
+    nextAction,
+    allowedOperationIds: nextAction ? [nextAction.operationId] : [],
   }
 }
 
@@ -255,5 +258,51 @@ describe('edit-first assistant choice cards', () => {
       workflow: workflow('style_preview_generating'),
       choiceType: 'style',
     })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
+  })
+
+  it('builds a next-step confirmation card for later immediate workflow operations', async () => {
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('ready_to_generate_edit_script', {
+        id: 'generate_edit_script',
+        operationId: 'generate_edit_script',
+        title: 'Generate edit core table',
+        requiresUserConfirmation: true,
+      }),
+      choiceType: 'next_step_confirmation',
+    })
+
+    expect(card).toMatchObject({
+      cardId: 'edit-first-next-step:ready_to_generate_edit_script:generate_edit_script',
+      variant: 'confirm_or_reply',
+      title: '确认下一步',
+      description: expect.stringContaining('生成剪辑先行表'),
+      groups: [],
+      submitLabel: '确认并继续',
+      submit: {
+        kind: 'send_message',
+        messageTemplate: expect.stringContaining('generate_edit_script'),
+      },
+      replyLabel: '其他想法',
+    })
+  })
+
+  it('rejects generic next-step cards when a dedicated edit-first card is required', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('screenplay_ready_for_review', {
+        id: 'generate_edit_style_previews',
+        operationId: 'generate_edit_style_previews',
+        title: 'Generate style previews',
+        requiresUserConfirmation: true,
+      }),
+      choiceType: 'next_step_confirmation',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=next_step_confirmation:stage=screenplay_ready_for_review')
   })
 })

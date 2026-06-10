@@ -504,6 +504,7 @@
         },
         "fields": {
           "summary": "摘要",
+          "duration": "时长",
           "originalClip": "原始片段",
           "screenplay": "剧本 JSON",
           "locations": "场景",

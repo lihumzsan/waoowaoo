@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
-import { applyProjectAgentWaitTerminalEvent } from '@/lib/project-agent/waits'
+import {
+  applyProjectAgentWaitTaskSnapshot,
+  applyProjectAgentWaitTerminalEvent,
+} from '@/lib/project-agent/waits'
 
 describe('project agent waits', () => {
   it('[batch partial] -> does not resolve before all tasks are terminal', () => {
@@ -42,6 +45,34 @@ describe('project agent waits', () => {
       terminalTaskIds: ['task-1', 'task-2'],
       failedTaskIds: ['task-2'],
       terminalStatus: 'failed',
+    })
+  })
+
+  it('[creation race] -> resolves from task snapshots when tasks finished before the wait row exists', () => {
+    expect(applyProjectAgentWaitTaskSnapshot({
+      taskIds: ['task-1', 'task-2'],
+      tasks: [
+        { id: 'task-1', status: 'completed' },
+        { id: 'task-2', status: 'completed' },
+      ],
+    })).toEqual({
+      terminalTaskIds: ['task-1', 'task-2'],
+      failedTaskIds: [],
+      terminalStatus: 'completed',
+    })
+  })
+
+  it('[creation race partial] -> preserves already terminal task ids for later task events', () => {
+    expect(applyProjectAgentWaitTaskSnapshot({
+      taskIds: ['task-1', 'task-2'],
+      tasks: [
+        { id: 'task-1', status: 'completed' },
+        { id: 'task-2', status: 'processing' },
+      ],
+    })).toEqual({
+      terminalTaskIds: ['task-1'],
+      failedTaskIds: [],
+      terminalStatus: null,
     })
   })
 })
