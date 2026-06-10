@@ -180,6 +180,8 @@
     "stylePreviewGenerationStatus": "生成中 · {status}",
     "stylePreviewSelect": "选择这个风格",
     "stylePreviewSelectedMessage": "已选择风格 {title} 和画面比例 {aspectRatio}，请读取最新项目状态并继续当前唯一下一步。",
+    "stylePreviewSummaryExpand": "展开",
+    "stylePreviewSummaryCollapse": "收起",
     "operationExecutionFailedFallback": "操作执行失败",
     "confirmedOperation": "已确认并执行操作 {operation}。",
     "confirmedOperationWithResult": "已确认并执行操作 {operation}。结果：{result}",

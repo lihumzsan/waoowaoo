@@ -684,6 +684,7 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
   const data: EditStylePreviewGenerationPartData = props.data
   const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
+  const [expandedSummaryIds, setExpandedSummaryIds] = useState<ReadonlySet<string>>(() => new Set())
   const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
     targetType: 'ProjectEditStylePreview',
     targetId: item.id,
@@ -738,9 +739,20 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
       setSelectingPreviewId(null)
     }
   }
+  const toggleSummary = (itemId: string) => {
+    setExpandedSummaryIds((current) => {
+      const next = new Set(current)
+      if (next.has(itemId)) {
+        next.delete(itemId)
+      } else {
+        next.add(itemId)
+      }
+      return next
+    })
+  }
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
+    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
       <div className="flex items-center gap-2">
         <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-text-tertiary)]" />
         <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{t('cards.stylePreviewGenerationTitle')}</div>
@@ -761,6 +773,7 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
               : 'processing'
           const ready = isEditStylePreviewChoiceReady(preview)
           const selecting = selectingPreviewId === item.id
+          const summaryExpanded = expandedSummaryIds.has(item.id)
           return (
             <div
               key={item.id}
@@ -780,14 +793,22 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
                     className="h-44 w-full object-cover"
                   />
                 ) : (
-                  <div className="relative flex h-36 items-center justify-center overflow-hidden bg-neutral-100">
-                    <div className="absolute inset-0 -translate-x-full animate-[assistant-style-shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/80 to-transparent" />
-                    <div className="h-8 w-8 animate-pulse rounded-full border border-[var(--glass-stroke-strong)] bg-white/80" />
-                  </div>
+                  <div className="workspace-node-loading-surface h-36 bg-slate-100" />
                 )}
               </div>
               <div className="space-y-1 p-2">
-                <div className="line-clamp-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{item.summary}</div>
+                <button
+                  type="button"
+                  className="block w-full text-left text-[11px] leading-5 text-[var(--glass-text-secondary)] transition-colors hover:text-[var(--glass-text-primary)]"
+                  onClick={() => toggleSummary(item.id)}
+                >
+                  <span className={summaryExpanded ? 'block' : 'line-clamp-1'}>
+                    {item.summary}
+                  </span>
+                  <span className="mt-0.5 inline-flex text-[10px] font-medium text-[var(--glass-text-tertiary)]">
+                    {summaryExpanded ? t('cards.stylePreviewSummaryCollapse') : t('cards.stylePreviewSummaryExpand')}
+                  </span>
+                </button>
                 <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
                   <AppIcon name={ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready ? '' : 'animate-spin'}`} />
                   <span>{stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: liveStatus })}</span>
@@ -807,13 +828,6 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
           )
         })}
       </div>
-      <style>{`
-        @keyframes assistant-style-shimmer {
-          100% {
-            transform: translateX(100%);
-          }
-        }
-      `}</style>
     </div>
   )
 }
@@ -1007,7 +1021,7 @@ export function WorkspaceAssistantThreadMessage(props: {
 
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
-          <MessagePrimitive.Root className="space-y-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]">
+          <MessagePrimitive.Root className="flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]">
             {showInlineThinkingIndicator ? (
               <WorkspaceAssistantThinkingIndicator status="streaming" />
             ) : null}
