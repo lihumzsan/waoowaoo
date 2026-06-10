@@ -120,9 +120,12 @@ export function useLocationActions({
     }, [assetType, propActions, selectLocationImageMutation, t])
 
     // 确认选择并删除其他候选图片
-    const handleConfirmLocationSelection = useCallback(async (locationId: string) => {
+    const handleConfirmLocationSelection = useCallback(async (
+        locationId: string,
+        imageIndex?: number | null,
+    ) => {
         try {
-            await confirmLocationSelectionMutation.mutateAsync({ locationId })
+            await confirmLocationSelectionMutation.mutateAsync({ locationId, imageIndex })
             showToast?.(`✓ ${t('image.confirmSuccess')}`, 'success')
         } catch (error: unknown) {
             if (isAbortError(error)) {

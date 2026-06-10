@@ -139,6 +139,53 @@ describe('worker character-image-task-handler behavior', () => {
     expect(generationInput.prompt).not.toContain(getArtStylePrompt('realistic', 'zh'))
   })
 
+  it('adds a visible-variation instruction when regenerating an existing character image', async () => {
+    const job = buildJob({ imageIndex: 0, regenerationToken: 'regen-test-token' })
+    await handleCharacterImageTask(job)
+
+    const generationInput = sharedMock.generateProjectLabeledImageToStorage.mock.calls[0]?.[0] as {
+      prompt: string
+    }
+    expect(generationInput.prompt).toContain('Regeneration variation token: regen-test-token-img-1-of-1')
+    expect(generationInput.prompt).toContain('visibly different')
+    expect(generationInput.prompt).toContain('at least three secondary elements')
+    expect(generationInput.prompt).toContain('redraw the image from scratch')
+    expect(generationInput.prompt).toContain('overrides earlier exact wardrobe')
+    expect(generationInput.prompt).toContain('Do not repeat the same garment and color combination')
+    expect(generationInput.prompt).toContain('gender presentation')
+    expect(generationInput.prompt).toContain(CHARACTER_PROMPT_SUFFIX)
+  })
+
+  it('removes fixed wardrobe clauses from character regeneration prompts', async () => {
+    prismaMock.characterAppearance.findUnique.mockResolvedValueOnce({
+      id: 'appearance-2',
+      characterId: 'character-1',
+      appearanceIndex: 1,
+      descriptions: JSON.stringify([
+        '脸型清秀，眼神清澈。乌黑短发，身形修长。身穿白色衬衫，外搭灰色连帽外套，浅灰长裤，脚穿白灰短靴。',
+      ]),
+      description: '脸型清秀，眼神清澈。乌黑短发，身形修长。身穿白色衬衫，外搭灰色连帽外套，浅灰长裤，脚穿白灰短靴。',
+      imageUrls: JSON.stringify([]),
+      selectedIndex: 0,
+      imageUrl: null,
+      changeReason: '初始形象',
+      character: { name: 'Hero' },
+    })
+
+    await handleCharacterImageTask(buildJob({ imageIndex: 0, regenerationToken: 'regen-test-token' }))
+
+    const generationInput = sharedMock.generateProjectLabeledImageToStorage.mock.calls[0]?.[0] as {
+      prompt: string
+    }
+    expect(generationInput.prompt).toContain('脸型清秀')
+    expect(generationInput.prompt).toContain('乌黑短发')
+    expect(generationInput.prompt).not.toContain('身穿白色衬衫')
+    expect(generationInput.prompt).not.toContain('灰色连帽外套')
+    expect(generationInput.prompt).not.toContain('白灰短靴')
+    expect(generationInput.prompt).toContain('Regeneration wardrobe redesign')
+    expect(generationInput.prompt).toContain('Suggested alternate styling')
+  })
+
   it('invalid payload artStyle -> explicit error', async () => {
     await expect(handleCharacterImageTask(buildJob({ imageIndex: 0, artStyle: 'noir' }))).rejects.toThrow(
       'Invalid artStyle in IMAGE_CHARACTER payload',
@@ -174,5 +221,21 @@ describe('worker character-image-task-handler behavior', () => {
         imageUrl: 'cos/character-generated-0.png',
       },
     })
+  })
+
+  it('uses a different regeneration variation token for each image in a grouped regeneration', async () => {
+    sharedMock.generateProjectLabeledImageToStorage
+      .mockResolvedValueOnce('cos/character-generated-0.png')
+      .mockResolvedValueOnce('cos/character-generated-1.png')
+      .mockResolvedValueOnce('cos/character-generated-2.png')
+
+    await handleCharacterImageTask(buildJob({ count: 3, regenerationToken: 'regen-group-token' }))
+
+    const prompts = sharedMock.generateProjectLabeledImageToStorage.mock.calls.map((call) => call[0].prompt)
+    expect(prompts).toHaveLength(3)
+    expect(prompts[0]).toContain('Regeneration variation token: regen-group-token-img-1-of-3')
+    expect(prompts[1]).toContain('Regeneration variation token: regen-group-token-img-2-of-3')
+    expect(prompts[2]).toContain('Regeneration variation token: regen-group-token-img-3-of-3')
+    expect(new Set(prompts).size).toBe(3)
   })
 })

@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 
 const runtime = vi.hoisted(() => ({
   useQueryCalls: [] as Array<Record<string, unknown>>,
+  effectCleanups: [] as Array<(() => void) | void>,
+  queryClient: {
+    invalidateQueries: vi.fn(),
+  },
   apiStates: [] as TaskTargetState[],
   overlayStates: {} as Record<string, {
     targetType: string
@@ -28,10 +32,14 @@ vi.mock('react', async () => {
   return {
     ...actual,
     useMemo: <T,>(factory: () => T) => factory(),
+    useEffect: (effect: () => (() => void) | void) => {
+      runtime.effectCleanups.push(effect())
+    },
   }
 })
 
 vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => runtime.queryClient,
   useQuery: (options: Record<string, unknown>) => {
     runtime.useQueryCalls.push(options)
 
@@ -53,6 +61,7 @@ describe('task target state map behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     runtime.useQueryCalls = []
+    runtime.effectCleanups = []
     runtime.apiStates = [
       {
         targetType: 'CharacterAppearance',
@@ -117,6 +126,14 @@ describe('task target state map behavior', () => {
     }
   })
 
+  afterEach(() => {
+    for (const cleanup of runtime.effectCleanups) {
+      cleanup?.()
+    }
+    runtime.effectCleanups = []
+    vi.useRealTimers()
+  })
+
   it('does not use interval polling and merges overlay only when rules match', async () => {
     const { useTaskTargetStateMap } = await import('@/lib/query/hooks/useTaskTargetStateMap')
 
@@ -137,6 +154,24 @@ describe('task target state map behavior', () => {
     expect(panel?.phase).toBe('processing')
     expect(panel?.runningTaskType).toBe('IMAGE_PANEL')
     expect(panel?.runningTaskId).toBe('task-api-panel')
+  })
+
+  it('fallback refreshes target states while an optimistic overlay is active', async () => {
+    vi.useFakeTimers()
+    const { useTaskTargetStateMap } = await import('@/lib/query/hooks/useTaskTargetStateMap')
+
+    useTaskTargetStateMap('project-1', [
+      { targetType: 'CharacterAppearance', targetId: 'appearance-1', types: ['IMAGE_CHARACTER'] },
+    ])
+
+    const targetStateQueryKey = runtime.useQueryCalls[0]?.queryKey
+    expect(targetStateQueryKey).toBeTruthy()
+
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(runtime.queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: targetStateQueryKey,
+    })
   })
 
   it('allows newer overlay to override completed state for immediate rerun feedback', async () => {

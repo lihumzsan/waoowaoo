@@ -1221,6 +1221,15 @@ describe('comfyui workflow registry prompt injection', () => {
           widgets_values: ['fps'],
         },
         {
+          id: 15,
+          type: 'LoadImage',
+          inputs: [
+            { name: 'image', type: 'COMBO', widget: { name: 'image' }, link: null },
+          ],
+          outputs: [{ name: 'IMAGE', type: 'IMAGE', links: [13] }],
+          widgets_values: ['source.png'],
+        },
+        {
           id: 20,
           type: 'GetNode',
           title: 'Get_FLOAT',
@@ -1233,6 +1242,11 @@ describe('comfyui workflow registry prompt injection', () => {
           type: 'VHS_VideoCombine',
           inputs: [
             {
+              name: 'images',
+              type: 'IMAGE',
+              link: 13,
+            },
+            {
               name: 'frame_rate',
               type: 'FLOAT',
               link: 12,
@@ -1243,7 +1257,8 @@ describe('comfyui workflow registry prompt injection', () => {
       ],
       links: [
         [11, 1, 0, 10, 0, 'FLOAT'],
-        [12, 20, 0, 30, 0, 'FLOAT'],
+        [12, 20, 0, 30, 1, 'FLOAT'],
+        [13, 15, 0, 30, 0, 'IMAGE'],
       ],
     })
 

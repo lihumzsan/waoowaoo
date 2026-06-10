@@ -12,6 +12,9 @@ Rules:
 5. If primary_identifier exists, include it clearly in each main description.
 6. Do not include expression, action, background, or plot narration.
 7. Do not include skin color, eye color, or lip color.
+8. Every descriptions string must begin with the profile gender and age range, e.g. "male, about eighteen years old, ..." or "female, about twenty-five years old, ...".
+9. For male characters, keep male gender presentation explicit and avoid strongly feminizing combinations such as delicate oval face, tiny nose, cupid-bow lips, petite frame, soft feminine beauty, or shoulder-length flowing hair unless the source text explicitly requires them.
+10. If a male character is delicate, sickly, youthful, or beautiful, still state the male identity and masculine/youth-male structure explicitly.
 
 Appearance strategy:
 - Initial appearance should be complete and self-contained.

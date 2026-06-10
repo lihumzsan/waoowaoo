@@ -86,7 +86,12 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('@/lib/storage', () => ({
+  deleteObject: vi.fn(),
   getSignedUrl: vi.fn((key: string) => `https://signed.example/${key}`),
+}))
+
+vi.mock('@/lib/media/service', () => ({
+  resolveStorageKeyFromMediaValue: vi.fn(async (value: string) => value),
 }))
 
 function toModuleImportPath(routeFile: string): string {
@@ -373,6 +378,44 @@ describe('api contract - crud routes (behavior)', () => {
     const payload = await res.json() as { success: boolean }
     expect(payload).toEqual({
       success: true,
+    })
+  })
+
+  it('POST /novel-promotion/[projectId]/character/confirm-selection accepts request selectedIndex when persisted selection has not caught up', async () => {
+    authState.authenticated = true
+    const mod = await import('@/app/api/novel-promotion/[projectId]/character/confirm-selection/route')
+    prismaMock.characterAppearance.findUnique.mockResolvedValueOnce({
+      id: 'appearance-1',
+      characterId: 'character-1',
+      changeReason: 'default',
+      imageUrls: JSON.stringify(['cos/char-0.png', 'cos/char-1.png']),
+      imageUrl: null,
+      descriptions: JSON.stringify(['desc-0', 'desc-1']),
+      description: 'fallback description',
+      selectedIndex: null,
+      character: { id: 'character-1', name: 'Alice' },
+    })
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/character/confirm-selection',
+      method: 'POST',
+      body: {
+        characterId: 'character-1',
+        appearanceId: 'appearance-1',
+        selectedIndex: 1,
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
+    expect(res.status).toBe(200)
+    expect(prismaMock.characterAppearance.update).toHaveBeenCalledWith({
+      where: { id: 'appearance-1' },
+      data: {
+        imageUrl: 'cos/char-1.png',
+        imageUrls: JSON.stringify(['cos/char-1.png']),
+        selectedIndex: 0,
+        description: 'desc-1',
+        descriptions: JSON.stringify(['desc-1']),
+      },
     })
   })
 

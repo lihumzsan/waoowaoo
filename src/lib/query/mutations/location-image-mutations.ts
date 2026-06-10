@@ -257,8 +257,6 @@ export function useModifyProjectLocationImage(projectId: string) {
 
 export function useRegenerateLocationGroup(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ locationId, count }: { locationId: string; count?: number }) => {
@@ -288,7 +286,6 @@ export function useRegenerateLocationGroup(projectId: string) {
                 targetId: locationId,
             })
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 
@@ -298,8 +295,6 @@ export function useRegenerateLocationGroup(projectId: string) {
 
 export function useRegenerateSingleLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ locationId, imageIndex }: { locationId: string; imageIndex: number }) => {
@@ -329,7 +324,6 @@ export function useRegenerateSingleLocationImage(projectId: string) {
                 targetId: locationId,
             })
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 

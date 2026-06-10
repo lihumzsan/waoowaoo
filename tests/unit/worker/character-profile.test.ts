@@ -217,6 +217,53 @@ describe('worker character-profile behavior', () => {
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
+  it('confirm profile prefixes generated appearance descriptions with profile gender and age when missing', async () => {
+    prismaMock.novelPromotionCharacter.findFirst.mockResolvedValueOnce({
+      id: 'character-1',
+      name: '陈迹',
+      profileData: JSON.stringify({
+        gender: '男',
+        age_range: '约十八岁',
+        archetype: '忧郁少年',
+      }),
+      profileConfirmed: false,
+      novelPromotionProjectId: 'np-project-1',
+    })
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        characters: [
+          {
+            appearances: [
+              {
+                change_reason: '初始形象',
+                descriptions: [
+                  '脸型清瘦偏长，乌黑短发盖耳，身形高挑偏瘦。',
+                  '鹅蛋偏长的脸廓，碎刘海散落眉骨附近。',
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    })
+
+    await handleCharacterProfileTask(buildJob(TASK_TYPE.CHARACTER_PROFILE_CONFIRM, { characterId: 'character-1' }))
+
+    expect(prismaMock.characterAppearance.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        description: '男性，约十八岁，脸型清瘦偏长，乌黑短发盖耳，身形高挑偏瘦。',
+        descriptions: JSON.stringify([
+          '男性，约十八岁，脸型清瘦偏长，乌黑短发盖耳，身形高挑偏瘦。',
+          '男性，约十八岁，鹅蛋偏长的脸廓，碎刘海散落眉骨附近。',
+        ]),
+      }),
+      select: {
+        id: true,
+        appearanceIndex: true,
+      },
+    })
+  })
+
   it('batch confirm -> loops through all unconfirmed characters and returns count', async () => {
     const job = buildJob(TASK_TYPE.CHARACTER_PROFILE_BATCH_CONFIRM, {})
     const result = await handleCharacterProfileTask(job)

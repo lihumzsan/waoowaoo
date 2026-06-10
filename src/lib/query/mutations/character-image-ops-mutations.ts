@@ -65,8 +65,6 @@ export function useModifyProjectCharacterImage(projectId: string) {
 
 export function useRegenerateCharacterGroup(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -105,7 +103,6 @@ export function useRegenerateCharacterGroup(projectId: string) {
                 targetId: appearanceId,
             })
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 
@@ -115,8 +112,6 @@ export function useRegenerateCharacterGroup(projectId: string) {
 
 export function useRegenerateSingleCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -155,7 +150,6 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
                 targetId: appearanceId,
             })
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 

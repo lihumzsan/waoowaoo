@@ -199,13 +199,25 @@ export function useConfirmProjectCharacterSelection(projectId: string) {
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
     return useMutation({
-        mutationFn: async ({ characterId, appearanceId }: { characterId: string; appearanceId: string }) =>
+        mutationFn: async ({
+            characterId,
+            appearanceId,
+            selectedIndex,
+        }: {
+            characterId: string
+            appearanceId: string
+            selectedIndex?: number | null
+        }) =>
             await requestJsonWithError(
                 `/api/novel-promotion/${projectId}/character/confirm-selection`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ characterId, appearanceId }),
+                    body: JSON.stringify({
+                        characterId,
+                        appearanceId,
+                        ...(typeof selectedIndex === 'number' ? { selectedIndex } : {}),
+                    }),
                 },
                 '确认选择失败',
             ),

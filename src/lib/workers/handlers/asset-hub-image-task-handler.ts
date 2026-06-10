@@ -4,6 +4,7 @@ import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, ad
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { appendRegenerationPromptInstruction, buildCharacterRegenerationDescription } from '@/lib/image-generation/regeneration'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { buildLocationImagePromptCore } from '@/lib/location-image-prompt'
 import { buildPropImagePromptCore } from '@/lib/prop-image-prompt'
@@ -93,7 +94,13 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
 
     for (let i = 0; i < count; i++) {
       const raw = base[i] || base[0]
-      const prompt = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
+      const regenerationContext = {
+        variationIndex: i,
+        variationCount: count,
+      }
+      const promptDescription = buildCharacterRegenerationDescription(raw, payload.regenerationToken, regenerationContext)
+      const basePrompt = artStyle ? `${addCharacterPromptSuffix(promptDescription)}，${artStyle}` : addCharacterPromptSuffix(promptDescription)
+      const prompt = appendRegenerationPromptInstruction(basePrompt, payload.regenerationToken, regenerationContext)
       const imageKey = await generateCleanImageToStorage({
         job,
         userId,
@@ -140,7 +147,8 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
       ? location.images.slice(0, count)
       : location.images
 
-    for (const image of targetImages) {
+    for (let i = 0; i < targetImages.length; i++) {
+      const image = targetImages[i]
       if (!image.description) continue
       const promptCore = payload.type === 'prop'
         ? buildPropImagePromptCore({
@@ -154,7 +162,11 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
       const promptWithSuffix = payload.type === 'prop'
         ? addPropPromptSuffix(promptCore)
         : addLocationPromptSuffix(promptCore)
-      const prompt = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+      const basePrompt = artStyle ? `${promptWithSuffix}，${artStyle}` : promptWithSuffix
+      const prompt = appendRegenerationPromptInstruction(basePrompt, payload.regenerationToken, {
+        variationIndex: i,
+        variationCount: targetImages.length,
+      })
       const aspectRatio = payload.type === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
 
       const imageKey = await generateCleanImageToStorage({

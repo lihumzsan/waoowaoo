@@ -29,7 +29,7 @@ vi.mock('@/lib/query/mutations/mutation-shared', async () => {
 import { useConfirmProjectLocationSelection } from '@/lib/query/mutations/location-management-mutations'
 
 interface ConfirmLocationSelectionMutation {
-  mutationFn: (variables: { locationId: string }) => Promise<unknown>
+  mutationFn: (variables: { locationId: string; imageIndex?: number | null }) => Promise<unknown>
 }
 
 describe('project location-backed confirm mutations', () => {
@@ -59,6 +59,28 @@ describe('project location-backed confirm mutations', () => {
         }),
       },
       '确认选择失败',
+    )
+  })
+
+  it('forwards imageIndex in the project location confirmation request body', async () => {
+    const mutation = useConfirmProjectLocationSelection('project-1', 'location') as unknown as ConfirmLocationSelectionMutation
+
+    await mutation.mutationFn({ locationId: 'location-1', imageIndex: 2 })
+
+    expect(requestJsonWithErrorMock).toHaveBeenCalledWith(
+      '/api/assets/location-1/select-render',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'project',
+          kind: 'location',
+          projectId: 'project-1',
+          confirm: true,
+          imageIndex: 2,
+        }),
+      },
+      expect.any(String),
     )
   })
 })

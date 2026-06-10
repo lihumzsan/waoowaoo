@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import type { TaskIntent } from '@/lib/task/intent'
 import type { TaskTargetOverlayMap } from '../task-target-overlay'
@@ -46,6 +46,7 @@ type TaskTargetStateBatch = {
 
 const TARGET_STATE_BATCH_WINDOW_MS = 120
 const TARGET_STATE_CHUNK_SIZE = 500
+const ACTIVE_OVERLAY_REFRESH_MS = 5_000
 const pendingTaskTargetStateBatches = new Map<string, TaskTargetStateBatch>()
 const mergeTraceSignatureByKey = new Map<string, string>()
 const taskTargetStateLogger = createScopedLogger({
@@ -301,15 +302,20 @@ export function useTaskTargetStateMap(
     staleTime?: number
   } = {},
 ) {
+  const queryClient = useQueryClient()
   const normalizedTargets = useMemo(() => normalizeTargets(targets), [targets])
   const serializedTargets = useMemo(
     () => JSON.stringify(normalizedTargets),
     [normalizedTargets],
   )
   const enabled = (options.enabled ?? true) && !!projectId && normalizedTargets.length > 0
+  const targetStatesQueryKey = useMemo(
+    () => queryKeys.tasks.targetStates(projectId || '', serializedTargets),
+    [projectId, serializedTargets],
+  )
 
   const query = useQuery({
-    queryKey: queryKeys.tasks.targetStates(projectId || '', serializedTargets),
+    queryKey: targetStatesQueryKey,
     enabled,
     staleTime: options.staleTime ?? 15000,
     refetchInterval: false,
@@ -327,6 +333,26 @@ export function useTaskTargetStateMap(
     initialData: {},
     queryFn: async () => ({}),
   })
+
+  const hasActiveOverlay = useMemo(() => {
+    const overlay = overlayQuery.data || {}
+    const now = Date.now()
+    return normalizedTargets.some((target) => {
+      const runtime = overlay[stateKey(target.targetType, target.targetId)]
+      if (!runtime) return false
+      if (runtime.expiresAt && runtime.expiresAt <= now) return false
+      if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
+      return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
+    })
+  }, [normalizedTargets, overlayQuery.data])
+
+  useEffect(() => {
+    if (!enabled || !projectId || !hasActiveOverlay) return
+    const timer = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: targetStatesQueryKey })
+    }, ACTIVE_OVERLAY_REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [enabled, hasActiveOverlay, projectId, queryClient, targetStatesQueryKey])
 
   const mergedByKey = useMemo(() => {
     const map = new Map<string, TaskTargetState>()

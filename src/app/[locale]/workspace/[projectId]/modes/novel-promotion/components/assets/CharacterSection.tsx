@@ -39,7 +39,7 @@ interface CharacterSectionProps {
     // 🔥 V6.6 重构：重命名为 handleGenerateImage
     handleGenerateImage: (type: 'character' | 'location', id: string, appearanceId?: string, count?: number) => Promise<void>
     onSelectImage: (characterId: string, appearanceId: string, imageIndex: number | null) => void
-    onConfirmSelection: (characterId: string, appearanceId: string) => void
+    onConfirmSelection: (characterId: string, appearanceId: string, selectedIndex?: number | null) => Promise<void> | void
     onRegenerateSingle: (characterId: string, appearanceId: string, imageIndex: number) => Promise<void>
     onRegenerateGroup: (characterId: string, appearanceId: string, count?: number) => Promise<void>
     onUndo: (characterId: string, appearanceId: string) => void

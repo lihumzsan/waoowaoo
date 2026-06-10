@@ -96,6 +96,50 @@ describe('project location-backed selection service', () => {
     })
   })
 
+  it('confirms by request imageIndex when persisted selection has not caught up', async () => {
+    prismaMock.novelPromotionLocation.findUnique.mockResolvedValue({
+      id: 'location-1',
+      selectedImageId: null,
+      images: [
+        {
+          id: 'location-image-1',
+          imageIndex: 0,
+          imageUrl: 'https://example.com/location-1.png',
+          isSelected: false,
+        },
+        {
+          id: 'location-image-2',
+          imageIndex: 1,
+          imageUrl: 'https://example.com/location-2.png',
+          isSelected: false,
+        },
+      ],
+    })
+
+    const mod = await import('@/lib/assets/services/project-location-backed-selection')
+
+    const result = await mod.confirmProjectLocationBackedSelection('location-1', 1)
+
+    expect(result).toEqual({ success: true })
+    expect(prismaMock.locationImage.deleteMany).toHaveBeenCalledWith({
+      where: {
+        locationId: 'location-1',
+        id: { not: 'location-image-2' },
+      },
+    })
+    expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
+      where: { id: 'location-image-2' },
+      data: {
+        imageIndex: 0,
+        isSelected: true,
+      },
+    })
+    expect(prismaMock.novelPromotionLocation.update).toHaveBeenCalledWith({
+      where: { id: 'location-1' },
+      data: { selectedImageId: 'location-image-2' },
+    })
+  })
+
   it('fails explicitly when confirming without a selected prop render', async () => {
     prismaMock.novelPromotionLocation.findUnique.mockResolvedValue({
       id: 'prop-1',

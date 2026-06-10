@@ -28,6 +28,10 @@ export const POST = apiHandler(async (
 
   const body = await request.json()
   const { characterId, appearanceId } = body
+  const requestedSelectedIndex =
+    typeof body.selectedIndex === 'number' && Number.isInteger(body.selectedIndex)
+      ? body.selectedIndex
+      : null
 
   if (!characterId || !appearanceId) {
     throw new ApiError('INVALID_PARAMS')
@@ -44,12 +48,19 @@ export const POST = apiHandler(async (
   }
 
   // 检查是否已选择
-  if (appearance.selectedIndex === null || appearance.selectedIndex === undefined) {
+  const selectedIndex = requestedSelectedIndex ?? appearance.selectedIndex
+
+  if (selectedIndex === null || selectedIndex === undefined) {
     throw new ApiError('INVALID_PARAMS')
   }
 
   // 解析图片数组
   const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'characterAppearance.imageUrls')
+  const selectedImageUrl = imageUrls[selectedIndex]
+
+  if (!selectedImageUrl) {
+    throw new ApiError('NOT_FOUND')
+  }
 
   if (imageUrls.length <= 1) {
     // 已经只有一张图片，无需操作
@@ -58,13 +69,6 @@ export const POST = apiHandler(async (
       message: '已确认选择',
       deletedCount: 0
     })
-  }
-
-  const selectedIndex = appearance.selectedIndex
-  const selectedImageUrl = imageUrls[selectedIndex]
-
-  if (!selectedImageUrl) {
-    throw new ApiError('NOT_FOUND')
   }
 
   // 删除未选中的图片

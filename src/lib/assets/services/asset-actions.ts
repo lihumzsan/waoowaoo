@@ -7,6 +7,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { getProjectModelConfig, getUserModelConfig, buildImageTaskPayload, buildImageTaskPayloadFromUserConfig } from '@/lib/config-service'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { createRegenerationToken } from '@/lib/image-generation/regeneration'
 import { ensureGlobalLocationImageSlots, ensureProjectLocationImageSlots } from '@/lib/image-generation/location-slots'
 import { hasCharacterAppearanceOutput, hasGlobalCharacterAppearanceOutput, hasGlobalCharacterOutput, hasGlobalLocationImageOutput, hasGlobalLocationOutput, hasLocationImageOutput } from '@/lib/task/has-output'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
@@ -151,6 +152,17 @@ function requireLocationBackedKind(kind: AssetKind): LocationBackedAssetKind {
   return kind
 }
 
+function withRegenerationToken(
+  payload: Record<string, unknown>,
+  regenerationToken: string | null,
+): Record<string, unknown> {
+  return regenerationToken ? { ...payload, regenerationToken } : payload
+}
+
+function withRegenerationDedupeKey(baseKey: string, regenerationToken: string | null): string {
+  return regenerationToken ? `${baseKey}:regen:${regenerationToken}` : baseKey
+}
+
 export async function submitAssetGenerateTask(input: AssetGenerateInput) {
   return input.access.scope === 'global'
     ? submitGlobalAssetGenerateTask(input)
@@ -202,9 +214,6 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     })
   }
 
-  const payloadBase: Record<string, unknown> = normalizedKind === 'character'
-    ? { ...input.body, id: input.assetId, type: input.kind, appearanceIndex, artStyle, count }
-    : { ...input.body, id: input.assetId, type: input.kind, artStyle, count }
   const targetType = normalizedKind === 'character' ? 'GlobalCharacter' : 'GlobalLocation'
   const hasOutputAtStart = normalizedKind === 'character'
     ? await hasGlobalCharacterOutput({
@@ -214,6 +223,13 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     : await hasGlobalLocationOutput({
       locationId: input.assetId,
     })
+  const regenerationToken = hasOutputAtStart ? createRegenerationToken() : null
+  const payloadBase: Record<string, unknown> = withRegenerationToken(
+    normalizedKind === 'character'
+      ? { ...input.body, id: input.assetId, type: input.kind, appearanceIndex, artStyle, count }
+      : { ...input.body, id: input.assetId, type: input.kind, artStyle, count },
+    regenerationToken,
+  )
 
   const userModelConfig = await getUserModelConfig(input.access.userId)
   const imageModel = input.kind === 'character'
@@ -241,7 +257,10 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     targetType,
     targetId: input.assetId,
     payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
-    dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${input.assetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${toNumber(input.body.imageIndex) === null ? count : `single:${toNumber(input.body.imageIndex)}`}`,
+    dedupeKey: withRegenerationDedupeKey(
+      `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${input.assetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${toNumber(input.body.imageIndex) === null ? count : `single:${toNumber(input.body.imageIndex)}`}`,
+      regenerationToken,
+    ),
   })
 }
 
@@ -302,14 +321,18 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
       locationId: input.assetId,
       imageIndex,
     })
+  const regenerationToken = hasOutputAtStart ? createRegenerationToken() : null
 
   const projectModelConfig = await getProjectModelConfig(projectId, input.access.userId)
   const imageModel = normalizedKind === 'character'
     ? projectModelConfig.characterModel
     : projectModelConfig.locationModel
-  const payloadBase = artStyle
-    ? { ...input.body, type: input.kind, id: input.assetId, artStyle, count }
-    : { ...input.body, type: input.kind, id: input.assetId, count }
+  const payloadBase = withRegenerationToken(
+    artStyle
+      ? { ...input.body, type: input.kind, id: input.assetId, artStyle, count }
+      : { ...input.body, type: input.kind, id: input.assetId, count },
+    regenerationToken,
+  )
 
   let taskPayload: Record<string, unknown>
   try {
@@ -333,7 +356,10 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     targetType,
     targetId,
     payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
-    dedupeKey: `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}`,
+    dedupeKey: withRegenerationDedupeKey(
+      `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}`,
+      regenerationToken,
+    ),
   })
 }
 
@@ -647,10 +673,10 @@ async function selectProjectAssetRender(input: AssetSelectInput) {
     return { success: true }
   }
   const confirm = input.body.confirm === true
-  if (confirm) {
-    return confirmProjectLocationBackedSelection(input.assetId)
-  }
   const selectedIndex = toNumber(input.body.selectedIndex ?? input.body.imageIndex)
+  if (confirm) {
+    return confirmProjectLocationBackedSelection(input.assetId, selectedIndex)
+  }
   const location = await prisma.novelPromotionLocation.findUnique({
     where: { id: input.assetId },
     include: { images: { orderBy: { imageIndex: 'asc' } } },

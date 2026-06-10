@@ -4,6 +4,7 @@ import { CHARACTER_ASSET_IMAGE_RATIO, addCharacterPromptSuffix, getArtStylePromp
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { appendRegenerationPromptInstruction, buildCharacterRegenerationDescription } from '@/lib/image-generation/regeneration'
 import { reportTaskProgress } from '../shared'
 import {
   assertTaskActive,
@@ -145,7 +146,13 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   for (let i = 0; i < indexes.length; i++) {
     const index = indexes[i]
     const raw = baseDescriptions[index] || baseDescriptions[0]
-    const prompt = artStyle ? `${addCharacterPromptSuffix(raw)}，${artStyle}` : addCharacterPromptSuffix(raw)
+    const regenerationContext = {
+      variationIndex: i,
+      variationCount: indexes.length,
+    }
+    const promptDescription = buildCharacterRegenerationDescription(raw, payload.regenerationToken, regenerationContext)
+    const basePrompt = artStyle ? `${addCharacterPromptSuffix(promptDescription)}，${artStyle}` : addCharacterPromptSuffix(promptDescription)
+    const prompt = appendRegenerationPromptInstruction(basePrompt, payload.regenerationToken, regenerationContext)
 
     await reportTaskProgress(job, 15 + Math.floor((i / Math.max(indexes.length, 1)) * 55), {
       stage: 'generate_character_image',

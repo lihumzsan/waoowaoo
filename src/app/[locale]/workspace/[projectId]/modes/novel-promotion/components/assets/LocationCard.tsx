@@ -39,7 +39,7 @@ interface LocationCardProps {
   activeTaskKeys?: Set<string>
   onClearTaskKey?: (key: string) => void
   projectId: string
-  onConfirmSelection?: (locationId: string) => Promise<void> | void
+  onConfirmSelection?: (locationId: string, imageIndex?: number | null) => Promise<void> | void
 }
 
 export default function LocationCard({
@@ -274,7 +274,7 @@ export default function LocationCard({
           onConfirmSelection={selectedIndex !== null && onConfirmSelection
             ? () => {
               setIsConfirmingSelection(true)
-              void Promise.resolve(onConfirmSelection(location.id)).finally(() => {
+              void Promise.resolve(onConfirmSelection(location.id, selectedIndex)).finally(() => {
                 setIsConfirmingSelection(false)
               })
             }

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "dev": "npm run storage:init && concurrently --kill-others \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:watchdog\" \"npm run dev:board\"",
+    "dev": "npm run storage:init && concurrently \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:watchdog\" \"npm run dev:board\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev -H 0.0.0.0",
     "dev:worker": "tsx watch --env-file=.env src/lib/workers/index.ts",
     "dev:watchdog": "tsx watch --env-file=.env scripts/watchdog.ts",
@@ -16,7 +16,7 @@
     "dev:turbo": "next dev --turbopack -H 0.0.0.0",
     "build": "prisma generate && next build",
     "build:turbo": "next build --turbopack",
-    "start": "npm run storage:init && concurrently --kill-others \"npm run start:next\" \"npm run start:worker\" \"npm run start:watchdog\" \"npm run start:board\"",
+    "start": "npm run storage:init && concurrently \"npm run start:next\" \"npm run start:worker\" \"npm run start:watchdog\" \"npm run start:board\"",
     "storage:init": "tsx --env-file=.env src/lib/storage/init.ts",
     "start:next": "next start -H 0.0.0.0",
     "start:worker": "tsx --env-file=.env src/lib/workers/index.ts",

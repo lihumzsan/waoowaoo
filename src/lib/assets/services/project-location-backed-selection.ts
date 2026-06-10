@@ -3,7 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { deleteObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
-export async function confirmProjectLocationBackedSelection(assetId: string): Promise<{ success: true }> {
+export async function confirmProjectLocationBackedSelection(
+  assetId: string,
+  imageIndex?: number | null,
+): Promise<{ success: true }> {
   const location = await prisma.novelPromotionLocation.findUnique({
     where: { id: assetId },
     include: { images: { orderBy: { imageIndex: 'asc' } } },
@@ -12,9 +15,16 @@ export async function confirmProjectLocationBackedSelection(assetId: string): Pr
     throw new ApiError('NOT_FOUND')
   }
 
-  const selectedImage = location.selectedImageId
+  const requestedImage = typeof imageIndex === 'number'
+    ? location.images.find((image) => image.imageIndex === imageIndex)
+    : null
+  if (typeof imageIndex === 'number' && !requestedImage) {
+    throw new ApiError('INVALID_PARAMS')
+  }
+
+  const selectedImage = requestedImage || (location.selectedImageId
     ? location.images.find((image) => image.id === location.selectedImageId)
-    : location.images.find((image) => image.isSelected)
+    : location.images.find((image) => image.isSelected))
 
   if (location.images.length <= 1) {
     const onlyImage = location.images[0] ?? null

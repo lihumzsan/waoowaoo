@@ -31,6 +31,39 @@ type CreatedAppearance = {
   appearanceIndex: number
 }
 
+function normalizeProfileGenderLabel(value: unknown): '男性' | '女性' | null {
+  const text = readText(value).trim().toLowerCase()
+  if (!text) return null
+  if (/女|female|woman|girl/.test(text)) return '女性'
+  if (/男|male|man|boy/.test(text)) return '男性'
+  return null
+}
+
+function hasExplicitGender(text: string, genderLabel: '男性' | '女性'): boolean {
+  const head = text.trim().slice(0, 80).toLowerCase()
+  if (genderLabel === '女性') {
+    return /女性|女孩|女生|女青年|少女|成年女人|female|woman|girl/.test(head)
+  }
+  return /男性|男孩|男生|男青年|少年男性|青年男性|成年男人|male|man|boy/.test(head)
+}
+
+function ensureAppearanceIdentityPrefix(
+  description: string,
+  genderLabel: '男性' | '女性' | null,
+  ageRange: string,
+): string {
+  const trimmed = description.trim()
+  if (!trimmed || !genderLabel || hasExplicitGender(trimmed, genderLabel)) {
+    return trimmed
+  }
+
+  const prefixParts: string[] = [genderLabel]
+  if (ageRange && !trimmed.slice(0, 80).includes(ageRange)) {
+    prefixParts.push(ageRange)
+  }
+  return `${prefixParts.join('，')}，${trimmed}`
+}
+
 async function maybeSubmitCharacterImageTask(
   job: Job<TaskJobData>,
   payload: AnyObj,
@@ -202,12 +235,16 @@ async function handleConfirmProfile(
     previousImageUrls: string
   }> = []
   const createdAppearances: CreatedAppearance[] = []
+  const profileGenderLabel = normalizeProfileGenderLabel(parsedProfile.gender)
+  const profileAgeRange = readText(parsedProfile.age_range).trim()
 
   for (let appIndex = 0; appIndex < appearances.length; appIndex++) {
     const app = appearances[appIndex]
     await assertTaskActive(job, 'character_profile_confirm_create_appearance')
     const descriptions = Array.isArray(app.descriptions) ? app.descriptions : []
-    const normalizedDescriptions = descriptions.map((item) => readText(item)).filter(Boolean)
+    const normalizedDescriptions = descriptions
+      .map((item) => ensureAppearanceIdentityPrefix(readText(item), profileGenderLabel, profileAgeRange))
+      .filter(Boolean)
     appearanceRows.push({
       characterId: character.id,
       appearanceIndex: appIndex,

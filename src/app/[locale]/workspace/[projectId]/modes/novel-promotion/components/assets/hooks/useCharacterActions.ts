@@ -135,9 +135,13 @@ export function useCharacterActions({
     }, [selectCharacterImageMutation, t])
 
     // 确认选择并删除其他候选图片
-    const handleConfirmSelection = useCallback(async (characterId: string, appearanceId: string) => {
+    const handleConfirmSelection = useCallback(async (
+        characterId: string,
+        appearanceId: string,
+        selectedIndex?: number | null,
+    ) => {
         try {
-            await confirmCharacterSelectionMutation.mutateAsync({ characterId, appearanceId })
+            await confirmCharacterSelectionMutation.mutateAsync({ characterId, appearanceId, selectedIndex })
             showToast?.(`✓ ${t('image.confirmSuccess')}`, 'success')
         } catch (error: unknown) {
             if (isAbortError(error)) {
