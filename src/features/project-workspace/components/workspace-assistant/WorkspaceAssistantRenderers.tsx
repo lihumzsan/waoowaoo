@@ -823,15 +823,17 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
               <div className="space-y-1 p-2">
                 <button
                   type="button"
-                  className="block w-full text-left text-[11px] leading-5 text-[var(--glass-text-secondary)] transition-colors hover:text-[var(--glass-text-primary)]"
+                  aria-label={summaryExpanded ? t('cards.stylePreviewSummaryCollapse') : t('cards.stylePreviewSummaryExpand')}
+                  className="group flex w-full items-start gap-1.5 text-left text-[11px] leading-5 text-[var(--glass-text-secondary)] transition-colors hover:text-[var(--glass-text-primary)]"
                   onClick={() => toggleSummary(item.id)}
                 >
-                  <span className={summaryExpanded ? 'block' : 'line-clamp-1'}>
+                  <span className={`min-w-0 flex-1 ${summaryExpanded ? 'block' : 'line-clamp-1'}`}>
                     {item.summary}
                   </span>
-                  <span className="mt-0.5 inline-flex text-[10px] font-medium text-[var(--glass-text-tertiary)]">
-                    {summaryExpanded ? t('cards.stylePreviewSummaryCollapse') : t('cards.stylePreviewSummaryExpand')}
-                  </span>
+                  <AppIcon
+                    name="chevronDown"
+                    className={`mt-1 h-3 w-3 shrink-0 text-[var(--glass-text-tertiary)] transition-transform group-hover:text-[var(--glass-text-secondary)] ${summaryExpanded ? 'rotate-180' : ''}`}
+                  />
                 </button>
                 <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
                   <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
