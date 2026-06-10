@@ -71,8 +71,6 @@ describe('workspace assistant panel layout', () => {
     const collapseHandleHtml = renderToStaticMarkup(
       createElement(WorkspaceAssistantCollapseHandle, {
         collapseLabel: 'Collapse AI assistant sidebar',
-        panelWidthPx: 520,
-        topOffset: '4rem',
         onCollapse: () => undefined,
       }),
     )
@@ -85,14 +83,17 @@ describe('workspace assistant panel layout', () => {
 
     expect(collapseHandleHtml).toContain('Collapse AI assistant sidebar')
     expect(collapseHandleHtml).toContain('lucide-chevron-right')
-    expect(collapseHandleHtml).toContain('fixed')
-    expect(collapseHandleHtml).toContain('pointer-events-auto')
-    expect(collapseHandleHtml).toContain('h-14 w-6')
-    expect(collapseHandleHtml).toContain('rounded-full')
-    expect(collapseHandleHtml).toContain('right:calc(1rem + 520px - 0.75rem)')
-    expect(collapseHandleHtml).toContain('top:calc(4rem + 1rem)')
+    expect(collapseHandleHtml).toContain('absolute')
+    expect(collapseHandleHtml).toContain('right-4')
+    expect(collapseHandleHtml).toContain('top-4')
+    expect(collapseHandleHtml).toContain('h-10 w-10')
+    expect(collapseHandleHtml).toContain('rounded-2xl')
+    expect(collapseHandleHtml).not.toContain('fixed')
+    expect(collapseHandleHtml).not.toContain('right:calc')
+    expect(collapseHandleHtml).not.toContain('top:calc')
+    expect(collapseHandleHtml).not.toContain('pointer-events-auto')
     expect(collapseHandleHtml).not.toContain('shrink-0')
-    expect(collapseHandleHtml).not.toContain('h-10 w-10')
+    expect(collapseHandleHtml).not.toContain('h-14 w-6')
     expect(collapseHandleHtml).not.toContain('Workspace Chat')
     expect(collapseHandleHtml).not.toContain('View full raw context')
     expect(collapseHandleHtml).not.toContain('Download Log')
@@ -119,6 +120,16 @@ describe('workspace assistant panel layout', () => {
       'linear-gradient(to bottom, transparent 0, black 28px, black 100%)',
     )
     expect(WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE.WebkitMaskImage).toBe(WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE.maskImage)
+  })
+
+  it('reserves only the inline area around the collapse control', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain('float-right h-14 w-14')
+    expect(panelSource).not.toContain('pr-16')
   })
 
   it('keeps confirmation actions in the message stream without a duplicate pending action summary', () => {

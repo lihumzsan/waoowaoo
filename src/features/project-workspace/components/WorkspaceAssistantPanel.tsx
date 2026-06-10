@@ -537,14 +537,6 @@ export default function WorkspaceAssistantPanel({
       style={{ width: `${layout.occupiedWidthPx}px` }}
       data-state={layout.state}
     >
-      {!isCollapsed ? (
-        <WorkspaceAssistantCollapseHandle
-          collapseLabel={t('panel.collapse')}
-          panelWidthPx={layout.panelWidthPx}
-          topOffset={WORKSPACE_ASSISTANT_TOP_OFFSET}
-          onCollapse={onToggleCollapsed}
-        />
-      ) : null}
       <div
         className={`pointer-events-auto fixed right-4 z-20 overflow-hidden rounded-[34px] border border-white/80 bg-white/82 ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl ${isResizing ? '' : 'transition-[width] duration-300 ease-out'}`}
         style={{
@@ -554,6 +546,12 @@ export default function WorkspaceAssistantPanel({
         }}
         data-state={layout.state}
       >
+        {!isCollapsed ? (
+          <WorkspaceAssistantCollapseHandle
+            collapseLabel={t('panel.collapse')}
+            onCollapse={onToggleCollapsed}
+          />
+        ) : null}
         {!isCollapsed ? (
           <button
             type="button"
@@ -574,16 +572,19 @@ export default function WorkspaceAssistantPanel({
                 className="flex-1 overflow-y-auto px-5 pb-4 pt-4"
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
-                <div className="space-y-3">
-                  <ThreadPrimitive.Messages>
-                    {() => (
-                      <WorkspaceAssistantThreadMessage
-                        messagePartComponents={partComponents}
-                        showAssistantThinkingIndicator={assistantRuntime.status === 'streaming'}
-                      />
-                    )}
-                  </ThreadPrimitive.Messages>
-                  <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
+                <div>
+                  {!isCollapsed ? <div aria-hidden="true" className="float-right h-14 w-14" /> : null}
+                  <div className="space-y-3">
+                    <ThreadPrimitive.Messages>
+                      {() => (
+                        <WorkspaceAssistantThreadMessage
+                          messagePartComponents={partComponents}
+                          showAssistantThinkingIndicator={assistantRuntime.status === 'streaming'}
+                        />
+                      )}
+                    </ThreadPrimitive.Messages>
+                    <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
+                  </div>
                 </div>
               </ThreadPrimitive.Viewport>
 
