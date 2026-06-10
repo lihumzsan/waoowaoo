@@ -550,7 +550,7 @@ describe('workspace node canvas projection', () => {
     expect(styleNode && timelineNode ? nodesOverlap(styleNode, timelineNode) : true).toBe(false)
   })
 
-  it('projects screenplay style preview candidates before a Style Bible is confirmed', () => {
+  it('keeps transient screenplay style preview candidates out of the canvas before confirmation', () => {
     const styleBible = createStyleBible()
     const editScreenplay = createEditScreenplay({
       styleBible: null,
@@ -622,20 +622,8 @@ describe('workspace node canvas projection', () => {
 
     const previewNodes = projection.nodes.filter((node) => node.data.kind === 'editStylePreview')
     expect(projection.nodes.some((node) => node.data.kind === 'editStyleBible')).toBe(false)
-    expect(previewNodes.map((node) => node.id)).toEqual([
-      'edit-style-preview:style-preview-a',
-      'edit-style-preview:style-preview-b',
-      'edit-style-preview:style-preview-c',
-    ])
-    expect(previewNodes[0]?.data.previewImageUrl).toBe('https://cdn.example.com/a.png')
-    expect(previewNodes[0]?.data.meta).toBe('nodes.editStylePreview.meta')
-    expect(previewNodes[0]?.data.action).toBeUndefined()
-    expect(previewNodes[0]?.data.actionLabel).toBe('actions.confirmEditStylePreview')
-    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
-      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-a',
-      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-b',
-      'edit-screenplay:screenplay-1->edit-style-preview:style-preview-c',
-    ])
+    expect(previewNodes).toEqual([])
+    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([])
   })
 
   it('keeps long edit screenplay cards from covering the edit pipeline in the default layout', () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Image from 'next/image'
 import {
   MessagePrimitive,
   useMessage,
@@ -16,6 +17,7 @@ import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import type {
   AgentPlanPartData,
   ConfirmationRequestPartData,
+  ProjectAgentChoiceCardPartData,
   ProjectAgentStopPartData,
   ProjectContextPartData,
   ProjectPhasePartData,
@@ -24,6 +26,12 @@ import type {
 } from '@/lib/project-agent/types'
 import { useRevertMutationBatch } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
+import {
+  interpolateChoiceCardTemplate,
+  isChoiceCardSubmitReady,
+  type ChoiceCardSelections,
+} from './choice-card-actions'
+import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -226,6 +234,126 @@ export function ConfirmationActionCard(props: {
           {props.cancelPending ? t('cards.cancelRunning') : t('cards.cancelAction')}
         </button>
       </div>
+    </div>
+  )
+}
+
+function isEditScriptVideoRatio(value: string | undefined): value is EditScriptVideoRatio {
+  return typeof value === 'string' && EDIT_SCRIPT_VIDEO_RATIOS.includes(value as EditScriptVideoRatio)
+}
+
+function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardPartData> & {
+  onSendChoiceMessage: (message: string) => Promise<void>
+  onConfirmEditStylePreviewChoice: (params: {
+    projectId: string
+    episodeId: string
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+    successMessage: string
+  }) => Promise<void>
+}) {
+  const t = useTranslations('assistantAgent')
+  const card: ProjectAgentChoiceCardPartData = props.data
+  const [selections, setSelections] = useState<ChoiceCardSelections>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ready = isChoiceCardSubmitReady(card.groups, selections)
+
+  const handleSubmit = async () => {
+    if (!ready || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      if (card.submit.kind === 'send_message') {
+        await props.onSendChoiceMessage(
+          interpolateChoiceCardTemplate(card.submit.messageTemplate, selections, card.groups),
+        )
+      } else {
+        const stylePreviewId = selections.stylePreviewId
+        const aspectRatio = selections.aspectRatio
+        if (!stylePreviewId || !isEditScriptVideoRatio(aspectRatio)) {
+          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_STYLE_SELECTION')
+        }
+        await props.onConfirmEditStylePreviewChoice({
+          projectId: card.submit.projectId,
+          episodeId: card.submit.episodeId,
+          stylePreviewId,
+          aspectRatio,
+          successMessage: interpolateChoiceCardTemplate(
+            card.submit.successMessageTemplate,
+            selections,
+            card.groups,
+          ),
+        })
+      }
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : String(submitError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)]/70 p-3 text-xs text-[var(--glass-text-secondary)]">
+      <div className="text-sm font-medium text-[var(--glass-text-primary)]">{card.title}</div>
+      {card.description ? <div className="mt-1 leading-5">{card.description}</div> : null}
+      <div className="mt-3 space-y-3">
+        {card.groups.map((group) => (
+          <div key={group.key} className="space-y-2">
+            <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{group.label}</div>
+            <div className="space-y-2">
+              {group.options.map((option) => {
+                const selected = selections[group.key] === option.value
+                return (
+                  <button
+                    key={`${group.key}:${option.value}`}
+                    type="button"
+                    className={`w-full overflow-hidden rounded-xl border text-left transition ${selected ? 'border-slate-950 bg-white ring-1 ring-slate-950' : 'border-[var(--glass-stroke-base)] bg-white/70 hover:border-slate-300'}`}
+                    onClick={() => setSelections((current) => ({
+                      ...current,
+                      [group.key]: option.value,
+                    }))}
+                    disabled={submitting}
+                  >
+                    {option.imageUrl ? (
+                      <Image
+                        src={option.imageUrl}
+                        alt={option.label}
+                        width={640}
+                        height={360}
+                        unoptimized
+                        className="h-32 w-full object-cover"
+                      />
+                    ) : null}
+                    <div className="space-y-1 p-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{option.label}</span>
+                        {selected ? <AppIcon name="check" className="h-4 w-4 shrink-0 text-slate-950" /> : null}
+                      </div>
+                      {option.description ? (
+                        <div className="line-clamp-3 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                      ) : null}
+                      {option.meta ? (
+                        <div className="text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                      ) : null}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
+      <button
+        type="button"
+        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-slate-400"
+        onClick={() => { void handleSubmit() }}
+        disabled={!ready || submitting}
+      >
+        {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
+      </button>
+      {!ready ? <div className="mt-2 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
     </div>
   )
 }
@@ -470,12 +598,22 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   onConfirmOperation: (operationId: string, argsHint?: Record<string, unknown> | null) => Promise<void>
   onCancelOperation: (operationId: string) => Promise<void>
   confirmationSubmittingKey: string | null
+  onSendChoiceMessage: (message: string) => Promise<void>
+  onConfirmEditStylePreviewChoice: (params: {
+    projectId: string
+    episodeId: string
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+    successMessage: string
+  }) => Promise<void>
 }
 
 export function useWorkspaceAssistantMessagePartComponents({
   onConfirmOperation,
   onCancelOperation,
   confirmationSubmittingKey,
+  onSendChoiceMessage,
+  onConfirmEditStylePreviewChoice,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
@@ -487,6 +625,13 @@ export function useWorkspaceAssistantMessagePartComponents({
       by_name: {
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
+        'assistant-choice-card': (props) => (
+          <AssistantChoiceCard
+            {...props}
+            onSendChoiceMessage={onSendChoiceMessage}
+            onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
+          />
+        ),
         'project-phase': ProjectPhaseDataCard,
         'confirmation-request': (props) => (
           <InlineConfirmationRequestDataCard
@@ -505,7 +650,9 @@ export function useWorkspaceAssistantMessagePartComponents({
   }), [
     confirmationSubmittingKey,
     onCancelOperation,
+    onConfirmEditStylePreviewChoice,
     onConfirmOperation,
+    onSendChoiceMessage,
   ])
 }
 

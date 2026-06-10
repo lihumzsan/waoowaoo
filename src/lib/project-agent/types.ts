@@ -116,6 +116,42 @@ export interface AgentRuntimeContextPartData {
   }>
 }
 
+export type ProjectAgentChoiceCardSubmit =
+  | {
+    kind: 'send_message'
+    messageTemplate: string
+  }
+  | {
+    kind: 'confirm_edit_style_preview'
+    projectId: string
+    episodeId: string
+    successMessageTemplate: string
+  }
+
+export interface ProjectAgentChoiceCardOption {
+  value: string
+  label: string
+  description?: string | null
+  imageUrl?: string | null
+  meta?: string | null
+}
+
+export interface ProjectAgentChoiceCardGroup {
+  key: string
+  label: string
+  required: boolean
+  options: ProjectAgentChoiceCardOption[]
+}
+
+export interface ProjectAgentChoiceCardPartData {
+  cardId: string
+  title: string
+  description?: string | null
+  groups: ProjectAgentChoiceCardGroup[]
+  submitLabel: string
+  submit: ProjectAgentChoiceCardSubmit
+}
+
 export interface ConfirmationRequestPartData {
   operationId: string
   summary: string
@@ -188,6 +224,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-debug'
   | 'data-agent-runtime-context'
   | 'data-agent-stop'
+  | 'data-assistant-choice-card'
   | 'data-project-phase'
   | 'data-confirmation-request'
   | 'data-task-submitted'

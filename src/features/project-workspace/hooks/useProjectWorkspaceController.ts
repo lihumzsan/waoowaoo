@@ -4,7 +4,6 @@ import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceUserModels } from './useWorkspaceUserModels'
@@ -25,7 +24,6 @@ import {
   useCreateProjectEditDirectorDecoupage,
   useCreateProjectEditScreenplay,
   useCreateProjectEditScript,
-  useConfirmProjectEditStylePreview,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
   useGenerateProjectEditScriptStoryboardSpatialBlocking,
@@ -124,7 +122,6 @@ export function useProjectWorkspaceController({
     episodeId,
   })
   const createEditScreenplay = useCreateProjectEditScreenplay(projectId)
-  const confirmEditStylePreview = useConfirmProjectEditStylePreview(projectId)
   const createEditDirectorDecoupage = useCreateProjectEditDirectorDecoupage(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
   const createEditCinematographyShotPlan = useCreateProjectEditCinematographyShotPlan(projectId)
@@ -140,11 +137,6 @@ export function useProjectWorkspaceController({
   const handleGenerateEditScreenplay = async (prompt: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await createEditScreenplay.mutateAsync({ episodeId, prompt })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleConfirmEditStylePreview = async (stylePreviewId: string, aspectRatio: EditScriptVideoRatio) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await confirmEditStylePreview.mutateAsync({ episodeId, stylePreviewId, aspectRatio })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditDirectorDecoupage = async (screenplayId?: string) => {
@@ -216,7 +208,7 @@ export function useProjectWorkspaceController({
     assetsLoading,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isStartingPlan: createEditScreenplay.isPending || confirmEditStylePreview.isPending || createEditDirectorDecoupage.isPending || createEditScript.isPending || createEditCinematographyShotPlan.isPending,
+    isStartingPlan: createEditScreenplay.isPending || createEditDirectorDecoupage.isPending || createEditScript.isPending || createEditCinematographyShotPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     videoModel: projectSnapshot.videoModel,
     singleShotVideoModel: projectSnapshot.singleShotVideoModel,
@@ -227,7 +219,6 @@ export function useProjectWorkspaceController({
     handleUpdateConfig: configActions.handleUpdateConfig,
     onRequestAssistantPlan: execution.requestAssistantPlan,
     handleGenerateEditScreenplay,
-    handleConfirmEditStylePreview,
     handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
     handleRegenerateStoryboardText,

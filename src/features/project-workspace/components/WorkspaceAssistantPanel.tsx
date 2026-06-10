@@ -42,6 +42,8 @@ import {
   syncWorkspaceResourceChanges,
   syncWorkspaceResourceChangesFromWriteResult,
 } from '@/lib/query/resource-change-sync'
+import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 
@@ -137,6 +139,7 @@ export default function WorkspaceAssistantPanel({
   const locale = useLocale()
   const queryClient = useQueryClient()
   const { subscribeTaskEvents } = useWorkspaceProvider()
+  const confirmEditStylePreview = useConfirmProjectEditStylePreview(projectId)
   const [assistantPanelWidth, setAssistantPanelWidth] = useState(readStoredAssistantPanelWidth)
   const [isResizing, setIsResizing] = useState(false)
   const resizeStateRef = useRef<{
@@ -399,10 +402,29 @@ export default function WorkspaceAssistantPanel({
       setConfirmationSubmittingKey(null)
     }
   }
+  const handleConfirmEditStylePreviewChoice = async (params: {
+    projectId: string
+    episodeId: string
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+    successMessage: string
+  }) => {
+    if (params.projectId !== projectId) {
+      throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
+    }
+    await confirmEditStylePreview.mutateAsync({
+      episodeId: params.episodeId,
+      stylePreviewId: params.stylePreviewId,
+      aspectRatio: params.aspectRatio,
+    })
+    await assistantRuntime.sendMessage(params.successMessage)
+  }
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     onConfirmOperation: handleConfirmOperation,
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
+    onSendChoiceMessage: assistantRuntime.sendMessage,
+    onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return

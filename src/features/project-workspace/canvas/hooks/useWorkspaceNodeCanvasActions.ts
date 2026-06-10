@@ -23,11 +23,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'confirm_edit_style_preview') {
-      await runtime.onConfirmEditStylePreview(action.stylePreviewId, action.aspectRatio)
-      return
-    }
-
     if (action.type === 'generate_edit_director_decoupage') {
       await runtime.onGenerateEditDirectorDecoupage(action.screenplayId)
       return
