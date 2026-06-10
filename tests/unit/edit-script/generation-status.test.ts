@@ -779,6 +779,81 @@ describe('edit script generation status persistence', () => {
     expect(screenplay.stylePreviews.find((preview) => preview.styleKey === 'style_b')?.status).toBe('confirmed')
   })
 
+  it('confirms a completed style preview when sibling preview tasks have failed', async () => {
+    const previews = mockStylePreviewOptions.stylePreviews.map((preview) => ({
+      id: `style-preview-${preview.styleKey}`,
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScreenplayId: 'screenplay-1',
+      styleKey: preview.styleKey,
+      aspectRatio: preview.aspectRatio,
+      title: preview.title,
+      summary: preview.summary,
+      styleBibleJson: preview.styleBible,
+      imagePrompt: preview.gridImagePrompt,
+      imageKey: preview.styleKey === 'style_b' ? `style-preview/${preview.styleKey}.png` : null,
+      status: preview.styleKey === 'style_b' ? 'completed' : 'failed',
+      taskId: `task-${preview.styleKey}`,
+      errorMessage: preview.styleKey === 'style_b' ? null : 'provider balance exhausted',
+    }))
+    prismaMock.projectEditStylePreview.findFirst.mockResolvedValueOnce({
+      id: 'style-preview-style_b',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScreenplayId: 'screenplay-1',
+      styleKey: 'style_b',
+      aspectRatio: '16:9',
+      title: '暖色悬疑',
+      summary: '暖光、阴影、悬疑节奏。',
+      styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
+      imagePrompt: mockStylePreviewOptions.stylePreviews[1].gridImagePrompt,
+      imageKey: 'style-preview/style-b.png',
+      status: 'completed',
+      taskId: 'style-preview-task-b',
+      errorMessage: null,
+      editScreenplay: {
+        id: 'screenplay-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        userPrompt: '做一个科幻短片',
+        styleBibleJson: null,
+        screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+        status: 'style_preview_ready',
+        stylePreviews: previews,
+      },
+    })
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+      id: 'screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      status: 'ready',
+      stylePreviews: previews.map((preview) => ({
+        ...preview,
+        status: preview.styleKey === 'style_b' ? 'confirmed' : preview.status,
+      })),
+    })
+
+    const screenplay = await confirmProjectEditStylePreview({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      stylePreviewId: 'style-preview-style_b',
+      aspectRatio: '16:9',
+    })
+
+    expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledWith({
+      where: { id: 'style-preview-style_b' },
+      data: {
+        status: 'confirmed',
+        errorMessage: null,
+      },
+    })
+    expect(screenplay.stylePreviews.find((preview) => preview.styleKey === 'style_b')?.status).toBe('confirmed')
+  })
+
   it('reads legacy edit script without Style Bible as nullable styleBible', async () => {
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
       id: 'legacy-edit-1',

@@ -9,6 +9,7 @@ import {
 } from '@assistant-ui/react'
 import {
   AssistantChoiceCardView,
+  EditStylePreviewGenerationDataCard,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
@@ -29,6 +30,7 @@ import {
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
 import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
+import { findActiveStylePreviewGenerationCard } from './workspace-assistant/active-style-preview-generation'
 import {
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
@@ -469,6 +471,9 @@ export default function WorkspaceAssistantPanel({
   const activeChoiceCard = useMemo(() => {
     return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
   }, [assistantRuntime.messages, dismissedChoiceCardKeys])
+  const activeStylePreviewGenerationCard = useMemo(() => {
+    return findActiveStylePreviewGenerationCard(assistantRuntime.messages)
+  }, [assistantRuntime.messages])
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
       const next = new Set(current)
@@ -481,6 +486,7 @@ export default function WorkspaceAssistantPanel({
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
     hideChoiceCards: true,
+    hideStylePreviewGenerationCards: true,
     onSendChoiceMessage: assistantRuntime.sendHiddenMessage,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
@@ -584,6 +590,14 @@ export default function WorkspaceAssistantPanel({
                       )}
                     </ThreadPrimitive.Messages>
                     <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
+                    {activeStylePreviewGenerationCard ? (
+                      <EditStylePreviewGenerationDataCard
+                        type="data"
+                        name="edit-style-preview-generation"
+                        status={{ type: 'complete' }}
+                        data={activeStylePreviewGenerationCard.data}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </ThreadPrimitive.Viewport>

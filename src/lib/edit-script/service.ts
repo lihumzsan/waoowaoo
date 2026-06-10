@@ -1055,13 +1055,13 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
     })
   }
 
-  const allPreviewsReady = screenplay.stylePreviews.length > 0
+  const allPreviewsTerminal = screenplay.stylePreviews.length > 0
     && screenplay.stylePreviews.length <= EDIT_STYLE_PREVIEW_MAX_COUNT
-    && screenplay.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed')
-  if (!allPreviewsReady) {
+    && screenplay.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed' || preview.status === 'failed')
+  if (!allPreviewsTerminal) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_STYLE_PREVIEWS_NOT_READY',
-      message: 'All edit style preview images must complete before confirmation',
+      message: 'All edit style preview image tasks must finish before confirmation',
     })
   }
 

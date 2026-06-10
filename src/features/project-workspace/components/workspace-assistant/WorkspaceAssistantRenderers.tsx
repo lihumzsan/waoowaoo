@@ -700,7 +700,7 @@ function truncateStylePreviewErrorMessage(message: string | null | undefined): s
   return singleLine.length > 180 ? `${singleLine.slice(0, 180)}...` : singleLine
 }
 
-function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
+export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
   const data: EditStylePreviewGenerationPartData = props.data
@@ -736,6 +736,8 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
     const previews = screenplayQuery.data?.screenplay?.stylePreviews ?? []
     return new Map(previews.map((preview) => [preview.id, preview]))
   }, [screenplayQuery.data?.screenplay?.stylePreviews])
+  const hasConfirmedStylePreview = (screenplayQuery.data?.screenplay?.stylePreviews ?? [])
+    .some((preview) => preview.status === 'confirmed')
 
   const handleSelectStylePreview = async (
     item: EditStylePreviewGenerationPartData['items'][number],
@@ -772,6 +774,8 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
       return next
     })
   }
+
+  if (hasConfirmedStylePreview) return null
 
   return (
     <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
@@ -949,6 +953,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
   confirmationSubmittingKey: string | null
   hideChoiceCards?: boolean
+  hideStylePreviewGenerationCards?: boolean
   onSendChoiceMessage: (message: string) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
     projectId: string
@@ -969,6 +974,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   onCancelOperation,
   confirmationSubmittingKey,
   hideChoiceCards = false,
+  hideStylePreviewGenerationCards = false,
   onSendChoiceMessage,
   onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
@@ -993,7 +999,9 @@ export function useWorkspaceAssistantMessagePartComponents({
                 onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
             ),
-        'edit-style-preview-generation': EditStylePreviewGenerationDataCard,
+        'edit-style-preview-generation': hideStylePreviewGenerationCards
+          ? HiddenRuntimeContextDataCard
+          : EditStylePreviewGenerationDataCard,
         'project-phase': ProjectPhaseDataCard,
         'confirmation-request': (props) => (
           <InlineConfirmationRequestDataCard
@@ -1012,6 +1020,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   }), [
     confirmationSubmittingKey,
     hideChoiceCards,
+    hideStylePreviewGenerationCards,
     onCancelOperation,
     onConfirmEditStylePreviewChoice,
     onConfirmOperation,

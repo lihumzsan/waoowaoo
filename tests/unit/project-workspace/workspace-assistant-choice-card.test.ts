@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { UIMessage } from 'ai'
 import type { ProjectAgentChoiceCardGroup } from '@/lib/project-agent/types'
 import {
   interpolateChoiceCardTemplate,
   isChoiceCardSubmitReady,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
+import { findActiveStylePreviewGenerationCard } from '@/features/project-workspace/components/workspace-assistant/active-style-preview-generation'
 
 const groups: ProjectAgentChoiceCardGroup[] = [
   {
@@ -52,5 +54,45 @@ describe('workspace assistant choice card actions', () => {
     )
 
     expect(message).toBe('我对当前剧本有修改意见：更克苏鲁一些')
+  })
+
+  it('keeps the latest style preview generation card active after newer messages', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{
+          type: 'data-edit-style-preview-generation',
+          data: {
+            operationId: 'generate_edit_style_previews',
+            projectId: 'project-1',
+            episodeId: 'episode-1',
+            screenplayId: 'screenplay-1',
+            items: [{
+              id: 'preview-1',
+              styleKey: 'style_a',
+              title: '暗黑风格',
+              summary: '暗黑摘要',
+              taskId: 'task-1',
+            }],
+          },
+        }],
+      },
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '为什么失败？' }],
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '我会读取状态。' }],
+      },
+    ] as unknown as UIMessage[]
+
+    const active = findActiveStylePreviewGenerationCard(messages)
+
+    expect(active?.data.screenplayId).toBe('screenplay-1')
+    expect(active?.data.items.map((item) => item.id)).toEqual(['preview-1'])
   })
 })
