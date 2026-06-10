@@ -83,18 +83,15 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
 
 export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
   const t = useTranslations('assistantAgent')
+  if (data.reason === 'awaiting_user_confirmation') return null
   const title = data.reason === 'step_cap'
     ? t('cards.maxSteps')
     : data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTask')
-      : data.reason === 'awaiting_user_confirmation'
-        ? t('cards.awaitingUserConfirmation')
-        : data.reason === 'repeated_tool_call'
+      : data.reason === 'repeated_tool_call'
           ? t('cards.repeatedToolCall')
           : t('cards.toolErrorBoundary')
-  const detail = data.reason === 'awaiting_user_confirmation'
-    ? null
-    : data.reason === 'step_cap'
+  const detail = data.reason === 'step_cap'
     ? t('cards.stepUsage', { stepCount: data.stepCount, maxSteps: data.maxSteps })
     : data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTaskDetail', {
