@@ -1503,6 +1503,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
       stylePreviews: submittedPreviews.map((item) => ({
         id: item.preview.id,
         styleKey: normalizeStylePreviewKey(item.preview.styleKey),
+        aspectRatio: normalizeStylePreviewAspectRatio(item.preview.aspectRatio),
         title: item.preview.title,
         summary: item.preview.summary,
         status: 'generating',

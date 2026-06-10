@@ -34,6 +34,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageError: string | null
   storageLoading: boolean
   sendMessage: (text: string) => Promise<void>
+  sendHiddenMessage: (text: string) => Promise<void>
   addToolOutput: (params: {
     tool: string
     toolCallId: string
@@ -103,6 +104,18 @@ export function useWorkspaceAssistantRuntime({
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
     await chat.sendMessage({ text })
+  }, [chat])
+
+  const sendHiddenMessage = useCallback(async (text: string) => {
+    chat.clearError()
+    await chat.sendMessage({
+      text,
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+        },
+      },
+    })
   }, [chat])
 
   const appendMessages = useCallback((messages: UIMessage[]) => {
@@ -187,6 +200,7 @@ export function useWorkspaceAssistantRuntime({
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
     sendMessage,
+    sendHiddenMessage,
     addToolOutput,
     replaceMessages,
     appendMessages,

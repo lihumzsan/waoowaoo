@@ -212,6 +212,7 @@ export interface EditStylePreviewGenerationPartData {
     title: string
     summary: string
     taskId: string
+    aspectRatio?: '9:16' | '16:9' | '21:9'
   }>
 }
 

@@ -49,6 +49,12 @@ function readStylePreviewKey(value: unknown): 'style_a' | 'style_b' | 'style_c' 
   return null
 }
 
+function readStylePreviewAspectRatio(value: unknown): '9:16' | '16:9' | '21:9' | null {
+  const aspectRatio = readNonEmptyString(value)
+  if (aspectRatio === '9:16' || aspectRatio === '16:9' || aspectRatio === '21:9') return aspectRatio
+  return null
+}
+
 function readTaskSubmittedPartData(value: unknown): TaskSubmittedPartData | null {
   if (!isRecord(value)) return null
   const operationId = readNonEmptyString(value.operationId)
@@ -143,6 +149,7 @@ export function collectAssistantAsyncTaskSubmissions(messages: readonly UIMessag
 
 function readOperationResult(payload: unknown): UnknownRecord | null {
   if (!isRecord(payload)) return null
+  if (payload.ok === true && isRecord(payload.data)) return payload.data
   return isRecord(payload.result) ? payload.result : null
 }
 
@@ -238,6 +245,7 @@ export function createEditStylePreviewGenerationDataFromOperationPayload(params:
       const title = readNonEmptyString(item.title)
       const summary = readNonEmptyString(item.summary)
       const taskId = readNonEmptyString(item.taskId)
+      const aspectRatio = readStylePreviewAspectRatio(item.aspectRatio)
       const styleKey = readStylePreviewKey(item.styleKey)
       return id && title && summary && taskId && styleKey
         ? [{
@@ -246,6 +254,7 @@ export function createEditStylePreviewGenerationDataFromOperationPayload(params:
             title,
             summary,
             taskId,
+            ...(aspectRatio ? { aspectRatio } : {}),
           }]
         : []
     })

@@ -400,6 +400,7 @@ describe('edit-script operations', () => {
 
   it('submits style preview generation after screenplay review', async () => {
     const operations = createEditScriptOperations()
+    const writerEvents: Record<string, unknown>[] = []
     const result = await operations.generate_edit_style_previews.execute(buildContext(), {
       screenplayId: 'screenplay-1',
       confirmed: true,
@@ -419,6 +420,25 @@ describe('edit-script operations', () => {
       locale: 'zh',
       screenplayId: 'screenplay-1',
     }))
+    await operations.generate_edit_style_previews.execute(buildContext(createTestWriter(writerEvents)), {
+      screenplayId: 'screenplay-1',
+      confirmed: true,
+    })
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-edit-style-preview-generation',
+        data: expect.objectContaining({
+          operationId: 'generate_edit_style_previews',
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'style-preview-a',
+              title: expect.any(String),
+              taskId: 'task-style-a',
+            }),
+          ]),
+        }),
+      }),
+    ])
   })
 
   it('passes screenplay id into director decoupage generation', async () => {

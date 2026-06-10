@@ -178,6 +178,8 @@
     "stylePreviewGenerationTitle": "Generating Visual Style Candidates",
     "stylePreviewGenerationCount": "{count} candidates",
     "stylePreviewGenerationStatus": "Generating · {status}",
+    "stylePreviewSelect": "Choose this style",
+    "stylePreviewSelectedMessage": "Selected style {title} and aspect ratio {aspectRatio}. Read the latest project state and continue with the immediate next step.",
     "operationExecutionFailedFallback": "Operation execution failed",
     "confirmedOperation": "Confirmed and executed operation {operation}.",
     "confirmedOperationWithResult": "Confirmed and executed operation {operation}. Result: {result}",

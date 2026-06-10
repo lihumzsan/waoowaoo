@@ -5,6 +5,7 @@ export const WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT = 'workspace-assistant:send-
 export interface WorkspaceAssistantSendMessagePayload {
   readonly key: string
   readonly message: string
+  readonly hidden?: boolean
 }
 
 export function dispatchWorkspaceAssistantMessage(payload: WorkspaceAssistantSendMessagePayload) {

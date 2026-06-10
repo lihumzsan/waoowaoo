@@ -10,7 +10,7 @@ import {
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
-import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
+import type { EditStylePreviewGenerationPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -125,6 +125,7 @@ const editStylePreviewGenerationOutputSchema = refineTaskBatchSubmitOperationOut
     stylePreviews: z.array(z.object({
       id: z.string().min(1),
       styleKey: z.enum(['style_a', 'style_b', 'style_c']),
+      aspectRatio: editScriptVideoRatioSchema.optional(),
       title: z.string().min(1),
       summary: z.string().min(1),
       status: z.string().min(1),
@@ -132,6 +133,8 @@ const editStylePreviewGenerationOutputSchema = refineTaskBatchSubmitOperationOut
     })),
   }).passthrough(),
 )
+
+type EditStylePreviewGenerationOutput = z.infer<typeof editStylePreviewGenerationOutputSchema>
 
 const editScriptSummaryOutputSchema = z.object({
   id: z.string().min(1).optional(),
@@ -342,7 +345,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: editStylePreviewGenerationOutputSchema,
       execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        return editStylePreviewGenerationOutputSchema.parse(await generateProjectEditStylePreviews({
+        const result = editStylePreviewGenerationOutputSchema.parse(await generateProjectEditStylePreviews({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
@@ -350,6 +353,21 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
         }))
+        writeOperationDataPart<EditStylePreviewGenerationPartData>(ctx.writer, 'data-edit-style-preview-generation', {
+          operationId: 'generate_edit_style_previews',
+          projectId: result.projectId,
+          episodeId: result.episodeId,
+          screenplayId: result.screenplayId,
+          items: result.stylePreviews.map((preview: EditStylePreviewGenerationOutput['stylePreviews'][number]) => ({
+            id: preview.id,
+            styleKey: preview.styleKey,
+            title: preview.title,
+            summary: preview.summary,
+            taskId: preview.taskId,
+            ...(preview.aspectRatio ? { aspectRatio: preview.aspectRatio } : {}),
+          })),
+        })
+        return result
       },
     }),
     request_edit_first_choice: defineOperation({

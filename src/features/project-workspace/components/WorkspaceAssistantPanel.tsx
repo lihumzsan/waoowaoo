@@ -208,7 +208,7 @@ export default function WorkspaceAssistantPanel({
   const sendAutoFollowUpMessage = useCallback(async (message: string): Promise<boolean> => {
     const runtime = assistantRuntimeRef.current
     if (runtime.pending || runtime.storageLoading) return false
-    await runtime.sendMessage(message)
+    await runtime.sendHiddenMessage(message)
     return true
   }, [])
   useEffect(() => {
@@ -216,7 +216,7 @@ export default function WorkspaceAssistantPanel({
     const [queuedMessage, ...remainingMessages] = queuedAutoFollowUpRef.current
     if (!queuedMessage) return
     queuedAutoFollowUpRef.current = remainingMessages
-    void assistantRuntime.sendMessage(queuedMessage)
+    void assistantRuntime.sendHiddenMessage(queuedMessage)
   }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.storageLoading])
   const flushResolvedWaitFollowUps = useCallback(async () => {
     const runtime = assistantRuntimeRef.current
@@ -235,6 +235,21 @@ export default function WorkspaceAssistantPanel({
     for (const followUp of payload.followUps) {
       if (consumedWaitFollowUpKeysRef.current.has(followUp.followUpKey)) continue
       consumedWaitFollowUpKeysRef.current.add(followUp.followUpKey)
+      if (followUp.operationId === 'generate_edit_style_previews' && followUp.terminalStatus === 'completed') {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+        if (episodeId) {
+          await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+        }
+        await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            waitId: followUp.waitId,
+            claimId: followUp.claimId,
+          }),
+        })
+        continue
+      }
       const sent = await sendAutoFollowUpMessage(
         followUp.terminalStatus === 'failed'
           ? t('autoFollowUp.waitFailed', {
@@ -258,7 +273,7 @@ export default function WorkspaceAssistantPanel({
         }),
       })
     }
-  }, [episodeId, projectId, sendAutoFollowUpMessage, t])
+  }, [episodeId, projectId, queryClient, sendAutoFollowUpMessage, t])
   useEffect(() => {
     if (assistantRuntime.storageLoading) return
     void flushResolvedWaitFollowUps()
@@ -271,13 +286,17 @@ export default function WorkspaceAssistantPanel({
     })
   }, [flushResolvedWaitFollowUps, subscribeTaskEvents])
   const consumedMessageKeysRef = useRef<Set<string>>(new Set())
-  const sendAssistantMessageOnce = useCallback(async (key: string, message: string) => {
+  const sendAssistantMessageOnce = useCallback(async (key: string, message: string, hidden = false) => {
     const normalizedKey = key.trim()
     const normalizedMessage = message.trim()
     if (!normalizedKey || !normalizedMessage) return
     if (consumedMessageKeysRef.current.has(normalizedKey)) return
     consumedMessageKeysRef.current.add(normalizedKey)
-    await assistantRuntime.sendMessage(normalizedMessage)
+    if (hidden) {
+      await assistantRuntime.sendHiddenMessage(normalizedMessage)
+    } else {
+      await assistantRuntime.sendMessage(normalizedMessage)
+    }
   }, [assistantRuntime])
   const handleComposerSubmit = useCallback(async () => {
     const normalizedText = composerText.trim()
@@ -305,7 +324,7 @@ export default function WorkspaceAssistantPanel({
   useEffect(() => {
     const handleSendMessage = (event: Event) => {
       if (!isWorkspaceAssistantSendMessageEvent(event)) return
-      void sendAssistantMessageOnce(event.detail.key, event.detail.message)
+      void sendAssistantMessageOnce(event.detail.key, event.detail.message, event.detail.hidden === true)
     }
     window.addEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
     return () => window.removeEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
@@ -420,7 +439,7 @@ export default function WorkspaceAssistantPanel({
       stylePreviewId: params.stylePreviewId,
       aspectRatio: params.aspectRatio,
     })
-    await assistantRuntime.sendMessage(params.successMessage)
+    await assistantRuntime.sendHiddenMessage(params.successMessage)
   }
   const handleSetProjectVideoRatioChoice = async (params: {
     projectId: string
@@ -445,7 +464,7 @@ export default function WorkspaceAssistantPanel({
     if (episodeId) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
     }
-    await assistantRuntime.sendMessage(params.message)
+    await assistantRuntime.sendHiddenMessage(params.message)
   }
   const activeChoiceCard = useMemo(() => {
     return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
@@ -462,7 +481,7 @@ export default function WorkspaceAssistantPanel({
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
     hideChoiceCards: true,
-    onSendChoiceMessage: assistantRuntime.sendMessage,
+    onSendChoiceMessage: assistantRuntime.sendHiddenMessage,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
@@ -558,10 +577,13 @@ export default function WorkspaceAssistantPanel({
                 <div className="space-y-3">
                   <ThreadPrimitive.Messages>
                     {() => (
-                      <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />
+                      <WorkspaceAssistantThreadMessage
+                        messagePartComponents={partComponents}
+                        showAssistantThinkingIndicator={assistantRuntime.status === 'streaming'}
+                      />
                     )}
                   </ThreadPrimitive.Messages>
-                  <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status} />
+                  <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
                 </div>
               </ThreadPrimitive.Viewport>
 
@@ -570,7 +592,7 @@ export default function WorkspaceAssistantPanel({
                   <div className="mb-2">
                     <AssistantChoiceCardView
                       data={activeChoiceCard.data}
-                      onSendChoiceMessage={assistantRuntime.sendMessage}
+                      onSendChoiceMessage={assistantRuntime.sendHiddenMessage}
                       onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
                       onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}

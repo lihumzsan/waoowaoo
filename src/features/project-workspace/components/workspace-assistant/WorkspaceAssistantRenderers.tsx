@@ -12,6 +12,7 @@ import {
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useQuery } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import type {
@@ -25,7 +26,7 @@ import type {
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
-import { useRevertMutationBatch } from '@/lib/query/hooks'
+import { useConfirmProjectEditStylePreview, useRevertMutationBatch } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   interpolateChoiceCardTemplate,
@@ -34,6 +35,10 @@ import {
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
+import { apiFetch } from '@/lib/api-fetch'
+import type { ProjectEditScreenplay, ProjectEditStylePreview } from '@/types/project'
+import { dispatchWorkspaceAssistantMessage } from './assistant-send-event'
+import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -64,6 +69,12 @@ function hasRenderedToolOutput(parts: readonly unknown[], toolCallId: string): b
       && part.toolCallId === toolCallId
       && ('result' in part || part.isError === true)
   })
+}
+
+function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
+  if (!isRecord(metadata)) return false
+  const custom = metadata.custom
+  return isRecord(custom) && custom.workspaceAssistantHidden === true
 }
 
 type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
@@ -659,10 +670,20 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   )
 }
 
+interface EditStylePreviewScreenplayResponse {
+  screenplay: ProjectEditScreenplay | null
+}
+
+function isEditStylePreviewChoiceReady(preview: ProjectEditStylePreview | null): preview is ProjectEditStylePreview {
+  return Boolean(preview?.id && preview.imageUrl && preview.status === 'completed')
+}
+
 function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
   const data: EditStylePreviewGenerationPartData = props.data
+  const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
+  const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
   const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
     targetType: 'ProjectEditStylePreview',
     targetId: item.id,
@@ -671,6 +692,52 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
   const taskStateMap = useTaskTargetStateMap(data.projectId, taskTargets, {
     enabled: taskTargets.length > 0,
   }).byKey
+  const screenplayQuery = useQuery({
+    queryKey: ['workspace-assistant-style-previews', data.projectId, data.episodeId, data.screenplayId],
+    queryFn: async (): Promise<EditStylePreviewScreenplayResponse> => {
+      const response = await apiFetch(`/api/projects/${data.projectId}/edit-script/screenplay?episodeId=${encodeURIComponent(data.episodeId)}`)
+      if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_SCREENPLAY_FETCH_FAILED')
+      return await response.json() as EditStylePreviewScreenplayResponse
+    },
+    refetchInterval: (query) => {
+      const screenplay = query.state.data?.screenplay ?? null
+      const previews = screenplay?.stylePreviews ?? []
+      const allReady = data.items.every((item) => {
+        const preview = previews.find((candidate) => candidate.id === item.id) ?? null
+        return isEditStylePreviewChoiceReady(preview)
+      })
+      return allReady ? false : 2500
+    },
+  })
+  const previewsById = useMemo(() => {
+    const previews = screenplayQuery.data?.screenplay?.stylePreviews ?? []
+    return new Map(previews.map((preview) => [preview.id, preview]))
+  }, [screenplayQuery.data?.screenplay?.stylePreviews])
+
+  const handleSelectStylePreview = async (
+    item: EditStylePreviewGenerationPartData['items'][number],
+    preview: ProjectEditStylePreview,
+  ) => {
+    if (!isEditStylePreviewChoiceReady(preview)) return
+    setSelectingPreviewId(item.id)
+    try {
+      await confirmStylePreview.mutateAsync({
+        episodeId: data.episodeId,
+        stylePreviewId: item.id,
+        aspectRatio: preview.aspectRatio,
+      })
+      dispatchWorkspaceAssistantMessage({
+        key: `style-preview-selected:${data.screenplayId}:${item.id}`,
+        hidden: true,
+        message: t('cards.stylePreviewSelectedMessage', {
+          title: item.title,
+          aspectRatio: preview.aspectRatio,
+        }),
+      })
+    } finally {
+      setSelectingPreviewId(null)
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
@@ -684,33 +751,69 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
       <div className="mt-2 space-y-2">
         {data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
           const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
+          const preview = previewsById.get(item.id) ?? null
           const rawStage = taskState?.stageLabel || taskState?.stage || null
           const stageLabel = resolveProgressStageLabel(rawStage, progressT)
-          const liveStatus = taskState && taskState.phase !== 'idle' ? taskState.phase : 'processing'
+          const liveStatus = preview?.status === 'completed'
+            ? 'completed'
+            : taskState && taskState.phase !== 'idle'
+              ? taskState.phase
+              : 'processing'
+          const ready = isEditStylePreviewChoiceReady(preview)
+          const selecting = selectingPreviewId === item.id
           return (
             <div
               key={item.id}
               className="overflow-hidden rounded-xl border border-[var(--glass-stroke-base)] bg-white/80"
             >
-              <div className="relative min-h-24 bg-neutral-100">
-                <div className="absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
+              <div className="relative min-h-36 overflow-hidden bg-neutral-100">
+                <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
                   {item.title}
                 </div>
-                <div className="flex h-24 items-center justify-center">
-                  <div className="h-8 w-8 animate-pulse rounded-full border border-[var(--glass-stroke-strong)] bg-white/80" />
-                </div>
+                {preview?.imageUrl ? (
+                  <Image
+                    src={preview.imageUrl}
+                    alt={item.title}
+                    width={768}
+                    height={432}
+                    unoptimized
+                    className="h-44 w-full object-cover"
+                  />
+                ) : (
+                  <div className="relative flex h-36 items-center justify-center overflow-hidden bg-neutral-100">
+                    <div className="absolute inset-0 -translate-x-full animate-[assistant-style-shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/80 to-transparent" />
+                    <div className="h-8 w-8 animate-pulse rounded-full border border-[var(--glass-stroke-strong)] bg-white/80" />
+                  </div>
+                )}
               </div>
               <div className="space-y-1 p-2">
                 <div className="line-clamp-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{item.summary}</div>
                 <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
-                  <AppIcon name="loader" className="h-3 w-3 animate-spin" />
+                  <AppIcon name={ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready ? '' : 'animate-spin'}`} />
                   <span>{stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: liveStatus })}</span>
                 </div>
+                {ready ? (
+                  <button
+                    type="button"
+                    className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/90 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={selecting || confirmStylePreview.isPending}
+                    onClick={() => { void handleSelectStylePreview(item, preview) }}
+                  >
+                    {selecting ? t('cards.choiceSubmitting') : t('cards.stylePreviewSelect')}
+                  </button>
+                ) : null}
               </div>
             </div>
           )
         })}
       </div>
+      <style>{`
+        @keyframes assistant-style-shimmer {
+          100% {
+            transform: translateX(100%);
+          }
+        }
+      `}</style>
     </div>
   )
 }
@@ -871,27 +974,43 @@ export function useWorkspaceAssistantMessagePartComponents({
 function HiddenConversationSummaryMessage(props: {
   children: React.ReactNode
 }) {
-  const isSummary = useMessage((state) => state.metadata.custom?.projectAgentConversationSummary === true)
-  if (isSummary) return null
+  const shouldHide = useMessage((state) => (
+    state.metadata.custom?.projectAgentConversationSummary === true
+      || isWorkspaceAssistantHiddenMetadata(state.metadata)
+  ))
+  if (shouldHide) return null
   return <>{props.children}</>
 }
 
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: MessagePartComponents
+  showAssistantThinkingIndicator: boolean
 }) {
+  const showInlineThinkingIndicator = useMessage((state) => (
+    props.showAssistantThinkingIndicator
+    && state.role === 'assistant'
+    && state.isLast
+    && state.status?.type === 'running'
+  ))
+
   return (
     <>
       <MessagePrimitive.If user>
-        <div className="ml-auto flex w-full max-w-[88%] flex-col items-end">
-          <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS}>
-            <MessagePrimitive.Parts />
-          </MessagePrimitive.Root>
-        </div>
+        <HiddenConversationSummaryMessage>
+          <div className="ml-auto flex w-full max-w-[88%] flex-col items-end">
+            <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS}>
+              <MessagePrimitive.Parts />
+            </MessagePrimitive.Root>
+          </div>
+        </HiddenConversationSummaryMessage>
       </MessagePrimitive.If>
 
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
           <MessagePrimitive.Root className="space-y-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]">
+            {showInlineThinkingIndicator ? (
+              <WorkspaceAssistantThinkingIndicator status="streaming" />
+            ) : null}
             <MessagePrimitive.Parts components={props.messagePartComponents} />
           </MessagePrimitive.Root>
         </div>
