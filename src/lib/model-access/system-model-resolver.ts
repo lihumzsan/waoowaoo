@@ -1,7 +1,7 @@
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
-import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
+import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 
 export type SystemModelPurpose =
   | 'analysis'
@@ -21,23 +21,7 @@ function requireModel(modelKey: string | null | undefined, purpose: SystemModelP
 }
 
 function resolvePlatformModel(purpose: SystemModelPurpose): string {
-  const defaults = getPlatformDefaultModels()
-  switch (purpose) {
-    case 'analysis':
-      return defaults.analysisModel
-    case 'character-image':
-      return defaults.characterModel
-    case 'location-image':
-      return defaults.locationModel
-    case 'storyboard-image':
-      return defaults.storyboardModel
-    case 'edit-image':
-      return defaults.editModel
-    case 'video':
-      return defaults.videoModel
-    case 'music':
-      return defaults.musicModel
-  }
+  return getPlatformRuntimePlan(purpose).modelKey
 }
 
 export async function resolveSystemModelKey(input: {

@@ -3,7 +3,8 @@
  *
  * 所有 API 通过此服务获取模型配置，确保数据源一致性。
  *
- * 优先级：项目配置 > 用户偏好 > null
+ * self-hosted 优先级：项目配置 > 用户偏好 > null
+ * cloud 优先级：平台模型/参数配置 + 项目画幅
  */
 
 import { prisma } from '@/lib/prisma'
@@ -19,6 +20,7 @@ import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
+import { getPlatformCapabilityDefaults } from '@/lib/platform-runtime/presets'
 import {
   type WorkflowConcurrencyConfig,
   normalizeWorkflowConcurrencyConfig,
@@ -157,27 +159,30 @@ export async function getProjectModelConfig(
   const platformDefaults = deployment.providerCredentialMode === 'platform-key'
     ? getPlatformDefaultModels()
     : null
-  const [projectData, userPref] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId } }),
-    prisma.userPreference.findUnique({ where: { userId } }),
-  ])
+  const projectDataPromise = prisma.project.findUnique({ where: { id: projectId } })
 
   if (platformDefaults) {
+    const projectData = await projectDataPromise
     return {
-      analysisModel: extractModelKey(projectData?.analysisModel) || platformDefaults.analysisModel,
-      characterModel: extractModelKey(projectData?.characterModel) || platformDefaults.characterModel,
-      locationModel: extractModelKey(projectData?.locationModel) || platformDefaults.locationModel,
-      storyboardModel: extractModelKey(projectData?.storyboardModel) || platformDefaults.storyboardModel,
-      editModel: extractModelKey(projectData?.editModel) || platformDefaults.editModel,
-      videoModel: extractModelKey(projectData?.videoModel) || platformDefaults.videoModel,
-      singleShotVideoModel: extractModelKey(projectData?.singleShotVideoModel) || extractModelKey(projectData?.videoModel) || platformDefaults.videoModel,
-      sequenceVideoModel: extractModelKey(projectData?.sequenceVideoModel) || platformDefaults.videoModel,
-      musicModel: extractModelKey(projectData?.musicModel) || platformDefaults.musicModel,
+      analysisModel: platformDefaults.analysisModel,
+      characterModel: platformDefaults.characterModel,
+      locationModel: platformDefaults.locationModel,
+      storyboardModel: platformDefaults.storyboardModel,
+      editModel: platformDefaults.editModel,
+      videoModel: platformDefaults.videoModel,
+      singleShotVideoModel: platformDefaults.videoModel,
+      sequenceVideoModel: platformDefaults.videoModel,
+      musicModel: platformDefaults.musicModel,
       videoRatio: projectData?.videoRatio || '9:16',
-      capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
-      capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
+      capabilityDefaults: getPlatformCapabilityDefaults(),
+      capabilityOverrides: {},
     }
   }
+
+  const [projectData, userPref] = await Promise.all([
+    projectDataPromise,
+    prisma.userPreference.findUnique({ where: { userId } }),
+  ])
 
   return {
     analysisModel: extractModelKey(projectData?.analysisModel) || extractModelKey(userPref?.analysisModel) || null,
@@ -202,10 +207,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   const deployment = getDeploymentConfig()
   if (deployment.providerCredentialMode === 'platform-key') {
     const platformDefaults = getPlatformDefaultModels()
-    const userPref = await prisma.userPreference.findUnique({
-      where: { userId },
-      select: { capabilityDefaults: true },
-    })
 
     return {
       analysisModel: platformDefaults.analysisModel,
@@ -215,7 +216,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
+      capabilityDefaults: getPlatformCapabilityDefaults(),
     }
   }
 

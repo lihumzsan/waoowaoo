@@ -19,6 +19,7 @@ import { DEFAULT_GROUP_VIDEO_MODEL } from '@/lib/ai-exec/video-defaults'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
+import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import type {
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
@@ -118,11 +119,15 @@ async function applyCloudSystemVideoModel(params: {
 }): Promise<void> {
   if (getDeploymentConfig().edition !== 'cloud') return
 
+  const plan = getPlatformRuntimePlan('video')
   const systemVideoModel = await resolveSystemModelKey({
     userId: params.userId,
     projectId: params.projectId,
     purpose: 'video',
   })
+  if (systemVideoModel !== plan.modelKey) {
+    throw new Error(`PLATFORM_RUNTIME_MODEL_MISMATCH: video=${systemVideoModel}`)
+  }
 
   const providedVideoModel = normalizeString(params.payload.videoModel)
   if (providedVideoModel && providedVideoModel !== systemVideoModel) {
@@ -153,6 +158,42 @@ async function applyCloudSystemVideoModel(params: {
   params.payload.groupVideoModel = systemVideoModel
   if (firstLast) {
     firstLast.flModel = systemVideoModel
+  }
+
+  const suppliedOptions = isRecord(params.payload.generationOptions)
+    ? params.payload.generationOptions
+    : {}
+  if (Object.prototype.hasOwnProperty.call(suppliedOptions, 'aspectRatio')) {
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_VIDEO_RATIO_MANAGED_BY_PROJECT',
+      field: 'generationOptions.aspectRatio',
+    })
+  }
+  const suppliedRuntimeOptions = isRecord(suppliedOptions)
+    ? toVideoRuntimeSelections(suppliedOptions)
+    : {}
+  const platformOptions = plan.generationOptions
+  const internalFields = new Set(['duration', 'generationMode', 'containsVideoInput'])
+  const internalOptions: Record<string, CapabilityValue> = {}
+
+  for (const [field, value] of Object.entries(suppliedRuntimeOptions)) {
+    if (internalFields.has(field)) {
+      internalOptions[field] = value
+      continue
+    }
+    const platformValue = platformOptions[field]
+    if (platformValue !== undefined && platformValue === value) {
+      continue
+    }
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_OPTIONS_MANAGED_BY_PLATFORM',
+      field: `generationOptions.${field}`,
+    })
+  }
+
+  params.payload.generationOptions = {
+    ...platformOptions,
+    ...internalOptions,
   }
 }
 

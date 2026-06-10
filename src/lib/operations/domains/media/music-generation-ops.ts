@@ -8,6 +8,10 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { ApiError } from '@/lib/api-errors'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
+import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
@@ -49,12 +53,62 @@ function requireModelKey(value: string): string {
   return parsed.modelKey
 }
 
+function isCloudDeployment(): boolean {
+  return getDeploymentConfig().edition === 'cloud'
+}
+
+function assertCloudMusicModelInput(requested: string, systemModel: string): void {
+  if (!requested || requested === systemModel) return
+  throw new ApiError('FORBIDDEN', {
+    code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
+    field: 'musicModel',
+  })
+}
+
+function resolveCloudMusicOption(
+  field: 'durationSeconds' | 'outputFormat',
+  requested: string | number | undefined,
+): string | number | undefined {
+  const plan = getPlatformRuntimePlan('music')
+  const platformValue = plan.generationOptions[field]
+  if (platformValue === undefined) return requested
+
+  if (field === 'durationSeconds') {
+    if (typeof platformValue !== 'number') {
+      throw new Error('PLATFORM_RUNTIME_MUSIC_DURATION_INVALID')
+    }
+    if (requested !== undefined && requested !== platformValue) {
+      throw new ApiError('FORBIDDEN', {
+        code: 'TASK_OPTIONS_MANAGED_BY_PLATFORM',
+        field,
+      })
+    }
+    return platformValue
+  }
+
+  if (typeof platformValue !== 'string') {
+    throw new Error('PLATFORM_RUNTIME_MUSIC_OUTPUT_FORMAT_INVALID')
+  }
+  if (requested !== undefined && requested !== platformValue) {
+    throw new ApiError('FORBIDDEN', {
+      code: 'TASK_OPTIONS_MANAGED_BY_PLATFORM',
+      field,
+    })
+  }
+  return platformValue
+}
+
 function hashPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 20)
 }
 
 async function resolveMusicModel(input: MusicGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
+  if (isCloudDeployment()) {
+    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
+    assertCloudMusicModelInput(requested, systemModel)
+    return systemModel
+  }
   if (requested) return requireModelKey(requested)
 
   const [project, pref] = await Promise.all([
@@ -74,6 +128,11 @@ async function resolveMusicModel(input: MusicGenerationInput, projectId: string,
 
 async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
+  if (isCloudDeployment()) {
+    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
+    assertCloudMusicModelInput(requested, systemModel)
+    return systemModel
+  }
   if (requested) return requireModelKey(requested)
 
   const [project, pref] = await Promise.all([
@@ -138,15 +197,21 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: taskSubmitOutput,
       execute: async (ctx, input) => {
         const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
+        const durationSeconds = isCloudDeployment()
+          ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
+          : input.durationSeconds
+        const outputFormat = isCloudDeployment()
+          ? resolveCloudMusicOption('outputFormat', input.outputFormat)
+          : input.outputFormat
         const payload: Record<string, unknown> = {
           prompt: input.prompt.trim(),
-          durationSeconds: input.durationSeconds,
+          durationSeconds,
           musicModel,
           ...(input.vocalMode ? { vocalMode: input.vocalMode } : {}),
           ...(input.genre ? { genre: input.genre.trim() } : {}),
           ...(input.mood ? { mood: input.mood.trim() } : {}),
           ...(typeof input.bpm === 'number' ? { bpm: input.bpm } : {}),
-          ...(input.outputFormat ? { outputFormat: input.outputFormat } : {}),
+          ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
         }
 
         const result = await submitOperationTask({
@@ -201,11 +266,14 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       execute: async (ctx, input) => {
         const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
         const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(input.episodeId, ctx.projectId)
+        const outputFormat = isCloudDeployment()
+          ? resolveCloudMusicOption('outputFormat', input.outputFormat)
+          : input.outputFormat
         const payload: Record<string, unknown> = {
           episodeId: input.episodeId,
           durationSeconds,
           musicModel,
-          ...(input.outputFormat ? { outputFormat: input.outputFormat } : {}),
+          ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
         }
 
         const result = await submitOperationTask({

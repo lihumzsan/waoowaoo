@@ -251,7 +251,7 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     panel,
     payload,
     modelId,
-    projectModels.videoRatio,
+    projectModels.videoRatio || null,
     generationOptions,
   )
 
