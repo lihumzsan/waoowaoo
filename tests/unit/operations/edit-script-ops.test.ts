@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
+import type { UIMessage, UIMessageStreamWriter } from 'ai'
+import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { createEditScriptOperations } from '@/lib/operations/domains/media/edit-script-ops'
 import { TASK_TYPE } from '@/lib/task/types'
 
@@ -100,7 +102,53 @@ const submitOperationTaskMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/operations/submit-operation-task', () => submitOperationTaskMock)
 
-function buildContext() {
+const choiceCardMock = vi.hoisted(() => ({
+  buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
+    cardId: 'edit-first-duration',
+    title: '选择短片时长',
+    groups: [{
+      key: 'durationSeconds',
+      label: '时长',
+      required: true,
+      options: [{ value: '60', label: '60 秒' }],
+    }],
+    submitLabel: '继续生成',
+    submit: {
+      kind: 'send_message',
+      messageTemplate: '我选择 {durationSeconds} 秒，请继续。',
+    },
+  })),
+}))
+
+vi.mock('@/lib/project-agent/choice-card', () => ({
+  buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
+  readEditFirstDurationSeconds: (text: string) => {
+    const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*(秒|s|sec|secs|second|seconds|分钟|minute|minutes|min|mins)/i)
+    if (!match) return null
+    const value = Number(match[1])
+    const unit = match[2] ?? ''
+    return /分钟|minute|minutes|min|mins/i.test(unit) ? value * 60 : value
+  },
+}))
+
+const workflowMock = vi.hoisted(() => ({
+  resolveEditFirstWorkflowState: vi.fn(async () => ({
+    active: true,
+    stage: 'ready_to_generate_screenplay',
+    blocking: {
+      kind: 'needs_confirmation',
+      reason: null,
+    },
+    nextAction: null,
+    allowedOperationIds: [],
+  })),
+}))
+
+vi.mock('@/lib/project-workflow/edit-first', () => ({
+  resolveEditFirstWorkflowState: workflowMock.resolveEditFirstWorkflowState,
+}))
+
+function buildContext(writer: UIMessageStreamWriter<UIMessage> | null = null): ProjectAgentOperationContext {
   return {
     request: new Request('http://localhost') as unknown as NextRequest,
     userId: 'user-1',
@@ -110,7 +158,15 @@ function buildContext() {
       locale: 'zh',
       episodeId: 'episode-1',
     },
-    writer: null,
+    writer,
+  }
+}
+
+function createTestWriter(events: Record<string, unknown>[]): UIMessageStreamWriter<UIMessage> {
+  return {
+    write: (chunk) => events.push(chunk as unknown as Record<string, unknown>),
+    merge: vi.fn(),
+    onError: vi.fn(),
   }
 }
 
@@ -129,15 +185,17 @@ describe('edit-script operations', () => {
       'generate_edit_script',
       'generate_edit_script_assets',
       'generate_edit_script_storyboard',
+      'request_edit_first_choice',
     ])
     expect(operations.generate_edit_script?.summary).toContain('director decoupage')
     expect(operations.generate_edit_script?.confirmation?.required).toBe(true)
+    expect(operations.request_edit_first_choice?.intent).toBe('query')
   })
 
   it('passes context episode and locale into screenplay generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a short film',
+      prompt: 'make a 60 seconds short film',
       confirmed: true,
     })
 
@@ -148,14 +206,14 @@ describe('edit-script operations', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      prompt: 'make a short film',
+      prompt: 'make a 60 seconds short film',
     }))
   })
 
   it('does not forward free-form artStyle from agent screenplay generation into project style config', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a cyberpunk short film',
+      prompt: 'make a 60 seconds cyberpunk short film',
       confirmed: true,
       artStyle: 'cyberpunk',
     })
@@ -163,7 +221,7 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a cyberpunk short film',
+      prompt: 'make a 60 seconds cyberpunk short film',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
@@ -173,7 +231,7 @@ describe('edit-script operations', () => {
   it('does not forward aspect ratio from agent screenplay generation', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a vertical short film',
+      prompt: 'make a 60 seconds vertical short film',
       confirmed: true,
       videoRatio: '9:16',
     })
@@ -181,11 +239,66 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a vertical short film',
+      prompt: 'make a 60 seconds vertical short film',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       videoRatio: expect.anything(),
     }))
+  })
+
+  it('rejects screenplay generation when the prompt does not include explicit duration', async () => {
+    const operations = createEditScriptOperations()
+
+    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
+      prompt: 'make a short film',
+      confirmed: true,
+    })).rejects.toThrow('EDIT_FIRST_DURATION_REQUIRED')
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+  })
+
+  it('rejects screenplay generation when the prompt duration exceeds two minutes', async () => {
+    const operations = createEditScriptOperations()
+
+    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
+      prompt: 'make a 180 seconds short film',
+      confirmed: true,
+    })).rejects.toThrow('EDIT_FIRST_DURATION_EXCEEDS_LIMIT:durationSeconds=180:maxSeconds=120')
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+  })
+
+  it('emits a fixed assistant choice card through the request choice operation', async () => {
+    const operations = createEditScriptOperations()
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.request_edit_first_choice.execute(buildContext(createTestWriter(writerEvents)), {
+      choiceType: 'duration',
+    })
+
+    expect(workflowMock.resolveEditFirstWorkflowState).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+    expect(choiceCardMock.buildEditFirstAssistantChoiceCard).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      choiceType: 'duration',
+    }))
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-assistant-choice-card',
+        data: expect.objectContaining({
+          cardId: 'edit-first-duration',
+        }),
+      }),
+    ])
+    expect(result).toEqual({
+      emitted: true,
+      choiceType: 'duration',
+      cardId: 'edit-first-duration',
+      workflowStage: 'ready_to_generate_screenplay',
+    })
   })
 
   it('passes screenplay id into director decoupage generation', async () => {

@@ -22,7 +22,6 @@ import { createProjectAgentStopController } from './stop-conditions'
 import type {
   AgentDebugPartData,
   AgentRuntimeContextPartData,
-  ProjectAgentChoiceCardPartData,
   ProjectAgentStopPartData,
 } from './types'
 import { routeProjectAgentRequest } from './router'
@@ -40,10 +39,6 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
-import {
-  buildEditFirstAssistantChoiceCards,
-  choiceCardsBlockOperation,
-} from './choice-card'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -299,25 +294,13 @@ export async function createProjectAgentChatResponse(input: {
         maxTools: 45,
         allowedIntents,
       })
-      const choiceCards = await buildEditFirstAssistantChoiceCards({
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: context.episodeId || null,
-        locale,
-        workflow: phase.editFirstWorkflow,
-        requestedGroups: route.requestedGroups,
-        latestUserText: route.latestUserText,
-      })
-      const constrainedOperationIds = constrainOperationIdsForEditFirstWorkflow({
+      const operationIds = constrainOperationIdsForEditFirstWorkflow({
         registry: operations,
         operationIds: selection.operationIds,
         allowedIntents,
         workflow: phase.editFirstWorkflow,
         requestedGroups: route.requestedGroups,
       })
-      const operationIds = constrainedOperationIds.filter((operationId) => (
-        !choiceCardsBlockOperation(choiceCards, operationId)
-      ))
       const toolEntries = operationIds.map((operationId) => {
         const operation = operations[operationId]
         const description = localizeSelectableToolDescription(operationId, operation.summary, locale)
@@ -369,9 +352,6 @@ export async function createProjectAgentChatResponse(input: {
         route,
         editFirstWorkflow: phase.editFirstWorkflow,
         selectedTools: toolEntries.map((item) => item.debugTool),
-      })
-      choiceCards.forEach((card) => {
-        writeOperationDataPart<ProjectAgentChoiceCardPartData>(writer, 'data-assistant-choice-card', card)
       })
       if (agentDebug) {
         writeDebugText(writer, [

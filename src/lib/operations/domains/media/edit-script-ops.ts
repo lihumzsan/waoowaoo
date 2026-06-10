@@ -14,9 +14,18 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import {
+  buildEditFirstAssistantChoiceCard,
+  readEditFirstDurationSeconds,
+} from '@/lib/project-agent/choice-card'
+import type {
+  EditFirstChoiceType,
+} from '@/lib/project-agent/choice-card'
+import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
+import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 
@@ -28,6 +37,11 @@ const confirmedInputFields = {
 const generateEditScreenplayInputSchema = z.object({
   ...confirmedInputFields,
   prompt: z.string().trim().min(1),
+}).passthrough()
+
+const requestEditFirstChoiceInputSchema = z.object({
+  episodeId: z.string().trim().min(1).optional(),
+  choiceType: z.enum(['duration', 'style_and_aspect_ratio']),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -59,6 +73,7 @@ const generateEditScriptStoryboardInputSchema = z.object({
 }).passthrough()
 
 type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
+type RequestEditFirstChoiceInput = z.infer<typeof requestEditFirstChoiceInputSchema>
 type GenerateEditDirectorDecoupageInput = z.infer<typeof generateEditDirectorDecoupageInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
@@ -72,6 +87,13 @@ const editScreenplayOutputSchema = z.object({
   userPrompt: z.string(),
   screenplayText: z.string().min(1),
   status: z.string().min(1),
+}).passthrough()
+
+const requestEditFirstChoiceOutputSchema = z.object({
+  emitted: z.literal(true),
+  choiceType: z.enum(['duration', 'style_and_aspect_ratio']),
+  cardId: z.string().min(1),
+  workflowStage: z.string().min(1),
 }).passthrough()
 
 const editScriptSummaryOutputSchema = z.object({
@@ -124,6 +146,16 @@ const EFFECTS_SYNC_AI_WRITE = {
   bulk: false,
   externalSideEffects: true,
   longRunning: true,
+} as const
+
+const EFFECTS_NONE = {
+  writes: false,
+  billable: false,
+  destructive: false,
+  overwrite: false,
+  bulk: false,
+  externalSideEffects: false,
+  longRunning: false,
 } as const
 
 const EFFECTS_BULK_WRITE = {
@@ -214,14 +246,56 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       },
       inputSchema: generateEditScreenplayInputSchema,
       outputSchema: editScreenplayOutputSchema,
-      execute: async (ctx, input: GenerateEditScreenplayInput) => editScreenplayOutputSchema.parse(await generateProjectEditScreenplay({
-        request: ctx.request,
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        episodeId: resolveEpisodeId(input, ctx.context.episodeId),
-        locale: resolveLocale(ctx.context.locale),
-        prompt: input.prompt,
-      })),
+      execute: async (ctx, input: GenerateEditScreenplayInput) => {
+        const durationSeconds = readEditFirstDurationSeconds(input.prompt)
+        if (durationSeconds === null) {
+          throw new Error('EDIT_FIRST_DURATION_REQUIRED: call request_edit_first_choice with choiceType=duration before generate_edit_screenplay')
+        }
+        if (durationSeconds > 120) {
+          throw new Error(`EDIT_FIRST_DURATION_EXCEEDS_LIMIT:durationSeconds=${String(durationSeconds)}:maxSeconds=120`)
+        }
+        return editScreenplayOutputSchema.parse(await generateProjectEditScreenplay({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          locale: resolveLocale(ctx.context.locale),
+          prompt: input.prompt,
+        }))
+      },
+    }),
+    request_edit_first_choice: defineOperation({
+      id: 'request_edit_first_choice',
+      summary: 'Request a fixed assistant choice card for edit-first production. Use this before screenplay generation to ask duration, and after style previews are ready to ask visual style plus aspect ratio.',
+      intent: 'query',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_NONE,
+      inputSchema: requestEditFirstChoiceInputSchema,
+      outputSchema: requestEditFirstChoiceOutputSchema,
+      execute: async (ctx, input: RequestEditFirstChoiceInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const workflow = await resolveEditFirstWorkflowState({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+        })
+        const choiceType: EditFirstChoiceType = input.choiceType
+        const card = await buildEditFirstAssistantChoiceCard({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          locale: resolveLocale(ctx.context.locale),
+          workflow,
+          choiceType,
+        })
+        writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', card)
+        return requestEditFirstChoiceOutputSchema.parse({
+          emitted: true,
+          choiceType,
+          cardId: card.cardId,
+          workflowStage: workflow.stage,
+        })
+      },
     }),
     generate_edit_director_decoupage: defineOperation({
       id: 'generate_edit_director_decoupage',

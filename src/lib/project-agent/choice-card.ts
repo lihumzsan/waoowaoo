@@ -10,17 +10,29 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 const STYLE_PREVIEW_COUNT = 3
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 
-function requestedGroupsContainEditFirst(requestedGroups: ReadonlyArray<ReadonlyArray<string>>): boolean {
-  return requestedGroups.some((groupPath) => groupPath[0] === 'edit-script')
+export type EditFirstChoiceType = 'duration' | 'style_and_aspect_ratio'
+
+export function readEditFirstDurationSeconds(text: string): number | null {
+  const normalized = text.trim().toLowerCase()
+  if (!normalized) return null
+
+  if (/半分钟/.test(normalized)) return 30
+  if (/一分钟/.test(normalized)) return 60
+  if (/(两分钟|二分钟)/.test(normalized)) return 120
+
+  const durationMatch = normalized.match(/([0-9]+(?:\.[0-9]+)?)\s*(秒|s|sec|secs|second|seconds|分钟|minute|minutes|min|mins)/i)
+  if (!durationMatch) return null
+  const rawValue = Number(durationMatch[1])
+  if (!Number.isFinite(rawValue) || rawValue <= 0) return null
+  const unit = durationMatch[2] ?? ''
+  const seconds = /分钟|minute|minutes|min|mins/i.test(unit)
+    ? rawValue * 60
+    : rawValue
+  return Math.round(seconds)
 }
 
 export function editFirstUserTextHasDuration(text: string): boolean {
-  const normalized = text.trim().toLowerCase()
-  if (!normalized) return false
-  if (/[0-9]+(?:\.[0-9]+)?\s*(秒|s|sec|secs|second|seconds|分钟|minute|minutes|min|mins)/i.test(normalized)) {
-    return true
-  }
-  return /(半分钟|一分钟|两分钟|二分钟|30\s*秒|60\s*秒|90\s*秒|120\s*秒)/.test(normalized)
+  return readEditFirstDurationSeconds(text) !== null
 }
 
 function buildDurationChoiceCard(locale: ProjectAgentLocale): ProjectAgentChoiceCardPartData {
@@ -99,7 +111,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-}): Promise<ProjectAgentChoiceCardPartData | null> {
+}): Promise<ProjectAgentChoiceCardPartData> {
   const screenplay = await prisma.projectEditScreenplay.findFirst({
     where: {
       projectId: params.projectId,
@@ -130,8 +142,15 @@ async function buildStyleAndRatioChoiceCard(params: {
       },
     },
   })
-  if (!screenplay || screenplay.status !== 'style_preview_ready') return null
-  if (screenplay.stylePreviews.length < STYLE_PREVIEW_COUNT) return null
+  if (!screenplay) {
+    throw new Error('EDIT_FIRST_CHOICE_SCREENPLAY_NOT_FOUND')
+  }
+  if (screenplay.status !== 'style_preview_ready') {
+    throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:screenplayStatus=${screenplay.status}`)
+  }
+  if (screenplay.stylePreviews.length < STYLE_PREVIEW_COUNT) {
+    throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:readyStylePreviewCount=${String(screenplay.stylePreviews.length)}`)
+  }
 
   const isEnglish = params.locale === 'en'
   return {
@@ -167,45 +186,31 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 }
 
-export async function buildEditFirstAssistantChoiceCards(params: {
+export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
-  episodeId?: string | null
+  episodeId: string
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
-  requestedGroups: ReadonlyArray<ReadonlyArray<string>>
-  latestUserText: string
-}): Promise<ProjectAgentChoiceCardPartData[]> {
-  const workflowApplies = params.workflow.active || requestedGroupsContainEditFirst(params.requestedGroups)
-  if (!workflowApplies) return []
-
-  if (
-    params.workflow.stage === 'ready_to_generate_screenplay'
-    && !editFirstUserTextHasDuration(params.latestUserText)
-  ) {
-    return [buildDurationChoiceCard(params.locale)]
+  choiceType: EditFirstChoiceType
+}): Promise<ProjectAgentChoiceCardPartData> {
+  if (params.choiceType === 'duration') {
+    if (params.workflow.stage !== 'ready_to_generate_screenplay') {
+      throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration:stage=${params.workflow.stage}`)
+    }
+    return buildDurationChoiceCard(params.locale)
   }
 
-  if (params.workflow.stage === 'needs_style_choice' && params.episodeId) {
-    const styleCard = await buildStyleAndRatioChoiceCard({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      locale: params.locale,
-    })
-    return styleCard ? [styleCard] : []
+  if (params.workflow.stage === 'style_preview_generating') {
+    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   }
-
-  return []
-}
-
-export function choiceCardsBlockOperation(
-  cards: readonly ProjectAgentChoiceCardPartData[],
-  operationId: string,
-): boolean {
-  return cards.some((card) => {
-    if (card.cardId === 'edit-first-duration') return operationId === 'generate_edit_screenplay'
-    if (card.cardId.startsWith('edit-first-style-ratio:')) return operationId === 'generate_edit_director_decoupage'
-    return false
+  if (params.workflow.stage !== 'needs_style_choice') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style_and_aspect_ratio:stage=${params.workflow.stage}`)
+  }
+  return await buildStyleAndRatioChoiceCard({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+    locale: params.locale,
   })
 }

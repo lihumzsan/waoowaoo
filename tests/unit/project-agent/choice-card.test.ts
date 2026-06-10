@@ -18,8 +18,9 @@ vi.mock('@/lib/storage', () => ({
 }))
 
 import {
-  buildEditFirstAssistantChoiceCards,
+  buildEditFirstAssistantChoiceCard,
   editFirstUserTextHasDuration,
+  readEditFirstDurationSeconds,
 } from '@/lib/project-agent/choice-card'
 
 function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
@@ -45,21 +46,22 @@ describe('edit-first assistant choice cards', () => {
     expect(editFirstUserTextHasDuration('我选择 60 秒')).toBe(true)
     expect(editFirstUserTextHasDuration('make it 90 seconds')).toBe(true)
     expect(editFirstUserTextHasDuration('开始生成短片')).toBe(false)
+    expect(readEditFirstDurationSeconds('我选择一分钟')).toBe(60)
+    expect(readEditFirstDurationSeconds('make it 2 minutes')).toBe(120)
+    expect(readEditFirstDurationSeconds('make it 180 seconds')).toBe(180)
   })
 
-  it('asks for duration before screenplay generation when no duration is present', async () => {
-    const cards = await buildEditFirstAssistantChoiceCards({
+  it('builds a duration card when the model requests duration at the screenplay stage', async () => {
+    const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('ready_to_generate_screenplay'),
-      requestedGroups: [['edit-script']],
-      latestUserText: '开始生成短片',
+      choiceType: 'duration',
     })
 
-    expect(cards).toHaveLength(1)
-    expect(cards[0]).toMatchObject({
+    expect(card).toMatchObject({
       cardId: 'edit-first-duration',
       title: '选择短片时长',
       groups: [{
@@ -70,22 +72,19 @@ describe('edit-first assistant choice cards', () => {
         kind: 'send_message',
       },
     })
-    expect(cards[0]?.groups[0]?.options.map((option) => option.value)).toEqual(['30', '60', '90', '120'])
+    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['30', '60', '90', '120'])
     expect(prismaState.findFirst).not.toHaveBeenCalled()
   })
 
-  it('does not ask for duration again after the user selected one', async () => {
-    const cards = await buildEditFirstAssistantChoiceCards({
+  it('rejects duration cards outside the screenplay generation stage', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_generate_screenplay'),
-      requestedGroups: [['edit-script']],
-      latestUserText: '我选择 60 秒，请继续',
-    })
-
-    expect(cards).toEqual([])
+      workflow: workflow('needs_style_choice'),
+      choiceType: 'duration',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration:stage=needs_style_choice')
   })
 
   it('builds a style and aspect-ratio card only after three style previews are ready', async () => {
@@ -117,14 +116,13 @@ describe('edit-first assistant choice cards', () => {
       ],
     })
 
-    const cards = await buildEditFirstAssistantChoiceCards({
+    const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
-      requestedGroups: [['edit-script']],
-      latestUserText: '继续',
+      choiceType: 'style_and_aspect_ratio',
     })
 
     expect(prismaState.findFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -136,8 +134,7 @@ describe('edit-first assistant choice cards', () => {
         },
       }),
     }))
-    expect(cards).toHaveLength(1)
-    expect(cards[0]).toMatchObject({
+    expect(card).toMatchObject({
       cardId: 'edit-first-style-ratio:screenplay-1',
       groups: [
         {
@@ -155,8 +152,19 @@ describe('edit-first assistant choice cards', () => {
         episodeId: 'episode-1',
       },
     })
-    expect(cards[0]?.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b', 'style-c'])
-    expect(cards[0]?.groups[0]?.options[0]?.imageUrl).toBe('/signed/a.png')
-    expect(cards[0]?.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
+    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b', 'style-c'])
+    expect(card.groups[0]?.options[0]?.imageUrl).toBe('/signed/a.png')
+    expect(card.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
+  })
+
+  it('rejects style and aspect-ratio cards while style previews are still generating', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('style_preview_generating'),
+      choiceType: 'style_and_aspect_ratio',
+    })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   })
 })

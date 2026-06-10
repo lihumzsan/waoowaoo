@@ -3,7 +3,6 @@ import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { ProjectAgentRouteDecision } from '@/lib/project-agent/router'
-import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 const streamState = vi.hoisted(() => ({
@@ -27,10 +26,6 @@ const registryState = vi.hoisted(() => ({
 
 const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
-}))
-
-const choiceCardState = vi.hoisted(() => ({
-  cards: [] as ProjectAgentChoiceCardPartData[],
 }))
 
 const phaseState = vi.hoisted(() => ({
@@ -157,17 +152,6 @@ vi.mock('@/lib/api-errors', () => ({
   getRequestId: vi.fn(() => 'req-1'),
 }))
 
-vi.mock('@/lib/project-agent/choice-card', () => ({
-  buildEditFirstAssistantChoiceCards: vi.fn(async () => choiceCardState.cards),
-  choiceCardsBlockOperation: vi.fn((cards: readonly ProjectAgentChoiceCardPartData[], operationId: string) => (
-    cards.some((card) => {
-      if (card.cardId === 'edit-first-duration') return operationId === 'generate_edit_screenplay'
-      if (card.cardId.startsWith('edit-first-style-ratio:')) return operationId === 'generate_edit_director_decoupage'
-      return false
-    })
-  )),
-}))
-
 import { createProjectAgentChatResponse } from '@/lib/project-agent/runtime'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveProjectAgentLanguageModel } from '@/lib/project-agent/model'
@@ -187,7 +171,6 @@ describe('project agent runtime tool routing', () => {
     streamState.capturedToolNames = []
     streamState.capturedSystem = ''
     streamState.writerEvents = []
-    choiceCardState.cards = []
     loggerState.info.mockReset()
     phaseState.editFirstWorkflow = {
       active: false,
@@ -231,6 +214,17 @@ describe('project agent runtime tool routing', () => {
         effects: EFFECTS_BILLABLE,
         confirmation: { required: true, summary: 'billable operation' },
         inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
+      request_edit_first_choice: makeTestOperation({
+        id: 'request_edit_first_choice',
+        summary: 'Request edit-first choice card',
+        intent: 'query',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_NONE,
+        inputSchema: z.object({ choiceType: z.enum(['duration', 'style_and_aspect_ratio']) }),
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),
@@ -502,7 +496,7 @@ describe('project agent runtime tool routing', () => {
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 
-  it('emits duration choice card and blocks screenplay generation until the user chooses duration', async () => {
+  it('injects the edit-first choice-card tool so the model can ask duration via tool use', async () => {
     phaseState.editFirstWorkflow = {
       active: true,
       stage: 'ready_to_generate_screenplay',
@@ -518,21 +512,6 @@ describe('project agent runtime tool routing', () => {
       },
       allowedOperationIds: ['generate_edit_screenplay'],
     }
-    choiceCardState.cards = [{
-      cardId: 'edit-first-duration',
-      title: '选择短片时长',
-      groups: [{
-        key: 'durationSeconds',
-        label: '时长',
-        required: true,
-        options: [{ value: '60', label: '60 秒' }],
-      }],
-      submitLabel: '继续生成',
-      submit: {
-        kind: 'send_message',
-        messageTemplate: '我选择 {durationSeconds} 秒，请继续。',
-      },
-    }]
     streamState.routeResult = {
       intent: 'act',
       domains: ['edit-script'],
@@ -554,14 +533,10 @@ describe('project agent runtime tool routing', () => {
     })
     await flushAsyncWork()
 
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
-    expect(streamState.writerEvents).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        type: 'data-assistant-choice-card',
-        data: expect.objectContaining({
-          cardId: 'edit-first-duration',
-        }),
-      }),
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.writerEvents).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'data-assistant-choice-card' }),
     ]))
   })
 
