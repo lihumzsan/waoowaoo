@@ -22,6 +22,18 @@ function invalidateEpisodeScoped(params: {
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
 }
 
+function invalidateEditFirstStylePreview(params: {
+  queryClient: QueryClient
+  projectId: string
+  episodeId: string | null
+}) {
+  if (!params.episodeId) return
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.projectData(params.projectId) })
+}
+
 function invalidateGlobalAssetLists(params: {
   queryClient: QueryClient
   kind?: 'character' | 'location' | null
@@ -105,6 +117,10 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
     params.targetType === 'ProjectVideoGroup'
   ) {
     invalidateEpisodeScoped(params)
+    return
+  }
+  if (params.targetType === 'ProjectEditStylePreview') {
+    invalidateEditFirstStylePreview(params)
     return
   }
   if (params.targetType === 'ProjectEpisode') {
