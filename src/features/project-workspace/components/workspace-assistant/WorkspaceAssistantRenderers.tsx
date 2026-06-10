@@ -92,7 +92,9 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
         : data.reason === 'repeated_tool_call'
           ? t('cards.repeatedToolCall')
           : t('cards.toolErrorBoundary')
-  const detail = data.reason === 'step_cap'
+  const detail = data.reason === 'awaiting_user_confirmation'
+    ? null
+    : data.reason === 'step_cap'
     ? t('cards.stepUsage', { stepCount: data.stepCount, maxSteps: data.maxSteps })
     : data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTaskDetail', {
@@ -100,11 +102,7 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
           tasks: data.taskIds.length > 0 ? data.taskIds.join(', ') : t('cards.unknownTask'),
           phases: data.phases.length > 0 ? data.phases.join(', ') : t('cards.none'),
         })
-      : data.reason === 'awaiting_user_confirmation'
-        ? t('cards.awaitingUserConfirmationDetail', {
-            operations: data.operationIds.join(', '),
-          })
-        : data.reason === 'repeated_tool_call'
+      : data.reason === 'repeated_tool_call'
           ? t('cards.repeatedToolCallDetail', {
               tool: data.toolName,
               hash: data.argsHash,
@@ -117,7 +115,7 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
     <details className="group border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{title} · {detail}</span>
+        <span className="min-w-0 truncate">{detail ? `${title} · ${detail}` : title}</span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="ml-5 mt-1 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.reason', { reason: data.reason })}</div>
@@ -205,21 +203,13 @@ export function ConfirmationActionCard(props: {
 }) {
   const t = useTranslations('assistantAgent')
   return (
-    <div className="rounded-2xl border border-[var(--glass-tone-warn-fg)]/30 bg-[var(--glass-bg-muted)]/70 p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="text-sm font-medium text-[var(--glass-text-primary)]">{t('cards.confirmationRequired')}</div>
-      <div className="mt-1">{props.summary}</div>
-      <div className="mt-2 rounded-xl bg-[var(--glass-bg-surface)]/70 px-3 py-2 font-mono text-[10px] text-[var(--glass-text-tertiary)]">
-        {t('cards.operationLabel')}: {props.operationId}
-      </div>
-      {props.argsHint ? (
-        <pre className="mt-2 overflow-x-auto rounded-xl bg-[var(--glass-bg-surface)]/70 px-3 py-2 text-[10px] text-[var(--glass-text-tertiary)]">
-          {JSON.stringify(props.argsHint, null, 2)}
-        </pre>
-      ) : null}
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{t('cards.confirmationRequired')}</div>
+      <div className="mt-1 leading-5">{props.summary}</div>
       <div className="mt-3 flex gap-2">
         <button
           type="button"
-          className="flex-1 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white"
+          className="flex-1 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)]"
           onClick={() => { void props.onConfirm() }}
           disabled={props.confirmPending}
         >
@@ -227,7 +217,7 @@ export function ConfirmationActionCard(props: {
         </button>
         <button
           type="button"
-          className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)]"
+          className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"
           onClick={() => { void props.onCancel() }}
           disabled={props.cancelPending}
         >
