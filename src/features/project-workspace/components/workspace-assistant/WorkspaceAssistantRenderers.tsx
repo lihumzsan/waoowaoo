@@ -37,6 +37,7 @@ import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-
 import { TASK_TYPE } from '@/lib/task/types'
 import { apiFetch } from '@/lib/api-fetch'
 import type { ProjectEditScreenplay, ProjectEditStylePreview } from '@/types/project'
+import { queryKeys } from '@/lib/query/keys'
 import { dispatchWorkspaceAssistantMessage } from './assistant-send-event'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 
@@ -675,7 +676,7 @@ interface EditStylePreviewScreenplayResponse {
 }
 
 function isEditStylePreviewChoiceReady(preview: ProjectEditStylePreview | null): preview is ProjectEditStylePreview {
-  return Boolean(preview?.id && preview.imageUrl && preview.status === 'completed')
+  return Boolean(preview?.id && preview.imageUrl && (preview.status === 'completed' || preview.status === 'confirmed'))
 }
 
 function isEditStylePreviewTerminal(preview: ProjectEditStylePreview | null): boolean {
@@ -716,7 +717,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     enabled: taskTargets.length > 0,
   }).byKey
   const screenplayQuery = useQuery({
-    queryKey: ['workspace-assistant-style-previews', data.projectId, data.episodeId, data.screenplayId],
+    queryKey: queryKeys.project.editScreenplay(data.projectId, data.episodeId),
     queryFn: async (): Promise<EditStylePreviewScreenplayResponse> => {
       const response = await apiFetch(`/api/projects/${data.projectId}/edit-script/screenplay?episodeId=${encodeURIComponent(data.episodeId)}`)
       if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_SCREENPLAY_FETCH_FAILED')
@@ -736,8 +737,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     const previews = screenplayQuery.data?.screenplay?.stylePreviews ?? []
     return new Map(previews.map((preview) => [preview.id, preview]))
   }, [screenplayQuery.data?.screenplay?.stylePreviews])
-  const hasConfirmedStylePreview = (screenplayQuery.data?.screenplay?.stylePreviews ?? [])
-    .some((preview) => preview.status === 'confirmed')
 
   const handleSelectStylePreview = async (
     item: EditStylePreviewGenerationPartData['items'][number],
@@ -774,8 +773,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       return next
     })
   }
-
-  if (hasConfirmedStylePreview) return null
 
   return (
     <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
@@ -852,7 +849,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                     {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
                   </div>
                 ) : null}
-                {ready ? (
+                {ready && preview.status !== 'confirmed' ? (
                   <button
                     type="button"
                     className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/90 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"

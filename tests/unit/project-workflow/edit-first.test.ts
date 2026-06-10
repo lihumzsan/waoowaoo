@@ -67,6 +67,34 @@ describe('edit-first workflow state', () => {
     expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
   })
 
+  it('allows choosing a completed style preview when sibling style preview tasks failed', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'style_preview_generating',
+      stylePreviewCount: 2,
+      completedStylePreviewCount: 1,
+      failedStylePreviewCount: 1,
+    }))
+
+    expect(state.stage).toBe('needs_style_choice')
+    expect(state.blocking.kind).toBe('needs_user_choice')
+    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+  })
+
+  it('regenerates style previews instead of screenplay when all style preview tasks failed', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'style_preview_generating',
+      stylePreviewCount: 2,
+      failedStylePreviewCount: 2,
+    }))
+
+    expect(state.stage).toBe('failed')
+    expect(state.blocking.reason).toBe('all style preview generation tasks failed')
+    expect(state.nextAction?.operationId).toBe('generate_edit_style_previews')
+    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+  })
+
   it('allows only director decoupage after screenplay is ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
@@ -80,6 +108,20 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.operationId).toBe('generate_edit_director_decoupage')
     expect(state.allowedOperationIds).toEqual(['generate_edit_director_decoupage'])
     expect(state.allowedOperationIds).not.toContain('revise_edit_screenplay')
+  })
+
+  it('ignores failed sibling style previews after one style preview is confirmed', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      stylePreviewCount: 2,
+      confirmedStylePreviewCount: 1,
+      failedStylePreviewCount: 1,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_director_decoupage')
+    expect(state.nextAction?.operationId).toBe('generate_edit_director_decoupage')
+    expect(state.allowedOperationIds).toEqual(['generate_edit_director_decoupage'])
   })
 
   it('moves to edit core table only after director decoupage is ready', () => {

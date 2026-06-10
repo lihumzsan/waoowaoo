@@ -140,11 +140,29 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.screenplayStatus === 'failed' || snapshot.failedStylePreviewCount > 0) {
+  if (snapshot.screenplayStatus === 'failed') {
     return state({
       stage: 'failed',
-      blocking: { kind: 'failed', reason: 'screenplay or style preview generation failed' },
+      blocking: { kind: 'failed', reason: 'screenplay generation failed' },
       nextAction: confirmationAction('generate_edit_screenplay', 'Regenerate screenplay'),
+    })
+  }
+
+  if (snapshot.failedStylePreviewCount > 0 && snapshot.confirmedStylePreviewCount === 0 && snapshot.completedStylePreviewCount === 0) {
+    const nextAction = confirmationAction('generate_edit_style_previews', 'Regenerate style previews')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'all style preview generation tasks failed' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
+  if (snapshot.screenplayStatus === 'style_preview_generating' && snapshot.completedStylePreviewCount > 0 && snapshot.failedStylePreviewCount > 0) {
+    return state({
+      stage: 'needs_style_choice',
+      blocking: { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' },
+      allowedOperationIds: ['generate_edit_style_previews'],
     })
   }
 

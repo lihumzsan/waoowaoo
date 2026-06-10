@@ -39,7 +39,7 @@ import {
   syncWorkspaceResourceChanges,
   syncWorkspaceResourceChangesFromWriteResult,
 } from '@/lib/query/resource-change-sync'
-import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
+import { useConfirmProjectEditStylePreview, useProjectEditScreenplay } from '@/lib/query/hooks'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -474,6 +474,13 @@ export default function WorkspaceAssistantPanel({
   const activeStylePreviewGenerationCard = useMemo(() => {
     return findActiveStylePreviewGenerationCard(assistantRuntime.messages)
   }, [assistantRuntime.messages])
+  const activeStylePreviewScreenplay = useProjectEditScreenplay(
+    projectId,
+    activeStylePreviewGenerationCard?.data.episodeId ?? null,
+  )
+  const activeStylePreviewConfirmed = (activeStylePreviewScreenplay.data?.stylePreviews ?? [])
+    .some((preview) => preview.status === 'confirmed')
+  const shouldDockStylePreviewGenerationCard = Boolean(activeStylePreviewGenerationCard && !activeStylePreviewConfirmed)
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
       const next = new Set(current)
@@ -486,7 +493,7 @@ export default function WorkspaceAssistantPanel({
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
     hideChoiceCards: true,
-    hideStylePreviewGenerationCards: true,
+    hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSendChoiceMessage: assistantRuntime.sendHiddenMessage,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
@@ -590,7 +597,7 @@ export default function WorkspaceAssistantPanel({
                       )}
                     </ThreadPrimitive.Messages>
                     <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
-                    {activeStylePreviewGenerationCard ? (
+                    {activeStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
                       <EditStylePreviewGenerationDataCard
                         type="data"
                         name="edit-style-preview-generation"
