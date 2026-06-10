@@ -104,18 +104,27 @@ vi.mock('@/lib/operations/submit-operation-task', () => submitOperationTaskMock)
 
 const choiceCardMock = vi.hoisted(() => ({
   buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
-    cardId: 'edit-first-duration',
-    title: '选择短片时长',
-    groups: [{
-      key: 'durationSeconds',
-      label: '时长',
-      required: true,
-      options: [{ value: '60', label: '60 秒' }],
-    }],
+    cardId: 'edit-first-duration-aspect-ratio',
+    title: '选择短片时长和画面比例',
+    groups: [
+      {
+        key: 'durationSeconds',
+        label: '时长',
+        required: true,
+        options: [{ value: '60', label: '60 秒' }],
+      },
+      {
+        key: 'aspectRatio',
+        label: '画面比例',
+        required: true,
+        options: [{ value: '16:9', label: '16:9' }],
+      },
+    ],
     submitLabel: '继续生成',
     submit: {
-      kind: 'send_message',
-      messageTemplate: '我选择 {durationSeconds} 秒，请继续。',
+      kind: 'set_project_video_ratio_and_send_message',
+      projectId: 'project-1',
+      messageTemplate: '我选择 {durationSeconds} 秒和 {aspectRatio} 画面比例，请继续。',
     },
   })),
 }))
@@ -128,6 +137,12 @@ vi.mock('@/lib/project-agent/choice-card', () => ({
     const value = Number(match[1])
     const unit = match[2] ?? ''
     return /分钟|minute|minutes|min|mins/i.test(unit) ? value * 60 : value
+  },
+  readEditFirstAspectRatio: (text: string) => {
+    if (text.includes('9:16')) return '9:16'
+    if (text.includes('16:9')) return '16:9'
+    if (text.includes('21:9')) return '21:9'
+    return null
   },
 }))
 
@@ -195,7 +210,7 @@ describe('edit-script operations', () => {
   it('passes context episode and locale into screenplay generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds short film',
+      prompt: 'make a 60 seconds 16:9 short film',
       confirmed: true,
     })
 
@@ -206,14 +221,14 @@ describe('edit-script operations', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      prompt: 'make a 60 seconds short film',
+      prompt: 'make a 60 seconds 16:9 short film',
     }))
   })
 
   it('does not forward free-form artStyle from agent screenplay generation into project style config', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds cyberpunk short film',
+      prompt: 'make a 60 seconds 16:9 cyberpunk short film',
       confirmed: true,
       artStyle: 'cyberpunk',
     })
@@ -221,7 +236,7 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a 60 seconds cyberpunk short film',
+      prompt: 'make a 60 seconds 16:9 cyberpunk short film',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
@@ -231,7 +246,7 @@ describe('edit-script operations', () => {
   it('does not forward aspect ratio from agent screenplay generation', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds vertical short film',
+      prompt: 'make a 60 seconds 9:16 vertical short film',
       confirmed: true,
       videoRatio: '9:16',
     })
@@ -239,7 +254,7 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a 60 seconds vertical short film',
+      prompt: 'make a 60 seconds 9:16 vertical short film',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       videoRatio: expect.anything(),
@@ -260,9 +275,19 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
 
     await expect(operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 180 seconds short film',
+      prompt: 'make a 180 seconds 16:9 short film',
       confirmed: true,
     })).rejects.toThrow('EDIT_FIRST_DURATION_EXCEEDS_LIMIT:durationSeconds=180:maxSeconds=120')
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+  })
+
+  it('rejects screenplay generation when the prompt does not include explicit aspect ratio', async () => {
+    const operations = createEditScriptOperations()
+
+    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
+      prompt: 'make a 60 seconds short film',
+      confirmed: true,
+    })).rejects.toThrow('EDIT_FIRST_ASPECT_RATIO_REQUIRED')
     expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
   })
 
@@ -270,7 +295,7 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
     const writerEvents: Record<string, unknown>[] = []
     const result = await operations.request_edit_first_choice.execute(buildContext(createTestWriter(writerEvents)), {
-      choiceType: 'duration',
+      choiceType: 'duration_and_aspect_ratio',
     })
 
     expect(workflowMock.resolveEditFirstWorkflowState).toHaveBeenCalledWith({
@@ -283,20 +308,20 @@ describe('edit-script operations', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      choiceType: 'duration',
+      choiceType: 'duration_and_aspect_ratio',
     }))
     expect(writerEvents).toEqual([
       expect.objectContaining({
         type: 'data-assistant-choice-card',
         data: expect.objectContaining({
-          cardId: 'edit-first-duration',
+          cardId: 'edit-first-duration-aspect-ratio',
         }),
       }),
     ])
     expect(result).toEqual({
       emitted: true,
-      choiceType: 'duration',
-      cardId: 'edit-first-duration',
+      choiceType: 'duration_and_aspect_ratio',
+      cardId: 'edit-first-duration-aspect-ratio',
       workflowStage: 'ready_to_generate_screenplay',
     })
   })

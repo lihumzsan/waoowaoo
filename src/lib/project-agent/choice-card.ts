@@ -6,11 +6,13 @@ import type {
   ProjectAgentChoiceCardGroup,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 
 const STYLE_PREVIEW_COUNT = 3
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
+const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
-export type EditFirstChoiceType = 'duration' | 'style_and_aspect_ratio'
+export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'style'
 
 export function readEditFirstDurationSeconds(text: string): number | null {
   const normalized = text.trim().toLowerCase()
@@ -35,47 +37,61 @@ export function editFirstUserTextHasDuration(text: string): boolean {
   return readEditFirstDurationSeconds(text) !== null
 }
 
-function buildDurationChoiceCard(locale: ProjectAgentLocale): ProjectAgentChoiceCardPartData {
+export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | null {
+  const normalized = text.trim()
+  const ratio = EDIT_FIRST_ASPECT_RATIOS.find((candidate) => normalized.includes(candidate))
+  return ratio ?? null
+}
+
+function buildDurationAndAspectRatioChoiceCard(params: {
+  locale: ProjectAgentLocale
+  projectId: string
+}): ProjectAgentChoiceCardPartData {
+  const { locale, projectId } = params
   const isEnglish = locale === 'en'
   return {
-    cardId: 'edit-first-duration',
-    title: isEnglish ? 'Choose Short Film Duration' : '选择短片时长',
+    cardId: 'edit-first-duration-aspect-ratio',
+    title: isEnglish ? 'Choose Duration and Aspect Ratio' : '选择短片时长和画面比例',
     description: isEnglish
-      ? 'The current test launch supports edit-first videos up to 120 seconds.'
-      : '当前测试上线支持生成两分钟以内的剪辑先行短片。',
-    groups: [{
-      key: 'durationSeconds',
-      label: isEnglish ? 'Duration' : '时长',
-      required: true,
-      options: [
-        {
-          value: '30',
-          label: isEnglish ? '30 seconds' : '30 秒',
-          description: isEnglish ? 'Fast rhythm, minimal story beat.' : '节奏最快，只保留核心情节。',
-        },
-        {
-          value: '60',
-          label: isEnglish ? '60 seconds' : '60 秒',
-          description: isEnglish ? 'Balanced one-minute short.' : '一分钟短片，叙事和节奏较均衡。',
-        },
-        {
-          value: '90',
-          label: isEnglish ? '90 seconds' : '90 秒',
-          description: isEnglish ? 'More room for atmosphere and setup.' : '有更多铺垫和氛围空间。',
-        },
-        {
-          value: '120',
-          label: isEnglish ? '120 seconds' : '120 秒',
-          description: isEnglish ? 'Maximum duration for this test launch.' : '当前测试上线的最长时长。',
-        },
-      ],
-    }],
+      ? 'Choose both before screenplay generation. The current test launch supports edit-first videos up to 120 seconds.'
+      : '生成剧本前先同时确认这两项。当前测试上线支持生成两分钟以内的剪辑先行短片。',
+    groups: [
+      {
+        key: 'durationSeconds',
+        label: isEnglish ? 'Duration' : '时长',
+        required: true,
+        options: [
+          {
+            value: '30',
+            label: isEnglish ? '30 seconds' : '30 秒',
+            description: isEnglish ? 'Fast rhythm, minimal story beat.' : '节奏最快，只保留核心情节。',
+          },
+          {
+            value: '60',
+            label: isEnglish ? '60 seconds' : '60 秒',
+            description: isEnglish ? 'Balanced one-minute short.' : '一分钟短片，叙事和节奏较均衡。',
+          },
+          {
+            value: '90',
+            label: isEnglish ? '90 seconds' : '90 秒',
+            description: isEnglish ? 'More room for atmosphere and setup.' : '有更多铺垫和氛围空间。',
+          },
+          {
+            value: '120',
+            label: isEnglish ? '120 seconds' : '120 秒',
+            description: isEnglish ? 'Maximum duration for this test launch.' : '当前测试上线的最长时长。',
+          },
+        ],
+      },
+      buildAspectRatioGroup(locale),
+    ],
     submitLabel: isEnglish ? 'Continue' : '继续生成',
     submit: {
-      kind: 'send_message',
+      kind: 'set_project_video_ratio_and_send_message',
+      projectId,
       messageTemplate: isEnglish
-        ? 'I choose {durationSeconds} seconds. Continue generating the edit-first screenplay with this duration.'
-        : '我选择 {durationSeconds} 秒，请以这个时长继续生成剪辑先行剧本。',
+        ? 'I choose {durationSeconds} seconds and aspect ratio {aspectRatio}. Continue generating the edit-first screenplay with these choices.'
+        : '我选择 {durationSeconds} 秒和 {aspectRatio} 画面比例，请以这些选择继续生成剪辑先行剧本。',
     },
   }
 }
@@ -112,36 +128,54 @@ async function buildStyleAndRatioChoiceCard(params: {
   episodeId: string
   locale: ProjectAgentLocale
 }): Promise<ProjectAgentChoiceCardPartData> {
-  const screenplay = await prisma.projectEditScreenplay.findFirst({
-    where: {
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      project: {
+  const [project, screenplay] = await Promise.all([
+    prisma.project.findFirst({
+      where: {
+        id: params.projectId,
         userId: params.userId,
       },
-    },
-    select: {
-      id: true,
-      status: true,
-      stylePreviews: {
-        where: {
-          status: {
-            in: ['completed', 'confirmed'],
-          },
-        },
-        orderBy: {
-          styleKey: 'asc',
-        },
-        select: {
-          id: true,
-          styleKey: true,
-          title: true,
-          summary: true,
-          imageKey: true,
+      select: {
+        videoRatio: true,
+      },
+    }),
+    prisma.projectEditScreenplay.findFirst({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        project: {
+          userId: params.userId,
         },
       },
-    },
-  })
+      select: {
+        id: true,
+        status: true,
+        stylePreviews: {
+          where: {
+            status: {
+              in: ['completed', 'confirmed'],
+            },
+          },
+          orderBy: {
+            styleKey: 'asc',
+          },
+          select: {
+            id: true,
+            styleKey: true,
+            title: true,
+            summary: true,
+            imageKey: true,
+          },
+        },
+      },
+    }),
+  ])
+  if (!project) {
+    throw new Error('EDIT_FIRST_CHOICE_PROJECT_NOT_FOUND')
+  }
+  const selectedAspectRatio = EDIT_FIRST_ASPECT_RATIOS.find((ratio) => ratio === project.videoRatio)
+  if (!selectedAspectRatio) {
+    throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: call request_edit_first_choice with choiceType=duration_and_aspect_ratio before style choice')
+  }
   if (!screenplay) {
     throw new Error('EDIT_FIRST_CHOICE_SCREENPLAY_NOT_FOUND')
   }
@@ -154,11 +188,11 @@ async function buildStyleAndRatioChoiceCard(params: {
 
   const isEnglish = params.locale === 'en'
   return {
-    cardId: `edit-first-style-ratio:${screenplay.id}`,
-    title: isEnglish ? 'Choose Visual Style and Aspect Ratio' : '选择视觉风格和画面比例',
+    cardId: `edit-first-style:${screenplay.id}`,
+    title: isEnglish ? 'Choose Visual Style' : '选择视觉风格',
     description: isEnglish
-      ? 'Choose one style candidate and one output aspect ratio before generating the director decoupage.'
-      : '请先选择一个风格候选和一个输出画面比例，再继续生成导演拆镜。',
+      ? `Choose one style candidate before generating the director decoupage. The selected aspect ratio is ${selectedAspectRatio}.`
+      : `请先选择一个风格候选，再继续生成导演拆镜。已选画面比例为 ${selectedAspectRatio}。`,
     groups: [
       {
         key: 'stylePreviewId',
@@ -172,16 +206,16 @@ async function buildStyleAndRatioChoiceCard(params: {
           meta: preview.styleKey,
         })),
       },
-      buildAspectRatioGroup(params.locale),
     ],
     submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
     submit: {
       kind: 'confirm_edit_style_preview',
       projectId: params.projectId,
       episodeId: params.episodeId,
+      aspectRatio: selectedAspectRatio,
       successMessageTemplate: isEnglish
-        ? 'Selected style {styleLabel} and aspect ratio {aspectRatio}. Read the latest project state and continue with the immediate next step.'
-        : '已选择风格 {styleLabel} 和画面比例 {aspectRatio}，请读取最新项目状态并继续当前唯一下一步。',
+        ? `Selected style {stylePreviewIdLabel} and aspect ratio ${selectedAspectRatio}. Read the latest project state and continue with the immediate next step.`
+        : `已选择风格 {stylePreviewIdLabel} 和画面比例 ${selectedAspectRatio}，请读取最新项目状态并继续当前唯一下一步。`,
     },
   }
 }
@@ -194,18 +228,21 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   workflow: EditFirstWorkflowState
   choiceType: EditFirstChoiceType
 }): Promise<ProjectAgentChoiceCardPartData> {
-  if (params.choiceType === 'duration') {
+  if (params.choiceType === 'duration_and_aspect_ratio') {
     if (params.workflow.stage !== 'ready_to_generate_screenplay') {
-      throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration:stage=${params.workflow.stage}`)
+      throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=${params.workflow.stage}`)
     }
-    return buildDurationChoiceCard(params.locale)
+    return buildDurationAndAspectRatioChoiceCard({
+      locale: params.locale,
+      projectId: params.projectId,
+    })
   }
 
   if (params.workflow.stage === 'style_preview_generating') {
     throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   }
   if (params.workflow.stage !== 'needs_style_choice') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style_and_aspect_ratio:stage=${params.workflow.stage}`)
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:stage=${params.workflow.stage}`)
   }
   return await buildStyleAndRatioChoiceCard({
     projectId: params.projectId,

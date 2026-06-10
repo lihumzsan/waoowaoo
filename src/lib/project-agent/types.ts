@@ -122,9 +122,15 @@ export type ProjectAgentChoiceCardSubmit =
     messageTemplate: string
   }
   | {
+    kind: 'set_project_video_ratio_and_send_message'
+    projectId: string
+    messageTemplate: string
+  }
+  | {
     kind: 'confirm_edit_style_preview'
     projectId: string
     episodeId: string
+    aspectRatio?: '9:16' | '16:9' | '21:9'
     successMessageTemplate: string
   }
 

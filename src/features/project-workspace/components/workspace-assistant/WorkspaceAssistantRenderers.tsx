@@ -242,8 +242,14 @@ function isEditScriptVideoRatio(value: string | undefined): value is EditScriptV
   return typeof value === 'string' && EDIT_SCRIPT_VIDEO_RATIOS.includes(value as EditScriptVideoRatio)
 }
 
-function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardPartData> & {
+export function AssistantChoiceCardView(props: {
+  data: ProjectAgentChoiceCardPartData
   onSendChoiceMessage: (message: string) => Promise<void>
+  onSetProjectVideoRatioChoice: (params: {
+    projectId: string
+    aspectRatio: EditScriptVideoRatio
+    message: string
+  }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
@@ -251,13 +257,17 @@ function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardP
     aspectRatio: EditScriptVideoRatio
     successMessage: string
   }) => Promise<void>
+  onSubmitted?: (cardId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
-  const card: ProjectAgentChoiceCardPartData = props.data
+  const card = props.data
   const [selections, setSelections] = useState<ChoiceCardSelections>({})
+  const [activeGroupIndex, setActiveGroupIndex] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const ready = isChoiceCardSubmitReady(card.groups, selections)
+  const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
+  const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
 
   const handleSubmit = async () => {
     if (!ready || submitting) return
@@ -268,9 +278,21 @@ function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardP
         await props.onSendChoiceMessage(
           interpolateChoiceCardTemplate(card.submit.messageTemplate, selections, card.groups),
         )
+        props.onSubmitted?.(card.cardId)
+      } else if (card.submit.kind === 'set_project_video_ratio_and_send_message') {
+        const aspectRatio = selections.aspectRatio
+        if (!isEditScriptVideoRatio(aspectRatio)) {
+          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_ASPECT_RATIO')
+        }
+        await props.onSetProjectVideoRatioChoice({
+          projectId: card.submit.projectId,
+          aspectRatio,
+          message: interpolateChoiceCardTemplate(card.submit.messageTemplate, selections, card.groups),
+        })
+        props.onSubmitted?.(card.cardId)
       } else {
         const stylePreviewId = selections.stylePreviewId
-        const aspectRatio = selections.aspectRatio
+        const aspectRatio = card.submit.aspectRatio ?? selections.aspectRatio
         if (!stylePreviewId || !isEditScriptVideoRatio(aspectRatio)) {
           throw new Error('ASSISTANT_CHOICE_CARD_INVALID_STYLE_SELECTION')
         }
@@ -285,6 +307,7 @@ function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardP
             card.groups,
           ),
         })
+        props.onSubmitted?.(card.cardId)
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
@@ -295,55 +318,65 @@ function AssistantChoiceCard(props: DataMessagePartProps<ProjectAgentChoiceCardP
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)]/70 p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="text-sm font-medium text-[var(--glass-text-primary)]">{card.title}</div>
-      {card.description ? <div className="mt-1 leading-5">{card.description}</div> : null}
-      <div className="mt-3 space-y-3">
-        {card.groups.map((group) => (
-          <div key={group.key} className="space-y-2">
-            <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{group.label}</div>
-            <div className="space-y-2">
-              {group.options.map((option) => {
-                const selected = selections[group.key] === option.value
-                return (
-                  <button
-                    key={`${group.key}:${option.value}`}
-                    type="button"
-                    className={`w-full overflow-hidden rounded-xl border text-left transition ${selected ? 'border-slate-950 bg-white ring-1 ring-slate-950' : 'border-[var(--glass-stroke-base)] bg-white/70 hover:border-slate-300'}`}
-                    onClick={() => setSelections((current) => ({
-                      ...current,
-                      [group.key]: option.value,
-                    }))}
-                    disabled={submitting}
-                  >
-                    {option.imageUrl ? (
-                      <Image
-                        src={option.imageUrl}
-                        alt={option.label}
-                        width={640}
-                        height={360}
-                        unoptimized
-                        className="h-32 w-full object-cover"
-                      />
-                    ) : null}
-                    <div className="space-y-1 p-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{option.label}</span>
-                        {selected ? <AppIcon name="check" className="h-4 w-4 shrink-0 text-slate-950" /> : null}
-                      </div>
-                      {option.description ? (
-                        <div className="line-clamp-3 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
-                      ) : null}
-                      {option.meta ? (
-                        <div className="text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
-                      ) : null}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1 text-sm font-medium text-[var(--glass-text-primary)]">{card.title}</div>
+        {progressLabel ? (
+          <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
+            {progressLabel}
           </div>
-        ))}
+        ) : null}
       </div>
+      {card.description ? <div className="mt-1 leading-5">{card.description}</div> : null}
+      {activeGroup ? (
+        <div className="mt-3 space-y-2">
+          <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
+          <div className="space-y-2">
+            {activeGroup.options.map((option) => {
+              const selected = selections[activeGroup.key] === option.value
+              return (
+                <button
+                  key={`${activeGroup.key}:${option.value}`}
+                  type="button"
+                  className={`w-full overflow-hidden rounded-xl border text-left transition ${selected ? 'border-slate-950 bg-white ring-1 ring-slate-950' : 'border-[var(--glass-stroke-base)] bg-white/70 hover:border-slate-300'}`}
+                  onClick={() => {
+                    setSelections((current) => ({
+                      ...current,
+                      [activeGroup.key]: option.value,
+                    }))
+                    if (activeGroupIndex < card.groups.length - 1) {
+                      setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
+                    }
+                  }}
+                  disabled={submitting}
+                >
+                  {option.imageUrl ? (
+                    <Image
+                      src={option.imageUrl}
+                      alt={option.label}
+                      width={640}
+                      height={360}
+                      unoptimized
+                      className="h-32 w-full object-cover"
+                    />
+                  ) : null}
+                  <div className="space-y-1 p-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{option.label}</span>
+                      {selected ? <AppIcon name="check" className="h-4 w-4 shrink-0 text-slate-950" /> : null}
+                    </div>
+                    {option.description ? (
+                      <div className="line-clamp-3 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                    ) : null}
+                    {option.meta ? (
+                      <div className="text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                    ) : null}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
       <button
         type="button"
@@ -598,7 +631,13 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   onConfirmOperation: (operationId: string, argsHint?: Record<string, unknown> | null) => Promise<void>
   onCancelOperation: (operationId: string) => Promise<void>
   confirmationSubmittingKey: string | null
+  hideChoiceCards?: boolean
   onSendChoiceMessage: (message: string) => Promise<void>
+  onSetProjectVideoRatioChoice: (params: {
+    projectId: string
+    aspectRatio: EditScriptVideoRatio
+    message: string
+  }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
@@ -612,7 +651,9 @@ export function useWorkspaceAssistantMessagePartComponents({
   onConfirmOperation,
   onCancelOperation,
   confirmationSubmittingKey,
+  hideChoiceCards = false,
   onSendChoiceMessage,
+  onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
@@ -625,13 +666,16 @@ export function useWorkspaceAssistantMessagePartComponents({
       by_name: {
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
-        'assistant-choice-card': (props) => (
-          <AssistantChoiceCard
-            {...props}
-            onSendChoiceMessage={onSendChoiceMessage}
-            onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
-          />
-        ),
+        'assistant-choice-card': hideChoiceCards
+          ? HiddenRuntimeContextDataCard
+          : (props) => (
+              <AssistantChoiceCardView
+                data={props.data}
+                onSendChoiceMessage={onSendChoiceMessage}
+                onSetProjectVideoRatioChoice={onSetProjectVideoRatioChoice}
+                onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
+              />
+            ),
         'project-phase': ProjectPhaseDataCard,
         'confirmation-request': (props) => (
           <InlineConfirmationRequestDataCard
@@ -649,9 +693,11 @@ export function useWorkspaceAssistantMessagePartComponents({
     },
   }), [
     confirmationSubmittingKey,
+    hideChoiceCards,
     onCancelOperation,
     onConfirmEditStylePreviewChoice,
     onConfirmOperation,
+    onSetProjectVideoRatioChoice,
     onSendChoiceMessage,
   ])
 }

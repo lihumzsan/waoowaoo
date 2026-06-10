@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
 const prismaState = vi.hoisted(() => ({
-  findFirst: vi.fn(),
+  projectFindFirst: vi.fn(),
+  screenplayFindFirst: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    project: {
+      findFirst: prismaState.projectFindFirst,
+    },
     projectEditScreenplay: {
-      findFirst: prismaState.findFirst,
+      findFirst: prismaState.screenplayFindFirst,
     },
   },
 }))
@@ -20,6 +24,7 @@ vi.mock('@/lib/storage', () => ({
 import {
   buildEditFirstAssistantChoiceCard,
   editFirstUserTextHasDuration,
+  readEditFirstAspectRatio,
   readEditFirstDurationSeconds,
 } from '@/lib/project-agent/choice-card'
 
@@ -39,7 +44,8 @@ function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowStat
 describe('edit-first assistant choice cards', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaState.findFirst.mockReset()
+    prismaState.projectFindFirst.mockReset()
+    prismaState.screenplayFindFirst.mockReset()
   })
 
   it('detects explicit duration in user text', () => {
@@ -49,46 +55,58 @@ describe('edit-first assistant choice cards', () => {
     expect(readEditFirstDurationSeconds('我选择一分钟')).toBe(60)
     expect(readEditFirstDurationSeconds('make it 2 minutes')).toBe(120)
     expect(readEditFirstDurationSeconds('make it 180 seconds')).toBe(180)
+    expect(readEditFirstAspectRatio('我选择 16:9')).toBe('16:9')
   })
 
-  it('builds a duration card when the model requests duration at the screenplay stage', async () => {
+  it('builds a duration and aspect-ratio card when the model requests it at the screenplay stage', async () => {
     const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('ready_to_generate_screenplay'),
-      choiceType: 'duration',
+      choiceType: 'duration_and_aspect_ratio',
     })
 
     expect(card).toMatchObject({
-      cardId: 'edit-first-duration',
-      title: '选择短片时长',
-      groups: [{
-        key: 'durationSeconds',
-        required: true,
-      }],
+      cardId: 'edit-first-duration-aspect-ratio',
+      title: '选择短片时长和画面比例',
+      groups: [
+        {
+          key: 'durationSeconds',
+          required: true,
+        },
+        {
+          key: 'aspectRatio',
+          required: true,
+        },
+      ],
       submit: {
-        kind: 'send_message',
+        kind: 'set_project_video_ratio_and_send_message',
+        projectId: 'project-1',
       },
     })
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['30', '60', '90', '120'])
-    expect(prismaState.findFirst).not.toHaveBeenCalled()
+    expect(card.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
+    expect(prismaState.screenplayFindFirst).not.toHaveBeenCalled()
   })
 
-  it('rejects duration cards outside the screenplay generation stage', async () => {
+  it('rejects duration and aspect-ratio cards outside the screenplay generation stage', async () => {
     await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
-      choiceType: 'duration',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration:stage=needs_style_choice')
+      choiceType: 'duration_and_aspect_ratio',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=needs_style_choice')
   })
 
-  it('builds a style and aspect-ratio card only after three style previews are ready', async () => {
-    prismaState.findFirst.mockResolvedValueOnce({
+  it('builds a style card only after three style previews are ready', async () => {
+    prismaState.projectFindFirst.mockResolvedValueOnce({
+      videoRatio: '16:9',
+    })
+    prismaState.screenplayFindFirst.mockResolvedValueOnce({
       id: 'screenplay-1',
       status: 'style_preview_ready',
       stylePreviews: [
@@ -122,10 +140,10 @@ describe('edit-first assistant choice cards', () => {
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
-      choiceType: 'style_and_aspect_ratio',
+      choiceType: 'style',
     })
 
-    expect(prismaState.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaState.screenplayFindFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         projectId: 'project-1',
         episodeId: 'episode-1',
@@ -135,14 +153,10 @@ describe('edit-first assistant choice cards', () => {
       }),
     }))
     expect(card).toMatchObject({
-      cardId: 'edit-first-style-ratio:screenplay-1',
+      cardId: 'edit-first-style:screenplay-1',
       groups: [
         {
           key: 'stylePreviewId',
-          required: true,
-        },
-        {
-          key: 'aspectRatio',
           required: true,
         },
       ],
@@ -150,21 +164,22 @@ describe('edit-first assistant choice cards', () => {
         kind: 'confirm_edit_style_preview',
         projectId: 'project-1',
         episodeId: 'episode-1',
+        aspectRatio: '16:9',
       },
     })
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b', 'style-c'])
     expect(card.groups[0]?.options[0]?.imageUrl).toBe('/signed/a.png')
-    expect(card.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
+    expect(card.groups).toHaveLength(1)
   })
 
-  it('rejects style and aspect-ratio cards while style previews are still generating', async () => {
+  it('rejects style cards while style previews are still generating', async () => {
     await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
       workflow: workflow('style_preview_generating'),
-      choiceType: 'style_and_aspect_ratio',
+      choiceType: 'style',
     })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   })
 })

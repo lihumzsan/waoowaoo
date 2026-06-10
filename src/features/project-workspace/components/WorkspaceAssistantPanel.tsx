@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import type { UIMessage } from 'ai'
@@ -9,6 +9,7 @@ import {
   ThreadPrimitive,
 } from '@assistant-ui/react'
 import {
+  AssistantChoiceCardView,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
@@ -44,6 +45,8 @@ import {
 } from '@/lib/query/resource-change-sync'
 import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 
@@ -114,6 +117,27 @@ function readAssistantToolOutput(part: unknown): unknown | null {
   return 'output' in part ? part.output : null
 }
 
+function isProjectAgentChoiceCardPartData(value: unknown): value is ProjectAgentChoiceCardPartData {
+  if (!isRecord(value)) return false
+  return typeof value.cardId === 'string'
+    && typeof value.title === 'string'
+    && Array.isArray(value.groups)
+    && typeof value.submitLabel === 'string'
+    && isRecord(value.submit)
+    && typeof value.submit.kind === 'string'
+}
+
+function readChoiceCardPart(part: unknown): ProjectAgentChoiceCardPartData | null {
+  if (!isRecord(part)) return null
+  if (part.type !== 'data-assistant-choice-card') return null
+  return isProjectAgentChoiceCardPartData(part.data) ? part.data : null
+}
+
+interface ActiveChoiceCard {
+  key: string
+  data: ProjectAgentChoiceCardPartData
+}
+
 function readStoredAssistantPanelWidth(): number {
   if (typeof window === 'undefined') return WORKSPACE_ASSISTANT_PANEL_WIDTH_PX
   const storedValue = window.localStorage.getItem(WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY)
@@ -162,6 +186,7 @@ export default function WorkspaceAssistantPanel({
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
   const consumedWaitFollowUpKeysRef = useRef<Set<string>>(new Set())
   const queuedAutoFollowUpRef = useRef<string[]>([])
+  const [dismissedChoiceCardKeys, setDismissedChoiceCardKeys] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     assistantRuntimeRef.current = assistantRuntime
   }, [assistantRuntime])
@@ -419,11 +444,61 @@ export default function WorkspaceAssistantPanel({
     })
     await assistantRuntime.sendMessage(params.successMessage)
   }
+  const handleSetProjectVideoRatioChoice = async (params: {
+    projectId: string
+    aspectRatio: EditScriptVideoRatio
+    message: string
+  }) => {
+    if (params.projectId !== projectId) {
+      throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
+    }
+    const response = await apiFetch(`/api/projects/${projectId}/config`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        videoRatio: params.aspectRatio,
+      }),
+    })
+    const payload: unknown = await response.json().catch(() => null)
+    if (!response.ok || (isRecord(payload) && payload.ok === false)) {
+      throw new Error(readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')))
+    }
+    await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+    if (episodeId) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+    }
+    await assistantRuntime.sendMessage(params.message)
+  }
+  const activeChoiceCard = useMemo(() => {
+    for (let messageIndex = assistantRuntime.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+      const message = assistantRuntime.messages[messageIndex]
+      if (!message || message.role !== 'assistant') continue
+      for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+        const card = readChoiceCardPart(message.parts[partIndex])
+        const key = `${message.id}:part:${String(partIndex)}:${card?.cardId ?? 'unknown'}`
+        if (!card || dismissedChoiceCardKeys.has(key)) continue
+        return {
+          key,
+          data: card,
+        } satisfies ActiveChoiceCard
+      }
+    }
+    return null
+  }, [assistantRuntime.messages, dismissedChoiceCardKeys])
+  const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
+    setDismissedChoiceCardKeys((current) => {
+      const next = new Set(current)
+      next.add(choiceCardKey)
+      return next
+    })
+  }, [])
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     onConfirmOperation: handleConfirmOperation,
     onCancelOperation: handleCancelOperation,
     confirmationSubmittingKey,
+    hideChoiceCards: true,
     onSendChoiceMessage: assistantRuntime.sendMessage,
+    onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -525,7 +600,7 @@ export default function WorkspaceAssistantPanel({
                 </div>
               </ThreadPrimitive.Viewport>
 
-              <div className="mx-4 mb-3 shrink-0 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
+              <div className="mx-4 mb-3 shrink-0 space-y-2 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
                 <WorkspaceAssistantComposer
                   value={composerText}
                   error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
@@ -533,6 +608,15 @@ export default function WorkspaceAssistantPanel({
                   onChange={setComposerText}
                   onSubmit={handleComposerSubmit}
                 />
+                {activeChoiceCard ? (
+                  <AssistantChoiceCardView
+                    data={activeChoiceCard.data}
+                    onSendChoiceMessage={assistantRuntime.sendMessage}
+                    onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
+                    onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
+                    onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}
+                  />
+                ) : null}
               </div>
             </ThreadPrimitive.Root>
           </AssistantRuntimeProvider>

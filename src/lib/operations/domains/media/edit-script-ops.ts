@@ -15,6 +15,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import {
   buildEditFirstAssistantChoiceCard,
+  readEditFirstAspectRatio,
   readEditFirstDurationSeconds,
 } from '@/lib/project-agent/choice-card'
 import type {
@@ -41,7 +42,7 @@ const generateEditScreenplayInputSchema = z.object({
 
 const requestEditFirstChoiceInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  choiceType: z.enum(['duration', 'style_and_aspect_ratio']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'style']),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -91,7 +92,7 @@ const editScreenplayOutputSchema = z.object({
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['duration', 'style_and_aspect_ratio']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'style']),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -249,10 +250,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       execute: async (ctx, input: GenerateEditScreenplayInput) => {
         const durationSeconds = readEditFirstDurationSeconds(input.prompt)
         if (durationSeconds === null) {
-          throw new Error('EDIT_FIRST_DURATION_REQUIRED: call request_edit_first_choice with choiceType=duration before generate_edit_screenplay')
+          throw new Error('EDIT_FIRST_DURATION_REQUIRED: call request_edit_first_choice with choiceType=duration_and_aspect_ratio before generate_edit_screenplay')
         }
         if (durationSeconds > 120) {
           throw new Error(`EDIT_FIRST_DURATION_EXCEEDS_LIMIT:durationSeconds=${String(durationSeconds)}:maxSeconds=120`)
+        }
+        if (!readEditFirstAspectRatio(input.prompt)) {
+          throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: call request_edit_first_choice with choiceType=duration_and_aspect_ratio before generate_edit_screenplay')
         }
         return editScreenplayOutputSchema.parse(await generateProjectEditScreenplay({
           request: ctx.request,
@@ -266,7 +270,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     request_edit_first_choice: defineOperation({
       id: 'request_edit_first_choice',
-      summary: 'Request a fixed assistant choice card for edit-first production. Use this before screenplay generation to ask duration, and after style previews are ready to ask visual style plus aspect ratio.',
+      summary: 'Request a fixed assistant choice card for edit-first production. Use duration_and_aspect_ratio before screenplay generation, then use style after screenplay-based style previews are ready.',
       intent: 'query',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_NONE,
