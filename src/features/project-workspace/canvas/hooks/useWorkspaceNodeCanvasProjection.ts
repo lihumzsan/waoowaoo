@@ -505,6 +505,10 @@ function estimateWrappedLineCount(text: string | null | undefined, charactersPer
     .reduce((total, line) => total + Math.max(1, Math.ceil(line.trim().length / charactersPerLine)), 0)
 }
 
+function normalizeOptionalText(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
 function estimateClampedTextHeight(text: string | null | undefined, charactersPerLine: number, maxLines: number): number {
   return Math.min(maxLines, estimateWrappedLineCount(text, charactersPerLine)) * VIDEO_PLAN_TEXT_LINE_HEIGHT
 }
@@ -593,13 +597,15 @@ function estimateEditScriptNodeHeight(editScript: ProjectEditScript): number {
 }
 
 function estimateEditScreenplayNodeHeight(editScreenplay: ProjectEditScreenplay): number {
-  const screenplayLines = estimateWrappedLineCount(editScreenplay.screenplayText, 34)
+  const screenplayText = normalizeOptionalText(editScreenplay.screenplayText)
+  const userPrompt = normalizeOptionalText(editScreenplay.userPrompt)
+  const screenplayLines = estimateWrappedLineCount(screenplayText, 34)
   const screenplaySectionHeight = EDIT_SCREENPLAY_SECTION_BASE_HEIGHT
     + screenplayLines * EDIT_SCREENPLAY_TEXT_LINE_HEIGHT
-  const userPromptSectionHeight = editScreenplay.userPrompt.trim()
+  const userPromptSectionHeight = userPrompt.trim()
     ? EDIT_SCREENPLAY_SECTION_GAP
       + EDIT_SCREENPLAY_SECTION_BASE_HEIGHT
-      + estimateWrappedLineCount(editScreenplay.userPrompt, 34) * EDIT_SCREENPLAY_TEXT_LINE_HEIGHT
+      + estimateWrappedLineCount(userPrompt, 34) * EDIT_SCREENPLAY_TEXT_LINE_HEIGHT
     : 0
 
   return Math.max(
@@ -1210,7 +1216,9 @@ export function buildWorkspaceNodeCanvasProjection({
     ? estimateEditScreenplayNodeHeight(editScreenplay)
     : EDIT_SCREENPLAY_NODE_HEIGHT
   if (editScreenplay) {
-    const screenplayTitle = extractEditScreenplayTitle(editScreenplay.screenplayText)
+    const screenplayText = normalizeOptionalText(editScreenplay.screenplayText)
+    const userPrompt = normalizeOptionalText(editScreenplay.userPrompt)
+    const screenplayTitle = extractEditScreenplayTitle(screenplayText)
     nodes.push(createNode({
       id: `edit-screenplay:${editScreenplay.id}`,
       fallbackX: STORY_COLUMN_X,
@@ -1225,7 +1233,7 @@ export function buildWorkspaceNodeCanvasProjection({
         targetId: editScreenplay.id,
         title: screenplayTitle || translate('nodes.editScreenplay.title'),
         eyebrow: translate('nodes.editScreenplay.eyebrow'),
-        body: compactText(editScreenplay.screenplayText, translate('empty.screenplay')),
+        body: compactText(screenplayText, translate('empty.screenplay')),
         meta: translate('nodes.editScreenplay.meta'),
         statusLabel: editScreenplay.status === 'ready'
           ? translate('status.ready')
@@ -1242,8 +1250,8 @@ export function buildWorkspaceNodeCanvasProjection({
         height: editScreenplayHeight,
         indexLabel: 'S',
         editScreenplayDetails: {
-          screenplayText: editScreenplay.screenplayText,
-          userPrompt: editScreenplay.userPrompt,
+          screenplayText,
+          userPrompt,
         },
         actionLabel: editScreenplay.status === 'ready' && !editDirectorDecoupage && !editScript && !editScriptPending
           ? translate('actions.generateEditDirectorDecoupage')

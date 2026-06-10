@@ -452,6 +452,29 @@ describe('workspace node canvas projection', () => {
     })
   })
 
+  it('projects legacy edit screenplay rows without a user prompt', () => {
+    const editScreenplay = {
+      ...createEditScreenplay(),
+      userPrompt: undefined,
+    } as unknown as ProjectEditScreenplay
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
+    expect(screenplayNode?.data.kind).toBe('editScreenplay')
+    expect(screenplayNode?.data.editScreenplayDetails).toEqual({
+      screenplayText: editScreenplay.screenplayText,
+      userPrompt: '',
+    })
+  })
+
   it('keeps the director decoupage node visible after the core edit table is ready', () => {
     const editScreenplay = createEditScreenplay({ styleBible: createStyleBible() })
     const editDirectorDecoupage = createDirectorDecoupage({
