@@ -2,6 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type {
   WorkspaceBatchVideoGenerationParams,
@@ -36,7 +37,7 @@ export interface WorkspaceRuntimeValue {
   onVideoRatioChange: (value: string) => Promise<void>
   onRequestAssistantPlan: () => Promise<void>
   onGenerateEditScreenplay: (prompt: string) => Promise<void>
-  onConfirmEditStylePreview: (stylePreviewId: string) => Promise<void>
+  onConfirmEditStylePreview: (stylePreviewId: string, aspectRatio: EditScriptVideoRatio) => Promise<void>
   onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
   onRegenerateStoryboardText: (storyboardId: string) => Promise<void>

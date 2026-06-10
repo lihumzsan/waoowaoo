@@ -320,6 +320,7 @@ export type EditScriptStyleBible = z.infer<typeof editScriptStyleBibleSchema>['s
 export const confirmEditStylePreviewRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   stylePreviewId: z.string().trim().min(1),
+  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
 })
 
 export const editScriptVideoPromptBlockSchema = z.object({

@@ -24,7 +24,7 @@ export function useWorkspaceNodeCanvasActions() {
     }
 
     if (action.type === 'confirm_edit_style_preview') {
-      await runtime.onConfirmEditStylePreview(action.stylePreviewId)
+      await runtime.onConfirmEditStylePreview(action.stylePreviewId, action.aspectRatio)
       return
     }
 

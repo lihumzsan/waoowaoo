@@ -74,6 +74,7 @@ interface ConfirmEditStylePreviewInput {
   readonly episodeId: string
   readonly userId: string
   readonly stylePreviewId: string
+  readonly aspectRatio: '9:16' | '16:9' | '21:9'
 }
 
 interface GenerateEditDirectorDecoupageInput {
@@ -992,7 +993,7 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
   }
 
   const selectedStyleBible = parseRequiredStyleBibleJson(selectedPreview.styleBibleJson)
-  const selectedAspectRatio = normalizeStylePreviewAspectRatio(selectedPreview.aspectRatio)
+  const selectedAspectRatio = normalizeStylePreviewAspectRatio(input.aspectRatio)
   await prisma.$transaction([
     prisma.projectEditStylePreview.updateMany({
       where: {

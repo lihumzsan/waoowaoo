@@ -5,8 +5,7 @@ Core goals:
 - Test-launch hard constraint: no candidate may use real-person, live-action real human, human actor, photorealistic human, real public figure, celebrity, face likeness, or actor-casting style. If the user request contains that category, convert it into a non-real-person generatable style such as animation, illustration, stylized CG, object/creature-led, or abstract visual storytelling.
 - The 3 candidates must differ clearly in lighting, color, texture, composition, camera temperament, and sound temperament so the user can choose the film tone.
 - Each candidate must include a complete styleBible. After the user confirms one candidate, downstream director decoupage, asset images, cinematography plan, storyboard images, video prompts, and sound prompts will read that single confirmed Style Bible.
-- Each candidate must choose one aspectRatio, exactly "9:16", "16:9", or "21:9". This becomes the film aspect ratio after that candidate is confirmed.
-- Derive aspectRatio from the user request and screenplay: prefer 9:16 for mobile-first, direct address, solo monologue, or vertical social stories; prefer 16:9 for horizontal spatial relationships, ensemble blocking, landscapes, and standard narrative coverage; use 21:9 only for strong widescreen space, epic distance, or an explicit cinematic widescreen need.
+- The aspectRatio field is only a schema-required technical placeholder. Set aspectRatio to "16:9" for every candidate. The final film aspect ratio is not chosen by style candidates; the user must choose it separately from "9:16", "16:9", and "21:9" when confirming a style.
 - Each candidate must include gridImagePrompt for one generated image: one single landscape 16:9 style preview image, target output resolution 1920x1080, with an exact 3 rows x 3 columns contact sheet layout and exactly 9 equal-size cinematic frame cells. This style preview image is only a visual-tone preview; it does not represent the final film aspect ratio and must not read, represent, or affect the candidate aspectRatio.
 - gridImagePrompt must be directly usable by an image model and must explicitly include the meaning of: one single landscape 16:9 image, 1920x1080; exact 3 rows x 3 columns storyboard contact sheet; exactly nine equal-size cinematic frame cells; no missing cells; no extra cells; no merged cells; no irregular collage; no uneven cell sizes; no text; no subtitles; no logo; no watermark; no poster layout; no UI; no labels; no border captions.
 - The nine cells must come from different key moments or emotional phases in the screenplay, covering setup, progression, turn, and ending beat. Do not promise final shot numbers or write a shot list.
@@ -33,7 +32,7 @@ Return JSON only. Do not return markdown or explanations. Schema:
   "stylePreviews": [
     {
       "styleKey": "style_a",
-      "aspectRatio": "9:16 or 16:9 or 21:9",
+      "aspectRatio": "16:9",
       "title": "string",
       "summary": "string",
       "styleBible": {
@@ -70,7 +69,7 @@ Return JSON only. Do not return markdown or explanations. Schema:
     },
     {
       "styleKey": "style_b",
-      "aspectRatio": "9:16 or 16:9 or 21:9",
+      "aspectRatio": "16:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",
@@ -78,7 +77,7 @@ Return JSON only. Do not return markdown or explanations. Schema:
     },
     {
       "styleKey": "style_c",
-      "aspectRatio": "9:16 or 16:9 or 21:9",
+      "aspectRatio": "16:9",
       "title": "string",
       "summary": "string",
       "styleBible": "same complete styleBible object as style_a",

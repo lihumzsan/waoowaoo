@@ -81,6 +81,7 @@ export const PATCH = apiHandler(async (
     episodeId: parsed.data.episodeId,
     userId: authResult.session.user.id,
     stylePreviewId: parsed.data.stylePreviewId,
+    aspectRatio: parsed.data.aspectRatio,
   })
 
   return NextResponse.json({ screenplay })

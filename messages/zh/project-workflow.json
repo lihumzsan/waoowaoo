@@ -309,6 +309,7 @@
         "soundPolicy": "声音策略",
         "soundFilterPrompt": "声音滤镜",
         "hardBans": "硬禁用项",
+        "selectAspectRatio": "选择画面比例",
         "originalClip": "原始片段",
         "scene": "场景 {index}",
         "characters": "出场角色",
@@ -739,7 +740,7 @@
         "editStylePreview": {
           "eyebrow": "风格候选",
           "body": "根据剧本生成的九宫格影片基调预览。",
-          "meta": "确认后作为唯一 Style Bible · {ratio}"
+          "meta": "确认后作为唯一 Style Bible"
         },
         "editStyleBible": {
           "title": "Style Bible",

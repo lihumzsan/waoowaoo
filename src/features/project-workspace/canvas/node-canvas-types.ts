@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
@@ -26,7 +27,7 @@ export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'pan
 
 export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_screenplay'; readonly prompt: string }
-  | { readonly type: 'confirm_edit_style_preview'; readonly stylePreviewId: string }
+  | { readonly type: 'confirm_edit_style_preview'; readonly stylePreviewId: string; readonly aspectRatio: EditScriptVideoRatio }
   | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }

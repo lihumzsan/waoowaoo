@@ -6,6 +6,17 @@ const authState = vi.hoisted(() => ({
 }))
 
 const serviceMock = vi.hoisted(() => ({
+  readProjectEditScreenplay: vi.fn(async () => null),
+  generateProjectEditScreenplay: vi.fn(async () => ({
+    id: 'screenplay-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'one minute sci-fi',
+    styleBible: null,
+    stylePreviews: [],
+    screenplayText: 'screenplay',
+    status: 'style_preview_generating',
+  })),
   readProjectEditScript: vi.fn(async () => ({
     id: 'edit-1',
     projectId: 'project-1',
@@ -113,6 +124,16 @@ const serviceMock = vi.hoisted(() => ({
         errorMessage: null,
       },
     ],
+  })),
+  confirmProjectEditStylePreview: vi.fn(async () => ({
+    id: 'screenplay-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'one minute sci-fi',
+    styleBible: null,
+    stylePreviews: [],
+    screenplayText: 'screenplay',
+    status: 'ready',
   })),
 }))
 
@@ -228,6 +249,9 @@ import {
   PATCH as editScriptPatch,
   POST as editScriptPost,
 } from '@/app/api/projects/[projectId]/edit-script/route'
+import {
+  PATCH as editScreenplayPatch,
+} from '@/app/api/projects/[projectId]/edit-script/screenplay/route'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   POST as editScriptAssetsGeneratePost,
@@ -243,6 +267,31 @@ describe('project edit script route', () => {
   beforeEach(() => {
     authState.authenticated = true
     vi.clearAllMocks()
+  })
+
+  it('PATCH /api/projects/[projectId]/edit-script/screenplay -> confirms style with user-selected aspect ratio', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script/screenplay',
+      method: 'PATCH',
+      body: {
+        episodeId: 'episode-1',
+        stylePreviewId: 'style-preview-1',
+        aspectRatio: '21:9',
+      },
+    })
+
+    const response = await editScreenplayPatch(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.screenplay?.status).toBe('ready')
+    expect(serviceMock.confirmProjectEditStylePreview).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      stylePreviewId: 'style-preview-1',
+      aspectRatio: '21:9',
+    })
   })
 
   it('POST /api/projects/[projectId]/edit-script -> submits async edit-script task so canvas can render progress states', async () => {

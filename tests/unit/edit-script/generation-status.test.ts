@@ -514,7 +514,7 @@ describe('edit script generation status persistence', () => {
     })
   })
 
-  it('confirms a completed style preview as the screenplay Style Bible', async () => {
+  it('confirms a completed style preview with the user-selected aspect ratio', async () => {
     prismaMock.projectEditStylePreview.findFirst.mockResolvedValueOnce({
       id: 'style-preview-style_b',
       projectId: 'project-1',
@@ -587,6 +587,7 @@ describe('edit script generation status persistence', () => {
       episodeId: 'episode-1',
       userId: 'user-1',
       stylePreviewId: 'style-preview-style_b',
+      aspectRatio: '9:16',
     })
 
     expect(prismaMock.projectEditStylePreview.updateMany).toHaveBeenCalledWith({
@@ -615,7 +616,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.project.update).toHaveBeenCalledWith({
       where: { id: 'project-1' },
       data: {
-        videoRatio: '16:9',
+        videoRatio: '9:16',
       },
     })
     expect(screenplay.status).toBe('ready')

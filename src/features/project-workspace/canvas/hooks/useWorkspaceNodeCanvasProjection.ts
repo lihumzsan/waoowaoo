@@ -69,6 +69,7 @@ const EDIT_SCREENPLAY_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.wi
 const EDIT_SCREENPLAY_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height
 const EDIT_STYLE_BIBLE_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width
 const EDIT_STYLE_BIBLE_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height
+const EDIT_STYLE_PREVIEW_NODE_HEIGHT = EDIT_STYLE_BIBLE_NODE_HEIGHT + 86
 const EDIT_STYLE_BIBLE_LAYER_GAP_Y = 120
 const EDIT_PIPELINE_STEP_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width
 const EDIT_PIPELINE_STEP_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height
@@ -1292,7 +1293,7 @@ export function buildWorkspaceNodeCanvasProjection({
     ? editScreenplayFallbackY + editScreenplayHeight + EDIT_STYLE_BIBLE_LAYER_GAP_Y
     : hasStory ? 430 : 180
   const stylePreviewLayerBottomY = shouldShowStylePreviews
-    ? editStyleBibleFallbackY + EDIT_STYLE_BIBLE_NODE_HEIGHT
+    ? editStyleBibleFallbackY + EDIT_STYLE_PREVIEW_NODE_HEIGHT
     : null
   const editStyleSourceBottomY = editStyleBibleNodeId
     ? editStyleBibleFallbackY + EDIT_STYLE_BIBLE_NODE_HEIGHT
@@ -1324,12 +1325,12 @@ export function buildWorkspaceNodeCanvasProjection({
           title: preview.title,
           eyebrow: translate('nodes.editStylePreview.eyebrow'),
           body: compactText(preview.summary, translate('nodes.editStylePreview.body')),
-          meta: translate('nodes.editStylePreview.meta', { ratio: preview.aspectRatio }),
+          meta: translate('nodes.editStylePreview.meta'),
           statusLabel: editStylePreviewStatusLabel(previewState, translate),
           isRunning: previewState === 'pending' || previewState === 'processing',
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(preview.id)),
           width: EDIT_STYLE_BIBLE_NODE_WIDTH,
-          height: EDIT_STYLE_BIBLE_NODE_HEIGHT,
+          height: EDIT_STYLE_PREVIEW_NODE_HEIGHT,
           indexLabel: `B${index + 1}`,
           previewImageUrl: preview.imageUrl,
           previewAspectRatio: 1,
@@ -1337,9 +1338,6 @@ export function buildWorkspaceNodeCanvasProjection({
           styleBibleDetails: previewDetails,
           actionLabel: previewState === 'ready' && previewScreenplay.status === 'style_preview_ready'
             ? translate('actions.confirmEditStylePreview')
-            : undefined,
-          action: previewState === 'ready' && previewScreenplay.status === 'style_preview_ready'
-            ? { type: 'confirm_edit_style_preview', stylePreviewId: preview.id }
             : undefined,
           onAction,
         },

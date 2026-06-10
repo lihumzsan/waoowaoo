@@ -309,6 +309,7 @@
         "soundPolicy": "Sound Policy",
         "soundFilterPrompt": "Sound Filter",
         "hardBans": "Hard Bans",
+        "selectAspectRatio": "Choose Aspect Ratio",
         "originalClip": "Original Clip",
         "scene": "Scene {index}",
         "characters": "Characters",
@@ -739,7 +740,7 @@
         "editStylePreview": {
           "eyebrow": "Style Candidate",
           "body": "A 3x3 film tone preview generated from the screenplay.",
-          "meta": "Becomes the single Style Bible · {ratio}"
+          "meta": "Becomes the single Style Bible"
         },
         "editStyleBible": {
           "title": "Style Bible",

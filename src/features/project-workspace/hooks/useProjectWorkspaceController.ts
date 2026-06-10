@@ -4,6 +4,7 @@ import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceUserModels } from './useWorkspaceUserModels'
@@ -141,9 +142,9 @@ export function useProjectWorkspaceController({
     await createEditScreenplay.mutateAsync({ episodeId, prompt })
     await onRefresh({ mode: 'full' })
   }
-  const handleConfirmEditStylePreview = async (stylePreviewId: string) => {
+  const handleConfirmEditStylePreview = async (stylePreviewId: string, aspectRatio: EditScriptVideoRatio) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await confirmEditStylePreview.mutateAsync({ episodeId, stylePreviewId })
+    await confirmEditStylePreview.mutateAsync({ episodeId, stylePreviewId, aspectRatio })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditDirectorDecoupage = async (screenplayId?: string) => {

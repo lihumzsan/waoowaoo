@@ -628,11 +628,8 @@ describe('workspace node canvas projection', () => {
       'edit-style-preview:style-preview-c',
     ])
     expect(previewNodes[0]?.data.previewImageUrl).toBe('https://cdn.example.com/a.png')
-    expect(previewNodes[0]?.data.meta).toBe('nodes.editStylePreview.meta:{"ratio":"9:16"}')
-    expect(previewNodes[0]?.data.action).toEqual({
-      type: 'confirm_edit_style_preview',
-      stylePreviewId: 'style-preview-a',
-    })
+    expect(previewNodes[0]?.data.meta).toBe('nodes.editStylePreview.meta')
+    expect(previewNodes[0]?.data.action).toBeUndefined()
     expect(previewNodes[0]?.data.actionLabel).toBe('actions.confirmEditStylePreview')
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-style-preview:style-preview-a',

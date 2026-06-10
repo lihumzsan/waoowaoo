@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import type {
@@ -1154,6 +1155,9 @@ function StyleBibleContent({
   const details = data.styleBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const shouldShowPreview = data.kind === 'editStylePreview' && hasText(data.previewImageUrl)
+  const stylePreviewRatioPicker = data.kind === 'editStylePreview' ? (
+    <StylePreviewAspectRatioPicker data={data} labels={labels} />
+  ) : null
 
   if (!expanded) {
     return (
@@ -1162,6 +1166,7 @@ function StyleBibleContent({
         {details.styleSummary ? renderSection(labels('styleSummary'), renderSummaryText(details.styleSummary, 3)) : null}
         {details.visual.imageFilterPrompt ? renderSection(labels('imageFilterPrompt'), renderSummaryText(details.visual.imageFilterPrompt, 3)) : null}
         {details.visual.negativePrompt ? renderSection(labels('negativePrompt'), renderSummaryText(details.visual.negativePrompt, 3)) : null}
+        {stylePreviewRatioPicker}
       </div>
     )
   }
@@ -1188,8 +1193,62 @@ function StyleBibleContent({
         { label: labels('soundFilterPrompt'), value: details.sound.soundFilterPrompt },
       ])}
       {renderChips(labels('hardBans'), details.hardBans)}
+      {stylePreviewRatioPicker}
     </div>
   )
+}
+
+function StylePreviewAspectRatioPicker({
+  data,
+  labels,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+}) {
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<EditScriptVideoRatio | null>(null)
+  const canConfirm = hasText(data.targetId)
+    && Boolean(data.actionLabel)
+    && Boolean(data.onAction)
+    && data.readOnly !== true
+    && data.isRunning !== true
+
+  if (!canConfirm) return null
+
+  return renderSection(labels('selectAspectRatio'), (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        {EDIT_SCRIPT_VIDEO_RATIOS.map((ratio) => {
+          const selected = selectedAspectRatio === ratio
+          return (
+            <button
+              key={ratio}
+              type="button"
+              className={`nodrag rounded-[12px] border px-2 py-2 text-xs font-semibold transition ${selected ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-[var(--glass-text-secondary)] hover:border-slate-300 hover:bg-slate-50'}`}
+              onClick={() => setSelectedAspectRatio(ratio)}
+            >
+              {ratio}
+            </button>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        className="nodrag inline-flex w-full items-center justify-center gap-1.5 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400"
+        disabled={!selectedAspectRatio}
+        onClick={() => {
+          if (!selectedAspectRatio || !hasText(data.targetId)) return
+          data.onAction?.({
+            type: 'confirm_edit_style_preview',
+            stylePreviewId: data.targetId,
+            aspectRatio: selectedAspectRatio,
+          }, data.nodeId)
+        }}
+      >
+        <AppIcon name="arrowRight" className="h-3.5 w-3.5" />
+        {data.actionLabel}
+      </button>
+    </div>
+  ))
 }
 
 function EditScreenplayContent({

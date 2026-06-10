@@ -37,6 +37,7 @@ interface CreateEditScreenplayInput {
 interface ConfirmEditStylePreviewInput {
   episodeId: string
   stylePreviewId: string
+  aspectRatio: EditScriptVideoRatio
 }
 
 interface CreateEditDirectorDecoupageInput {
