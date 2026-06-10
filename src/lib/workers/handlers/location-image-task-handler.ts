@@ -28,6 +28,7 @@ import {
   resolveEditScriptStyleBibleForTask,
 } from '@/lib/edit-script/style-bible-prompt'
 import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
+import { markEditAssetRequirementsCompletedForTargets } from '@/lib/edit-script/asset-requirement-status'
 
 interface LocationImageRecord {
   id: string
@@ -143,6 +144,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   }
 
   const locationIds = Array.from(new Set(locationImages.map((it) => it.locationId)))
+  const completedLocationIds = new Set<string>()
   const groupedLocationDescription = assetType === 'location'
     ? locationImages.find((it) => typeof it.description === 'string' && it.description.trim())?.description?.trim() || ''
     : ''
@@ -247,7 +249,13 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
         locale: job.data.locale === 'en' ? 'en' : 'zh',
       })
     }
+    completedLocationIds.add(item.locationId)
   }
+  await markEditAssetRequirementsCompletedForTargets({
+    projectId,
+    kind: assetType,
+    targetIds: [...completedLocationIds],
+  })
 
   return {
     updated: locationImages.length,

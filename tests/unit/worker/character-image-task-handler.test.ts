@@ -32,6 +32,9 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScreenplay: {
     findFirst: vi.fn(),
   },
+  projectEditAssetRequirement: {
+    updateMany: vi.fn(async () => ({ count: 0 })),
+  },
 }))
 
 const sharedMock = vi.hoisted(() => ({
@@ -163,6 +166,17 @@ describe('worker character-image-task-handler behavior', () => {
         imageUrl: 'cos/character-generated-0.png',
       },
     })
+    expect(prismaMock.projectEditAssetRequirement.updateMany).toHaveBeenCalledWith({
+      where: {
+        projectId: 'project-1',
+        kind: 'character',
+        targetId: { in: ['character-1'] },
+      },
+      data: {
+        status: 'completed',
+        errorMessage: null,
+      },
+    })
   })
 
   it('primary appearance generation omits referenceImages option when no reference image exists', async () => {
@@ -248,6 +262,27 @@ describe('worker character-image-task-handler behavior', () => {
           '候选角色提示词B，服装材质清晰',
           '候选角色提示词C，分镜动作语境清晰',
         ]),
+      },
+    })
+  })
+
+  it('honors explicit single-image grouped generation without candidate prompt analysis', async () => {
+    sharedMock.generateCleanImageToStorage.mockResolvedValueOnce('cos/character-generated-single.png')
+
+    const result = await handleCharacterImageTask(buildJob({ count: 1 }))
+
+    expect(textEngineMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      appearanceId: 'appearance-2',
+      imageCount: 1,
+      imageUrl: 'cos/character-generated-single.png',
+    })
+    expect(prismaMock.characterAppearance.update).toHaveBeenCalledWith({
+      where: { id: 'appearance-2' },
+      data: {
+        imageUrls: JSON.stringify(['cos/character-generated-single.png']),
+        imageUrl: 'cos/character-generated-single.png',
       },
     })
   })

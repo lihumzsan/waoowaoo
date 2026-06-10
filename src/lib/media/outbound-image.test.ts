@@ -11,7 +11,7 @@ import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { lookup } from 'node:dns/promises'
 
 vi.mock('@/lib/storage', () => ({
-  getSignedUrl: vi.fn((key: string) => `/signed/${key}`),
+  getSignedObjectUrl: vi.fn(async (key: string) => `/signed/${key}`),
   toFetchableUrl: vi.fn((value: string) => (
     value.startsWith('/') ? `https://app.example.com${value}` : value
   )),

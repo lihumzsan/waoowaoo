@@ -175,4 +175,29 @@ describe('api specific - novel promotion generate image art style', () => {
     expect(submitArg?.payload?.count).toBe(3)
     expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:3:style-bible:none')
   })
+
+  it('honors explicit single project character generation count', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/generate/route')
+    const req = buildMockRequest({
+      path: '/api/assets/character-1/generate',
+      method: 'POST',
+      body: {
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
+        appearanceId: 'appearance-1',
+        count: 1,
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
+    expect(res.status).toBe(200)
+
+    const submitArg = submitTaskMock.mock.calls[0]?.[0] as {
+      payload?: Record<string, unknown>
+      dedupeKey?: string
+    } | undefined
+    expect(submitArg?.payload?.count).toBe(1)
+    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:1:style-bible:none')
+  })
 })

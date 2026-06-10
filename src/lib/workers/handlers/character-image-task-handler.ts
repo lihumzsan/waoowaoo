@@ -23,6 +23,7 @@ import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForTask,
 } from '@/lib/edit-script/style-bible-prompt'
+import { markEditAssetRequirementsCompletedForTargets } from '@/lib/edit-script/asset-requirement-status'
 import {
   AnyObj,
   generateCleanImageToStorage,
@@ -170,16 +171,19 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   })
 
   const singleIndex = payload.imageIndex ?? payload.descriptionIndex
+  const requestedGroupedCount = normalizeImageGenerationCount('character', payload.count, CHARACTER_CANDIDATE_PROMPT_COUNT)
   const count = singleIndex !== undefined
     ? normalizeImageGenerationCount('character', 1)
-    : CHARACTER_CANDIDATE_PROMPT_COUNT
+    : requestedGroupedCount === 1
+      ? 1
+      : CHARACTER_CANDIDATE_PROMPT_COUNT
   const indexes = singleIndex !== undefined
     ? [Number(singleIndex)]
     : Array.from({ length: count }, (_value, index) => index)
 
   const imageUrls = parseImageUrls(appearance.imageUrls, 'characterAppearance.imageUrls')
   const nextImageUrls = [...imageUrls]
-  const generatedCandidateDescriptions = singleIndex === undefined
+  const generatedCandidateDescriptions = singleIndex === undefined && count > 1
     ? await (async () => {
       const analysisModel = models.analysisModel
       if (!analysisModel) throw new Error('CHARACTER_CANDIDATE_PROMPT_MODEL_REQUIRED')
@@ -256,6 +260,11 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
         ? { descriptions: JSON.stringify(generatedCandidateDescriptions) }
         : {}),
     },
+  })
+  await markEditAssetRequirementsCompletedForTargets({
+    projectId,
+    kind: 'character',
+    targetIds: [appearance.characterId],
   })
 
   return {

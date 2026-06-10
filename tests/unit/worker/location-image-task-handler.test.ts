@@ -26,6 +26,9 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScreenplay: {
     findFirst: vi.fn(),
   },
+  projectEditAssetRequirement: {
+    updateMany: vi.fn(async () => ({ count: 0 })),
+  },
 }))
 
 const sharedMock = vi.hoisted(() => ({
@@ -191,6 +194,17 @@ describe('worker location-image-task-handler behavior', () => {
       projectId: 'project-1',
       model: 'analysis-model-1',
       locale: 'zh',
+    })
+    expect(prismaMock.projectEditAssetRequirement.updateMany).toHaveBeenCalledWith({
+      where: {
+        projectId: 'project-1',
+        kind: 'location',
+        targetId: { in: ['location-1'] },
+      },
+      data: {
+        status: 'completed',
+        errorMessage: null,
+      },
     })
   })
 

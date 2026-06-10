@@ -124,6 +124,15 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   })
 }
 
+function resolveGroupedCharacterGenerateCount(value: unknown): number {
+  const normalized = normalizeImageGenerationCount('character', value, CHARACTER_CANDIDATE_PROMPT_COUNT)
+  return normalized === 1 ? 1 : CHARACTER_CANDIDATE_PROMPT_COUNT
+}
+
+function resolveGroupedLocationGenerateCount(value: unknown): number {
+  return normalizeImageGenerationCount('location', value, LOCATION_CANDIDATE_PROMPT_COUNT)
+}
+
 function normalizeLocationBackedKind(kind: AssetKind): 'character' | 'location' {
   return kind === 'character' ? 'character' : 'location'
 }
@@ -148,8 +157,8 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
   const normalizedKind = normalizeLocationBackedKind(input.kind)
   const imageIndex = toNumber(input.body.imageIndex)
   const count = normalizedKind === 'character'
-    ? (imageIndex === null ? CHARACTER_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('character', input.body.count))
-    : (imageIndex === null ? LOCATION_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('location', input.body.count))
+    ? (imageIndex === null ? resolveGroupedCharacterGenerateCount(input.body.count) : normalizeImageGenerationCount('character', input.body.count))
+    : (imageIndex === null ? resolveGroupedLocationGenerateCount(input.body.count) : normalizeImageGenerationCount('location', input.body.count))
   if (normalizedKind === 'location' && imageIndex === null) {
     const location = await prisma.globalLocation.findFirst({
       where: { id: input.assetId, userId: input.access.userId },
@@ -268,8 +277,8 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
   const appearanceId = normalizeString(input.body.appearanceId)
   const imageIndex = toNumber(input.body.imageIndex)
   const count = normalizedKind === 'character'
-    ? (imageIndex === null ? CHARACTER_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('character', input.body.count))
-    : (imageIndex === null ? LOCATION_CANDIDATE_PROMPT_COUNT : normalizeImageGenerationCount('location', input.body.count))
+    ? (imageIndex === null ? resolveGroupedCharacterGenerateCount(input.body.count) : normalizeImageGenerationCount('character', input.body.count))
+    : (imageIndex === null ? resolveGroupedLocationGenerateCount(input.body.count) : normalizeImageGenerationCount('location', input.body.count))
 
   if (normalizedKind === 'location' && imageIndex === null) {
     const location = await prisma.projectLocation.findUnique({

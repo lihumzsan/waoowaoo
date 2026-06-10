@@ -5,7 +5,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { getInternalBaseUrl } from '@/lib/env'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
-type StorageHelpers = Pick<typeof import('@/lib/storage'), 'getSignedUrl' | 'toFetchableUrl'>
+type StorageHelpers = Pick<typeof import('@/lib/storage'), 'getSignedObjectUrl' | 'toFetchableUrl'>
 
 type InputIssueReason =
   | 'next_image_unwrapped'
@@ -92,7 +92,7 @@ let storageHelpersPromise: Promise<StorageHelpers> | null = null
 async function getStorageHelpers(): Promise<StorageHelpers> {
   if (!storageHelpersPromise) {
     storageHelpersPromise = import('@/lib/storage').then((mod) => ({
-      getSignedUrl: mod.getSignedUrl,
+      getSignedObjectUrl: mod.getSignedObjectUrl,
       toFetchableUrl: mod.toFetchableUrl,
     }))
   }
@@ -467,8 +467,8 @@ function guessContentType(input: string, contentTypeHeader: string | null, buffe
 }
 
 async function signStorageKey(storageKey: string): Promise<string> {
-  const { getSignedUrl, toFetchableUrl } = await getStorageHelpers()
-  return toFetchableUrl(getSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS))
+  const { getSignedObjectUrl, toFetchableUrl } = await getStorageHelpers()
+  return toFetchableUrl(await getSignedObjectUrl(storageKey, SIGNED_URL_TTL_SECONDS))
 }
 
 async function toFetchableAbsoluteUrl(value: string): Promise<string> {
