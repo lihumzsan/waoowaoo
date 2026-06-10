@@ -77,6 +77,11 @@ describe('edit script block-first prompt flow', () => {
 
     expect(stylePreviewPrompt).toContain('基于同一份剧本生成 3 个可供用户选择的 Style Bible 候选')
     expect(stylePreviewPrompt).toContain('三个候选必须都忠于用户需求和剧本事实')
+    expect(stylePreviewPrompt).toContain('画面风格/影片基调')
+    expect(stylePreviewPrompt).toContain('美术媒介/画风')
+    expect(stylePreviewPrompt).toContain('用户最终只选一个候选')
+    expect(stylePreviewPrompt).toContain('至少两个候选必须采用明显不同的非真人美术媒介/画风')
+    expect(stylePreviewPrompt).toContain('不要把三个候选只做成同一画风下的调色、明暗、颗粒或镜头滤镜变化')
     expect(stylePreviewPrompt).toContain('候选风格不得是真人类型、实拍真人、真人演员、写实真人')
     expect(stylePreviewPrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
     expect(stylePreviewPrompt).toContain('aspectRatio 字段只是 schema 必填的技术占位值')
