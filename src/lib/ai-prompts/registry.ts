@@ -161,7 +161,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS]: {
     pathStem: 'edit-script/style-preview-options',
-    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds'],
+    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds', 'style_direction', 'style_preview_count'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY]: {
     pathStem: 'edit-script/screenplay',

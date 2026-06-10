@@ -64,7 +64,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('needs_style_choice')
     expect(state.blocking.kind).toBe('needs_user_choice')
     expect(state.nextAction).toBeNull()
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
   })
 
   it('allows only director decoupage after screenplay is ready', () => {

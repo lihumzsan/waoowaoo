@@ -441,6 +441,33 @@ describe('edit-script operations', () => {
     ])
   })
 
+  it('passes flexible style preview regeneration fields into the style preview service', async () => {
+    const operations = createEditScriptOperations()
+    await operations.generate_edit_style_previews.execute(buildContext(), {
+      screenplayId: 'screenplay-1',
+      styleDirection: '更黑暗一些',
+      count: 2,
+      replaceExisting: true,
+      confirmed: true,
+    })
+
+    expect(serviceMock.generateProjectEditStylePreviews).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
+      styleDirection: '更黑暗一些',
+      count: 2,
+      replaceExisting: true,
+    }))
+    expect(operations.generate_edit_style_previews.inputSchema.safeParse({
+      screenplayId: 'screenplay-1',
+      count: 4,
+      confirmed: true,
+    }).success).toBe(false)
+  })
+
   it('passes screenplay id into director decoupage generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_director_decoupage.execute(buildContext(), {

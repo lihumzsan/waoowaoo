@@ -138,7 +138,7 @@ describe('edit-first assistant choice cards', () => {
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=ready_to_generate_screenplay')
   })
 
-  it('builds a style card only after three style previews are ready', async () => {
+  it('builds a style card from the available completed style previews', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       videoRatio: '16:9',
     })
@@ -206,6 +206,44 @@ describe('edit-first assistant choice cards', () => {
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b', 'style-c'])
     expect(card.groups[0]?.options[0]?.imageUrl).toBe('/signed/a.png')
     expect(card.groups).toHaveLength(1)
+  })
+
+  it('renders style card options from the actual completed preview count', async () => {
+    prismaState.projectFindFirst.mockResolvedValueOnce({
+      videoRatio: '16:9',
+    })
+    prismaState.screenplayFindFirst.mockResolvedValueOnce({
+      id: 'screenplay-1',
+      status: 'style_preview_ready',
+      stylePreviews: [
+        {
+          id: 'style-a',
+          styleKey: 'A',
+          title: '暗黑风格化 CG',
+          summary: '更黑暗。',
+          imageKey: 'a.png',
+        },
+        {
+          id: 'style-b',
+          styleKey: 'B',
+          title: '黑白插画',
+          summary: '更克制。',
+          imageKey: 'b.png',
+        },
+      ],
+    })
+
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('needs_style_choice'),
+      choiceType: 'style',
+    })
+
+    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b'])
+    expect(card.groups[0]?.options).toHaveLength(2)
   })
 
   it('rejects style cards while style previews are still generating', async () => {

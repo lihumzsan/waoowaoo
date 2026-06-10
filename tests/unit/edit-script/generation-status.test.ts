@@ -588,6 +588,58 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
   })
 
+  it('regenerates style previews from user direction during style choice with at most three candidates', async () => {
+    aiExecMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        stylePreviews: mockStylePreviewOptions.stylePreviews.slice(0, 2),
+      }),
+    })
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+      id: 'screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '做一个60秒 16:9 科幻短片',
+      styleBibleJson: null,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      status: 'style_preview_ready',
+    })
+
+    const result = await generateProjectEditStylePreviews({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
+      styleDirection: '更黑暗一些，低照度，强阴影',
+      count: 2,
+      replaceExisting: true,
+    })
+
+    expect(result.total).toBe(2)
+    expect(result.stylePreviews.map((preview) => preview.styleKey)).toEqual(['style_a', 'style_b'])
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.stringContaining('用户本轮风格调整方向：更黑暗一些，低照度，强阴影'),
+        }),
+      ]),
+    }))
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.stringContaining('候选数量必须严格等于 2'),
+        }),
+      ]),
+    }))
+    expect(txMock.projectEditStylePreview.deleteMany).toHaveBeenCalledWith({
+      where: { editScreenplayId: 'screenplay-1' },
+    })
+    expect(txMock.projectEditStylePreview.create).toHaveBeenCalledTimes(2)
+    expect(submitTask).toHaveBeenCalledTimes(2)
+  })
+
   it('reads legacy screenplay without Style Bible as nullable styleBible', async () => {
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
       id: 'legacy-screenplay-1',

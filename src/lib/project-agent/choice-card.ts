@@ -6,9 +6,8 @@ import type {
   ProjectAgentChoiceCardGroup,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 
-const STYLE_PREVIEW_COUNT = 3
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
@@ -182,7 +181,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   if (screenplay.status !== 'style_preview_ready') {
     throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:screenplayStatus=${screenplay.status}`)
   }
-  if (screenplay.stylePreviews.length < STYLE_PREVIEW_COUNT) {
+  if (screenplay.stylePreviews.length < 1 || screenplay.stylePreviews.length > EDIT_STYLE_PREVIEW_MAX_COUNT) {
     throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:readyStylePreviewCount=${String(screenplay.stylePreviews.length)}`)
   }
 
@@ -198,7 +197,7 @@ async function buildStyleAndRatioChoiceCard(params: {
         key: 'stylePreviewId',
         label: isEnglish ? 'Visual Style' : '视觉风格',
         required: true,
-        options: screenplay.stylePreviews.slice(0, STYLE_PREVIEW_COUNT).map((preview, index) => ({
+        options: screenplay.stylePreviews.map((preview, index) => ({
           value: preview.id,
           label: `${String.fromCharCode(65 + index)} · ${preview.title}`,
           description: preview.summary,

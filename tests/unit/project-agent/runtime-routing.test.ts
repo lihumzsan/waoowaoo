@@ -647,6 +647,44 @@ describe('project agent runtime tool routing', () => {
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 
+  it('injects style preview regeneration during style choice without exposing later edit-first act tools', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'needs_style_choice',
+      blocking: {
+        kind: 'needs_user_choice',
+        reason: 'choose and confirm one completed style preview',
+      },
+      nextAction: null,
+      allowedOperationIds: ['generate_edit_style_previews'],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user wants darker regenerated style candidates'],
+      latestUserText: '重新生成一下，要求更黑暗一些',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '重新生成一下，要求更黑暗一些' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
   it('injects style preview generation and screenplay revision after screenplay review', async () => {
     phaseState.editFirstWorkflow = {
       active: true,

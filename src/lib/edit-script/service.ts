@@ -45,6 +45,7 @@ import {
   editCinematographyShotPlanSchema,
   editStylePreviewOptionsSchema,
   EDIT_STYLE_PREVIEW_KEYS,
+  EDIT_STYLE_PREVIEW_MAX_COUNT,
   editScriptStyleBibleSchema,
 } from './types'
 import { designEditAssetRequirements } from './asset-design'
@@ -89,6 +90,9 @@ interface GenerateEditStylePreviewsInput {
   readonly userId: string
   readonly locale: Locale
   readonly screenplayId?: string
+  readonly styleDirection?: string
+  readonly count?: number
+  readonly replaceExisting?: boolean
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -264,7 +268,19 @@ interface ExistingAssetRef {
 
 const EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY = 'screenplay_ready'
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING = 'style_preview_generating'
+const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY = 'style_preview_ready'
 const EDIT_SCREENPLAY_STATUS_FAILED = 'failed'
+
+function resolveStylePreviewCount(value: number | undefined): number {
+  if (value === undefined) return EDIT_STYLE_PREVIEW_MAX_COUNT
+  if (!Number.isInteger(value) || value < 1 || value > EDIT_STYLE_PREVIEW_MAX_COUNT) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_STYLE_PREVIEW_COUNT_INVALID',
+      message: `Style preview count must be an integer from 1 to ${String(EDIT_STYLE_PREVIEW_MAX_COUNT)}`,
+    })
+  }
+  return value
+}
 
 function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
   if (value === 'generating' || value === 'completed' || value === 'confirmed' || value === 'failed') return value
@@ -498,6 +514,8 @@ async function generateEditStylePreviewOptions(input: {
   readonly userPrompt: string
   readonly screenplayText: string
   readonly durationSeconds: number
+  readonly styleDirection: string
+  readonly count: number
 }): Promise<readonly EditStylePreviewOption[]> {
   const raw = await runPromptStep({
     userId: input.userId,
@@ -509,14 +527,19 @@ async function generateEditStylePreviewOptions(input: {
       user_request: input.userPrompt,
       screenplay_text: input.screenplayText,
       duration_seconds: String(input.durationSeconds),
+      style_direction: input.styleDirection,
+      style_preview_count: String(input.count),
     },
     stepTitle: 'Edit style preview options',
     stepIndex: 2,
     stepTotal: 2,
   })
   const parsed = editStylePreviewOptionsSchema.parse(raw).stylePreviews
+  if (parsed.length !== input.count) {
+    throw new Error(`EDIT_STYLE_PREVIEW_COUNT_MISMATCH:expected=${String(input.count)}:actual=${String(parsed.length)}`)
+  }
   const byKey = new Map(parsed.map((preview) => [preview.styleKey, preview]))
-  return EDIT_STYLE_PREVIEW_KEYS.map((key) => {
+  return EDIT_STYLE_PREVIEW_KEYS.slice(0, input.count).map((key) => {
     const preview = byKey.get(key)
     if (!preview) throw new Error(`EDIT_STYLE_PREVIEW_OPTION_MISSING:${key}`)
     return preview
@@ -1032,7 +1055,8 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
     })
   }
 
-  const allPreviewsReady = screenplay.stylePreviews.length === EDIT_STYLE_PREVIEW_KEYS.length
+  const allPreviewsReady = screenplay.stylePreviews.length > 0
+    && screenplay.stylePreviews.length <= EDIT_STYLE_PREVIEW_MAX_COUNT
     && screenplay.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed')
   if (!allPreviewsReady) {
     throw new ApiError('INVALID_PARAMS', {
@@ -1404,10 +1428,20 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
     },
   })
   if (!screenplay) throw new ApiError('NOT_FOUND')
-  if (screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY) {
+  const count = resolveStylePreviewCount(input.count)
+  if (input.replaceExisting === false) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_STYLE_PREVIEW_APPEND_UNSUPPORTED',
+      message: 'Style preview generation currently replaces the existing candidate set; pass replaceExisting=true or omit it.',
+    })
+  }
+  if (
+    screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY
+    && screenplay.status !== EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY
+  ) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCREENPLAY_REVIEW_REQUIRED',
-      message: `Edit screenplay must be reviewed before style preview generation; current status is ${screenplay.status}`,
+      message: `Edit screenplay must be ready for style preview generation or regeneration; current status is ${screenplay.status}`,
     })
   }
 
@@ -1423,6 +1457,8 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
       userPrompt: screenplay.userPrompt,
       screenplayText: screenplay.screenplayText,
       durationSeconds: defaults.durationSeconds,
+      styleDirection: input.styleDirection?.trim() ?? '',
+      count,
     })
 
     const stylePreviews = await prisma.$transaction(async (tx) => {

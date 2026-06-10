@@ -11,6 +11,7 @@ export const EDIT_SCRIPT_VIDEO_RATIOS = ['9:16', '16:9', '21:9'] as const
 export type EditScriptVideoRatio = (typeof EDIT_SCRIPT_VIDEO_RATIOS)[number]
 
 export const EDIT_STYLE_PREVIEW_KEYS = ['style_a', 'style_b', 'style_c'] as const
+export const EDIT_STYLE_PREVIEW_MAX_COUNT = EDIT_STYLE_PREVIEW_KEYS.length
 export type EditStylePreviewKey = (typeof EDIT_STYLE_PREVIEW_KEYS)[number]
 
 export type EditStylePreviewStatus = 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
@@ -36,6 +37,7 @@ export interface EditStylePreviewPayload {
 export interface EditStylePreviewGenerationItem {
   readonly id: string
   readonly styleKey: EditStylePreviewKey
+  readonly aspectRatio: EditScriptVideoRatio
   readonly title: string
   readonly summary: string
   readonly status: EditStylePreviewStatus
@@ -312,27 +314,22 @@ export const editStylePreviewOptionSchema = z.object({
 })
 
 export const editStylePreviewOptionsSchema = z.object({
-  stylePreviews: z.tuple([
-    editStylePreviewOptionSchema,
-    editStylePreviewOptionSchema,
-    editStylePreviewOptionSchema,
-  ]),
+  stylePreviews: z.array(editStylePreviewOptionSchema).min(1).max(EDIT_STYLE_PREVIEW_MAX_COUNT),
 }).superRefine((value, context) => {
-  const expectedKeys = new Set<EditStylePreviewKey>(EDIT_STYLE_PREVIEW_KEYS)
   const actualKeys = new Set(value.stylePreviews.map((preview) => preview.styleKey))
-  if (actualKeys.size !== EDIT_STYLE_PREVIEW_KEYS.length) {
+  if (actualKeys.size !== value.stylePreviews.length) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['stylePreviews'],
       message: 'Style preview keys must be unique.',
     })
   }
-  for (const key of expectedKeys) {
-    if (!actualKeys.has(key)) {
+  for (const [index, preview] of value.stylePreviews.entries()) {
+    if (preview.styleKey !== EDIT_STYLE_PREVIEW_KEYS[index]) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['stylePreviews'],
-        message: `Missing style preview key: ${key}`,
+        path: ['stylePreviews', index, 'styleKey'],
+        message: `Style preview key at index ${String(index)} must be ${EDIT_STYLE_PREVIEW_KEYS[index]}.`,
       })
     }
   }

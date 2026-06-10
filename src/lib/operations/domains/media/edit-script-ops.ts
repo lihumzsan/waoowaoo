@@ -55,6 +55,9 @@ const reviseEditScreenplayInputSchema = z.object({
 const generateEditStylePreviewsInputSchema = z.object({
   ...confirmedInputFields,
   screenplayId: z.string().trim().min(1).optional(),
+  styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
+  count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
+  replaceExisting: z.literal(true).optional().describe('When regenerating existing visual style candidates, pass true or omit this field. Appending candidates is not supported.'),
 }).passthrough()
 
 const requestEditFirstChoiceInputSchema = z.object({
@@ -333,7 +336,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
-      summary: 'Generate three screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay.',
+      summary: 'Generate or regenerate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. Use it again during visual style choice when the user asks to regenerate or adjust the candidates. Optional styleDirection carries the user feedback, count is 1-3 and defaults to 3, and regeneration replaces the existing candidate set.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
@@ -352,6 +355,9 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           locale: resolveLocale(ctx.context.locale),
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+          ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
+          ...(input.count ? { count: input.count } : {}),
+          ...(input.replaceExisting !== undefined ? { replaceExisting: input.replaceExisting } : {}),
         }))
         writeOperationDataPart<EditStylePreviewGenerationPartData>(ctx.writer, 'data-edit-style-preview-generation', {
           operationId: 'generate_edit_style_previews',

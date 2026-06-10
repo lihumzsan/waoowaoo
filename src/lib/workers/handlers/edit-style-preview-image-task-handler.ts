@@ -36,7 +36,7 @@ async function updateScreenplayStatusIfAllPreviewsCompleted(editScreenplayId: st
     where: { editScreenplayId },
     select: { status: true },
   })
-  if (previews.length !== 3) return
+  if (previews.length < 1 || previews.length > 3) return
   if (!previews.every((preview) => preview.status === 'completed')) return
   await prisma.projectEditScreenplay.update({
     where: { id: editScreenplayId },

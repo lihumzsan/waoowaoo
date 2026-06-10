@@ -169,6 +169,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'needs_style_choice',
       blocking: { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' },
+      allowedOperationIds: ['generate_edit_style_previews'],
     })
   }
 
