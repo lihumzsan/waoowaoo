@@ -242,6 +242,31 @@ function isEditScriptVideoRatio(value: string | undefined): value is EditScriptV
   return typeof value === 'string' && EDIT_SCRIPT_VIDEO_RATIOS.includes(value as EditScriptVideoRatio)
 }
 
+function isAspectRatioChoiceGroupKey(key: string): boolean {
+  return key === 'aspectRatio'
+}
+
+function RatioChoiceShape(props: {
+  ratio: string
+  selected: boolean
+}) {
+  const [rawWidth, rawHeight] = props.ratio.split(':').map(Number)
+  const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1
+  const height = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 1
+  const max = Math.max(width, height)
+  return (
+    <div className="flex h-9 w-12 items-center justify-center">
+      <div
+        className={`rounded-[4px] border-2 transition-colors ${props.selected ? 'border-[var(--glass-accent-from)] bg-[var(--glass-accent-from)]/10' : 'border-[var(--glass-stroke-strong)] bg-white'}`}
+        style={{
+          width: `${String(Math.max(14, Math.round(34 * (width / max))))}px`,
+          height: `${String(Math.max(14, Math.round(34 * (height / max))))}px`,
+        }}
+      />
+    </div>
+  )
+}
+
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
   onSendChoiceMessage: (message: string) => Promise<void>
@@ -268,6 +293,8 @@ export function AssistantChoiceCardView(props: {
   const ready = isChoiceCardSubmitReady(card.groups, selections)
   const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
   const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
+  const canGoBack = activeGroupIndex > 0
+  const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
 
   const handleSubmit = async () => {
     if (!ready || submitting) return
@@ -317,27 +344,41 @@ export function AssistantChoiceCardView(props: {
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)]/70 p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1 text-sm font-medium text-[var(--glass-text-primary)]">{card.title}</div>
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+      <div className="flex items-center gap-2">
+        {canGoBack ? (
+          <button
+            type="button"
+            aria-label={t('cards.choiceBack')}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--glass-stroke-base)] bg-white text-[var(--glass-text-secondary)] transition-colors hover:bg-neutral-100 hover:text-[var(--glass-text-primary)] disabled:opacity-60"
+            onClick={() => {
+              setActiveGroupIndex((current) => Math.max(0, current - 1))
+              setError(null)
+            }}
+            disabled={submitting}
+          >
+            <AppIcon name="chevronLeft" className="h-4 w-4" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{card.title}</div>
         {progressLabel ? (
-          <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
+          <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
             {progressLabel}
           </div>
         ) : null}
       </div>
-      {card.description ? <div className="mt-1 leading-5">{card.description}</div> : null}
+      {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
       {activeGroup ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-2">
           <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
-          <div className="space-y-2">
+          <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
             {activeGroup.options.map((option) => {
               const selected = selections[activeGroup.key] === option.value
               return (
                 <button
                   key={`${activeGroup.key}:${option.value}`}
                   type="button"
-                  className={`w-full overflow-hidden rounded-xl border text-left transition ${selected ? 'border-slate-950 bg-white ring-1 ring-slate-950' : 'border-[var(--glass-stroke-base)] bg-white/70 hover:border-slate-300'}`}
+                  className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-[var(--glass-accent-from)] bg-[var(--glass-accent-from)]/5 ring-1 ring-[var(--glass-accent-from)]/30' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
                   onClick={() => {
                     setSelections((current) => ({
                       ...current,
@@ -356,19 +397,20 @@ export function AssistantChoiceCardView(props: {
                       width={640}
                       height={360}
                       unoptimized
-                      className="h-32 w-full object-cover"
+                      className="h-28 w-full object-cover"
                     />
                   ) : null}
-                  <div className="space-y-1 p-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{option.label}</span>
-                      {selected ? <AppIcon name="check" className="h-4 w-4 shrink-0 text-slate-950" /> : null}
+                  <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-0.5'}`}>
+                    {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-[var(--glass-accent-from)]' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-accent-from)]" /> : null}
                     </div>
-                    {option.description ? (
-                      <div className="line-clamp-3 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                    {!isAspectRatioGroup && option.description ? (
+                      <div className="line-clamp-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
                     ) : null}
-                    {option.meta ? (
-                      <div className="text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                    {!isAspectRatioGroup && option.meta ? (
+                      <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
                     ) : null}
                   </div>
                 </button>
@@ -380,13 +422,13 @@ export function AssistantChoiceCardView(props: {
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
       <button
         type="button"
-        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
         onClick={() => { void handleSubmit() }}
         disabled={!ready || submitting}
       >
         {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
       </button>
-      {!ready ? <div className="mt-2 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
+      {!ready ? <div className="mt-1.5 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
     </div>
   )
 }

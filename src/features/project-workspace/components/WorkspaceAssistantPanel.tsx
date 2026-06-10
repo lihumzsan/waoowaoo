@@ -600,23 +600,27 @@ export default function WorkspaceAssistantPanel({
                 </div>
               </ThreadPrimitive.Viewport>
 
-              <div className="mx-4 mb-3 shrink-0 space-y-2 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
-                <WorkspaceAssistantComposer
-                  value={composerText}
-                  error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
-                  pending={assistantRuntime.pending || assistantRuntime.storageLoading}
-                  onChange={setComposerText}
-                  onSubmit={handleComposerSubmit}
-                />
+              <div className="mx-4 mb-2 shrink-0">
                 {activeChoiceCard ? (
-                  <AssistantChoiceCardView
-                    data={activeChoiceCard.data}
-                    onSendChoiceMessage={assistantRuntime.sendMessage}
-                    onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
-                    onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
-                    onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}
-                  />
+                  <div className="mb-2">
+                    <AssistantChoiceCardView
+                      data={activeChoiceCard.data}
+                      onSendChoiceMessage={assistantRuntime.sendMessage}
+                      onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
+                      onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
+                      onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}
+                    />
+                  </div>
                 ) : null}
+                <div className="rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
+                  <WorkspaceAssistantComposer
+                    value={composerText}
+                    error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
+                    pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                    onChange={setComposerText}
+                    onSubmit={handleComposerSubmit}
+                  />
+                </div>
               </div>
             </ThreadPrimitive.Root>
           </AssistantRuntimeProvider>

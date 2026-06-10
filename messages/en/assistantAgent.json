@@ -169,6 +169,7 @@
     "rejectedPlan": "Rejected the {workflow} plan.{reason}",
     "approvedPlan": "Approved the {workflow} plan and started execution.",
     "choiceRequired": "Select all required options to continue.",
+    "choiceBack": "Back to previous choice",
     "choiceSubmitting": "Processing...",
     "choiceSubmitFailed": "Submit failed: {error}",
     "operationExecutionFailedFallback": "Operation execution failed",

@@ -169,6 +169,7 @@
     "rejectedPlan": "已拒绝 {workflow} 计划。{reason}",
     "approvedPlan": "已批准 {workflow} 计划，正在开始执行。",
     "choiceRequired": "请选择所有必填项后继续。",
+    "choiceBack": "返回上一步",
     "choiceSubmitting": "处理中...",
     "choiceSubmitFailed": "提交失败：{error}",
     "operationExecutionFailedFallback": "操作执行失败",
