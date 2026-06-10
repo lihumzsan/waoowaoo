@@ -46,7 +46,7 @@ describe('CapsuleNav layering', () => {
 })
 
 describe('ProjectNameEditor', () => {
-  it('renders a project rename affordance with folder styling when rename is available', () => {
+  it('renders a compact inline project rename affordance when rename is available', () => {
     Reflect.set(globalThis, 'React', React)
 
     const html = renderToStaticMarkup(
@@ -60,6 +60,10 @@ describe('ProjectNameEditor', () => {
     expect(html).toContain('data-icon="folder"')
     expect(html).toContain('title="editProjectName"')
     expect(html).toContain('听雨')
+    expect(html).toContain('mb-1 flex items-center gap-1.5 px-2 py-1.5')
+    expect(html).not.toContain('rounded-xl border')
+    expect(html).not.toContain('glass-tone-info-bg')
+    expect(html).not.toContain('>project<')
   })
 
   it('does not render a disabled project edit button without a rename handler', () => {

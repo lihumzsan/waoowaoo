@@ -233,10 +233,10 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
 
     if (isEditing) {
         return (
-            <div className="mb-2 rounded-xl border border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)] p-3">
-                <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/45 text-[var(--glass-tone-info-fg)]">
-                        <AppIcon name="folder" className="h-4 w-4" />
+            <div className="mb-1 px-2 py-1.5">
+                <div className="flex items-center gap-1.5">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--glass-bg-muted)] text-[var(--glass-text-tertiary)]">
+                        <AppIcon name="folder" className="h-3.5 w-3.5" />
                     </div>
                     <input
                         type="text"
@@ -249,7 +249,7 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
                                 cancelEditing()
                             }
                         }}
-                        className="min-w-0 flex-1 rounded-lg border border-[var(--glass-stroke-focus)] bg-white/70 px-2 py-1.5 text-sm text-[var(--glass-text-primary)] outline-none"
+                        className="min-w-0 flex-1 rounded-md border border-[var(--glass-stroke-base)] bg-white/40 px-2 py-1 text-sm font-bold text-[var(--glass-text-primary)] outline-none focus:border-[var(--glass-stroke-strong)]"
                         placeholder={t('projectNamePlaceholder')}
                         autoFocus
                     />
@@ -257,19 +257,19 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
                         type="button"
                         onClick={() => { void submitRename() }}
                         disabled={isSaving || !draftName.trim()}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--glass-accent-from)] text-white transition-opacity hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--glass-text-secondary)] transition-colors hover:bg-[var(--glass-bg-surface-strong)] hover:text-[var(--glass-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                         title={t('save')}
                     >
-                        <AppIcon name="check" className="h-4 w-4" />
+                        <AppIcon name="check" className="h-3.5 w-3.5" />
                     </button>
                     <button
                         type="button"
                         onClick={cancelEditing}
                         disabled={isSaving}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--glass-text-tertiary)] transition-colors hover:bg-[var(--glass-bg-surface-strong)] hover:text-[var(--glass-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
                         title={t('cancel')}
                     >
-                        <AppIcon name="close" className="h-4 w-4" />
+                        <AppIcon name="close" className="h-3.5 w-3.5" />
                     </button>
                 </div>
                 {errorMessage && (
@@ -282,22 +282,19 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
     }
 
     return (
-        <div className="mb-2 flex items-center gap-3 rounded-xl border border-[var(--glass-stroke-base)] bg-white/35 p-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)]">
-                <AppIcon name="folder" className="h-4 w-4" />
+        <div className="mb-1 flex items-center gap-1.5 px-2 py-1.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--glass-bg-muted)] text-[var(--glass-text-tertiary)]">
+                <AppIcon name="folder" className="h-3.5 w-3.5" />
             </div>
-            <div className="min-w-0 flex-1">
-                <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('project')}</div>
-                <div className="truncate text-sm font-bold text-[var(--glass-text-primary)]">{displayName}</div>
-            </div>
+            <div className="min-w-0 truncate text-sm font-bold text-[var(--glass-text-primary)]">{displayName}</div>
             {onRename && (
                 <button
                     type="button"
                     onClick={startEditing}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--glass-text-tertiary)] transition-colors hover:bg-[var(--glass-bg-surface-strong)] hover:text-[var(--glass-text-secondary)]"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--glass-text-tertiary)] transition-colors hover:bg-[var(--glass-bg-surface-strong)] hover:text-[var(--glass-text-secondary)]"
                     title={t('editProjectName')}
                 >
-                    <AppIcon name="edit" className="h-4 w-4" />
+                    <AppIcon name="edit" className="h-3.5 w-3.5" />
                 </button>
             )}
         </div>
