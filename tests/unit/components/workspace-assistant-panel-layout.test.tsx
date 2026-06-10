@@ -8,9 +8,12 @@ import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/c
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import { WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
+  resolveEditStylePreviewCardStatus,
   resolveProgressStageLabel,
   WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
+import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
+import type { ProjectEditStylePreview } from '@/types/project'
 import {
   buildWorkspaceAssistantPanelLayout,
   clampWorkspaceAssistantPanelWidth,
@@ -21,6 +24,45 @@ import {
 } from '@/features/project-workspace/components/workspace-assistant/panel-layout'
 
 type ProgressTranslator = Parameters<typeof resolveProgressStageLabel>[1]
+
+function buildStylePreview(overrides: Partial<ProjectEditStylePreview>): ProjectEditStylePreview {
+  return {
+    id: 'preview-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    styleKey: 'style_a',
+    aspectRatio: '16:9',
+    title: 'Style A',
+    summary: 'A visual style.',
+    styleBible: {},
+    gridImagePrompt: 'Prompt',
+    imageKey: null,
+    imageUrl: null,
+    status: 'generating',
+    taskId: 'task-1',
+    errorMessage: null,
+    ...overrides,
+  }
+}
+
+function buildTaskState(overrides: Partial<TaskTargetState>): TaskTargetState {
+  return {
+    targetType: 'ProjectEditStylePreview',
+    targetId: 'preview-1',
+    phase: 'processing',
+    runningTaskId: 'task-1',
+    runningTaskType: 'edit_style_preview_image',
+    intent: 'process',
+    hasOutputAtStart: null,
+    progress: 45,
+    stage: null,
+    stageLabel: null,
+    lastError: null,
+    updatedAt: null,
+    ...overrides,
+  }
+}
 
 function createProgressTranslator(messages: {
   stage?: Record<string, string>
@@ -158,6 +200,40 @@ describe('workspace assistant panel layout', () => {
     expect(resolveProgressStageLabel('progress.stage.editScriptVideoPrompt', progressT)).toBe('生成视频提示词')
     expect(resolveProgressStageLabel('progress.stage.missingStage', progressT)).toBe('MISSING_MESSAGE:progress.stage.missingStage')
     expect(resolveProgressStageLabel('外部阶段', progressT)).toBe('外部阶段')
+  })
+
+  it('marks style preview cards as failed when the preview record or task state fails', () => {
+    expect(resolveEditStylePreviewCardStatus({
+      preview: buildStylePreview({ status: 'failed', errorMessage: 'FAL balance exhausted' }),
+      taskState: buildTaskState({ phase: 'processing' }),
+    })).toBe('failed')
+    expect(resolveEditStylePreviewCardStatus({
+      preview: buildStylePreview({ status: 'generating' }),
+      taskState: buildTaskState({
+        phase: 'failed',
+        lastError: {
+          code: 'FORBIDDEN',
+          message: 'Provider rejected the request',
+        },
+      }),
+    })).toBe('failed')
+  })
+
+  it('marks style preview cards as completed only when a completed preview has an image', () => {
+    expect(resolveEditStylePreviewCardStatus({
+      preview: buildStylePreview({
+        status: 'completed',
+        imageUrl: 'https://example.test/style.png',
+      }),
+      taskState: buildTaskState({ phase: 'completed' }),
+    })).toBe('completed')
+    expect(resolveEditStylePreviewCardStatus({
+      preview: buildStylePreview({
+        status: 'completed',
+        imageUrl: null,
+      }),
+      taskState: buildTaskState({ phase: 'completed' }),
+    })).toBe('generating')
   })
 
   it('keeps edit script video prompt stage translated in supported locales', () => {

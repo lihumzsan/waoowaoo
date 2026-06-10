@@ -178,6 +178,8 @@
     "stylePreviewGenerationTitle": "Generating Visual Style Candidates",
     "stylePreviewGenerationCount": "{count} candidates",
     "stylePreviewGenerationStatus": "Generating · {status}",
+    "stylePreviewGenerationFailed": "Generation failed",
+    "stylePreviewGenerationFailedReason": "Reason: {reason}",
     "stylePreviewSelect": "Choose this style",
     "stylePreviewSelectedMessage": "Selected style {title} and aspect ratio {aspectRatio}. Read the latest project state and continue with the immediate next step.",
     "stylePreviewSummaryExpand": "Expand",

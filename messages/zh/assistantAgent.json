@@ -178,6 +178,8 @@
     "stylePreviewGenerationTitle": "正在生成视觉风格候选图",
     "stylePreviewGenerationCount": "{count} 个候选",
     "stylePreviewGenerationStatus": "生成中 · {status}",
+    "stylePreviewGenerationFailed": "生成失败",
+    "stylePreviewGenerationFailedReason": "失败原因：{reason}",
     "stylePreviewSelect": "选择这个风格",
     "stylePreviewSelectedMessage": "已选择风格 {title} 和画面比例 {aspectRatio}，请读取最新项目状态并继续当前唯一下一步。",
     "stylePreviewSummaryExpand": "展开",

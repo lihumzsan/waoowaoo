@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
-import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
+import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import type {
   AgentPlanPartData,
   ConfirmationRequestPartData,
@@ -678,6 +678,28 @@ function isEditStylePreviewChoiceReady(preview: ProjectEditStylePreview | null):
   return Boolean(preview?.id && preview.imageUrl && preview.status === 'completed')
 }
 
+function isEditStylePreviewTerminal(preview: ProjectEditStylePreview | null): boolean {
+  return preview?.status === 'completed' || preview?.status === 'confirmed' || preview?.status === 'failed'
+}
+
+export type EditStylePreviewCardStatus = 'generating' | 'completed' | 'failed'
+
+export function resolveEditStylePreviewCardStatus(params: {
+  readonly preview: ProjectEditStylePreview | null
+  readonly taskState: TaskTargetState | undefined
+}): EditStylePreviewCardStatus {
+  if (params.preview?.status === 'failed' || params.taskState?.phase === 'failed') return 'failed'
+  if (isEditStylePreviewChoiceReady(params.preview)) return 'completed'
+  return 'generating'
+}
+
+function truncateStylePreviewErrorMessage(message: string | null | undefined): string | null {
+  const normalized = message?.trim()
+  if (!normalized) return null
+  const singleLine = normalized.replace(/\s+/g, ' ')
+  return singleLine.length > 180 ? `${singleLine.slice(0, 180)}...` : singleLine
+}
+
 function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
@@ -703,11 +725,11 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
     refetchInterval: (query) => {
       const screenplay = query.state.data?.screenplay ?? null
       const previews = screenplay?.stylePreviews ?? []
-      const allReady = data.items.every((item) => {
+      const allTerminal = data.items.every((item) => {
         const preview = previews.find((candidate) => candidate.id === item.id) ?? null
-        return isEditStylePreviewChoiceReady(preview)
+        return isEditStylePreviewTerminal(preview)
       })
-      return allReady ? false : 2500
+      return allTerminal ? false : 2500
     },
   })
   const previewsById = useMemo(() => {
@@ -766,18 +788,16 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
           const preview = previewsById.get(item.id) ?? null
           const rawStage = taskState?.stageLabel || taskState?.stage || null
           const stageLabel = resolveProgressStageLabel(rawStage, progressT)
-          const liveStatus = preview?.status === 'completed'
-            ? 'completed'
-            : taskState && taskState.phase !== 'idle'
-              ? taskState.phase
-              : 'processing'
-          const ready = isEditStylePreviewChoiceReady(preview)
+          const cardStatus = resolveEditStylePreviewCardStatus({ preview, taskState })
+          const ready = cardStatus === 'completed' && isEditStylePreviewChoiceReady(preview)
+          const failed = cardStatus === 'failed'
           const selecting = selectingPreviewId === item.id
           const summaryExpanded = expandedSummaryIds.has(item.id)
+          const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
           return (
             <div
               key={item.id}
-              className="overflow-hidden rounded-xl border border-[var(--glass-stroke-base)] bg-white/80"
+              className={`overflow-hidden rounded-xl border bg-white/80 ${failed ? 'border-[var(--glass-tone-warn-fg)]/35' : 'border-[var(--glass-stroke-base)]'}`}
             >
               <div className="relative min-h-36 overflow-hidden bg-neutral-100">
                 <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
@@ -792,6 +812,10 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
                     unoptimized
                     className="h-44 w-full object-cover"
                   />
+                ) : failed ? (
+                  <div className="flex h-36 items-center justify-center bg-[var(--glass-tone-warn-bg)]/35 px-4 text-center text-xs font-medium text-[var(--glass-tone-warn-fg)]">
+                    {t('cards.stylePreviewGenerationFailed')}
+                  </div>
                 ) : (
                   <div className="workspace-node-loading-surface h-36 bg-slate-100" />
                 )}
@@ -810,9 +834,18 @@ function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStyl
                   </span>
                 </button>
                 <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
-                  <AppIcon name={ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready ? '' : 'animate-spin'}`} />
-                  <span>{stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: liveStatus })}</span>
+                  <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
+                  <span>
+                    {failed
+                      ? t('cards.stylePreviewGenerationFailed')
+                      : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
+                  </span>
                 </div>
+                {failed && errorMessage ? (
+                  <div className="rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[10px] leading-4 text-[var(--glass-tone-warn-fg)]">
+                    {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
+                  </div>
+                ) : null}
                 {ready ? (
                   <button
                     type="button"
