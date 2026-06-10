@@ -51,6 +51,7 @@ export async function executeProjectAgentOperationFromTool(params: {
   source: string
   writer: UIMessageStreamWriter<UIMessage>
   input: unknown
+  toolCallId?: string | null
 }): Promise<ProjectAgentToolResult<unknown>> {
   const registry = createProjectAgentOperationRegistry()
   const operation = registry[params.operationId]
@@ -155,6 +156,7 @@ export async function executeProjectAgentOperationFromTool(params: {
       writeOperationDataPart<ConfirmationRequestPartData>(params.writer, 'data-confirmation-request', {
         operationId: params.operationId,
         summary,
+        ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
         argsHint: {
           ...(parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data as Record<string, unknown> : {}),
           confirmed: true,

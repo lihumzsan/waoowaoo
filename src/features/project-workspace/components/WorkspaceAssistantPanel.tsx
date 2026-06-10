@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
-import type { UIMessage } from 'ai'
 import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
@@ -13,10 +12,6 @@ import {
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
-import {
-  removeConfirmationRequestFromMessages,
-} from './workspace-assistant/approval-state'
-import { createAssistantMessage } from './workspace-assistant/assistant-messages'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { apiFetch } from '@/lib/api-fetch'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
@@ -35,9 +30,6 @@ import {
 } from './workspace-assistant/assistant-send-event'
 import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
 import {
-  createEditStylePreviewGenerationDataFromOperationPayload,
-  createTaskBatchSubmittedDataFromOperationPayload,
-  createTaskSubmittedDataFromOperationPayload,
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
 import {
@@ -50,6 +42,7 @@ import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
+import type { ConfirmationRequestPartData } from '@/lib/project-agent/types'
 
 interface ProjectAgentWaitFollowUp {
   waitId: string
@@ -100,38 +93,36 @@ function readResponseErrorMessage(payload: unknown, fallback: string): string {
   return fallback
 }
 
-function readOperationResultSummary(payload: unknown): string {
-  if (!isRecord(payload)) return ''
-  const result = isRecord(payload.result) ? payload.result : null
-  if (!result) return ''
-  const taskId = typeof result.taskId === 'string' ? result.taskId.trim() : ''
-  const runId = typeof result.runId === 'string' ? result.runId.trim() : ''
-  const status = typeof result.status === 'string' ? result.status.trim() : ''
-  return [status, taskId || runId].filter(Boolean).join(' · ')
-}
-
-function readConfirmedOperationMessage(params: {
-  operationId: string
-  resultSummary: string
-  t: ReturnType<typeof useTranslations<'assistantAgent'>>
-}): string {
-  if (params.operationId === 'generate_edit_screenplay') {
-    return params.t('cards.confirmedScreenplayReady')
-  }
-  if (params.operationId === 'generate_edit_style_previews') {
-    return params.t('cards.confirmedStylePreviewGenerationStarted')
-  }
-  return params.resultSummary
-    ? params.t('cards.confirmedOperationWithResult', { operation: params.operationId, result: params.resultSummary })
-    : params.t('cards.confirmedOperation', { operation: params.operationId })
-}
-
 function readAssistantToolOutput(part: unknown): unknown | null {
   if (!isRecord(part)) return null
   const type = typeof part.type === 'string' ? part.type : ''
   if (type !== 'dynamic-tool' && !type.startsWith('tool-')) return null
   if (part.state !== 'output-available') return null
   return 'output' in part ? part.output : null
+}
+
+function readConfirmedOperationSuccessData(payload: unknown): unknown | null {
+  if (!isRecord(payload)) return null
+  if (payload.ok !== true) return null
+  return 'data' in payload ? payload.data : null
+}
+
+function buildOperationFailureToolOutput(params: {
+  operationId: string
+  message: string
+  code: string
+  details?: unknown
+}): Record<string, unknown> {
+  return {
+    ok: false,
+    operationId: params.operationId,
+    error: {
+      code: params.code,
+      message: params.message,
+      operationId: params.operationId,
+      details: params.details ?? null,
+    },
+  }
 }
 
 function readStoredAssistantPanelWidth(): number {
@@ -320,7 +311,13 @@ export default function WorkspaceAssistantPanel({
     return () => window.removeEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
   }, [sendAssistantMessageOnce])
   const [confirmationSubmittingKey, setConfirmationSubmittingKey] = useState<string | null>(null)
-  const handleConfirmOperation = async (operationId: string, argsHint?: Record<string, unknown> | null) => {
+  const handleConfirmOperation = async (confirmation: ConfirmationRequestPartData) => {
+    const operationId = confirmation.operationId
+    const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
+    if (!toolCallId) {
+      throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
+    }
+    const argsHint = isRecord(confirmation.argsHint) ? confirmation.argsHint : null
     setConfirmationSubmittingKey(`confirm:${operationId}:continue`)
     try {
       const response = await apiFetch(`/api/projects/${projectId}/assistant/confirm-operation`, {
@@ -344,93 +341,66 @@ export default function WorkspaceAssistantPanel({
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok) {
-        throw new Error(readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')))
-      }
-      const operationEpisodeId = typeof argsHint?.episodeId === 'string' && argsHint.episodeId.trim()
-        ? argsHint.episodeId.trim()
-        : episodeId
-      await syncWorkspaceResourceChangesFromWriteResult({
-        queryClient,
-        result: payload,
-        projectId,
-        fallbackEpisodeId: operationEpisodeId ?? null,
-      })
-
-      const nextMessages = removeConfirmationRequestFromMessages(assistantRuntime.messages, operationId)
-      const resultSummary = readOperationResultSummary(payload)
-      const taskSubmittedData = createTaskSubmittedDataFromOperationPayload({
-        payload,
-        operationId,
-        projectId,
-        episodeId: operationEpisodeId ?? null,
-      })
-      const taskBatchSubmittedData = taskSubmittedData
-        ? null
-        : createTaskBatchSubmittedDataFromOperationPayload({
-            payload,
+        await assistantRuntime.addToolOutput({
+          tool: operationId,
+          toolCallId,
+          output: buildOperationFailureToolOutput({
             operationId,
-          })
-      const editStylePreviewGenerationData = createEditStylePreviewGenerationDataFromOperationPayload({
-        payload,
-        operationId,
-      })
-      const confirmationMessageParts: UIMessage['parts'] = [{
-        type: 'text',
-        text: readConfirmedOperationMessage({
-          operationId,
-          resultSummary,
-          t,
-        }),
-      }]
-      if (editStylePreviewGenerationData) {
-        confirmationMessageParts.push({
-          type: 'data-edit-style-preview-generation',
-          data: editStylePreviewGenerationData,
-        } as unknown as UIMessage['parts'][number])
-      }
-      if (taskSubmittedData) {
-        confirmationMessageParts.push({
-          type: 'data-task-submitted',
-          data: taskSubmittedData,
-        } as unknown as UIMessage['parts'][number])
-      }
-      if (taskBatchSubmittedData) {
-        confirmationMessageParts.push({
-          type: 'data-task-batch-submitted',
-          data: taskBatchSubmittedData,
-        } as unknown as UIMessage['parts'][number])
-      }
-      assistantRuntime.replaceMessages([
-        ...nextMessages,
-        createAssistantMessage(confirmationMessageParts),
-      ])
-    } catch (error) {
-      const nextMessages = removeConfirmationRequestFromMessages(assistantRuntime.messages, operationId)
-      assistantRuntime.replaceMessages([
-        ...nextMessages,
-        createAssistantMessage([{
-          type: 'text',
-          text: t('cards.confirmedOperationFailed', {
-            operation: operationId,
-            error: error instanceof Error ? error.message : String(error),
+            code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
+            message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
+            details: payload,
           }),
-        }]),
-      ])
+        })
+        return
+      }
+      const successData = readConfirmedOperationSuccessData(payload)
+      if (successData !== null) {
+        const operationEpisodeId = typeof argsHint?.episodeId === 'string' && argsHint.episodeId.trim()
+          ? argsHint.episodeId.trim()
+          : episodeId
+        await syncWorkspaceResourceChangesFromWriteResult({
+          queryClient,
+          result: successData,
+          projectId,
+          fallbackEpisodeId: operationEpisodeId ?? null,
+        })
+      }
+      await assistantRuntime.addToolOutput({
+        tool: operationId,
+        toolCallId,
+        output: payload,
+      })
+    } catch (error) {
+      await assistantRuntime.addToolOutput({
+        tool: operationId,
+        toolCallId,
+        output: buildOperationFailureToolOutput({
+          operationId,
+          code: 'CONFIRMED_OPERATION_CLIENT_FAILED',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      })
     } finally {
       setConfirmationSubmittingKey(null)
     }
   }
-  const handleCancelOperation = async (operationId: string) => {
+  const handleCancelOperation = async (confirmation: ConfirmationRequestPartData) => {
+    const operationId = confirmation.operationId
+    const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
+    if (!toolCallId) {
+      throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
+    }
     setConfirmationSubmittingKey(`confirm:${operationId}:cancel`)
     try {
-      const nextMessages = removeConfirmationRequestFromMessages(assistantRuntime.messages, operationId)
-      assistantRuntime.replaceMessages([
-        ...nextMessages,
-        createAssistantMessage([{
-          type: 'text',
-          text: t('cards.cancelledOperation', { operation: operationId }),
-        }]),
-      ])
+      await assistantRuntime.addToolOutput({
+        tool: operationId,
+        toolCallId,
+        output: buildOperationFailureToolOutput({
+          operationId,
+          code: 'USER_CANCELLED_OPERATION',
+          message: 'USER_CANCELLED_OPERATION',
+        }),
+      })
     } finally {
       setConfirmationSubmittingKey(null)
     }

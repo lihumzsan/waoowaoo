@@ -6,6 +6,7 @@ import {
   streamText,
   type UIMessage,
   type ToolSet,
+  type ToolExecutionOptions,
   type UIMessageStreamWriter,
 } from 'ai'
 import type { Tool } from '@ai-sdk/provider-utils'
@@ -307,7 +308,7 @@ export async function createProjectAgentChatResponse(input: {
         const definition: Tool<unknown, unknown> = {
           description,
           inputSchema: operation.inputSchema,
-          execute: async (args: unknown) => {
+          execute: async (args: unknown, options?: ToolExecutionOptions) => {
             return executeProjectAgentOperationFromTool({
               request: input.request,
               operationId,
@@ -317,6 +318,7 @@ export async function createProjectAgentChatResponse(input: {
               source: 'assistant-panel',
               writer,
               input: args,
+              toolCallId: options?.toolCallId,
             })
           },
         }

@@ -53,6 +53,19 @@ function formatSkillLabel(skillId: string | null | undefined, t: ReturnType<type
   return labelKey ? t(`cards.skillLabels.${labelKey}`) : skillId
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasRenderedToolOutput(parts: readonly unknown[], toolCallId: string): boolean {
+  return parts.some((part) => {
+    if (!isRecord(part)) return false
+    return part.type === 'tool-call'
+      && part.toolCallId === toolCallId
+      && ('result' in part || part.isError === true)
+  })
+}
+
 type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)]'
@@ -424,17 +437,21 @@ export function AssistantChoiceCardView(props: {
 }
 
 function InlineConfirmationRequestDataCard(props: DataMessagePartProps<ConfirmationRequestPartData> & {
-  onConfirmOperation: (operationId: string, argsHint?: Record<string, unknown> | null) => Promise<void>
-  onCancelOperation: (operationId: string) => Promise<void>
+  onConfirmOperation: (data: ConfirmationRequestPartData) => Promise<void>
+  onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
   confirmationSubmittingKey: string | null
 }) {
+  const toolCallId = typeof props.data.toolCallId === 'string' ? props.data.toolCallId.trim() : ''
+  const messageContent = useMessage((state) => state.content)
+  if (!toolCallId || hasRenderedToolOutput(messageContent, toolCallId)) return null
+
   return (
     <ConfirmationActionCard
       operationId={props.data.operationId}
       summary={props.data.summary}
       argsHint={props.data.argsHint ?? null}
-      onConfirm={async () => props.onConfirmOperation(props.data.operationId, props.data.argsHint ?? null)}
-      onCancel={async () => props.onCancelOperation(props.data.operationId)}
+      onConfirm={async () => props.onConfirmOperation(props.data)}
+      onCancel={async () => props.onCancelOperation(props.data)}
       confirmPending={props.confirmationSubmittingKey === `confirm:${props.data.operationId}:continue`}
       cancelPending={props.confirmationSubmittingKey === `confirm:${props.data.operationId}:cancel`}
     />
@@ -716,8 +733,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
 }
 
 interface WorkspaceAssistantMessagePartComponentsOptions {
-  onConfirmOperation: (operationId: string, argsHint?: Record<string, unknown> | null) => Promise<void>
-  onCancelOperation: (operationId: string) => Promise<void>
+  onConfirmOperation: (data: ConfirmationRequestPartData) => Promise<void>
+  onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
   confirmationSubmittingKey: string | null
   hideChoiceCards?: boolean
   onSendChoiceMessage: (message: string) => Promise<void>

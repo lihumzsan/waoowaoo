@@ -378,13 +378,48 @@ describe('project assistant chat route', () => {
       taskIds: ['task-music-1'],
     })
     await expect(response.json()).resolves.toEqual({
-      success: true,
+      ok: true,
       operationId: 'generate_project_music',
-      result: {
+      data: {
         async: true,
         status: 'submitted',
         taskId: 'task-music-1',
       },
+    })
+  })
+
+  it('POST /api/projects/[projectId]/assistant/confirm-operation -> returns operation execution failure as tool output', async () => {
+    apiAdapterMock.executeProjectAgentOperationFromApi.mockRejectedValueOnce(new Error('provider quota exceeded'))
+
+    const response = await confirmOperationPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/confirm-operation',
+        method: 'POST',
+        body: {
+          operationId: 'generate_project_music',
+          input: {
+            prompt: 'lo-fi title theme',
+            durationSeconds: 30,
+            confirmed: true,
+          },
+          context: {
+            locale: 'zh',
+            episodeId: 'episode-1',
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      operationId: 'generate_project_music',
+      error: expect.objectContaining({
+        code: 'RATE_LIMIT',
+        message: 'provider quota exceeded',
+        operationId: 'generate_project_music',
+      }),
     })
   })
 

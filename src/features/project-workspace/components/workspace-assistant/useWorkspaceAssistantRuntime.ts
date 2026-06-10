@@ -3,7 +3,7 @@
 import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
-import type { ChatStatus, UIMessage } from 'ai'
+import { lastAssistantMessageIsCompleteWithToolCalls, type ChatStatus, type UIMessage } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -34,6 +34,11 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageError: string | null
   storageLoading: boolean
   sendMessage: (text: string) => Promise<void>
+  addToolOutput: (params: {
+    tool: string
+    toolCallId: string
+    output: unknown
+  }) => Promise<void>
   replaceMessages: (messages: UIMessage[]) => void
   appendMessages: (messages: UIMessage[]) => void
 }
@@ -82,6 +87,7 @@ export function useWorkspaceAssistantRuntime({
   const chat = useChat({
     id: chatId,
     transport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   })
   const runtime = useAISDKRuntime(chat)
   const hydratedSessionKeyRef = useRef<string | null>(null)
@@ -102,6 +108,19 @@ export function useWorkspaceAssistantRuntime({
   const appendMessages = useCallback((messages: UIMessage[]) => {
     if (messages.length === 0) return
     chat.setMessages((current) => [...current, ...messages])
+  }, [chat])
+
+  const addToolOutput = useCallback(async (params: {
+    tool: string
+    toolCallId: string
+    output: unknown
+  }) => {
+    chat.clearError()
+    await chat.addToolOutput({
+      tool: params.tool,
+      toolCallId: params.toolCallId,
+      output: params.output,
+    })
   }, [chat])
 
   useEffect(() => {
@@ -168,6 +187,7 @@ export function useWorkspaceAssistantRuntime({
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
     sendMessage,
+    addToolOutput,
     replaceMessages,
     appendMessages,
   }

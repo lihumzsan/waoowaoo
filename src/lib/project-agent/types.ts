@@ -161,6 +161,7 @@ export interface ProjectAgentChoiceCardPartData {
 export interface ConfirmationRequestPartData {
   operationId: string
   summary: string
+  toolCallId?: string | null
   argsHint?: UnknownObject | null
   budget?: {
     key?: string

@@ -95,15 +95,17 @@ describe('executeProjectAgentOperationFromTool', () => {
       source: 'assistant-panel',
       writer,
       input: {},
+      toolCallId: 'tool-call-1',
     })
 
     expect(writer.write).toHaveBeenCalledWith(expect.objectContaining({
       type: 'data-confirmation-request',
-      data: expect.objectContaining({
-        operationId: 'confirm_op',
-        summary: 'needs confirm',
-        argsHint: expect.objectContaining({ confirmed: true }),
-        budget: {
+        data: expect.objectContaining({
+          operationId: 'confirm_op',
+          summary: 'needs confirm',
+          toolCallId: 'tool-call-1',
+          argsHint: expect.objectContaining({ confirmed: true }),
+          budget: {
           key: 'assistant-budget',
           estimatedCostUnits: 3,
         },
