@@ -30,6 +30,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '在剪辑先行流程中请求固定选择卡：生成剧本前一次性询问时长和画面比例，风格候选 ready 后询问视觉风格。',
     en: 'Request a fixed choice card in edit-first production: ask duration and aspect ratio together before screenplay generation, or ask visual style after style previews are ready.',
   },
+  generate_edit_screenplay: {
+    zh: '生成剪辑先行剧本。必须传入 prompt、durationSeconds、aspectRatio 三个字段；durationSeconds 和 aspectRatio 必须来自用户通过 request_edit_first_choice 选择卡确认的结果，不能只依赖 prompt 自然语言。',
+    en: 'Generate the edit-first screenplay. You must pass prompt, durationSeconds, and aspectRatio. durationSeconds and aspectRatio must come from the user selection confirmed through request_edit_first_choice; do not rely on prompt text alone.',
+  },
   generate_edit_style_previews: {
     zh: '用户审核确认剧本后，基于剧本生成 3 个视觉风格候选图。',
     en: 'Generate three screenplay-based visual style preview images after the user has reviewed and approved the screenplay.',

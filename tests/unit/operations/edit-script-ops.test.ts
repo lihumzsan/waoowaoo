@@ -151,19 +151,6 @@ const choiceCardMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/project-agent/choice-card', () => ({
   buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
-  readEditFirstDurationSeconds: (text: string) => {
-    const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*(秒|s|sec|secs|second|seconds|分钟|minute|minutes|min|mins)/i)
-    if (!match) return null
-    const value = Number(match[1])
-    const unit = match[2] ?? ''
-    return /分钟|minute|minutes|min|mins/i.test(unit) ? value * 60 : value
-  },
-  readEditFirstAspectRatio: (text: string) => {
-    if (text.includes('9:16')) return '9:16'
-    if (text.includes('16:9')) return '16:9'
-    if (text.includes('21:9')) return '21:9'
-    return null
-  },
 }))
 
 const workflowMock = vi.hoisted(() => ({
@@ -231,7 +218,9 @@ describe('edit-script operations', () => {
   it('passes context episode and locale into screenplay generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds 16:9 short film',
+      prompt: 'make a short film',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
       confirmed: true,
     })
 
@@ -242,14 +231,20 @@ describe('edit-script operations', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      prompt: 'make a 60 seconds 16:9 short film',
+      prompt: [
+        'make a short film',
+        '',
+        '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
+      ].join('\n'),
     }))
   })
 
   it('does not forward free-form artStyle from agent screenplay generation into project style config', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds 16:9 cyberpunk short film',
+      prompt: 'make a cyberpunk short film',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
       confirmed: true,
       artStyle: 'cyberpunk',
     })
@@ -257,17 +252,23 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a 60 seconds 16:9 cyberpunk short film',
+      prompt: [
+        'make a cyberpunk short film',
+        '',
+        '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
+      ].join('\n'),
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
     }))
   })
 
-  it('does not forward aspect ratio from agent screenplay generation', async () => {
+  it('keeps screenplay duration and aspect ratio as structured tool fields', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds 9:16 vertical short film',
+      prompt: 'make a vertical short film',
+      durationSeconds: 90,
+      aspectRatio: '9:16',
       confirmed: true,
       videoRatio: '9:16',
     })
@@ -275,41 +276,42 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: 'make a 60 seconds 9:16 vertical short film',
+      prompt: [
+        'make a vertical short film',
+        '',
+        '剪辑先行结构化参数：目标总时长 90 秒；最终画面比例 9:16。',
+      ].join('\n'),
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       videoRatio: expect.anything(),
     }))
   })
 
-  it('rejects screenplay generation when the prompt does not include explicit duration', async () => {
+  it('requires screenplay duration and aspect ratio in the structured tool schema', () => {
     const operations = createEditScriptOperations()
 
-    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
+    expect(operations.generate_edit_screenplay.inputSchema.safeParse({
       prompt: 'make a short film',
       confirmed: true,
-    })).rejects.toThrow('EDIT_FIRST_DURATION_REQUIRED')
-    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
-  })
-
-  it('rejects screenplay generation when the prompt duration exceeds two minutes', async () => {
-    const operations = createEditScriptOperations()
-
-    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 180 seconds 16:9 short film',
+    }).success).toBe(false)
+    expect(operations.generate_edit_screenplay.inputSchema.safeParse({
+      prompt: 'make a short film',
+      durationSeconds: 121,
+      aspectRatio: '16:9',
       confirmed: true,
-    })).rejects.toThrow('EDIT_FIRST_DURATION_EXCEEDS_LIMIT:durationSeconds=180:maxSeconds=120')
-    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
-  })
-
-  it('rejects screenplay generation when the prompt does not include explicit aspect ratio', async () => {
-    const operations = createEditScriptOperations()
-
-    await expect(operations.generate_edit_screenplay.execute(buildContext(), {
-      prompt: 'make a 60 seconds short film',
+    }).success).toBe(false)
+    expect(operations.generate_edit_screenplay.inputSchema.safeParse({
+      prompt: 'make a short film',
+      durationSeconds: 60,
+      aspectRatio: '4:3',
       confirmed: true,
-    })).rejects.toThrow('EDIT_FIRST_ASPECT_RATIO_REQUIRED')
-    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+    }).success).toBe(false)
+    expect(operations.generate_edit_screenplay.inputSchema.safeParse({
+      prompt: 'make a short film',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
+      confirmed: true,
+    }).success).toBe(true)
   })
 
   it('emits a fixed assistant choice card through the request choice operation', async () => {

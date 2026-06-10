@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildProjectAgentSystemPrompt } from '@/lib/project-agent/copy'
+import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from '@/lib/project-agent/copy'
 
 describe('project agent prompt copy', () => {
   it('uses direct operation rules instead of fixed workflow or skill-gateway rules', () => {
@@ -52,5 +52,15 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('the single operation that creates or repairs that immediate next artifact')
     expect(prompt).toContain('After the edit script/core edit table is ready, stop open-ended creative discussion')
     expect(prompt).toContain('Never skip ahead, batch multiple future stages, run a later-stage operation')
+  })
+
+  it('describes screenplay generation as requiring structured duration and aspect ratio fields', () => {
+    const zhDescription = localizeSelectableToolDescription('generate_edit_screenplay', 'fallback', 'zh')
+    const enDescription = localizeSelectableToolDescription('generate_edit_screenplay', 'fallback', 'en')
+
+    expect(zhDescription).toContain('必须传入 prompt、durationSeconds、aspectRatio 三个字段')
+    expect(zhDescription).toContain('必须来自用户通过 request_edit_first_choice 选择卡确认的结果')
+    expect(enDescription).toContain('You must pass prompt, durationSeconds, and aspectRatio')
+    expect(enDescription).toContain('confirmed through request_edit_first_choice')
   })
 })
