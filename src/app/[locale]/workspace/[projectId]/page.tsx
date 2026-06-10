@@ -291,6 +291,28 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // 重命名项目
+  const handleRenameProject = async (newName: string) => {
+    if (!project) {
+      throw new Error(t('projectNotFound'))
+    }
+
+    const res = await apiFetch(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newName,
+        description: project.description ?? null,
+      }),
+    })
+
+    if (!res.ok) {
+      throw new Error(await readApiErrorMessage(res, t('renameFailed')))
+    }
+
+    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+  }
+
   // 删除剧集
   const handleDeleteEpisode = async (episodeId: string) => {
     const res = await apiFetch(`/api/projects/${projectId}/episodes/${episodeId}`, {
@@ -531,6 +553,7 @@ export default function ProjectDetailPage() {
               onEpisodeCreate={() => handleCreateEpisode(`${t('episode')} ${episodes.length + 1}`)}
               onEpisodeRename={handleRenameEpisode}
               onEpisodeDelete={handleDeleteEpisode}
+              onProjectRename={handleRenameProject}
             />
           ) : (
             // 加载中

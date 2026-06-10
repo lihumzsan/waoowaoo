@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { CapsuleNav, EpisodeSelector } from '@/components/ui/CapsuleNav'
+import { CapsuleNav, EpisodeSelector, ProjectNameEditor } from '@/components/ui/CapsuleNav'
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -42,5 +42,37 @@ describe('CapsuleNav layering', () => {
     expect(html).toContain('fixed top-20 left-6 z-40')
     expect(html).not.toContain('z-50 animate-fadeInDown')
     expect(html).not.toContain('z-[60]')
+  })
+})
+
+describe('ProjectNameEditor', () => {
+  it('renders a project rename affordance with folder styling when rename is available', () => {
+    Reflect.set(globalThis, 'React', React)
+
+    const html = renderToStaticMarkup(
+      createElement(ProjectNameEditor, {
+        projectName: '听雨',
+        onRename: async () => undefined,
+        t: (key: string) => key,
+      }),
+    )
+
+    expect(html).toContain('data-icon="folder"')
+    expect(html).toContain('title="editProjectName"')
+    expect(html).toContain('听雨')
+  })
+
+  it('does not render a disabled project edit button without a rename handler', () => {
+    Reflect.set(globalThis, 'React', React)
+
+    const html = renderToStaticMarkup(
+      createElement(ProjectNameEditor, {
+        projectName: '听雨',
+        t: (key: string) => key,
+      }),
+    )
+
+    expect(html).toContain('data-icon="folder"')
+    expect(html).not.toContain('title="editProjectName"')
   })
 })

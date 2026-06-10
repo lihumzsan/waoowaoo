@@ -62,6 +62,7 @@ interface WorkspaceHeaderShellProps {
   onEpisodeCreate?: () => void
   onEpisodeRename?: (episodeId: string, newName: string) => void
   onEpisodeDelete?: (episodeId: string) => void
+  onProjectRename?: (newName: string) => void | Promise<void>
   onOpenAssetLibrary: () => void
   onOpenSettingsModal: () => void
   projectConfigurable: boolean
@@ -99,6 +100,7 @@ export default function WorkspaceHeaderShell({
   onEpisodeCreate,
   onEpisodeRename,
   onEpisodeDelete,
+  onProjectRename,
   onOpenAssetLibrary,
   onOpenSettingsModal,
   projectConfigurable,
@@ -184,6 +186,7 @@ export default function WorkspaceHeaderShell({
             onAdd={onEpisodeCreate}
             onRename={(id, newName) => onEpisodeRename?.(id, newName)}
             onDelete={onEpisodeDelete}
+            onProjectRename={onProjectRename}
           />
         )
       })()}

@@ -43,6 +43,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     onEpisodeCreate,
     onEpisodeRename,
     onEpisodeDelete,
+    onProjectRename,
   } = props
 
   useEffect(() => {
@@ -99,6 +100,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onEpisodeCreate={onEpisodeCreate}
         onEpisodeRename={onEpisodeRename}
         onEpisodeDelete={onEpisodeDelete}
+        onProjectRename={onProjectRename}
         onOpenAssetLibrary={() => vm.ui.openAssetLibrary()}
         onOpenSettingsModal={() => vm.ui.setIsSettingsModalOpen(true)}
         projectConfigurable={projectConfigurable}

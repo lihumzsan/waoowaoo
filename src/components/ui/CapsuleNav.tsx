@@ -183,6 +183,125 @@ interface EpisodeSelectorProps {
     onRename?: (id: string, newName: string) => void
     onDelete?: (id: string) => void
     projectName?: string  // 项目名称，显示在左上角
+    onProjectRename?: (newName: string) => void | Promise<void>
+}
+
+interface ProjectNameEditorProps {
+    projectName?: string
+    onRename?: (newName: string) => void | Promise<void>
+    t: (key: 'cancel' | 'editProjectName' | 'project' | 'projectNamePlaceholder' | 'projectRenameFailed' | 'save') => string
+}
+
+export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEditorProps) {
+    const displayName = projectName?.trim() || t('project')
+    const [isEditing, setIsEditing] = useState(false)
+    const [draftName, setDraftName] = useState(displayName)
+    const [isSaving, setIsSaving] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+    const startEditing = () => {
+        setDraftName(displayName)
+        setErrorMessage(null)
+        setIsEditing(true)
+    }
+
+    const cancelEditing = () => {
+        setDraftName(displayName)
+        setErrorMessage(null)
+        setIsEditing(false)
+    }
+
+    const submitRename = async () => {
+        const nextName = draftName.trim()
+        if (!nextName || isSaving) return
+        if (!onRename || nextName === displayName) {
+            setIsEditing(false)
+            return
+        }
+
+        setIsSaving(true)
+        setErrorMessage(null)
+        try {
+            await onRename(nextName)
+            setIsEditing(false)
+        } catch (error: unknown) {
+            setErrorMessage(error instanceof Error && error.message ? error.message : t('projectRenameFailed'))
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    if (isEditing) {
+        return (
+            <div className="mb-2 rounded-xl border border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)] p-3">
+                <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/45 text-[var(--glass-tone-info-fg)]">
+                        <AppIcon name="folder" className="h-4 w-4" />
+                    </div>
+                    <input
+                        type="text"
+                        value={draftName}
+                        onChange={(event) => setDraftName(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                                void submitRename()
+                            } else if (event.key === 'Escape') {
+                                cancelEditing()
+                            }
+                        }}
+                        className="min-w-0 flex-1 rounded-lg border border-[var(--glass-stroke-focus)] bg-white/70 px-2 py-1.5 text-sm text-[var(--glass-text-primary)] outline-none"
+                        placeholder={t('projectNamePlaceholder')}
+                        autoFocus
+                    />
+                    <button
+                        type="button"
+                        onClick={() => { void submitRename() }}
+                        disabled={isSaving || !draftName.trim()}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--glass-accent-from)] text-white transition-opacity hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:opacity-50"
+                        title={t('save')}
+                    >
+                        <AppIcon name="check" className="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={cancelEditing}
+                        disabled={isSaving}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                        title={t('cancel')}
+                    >
+                        <AppIcon name="close" className="h-4 w-4" />
+                    </button>
+                </div>
+                {errorMessage && (
+                    <div className="mt-2 text-xs text-[var(--glass-tone-danger-fg)]">
+                        {errorMessage}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="mb-2 flex items-center gap-3 rounded-xl border border-[var(--glass-stroke-base)] bg-white/35 p-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)]">
+                <AppIcon name="folder" className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('project')}</div>
+                <div className="truncate text-sm font-bold text-[var(--glass-text-primary)]">{displayName}</div>
+            </div>
+            {onRename && (
+                <button
+                    type="button"
+                    onClick={startEditing}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--glass-text-tertiary)] transition-colors hover:bg-[var(--glass-bg-surface-strong)] hover:text-[var(--glass-text-secondary)]"
+                    title={t('editProjectName')}
+                >
+                    <AppIcon name="edit" className="h-4 w-4" />
+                </button>
+            )}
+        </div>
+    )
 }
 
 export function EpisodeSelector({
@@ -192,7 +311,8 @@ export function EpisodeSelector({
     onAdd,
     onRename,
     onDelete,
-    projectName
+    projectName,
+    onProjectRename
 }: EpisodeSelectorProps) {
     const t = useTranslations('common')
     const [isOpen, setIsOpen] = useState(false)
@@ -237,6 +357,11 @@ export function EpisodeSelector({
 
             {isOpen && (
                 <div className="glass-surface-modal absolute left-0 top-full mt-2 w-72 origin-top-left p-2 animate-fadeIn">
+                    <ProjectNameEditor
+                        projectName={projectName}
+                        onRename={onProjectRename}
+                        t={t}
+                    />
                     <div className="max-h-[300px] overflow-y-auto app-scrollbar space-y-1">
                         {episodes.map(ep => {
                             const statusColor = ep.status?.visual === 'ready'
