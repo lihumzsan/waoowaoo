@@ -31,6 +31,7 @@ import type {
   EditAssetStatus,
   EditScreenplayPayload,
   EditScriptVideoRatio,
+  EditStylePreviewGenerationPayload,
   EditStylePreviewKey,
   EditStylePreviewOption,
   EditStylePreviewPayload,
@@ -67,6 +68,15 @@ interface GenerateEditScreenplayInput {
   readonly userId: string
   readonly locale: Locale
   readonly prompt: string
+}
+
+interface GenerateEditStylePreviewsInput {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly episodeId: string
+  readonly userId: string
+  readonly locale: Locale
+  readonly screenplayId?: string
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -239,6 +249,7 @@ interface ExistingAssetRef {
   readonly spatialProfileModel?: string | null
 }
 
+const EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY = 'screenplay_ready'
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING = 'style_preview_generating'
 const EDIT_SCREENPLAY_STATUS_FAILED = 'failed'
 
@@ -1200,7 +1211,6 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
   if (!episode || !project) throw new ApiError('NOT_FOUND')
 
   const model = resolveTextModel(config)
-  const imageModel = resolveStylePreviewImageModel(config)
   const defaults = resolveEditScriptDefaults(input.prompt)
   const screenplayText = await runPromptTextStep({
     userId: input.userId,
@@ -1214,7 +1224,7 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
     },
     stepTitle: 'Edit screenplay',
     stepIndex: 1,
-    stepTotal: 2,
+    stepTotal: 1,
   })
   const saved = await prisma.projectEditScreenplay.upsert({
     where: { episodeId: input.episodeId },
@@ -1224,29 +1234,80 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       userPrompt: input.prompt,
       styleBibleJson: Prisma.JsonNull,
       screenplayText,
-      status: EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING,
+      status: EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY,
     },
     update: {
       userPrompt: input.prompt,
       styleBibleJson: Prisma.JsonNull,
       screenplayText,
-      status: EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING,
+      status: EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY,
     },
   })
+
+  await prisma.projectEditStylePreview.deleteMany({
+    where: { editScreenplayId: saved.id },
+  })
+
+  const next = await getPersistedEditScreenplay(input.projectId, input.episodeId, saved.id)
+  if (!next) throw new ApiError('NOT_FOUND')
+  return mapPersistedEditScreenplay(next)
+}
+
+export async function generateProjectEditStylePreviews(input: GenerateEditStylePreviewsInput): Promise<EditStylePreviewGenerationPayload> {
+  const locale = assertLocale(input.locale)
+  const [episode, project, config] = await Promise.all([
+    prisma.projectEpisode.findFirst({
+      where: { id: input.episodeId, projectId: input.projectId },
+      select: { id: true },
+    }),
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: {
+        id: true,
+      },
+    }),
+    getProjectModelConfig(input.projectId, input.userId),
+  ])
+  if (!episode || !project) throw new ApiError('NOT_FOUND')
+
+  const screenplay = await prisma.projectEditScreenplay.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      ...(input.screenplayId ? { id: input.screenplayId } : {}),
+    },
+    select: {
+      id: true,
+      userPrompt: true,
+      screenplayText: true,
+      status: true,
+    },
+  })
+  if (!screenplay) throw new ApiError('NOT_FOUND')
+  if (screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCREENPLAY_REVIEW_REQUIRED',
+      message: `Edit screenplay must be reviewed before style preview generation; current status is ${screenplay.status}`,
+    })
+  }
+
+  const model = resolveTextModel(config)
+  const imageModel = resolveStylePreviewImageModel(config)
+  const defaults = resolveEditScriptDefaults(screenplay.userPrompt)
   try {
     const styleOptions = await generateEditStylePreviewOptions({
       userId: input.userId,
       projectId: input.projectId,
       model,
       locale,
-      userPrompt: input.prompt,
-      screenplayText,
+      userPrompt: screenplay.userPrompt,
+      screenplayText: screenplay.screenplayText,
       durationSeconds: defaults.durationSeconds,
     })
 
     const stylePreviews = await prisma.$transaction(async (tx) => {
       await tx.projectEditStylePreview.deleteMany({
-        where: { editScreenplayId: saved.id },
+        where: { editScreenplayId: screenplay.id },
       })
       const created: PersistedEditStylePreview[] = []
       for (const option of styleOptions) {
@@ -1254,7 +1315,7 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
           data: {
             projectId: input.projectId,
             episodeId: input.episodeId,
-            editScreenplayId: saved.id,
+            editScreenplayId: screenplay.id,
             styleKey: option.styleKey,
             aspectRatio: option.aspectRatio,
             title: option.title,
@@ -1269,6 +1330,10 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
       return created
     })
 
+    const submittedPreviews: Array<{
+      readonly preview: PersistedEditStylePreview
+      readonly taskId: string
+    }> = []
     for (const preview of stylePreviews) {
       const result = await submitEditStylePreviewImageTask({
         request: input.request,
@@ -1289,19 +1354,49 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
           errorMessage: null,
         },
       })
+      submittedPreviews.push({
+        preview,
+        taskId: result.taskId,
+      })
+    }
+
+    await prisma.projectEditScreenplay.update({
+      where: { id: screenplay.id },
+      data: {
+        status: EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING,
+      },
+    })
+
+    return {
+      success: true,
+      async: true,
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      screenplayId: screenplay.id,
+      status: 'queued',
+      total: submittedPreviews.length,
+      taskIds: submittedPreviews.map((item) => item.taskId),
+      results: submittedPreviews.map((item) => ({
+        refId: item.preview.id,
+        taskId: item.taskId,
+      })),
+      stylePreviews: submittedPreviews.map((item) => ({
+        id: item.preview.id,
+        styleKey: normalizeStylePreviewKey(item.preview.styleKey),
+        title: item.preview.title,
+        summary: item.preview.summary,
+        status: 'generating',
+        taskId: item.taskId,
+      })),
     }
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught)
     await markStylePreviewGenerationFailed({
-      screenplayId: saved.id,
+      screenplayId: screenplay.id,
       message,
     })
     throw caught
   }
-
-  const next = await getPersistedEditScreenplay(input.projectId, input.episodeId, saved.id)
-  if (!next) throw new ApiError('NOT_FOUND')
-  return mapPersistedEditScreenplay(next)
 }
 
 export async function generateProjectEditDirectorDecoupage(input: GenerateEditDirectorDecoupageInput): Promise<EditDirectorDecoupagePayload> {

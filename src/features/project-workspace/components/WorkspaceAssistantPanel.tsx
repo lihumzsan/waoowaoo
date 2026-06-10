@@ -35,6 +35,7 @@ import {
 } from './workspace-assistant/assistant-send-event'
 import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
 import {
+  createEditStylePreviewGenerationDataFromOperationPayload,
   createTaskBatchSubmittedDataFromOperationPayload,
   createTaskSubmittedDataFromOperationPayload,
   resolveAssistantAsyncTaskTerminalEvent,
@@ -107,6 +108,22 @@ function readOperationResultSummary(payload: unknown): string {
   const runId = typeof result.runId === 'string' ? result.runId.trim() : ''
   const status = typeof result.status === 'string' ? result.status.trim() : ''
   return [status, taskId || runId].filter(Boolean).join(' · ')
+}
+
+function readConfirmedOperationMessage(params: {
+  operationId: string
+  resultSummary: string
+  t: ReturnType<typeof useTranslations<'assistantAgent'>>
+}): string {
+  if (params.operationId === 'generate_edit_screenplay') {
+    return params.t('cards.confirmedScreenplayReady')
+  }
+  if (params.operationId === 'generate_edit_style_previews') {
+    return params.t('cards.confirmedStylePreviewGenerationStarted')
+  }
+  return params.resultSummary
+    ? params.t('cards.confirmedOperationWithResult', { operation: params.operationId, result: params.resultSummary })
+    : params.t('cards.confirmedOperation', { operation: params.operationId })
 }
 
 function readAssistantToolOutput(part: unknown): unknown | null {
@@ -353,12 +370,24 @@ export default function WorkspaceAssistantPanel({
             payload,
             operationId,
           })
+      const editStylePreviewGenerationData = createEditStylePreviewGenerationDataFromOperationPayload({
+        payload,
+        operationId,
+      })
       const confirmationMessageParts: UIMessage['parts'] = [{
         type: 'text',
-        text: resultSummary
-          ? t('cards.confirmedOperationWithResult', { operation: operationId, result: resultSummary })
-          : t('cards.confirmedOperation', { operation: operationId }),
+        text: readConfirmedOperationMessage({
+          operationId,
+          resultSummary,
+          t,
+        }),
       }]
+      if (editStylePreviewGenerationData) {
+        confirmationMessageParts.push({
+          type: 'data-edit-style-preview-generation',
+          data: editStylePreviewGenerationData,
+        } as unknown as UIMessage['parts'][number])
+      }
       if (taskSubmittedData) {
         confirmationMessageParts.push({
           type: 'data-task-submitted',

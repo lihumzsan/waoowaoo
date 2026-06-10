@@ -172,9 +172,14 @@
     "choiceBack": "Back to previous choice",
     "choiceSubmitting": "Processing...",
     "choiceSubmitFailed": "Submit failed: {error}",
+    "stylePreviewGenerationTitle": "Generating Visual Style Candidates",
+    "stylePreviewGenerationCount": "{count} candidates",
+    "stylePreviewGenerationStatus": "Generating · {status}",
     "operationExecutionFailedFallback": "Operation execution failed",
     "confirmedOperation": "Confirmed and executed operation {operation}.",
     "confirmedOperationWithResult": "Confirmed and executed operation {operation}. Result: {result}",
+    "confirmedScreenplayReady": "The screenplay is ready for review. Confirm it to generate visual style candidates.",
+    "confirmedStylePreviewGenerationStarted": "Visual style candidates are now generating. Please wait.",
     "confirmedOperationFailed": "Operation {operation} failed: {error}",
     "cancelledOperation": "Rejected operation {operation}. The system will not continue executing it."
   }

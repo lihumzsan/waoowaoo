@@ -228,6 +228,18 @@ describe('project agent runtime tool routing', () => {
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),
+      generate_edit_style_previews: makeTestOperation({
+        id: 'generate_edit_style_previews',
+        summary: 'Generate edit style previews',
+        intent: 'act',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
       generate_edit_director_decoupage: makeTestOperation({
         id: 'generate_edit_director_decoupage',
         summary: 'Generate director decoupage',
@@ -619,6 +631,49 @@ describe('project agent runtime tool routing', () => {
 
     expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
+  it('injects style preview generation as the immediate next tool after screenplay review', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'screenplay_ready_for_review',
+      blocking: {
+        kind: 'needs_confirmation',
+        reason: null,
+      },
+      nextAction: {
+        id: 'generate_edit_style_previews',
+        operationId: 'generate_edit_style_previews',
+        title: 'Generate style previews',
+        requiresUserConfirmation: true,
+      },
+      allowedOperationIds: ['generate_edit_style_previews'],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user approved screenplay'],
+      latestUserText: '剧本可以，继续生成风格图',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '剧本可以，继续生成风格图' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 })

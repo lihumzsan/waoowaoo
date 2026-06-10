@@ -33,6 +33,31 @@ export interface EditStylePreviewPayload {
   readonly errorMessage: string | null
 }
 
+export interface EditStylePreviewGenerationItem {
+  readonly id: string
+  readonly styleKey: EditStylePreviewKey
+  readonly title: string
+  readonly summary: string
+  readonly status: EditStylePreviewStatus
+  readonly taskId: string
+}
+
+export interface EditStylePreviewGenerationPayload {
+  readonly success: true
+  readonly async: true
+  readonly projectId: string
+  readonly episodeId: string
+  readonly screenplayId: string
+  readonly status: 'queued'
+  readonly total: number
+  readonly taskIds: ReadonlyArray<string>
+  readonly results: ReadonlyArray<{
+    readonly refId: string
+    readonly taskId: string
+  }>
+  readonly stylePreviews: readonly EditStylePreviewGenerationItem[]
+}
+
 export interface EditScreenplayPayload {
   readonly id: string
   readonly projectId: string

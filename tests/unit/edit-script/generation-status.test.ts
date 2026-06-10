@@ -42,6 +42,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectEditStylePreview: {
     findFirst: vi.fn(),
+    deleteMany: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
   },
@@ -107,6 +108,7 @@ import {
   confirmProjectEditStylePreview,
   generateProjectEditScreenplay,
   generateProjectEditScript,
+  generateProjectEditStylePreviews,
   readProjectEditScreenplay,
   readProjectEditScript,
 } from '@/lib/edit-script/service'
@@ -348,6 +350,7 @@ describe('edit script generation status persistence', () => {
       errorMessage: null,
     }))
     prismaMock.projectEditStylePreview.update.mockResolvedValue({})
+    prismaMock.projectEditStylePreview.deleteMany.mockResolvedValue({ count: 0 })
     prismaMock.projectEditStylePreview.updateMany.mockResolvedValue({ count: 0 })
     prismaMock.projectEditStylePreview.findFirst.mockResolvedValue(null)
     txMock.projectEditScript.findUniqueOrThrow.mockResolvedValue({
@@ -390,13 +393,10 @@ describe('edit script generation status persistence', () => {
     })
   })
 
-  it('generates screenplay independently before edit script generation', async () => {
+  it('generates screenplay for user review without starting style preview tasks', async () => {
     aiExecMock.executeAiTextStep
       .mockResolvedValueOnce({
         text: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
-      })
-      .mockResolvedValueOnce({
-        text: JSON.stringify(mockStylePreviewOptions),
       })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
       id: 'screenplay-1',
@@ -405,23 +405,8 @@ describe('edit script generation status persistence', () => {
       userPrompt: '做一个科幻短片',
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
-      status: 'style_preview_generating',
-      stylePreviews: mockStylePreviewOptions.stylePreviews.map((preview) => ({
-        id: `style-preview-${preview.styleKey}`,
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        editScreenplayId: 'screenplay-1',
-        styleKey: preview.styleKey,
-        aspectRatio: preview.aspectRatio,
-        title: preview.title,
-        summary: preview.summary,
-        styleBibleJson: preview.styleBible,
-        imagePrompt: preview.gridImagePrompt,
-        imageKey: null,
-        status: 'generating',
-        taskId: 'style-preview-task-1',
-        errorMessage: null,
-      })),
+      status: 'screenplay_ready',
+      stylePreviews: [],
     })
 
     const screenplay = await generateProjectEditScreenplay({
@@ -435,34 +420,77 @@ describe('edit script generation status persistence', () => {
 
     expect(screenplay.id).toBe('screenplay-1')
     expect(screenplay.styleBible).toBeNull()
-    expect(screenplay.status).toBe('style_preview_generating')
-    expect(screenplay.stylePreviews).toHaveLength(3)
-    expect(screenplay.stylePreviews.map((preview) => preview.styleKey)).toEqual(['style_a', 'style_b', 'style_c'])
-    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(2)
+    expect(screenplay.status).toBe('screenplay_ready')
+    expect(screenplay.stylePreviews).toHaveLength(0)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(1)
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
       meta: expect.objectContaining({
         stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
         stepIndex: 1,
-        stepTotal: 2,
-      }),
-    }))
-    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
-      meta: expect.objectContaining({
-        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
-        stepIndex: 2,
-        stepTotal: 2,
+        stepTotal: 1,
       }),
     }))
     expect(prismaMock.projectEditScreenplay.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
-        status: 'style_preview_generating',
+        status: 'screenplay_ready',
       }),
       update: expect.objectContaining({
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
-        status: 'style_preview_generating',
+        status: 'screenplay_ready',
+      }),
+    }))
+    expect(prismaMock.projectEditStylePreview.deleteMany).toHaveBeenCalledWith({
+      where: { editScreenplayId: 'screenplay-1' },
+    })
+    expect(txMock.projectEditStylePreview.create).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditStylePreview.update).not.toHaveBeenCalled()
+    expect(submitTask).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
+  })
+
+  it('generates screenplay-based style preview tasks after screenplay review', async () => {
+    aiExecMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify(mockStylePreviewOptions),
+    })
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+      id: 'screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '做一个60秒 16:9 科幻短片',
+      styleBibleJson: null,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      status: 'screenplay_ready',
+    })
+
+    const result = await generateProjectEditStylePreviews({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      status: 'queued',
+      total: 3,
+      taskIds: ['style-preview-task-1', 'style-preview-task-1', 'style-preview-task-1'],
+    }))
+    expect(result.stylePreviews.map((preview) => preview.styleKey)).toEqual(['style_a', 'style_b', 'style_c'])
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(1)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
+      meta: expect.objectContaining({
+        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
+        stepIndex: 2,
+        stepTotal: 2,
       }),
     }))
     expect(txMock.projectEditStylePreview.create).toHaveBeenCalledTimes(3)
@@ -472,6 +500,12 @@ describe('edit script generation status persistence', () => {
         aspectRatio: '9:16',
       }),
     }))
+    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
+      where: { id: 'screenplay-1' },
+      data: {
+        status: 'style_preview_generating',
+      },
+    })
     expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenNthCalledWith(1, expect.objectContaining({

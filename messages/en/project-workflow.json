@@ -218,6 +218,7 @@
         "pending": "Pending",
         "ready": "Ready",
         "confirmed": "Confirmed",
+        "awaitingScreenplayReview": "Awaiting Screenplay Review",
         "awaitingStyleConfirmation": "Awaiting Style Confirmation",
         "finalReady": "Final Ready",
         "aiEditing": "AI Editing",

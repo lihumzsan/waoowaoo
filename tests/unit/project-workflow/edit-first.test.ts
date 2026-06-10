@@ -27,6 +27,18 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
 }
 
 describe('edit-first workflow state', () => {
+  it('requires screenplay review before style preview generation', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'screenplay_ready',
+    }))
+
+    expect(state.stage).toBe('screenplay_ready_for_review')
+    expect(state.blocking.kind).toBe('needs_confirmation')
+    expect(state.nextAction?.operationId).toBe('generate_edit_style_previews')
+    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+  })
+
   it('blocks later operations while style preview images are generating', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,

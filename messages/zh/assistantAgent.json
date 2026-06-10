@@ -172,9 +172,14 @@
     "choiceBack": "返回上一步",
     "choiceSubmitting": "处理中...",
     "choiceSubmitFailed": "提交失败：{error}",
+    "stylePreviewGenerationTitle": "正在生成视觉风格候选图",
+    "stylePreviewGenerationCount": "{count} 个候选",
+    "stylePreviewGenerationStatus": "生成中 · {status}",
     "operationExecutionFailedFallback": "操作执行失败",
     "confirmedOperation": "已确认并执行操作 {operation}。",
     "confirmedOperationWithResult": "已确认并执行操作 {operation}。结果：{result}",
+    "confirmedScreenplayReady": "剧本已生成，请审核剧本内容；确认后将生成视觉风格候选图。",
+    "confirmedStylePreviewGenerationStarted": "已开始生成视觉风格候选图，请稍候。",
     "confirmedOperationFailed": "操作 {operation} 执行失败：{error}",
     "cancelledOperation": "已拒绝执行操作 {operation}，系统不会继续执行该操作。"
   }

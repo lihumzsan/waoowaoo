@@ -1229,12 +1229,14 @@ export function buildWorkspaceNodeCanvasProjection({
         meta: translate('nodes.editScreenplay.meta'),
         statusLabel: editScreenplay.status === 'ready'
           ? translate('status.ready')
-          : editScreenplay.status === 'style_preview_ready'
-            ? translate('status.awaitingStyleConfirmation')
-            : editScreenplay.status === 'failed'
-              ? translate('status.failed')
-              : translate('status.processing'),
-        isRunning: editScreenplay.status !== 'ready' && editScreenplay.status !== 'style_preview_ready' && editScreenplay.status !== 'failed',
+          : editScreenplay.status === 'screenplay_ready'
+            ? translate('status.awaitingScreenplayReview')
+            : editScreenplay.status === 'style_preview_ready'
+              ? translate('status.awaitingStyleConfirmation')
+              : editScreenplay.status === 'failed'
+                ? translate('status.failed')
+                : translate('status.processing'),
+        isRunning: editScreenplay.status !== 'ready' && editScreenplay.status !== 'screenplay_ready' && editScreenplay.status !== 'style_preview_ready' && editScreenplay.status !== 'failed',
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         width: EDIT_SCREENPLAY_NODE_WIDTH,
         height: editScreenplayHeight,

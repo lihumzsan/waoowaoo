@@ -15,7 +15,7 @@ const serviceMock = vi.hoisted(() => ({
     styleBible: null,
     stylePreviews: [],
     screenplayText: 'screenplay',
-    status: 'style_preview_generating',
+    status: 'screenplay_ready',
   })),
   readProjectEditScript: vi.fn(async () => ({
     id: 'edit-1',

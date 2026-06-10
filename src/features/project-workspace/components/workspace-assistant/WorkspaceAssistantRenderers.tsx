@@ -17,6 +17,7 @@ import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import type {
   AgentPlanPartData,
   ConfirmationRequestPartData,
+  EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
   ProjectAgentStopPartData,
   ProjectContextPartData,
@@ -32,6 +33,7 @@ import {
   type ChoiceCardSelections,
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -282,6 +284,7 @@ export function AssistantChoiceCardView(props: {
   const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
+  const isStylePreviewGroup = activeGroup?.key === 'stylePreviewId'
 
   const handleSubmit = async () => {
     if (!ready || submitting) return
@@ -358,7 +361,7 @@ export function AssistantChoiceCardView(props: {
       {activeGroup ? (
         <div className="mt-2 space-y-2">
           <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
-          <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
+          <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : isStylePreviewGroup ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
             {activeGroup.options.map((option) => {
               const selected = selections[activeGroup.key] === option.value
               return (
@@ -579,6 +582,62 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   )
 }
 
+function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
+  const t = useTranslations('assistantAgent')
+  const progressT = useTranslations('progress')
+  const data: EditStylePreviewGenerationPartData = props.data
+  const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
+    targetType: 'ProjectEditStylePreview',
+    targetId: item.id,
+    types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
+  })), [data.items])
+  const taskStateMap = useTaskTargetStateMap(data.projectId, taskTargets, {
+    enabled: taskTargets.length > 0,
+  }).byKey
+
+  return (
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
+      <div className="flex items-center gap-2">
+        <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-text-tertiary)]" />
+        <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{t('cards.stylePreviewGenerationTitle')}</div>
+        <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
+          {t('cards.stylePreviewGenerationCount', { count: data.items.length })}
+        </div>
+      </div>
+      <div className="mt-2 space-y-2">
+        {data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
+          const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
+          const rawStage = taskState?.stageLabel || taskState?.stage || null
+          const stageLabel = resolveProgressStageLabel(rawStage, progressT)
+          const liveStatus = taskState && taskState.phase !== 'idle' ? taskState.phase : 'processing'
+          return (
+            <div
+              key={item.id}
+              className="overflow-hidden rounded-xl border border-[var(--glass-stroke-base)] bg-white/80"
+            >
+              <div className="relative min-h-24 bg-neutral-100">
+                <div className="absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
+                  {item.title}
+                </div>
+                <div className="flex h-24 items-center justify-center">
+                  <div className="h-8 w-8 animate-pulse rounded-full border border-[var(--glass-stroke-strong)] bg-white/80" />
+                </div>
+              </div>
+              <div className="space-y-1 p-2">
+                <div className="line-clamp-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{item.summary}</div>
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
+                  <AppIcon name="loader" className="h-3 w-3 animate-spin" />
+                  <span>{stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: liveStatus })}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function AgentPlanDataCard({ data }: DataMessagePartProps<AgentPlanPartData>) {
   const t = useTranslations('assistantAgent')
   return (
@@ -705,6 +764,7 @@ export function useWorkspaceAssistantMessagePartComponents({
                 onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
             ),
+        'edit-style-preview-generation': EditStylePreviewGenerationDataCard,
         'project-phase': ProjectPhaseDataCard,
         'confirmation-request': (props) => (
           <InlineConfirmationRequestDataCard

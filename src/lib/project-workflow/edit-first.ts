@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 export type EditFirstWorkflowStage =
   | 'not_started'
   | 'ready_to_generate_screenplay'
+  | 'screenplay_ready_for_review'
   | 'style_preview_generating'
   | 'needs_style_choice'
   | 'ready_to_generate_director_decoupage'
@@ -28,6 +29,7 @@ export type EditFirstWorkflowBlockingKind =
 
 export type EditFirstWorkflowOperationId =
   | 'generate_edit_screenplay'
+  | 'generate_edit_style_previews'
   | 'generate_edit_director_decoupage'
   | 'generate_edit_script'
   | 'generate_edit_script_assets'
@@ -148,6 +150,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'style_preview_generating',
       blocking: { kind: 'processing', reason: 'style preview images are still generating' },
+    })
+  }
+
+  if (snapshot.screenplayStatus === 'screenplay_ready') {
+    return state({
+      stage: 'screenplay_ready_for_review',
+      blocking: { kind: 'needs_confirmation', reason: 'review and approve screenplay before style preview generation' },
+      nextAction: confirmationAction('generate_edit_style_previews', 'Generate style previews'),
     })
   }
 

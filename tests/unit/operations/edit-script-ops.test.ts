@@ -12,7 +12,27 @@ const serviceMock = vi.hoisted(() => ({
     episodeId: 'episode-1',
     userPrompt: 'make a short film',
     screenplayText: 'INT. ORBITAL DOCK - NIGHT',
-    status: 'ready',
+    status: 'screenplay_ready',
+  })),
+  generateProjectEditStylePreviews: vi.fn(async () => ({
+    success: true,
+    async: true,
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    status: 'queued',
+    total: 3,
+    taskIds: ['task-style-a', 'task-style-b', 'task-style-c'],
+    results: [
+      { refId: 'style-preview-a', taskId: 'task-style-a' },
+      { refId: 'style-preview-b', taskId: 'task-style-b' },
+      { refId: 'style-preview-c', taskId: 'task-style-c' },
+    ],
+    stylePreviews: [
+      { id: 'style-preview-a', styleKey: 'style_a', title: 'Style A', summary: 'Summary A', status: 'generating', taskId: 'task-style-a' },
+      { id: 'style-preview-b', styleKey: 'style_b', title: 'Style B', summary: 'Summary B', status: 'generating', taskId: 'task-style-b' },
+      { id: 'style-preview-c', styleKey: 'style_c', title: 'Style C', summary: 'Summary C', status: 'generating', taskId: 'task-style-c' },
+    ],
   })),
   generateProjectEditDirectorDecoupage: vi.fn(async () => ({
     id: 'decoupage-1',
@@ -200,6 +220,7 @@ describe('edit-script operations', () => {
       'generate_edit_script',
       'generate_edit_script_assets',
       'generate_edit_script_storyboard',
+      'generate_edit_style_previews',
       'request_edit_first_choice',
     ])
     expect(operations.generate_edit_script?.summary).toContain('director decoupage')
@@ -324,6 +345,29 @@ describe('edit-script operations', () => {
       cardId: 'edit-first-duration-aspect-ratio',
       workflowStage: 'ready_to_generate_screenplay',
     })
+  })
+
+  it('submits style preview generation after screenplay review', async () => {
+    const operations = createEditScriptOperations()
+    const result = await operations.generate_edit_style_previews.execute(buildContext(), {
+      screenplayId: 'screenplay-1',
+      confirmed: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      screenplayId: 'screenplay-1',
+      taskIds: ['task-style-a', 'task-style-b', 'task-style-c'],
+      total: 3,
+    }))
+    expect(serviceMock.generateProjectEditStylePreviews).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
+    }))
   })
 
   it('passes screenplay id into director decoupage generation', async () => {

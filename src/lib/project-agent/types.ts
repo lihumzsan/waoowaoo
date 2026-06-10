@@ -193,6 +193,20 @@ export interface TaskBatchSubmittedPartData {
   mutationBatchId?: string | null
 }
 
+export interface EditStylePreviewGenerationPartData {
+  operationId: 'generate_edit_style_previews'
+  projectId: string
+  episodeId: string
+  screenplayId: string
+  items: Array<{
+    id: string
+    styleKey: 'style_a' | 'style_b' | 'style_c'
+    title: string
+    summary: string
+    taskId: string
+  }>
+}
+
 export interface ProjectAssistantContextSnapshot {
   projectId: string
   projectName: string
@@ -231,6 +245,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-runtime-context'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
+  | 'data-edit-style-preview-generation'
   | 'data-project-phase'
   | 'data-confirmation-request'
   | 'data-task-submitted'
