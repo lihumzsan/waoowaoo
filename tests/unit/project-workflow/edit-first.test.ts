@@ -36,7 +36,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('screenplay_ready_for_review')
     expect(state.blocking.kind).toBe('needs_confirmation')
     expect(state.nextAction?.operationId).toBe('generate_edit_style_previews')
-    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews', 'revise_edit_screenplay'])
   })
 
   it('blocks later operations while style preview images are generating', () => {
@@ -79,6 +79,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('ready_to_generate_director_decoupage')
     expect(state.nextAction?.operationId).toBe('generate_edit_director_decoupage')
     expect(state.allowedOperationIds).toEqual(['generate_edit_director_decoupage'])
+    expect(state.allowedOperationIds).not.toContain('revise_edit_screenplay')
   })
 
   it('moves to edit core table only after director decoupage is ready', () => {

@@ -28,6 +28,7 @@ export const AI_PROMPT_IDS = {
   EDIT_SCRIPT_STYLE_BIBLE: 'edit-script-style-bible',
   EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS: 'edit-script-style-preview-options',
   EDIT_SCRIPT_SCREENPLAY: 'edit-script-screenplay',
+  EDIT_SCRIPT_SCREENPLAY_REVISION: 'edit-script-screenplay-revision',
   EDIT_SCRIPT_DIRECTOR_DECOUPAGE: 'edit-script-director-decoupage',
   EDIT_SCRIPT_PRIMARY: 'edit-script-primary',
   EDIT_SCRIPT_ASSET_EXTRACT: 'edit-script-asset-extract',

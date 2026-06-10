@@ -240,6 +240,18 @@ describe('project agent runtime tool routing', () => {
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),
+      revise_edit_screenplay: makeTestOperation({
+        id: 'revise_edit_screenplay',
+        summary: 'Revise edit screenplay',
+        intent: 'act',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
       generate_edit_director_decoupage: makeTestOperation({
         id: 'generate_edit_director_decoupage',
         summary: 'Generate director decoupage',
@@ -631,10 +643,11 @@ describe('project agent runtime tool routing', () => {
 
     expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 
-  it('injects style preview generation as the immediate next tool after screenplay review', async () => {
+  it('injects style preview generation and screenplay revision after screenplay review', async () => {
     phaseState.editFirstWorkflow = {
       active: true,
       stage: 'screenplay_ready_for_review',
@@ -648,7 +661,7 @@ describe('project agent runtime tool routing', () => {
         title: 'Generate style previews',
         requiresUserConfirmation: true,
       },
-      allowedOperationIds: ['generate_edit_style_previews'],
+      allowedOperationIds: ['generate_edit_style_previews', 'revise_edit_screenplay'],
     }
     streamState.routeResult = {
       intent: 'act',
@@ -672,6 +685,7 @@ describe('project agent runtime tool routing', () => {
     await flushAsyncWork()
 
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedToolNames).toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')

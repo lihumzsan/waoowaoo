@@ -24,6 +24,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('当 assistant 面板展示剪辑先行时长、视觉风格或画面比例选择卡时，必须等待用户点击卡片')
     expect(prompt).toContain('禁止跳步、批量推进多个未来阶段、执行后置阶段 operation')
     expect(prompt).toContain('generate_edit_screenplay 成功后，必须停止并让用户审核剧本内容')
+    expect(prompt).toContain('必须调用 revise_edit_screenplay')
     expect(prompt).toContain('再调用 generate_edit_style_previews')
     expect(prompt).toContain('只有当用户明确询问技能、可复用计划或 skill catalog 文档时，才使用 Agent Skill 工具')
     expect(prompt).not.toContain('只能通过固定 workflow package 执行')
@@ -48,6 +49,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('choiceType="style"')
     expect(prompt).toContain('When the assistant panel displays a choice card for edit-first duration, visual style, or aspect ratio')
     expect(prompt).toContain('After generate_edit_screenplay succeeds, stop and let the user review the screenplay content')
+    expect(prompt).toContain('call revise_edit_screenplay instead of postponing the change to visual style previews')
     expect(prompt).toContain('generate_edit_style_previews')
     expect(prompt).toContain('the single operation that creates or repairs that immediate next artifact')
     expect(prompt).toContain('After the edit script/core edit table is ready, stop open-ended creative discussion')
@@ -62,5 +64,15 @@ describe('project agent prompt copy', () => {
     expect(zhDescription).toContain('必须来自用户通过 request_edit_first_choice 选择卡确认的结果')
     expect(enDescription).toContain('You must pass prompt, durationSeconds, and aspectRatio')
     expect(enDescription).toContain('confirmed through request_edit_first_choice')
+  })
+
+  it('describes screenplay revision as review-stage only with structured fields', () => {
+    const zhDescription = localizeSelectableToolDescription('revise_edit_screenplay', 'fallback', 'zh')
+    const enDescription = localizeSelectableToolDescription('revise_edit_screenplay', 'fallback', 'en')
+
+    expect(zhDescription).toContain('仅在剧本已生成')
+    expect(zhDescription).toContain('必须传入 revisionInstruction、durationSeconds、aspectRatio')
+    expect(enDescription).toContain('Use only after the screenplay exists')
+    expect(enDescription).toContain('pass revisionInstruction, durationSeconds, and aspectRatio')
   })
 })

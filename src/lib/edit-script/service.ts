@@ -70,6 +70,18 @@ interface GenerateEditScreenplayInput {
   readonly prompt: string
 }
 
+interface ReviseEditScreenplayInput {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly episodeId: string
+  readonly userId: string
+  readonly locale: Locale
+  readonly screenplayId?: string
+  readonly revisionInstruction: string
+  readonly durationSeconds: number
+  readonly aspectRatio: '9:16' | '16:9' | '21:9'
+}
+
 interface GenerateEditStylePreviewsInput {
   readonly request: NextRequest
   readonly projectId: string
@@ -134,6 +146,7 @@ interface UpdateEditScriptAssetRequirementDescriptionInput {
 type PromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY
+  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT
@@ -347,6 +360,31 @@ function styleBibleToJsonValue(styleBible: EditScriptStyleBible): Prisma.InputJs
 
 function assertLocale(value: Locale): Locale {
   return value
+}
+
+function buildRevisedEditScreenplayUserPrompt(input: {
+  readonly locale: Locale
+  readonly originalPrompt: string
+  readonly revisionInstruction: string
+  readonly durationSeconds: number
+  readonly aspectRatio: EditScriptVideoRatio
+}): string {
+  const normalizedOriginal = input.originalPrompt.trim()
+  const normalizedInstruction = input.revisionInstruction.trim()
+  if (input.locale === 'en') {
+    return [
+      normalizedOriginal,
+      '',
+      `Revision instruction: ${normalizedInstruction}`,
+      `Structured edit-first parameters: target duration ${String(input.durationSeconds)} seconds; final aspect ratio ${input.aspectRatio}.`,
+    ].join('\n')
+  }
+  return [
+    normalizedOriginal,
+    '',
+    `剧本修改要求：${normalizedInstruction}`,
+    `剪辑先行结构化参数：目标总时长 ${String(input.durationSeconds)} 秒；最终画面比例 ${input.aspectRatio}。`,
+  ].join('\n')
 }
 
 function resolveTextModel(config: Awaited<ReturnType<typeof getProjectModelConfig>>): string {
@@ -1249,6 +1287,88 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
   })
 
   const next = await getPersistedEditScreenplay(input.projectId, input.episodeId, saved.id)
+  if (!next) throw new ApiError('NOT_FOUND')
+  return mapPersistedEditScreenplay(next)
+}
+
+export async function reviseProjectEditScreenplay(input: ReviseEditScreenplayInput): Promise<EditScreenplayPayload> {
+  const locale = assertLocale(input.locale)
+  const [episode, project, config] = await Promise.all([
+    prisma.projectEpisode.findFirst({
+      where: { id: input.episodeId, projectId: input.projectId },
+      select: { id: true },
+    }),
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: {
+        id: true,
+      },
+    }),
+    getProjectModelConfig(input.projectId, input.userId),
+  ])
+  if (!episode || !project) throw new ApiError('NOT_FOUND')
+
+  const screenplay = await prisma.projectEditScreenplay.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      ...(input.screenplayId ? { id: input.screenplayId } : {}),
+    },
+    select: {
+      id: true,
+      userPrompt: true,
+      screenplayText: true,
+      status: true,
+    },
+  })
+  if (!screenplay) throw new ApiError('NOT_FOUND')
+  if (screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCREENPLAY_REVISION_NOT_ALLOWED',
+      message: `Edit screenplay can only be revised during screenplay review; current status is ${screenplay.status}`,
+    })
+  }
+
+  const model = resolveTextModel(config)
+  const revisedScreenplayText = await runPromptTextStep({
+    userId: input.userId,
+    projectId: input.projectId,
+    model,
+    locale,
+    promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+    variables: {
+      original_user_request: screenplay.userPrompt,
+      current_screenplay_text: screenplay.screenplayText,
+      revision_instruction: input.revisionInstruction,
+      duration_seconds: String(input.durationSeconds),
+      aspect_ratio: input.aspectRatio,
+    },
+    stepTitle: 'Revise edit screenplay',
+    stepIndex: 1,
+    stepTotal: 1,
+  })
+
+  await prisma.projectEditScreenplay.update({
+    where: { id: screenplay.id },
+    data: {
+      userPrompt: buildRevisedEditScreenplayUserPrompt({
+        locale,
+        originalPrompt: screenplay.userPrompt,
+        revisionInstruction: input.revisionInstruction,
+        durationSeconds: input.durationSeconds,
+        aspectRatio: input.aspectRatio,
+      }),
+      styleBibleJson: Prisma.JsonNull,
+      screenplayText: revisedScreenplayText,
+      status: EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY,
+    },
+  })
+
+  await prisma.projectEditStylePreview.deleteMany({
+    where: { editScreenplayId: screenplay.id },
+  })
+
+  const next = await getPersistedEditScreenplay(input.projectId, input.episodeId, screenplay.id)
   if (!next) throw new ApiError('NOT_FOUND')
   return mapPersistedEditScreenplay(next)
 }

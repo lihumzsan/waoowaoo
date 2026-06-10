@@ -27,6 +27,25 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('创建一个阴郁的老管家')
   })
 
+  it('loads the edit-first screenplay revision template', () => {
+    const prompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+      locale: 'zh',
+      variables: {
+        original_user_request: '做一个60秒恐怖短片',
+        current_screenplay_text: '标题：《旧钟》',
+        revision_instruction: '改得更克苏鲁一些',
+        duration_seconds: '60',
+        aspect_ratio: '16:9',
+      },
+    })
+
+    expect(prompt).toContain('剧本修改模块')
+    expect(prompt).toContain('标题：《旧钟》')
+    expect(prompt).toContain('改得更克苏鲁一些')
+    expect(prompt).toContain('16:9')
+  })
+
   it('keeps character analysis style-aware without role or costume tiers', () => {
     const template = getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_ANALYZE, 'zh')
 

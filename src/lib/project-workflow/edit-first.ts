@@ -29,6 +29,7 @@ export type EditFirstWorkflowBlockingKind =
 
 export type EditFirstWorkflowOperationId =
   | 'generate_edit_screenplay'
+  | 'revise_edit_screenplay'
   | 'generate_edit_style_previews'
   | 'generate_edit_director_decoupage'
   | 'generate_edit_script'
@@ -103,6 +104,7 @@ function state(params: {
   stage: EditFirstWorkflowStage
   blocking?: EditFirstWorkflowState['blocking']
   nextAction?: EditFirstWorkflowAction | null
+  allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
 }): EditFirstWorkflowState {
   const nextAction = params.nextAction ?? null
   return {
@@ -113,7 +115,7 @@ function state(params: {
       reason: null,
     },
     nextAction,
-    allowedOperationIds: nextAction ? [nextAction.operationId] : [],
+    allowedOperationIds: params.allowedOperationIds ? [...params.allowedOperationIds] : nextAction ? [nextAction.operationId] : [],
   }
 }
 
@@ -154,10 +156,12 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.screenplayStatus === 'screenplay_ready') {
+    const nextAction = confirmationAction('generate_edit_style_previews', 'Generate style previews')
     return state({
       stage: 'screenplay_ready_for_review',
       blocking: { kind: 'needs_confirmation', reason: 'review and approve screenplay before style preview generation' },
-      nextAction: confirmationAction('generate_edit_style_previews', 'Generate style previews'),
+      nextAction,
+      allowedOperationIds: [nextAction.operationId, 'revise_edit_screenplay'],
     })
   }
 

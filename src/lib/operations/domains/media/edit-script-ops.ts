@@ -5,6 +5,7 @@ import {
   generateProjectEditScreenplay,
   generateProjectEditScriptAssets,
   generateProjectEditStylePreviews,
+  reviseProjectEditScreenplay,
 } from '@/lib/edit-script/service'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
@@ -41,6 +42,14 @@ const generateEditScreenplayInputSchema = z.object({
   prompt: z.string().trim().min(1).describe('The user creative request/story premise. Do not use this field as the only carrier for duration or aspect ratio.'),
   durationSeconds: z.number().int().min(1).max(120).describe('Required edit-first target duration in seconds. Use the value selected by the user in request_edit_first_choice. Maximum is 120.'),
   aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the value selected by the user in request_edit_first_choice.'),
+}).passthrough()
+
+const reviseEditScreenplayInputSchema = z.object({
+  ...confirmedInputFields,
+  screenplayId: z.string().trim().min(1).optional(),
+  revisionInstruction: z.string().trim().min(1).describe('Concrete user-requested screenplay changes to apply to the current generated edit-first screenplay.'),
+  durationSeconds: z.number().int().min(1).max(120).describe('Required edit-first target duration in seconds. Use the original duration selected by the user unless the user explicitly changes it. Maximum is 120.'),
+  aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the original aspect ratio selected by the user unless the user explicitly changes it.'),
 }).passthrough()
 
 const generateEditStylePreviewsInputSchema = z.object({
@@ -82,6 +91,7 @@ const generateEditScriptStoryboardInputSchema = z.object({
 }).passthrough()
 
 type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
+type ReviseEditScreenplayInput = z.infer<typeof reviseEditScreenplayInputSchema>
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
 type RequestEditFirstChoiceInput = z.infer<typeof requestEditFirstChoiceInputSchema>
 type GenerateEditDirectorDecoupageInput = z.infer<typeof generateEditDirectorDecoupageInputSchema>
@@ -289,6 +299,32 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId: resolveEpisodeId(input, ctx.context.episodeId),
           locale: resolveLocale(ctx.context.locale),
           prompt: buildEditScreenplayGenerationPrompt(input),
+        }))
+      },
+    }),
+    revise_edit_screenplay: defineOperation({
+      id: 'revise_edit_screenplay',
+      summary: 'Revise the current generated edit-first screenplay during screenplay review only. Required input fields: revisionInstruction, durationSeconds, and aspectRatio. Use when the user asks to change the story, tone, structure, theme, ending, or atmosphere before approving the screenplay. Stops at screenplay review; do not generate style previews or later edit artifacts.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_SYNC_AI_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将根据用户修改要求重新生成并覆盖当前剪辑先行剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      inputSchema: reviseEditScreenplayInputSchema,
+      outputSchema: editScreenplayOutputSchema,
+      execute: async (ctx, input: ReviseEditScreenplayInput) => {
+        return editScreenplayOutputSchema.parse(await reviseProjectEditScreenplay({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          locale: resolveLocale(ctx.context.locale),
+          ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+          revisionInstruction: input.revisionInstruction,
+          durationSeconds: input.durationSeconds,
+          aspectRatio: input.aspectRatio,
         }))
       },
     }),

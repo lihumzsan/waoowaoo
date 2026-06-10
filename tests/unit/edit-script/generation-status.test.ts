@@ -111,6 +111,7 @@ import {
   generateProjectEditStylePreviews,
   readProjectEditScreenplay,
   readProjectEditScript,
+  reviseProjectEditScreenplay,
 } from '@/lib/edit-script/service'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
 import { submitTask } from '@/lib/task/submitter'
@@ -438,6 +439,74 @@ describe('edit script generation status persistence', () => {
       }),
       update: expect.objectContaining({
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+        status: 'screenplay_ready',
+      }),
+    }))
+    expect(prismaMock.projectEditStylePreview.deleteMany).toHaveBeenCalledWith({
+      where: { editScreenplayId: 'screenplay-1' },
+    })
+    expect(txMock.projectEditStylePreview.create).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditStylePreview.update).not.toHaveBeenCalled()
+    expect(submitTask).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
+  })
+
+  it('revises screenplay during review without starting style preview tasks', async () => {
+    aiExecMock.executeAiTextStep.mockResolvedValueOnce({
+      text: '标题：《深空低语》\n\n故事梗概：空间站收到不可名状的深海星图。',
+    })
+    prismaMock.projectEditScreenplay.findFirst
+      .mockResolvedValueOnce({
+        id: 'screenplay-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        userPrompt: '做一个60秒 16:9 科幻短片',
+        styleBibleJson: null,
+        screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+        status: 'screenplay_ready',
+      })
+      .mockResolvedValueOnce({
+        id: 'screenplay-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        userPrompt: [
+          '做一个60秒 16:9 科幻短片',
+          '',
+          '剧本修改要求：改得更克苏鲁一些',
+          '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
+        ].join('\n'),
+        styleBibleJson: null,
+        screenplayText: '标题：《深空低语》\n\n故事梗概：空间站收到不可名状的深海星图。',
+        status: 'screenplay_ready',
+        stylePreviews: [],
+      })
+
+    const screenplay = await reviseProjectEditScreenplay({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      revisionInstruction: '改得更克苏鲁一些',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
+    })
+
+    expect(screenplay.status).toBe('screenplay_ready')
+    expect(screenplay.screenplayText).toContain('不可名状')
+    expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(1)
+    expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+      meta: expect.objectContaining({
+        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+        stepIndex: 1,
+        stepTotal: 1,
+      }),
+    }))
+    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'screenplay-1' },
+      data: expect.objectContaining({
+        screenplayText: '标题：《深空低语》\n\n故事梗概：空间站收到不可名状的深海星图。',
         status: 'screenplay_ready',
       }),
     }))

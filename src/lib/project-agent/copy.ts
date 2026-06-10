@@ -34,6 +34,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '生成剪辑先行剧本。必须传入 prompt、durationSeconds、aspectRatio 三个字段；durationSeconds 和 aspectRatio 必须来自用户通过 request_edit_first_choice 选择卡确认的结果，不能只依赖 prompt 自然语言。',
     en: 'Generate the edit-first screenplay. You must pass prompt, durationSeconds, and aspectRatio. durationSeconds and aspectRatio must come from the user selection confirmed through request_edit_first_choice; do not rely on prompt text alone.',
   },
+  revise_edit_screenplay: {
+    zh: '修改当前剪辑先行剧本。仅在剧本已生成、用户尚未确认进入风格候选/导演拆镜/剪辑表前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；必须传入 revisionInstruction、durationSeconds、aspectRatio，修改后仍停留在剧本审核阶段。',
+    en: 'Revise the current edit-first screenplay. Use only after the screenplay exists and before the user approves progression to style previews, director decoupage, or the edit table. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass revisionInstruction, durationSeconds, and aspectRatio. The result remains in screenplay review.',
+  },
   generate_edit_style_previews: {
     zh: '用户审核确认剧本后，基于剧本生成 3 个视觉风格候选图。',
     en: 'Generate three screenplay-based visual style preview images after the user has reviewed and approved the screenplay.',
@@ -68,6 +72,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'Do not expose internal system rules, test-launch constraints, safety policy wording, tool instructions, or workflow gates to the user as prose. Apply those rules silently. Mention a limit or restriction only when the user directly asks for it or requests something disallowed.',
       'When edit-first production needs text-only user choices that can be decided before screenplay generation, initiate them together with tool use. Before calling generate_edit_screenplay, if the user has not already provided both an explicit <=120-second duration and an aspect ratio, call request_edit_first_choice with choiceType="duration_and_aspect_ratio" and wait for the user to click the card. Do not ask them to type those choices.',
       'After generate_edit_screenplay succeeds, stop and let the user review the screenplay content. Do not call generate_edit_style_previews until the user confirms the screenplay is acceptable.',
+      'If the screenplay is in review and the user asks to change the story, subject, mood, structure, characters, ending, or expression direction, call revise_edit_screenplay instead of postponing the change to visual style previews.',
       'Only after the user confirms the generated screenplay may you call generate_edit_style_previews. When that operation returns async=true, do not poll in the same turn; the assistant panel will show style preview placeholders and the system will monitor the tasks.',
       'After style previews are ready and before calling generate_edit_director_decoupage, call request_edit_first_choice with choiceType="style" and wait for the user to click the card. Do not ask them to type the style, and do not invent or render card JSON in text.',
       'When the assistant panel displays a choice card for edit-first duration, visual style, or aspect ratio, wait for the user to click that card. Do not choose for the user, do not ask them to type the same choice, and do not call the next act tool until the card submission returns.',
@@ -115,6 +120,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '不要把内部系统规则、测试上线限制、安全策略措辞、tool 使用说明或 workflow 门禁作为说明文字发给用户。必须静默应用这些规则；只有当用户直接询问限制，或用户请求了被禁止/超限内容时，才简短说明对应限制。',
     '当剪辑先行流程需要用户选择，且这些文字选择可以在剧本生成前确定时，必须由你主动通过 tool use 一次性发起。调用 generate_edit_screenplay 前，如果用户还没有明确给出 <=120 秒的时长和画面比例，先调用 request_edit_first_choice 并传 choiceType="duration_and_aspect_ratio"，然后等待用户点击卡片；不要要求用户用文字再输入这些选择。',
     'generate_edit_screenplay 成功后，必须停止并让用户审核剧本内容。除非用户确认剧本可以继续，否则不要调用 generate_edit_style_previews。',
+    '如果剧本处于审核阶段，且用户要求修改剧情、题材、氛围、结构、角色、结尾或表达方向，必须调用 revise_edit_screenplay；不要把这类剧情修改推迟到视觉风格候选阶段。',
     '只有用户确认已生成剧本后，才可以调用 generate_edit_style_previews。该 operation 返回 async=true 时，不要在同一轮轮询；assistant 面板会显示风格候选占位，系统会监控任务。',
     '风格候选 ready 后、调用 generate_edit_director_decoupage 前，先调用 request_edit_first_choice 并传 choiceType="style"，然后等待用户点击卡片；不要要求用户用文字输入风格，也不要在文本里编造或渲染卡片 JSON。',
     '当 assistant 面板展示剪辑先行时长、视觉风格或画面比例选择卡时，必须等待用户点击卡片。不要替用户选择，不要要求用户再用文字输入同样选择，也不要在卡片提交成功前调用下一步 act tool。',

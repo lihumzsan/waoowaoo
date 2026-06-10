@@ -14,6 +14,14 @@ const serviceMock = vi.hoisted(() => ({
     screenplayText: 'INT. ORBITAL DOCK - NIGHT',
     status: 'screenplay_ready',
   })),
+  reviseProjectEditScreenplay: vi.fn(async () => ({
+    id: 'screenplay-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'make a short film',
+    screenplayText: 'INT. ORBITAL DOCK - NIGHT\nCthulhu symbols pulse.',
+    status: 'screenplay_ready',
+  })),
   generateProjectEditStylePreviews: vi.fn(async () => ({
     success: true,
     async: true,
@@ -209,6 +217,7 @@ describe('edit-script operations', () => {
       'generate_edit_script_storyboard',
       'generate_edit_style_previews',
       'request_edit_first_choice',
+      'revise_edit_screenplay',
     ])
     expect(operations.generate_edit_script?.summary).toContain('director decoupage')
     expect(operations.generate_edit_script?.confirmation?.required).toBe(true)
@@ -308,6 +317,46 @@ describe('edit-script operations', () => {
     }).success).toBe(false)
     expect(operations.generate_edit_screenplay.inputSchema.safeParse({
       prompt: 'make a short film',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
+      confirmed: true,
+    }).success).toBe(true)
+  })
+
+  it('revises an edit-first screenplay during screenplay review with structured fields', async () => {
+    const operations = createEditScriptOperations()
+    const result = await operations.revise_edit_screenplay.execute(buildContext(), {
+      revisionInstruction: '改得更克苏鲁一些',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
+      screenplayId: 'screenplay-1',
+      confirmed: true,
+    })
+
+    const screenplay = result as { readonly screenplayText: string; readonly status: string }
+    expect(screenplay.status).toBe('screenplay_ready')
+    expect(screenplay.screenplayText).toContain('Cthulhu')
+    expect(serviceMock.reviseProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      screenplayId: 'screenplay-1',
+      revisionInstruction: '改得更克苏鲁一些',
+      durationSeconds: 60,
+      aspectRatio: '16:9',
+    }))
+  })
+
+  it('requires screenplay revision instruction, duration, and aspect ratio in the structured schema', () => {
+    const operations = createEditScriptOperations()
+
+    expect(operations.revise_edit_screenplay.inputSchema.safeParse({
+      revisionInstruction: '改得更克苏鲁一些',
+      confirmed: true,
+    }).success).toBe(false)
+    expect(operations.revise_edit_screenplay.inputSchema.safeParse({
+      revisionInstruction: '改得更克苏鲁一些',
       durationSeconds: 60,
       aspectRatio: '16:9',
       confirmed: true,
