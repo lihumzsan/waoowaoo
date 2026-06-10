@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { resolveOriginalImageUrl, toDisplayImageUrl } from '@/lib/media/image-url'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
@@ -13,9 +14,15 @@ interface ImagePreviewModalProps {
 
 export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewModalProps) {
   const t = useTranslations('common')
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // 禁用body滚动
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!imageUrl || !mounted) return
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
     const handleEscape = (e: KeyboardEvent) => {
@@ -27,17 +34,17 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
     document.addEventListener('keydown', handleEscape)
 
     return () => {
-      document.body.style.overflow = 'unset'
+      document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [onClose])
+  }, [imageUrl, mounted, onClose])
 
-  if (!imageUrl) return null
+  if (!imageUrl || !mounted) return null
   const displayImageUrl = toDisplayImageUrl(imageUrl)
   const originalImageUrl = resolveOriginalImageUrl(imageUrl) || displayImageUrl
   if (!displayImageUrl) return null
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-[var(--glass-overlay)] backdrop-blur-sm"
       onClick={onClose}
@@ -72,6 +79,7 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
           onClick={(e) => e.stopPropagation()}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

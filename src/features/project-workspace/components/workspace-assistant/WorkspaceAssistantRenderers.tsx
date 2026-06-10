@@ -12,9 +12,10 @@ import {
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useQuery } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
+import { useQuery } from '@tanstack/react-query'
 import type {
   AgentPlanPartData,
   ConfirmationRequestPartData,
@@ -671,10 +672,6 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   )
 }
 
-interface EditStylePreviewScreenplayResponse {
-  screenplay: ProjectEditScreenplay | null
-}
-
 function isEditStylePreviewChoiceReady(preview: ProjectEditStylePreview | null): preview is ProjectEditStylePreview {
   return Boolean(preview?.id && preview.imageUrl && (preview.status === 'completed' || preview.status === 'confirmed'))
 }
@@ -707,6 +704,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   const data: EditStylePreviewGenerationPartData = props.data
   const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [expandedSummaryIds, setExpandedSummaryIds] = useState<ReadonlySet<string>>(() => new Set())
   const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
     targetType: 'ProjectEditStylePreview',
@@ -718,13 +716,14 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   }).byKey
   const screenplayQuery = useQuery({
     queryKey: queryKeys.project.editScreenplay(data.projectId, data.episodeId),
-    queryFn: async (): Promise<EditStylePreviewScreenplayResponse> => {
+    queryFn: async (): Promise<ProjectEditScreenplay | null> => {
       const response = await apiFetch(`/api/projects/${data.projectId}/edit-script/screenplay?episodeId=${encodeURIComponent(data.episodeId)}`)
       if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_SCREENPLAY_FETCH_FAILED')
-      return await response.json() as EditStylePreviewScreenplayResponse
+      const payload = await response.json() as { screenplay?: ProjectEditScreenplay | null }
+      return payload.screenplay ?? null
     },
     refetchInterval: (query) => {
-      const screenplay = query.state.data?.screenplay ?? null
+      const screenplay = query.state.data ?? null
       const previews = screenplay?.stylePreviews ?? []
       const allTerminal = data.items.every((item) => {
         const preview = previews.find((candidate) => candidate.id === item.id) ?? null
@@ -734,9 +733,15 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     },
   })
   const previewsById = useMemo(() => {
-    const previews = screenplayQuery.data?.screenplay?.stylePreviews ?? []
+    const previews = screenplayQuery.data?.stylePreviews ?? []
     return new Map(previews.map((preview) => [preview.id, preview]))
-  }, [screenplayQuery.data?.screenplay?.stylePreviews])
+  }, [screenplayQuery.data?.stylePreviews])
+  const cardStatuses = useMemo(() => data.items.map((item) => {
+    const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
+    const preview = previewsById.get(item.id) ?? null
+    return resolveEditStylePreviewCardStatus({ preview, taskState })
+  }), [data.items, previewsById, taskStateMap])
+  const hasGeneratingPreview = cardStatuses.some((status) => status === 'generating')
 
   const handleSelectStylePreview = async (
     item: EditStylePreviewGenerationPartData['items'][number],
@@ -777,8 +782,13 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   return (
     <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
       <div className="flex items-center gap-2">
-        <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-text-tertiary)]" />
-        <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{t('cards.stylePreviewGenerationTitle')}</div>
+        <AppIcon
+          name={hasGeneratingPreview ? 'loader' : 'check'}
+          className={`h-3.5 w-3.5 text-[var(--glass-text-tertiary)] ${hasGeneratingPreview ? 'animate-spin' : ''}`}
+        />
+        <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">
+          {hasGeneratingPreview ? t('cards.stylePreviewGenerationTitle') : t('cards.stylePreviewChoiceTitle')}
+        </div>
         <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
           {t('cards.stylePreviewGenerationCount', { count: data.items.length })}
         </div>
@@ -805,14 +815,21 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                   {item.title}
                 </div>
                 {preview?.imageUrl ? (
-                  <Image
-                    src={preview.imageUrl}
-                    alt={item.title}
-                    width={768}
-                    height={432}
-                    unoptimized
-                    className="h-44 w-full object-cover"
-                  />
+                  <button
+                    type="button"
+                    aria-label={t('cards.stylePreviewOpenPreview')}
+                    className="block h-44 w-full cursor-zoom-in overflow-hidden text-left"
+                    onClick={() => setPreviewImageUrl(preview.imageUrl)}
+                  >
+                    <Image
+                      src={preview.imageUrl}
+                      alt={item.title}
+                      width={768}
+                      height={432}
+                      unoptimized
+                      className="h-44 w-full object-cover transition-transform duration-200 hover:scale-[1.01]"
+                    />
+                  </button>
                 ) : failed ? (
                   <div className="flex h-36 items-center justify-center bg-[var(--glass-tone-warn-bg)]/35 px-4 text-center text-xs font-medium text-[var(--glass-tone-warn-fg)]">
                     {t('cards.stylePreviewGenerationFailed')}
@@ -841,7 +858,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                   <span>
                     {failed
                       ? t('cards.stylePreviewGenerationFailed')
-                      : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
+                      : ready
+                        ? t('cards.stylePreviewReady')
+                        : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
                   </span>
                 </div>
                 {failed && errorMessage ? (
@@ -864,6 +883,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           )
         })}
       </div>
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
     </div>
   )
 }
