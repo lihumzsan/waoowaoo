@@ -9,6 +9,7 @@ import {
   type ReasoningMessagePartProps,
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
+import type { ChatStatus, UIMessage } from 'ai'
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -72,6 +73,33 @@ function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
 type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)]'
+const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]'
+
+export function findLatestAssistantMessageIdAfterLatestUser(
+  messages: readonly Pick<UIMessage, 'id' | 'role'>[],
+): string | null {
+  let latestUserMessageIndex = -1
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    if (messages[messageIndex]?.role === 'user') {
+      latestUserMessageIndex = messageIndex
+      break
+    }
+  }
+
+  for (let messageIndex = messages.length - 1; messageIndex > latestUserMessageIndex; messageIndex -= 1) {
+    const message = messages[messageIndex]
+    if (message?.role === 'assistant') return message.id
+  }
+
+  return null
+}
+
+export function shouldShowPendingAssistantTurnPlaceholder(params: {
+  readonly status: ChatStatus
+  readonly activeAssistantMessageId: string | null
+}): boolean {
+  return params.status === 'submitted' || (params.status === 'streaming' && !params.activeAssistantMessageId)
+}
 
 export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {
   if (!raw) return null
@@ -1081,13 +1109,12 @@ function HiddenConversationSummaryMessage(props: {
 
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: MessagePartComponents
-  showAssistantThinkingIndicator: boolean
+  activeThinkingAssistantMessageId: string | null
 }) {
   const showInlineThinkingIndicator = useMessage((state) => (
-    props.showAssistantThinkingIndicator
+    props.activeThinkingAssistantMessageId !== null
     && state.role === 'assistant'
-    && state.isLast
-    && state.status?.type === 'running'
+    && state.id === props.activeThinkingAssistantMessageId
   ))
 
   return (
@@ -1104,7 +1131,7 @@ export function WorkspaceAssistantThreadMessage(props: {
 
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
-          <MessagePrimitive.Root className="flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]">
+          <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
             {showInlineThinkingIndicator ? (
               <WorkspaceAssistantThinkingIndicator status="streaming" />
             ) : null}
@@ -1123,5 +1150,17 @@ export function WorkspaceAssistantThreadMessage(props: {
         </HiddenConversationSummaryMessage>
       </MessagePrimitive.If>
     </>
+  )
+}
+
+export function WorkspaceAssistantPendingTurnPlaceholder(props: {
+  status: ChatStatus
+}) {
+  return (
+    <div className="space-y-1">
+      <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
+        <WorkspaceAssistantThinkingIndicator status={props.status} />
+      </div>
+    </div>
   )
 }

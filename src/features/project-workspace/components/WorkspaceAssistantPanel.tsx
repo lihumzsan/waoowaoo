@@ -10,7 +10,10 @@ import {
 import {
   AssistantChoiceCardView,
   EditStylePreviewGenerationDataCard,
+  findLatestAssistantMessageIdAfterLatestUser,
+  shouldShowPendingAssistantTurnPlaceholder,
   useWorkspaceAssistantMessagePartComponents,
+  WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
@@ -18,7 +21,6 @@ import { apiFetch } from '@/lib/api-fetch'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantCollapseHandle } from './workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from './workspace-assistant/WorkspaceAssistantPanelRail'
-import { WorkspaceAssistantThinkingIndicator } from './workspace-assistant/WorkspaceAssistantThinkingIndicator'
 import {
   buildWorkspaceAssistantPanelLayout,
   clampWorkspaceAssistantPanelWidth,
@@ -394,6 +396,14 @@ export default function WorkspaceAssistantPanel({
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
+  const activeThinkingAssistantMessageId = useMemo(() => {
+    if (assistantRuntime.status !== 'streaming') return null
+    return findLatestAssistantMessageIdAfterLatestUser(assistantRuntime.messages)
+  }, [assistantRuntime.messages, assistantRuntime.status])
+  const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
+    status: assistantRuntime.status,
+    activeAssistantMessageId: activeThinkingAssistantMessageId,
+  })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
     event.preventDefault()
@@ -488,11 +498,13 @@ export default function WorkspaceAssistantPanel({
                       {() => (
                         <WorkspaceAssistantThreadMessage
                           messagePartComponents={partComponents}
-                          showAssistantThinkingIndicator={assistantRuntime.status === 'streaming'}
+                          activeThinkingAssistantMessageId={activeThinkingAssistantMessageId}
                         />
                       )}
                     </ThreadPrimitive.Messages>
-                    <WorkspaceAssistantThinkingIndicator status={assistantRuntime.status === 'submitted' ? 'submitted' : 'ready'} />
+                    {showPendingAssistantTurnPlaceholder ? (
+                      <WorkspaceAssistantPendingTurnPlaceholder status={assistantRuntime.status} />
+                    ) : null}
                     {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
                       <EditStylePreviewGenerationDataCard
                         type="data"
