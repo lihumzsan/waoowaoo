@@ -13,6 +13,7 @@ import {
   saveProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
 import { writeWorkspaceAssistantThreadLog } from '@/lib/project-agent/thread-log'
+import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
@@ -95,8 +96,9 @@ async function compressThreadMessagesIfNeeded(params: {
   if (!validation.success) {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
-  if (!shouldCompressMessages(validation.data)) {
-    return validation.data
+  const messages = ensureUniqueUIMessages(validation.data)
+  if (!shouldCompressMessages(messages)) {
+    return messages
   }
 
   const projectConfig = await getProjectModelConfig(params.projectId, params.userId)
@@ -111,7 +113,7 @@ async function compressThreadMessagesIfNeeded(params: {
   })
 
   return await compressMessages({
-    messages: validation.data,
+    messages,
     locale: params.locale,
     model: resolved.languageModel,
   })

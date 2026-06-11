@@ -21,3 +21,36 @@ export function isPersistableUIMessages(messages: unknown): messages is UIMessag
     return true
   })
 }
+
+export function ensureUniqueUIMessages(messages: UIMessage[]): UIMessage[] {
+  const usedIds = new Set<string>()
+  const duplicateCounts = new Map<string, number>()
+  let changed = false
+
+  const normalizedMessages = messages.map((message, index) => {
+    const originalId = message.id
+    if (!usedIds.has(originalId)) {
+      usedIds.add(originalId)
+      return message
+    }
+
+    changed = true
+    const nextCount = (duplicateCounts.get(originalId) ?? 0) + 1
+    duplicateCounts.set(originalId, nextCount)
+
+    let candidateId = `${originalId}--dedup-${nextCount}`
+    let collisionCount = nextCount
+    while (usedIds.has(candidateId)) {
+      collisionCount += 1
+      candidateId = `${originalId}--dedup-${collisionCount}`
+    }
+    usedIds.add(candidateId)
+
+    return {
+      ...message,
+      id: candidateId || `message-${index}`,
+    }
+  })
+
+  return changed ? normalizedMessages : messages
+}

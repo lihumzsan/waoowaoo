@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
+import type { UIMessage } from 'ai'
+import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
 
 describe('isPersistableUIMessages', () => {
   it('rejects non-array input', () => {
@@ -22,3 +23,52 @@ describe('isPersistableUIMessages', () => {
   })
 })
 
+describe('ensureUniqueUIMessages', () => {
+  it('rewrites later duplicate message ids while preserving message content', () => {
+    const messages: UIMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'first' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'second' }],
+      },
+      {
+        id: 'assistant-1--dedup-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'existing suffix' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'third' }],
+      },
+    ]
+
+    expect(ensureUniqueUIMessages(messages)).toEqual([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'first' }],
+      },
+      {
+        id: 'assistant-1--dedup-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'second' }],
+      },
+      {
+        id: 'assistant-1--dedup-1--dedup-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'existing suffix' }],
+      },
+      {
+        id: 'assistant-1--dedup-2',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'third' }],
+      },
+    ])
+  })
+})

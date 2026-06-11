@@ -11,7 +11,7 @@ import {
   useProjectAssistantThreadSync,
 } from '@/lib/query/hooks'
 import type { ProjectAgentInteractionMode } from '@/lib/project-agent/types'
-import { isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
+import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -98,7 +98,7 @@ export function useWorkspaceAssistantRuntime({
   const [syncError, setSyncError] = useState<string | null>(null)
 
   const replaceMessages = useCallback((messages: UIMessage[]) => {
-    chat.setMessages(messages)
+    chat.setMessages(ensureUniqueUIMessages(messages))
   }, [chat])
 
   const sendMessage = useCallback(async (text: string) => {
@@ -120,7 +120,7 @@ export function useWorkspaceAssistantRuntime({
 
   const appendMessages = useCallback((messages: UIMessage[]) => {
     if (messages.length === 0) return
-    chat.setMessages((current) => [...current, ...messages])
+    chat.setMessages((current) => ensureUniqueUIMessages([...current, ...messages]))
   }, [chat])
 
   const addToolOutput = useCallback(async (params: {
@@ -139,10 +139,11 @@ export function useWorkspaceAssistantRuntime({
   useEffect(() => {
     if (assistantThread.isLoading) return
     if (hydratedSessionKeyRef.current === chatId) return
-    const persistedMessages = assistantThread.data?.messages || []
-    const mergedMessages = chat.messages.length > 0
-      ? [...persistedMessages, ...chat.messages.filter((message) => !persistedMessages.some((item) => item.id === message.id))]
-      : persistedMessages
+    const persistedMessages = ensureUniqueUIMessages(assistantThread.data?.messages || [])
+    const persistedMessageIds = new Set(persistedMessages.map((message) => message.id))
+    const mergedMessages = ensureUniqueUIMessages(chat.messages.length > 0
+      ? [...persistedMessages, ...chat.messages.filter((message) => !persistedMessageIds.has(message.id))]
+      : persistedMessages)
     replaceMessages(mergedMessages)
     hydratedSessionKeyRef.current = chatId
     lastPersistedSignatureRef.current = JSON.stringify(persistedMessages)

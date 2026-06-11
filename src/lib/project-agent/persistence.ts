@@ -1,6 +1,7 @@
 import { Prisma, type ProjectAssistantThread } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
+import { ensureUniqueUIMessages } from './ui-message-validation'
 import type { ProjectAssistantId, ProjectAssistantThreadSnapshot } from './types'
 
 interface ProjectAssistantThreadScopeInput {
@@ -22,7 +23,7 @@ function buildProjectAssistantScopeRef(input: ProjectAssistantThreadScopeInput):
 }
 
 function serializeMessages(messages: UIMessage[]): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(messages)) as Prisma.InputJsonValue
+  return JSON.parse(JSON.stringify(ensureUniqueUIMessages(messages))) as Prisma.InputJsonValue
 }
 
 async function validateMessages(messages: unknown): Promise<UIMessage[]> {
@@ -30,7 +31,7 @@ async function validateMessages(messages: unknown): Promise<UIMessage[]> {
   if (!validation.success) {
     throw new Error('PROJECT_ASSISTANT_INVALID_THREAD_MESSAGES')
   }
-  return validation.data
+  return ensureUniqueUIMessages(validation.data)
 }
 
 function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[]): ProjectAssistantThreadSnapshot {
