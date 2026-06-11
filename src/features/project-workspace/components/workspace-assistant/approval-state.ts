@@ -20,7 +20,9 @@ function isConfirmationRequestPart(
   if (!record.data || typeof record.data !== 'object' || Array.isArray(record.data)) return false
   const data = record.data as Record<string, unknown>
   const toolCallId = data.toolCallId
+  const approvalId = data.approvalId
   return typeof data.operationId === 'string'
+    && typeof approvalId === 'string'
     && typeof data.summary === 'string'
     && (toolCallId === undefined || toolCallId === null || typeof toolCallId === 'string')
 }

@@ -62,7 +62,7 @@ const generateEditStylePreviewsInputSchema = z.object({
 
 const requestEditFirstChoiceInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'next_step_confirmation']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -114,7 +114,7 @@ const editScreenplayOutputSchema = z.object({
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'next_step_confirmation']),
+  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -378,7 +378,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     request_edit_first_choice: defineOperation({
       id: 'request_edit_first_choice',
-      summary: 'Request a fixed assistant choice card for edit-first production. Use duration_and_aspect_ratio before screenplay generation, screenplay_review after screenplay generation, style after screenplay-based style previews are ready, and next_step_confirmation before later immediate-next workflow operations such as edit core table, assets, cinematography, storyboard, videos, or final render.',
+      summary: 'Request a fixed assistant choice card for edit-first production content choices only. Use duration_and_aspect_ratio before screenplay generation, screenplay_review after screenplay generation, and style after screenplay-based style previews are ready. Do not use this tool for execution permission; call the target operation directly and let runtime approval handle confirmation.',
       intent: 'query',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_NONE,

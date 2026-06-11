@@ -9,6 +9,7 @@ import {
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
 import type { ConfirmationRequestPartData, ProjectAgentContext } from '@/lib/project-agent/types'
+import { createAssistantToolApproval } from '@/lib/project-agent/tool-approval'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 
 function toMessage(error: unknown): string {
@@ -40,6 +41,14 @@ function buildToolError(params: {
     details: params.details ?? null,
     ...(params.issues !== undefined ? { issues: params.issues } : {}),
   }
+}
+
+function toUserApprovalSummary(summary: string): string {
+  return summary
+    .replace(/确认继续后请重新调用并传入 confirmed=true。?/g, '')
+    .replace(/Confirm to continue and call again with confirmed=true\.?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export async function executeProjectAgentOperationFromTool(params: {
@@ -141,6 +150,16 @@ export async function executeProjectAgentOperationFromTool(params: {
   const requiresConfirmation = shouldRequireAssistantConfirmation(operation.confirmation)
   if (requiresConfirmation) {
     if (!isConfirmedOperationInput(params.input)) {
+      if (!params.toolCallId?.trim()) {
+        return {
+          ok: false,
+          error: buildToolError({
+            code: 'OPERATION_PREREQUISITE_MISSING',
+            message: 'PROJECT_AGENT_OPERATION_CONFIRMATION_TOOL_CALL_ID_REQUIRED',
+            operationId: params.operationId,
+          }),
+        }
+      }
       const budgetKey = operation.confirmation?.budget?.key
       const estimatedCostUnits = operation.confirmation?.budget?.estimatedCostUnits
       const budget = !budgetKey && estimatedCostUnits === undefined
@@ -153,14 +172,21 @@ export async function executeProjectAgentOperationFromTool(params: {
         || (params.context.locale === 'en'
           ? `Executing ${params.operationId} may write data, create billable usage, or trigger external side effects. Confirm to continue.`
           : `执行 ${params.operationId} 会产生写入、计费或外部副作用。请确认后继续执行。`)
-      writeOperationDataPart<ConfirmationRequestPartData>(params.writer, 'data-confirmation-request', {
+      const userSummary = toUserApprovalSummary(summary)
+      const approval = await createAssistantToolApproval({
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: effectiveEpisodeId || null,
+        toolCallId: params.toolCallId,
         operationId: params.operationId,
-        summary,
-        ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
-        argsHint: {
-          ...(parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data as Record<string, unknown> : {}),
-          confirmed: true,
-        },
+        operationInput: parsed.data,
+        context: params.context,
+      })
+      writeOperationDataPart<ConfirmationRequestPartData>(params.writer, 'data-confirmation-request', {
+        approvalId: approval.approvalId,
+        operationId: params.operationId,
+        summary: userSummary,
+        toolCallId: params.toolCallId,
         ...(budget ? { budget } : {}),
       })
       return {
@@ -168,7 +194,7 @@ export async function executeProjectAgentOperationFromTool(params: {
         confirmationRequired: true,
         error: buildToolError({
           code: 'CONFIRMATION_REQUIRED',
-          message: summary,
+          message: userSummary,
           operationId: params.operationId,
           details: budget ? { budget } : null,
         }),
@@ -185,6 +211,7 @@ export async function executeProjectAgentOperationFromTool(params: {
       context: params.context,
       source: params.source,
       writer: params.writer,
+      toolCallId: params.toolCallId,
     }, parsed.data)
   } catch (error) {
     return {

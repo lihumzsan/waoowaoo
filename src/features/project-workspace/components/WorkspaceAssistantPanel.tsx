@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   AssistantRuntimeProvider,
@@ -152,7 +152,6 @@ export default function WorkspaceAssistantPanel({
   onEditScriptPendingChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
-  const locale = useLocale()
   const queryClient = useQueryClient()
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const confirmEditStylePreview = useConfirmProjectEditStylePreview(projectId)
@@ -338,29 +337,21 @@ export default function WorkspaceAssistantPanel({
   const handleConfirmOperation = async (confirmation: ConfirmationRequestPartData) => {
     const operationId = confirmation.operationId
     const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
+    const approvalId = confirmation.approvalId.trim()
     if (!toolCallId) {
       throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
     }
-    const argsHint = isRecord(confirmation.argsHint) ? confirmation.argsHint : null
+    if (!approvalId) {
+      throw new Error('CONFIRMATION_APPROVAL_ID_MISSING')
+    }
     setConfirmationSubmittingKey(`confirm:${operationId}:continue`)
     try {
       const response = await apiFetch(`/api/projects/${projectId}/assistant/confirm-operation`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          operationId,
-          input: {
-            ...(argsHint ?? {}),
-            confirmed: true,
-          },
-          context: {
-            locale,
-            ...(episodeId ? { episodeId } : {}),
-            ...(selection?.selectedScopeRef ? { selectedScopeRef: selection.selectedScopeRef } : {}),
-            ...(selection?.selectedPanelId ? { selectedPanelId: selection.selectedPanelId } : {}),
-            ...(selection?.selectedClipId ? { selectedClipId: selection.selectedClipId } : {}),
-            ...(selection?.selectedAssetId ? { selectedAssetId: selection.selectedAssetId } : {}),
-          },
+          approvalId,
+          decision: 'approve',
         }),
       })
       const payload: unknown = await response.json().catch(() => null)
@@ -379,14 +370,11 @@ export default function WorkspaceAssistantPanel({
       }
       const successData = readConfirmedOperationSuccessData(payload)
       if (successData !== null) {
-        const operationEpisodeId = typeof argsHint?.episodeId === 'string' && argsHint.episodeId.trim()
-          ? argsHint.episodeId.trim()
-          : episodeId
         await syncWorkspaceResourceChangesFromWriteResult({
           queryClient,
           result: successData,
           projectId,
-          fallbackEpisodeId: operationEpisodeId ?? null,
+          fallbackEpisodeId: episodeId ?? null,
         })
       }
       await assistantRuntime.addToolOutput({
@@ -411,19 +399,41 @@ export default function WorkspaceAssistantPanel({
   const handleCancelOperation = async (confirmation: ConfirmationRequestPartData) => {
     const operationId = confirmation.operationId
     const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
+    const approvalId = confirmation.approvalId.trim()
     if (!toolCallId) {
       throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
     }
+    if (!approvalId) {
+      throw new Error('CONFIRMATION_APPROVAL_ID_MISSING')
+    }
     setConfirmationSubmittingKey(`confirm:${operationId}:cancel`)
     try {
+      const response = await apiFetch(`/api/projects/${projectId}/assistant/confirm-operation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          approvalId,
+          decision: 'deny',
+        }),
+      })
+      const payload: unknown = await response.json().catch(() => null)
+      if (!response.ok) {
+        await assistantRuntime.addToolOutput({
+          tool: operationId,
+          toolCallId,
+          output: buildOperationFailureToolOutput({
+            operationId,
+            code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
+            message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
+            details: payload,
+          }),
+        })
+        return
+      }
       await assistantRuntime.addToolOutput({
         tool: operationId,
         toolCallId,
-        output: buildOperationFailureToolOutput({
-          operationId,
-          code: 'USER_CANCELLED_OPERATION',
-          message: 'USER_CANCELLED_OPERATION',
-        }),
+        output: payload,
       })
     } finally {
       setConfirmationSubmittingKey(null)

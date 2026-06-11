@@ -84,6 +84,7 @@ export async function executeProjectAgentOperationFromApi(params: {
       },
       source: params.source || 'project-ui',
       writer: null,
+      toolCallId: null,
     }, parsed.data)
     const outputParsed = operation.outputSchema.safeParse(result)
     if (!outputParsed.success) {

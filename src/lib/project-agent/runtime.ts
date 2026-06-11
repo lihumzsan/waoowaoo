@@ -30,6 +30,7 @@ import { selectProjectAgentOperationsByGroups } from './operation-injection'
 import type { OperationIntent, ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
+import { resolveEditFirstWorkflowCapabilityOperationIds } from '@/lib/project-workflow/edit-first'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
 import type { ProjectAgentInteractionMode } from './types'
@@ -151,93 +152,22 @@ function routeRequestsEditFirstWorkflow(requestedGroups: ReadonlyArray<ReadonlyA
   return requestedGroups.some((groupPath) => groupPath[0] === 'edit-script')
 }
 
-const EDIT_FIRST_NEXT_STEP_CONFIRMATION_STAGES = new Set<string>([
-  'ready_to_generate_director_decoupage',
-  'ready_to_generate_edit_script',
-  'ready_to_generate_assets',
-  'ready_to_generate_cinematography',
-  'ready_to_generate_storyboard',
-  'ready_to_generate_videos',
-  'ready_to_render_final',
-])
-
-function readMessageText(message: UIMessage): string {
-  return message.parts
-    .map((part) => {
-      if (!part || typeof part !== 'object' || Array.isArray(part)) return ''
-      const record = part as Record<string, unknown>
-      return record.type === 'text' && typeof record.text === 'string' ? record.text.trim() : ''
-    })
-    .filter(Boolean)
-    .join('\n')
-    .trim()
-}
-
-function isWorkspaceAssistantHiddenMessage(message: UIMessage): boolean {
-  const metadata = message.metadata
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
-  const custom = (metadata as Record<string, unknown>).custom
-  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return false
-  return (custom as Record<string, unknown>).workspaceAssistantHidden === true
-}
-
-function latestUserMessageConfirmsEditFirstNextAction(params: {
-  readonly messages: readonly UIMessage[]
-  readonly operationId: string
-}): boolean {
-  for (let index = params.messages.length - 1; index >= 0; index -= 1) {
-    const message = params.messages[index]
-    if (!message || message.role !== 'user') continue
-    if (!isWorkspaceAssistantHiddenMessage(message)) return false
-    const text = readMessageText(message)
-    return text.includes(`operation: ${params.operationId}`)
-      || text.includes(`operation：${params.operationId}`)
-  }
-  return false
-}
-
-function editFirstNextActionRequiresChoiceConfirmation(params: {
-  readonly workflow: Awaited<ReturnType<typeof resolveProjectPhase>>['editFirstWorkflow']
-  readonly operationId: string
-}): boolean {
-  const nextAction = params.workflow.nextAction
-  return Boolean(
-    nextAction?.requiresUserConfirmation
-      && nextAction.operationId === params.operationId
-      && params.workflow.blocking.kind === 'needs_confirmation'
-      && EDIT_FIRST_NEXT_STEP_CONFIRMATION_STAGES.has(params.workflow.stage),
-  )
-}
-
 function constrainOperationIdsForEditFirstWorkflow(params: {
   registry: ProjectAgentOperationRegistry
   operationIds: string[]
   allowedIntents: ReadonlyArray<OperationIntent>
   workflow: Awaited<ReturnType<typeof resolveProjectPhase>>['editFirstWorkflow']
   requestedGroups: ReadonlyArray<ReadonlyArray<string>>
-  messages: readonly UIMessage[]
 }): string[] {
   const workflowApplies = params.workflow.active || routeRequestsEditFirstWorkflow(params.requestedGroups)
   if (!workflowApplies) return params.operationIds
 
   const allowedIntents = new Set<OperationIntent>(params.allowedIntents)
-  const allowedWorkflowOperations = new Set<string>(params.workflow.allowedOperationIds)
+  const allowedWorkflowOperations = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
   const constrained = params.operationIds.filter((operationId) => {
     const operation = params.registry[operationId]
     if (!operation) return false
     if (operation.intent !== 'act') return true
-    if (
-      editFirstNextActionRequiresChoiceConfirmation({
-        workflow: params.workflow,
-        operationId,
-      })
-      && !latestUserMessageConfirmsEditFirstNextAction({
-        messages: params.messages,
-        operationId,
-      })
-    ) {
-      return false
-    }
     return allowedWorkflowOperations.has(operationId)
   })
 
@@ -246,18 +176,7 @@ function constrainOperationIdsForEditFirstWorkflow(params: {
   const nextOperation = params.registry[nextOperationId]
   if (!nextOperation?.channels.tool) return constrained
   if (!allowedIntents.has(nextOperation.intent)) return constrained
-  if (
-    editFirstNextActionRequiresChoiceConfirmation({
-      workflow: params.workflow,
-      operationId: nextOperationId,
-    })
-    && !latestUserMessageConfirmsEditFirstNextAction({
-      messages: params.messages,
-      operationId: nextOperationId,
-    })
-  ) {
-    return constrained
-  }
+  if (!allowedWorkflowOperations.has(nextOperationId)) return constrained
   return [...constrained, nextOperationId]
 }
 
@@ -384,7 +303,6 @@ export async function createProjectAgentChatResponse(input: {
         allowedIntents,
         workflow: phase.editFirstWorkflow,
         requestedGroups: route.requestedGroups,
-        messages: runtimeMessages,
       })
       const toolEntries = operationIds.map((operationId) => {
         const operation = operations[operationId]

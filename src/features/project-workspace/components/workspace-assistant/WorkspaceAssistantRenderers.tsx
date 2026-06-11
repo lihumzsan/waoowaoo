@@ -220,7 +220,6 @@ export function WorkspaceAssistantReasoningPart(props: ReasoningMessagePartProps
 export function ConfirmationActionCard(props: {
   operationId: string
   summary: string
-  argsHint?: Record<string, unknown> | null
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
   confirmPending: boolean
@@ -522,7 +521,6 @@ function InlineConfirmationRequestDataCard(props: DataMessagePartProps<Confirmat
     <ConfirmationActionCard
       operationId={props.data.operationId}
       summary={props.data.summary}
-      argsHint={props.data.argsHint ?? null}
       onConfirm={async () => props.onConfirmOperation(props.data)}
       onCancel={async () => props.onCancelOperation(props.data)}
       confirmPending={props.confirmationSubmittingKey === `confirm:${props.data.operationId}:continue`}

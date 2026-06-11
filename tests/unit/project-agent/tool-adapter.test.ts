@@ -9,9 +9,15 @@ const registryState = vi.hoisted(() => ({
   registry: {} as ProjectAgentOperationRegistry,
 }))
 
+const approvalMock = vi.hoisted(() => ({
+  createAssistantToolApproval: vi.fn(async () => ({ approvalId: 'approval-1' })),
+}))
+
 vi.mock('@/lib/operations/registry', () => ({
   createProjectAgentOperationRegistry: () => registryState.registry,
 }))
+
+vi.mock('@/lib/project-agent/tool-approval', () => approvalMock)
 
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 
@@ -102,9 +108,9 @@ describe('executeProjectAgentOperationFromTool', () => {
       type: 'data-confirmation-request',
         data: expect.objectContaining({
           operationId: 'confirm_op',
+          approvalId: 'approval-1',
           summary: 'needs confirm',
           toolCallId: 'tool-call-1',
-          argsHint: expect.objectContaining({ confirmed: true }),
           budget: {
           key: 'assistant-budget',
           estimatedCostUnits: 3,
@@ -116,6 +122,11 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.confirmationRequired).toBe(true)
     expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
     expect(execute).not.toHaveBeenCalled()
+    expect(approvalMock.createAssistantToolApproval).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'confirm_op',
+      operationInput: {},
+      toolCallId: 'tool-call-1',
+    }))
   })
 
   it('[confirmed input] -> executes operation when confirmation required', async () => {

@@ -25,9 +25,15 @@ const executeAgentPlanMock = vi.hoisted(() => vi.fn(async (_params: {
   },
 })))
 
+const approvalMock = vi.hoisted(() => ({
+  createAssistantToolApproval: vi.fn(async () => ({ approvalId: 'approval-1' })),
+}))
+
 vi.mock('@/lib/plan-run-runtime/executor', () => ({
   executeAgentPlan: executeAgentPlanMock,
 }))
+
+vi.mock('@/lib/project-agent/tool-approval', () => approvalMock)
 
 function buildContext(writerEvents: Array<Record<string, unknown>> = []): ProjectAgentOperationContext {
   return {
@@ -36,6 +42,7 @@ function buildContext(writerEvents: Array<Record<string, unknown>> = []): Projec
     projectId: 'project-1',
     context: { episodeId: 'episode-1', locale: 'zh' },
     source: 'assistant-panel',
+    toolCallId: 'tool-call-1',
     writer: {
       write: (chunk: Record<string, unknown>) => {
         writerEvents.push(chunk)
@@ -176,15 +183,21 @@ describe('agent skill operations', () => {
         type: 'data-confirmation-request',
         data: expect.objectContaining({
           operationId: 'invoke_operation',
-          argsHint: expect.objectContaining({
-            skillId: 'media-generation',
-            operationId: 'generate_project_music',
-            input: expect.objectContaining({
-              confirmed: true,
-            }),
-          }),
+          approvalId: 'approval-1',
+          toolCallId: 'tool-call-1',
         }),
       }),
     ])
+    expect(approvalMock.createAssistantToolApproval).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'invoke_operation',
+      operationInput: expect.objectContaining({
+        skillId: 'media-generation',
+        operationId: 'generate_project_music',
+        input: expect.objectContaining({
+          confirmed: true,
+        }),
+        confirmed: true,
+      }),
+    }))
   })
 })

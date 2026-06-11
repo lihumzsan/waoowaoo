@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  resolveEditFirstWorkflowCapabilityOperationIds,
   resolveEditFirstWorkflowStateFromSnapshot,
   type EditFirstWorkflowSnapshot,
 } from '@/lib/project-workflow/edit-first'
@@ -65,6 +66,7 @@ describe('edit-first workflow state', () => {
     expect(state.blocking.kind).toBe('needs_user_choice')
     expect(state.nextAction).toBeNull()
     expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_style_previews'])
   })
 
   it('allows choosing a completed style preview when sibling style preview tasks failed', () => {
@@ -93,6 +95,7 @@ describe('edit-first workflow state', () => {
     expect(state.blocking.reason).toBe('all style preview generation tasks failed')
     expect(state.nextAction?.operationId).toBe('generate_edit_style_previews')
     expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_style_previews'])
   })
 
   it('allows only director decoupage after screenplay is ready', () => {
@@ -135,5 +138,6 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('ready_to_generate_edit_script')
     expect(state.nextAction?.operationId).toBe('generate_edit_script')
     expect(state.allowedOperationIds).toEqual(['generate_edit_script'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script'])
   })
 })

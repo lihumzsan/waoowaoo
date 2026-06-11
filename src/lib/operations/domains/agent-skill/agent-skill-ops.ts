@@ -14,6 +14,7 @@ import {
 } from '@/lib/agent-skills/registry'
 import type { AgentPlanDraft, AgentPlanValidationResult } from '@/lib/agent-skills/types'
 import type { AgentPlanPartData, ConfirmationRequestPartData, ProjectAgentContext } from '@/lib/project-agent/types'
+import { createAssistantToolApproval } from '@/lib/project-agent/tool-approval'
 import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import type {
@@ -143,6 +144,7 @@ const invokeOperationInputSchema = z.object({
   skillId: z.string().min(1),
   operationId: z.string().min(1),
   input: z.record(z.unknown()).optional(),
+  confirmed: z.boolean().optional(),
 })
 
 function operationRequiresConfirmation(operation: ReturnType<typeof createProjectAgentOperationRegistryForApi>[string]): boolean {
@@ -195,6 +197,14 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message.trim() || 'OPERATION_EXECUTION_FAILED'
   if (typeof error === 'string' && error.trim()) return error.trim()
   return 'OPERATION_EXECUTION_FAILED'
+}
+
+function toUserApprovalSummary(summary: string): string {
+  return summary
+    .replace(/确认继续后请重新调用并传入 confirmed=true。?/g, '')
+    .replace(/Confirm to continue and call again with confirmed=true\.?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 async function invokeAllowedOperation(params: {
@@ -262,19 +272,39 @@ async function invokeAllowedOperation(params: {
     })
   }
   if (operationRequiresConfirmation(operation) && !isConfirmedOperationInput(params.input)) {
-    const summary = operation.confirmation.summary
+    const summary = toUserApprovalSummary(operation.confirmation.summary
       || `Operation ${params.operationId} requires confirmation.`
-    writeOperationDataPart<ConfirmationRequestPartData>(params.ctx.writer, 'data-confirmation-request', {
+    )
+    const toolCallId = params.ctx.toolCallId?.trim() || ''
+    if (!toolCallId) {
+      return buildProjectAgentToolResultError({
+        code: 'OPERATION_PREREQUISITE_MISSING',
+        message: 'PROJECT_AGENT_OPERATION_CONFIRMATION_TOOL_CALL_ID_REQUIRED',
+        operationId: params.operationId,
+      })
+    }
+    const approval = await createAssistantToolApproval({
+      projectId: params.ctx.projectId,
+      userId: params.ctx.userId,
+      episodeId,
+      toolCallId,
       operationId: 'invoke_operation',
-      summary,
-      argsHint: {
+      operationInput: {
         skillId: params.skillId,
         operationId: params.operationId,
         input: {
           ...params.input,
           confirmed: true,
         },
+        confirmed: true,
       },
+      context: params.ctx.context,
+    })
+    writeOperationDataPart<ConfirmationRequestPartData>(params.ctx.writer, 'data-confirmation-request', {
+      approvalId: approval.approvalId,
+      operationId: 'invoke_operation',
+      summary,
+      toolCallId,
       ...(operation.confirmation.budget ? { budget: operation.confirmation.budget } : {}),
     })
     return buildProjectAgentToolResultError({

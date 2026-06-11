@@ -224,7 +224,7 @@ describe('project agent runtime tool routing', () => {
         groupPath: ['edit-script'],
         prerequisites: { episodeId: 'required' },
         effects: EFFECTS_NONE,
-        inputSchema: z.object({ choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'next_step_confirmation']) }),
+        inputSchema: z.object({ choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']) }),
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),
@@ -604,7 +604,7 @@ describe('project agent runtime tool routing', () => {
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
   })
 
-  it('requires the next-step confirmation card before later edit-first act tools', async () => {
+  it('injects the immediate next edit-first act tool and lets runtime approval handle confirmation', async () => {
     phaseState.editFirstWorkflow = {
       active: true,
       stage: 'ready_to_generate_director_decoupage',
@@ -642,13 +642,13 @@ describe('project agent runtime tool routing', () => {
     await flushAsyncWork()
 
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 
-  it('injects the workflow immediate next edit-first act tool after hidden card confirmation', async () => {
+  it('injects the workflow immediate next edit-first act tool without hidden card confirmation', async () => {
     phaseState.editFirstWorkflow = {
       active: true,
       stage: 'ready_to_generate_edit_script',
@@ -670,8 +670,8 @@ describe('project agent runtime tool routing', () => {
       requestedGroups: [['edit-script']],
       needsClarification: false,
       clarifyingQuestion: null,
-      reasoning: ['choice card confirmed the next edit-first step'],
-      latestUserText: '我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：generate_edit_script。调用该 operation 时传入 confirmed=true。',
+      reasoning: ['user wants the next edit-first step'],
+      latestUserText: '好的继续',
     }
 
     await createProjectAgentChatResponse({
@@ -683,14 +683,9 @@ describe('project agent runtime tool routing', () => {
         {
           id: 'u1',
           role: 'user',
-          metadata: {
-            custom: {
-              workspaceAssistantHidden: true,
-            },
-          },
           parts: [{
             type: 'text',
-            text: '我确认继续当前剪辑先行唯一下一步。请读取最新项目状态，并执行当前下一步 operation：generate_edit_script。调用该 operation 时传入 confirmed=true。',
+            text: '好的继续',
           }],
         },
       ],

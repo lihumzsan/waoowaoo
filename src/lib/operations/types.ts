@@ -17,6 +17,7 @@ export interface ProjectAgentOperationContext {
    */
   source: string
   writer?: UIMessageStreamWriter<UIMessage> | null
+  toolCallId?: string | null
 }
 
 type BivariantOperationExecute<Input, Output> = {

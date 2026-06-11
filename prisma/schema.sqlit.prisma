@@ -543,6 +543,7 @@ model Project {
   editCinematographyShotPlans ProjectEditCinematographyShotPlan[]
   editAssetRequirements ProjectEditAssetRequirement[]
   videoGroups        ProjectVideoGroup[]
+  assistantToolApprovals AssistantToolApproval[]
 
   @@index([userId])
   @@map("projects")
@@ -581,6 +582,34 @@ model UsageCost {
   @@map("usage_costs")
 }
 
+model AssistantToolApproval {
+  id                 String    @id @default(uuid())
+  projectId          String
+  userId             String
+  episodeId          String?
+  assistantId        String
+  scopeRef           String
+  toolCallId         String
+  operationId        String
+  operationInputJson Json
+  operationInputHash String
+  contextJson        Json?
+  status             String    @default("pending")
+  resultJson         Json?
+  expiresAt          DateTime
+  resolvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([toolCallId])
+  @@index([operationId])
+  @@map("assistant_tool_approvals")
+}
+
 model User {
   id            String          @id @default(uuid())
   name          String          @unique(map: "User_name_key")
@@ -603,6 +632,7 @@ model User {
   globalLocations    GlobalLocation[]
   tasks              Task[]
   taskEvents         TaskEvent[]
+  assistantToolApprovals AssistantToolApproval[]
   inviteRedemptions  InviteRedemption[]
 
   @@map("user")

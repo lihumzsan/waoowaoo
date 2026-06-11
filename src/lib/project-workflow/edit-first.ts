@@ -290,6 +290,52 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 }
 
+export function resolveEditFirstWorkflowCapabilityOperationIds(
+  workflow: EditFirstWorkflowState,
+): EditFirstWorkflowOperationId[] {
+  if (!workflow.active && workflow.stage === 'not_started') return ['generate_edit_screenplay']
+  switch (workflow.stage) {
+    case 'ready_to_generate_screenplay':
+      return ['generate_edit_screenplay']
+    case 'screenplay_ready_for_review':
+      return ['revise_edit_screenplay', 'generate_edit_style_previews']
+    case 'style_preview_generating':
+      return []
+    case 'needs_style_choice':
+      return ['generate_edit_style_previews']
+    case 'ready_to_generate_director_decoupage':
+      return ['generate_edit_director_decoupage']
+    case 'ready_to_generate_edit_script':
+      return ['generate_edit_script']
+    case 'edit_script_generating':
+      return []
+    case 'ready_to_generate_assets':
+      return ['generate_edit_script_assets']
+    case 'assets_generating':
+      return []
+    case 'ready_to_generate_cinematography':
+      return ['generate_edit_cinematography_shot_plan']
+    case 'ready_to_generate_storyboard':
+      return ['generate_edit_script_storyboard']
+    case 'storyboard_generating':
+      return []
+    case 'ready_to_generate_videos':
+      return ['generate_episode_videos']
+    case 'videos_generating':
+      return []
+    case 'ready_to_render_final':
+      return ['render_final_video']
+    case 'completed':
+      return []
+    case 'failed':
+      return [...workflow.allowedOperationIds]
+    case 'not_started':
+      return ['generate_edit_screenplay']
+    default:
+      return [...workflow.allowedOperationIds]
+  }
+}
+
 export async function resolveEditFirstWorkflowState(params: {
   projectId: string
   userId: string

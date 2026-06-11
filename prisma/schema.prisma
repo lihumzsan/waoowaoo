@@ -620,6 +620,34 @@ model ProjectAgentWait {
   @@map("project_agent_waits")
 }
 
+model AssistantToolApproval {
+  id                 String    @id @default(uuid())
+  projectId          String
+  userId             String
+  episodeId          String?
+  assistantId        String    @db.VarChar(64)
+  scopeRef           String    @db.VarChar(64)
+  toolCallId         String    @db.VarChar(191)
+  operationId        String    @db.VarChar(128)
+  operationInputJson Json
+  operationInputHash String    @db.VarChar(64)
+  contextJson        Json?
+  status             String    @default("pending") @db.VarChar(32)
+  resultJson         Json?
+  expiresAt          DateTime
+  resolvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([toolCallId])
+  @@index([operationId])
+  @@map("assistant_tool_approvals")
+}
+
 model ProjectAssistantToolSelection {
   id            String    @id @default(uuid())
   userId        String
@@ -774,6 +802,7 @@ model Project {
   planApprovals      PlanApproval[]
   assistantThreads   ProjectAssistantThread[]
   agentWaits         ProjectAgentWait[]
+  assistantToolApprovals AssistantToolApproval[]
   assistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches    MutationBatch[]
   savedSkills        SavedSkill[]
@@ -898,6 +927,7 @@ model User {
   planApprovals           PlanApproval[]
   projectAssistantThreads ProjectAssistantThread[]
   projectAgentWaits       ProjectAgentWait[]
+  assistantToolApprovals  AssistantToolApproval[]
   projectAssistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches         MutationBatch[]
   savedSkills             SavedSkill[]

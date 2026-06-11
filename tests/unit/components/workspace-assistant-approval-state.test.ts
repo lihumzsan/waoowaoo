@@ -22,12 +22,9 @@ function buildMessages(): UIMessage[] {
           type: 'data-confirmation-request',
           data: {
             operationId: 'regenerate_panel_image',
+            approvalId: 'approval-1',
             summary: 'Need confirmation',
             toolCallId: 'tool-call-1',
-            argsHint: {
-              panelId: 'panel-1',
-              confirmed: true,
-            },
           },
         },
       ],
@@ -70,7 +67,24 @@ describe('workspace assistant confirmation state', () => {
     if (confirmation && typeof confirmation === 'object' && 'data' in confirmation) {
       confirmation.data = {
         operationId: 'regenerate_panel_image',
+        approvalId: 'approval-1',
         summary: 'Need confirmation',
+      }
+    }
+
+    const confirmations = collectPendingConfirmationActions(messages)
+
+    expect(confirmations).toHaveLength(0)
+  })
+
+  it('does not collect legacy confirmations without an approval id', () => {
+    const messages = buildMessages()
+    const confirmation = messages[1]?.parts[0]
+    if (confirmation && typeof confirmation === 'object' && 'data' in confirmation) {
+      confirmation.data = {
+        operationId: 'regenerate_panel_image',
+        summary: 'Need confirmation',
+        toolCallId: 'tool-call-1',
       }
     }
 
