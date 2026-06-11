@@ -4,14 +4,7 @@ import { z } from 'zod'
 import { createAgentSkillOperations } from '@/lib/operations/domains/agent-skill/agent-skill-ops'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 
-const executeAgentPlanMock = vi.hoisted(() => vi.fn(async (_params: {
-  userId: string
-  projectId: string
-  episodeId?: string | null
-  planId?: string | null
-  input: unknown
-  invokeStep: unknown
-}) => ({
+const executeAgentPlanMock = vi.hoisted(() => vi.fn(async () => ({
   success: true,
   planRunId: 'plan-run-1',
   status: 'completed',
@@ -25,15 +18,9 @@ const executeAgentPlanMock = vi.hoisted(() => vi.fn(async (_params: {
   },
 })))
 
-const approvalMock = vi.hoisted(() => ({
-  createAssistantToolApproval: vi.fn(async () => ({ approvalId: 'approval-1' })),
-}))
-
 vi.mock('@/lib/plan-run-runtime/executor', () => ({
   executeAgentPlan: executeAgentPlanMock,
 }))
-
-vi.mock('@/lib/project-agent/tool-approval', () => approvalMock)
 
 function buildContext(writerEvents: Array<Record<string, unknown>> = []): ProjectAgentOperationContext {
   return {
@@ -165,11 +152,11 @@ describe('agent skill operations', () => {
     }))
   })
 
-  it('invoke_operation requests confirmation through the gateway operation', async () => {
+  it('invoke_operation returns a defensive approval error when SDK approval was not granted', async () => {
     const writerEvents: Array<Record<string, unknown>> = []
     const operations = createAgentSkillOperations()
 
-    await operations.invoke_operation.execute(buildContext(writerEvents), {
+    const raw = await operations.invoke_operation.execute(buildContext(writerEvents), {
       skillId: 'media-generation',
       operationId: 'generate_project_music',
       input: {
@@ -178,26 +165,18 @@ describe('agent skill operations', () => {
       },
     })
 
-    expect(writerEvents).toEqual([
-      expect.objectContaining({
-        type: 'data-confirmation-request',
-        data: expect.objectContaining({
-          operationId: 'invoke_operation',
-          approvalId: 'approval-1',
-          toolCallId: 'tool-call-1',
-        }),
-      }),
-    ])
-    expect(approvalMock.createAssistantToolApproval).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'invoke_operation',
-      operationInput: expect.objectContaining({
-        skillId: 'media-generation',
+    expect(writerEvents).toEqual([])
+    expect(raw).toMatchObject({
+      ok: false,
+      error: {
+        code: 'OPERATION_PREREQUISITE_MISSING',
+        message: 'PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED',
         operationId: 'generate_project_music',
-        input: expect.objectContaining({
-          confirmed: true,
-        }),
-        confirmed: true,
-      }),
-    }))
+        details: {
+          skillId: 'media-generation',
+          approval: 'ai-sdk-tool-approval',
+        },
+      },
+    })
   })
 })

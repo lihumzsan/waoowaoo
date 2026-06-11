@@ -27,21 +27,3 @@ export function resolveChoiceCardSelectionLabels(
   })
   return labels
 }
-
-export function interpolateChoiceCardTemplate(
-  template: string,
-  selections: ChoiceCardSelections,
-  groups: readonly ProjectAgentChoiceCardGroup[],
-  extraValues?: ChoiceCardSelections,
-): string {
-  const labels = resolveChoiceCardSelectionLabels(groups, selections)
-  const values: ChoiceCardSelections = {
-    ...selections,
-    ...labels,
-    ...(extraValues ?? {}),
-  }
-  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key: string) => {
-    const value = values[key]
-    return value === undefined ? match : value
-  })
-}

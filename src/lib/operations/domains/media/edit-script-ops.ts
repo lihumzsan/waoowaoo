@@ -385,6 +385,10 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       inputSchema: requestEditFirstChoiceInputSchema,
       outputSchema: requestEditFirstChoiceOutputSchema,
       execute: async (ctx, input: RequestEditFirstChoiceInput) => {
+        const toolCallId = ctx.toolCallId?.trim() || ''
+        if (!toolCallId) {
+          throw new Error('REQUEST_EDIT_FIRST_CHOICE_TOOL_CALL_ID_REQUIRED')
+        }
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const workflow = await resolveEditFirstWorkflowState({
           projectId: ctx.projectId,
@@ -399,6 +403,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           workflow,
           choiceType,
+          toolCallId,
         })
         writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', card)
         return requestEditFirstChoiceOutputSchema.parse({

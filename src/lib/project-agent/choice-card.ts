@@ -45,11 +45,14 @@ export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | n
 function buildDurationAndAspectRatioChoiceCard(params: {
   locale: ProjectAgentLocale
   projectId: string
+  toolCallId: string
 }): ProjectAgentChoiceCardPartData {
-  const { locale, projectId } = params
+  const { locale, projectId, toolCallId } = params
   const isEnglish = locale === 'en'
   return {
     cardId: 'edit-first-duration-aspect-ratio',
+    toolCallId,
+    choiceType: 'duration_and_aspect_ratio',
     title: isEnglish ? 'Choose Duration and Aspect Ratio' : '选择短片时长和画面比例',
     description: isEnglish
       ? 'Choose both before screenplay generation. The current test launch supports edit-first videos up to 120 seconds.'
@@ -86,11 +89,8 @@ function buildDurationAndAspectRatioChoiceCard(params: {
     ],
     submitLabel: isEnglish ? 'Continue' : '继续生成',
     submit: {
-      kind: 'set_project_video_ratio_and_send_message',
+      kind: 'set_project_video_ratio',
       projectId,
-      messageTemplate: isEnglish
-        ? 'I choose {durationSeconds} seconds and aspect ratio {aspectRatio}. Continue generating the edit-first screenplay with these choices.'
-        : '我选择 {durationSeconds} 秒和 {aspectRatio} 画面比例，请以这些选择继续生成剪辑先行剧本。',
     },
   }
 }
@@ -126,6 +126,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
+  toolCallId: string
 }): Promise<ProjectAgentChoiceCardPartData> {
   const [project, screenplay] = await Promise.all([
     prisma.project.findFirst({
@@ -188,6 +189,8 @@ async function buildStyleAndRatioChoiceCard(params: {
   const isEnglish = params.locale === 'en'
   return {
     cardId: `edit-first-style:${screenplay.id}`,
+    toolCallId: params.toolCallId,
+    choiceType: 'style',
     title: isEnglish ? 'Choose Visual Style' : '选择视觉风格',
     description: isEnglish
       ? `Choose one style candidate before generating the director decoupage. The selected aspect ratio is ${selectedAspectRatio}.`
@@ -212,9 +215,6 @@ async function buildStyleAndRatioChoiceCard(params: {
       projectId: params.projectId,
       episodeId: params.episodeId,
       aspectRatio: selectedAspectRatio,
-      successMessageTemplate: isEnglish
-        ? `Selected style {stylePreviewIdLabel} and aspect ratio ${selectedAspectRatio}. Read the latest project state and continue with the immediate next step.`
-        : `已选择风格 {stylePreviewIdLabel} 和画面比例 ${selectedAspectRatio}，请读取最新项目状态并继续当前唯一下一步。`,
     },
   }
 }
@@ -222,6 +222,7 @@ async function buildStyleAndRatioChoiceCard(params: {
 function buildScreenplayReviewChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
+  toolCallId: string
 }): ProjectAgentChoiceCardPartData {
   if (params.workflow.stage !== 'screenplay_ready_for_review') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=${params.workflow.stage}`)
@@ -229,6 +230,8 @@ function buildScreenplayReviewChoiceCard(params: {
   const isEnglish = params.locale === 'en'
   return {
     cardId: 'edit-first-screenplay-review',
+    toolCallId: params.toolCallId,
+    choiceType: 'screenplay_review',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Review Screenplay' : '审核剧本',
     description: isEnglish
@@ -237,19 +240,14 @@ function buildScreenplayReviewChoiceCard(params: {
     groups: [],
     submitLabel: isEnglish ? 'Confirm' : '确认',
     submit: {
-      kind: 'send_message',
-      messageTemplate: isEnglish
-        ? 'I approve the current edit-first screenplay. Read the latest project state and continue with the immediate next step: generate visual style candidates.'
-        : '我确认当前剪辑先行剧本，请读取最新项目状态，并继续当前唯一下一步：生成视觉风格候选图。',
+      kind: 'submit_tool_output',
     },
     replyLabel: isEnglish ? 'Other ideas' : '其他想法',
     replyPlaceholder: isEnglish
       ? 'Describe what you want changed in the screenplay...'
       : '输入你希望修改的剧情、氛围、角色、结尾或表达方向...',
     replySubmitLabel: isEnglish ? 'Submit notes' : '提交想法',
-    replyMessageTemplate: isEnglish
-      ? 'I have revision notes for the current edit-first screenplay: {replyText}'
-      : '我对当前剪辑先行剧本有修改意见：{replyText}',
+    replyToolOutputKey: 'revisionNotes',
   }
 }
 
@@ -260,6 +258,7 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   choiceType: EditFirstChoiceType
+  toolCallId: string
 }): Promise<ProjectAgentChoiceCardPartData> {
   if (params.choiceType === 'duration_and_aspect_ratio') {
     if (params.workflow.stage !== 'ready_to_generate_screenplay') {
@@ -268,6 +267,7 @@ export async function buildEditFirstAssistantChoiceCard(params: {
     return buildDurationAndAspectRatioChoiceCard({
       locale: params.locale,
       projectId: params.projectId,
+      toolCallId: params.toolCallId,
     })
   }
 
@@ -275,6 +275,7 @@ export async function buildEditFirstAssistantChoiceCard(params: {
     return buildScreenplayReviewChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
+      toolCallId: params.toolCallId,
     })
   }
 
@@ -289,5 +290,6 @@ export async function buildEditFirstAssistantChoiceCard(params: {
     userId: params.userId,
     episodeId: params.episodeId,
     locale: params.locale,
+    toolCallId: params.toolCallId,
   })
 }

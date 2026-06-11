@@ -32,10 +32,11 @@ describe('project assistant thread log', () => {
               output: { ok: true, operationId: 'delete_storyboard_panel' },
             },
             {
-              type: 'data-confirmation-request',
+              type: 'data-agent-stop',
               data: {
-                operationId: 'delete_storyboard_panel',
-                summary: '删除分镜 7',
+                reason: 'awaiting_external_task',
+                operationIds: ['generate_edit_script'],
+                taskIds: ['task-1'],
               },
             },
           ],
@@ -52,8 +53,8 @@ describe('project assistant thread log', () => {
     expect(text).toContain('删除第七个分镜')
     expect(text).toContain('### Tool delete_storyboard_panel')
     expect(text).toContain('"panelNumber": 7')
-    expect(text).toContain('### data-confirmation-request')
-    expect(text).toContain('"summary": "删除分镜 7"')
+    expect(text).toContain('### data-agent-stop')
+    expect(text).toContain('"reason": "awaiting_external_task"')
   })
 
   it('builds a stable download filename from project scope and thread id', () => {

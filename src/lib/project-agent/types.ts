@@ -118,20 +118,17 @@ export interface AgentRuntimeContextPartData {
 
 export type ProjectAgentChoiceCardSubmit =
   | {
-    kind: 'send_message'
-    messageTemplate: string
+    kind: 'submit_tool_output'
   }
   | {
-    kind: 'set_project_video_ratio_and_send_message'
+    kind: 'set_project_video_ratio'
     projectId: string
-    messageTemplate: string
   }
   | {
     kind: 'confirm_edit_style_preview'
     projectId: string
     episodeId: string
     aspectRatio?: '9:16' | '16:9' | '21:9'
-    successMessageTemplate: string
   }
 
 export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm_or_reply'
@@ -153,6 +150,8 @@ export interface ProjectAgentChoiceCardGroup {
 
 export interface ProjectAgentChoiceCardPartData {
   cardId: string
+  toolCallId: string
+  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
   variant?: ProjectAgentChoiceCardVariant
   title: string
   description?: string | null
@@ -162,18 +161,7 @@ export interface ProjectAgentChoiceCardPartData {
   replyLabel?: string | null
   replyPlaceholder?: string | null
   replySubmitLabel?: string | null
-  replyMessageTemplate?: string | null
-}
-
-export interface ConfirmationRequestPartData {
-  approvalId: string
-  operationId: string
-  summary: string
-  toolCallId?: string | null
-  budget?: {
-    key?: string
-    estimatedCostUnits?: number
-  } | null
+  replyToolOutputKey?: string | null
 }
 
 export interface TaskSubmittedPartData {
@@ -256,7 +244,6 @@ export type WorkspaceAssistantPartType =
   | 'data-assistant-choice-card'
   | 'data-edit-style-preview-generation'
   | 'data-project-phase'
-  | 'data-confirmation-request'
   | 'data-task-submitted'
   | 'data-task-batch-submitted'
   | 'data-plan'

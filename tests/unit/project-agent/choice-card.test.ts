@@ -69,10 +69,13 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('ready_to_generate_screenplay'),
       choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-call-1',
     })
 
     expect(card).toMatchObject({
       cardId: 'edit-first-duration-aspect-ratio',
+      toolCallId: 'tool-call-1',
+      choiceType: 'duration_and_aspect_ratio',
       title: '选择短片时长和画面比例',
       groups: [
         {
@@ -85,7 +88,7 @@ describe('edit-first assistant choice cards', () => {
         },
       ],
       submit: {
-        kind: 'set_project_video_ratio_and_send_message',
+        kind: 'set_project_video_ratio',
         projectId: 'project-1',
       },
     })
@@ -102,6 +105,7 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
       choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-call-1',
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=needs_style_choice')
   })
 
@@ -113,20 +117,22 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('screenplay_ready_for_review'),
       choiceType: 'screenplay_review',
+      toolCallId: 'tool-call-1',
     })
 
     expect(card).toMatchObject({
       cardId: 'edit-first-screenplay-review',
+      toolCallId: 'tool-call-1',
+      choiceType: 'screenplay_review',
       variant: 'confirm_or_reply',
       title: '审核剧本',
       groups: [],
       submitLabel: '确认',
       submit: {
-        kind: 'send_message',
-        messageTemplate: expect.stringContaining('确认当前剪辑先行剧本'),
+        kind: 'submit_tool_output',
       },
       replyLabel: '其他想法',
-      replyMessageTemplate: '我对当前剪辑先行剧本有修改意见：{replyText}',
+      replyToolOutputKey: 'revisionNotes',
     })
   })
 
@@ -138,6 +144,7 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('ready_to_generate_screenplay'),
       choiceType: 'screenplay_review',
+      toolCallId: 'tool-call-1',
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=ready_to_generate_screenplay')
   })
 
@@ -180,6 +187,7 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
       choiceType: 'style',
+      toolCallId: 'tool-call-1',
     })
 
     expect(prismaState.screenplayFindFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -193,6 +201,8 @@ describe('edit-first assistant choice cards', () => {
     }))
     expect(card).toMatchObject({
       cardId: 'edit-first-style:screenplay-1',
+      toolCallId: 'tool-call-1',
+      choiceType: 'style',
       groups: [
         {
           key: 'stylePreviewId',
@@ -243,6 +253,7 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('needs_style_choice'),
       choiceType: 'style',
+      toolCallId: 'tool-call-1',
     })
 
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b'])
@@ -257,6 +268,7 @@ describe('edit-first assistant choice cards', () => {
       locale: 'zh',
       workflow: workflow('style_preview_generating'),
       choiceType: 'style',
+      toolCallId: 'tool-call-1',
     })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   })
 

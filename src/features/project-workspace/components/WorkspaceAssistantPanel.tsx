@@ -40,14 +40,12 @@ import {
 import {
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
-  syncWorkspaceResourceChangesFromWriteResult,
 } from '@/lib/query/resource-change-sync'
 import { useConfirmProjectEditStylePreview, useProjectEditScreenplay } from '@/lib/query/hooks'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
-import type { ConfirmationRequestPartData } from '@/lib/project-agent/types'
 
 interface ProjectAgentWaitFollowUp {
   waitId: string
@@ -104,30 +102,6 @@ function readAssistantToolOutput(part: unknown): unknown | null {
   if (type !== 'dynamic-tool' && !type.startsWith('tool-')) return null
   if (part.state !== 'output-available') return null
   return 'output' in part ? part.output : null
-}
-
-function readConfirmedOperationSuccessData(payload: unknown): unknown | null {
-  if (!isRecord(payload)) return null
-  if (payload.ok !== true) return null
-  return 'data' in payload ? payload.data : null
-}
-
-function buildOperationFailureToolOutput(params: {
-  operationId: string
-  message: string
-  code: string
-  details?: unknown
-}): Record<string, unknown> {
-  return {
-    ok: false,
-    operationId: params.operationId,
-    error: {
-      code: params.code,
-      message: params.message,
-      operationId: params.operationId,
-      details: params.details ?? null,
-    },
-  }
 }
 
 function readStoredAssistantPanelWidth(): number {
@@ -346,127 +320,21 @@ export default function WorkspaceAssistantPanel({
       setConfirmationSubmittingKey(null)
     }
   }
-  const handleConfirmOperation = async (confirmation: ConfirmationRequestPartData) => {
-    const operationId = confirmation.operationId
-    const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
-    const approvalId = confirmation.approvalId.trim()
-    if (!toolCallId) {
-      throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
-    }
-    if (!approvalId) {
-      throw new Error('CONFIRMATION_APPROVAL_ID_MISSING')
-    }
-    setConfirmationSubmittingKey(`confirm:${operationId}:continue`)
-    try {
-      const response = await apiFetch(`/api/projects/${projectId}/assistant/confirm-operation`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          approvalId,
-          decision: 'approve',
-        }),
-      })
-      const payload: unknown = await response.json().catch(() => null)
-      if (!response.ok) {
-        await assistantRuntime.sendHiddenMessage(JSON.stringify({
-          type: 'assistant_tool_approval_result',
-          operationId,
-          toolCallId,
-          approvalId,
-          output: buildOperationFailureToolOutput({
-            operationId,
-            code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
-            message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
-            details: payload,
-          }),
-        }))
-        return
-      }
-      const successData = readConfirmedOperationSuccessData(payload)
-      if (successData !== null) {
-        await syncWorkspaceResourceChangesFromWriteResult({
-          queryClient,
-          result: successData,
-          projectId,
-          fallbackEpisodeId: episodeId ?? null,
-        })
-      }
-      await assistantRuntime.sendHiddenMessage(JSON.stringify({
-        type: 'assistant_tool_approval_result',
-        operationId,
-        toolCallId,
-        approvalId,
-        output: payload,
-      }))
-    } catch (error) {
-      await assistantRuntime.sendHiddenMessage(JSON.stringify({
-        type: 'assistant_tool_approval_result',
-        operationId,
-        toolCallId,
-        approvalId,
-        output: buildOperationFailureToolOutput({
-          operationId,
-          code: 'CONFIRMED_OPERATION_CLIENT_FAILED',
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      }))
-    } finally {
-      setConfirmationSubmittingKey(null)
-    }
-  }
-  const handleCancelOperation = async (confirmation: ConfirmationRequestPartData) => {
-    const operationId = confirmation.operationId
-    const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
-    const approvalId = confirmation.approvalId.trim()
-    if (!toolCallId) {
-      throw new Error('CONFIRMATION_TOOL_CALL_ID_MISSING')
-    }
-    if (!approvalId) {
-      throw new Error('CONFIRMATION_APPROVAL_ID_MISSING')
-    }
-    setConfirmationSubmittingKey(`confirm:${operationId}:cancel`)
-    try {
-      const response = await apiFetch(`/api/projects/${projectId}/assistant/confirm-operation`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          approvalId,
-          decision: 'deny',
-        }),
-      })
-      const payload: unknown = await response.json().catch(() => null)
-      if (!response.ok) {
-        await assistantRuntime.sendHiddenMessage(JSON.stringify({
-          type: 'assistant_tool_approval_result',
-          operationId,
-          toolCallId,
-          approvalId,
-          output: buildOperationFailureToolOutput({
-            operationId,
-            code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
-            message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
-            details: payload,
-          }),
-        }))
-        return
-      }
-      await assistantRuntime.sendHiddenMessage(JSON.stringify({
-        type: 'assistant_tool_approval_result',
-        operationId,
-        toolCallId,
-        approvalId,
-        output: payload,
-      }))
-    } finally {
-      setConfirmationSubmittingKey(null)
-    }
+  const handleSubmitChoiceToolOutput = async (params: {
+    toolCallId: string
+    output: Record<string, unknown>
+  }) => {
+    await assistantRuntime.addToolOutput({
+      tool: 'request_edit_first_choice',
+      toolCallId: params.toolCallId,
+      output: params.output,
+    })
   }
   const handleConfirmEditStylePreviewChoice = async (params: {
     projectId: string
     episodeId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
-    successMessage: string
   }) => {
     if (params.projectId !== projectId) {
       throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
@@ -476,12 +344,10 @@ export default function WorkspaceAssistantPanel({
       stylePreviewId: params.stylePreviewId,
       aspectRatio: params.aspectRatio,
     })
-    await assistantRuntime.sendHiddenMessage(params.successMessage)
   }
   const handleSetProjectVideoRatioChoice = async (params: {
     projectId: string
     aspectRatio: EditScriptVideoRatio
-    message: string
   }) => {
     if (params.projectId !== projectId) {
       throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
@@ -501,7 +367,6 @@ export default function WorkspaceAssistantPanel({
     if (episodeId) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
     }
-    await assistantRuntime.sendHiddenMessage(params.message)
   }
   const activeChoiceCard = useMemo(() => {
     return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
@@ -529,13 +394,11 @@ export default function WorkspaceAssistantPanel({
     })
   }, [])
   const partComponents = useWorkspaceAssistantMessagePartComponents({
-    onConfirmOperation: handleConfirmOperation,
-    onCancelOperation: handleCancelOperation,
     onRespondToolApproval: handleRespondToolApproval,
     confirmationSubmittingKey,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
-    onSendChoiceMessage: assistantRuntime.sendHiddenMessage,
+    onSubmitChoiceToolOutput: handleSubmitChoiceToolOutput,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
@@ -655,7 +518,7 @@ export default function WorkspaceAssistantPanel({
                   <div className="mb-2">
                     <AssistantChoiceCardView
                       data={activeChoiceCard.data}
-                      onSendChoiceMessage={assistantRuntime.sendHiddenMessage}
+                      onSubmitChoiceToolOutput={handleSubmitChoiceToolOutput}
                       onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
                       onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}

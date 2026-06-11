@@ -13,8 +13,7 @@ import {
   searchAgentSkills,
 } from '@/lib/agent-skills/registry'
 import type { AgentPlanDraft, AgentPlanValidationResult } from '@/lib/agent-skills/types'
-import type { AgentPlanPartData, ConfirmationRequestPartData, ProjectAgentContext } from '@/lib/project-agent/types'
-import { createAssistantToolApproval } from '@/lib/project-agent/tool-approval'
+import type { AgentPlanPartData, ProjectAgentContext } from '@/lib/project-agent/types'
 import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import type {
@@ -199,14 +198,6 @@ function errorMessage(error: unknown): string {
   return 'OPERATION_EXECUTION_FAILED'
 }
 
-function toUserApprovalSummary(summary: string): string {
-  return summary
-    .replace(/确认继续后请重新调用并传入 confirmed=true。?/g, '')
-    .replace(/Confirm to continue and call again with confirmed=true\.?/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 async function invokeAllowedOperation(params: {
   ctx: ProjectAgentOperationContext
   skillId: string
@@ -272,46 +263,14 @@ async function invokeAllowedOperation(params: {
     })
   }
   if (operationRequiresConfirmation(operation) && !isConfirmedOperationInput(params.input)) {
-    const summary = toUserApprovalSummary(operation.confirmation.summary
-      || `Operation ${params.operationId} requires confirmation.`
-    )
-    const toolCallId = params.ctx.toolCallId?.trim() || ''
-    if (!toolCallId) {
-      return buildProjectAgentToolResultError({
-        code: 'OPERATION_PREREQUISITE_MISSING',
-        message: 'PROJECT_AGENT_OPERATION_CONFIRMATION_TOOL_CALL_ID_REQUIRED',
-        operationId: params.operationId,
-      })
-    }
-    const approval = await createAssistantToolApproval({
-      projectId: params.ctx.projectId,
-      userId: params.ctx.userId,
-      episodeId,
-      toolCallId,
-      operationId: 'invoke_operation',
-      operationInput: {
-        skillId: params.skillId,
-        operationId: params.operationId,
-        input: {
-          ...params.input,
-          confirmed: true,
-        },
-        confirmed: true,
-      },
-      context: params.ctx.context,
-    })
-    writeOperationDataPart<ConfirmationRequestPartData>(params.ctx.writer, 'data-confirmation-request', {
-      approvalId: approval.approvalId,
-      operationId: 'invoke_operation',
-      summary,
-      toolCallId,
-      ...(operation.confirmation.budget ? { budget: operation.confirmation.budget } : {}),
-    })
     return buildProjectAgentToolResultError({
-      code: 'CONFIRMATION_REQUIRED',
-      message: summary,
+      code: 'OPERATION_PREREQUISITE_MISSING',
+      message: 'PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED',
       operationId: params.operationId,
-      details: { skillId: params.skillId },
+      details: {
+        skillId: params.skillId,
+        approval: 'ai-sdk-tool-approval',
+      },
     })
   }
 
@@ -459,7 +418,10 @@ export function createAgentSkillOperations(): ProjectAgentOperationRegistryDraft
             ctx,
             skillId: step.skillId,
             operationId: step.operationId,
-            input: step.input,
+            input: {
+              ...step.input,
+              confirmed: true,
+            },
           }),
         })
       },
@@ -468,14 +430,31 @@ export function createAgentSkillOperations(): ProjectAgentOperationRegistryDraft
       id: 'invoke_operation',
       summary: 'Invoke one real operation through a loaded Agent Skill allowlist. This is the only assistant-facing gateway to business operations.',
       intent: 'act',
-      effects: EFFECTS_NONE,
+      effects: {
+        writes: true,
+        billable: true,
+        destructive: false,
+        overwrite: true,
+        bulk: false,
+        externalSideEffects: true,
+        longRunning: true,
+      },
+      confirmation: {
+        required: true,
+        summary: '将通过 Agent Skill 调用项目 operation；可能写入项目数据、提交后台任务或产生计费。确认后继续执行。',
+      },
       inputSchema: invokeOperationInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => invokeAllowedOperation({
         ctx,
         skillId: input.skillId,
         operationId: input.operationId,
-        input: input.input ?? {},
+        input: input.confirmed
+          ? {
+              ...(input.input ?? {}),
+              confirmed: true,
+            }
+          : input.input ?? {},
       }),
     }),
   }

@@ -150,10 +150,11 @@ const choiceCardMock = vi.hoisted(() => ({
     ],
     submitLabel: '继续生成',
     submit: {
-      kind: 'set_project_video_ratio_and_send_message',
+      kind: 'set_project_video_ratio',
       projectId: 'project-1',
-      messageTemplate: '我选择 {durationSeconds} 秒和 {aspectRatio} 画面比例，请继续。',
     },
+    toolCallId: 'tool-call-choice',
+    choiceType: 'duration_and_aspect_ratio',
   })),
 }))
 
@@ -189,6 +190,7 @@ function buildContext(writer: UIMessageStreamWriter<UIMessage> | null = null): P
       episodeId: 'episode-1',
     },
     writer,
+    toolCallId: 'tool-call-choice',
   }
 }
 
@@ -381,12 +383,14 @@ describe('edit-script operations', () => {
       episodeId: 'episode-1',
       locale: 'zh',
       choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-call-choice',
     }))
     expect(writerEvents).toEqual([
       expect.objectContaining({
         type: 'data-assistant-choice-card',
         data: expect.objectContaining({
           cardId: 'edit-first-duration-aspect-ratio',
+          toolCallId: 'tool-call-choice',
         }),
       }),
     ])

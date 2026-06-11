@@ -18,7 +18,6 @@ import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/u
 import { useQuery } from '@tanstack/react-query'
 import type {
   AgentPlanPartData,
-  ConfirmationRequestPartData,
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
   ProjectAgentStopPartData,
@@ -30,8 +29,8 @@ import type {
 import { useConfirmProjectEditStylePreview, useRevertMutationBatch } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
-  interpolateChoiceCardTemplate,
   isChoiceCardSubmitReady,
+  resolveChoiceCardSelectionLabels,
   type ChoiceCardSelections,
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
@@ -62,29 +61,6 @@ function formatSkillLabel(skillId: string | null | undefined, t: ReturnType<type
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isConfirmationRequiredOutput(value: unknown): boolean {
-  return isRecord(value) && value.confirmationRequired === true
-}
-
-function hasRenderedToolOutput(parts: readonly unknown[], toolCallId: string): boolean {
-  return parts.some((part) => {
-    if (!isRecord(part)) return false
-    const type = typeof part.type === 'string' ? part.type : ''
-    if (part.toolCallId !== toolCallId) return false
-    if (type === 'tool-call') {
-      if (isConfirmationRequiredOutput(part.result)) return false
-      return 'result' in part || part.isError === true
-    }
-    if (type === 'dynamic-tool' || type.startsWith('tool-')) {
-      if (isConfirmationRequiredOutput(part.output)) return false
-      return part.state === 'output-available'
-        || part.state === 'output-error'
-        || part.state === 'output-denied'
-    }
-    return false
-  })
 }
 
 function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
@@ -297,18 +273,19 @@ function RatioChoiceShape(props: {
 
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
-  onSendChoiceMessage: (message: string) => Promise<void>
+  onSubmitChoiceToolOutput: (params: {
+    toolCallId: string
+    output: Record<string, unknown>
+  }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
     projectId: string
     aspectRatio: EditScriptVideoRatio
-    message: string
   }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
-    successMessage: string
   }) => Promise<void>
   onSubmitted?: (cardId: string) => void
 }) {
@@ -329,16 +306,21 @@ export function AssistantChoiceCardView(props: {
 
   const handleReplySubmit = async () => {
     const trimmedReply = replyText.trim()
-    const template = card.replyMessageTemplate?.trim()
-    if (!template || !trimmedReply || submitting) return
+    const replyKey = card.replyToolOutputKey?.trim() || 'replyText'
+    if (!trimmedReply || submitting) return
     setSubmitting(true)
     setError(null)
     try {
-      await props.onSendChoiceMessage(
-        interpolateChoiceCardTemplate(template, selections, card.groups, {
-          replyText: trimmedReply,
-        }),
-      )
+      await props.onSubmitChoiceToolOutput({
+        toolCallId: card.toolCallId,
+        output: {
+          ok: true,
+          choiceType: card.choiceType,
+          cardId: card.cardId,
+          decision: 'revise',
+          [replyKey]: trimmedReply,
+        },
+      })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
@@ -352,12 +334,21 @@ export function AssistantChoiceCardView(props: {
     setSubmitting(true)
     setError(null)
     try {
-      if (card.submit.kind === 'send_message') {
-        await props.onSendChoiceMessage(
-          interpolateChoiceCardTemplate(card.submit.messageTemplate, selections, card.groups),
-        )
+      const labels = resolveChoiceCardSelectionLabels(card.groups, selections)
+      if (card.submit.kind === 'submit_tool_output') {
+        await props.onSubmitChoiceToolOutput({
+          toolCallId: card.toolCallId,
+          output: {
+            ok: true,
+            choiceType: card.choiceType,
+            cardId: card.cardId,
+            decision: 'approve',
+            selections,
+            labels,
+          },
+        })
         props.onSubmitted?.(card.cardId)
-      } else if (card.submit.kind === 'set_project_video_ratio_and_send_message') {
+      } else if (card.submit.kind === 'set_project_video_ratio') {
         const aspectRatio = selections.aspectRatio
         if (!isEditScriptVideoRatio(aspectRatio)) {
           throw new Error('ASSISTANT_CHOICE_CARD_INVALID_ASPECT_RATIO')
@@ -365,7 +356,18 @@ export function AssistantChoiceCardView(props: {
         await props.onSetProjectVideoRatioChoice({
           projectId: card.submit.projectId,
           aspectRatio,
-          message: interpolateChoiceCardTemplate(card.submit.messageTemplate, selections, card.groups),
+        })
+        await props.onSubmitChoiceToolOutput({
+          toolCallId: card.toolCallId,
+          output: {
+            ok: true,
+            choiceType: card.choiceType,
+            cardId: card.cardId,
+            durationSeconds: Number(selections.durationSeconds),
+            aspectRatio,
+            selections,
+            labels,
+          },
         })
         props.onSubmitted?.(card.cardId)
       } else {
@@ -379,11 +381,18 @@ export function AssistantChoiceCardView(props: {
           episodeId: card.submit.episodeId,
           stylePreviewId,
           aspectRatio,
-          successMessage: interpolateChoiceCardTemplate(
-            card.submit.successMessageTemplate,
+        })
+        await props.onSubmitChoiceToolOutput({
+          toolCallId: card.toolCallId,
+          output: {
+            ok: true,
+            choiceType: card.choiceType,
+            cardId: card.cardId,
+            stylePreviewId,
+            aspectRatio,
             selections,
-            card.groups,
-          ),
+            labels,
+          },
         })
         props.onSubmitted?.(card.cardId)
       }
@@ -447,7 +456,7 @@ export function AssistantChoiceCardView(props: {
               type="button"
               className="inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-[var(--glass-text-tertiary)] disabled:opacity-70"
               onClick={() => { void handleReplySubmit() }}
-              disabled={submitting || !replyText.trim() || !card.replyMessageTemplate?.trim()}
+              disabled={submitting || !replyText.trim()}
             >
               {submitting ? t('cards.choiceSubmitting') : card.replySubmitLabel || t('cards.choiceReplySubmit')}
             </button>
@@ -519,27 +528,6 @@ export function AssistantChoiceCardView(props: {
         </>
       ) : null}
     </div>
-  )
-}
-
-function InlineConfirmationRequestDataCard(props: DataMessagePartProps<ConfirmationRequestPartData> & {
-  onConfirmOperation: (data: ConfirmationRequestPartData) => Promise<void>
-  onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
-  confirmationSubmittingKey: string | null
-}) {
-  const toolCallId = typeof props.data.toolCallId === 'string' ? props.data.toolCallId.trim() : ''
-  const messageContent = useMessage((state) => state.content)
-  if (!toolCallId || hasRenderedToolOutput(messageContent, toolCallId)) return null
-
-  return (
-    <ConfirmationActionCard
-      operationId={props.data.operationId}
-      summary={props.data.summary}
-      onConfirm={async () => props.onConfirmOperation(props.data)}
-      onCancel={async () => props.onCancelOperation(props.data)}
-      confirmPending={props.confirmationSubmittingKey === `confirm:${props.data.operationId}:continue`}
-      cancelPending={props.confirmationSubmittingKey === `confirm:${props.data.operationId}:cancel`}
-    />
   )
 }
 
@@ -1004,35 +992,32 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
 }
 
 interface WorkspaceAssistantMessagePartComponentsOptions {
-  onConfirmOperation: (data: ConfirmationRequestPartData) => Promise<void>
-  onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
   onRespondToolApproval: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey: string | null
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
-  onSendChoiceMessage: (message: string) => Promise<void>
+  onSubmitChoiceToolOutput: (params: {
+    toolCallId: string
+    output: Record<string, unknown>
+  }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
     projectId: string
     aspectRatio: EditScriptVideoRatio
-    message: string
   }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
-    successMessage: string
   }) => Promise<void>
 }
 
 export function useWorkspaceAssistantMessagePartComponents({
-  onConfirmOperation,
-  onCancelOperation,
   onRespondToolApproval,
   confirmationSubmittingKey,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
-  onSendChoiceMessage,
+  onSubmitChoiceToolOutput,
   onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
@@ -1057,7 +1042,7 @@ export function useWorkspaceAssistantMessagePartComponents({
           : (props) => (
               <AssistantChoiceCardView
                 data={props.data}
-                onSendChoiceMessage={onSendChoiceMessage}
+                onSubmitChoiceToolOutput={onSubmitChoiceToolOutput}
                 onSetProjectVideoRatioChoice={onSetProjectVideoRatioChoice}
                 onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
@@ -1066,14 +1051,6 @@ export function useWorkspaceAssistantMessagePartComponents({
           ? HiddenRuntimeContextDataCard
           : EditStylePreviewGenerationDataCard,
         'project-phase': ProjectPhaseDataCard,
-        'confirmation-request': (props) => (
-          <InlineConfirmationRequestDataCard
-            {...props}
-            onConfirmOperation={onConfirmOperation}
-            onCancelOperation={onCancelOperation}
-            confirmationSubmittingKey={confirmationSubmittingKey}
-          />
-        ),
         'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         plan: AgentPlanDataCard,
@@ -1084,12 +1061,10 @@ export function useWorkspaceAssistantMessagePartComponents({
     confirmationSubmittingKey,
     hideChoiceCards,
     hideStylePreviewGenerationCards,
-    onCancelOperation,
     onConfirmEditStylePreviewChoice,
-    onConfirmOperation,
     onRespondToolApproval,
     onSetProjectVideoRatioChoice,
-    onSendChoiceMessage,
+    onSubmitChoiceToolOutput,
   ])
 }
 

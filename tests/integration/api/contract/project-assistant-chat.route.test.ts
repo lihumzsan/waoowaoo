@@ -17,23 +17,6 @@ const apiAdapterMock = vi.hoisted(() => ({
   })),
 }))
 
-const toolApprovalMock = vi.hoisted(() => ({
-  resolveAssistantToolApproval: vi.fn(async (): Promise<Record<string, unknown>> => ({
-    approvalId: 'approval-1',
-    operationId: 'generate_project_music',
-    toolCallId: 'tool-call-1',
-    output: {
-      ok: true,
-      operationId: 'generate_project_music',
-      data: {
-        async: true,
-        status: 'submitted',
-        taskId: 'task-music-1',
-      },
-    },
-  })),
-}))
-
 const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
   listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
@@ -116,13 +99,6 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
-vi.mock('@/lib/project-agent/tool-approval', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/project-agent/tool-approval')>('@/lib/project-agent/tool-approval')
-  return {
-    ...actual,
-    resolveAssistantToolApproval: toolApprovalMock.resolveAssistantToolApproval,
-  }
-})
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
 vi.mock('@/lib/project-agent/waits', () => waitMock)
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
@@ -138,7 +114,6 @@ import {
   PUT as chatPut,
 } from '@/app/api/projects/[projectId]/assistant/chat/route'
 import { GET as chatLogGet } from '@/app/api/projects/[projectId]/assistant/chat/log/route'
-import { POST as confirmOperationPost } from '@/app/api/projects/[projectId]/assistant/confirm-operation/route'
 import {
   GET as waitsGet,
   POST as waitsPost,
@@ -339,130 +314,6 @@ describe('project assistant chat route', () => {
         details: expect.objectContaining({ code: 'PROJECT_AGENT_MODEL_NOT_CONFIGURED' }),
       }),
     }))
-  })
-
-  it('POST /api/projects/[projectId]/assistant/confirm-operation -> resolves a stored approval without accepting operation args', async () => {
-    const response = await confirmOperationPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/confirm-operation',
-        method: 'POST',
-        body: {
-          approvalId: 'approval-1',
-          decision: 'approve',
-          input: { prompt: 'client args must be ignored' },
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(toolApprovalMock.resolveAssistantToolApproval).toHaveBeenCalledTimes(1)
-    expect(toolApprovalMock.resolveAssistantToolApproval).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      userId: 'user-1',
-      approvalId: 'approval-1',
-      decision: 'approve',
-    }))
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()
-    expect(waitMock.createProjectAgentWait).not.toHaveBeenCalled()
-    await expect(response.json()).resolves.toEqual({
-      ok: true,
-      operationId: 'generate_project_music',
-      data: {
-        async: true,
-        status: 'submitted',
-        taskId: 'task-music-1',
-      },
-    })
-  })
-
-  it('POST /api/projects/[projectId]/assistant/confirm-operation -> returns operation execution failure as tool output', async () => {
-    toolApprovalMock.resolveAssistantToolApproval.mockResolvedValueOnce({
-      approvalId: 'approval-1',
-      operationId: 'generate_project_music',
-      toolCallId: 'tool-call-1',
-      output: {
-        ok: false,
-        operationId: 'generate_project_music',
-        error: {
-          code: 'RATE_LIMIT',
-          message: 'provider quota exceeded',
-          operationId: 'generate_project_music',
-          details: null,
-        },
-      },
-    })
-
-    const response = await confirmOperationPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/confirm-operation',
-        method: 'POST',
-        body: {
-          approvalId: 'approval-1',
-          decision: 'approve',
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
-      ok: false,
-      operationId: 'generate_project_music',
-      error: expect.objectContaining({
-        code: 'RATE_LIMIT',
-        message: 'provider quota exceeded',
-        operationId: 'generate_project_music',
-      }),
-    })
-  })
-
-  it('POST /api/projects/[projectId]/assistant/confirm-operation -> rejects invalid approval request before execution', async () => {
-    const response = await confirmOperationPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/confirm-operation',
-        method: 'POST',
-        body: {
-          operationId: 'generate_project_music',
-          input: { prompt: 'legacy args are invalid' },
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(400)
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()
-    expect(toolApprovalMock.resolveAssistantToolApproval).not.toHaveBeenCalled()
-    await expect(response.json()).resolves.toEqual(expect.objectContaining({
-      error: expect.objectContaining({
-        code: 'INVALID_PARAMS',
-        details: expect.objectContaining({
-          code: 'ASSISTANT_TOOL_APPROVAL_ID_REQUIRED',
-        }),
-      }),
-    }))
-  })
-
-  it('POST /api/projects/[projectId]/assistant/confirm-operation -> rejects unauthenticated requests', async () => {
-    authState.authenticated = false
-
-    const response = await confirmOperationPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/confirm-operation',
-        method: 'POST',
-        body: {
-          approvalId: 'approval-1',
-          decision: 'approve',
-          input: {
-            prompt: 'lo-fi title theme',
-          },
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(401)
-    expect(toolApprovalMock.resolveAssistantToolApproval).not.toHaveBeenCalled()
   })
 
   it('GET /api/projects/[projectId]/assistant/waits -> returns resolved follow-ups for the assistant scope', async () => {

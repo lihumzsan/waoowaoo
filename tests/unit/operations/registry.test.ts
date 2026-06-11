@@ -126,7 +126,7 @@ describe('project agent operation registry', () => {
     expect(registry.validate_plan?.intent).toBe('plan')
     expect(registry.invoke_operation?.intent).toBe('act')
 
-    for (const operationId of ['search_skills', 'load_skill', 'create_plan', 'validate_plan', 'invoke_operation']) {
+    for (const operationId of ['search_skills', 'load_skill', 'create_plan', 'validate_plan']) {
       expect(registry[operationId]?.effects).toEqual({
         writes: false,
         billable: false,
@@ -137,5 +137,15 @@ describe('project agent operation registry', () => {
         longRunning: false,
       })
     }
+    expect(registry.invoke_operation?.effects).toEqual({
+      writes: true,
+      billable: true,
+      destructive: false,
+      overwrite: true,
+      bulk: false,
+      externalSideEffects: true,
+      longRunning: true,
+    })
+    expect(registry.invoke_operation?.confirmation.required).toBe(true)
   })
 })

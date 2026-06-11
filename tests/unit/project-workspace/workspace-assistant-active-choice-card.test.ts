@@ -5,6 +5,8 @@ import { findActiveChoiceCard } from '@/features/project-workspace/components/wo
 
 const choiceCard: ProjectAgentChoiceCardPartData = {
   cardId: 'edit-first-duration-aspect-ratio',
+  toolCallId: 'tool-call-1',
+  choiceType: 'duration_and_aspect_ratio',
   title: '选择短片时长和画面比例',
   groups: [
     {
@@ -16,8 +18,7 @@ const choiceCard: ProjectAgentChoiceCardPartData = {
   ],
   submitLabel: '继续生成',
   submit: {
-    kind: 'send_message',
-    messageTemplate: '继续',
+    kind: 'submit_tool_output',
   },
 }
 

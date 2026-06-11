@@ -11,6 +11,7 @@ import {
 } from 'ai'
 import type { Tool } from '@ai-sdk/provider-utils'
 import type { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
 import { getProjectModelConfig } from '@/lib/config-service'
@@ -317,7 +318,28 @@ export async function createProjectAgentChatResponse(input: {
           description,
           inputSchema: operation.inputSchema,
           ...(requiresApproval ? { needsApproval: true } : {}),
-          execute: async (args: unknown, options?: ToolExecutionOptions) => {
+          ...(operationId === 'request_edit_first_choice'
+            ? {
+                outputSchema: z.unknown(),
+                onInputAvailable: async (options: {
+                  input: unknown
+                  toolCallId: string
+                }) => {
+                  await executeProjectAgentOperationFromTool({
+                    request: input.request,
+                    operationId,
+                    projectId: input.projectId,
+                    userId: input.userId,
+                    context,
+                    source: 'assistant-panel',
+                    writer,
+                    input: options.input,
+                    toolCallId: options.toolCallId,
+                  })
+                },
+              }
+            : {
+                execute: async (args: unknown, options?: ToolExecutionOptions) => {
             const effectiveInput = requiresApproval && !isConfirmedOperationInput(args)
               ? {
                   ...(isRecord(args) ? args : {}),
@@ -335,7 +357,8 @@ export async function createProjectAgentChatResponse(input: {
               input: effectiveInput,
               toolCallId: options?.toolCallId,
             })
-          },
+                },
+              }),
         }
         return {
           entry: [operationId, definition] as const,

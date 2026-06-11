@@ -9,15 +9,9 @@ const registryState = vi.hoisted(() => ({
   registry: {} as ProjectAgentOperationRegistry,
 }))
 
-const approvalMock = vi.hoisted(() => ({
-  createAssistantToolApproval: vi.fn(async () => ({ approvalId: 'approval-1' })),
-}))
-
 vi.mock('@/lib/operations/registry', () => ({
   createProjectAgentOperationRegistry: () => registryState.registry,
 }))
-
-vi.mock('@/lib/project-agent/tool-approval', () => approvalMock)
 
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 
@@ -69,7 +63,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.error.issues).toBeDefined()
   })
 
-  it('[confirmation required] -> writes confirmation card and returns error', async () => {
+  it('[approval required without SDK approval] -> returns a defensive error without executing', async () => {
     const writer = buildWriter()
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
@@ -104,29 +98,13 @@ describe('executeProjectAgentOperationFromTool', () => {
       toolCallId: 'tool-call-1',
     })
 
-    expect(writer.write).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'data-confirmation-request',
-        data: expect.objectContaining({
-          operationId: 'confirm_op',
-          approvalId: 'approval-1',
-          summary: 'needs confirm',
-          toolCallId: 'tool-call-1',
-          budget: {
-          key: 'assistant-budget',
-          estimatedCostUnits: 3,
-        },
-      }),
-    }))
+    expect(writer.write).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.confirmationRequired).toBe(true)
-    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
+    expect(result.error.code).toBe('OPERATION_PREREQUISITE_MISSING')
+    expect(result.error.message).toBe('PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED')
+    expect(result.error.details).toEqual({ approval: 'ai-sdk-tool-approval' })
     expect(execute).not.toHaveBeenCalled()
-    expect(approvalMock.createAssistantToolApproval).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'confirm_op',
-      operationInput: {},
-      toolCallId: 'tool-call-1',
-    }))
   })
 
   it('[confirmed input] -> executes operation when confirmation required', async () => {
