@@ -656,6 +656,7 @@ async function resolveLocationAsset(projectId: string, targetId: string | null):
   const image = location?.images.find((item) => item.id === location.selectedImageId)
     ?? location?.images.find((item) => item.isSelected)
     ?? location?.images.find((item) => Boolean(item.imageUrl))
+    ?? location?.images[0]
     ?? null
   if (!location || !image) return null
   return {

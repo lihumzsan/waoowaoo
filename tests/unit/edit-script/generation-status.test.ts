@@ -55,6 +55,10 @@ const prismaMock = vi.hoisted(() => ({
   projectLocation: {
     findMany: vi.fn(),
     findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+  projectEditAssetRequirement: {
+    update: vi.fn(),
   },
   task: {
     findFirst: vi.fn(),
@@ -82,6 +86,10 @@ const billingMock = vi.hoisted(() => ({
   })),
 }))
 
+const assetActionsMock = vi.hoisted(() => ({
+  submitAssetGenerateTask: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({ analysisModel: 'analysis-model-1', storyboardModel: 'image-model-1' })),
@@ -96,7 +104,7 @@ vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/edit-script/asset-design', () => ({
   designEditAssetRequirements: vi.fn(async (input: { requirements: unknown }) => input.requirements),
 }))
-vi.mock('@/lib/assets/services/asset-actions', () => ({ submitAssetGenerateTask: vi.fn() }))
+vi.mock('@/lib/assets/services/asset-actions', () => assetActionsMock)
 vi.mock('@/lib/task/submitter', () => ({
   submitTask: vi.fn(async () => ({ taskId: 'style-preview-task-1', status: 'queued' })),
 }))
@@ -108,6 +116,7 @@ import {
   confirmProjectEditStylePreview,
   generateProjectEditScreenplay,
   generateProjectEditScript,
+  generateProjectEditScriptAssets,
   generateProjectEditStylePreviews,
   readProjectEditScreenplay,
   readProjectEditScript,
@@ -263,6 +272,9 @@ describe('edit script generation status persistence', () => {
     prismaMock.projectCharacter.findMany.mockResolvedValue([])
     prismaMock.projectLocation.findMany.mockResolvedValue([])
     prismaMock.projectLocation.findFirst.mockResolvedValue(null)
+    prismaMock.projectLocation.create.mockResolvedValue({ id: 'created-location-1' })
+    prismaMock.projectEditAssetRequirement.update.mockResolvedValue({})
+    assetActionsMock.submitAssetGenerateTask.mockResolvedValue({ taskId: 'asset-task-1', status: 'queued' })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue({
       id: 'screenplay-1',
       projectId: 'project-1',
@@ -990,6 +1002,99 @@ describe('edit script generation status persistence', () => {
         targetId: 'location-1',
       }),
       orderBy: { updatedAt: 'desc' },
+    }))
+  })
+
+  it('reuses a bound location asset without output instead of creating a duplicate project location', async () => {
+    const persistedScript = {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: '做一个科幻短片',
+      styleBibleJson: mockStyleBible,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      title: 'Sci-Fi Short',
+      logline: 'A quiet signal wakes a station.',
+      durationSec: 4,
+      shotCount: 1,
+      status: 'ready',
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 4,
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A station corridor flickers awake.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
+          charactersAndScene: 'Station corridor',
+          sound: 'low electrical hum',
+        },
+      ],
+      videoBlocksJson: [],
+      requirements: [
+        {
+          id: 'requirement-1',
+          kind: 'location',
+          name: 'Station Corridor',
+          description: 'A cold sci-fi corridor.',
+          shotIndexes: [1],
+          status: 'pending',
+          targetId: 'location-1',
+          errorMessage: null,
+        },
+      ],
+    }
+    prismaMock.projectEditScript.findFirst
+      .mockResolvedValueOnce(persistedScript)
+      .mockResolvedValueOnce(persistedScript)
+    prismaMock.projectLocation.findFirst.mockResolvedValue({
+      id: 'location-1',
+      selectedImageId: null,
+      images: [
+        {
+          id: 'location-image-1',
+          imageUrl: null,
+          imageMediaId: null,
+          isSelected: false,
+          spatialProfileJson: null,
+          spatialProfileStatus: null,
+          spatialProfileError: null,
+          spatialProfileAnalyzedAt: null,
+          spatialProfileModel: null,
+        },
+      ],
+    })
+
+    await generateProjectEditScriptAssets({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
+      requirementId: 'requirement-1',
+    })
+
+    expect(prismaMock.projectLocation.create).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'requirement-1' },
+      data: expect.objectContaining({
+        targetId: 'location-1',
+        status: 'generating',
+      }),
+    }))
+    expect(assetActionsMock.submitAssetGenerateTask).toHaveBeenCalledWith(expect.objectContaining({
+      episodeId: 'episode-1',
+      kind: 'location',
+      assetId: 'location-1',
+      access: expect.objectContaining({
+        projectId: 'project-1',
+        scope: 'project',
+      }),
     }))
   })
 
