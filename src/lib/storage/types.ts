@@ -20,6 +20,20 @@ export interface SignedUrlParams {
   expiresInSeconds: number
 }
 
+export interface GetObjectStreamParams {
+  key: string
+  range?: string | null
+}
+
+export interface ObjectStreamResult {
+  body: ReadableStream<Uint8Array>
+  contentType: string | null
+  contentLength: number | null
+  contentRange: string | null
+  acceptRanges: string | null
+  statusCode: number
+}
+
 export interface StorageProvider {
   readonly kind: StorageType
   uploadObject(params: UploadObjectParams): Promise<UploadObjectResult>
@@ -27,6 +41,7 @@ export interface StorageProvider {
   deleteObjects(keys: string[]): Promise<DeleteObjectsResult>
   getSignedObjectUrl(params: SignedUrlParams): Promise<string>
   getObjectBuffer(key: string): Promise<Buffer>
+  getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult>
   extractStorageKey(input: string | null | undefined): string | null
   toFetchableUrl(inputUrl: string): string
   generateUniqueKey(params: { prefix: string; ext: string }): string

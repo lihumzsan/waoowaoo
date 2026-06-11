@@ -1,6 +1,6 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { createStorageProvider } from '@/lib/storage/factory'
-import type { DeleteObjectsResult, StorageProvider } from '@/lib/storage/types'
+import type { DeleteObjectsResult, GetObjectStreamParams, ObjectStreamResult, StorageProvider } from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS, withRetry } from '@/lib/storage/utils'
 
 const storageLogger = createScopedLogger({
@@ -65,6 +65,10 @@ export function extractStorageKey(input: string | null | undefined): string | nu
 
 export async function getObjectBuffer(key: string): Promise<Buffer> {
   return await getStorageProvider().getObjectBuffer(key)
+}
+
+export async function getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
+  return await getStorageProvider().getObjectStream(params)
 }
 
 export async function getSignedObjectUrl(key: string, expiresInSeconds: number = DEFAULT_SIGNED_URL_EXPIRES_SECONDS): Promise<string> {

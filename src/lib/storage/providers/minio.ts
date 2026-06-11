@@ -1,4 +1,12 @@
-import type { DeleteObjectsResult, SignedUrlParams, StorageProvider, UploadObjectParams, UploadObjectResult } from '@/lib/storage/types'
+import type {
+  DeleteObjectsResult,
+  GetObjectStreamParams,
+  ObjectStreamResult,
+  SignedUrlParams,
+  StorageProvider,
+  UploadObjectParams,
+  UploadObjectResult,
+} from '@/lib/storage/types'
 import { requireEnv, streamToBuffer, toFetchableUrl } from '@/lib/storage/utils'
 
 const DEFAULT_MINIO_REGION = 'us-east-1'
@@ -15,8 +23,74 @@ type S3SdkModule = {
   GetObjectCommand: new (input: Record<string, unknown>) => unknown
 }
 
+type S3GetObjectResult = {
+  Body?: unknown
+  ContentType?: string
+  ContentLength?: number
+  ContentRange?: string
+  AcceptRanges?: string
+  $metadata?: {
+    httpStatusCode?: number
+  }
+}
+
+type WebStreamBody = {
+  transformToWebStream: () => ReadableStream<Uint8Array>
+}
+
 type PresignerModule = {
   getSignedUrl: (client: S3ClientLike, command: unknown, options: { expiresIn: number }) => Promise<string>
+}
+
+function toUint8Array(chunk: unknown): Uint8Array {
+  if (chunk instanceof Uint8Array) {
+    return chunk
+  }
+  if (chunk instanceof ArrayBuffer) {
+    return new Uint8Array(chunk)
+  }
+  if (typeof chunk === 'string') {
+    return Buffer.from(chunk)
+  }
+  return Buffer.from(String(chunk))
+}
+
+function isWebStreamBody(body: unknown): body is WebStreamBody {
+  return typeof (body as { transformToWebStream?: unknown } | null)?.transformToWebStream === 'function'
+}
+
+function isAsyncIterable(body: unknown): body is AsyncIterable<unknown> {
+  return typeof (body as { [Symbol.asyncIterator]?: unknown } | null)?.[Symbol.asyncIterator] === 'function'
+}
+
+function asyncIterableToReadableStream(iterable: AsyncIterable<unknown>): ReadableStream<Uint8Array> {
+  const iterator = iterable[Symbol.asyncIterator]()
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const result = await iterator.next()
+      if (result.done) {
+        controller.close()
+        return
+      }
+      controller.enqueue(toUint8Array(result.value))
+    },
+    async cancel() {
+      await iterator.return?.()
+    },
+  })
+}
+
+function objectBodyToReadableStream(body: unknown): ReadableStream<Uint8Array> {
+  if (body instanceof ReadableStream) {
+    return body as ReadableStream<Uint8Array>
+  }
+  if (isWebStreamBody(body)) {
+    return body.transformToWebStream()
+  }
+  if (isAsyncIterable(body)) {
+    return asyncIterableToReadableStream(body)
+  }
+  throw new Error('Storage object response body is not streamable')
 }
 
 export class MinioStorageProvider implements StorageProvider {
@@ -133,6 +207,32 @@ export class MinioStorageProvider implements StorageProvider {
       Key: key,
     })) as { Body?: unknown }
     return await streamToBuffer(result.Body)
+  }
+
+  async getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
+    const sdk = await this.loadSdk()
+    const client = await this.getClient()
+    const result = await client.send(new sdk.GetObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+      ...(params.range ? { Range: params.range } : {}),
+    })) as S3GetObjectResult
+
+    if (!result.Body) {
+      throw new Error('Storage object response body is empty')
+    }
+
+    const upstreamStatus = result.$metadata?.httpStatusCode
+    const statusCode = upstreamStatus === 206 ? 206 : upstreamStatus === 416 ? 416 : 200
+
+    return {
+      body: objectBodyToReadableStream(result.Body),
+      contentType: result.ContentType ?? null,
+      contentLength: result.ContentLength ?? null,
+      contentRange: result.ContentRange ?? null,
+      acceptRanges: result.AcceptRanges ?? null,
+      statusCode,
+    }
   }
 
   extractStorageKey(input: string | null | undefined): string | null {
