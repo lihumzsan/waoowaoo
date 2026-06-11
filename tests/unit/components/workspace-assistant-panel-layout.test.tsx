@@ -174,7 +174,7 @@ describe('workspace assistant panel layout', () => {
     expect(panelSource).not.toContain('pr-16')
   })
 
-  it('keeps confirmation actions in the message stream without a duplicate pending action summary', () => {
+  it('keeps SDK tool approval actions in the message stream without a duplicate pending action summary', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
       'utf8',
@@ -186,8 +186,9 @@ describe('workspace assistant panel layout', () => {
 
     expect(panelSource).not.toContain('pendingActionsTitle')
     expect(panelSource).not.toContain('pendingConfirmationChip')
-    expect(rendererSource).toContain("'confirmation-request'")
-    expect(rendererSource).toContain('InlineConfirmationRequestDataCard')
+    expect(rendererSource).toContain('ToolCallMessagePartProps')
+    expect(rendererSource).toContain("toolStatus === 'requires-action'")
+    expect(rendererSource).toContain('ConfirmationActionCard')
   })
 
   it('resolves progress stage labels without crashing on missing translations', () => {

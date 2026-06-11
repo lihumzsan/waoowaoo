@@ -1,4 +1,9 @@
 import { prisma } from '@/lib/prisma'
+import { TASK_TYPE } from '@/lib/task/types'
+import {
+  resolveLocationSpatialProfileReadiness,
+  resolveStoryboardImageReadiness,
+} from './edit-first-readiness'
 
 export type EditFirstWorkflowStage =
   | 'not_started'
@@ -14,6 +19,8 @@ export type EditFirstWorkflowStage =
   | 'ready_to_generate_cinematography'
   | 'ready_to_generate_storyboard'
   | 'storyboard_generating'
+  | 'ready_to_generate_storyboard_images'
+  | 'storyboard_images_generating'
   | 'ready_to_generate_videos'
   | 'videos_generating'
   | 'ready_to_render_final'
@@ -36,6 +43,7 @@ export type EditFirstWorkflowOperationId =
   | 'generate_edit_script_assets'
   | 'generate_edit_cinematography_shot_plan'
   | 'generate_edit_script_storyboard'
+  | 'generate_edit_script_storyboard_images'
   | 'generate_episode_videos'
   | 'render_final_video'
 
@@ -70,10 +78,17 @@ export interface EditFirstWorkflowSnapshot {
   hasEditScript: boolean
   editScriptStatus: string | null
   pendingAssetRequirementCount: number
+  generatingAssetRequirementCount: number
+  requiredLocationSpatialProfileCount: number
+  readyLocationSpatialProfileCount: number
   hasCinematographyShotPlan: boolean
   cinematographyShotPlanStatus: string | null
   storyboardCount: number
   panelCount: number
+  storyboardPanelImageReadyCount: number
+  storyboardPanelImageMissingCount: number
+  storyboardPanelImageFailedCount: number
+  activeStoryboardImageTaskCount: number
 }
 
 export const EDIT_FIRST_WORKFLOW_EMPTY_STATE: EditFirstWorkflowState = {
@@ -242,7 +257,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.pendingAssetRequirementCount > 0) {
+  const missingSpatialProfileCount = Math.max(0, snapshot.requiredLocationSpatialProfileCount - snapshot.readyLocationSpatialProfileCount)
+  if (snapshot.pendingAssetRequirementCount > 0 || missingSpatialProfileCount > 0) {
+    if (snapshot.generatingAssetRequirementCount > 0) {
+      return state({
+        stage: 'assets_generating',
+        blocking: { kind: 'processing', reason: 'required assets or spatial profiles are still generating' },
+      })
+    }
     return state({
       stage: 'ready_to_generate_assets',
       nextAction: confirmationAction('generate_edit_script_assets', 'Generate required assets'),
@@ -275,6 +297,28 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'ready_to_generate_storyboard',
       nextAction: confirmationAction('generate_edit_script_storyboard', 'Generate storyboard'),
+    })
+  }
+
+  if (snapshot.storyboardPanelImageMissingCount > 0) {
+    const nextAction = confirmationAction('generate_edit_script_storyboard_images', 'Generate storyboard images')
+    if (snapshot.activeStoryboardImageTaskCount > 0) {
+      return state({
+        stage: 'storyboard_images_generating',
+        blocking: { kind: 'processing', reason: 'storyboard panel images are still generating' },
+      })
+    }
+    if (snapshot.storyboardPanelImageFailedCount > 0) {
+      return state({
+        stage: 'failed',
+        blocking: { kind: 'failed', reason: 'storyboard panel image generation failed' },
+        nextAction,
+        allowedOperationIds: [nextAction.operationId],
+      })
+    }
+    return state({
+      stage: 'ready_to_generate_storyboard_images',
+      nextAction,
     })
   }
 
@@ -319,6 +363,10 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return ['generate_edit_script_storyboard']
     case 'storyboard_generating':
       return []
+    case 'ready_to_generate_storyboard_images':
+      return ['generate_edit_script_storyboard_images']
+    case 'storyboard_images_generating':
+      return []
     case 'ready_to_generate_videos':
       return ['generate_episode_videos']
     case 'videos_generating':
@@ -358,7 +406,7 @@ export async function resolveEditFirstWorkflowState(params: {
     editScript,
     cinematographyShotPlan,
     storyboardCount,
-    panelCount,
+    panels,
   ] = await Promise.all([
     prisma.projectEditScreenplay.findFirst({
       where: {
@@ -395,7 +443,9 @@ export async function resolveEditFirstWorkflowState(params: {
         status: true,
         requirements: {
           select: {
+            kind: true,
             status: true,
+            targetId: true,
           },
         },
       },
@@ -415,14 +465,81 @@ export async function resolveEditFirstWorkflowState(params: {
         episodeId: params.episodeId,
       },
     }),
-    prisma.projectPanel.count({
+    prisma.projectPanel.findMany({
       where: {
         storyboard: {
           episodeId: params.episodeId,
         },
       },
+      select: {
+        id: true,
+        imageUrl: true,
+        imageMediaId: true,
+      },
     }),
   ])
+
+  const locationTargetIds = Array.from(new Set((editScript?.requirements ?? [])
+    .filter((requirement) => requirement.kind === 'location' && typeof requirement.targetId === 'string' && requirement.targetId.trim().length > 0)
+    .map((requirement) => requirement.targetId!)
+    .filter(Boolean)))
+  const locationRows = locationTargetIds.length > 0
+    ? await prisma.projectLocation.findMany({
+      where: {
+        id: { in: locationTargetIds },
+        projectId: params.projectId,
+      },
+      select: {
+        id: true,
+        selectedImage: {
+          select: {
+            imageUrl: true,
+            imageMediaId: true,
+            spatialProfileStatus: true,
+            spatialProfileJson: true,
+          },
+        },
+      },
+    })
+    : []
+  const locationById = new Map(locationRows.map((location) => [location.id, location]))
+  const locationSpatialProfileReadiness = resolveLocationSpatialProfileReadiness(
+    (editScript?.requirements ?? [])
+      .filter((requirement) => requirement.kind === 'location')
+      .map((requirement) => {
+        const targetId = requirement.targetId ?? null
+        return {
+          targetId,
+          selectedImage: targetId ? locationById.get(targetId)?.selectedImage ?? null : null,
+        }
+      }),
+  )
+  const storyboardImageReadiness = resolveStoryboardImageReadiness(panels)
+  const panelIds = panels.map((panel) => panel.id)
+  const activeStoryboardImageTaskCount = panelIds.length > 0
+    ? await prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectPanel',
+        targetId: { in: panelIds },
+        type: TASK_TYPE.IMAGE_PANEL,
+        status: { in: ['queued', 'processing'] },
+      },
+    })
+    : 0
+  const storyboardPanelImageFailedCount = panelIds.length > 0
+    ? await prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectPanel',
+        targetId: { in: panelIds },
+        type: TASK_TYPE.IMAGE_PANEL,
+        status: 'failed',
+      },
+    })
+    : 0
 
   return resolveEditFirstWorkflowStateFromSnapshot({
     hasEpisode: true,
@@ -437,9 +554,16 @@ export async function resolveEditFirstWorkflowState(params: {
     hasEditScript: Boolean(editScript),
     editScriptStatus: editScript?.status ?? null,
     pendingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status !== 'completed').length ?? 0,
+    generatingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status === 'generating').length ?? 0,
+    requiredLocationSpatialProfileCount: locationSpatialProfileReadiness.requiredCount,
+    readyLocationSpatialProfileCount: locationSpatialProfileReadiness.readyCount,
     hasCinematographyShotPlan: Boolean(cinematographyShotPlan),
     cinematographyShotPlanStatus: cinematographyShotPlan?.status ?? null,
     storyboardCount,
-    panelCount,
+    panelCount: storyboardImageReadiness.panelCount,
+    storyboardPanelImageReadyCount: storyboardImageReadiness.readyCount,
+    storyboardPanelImageMissingCount: storyboardImageReadiness.missingCount,
+    storyboardPanelImageFailedCount,
+    activeStoryboardImageTaskCount,
   })
 }

@@ -279,6 +279,30 @@ describe('project agent runtime tool routing', () => {
         outputSchema: z.unknown(),
         execute: async () => ({}),
       }),
+      generate_edit_script_storyboard_images: makeTestOperation({
+        id: 'generate_edit_script_storyboard_images',
+        summary: 'Generate missing edit-first storyboard images',
+        intent: 'act',
+        groupPath: ['edit-script'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
+      generate_episode_videos: makeTestOperation({
+        id: 'generate_episode_videos',
+        summary: 'Generate episode videos',
+        intent: 'act',
+        groupPath: ['media', 'video'],
+        prerequisites: { episodeId: 'required' },
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true, summary: 'billable operation' },
+        inputSchema: z.object({}),
+        outputSchema: z.unknown(),
+        execute: async () => ({}),
+      }),
       get_project_phase: makeTestOperation({
         id: 'get_project_phase',
         summary: 'Get project phase',
@@ -807,5 +831,47 @@ describe('project agent runtime tool routing', () => {
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
+  it('injects storyboard image generation instead of video generation when edit-first panel images are missing', async () => {
+    phaseState.editFirstWorkflow = {
+      active: true,
+      stage: 'ready_to_generate_storyboard_images',
+      blocking: {
+        kind: 'needs_confirmation',
+        reason: 'storyboard panel images are missing',
+      },
+      nextAction: {
+        id: 'generate_edit_script_storyboard_images',
+        operationId: 'generate_edit_script_storyboard_images',
+        title: 'Generate storyboard images',
+        requiresUserConfirmation: true,
+      },
+      allowedOperationIds: ['generate_edit_script_storyboard_images'],
+    }
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['edit-script'],
+      requestedGroups: [['edit-script']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user wants storyboard images'],
+      latestUserText: '生成分镜图片',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '生成分镜图片' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('generate_edit_script_storyboard_images')
+    expect(streamState.capturedTools.generate_edit_script_storyboard_images?.needsApproval).toBe(true)
+    expect(streamState.capturedToolNames).not.toContain('generate_episode_videos')
   })
 })

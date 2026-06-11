@@ -4,6 +4,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
+import { isStoryboardSpatialProfileStageReady } from '@/lib/project-workflow/edit-first-readiness'
 
 interface SubmitSpatialBlockingStoryboardInput {
   readonly projectId: string
@@ -32,10 +33,6 @@ function parseJsonRecord(value: string | null): Record<string, unknown> {
   } catch {
     throw new Error('EDIT_SCRIPT_STORYBOARD_PHOTOGRAPHY_PLAN_INVALID')
   }
-}
-
-function spatialProfileReady(stage: string | null): boolean {
-  return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
 }
 
 async function resolveEditScriptId(input: Pick<SubmitSpatialBlockingStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
@@ -109,7 +106,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     if (sourceEditScriptId !== editScriptId) return []
     return [{ storyboardId: storyboard.id, plan }]
   })
-  const ready = matchingStoryboards.find((item) => spatialProfileReady(readString(item.plan.currentStage)))
+  const ready = matchingStoryboards.find((item) => isStoryboardSpatialProfileStageReady(readString(item.plan.currentStage)))
   if (!ready) {
     throw new ApiError('CONFLICT', {
       code: 'LOCATION_SPATIAL_PROFILE_REQUIRED',

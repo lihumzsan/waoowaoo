@@ -185,17 +185,20 @@ export default function WorkspaceAssistantPanel({
   }, [assistantRuntime.messages, episodeId, projectId, queryClient])
   const sendAutoFollowUpMessage = useCallback(async (message: string): Promise<boolean> => {
     const runtime = assistantRuntimeRef.current
-    if (runtime.pending || runtime.storageLoading) return false
+    if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) {
+      queuedAutoFollowUpRef.current = [...queuedAutoFollowUpRef.current, message]
+      return true
+    }
     await runtime.sendHiddenMessage(message)
     return true
   }, [])
   useEffect(() => {
-    if (assistantRuntime.pending || assistantRuntime.storageLoading) return
+    if (assistantRuntime.pending || assistantRuntime.storageLoading || assistantRuntime.pendingApprovalId) return
     const [queuedMessage, ...remainingMessages] = queuedAutoFollowUpRef.current
     if (!queuedMessage) return
     queuedAutoFollowUpRef.current = remainingMessages
     void assistantRuntime.sendHiddenMessage(queuedMessage)
-  }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.storageLoading])
+  }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.pendingApprovalId, assistantRuntime.storageLoading])
   const flushResolvedWaitFollowUps = useCallback(async () => {
     const runtime = assistantRuntimeRef.current
     if (runtime.pending || runtime.storageLoading) return
@@ -212,21 +215,9 @@ export default function WorkspaceAssistantPanel({
     if (!payload?.success || !Array.isArray(payload.followUps)) return
     for (const followUp of payload.followUps) {
       if (consumedWaitFollowUpKeysRef.current.has(followUp.followUpKey)) continue
-      consumedWaitFollowUpKeysRef.current.add(followUp.followUpKey)
-      if (followUp.operationId === 'generate_edit_style_previews' && followUp.terminalStatus === 'completed') {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
-        if (episodeId) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
-        }
-        await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            waitId: followUp.waitId,
-            claimId: followUp.claimId,
-          }),
-        })
-        continue
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+      if (episodeId) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
       }
       const sent = await sendAutoFollowUpMessage(
         followUp.terminalStatus === 'failed'
@@ -242,6 +233,7 @@ export default function WorkspaceAssistantPanel({
             }),
       )
       if (!sent) continue
+      consumedWaitFollowUpKeysRef.current.add(followUp.followUpKey)
       await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

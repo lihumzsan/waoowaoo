@@ -15,13 +15,15 @@ import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
 import { createMutationBatch } from '@/lib/mutation-batch/service'
-import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
+import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import {
   refineTaskSubmitOperationOutputSchema,
+  refineTaskBatchSubmitOperationOutputSchema,
+  taskBatchSubmitOperationOutputSchemaBase,
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
@@ -174,8 +176,187 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
   const taskSubmitOutputWithMutationBatch = <TShape extends z.ZodRawShape>(shape: TShape) => refineTaskSubmitOperationOutputSchema(
     withMutationBatchBase.extend(shape).passthrough(),
   )
+  const storyboardImageBatchOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
+    taskBatchSubmitOperationOutputSchemaBase.extend({
+      episodeId: z.string().min(1),
+      storyboardIds: z.array(z.string().min(1)),
+      panelIds: z.array(z.string().min(1)),
+    }).passthrough(),
+  )
 
   return {
+    generate_edit_script_storyboard_images: defineOperation({
+      id: 'generate_edit_script_storyboard_images',
+      summary: 'Generate missing storyboard panel images for the edit-first storyboard.',
+      intent: 'act',
+      effects: {
+        writes: true,
+        billable: true,
+        destructive: false,
+        overwrite: false,
+        bulk: true,
+        externalSideEffects: true,
+        longRunning: true,
+      },
+      confirmation: {
+        required: true,
+        summary: '将为当前剪辑先行分镜中缺失图片的格子批量生成分镜图片，可能消耗额度或产生计费。',
+      },
+      inputSchema: z.object({
+        confirmed: z.boolean().optional(),
+        episodeId: z.string().trim().min(1).optional(),
+        storyboardId: z.string().trim().min(1).optional(),
+      }).passthrough(),
+      outputSchema: storyboardImageBatchOutputSchema,
+      execute: async (ctx, input) => {
+        const episodeId = normalizeString((input as { episodeId?: unknown }).episodeId) || normalizeString(ctx.context.episodeId)
+        if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+        const storyboardId = normalizeString((input as { storyboardId?: unknown }).storyboardId)
+        const panels = await prisma.projectPanel.findMany({
+          where: {
+            storyboard: {
+              ...(storyboardId ? { id: storyboardId } : {}),
+              episodeId,
+              episode: {
+                projectId: ctx.projectId,
+              },
+            },
+          },
+          orderBy: [
+            { storyboardId: 'asc' },
+            { panelIndex: 'asc' },
+          ],
+          select: {
+            id: true,
+            storyboardId: true,
+            imageUrl: true,
+            imageMediaId: true,
+          },
+        })
+        const missingPanels = panels.filter((panel) => !normalizeString(panel.imageUrl) && !normalizeString(panel.imageMediaId))
+        if (missingPanels.length === 0) {
+          return storyboardImageBatchOutputSchema.parse({
+            success: true,
+            async: true,
+            total: 0,
+            taskIds: [],
+            results: [],
+            episodeId,
+            storyboardIds: [],
+            panelIds: [],
+            noop: true,
+          })
+        }
+
+        const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
+        if (!projectModelConfig.storyboardModel) {
+          throw new Error('STORYBOARD_MODEL_NOT_CONFIGURED')
+        }
+        await resolveModelSelection(ctx.userId, projectModelConfig.storyboardModel, 'image')
+        const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          modelType: 'image',
+          modelKey: projectModelConfig.storyboardModel,
+        })
+        const locale = resolveLocaleFromContext(ctx.context.locale)
+        const taskLocale = resolveRequiredTaskLocale(ctx.request, {
+          count: 1,
+          meta: { locale },
+        })
+        const styleBibleSignatures = new Map<string, string>()
+        const readStyleBibleSignature = async (panelStoryboardId: string) => {
+          const cached = styleBibleSignatures.get(panelStoryboardId)
+          if (cached) return cached
+          const signature = await resolveEditScriptStyleBibleSignatureForTask({
+            projectId: ctx.projectId,
+            storyboardId: panelStoryboardId,
+          })
+          styleBibleSignatures.set(panelStoryboardId, signature)
+          return signature
+        }
+
+        const taskResults: Array<{
+          panel: (typeof missingPanels)[number]
+          result: Awaited<ReturnType<typeof submitOperationTask>>
+        }> = []
+        for (const panel of missingPanels) {
+          const styleBibleSignature = await readStyleBibleSignature(panel.storyboardId)
+          const body = {
+            panelId: panel.id,
+            candidateCount: 1,
+            count: 1,
+            referenceMode: 'asset',
+            meta: {
+              locale,
+            },
+          }
+          const billingPayload = {
+            ...body,
+            imageModel: projectModelConfig.storyboardModel,
+            ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
+          }
+          const result = await submitOperationTask({
+            request: ctx.request,
+            userId: ctx.userId,
+            locale: taskLocale,
+            projectId: ctx.projectId,
+            episodeId,
+            type: TASK_TYPE.IMAGE_PANEL,
+            targetType: 'ProjectPanel',
+            targetId: panel.id,
+            operationId: 'generate_edit_script_storyboard_images',
+            source: ctx.source,
+            confirmed: (input as { confirmed?: boolean }).confirmed === true,
+            payload: withTaskUiPayload(billingPayload, {
+              intent: 'generate',
+              hasOutputAtStart: false,
+            }),
+            dedupeKey: `edit_first_panel_image:${panel.id}:${styleBibleSignature}`,
+            billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload),
+            decoratePayload: false,
+          })
+          taskResults.push({ panel, result })
+        }
+
+        const mutationBatch = await createMutationBatch({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          source: ctx.source,
+          operationId: 'generate_edit_script_storyboard_images',
+          episodeId,
+          summary: `generate_edit_script_storyboard_images:${episodeId}`,
+          entries: missingPanels.map((panel) => ({
+            kind: 'panel_candidate_cancel',
+            targetType: 'ProjectPanel',
+            targetId: panel.id,
+          })),
+        })
+        const taskIds = taskResults.map((item) => item.result.taskId)
+        const storyboardIds = Array.from(new Set(missingPanels.map((panel) => panel.storyboardId)))
+        const panelIds = missingPanels.map((panel) => panel.id)
+
+        writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
+          operationId: 'generate_edit_script_storyboard_images',
+          total: taskResults.length,
+          taskIds,
+          results: taskResults.map((item) => ({ refId: item.panel.id, taskId: item.result.taskId })),
+          mutationBatchId: mutationBatch.id,
+        })
+
+        return storyboardImageBatchOutputSchema.parse({
+          success: true,
+          async: true,
+          total: taskResults.length,
+          taskIds,
+          results: taskResults.map((item) => ({ refId: item.panel.id, taskId: item.result.taskId })),
+          mutationBatchId: mutationBatch.id,
+          episodeId,
+          storyboardIds,
+          panelIds,
+        })
+      },
+    }),
     regenerate_panel_image: defineOperation({
       id: 'regenerate_panel_image',
       summary: 'Regenerate storyboard panel images (async task submission).',

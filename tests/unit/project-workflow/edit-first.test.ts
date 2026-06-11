@@ -19,10 +19,17 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     hasEditScript: false,
     editScriptStatus: null,
     pendingAssetRequirementCount: 0,
+    generatingAssetRequirementCount: 0,
+    requiredLocationSpatialProfileCount: 0,
+    readyLocationSpatialProfileCount: 0,
     hasCinematographyShotPlan: false,
     cinematographyShotPlanStatus: null,
     storyboardCount: 0,
     panelCount: 0,
+    storyboardPanelImageReadyCount: 0,
+    storyboardPanelImageMissingCount: 0,
+    storyboardPanelImageFailedCount: 0,
+    activeStoryboardImageTaskCount: 0,
     ...overrides,
   }
 }
@@ -139,5 +146,122 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.operationId).toBe('generate_edit_script')
     expect(state.allowedOperationIds).toEqual(['generate_edit_script'])
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script'])
+  })
+
+  it('exposes asset generation after edit core table is ready and requirements are pending', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      pendingAssetRequirementCount: 2,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_assets')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_assets')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_assets'])
+  })
+
+  it('keeps asset stage processing while generated assets or spatial profiles are still running', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      pendingAssetRequirementCount: 1,
+      generatingAssetRequirementCount: 1,
+      requiredLocationSpatialProfileCount: 1,
+      readyLocationSpatialProfileCount: 0,
+    }))
+
+    expect(state.stage).toBe('assets_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('moves to cinematography after edit core table assets and spatial profiles are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      pendingAssetRequirementCount: 0,
+      requiredLocationSpatialProfileCount: 2,
+      readyLocationSpatialProfileCount: 2,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_cinematography')
+    expect(state.nextAction?.operationId).toBe('generate_edit_cinematography_shot_plan')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_cinematography_shot_plan'])
+  })
+
+  it('does not expose video generation when storyboard panels exist but images are missing', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 17,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 14,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_storyboard_images')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_images')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard_images'])
+  })
+
+  it('keeps storyboard image generation blocked while panel image tasks are active', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 17,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 14,
+      activeStoryboardImageTaskCount: 14,
+    }))
+
+    expect(state.stage).toBe('storyboard_images_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('allows video generation only after all storyboard panel images are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 17,
+      storyboardPanelImageReadyCount: 17,
+      storyboardPanelImageMissingCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_videos')
+    expect(state.nextAction?.operationId).toBe('generate_episode_videos')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
   })
 })

@@ -17,6 +17,7 @@ import {
 } from '@/lib/query/hooks'
 import type { ProjectAgentInteractionMode } from '@/lib/project-agent/types'
 import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
+import { findPendingToolApprovalId } from '@/lib/project-agent/ui-message-approval'
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -34,6 +35,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   messageCount: number
   status: ChatStatus
   pending: boolean
+  pendingApprovalId: string | null
   error: Error | undefined
   syncError: string | null
   storageError: string | null
@@ -95,13 +97,20 @@ export function useWorkspaceAssistantRuntime({
       context: contextPayload,
     },
   }), [contextPayload, projectId])
+  const suppressNextAutomaticSendRef = useRef(false)
   const chat = useChat({
     id: chatId,
     transport,
-    sendAutomaticallyWhen: ({ messages }) => (
-      lastAssistantMessageIsCompleteWithToolCalls({ messages })
-      || lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
-    ),
+    sendAutomaticallyWhen: ({ messages }) => {
+      if (suppressNextAutomaticSendRef.current) {
+        suppressNextAutomaticSendRef.current = false
+        return false
+      }
+      return (
+        lastAssistantMessageIsCompleteWithToolCalls({ messages })
+        || lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
+      )
+    },
   })
   const runtime = useAISDKRuntime(chat)
   const hydratedSessionKeyRef = useRef<string | null>(null)
@@ -114,10 +123,22 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages(ensureUniqueUIMessages(messages))
   }, [chat])
 
+  const cancelPendingApprovalBeforeUserMessage = useCallback(async () => {
+    const approvalId = findPendingToolApprovalId(chat.messages)
+    if (!approvalId) return
+    suppressNextAutomaticSendRef.current = true
+    await chat.addToolApprovalResponse({
+      id: approvalId,
+      approved: false,
+      reason: 'user_interrupted',
+    })
+  }, [chat])
+
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
+    await cancelPendingApprovalBeforeUserMessage()
     await chat.sendMessage({ text })
-  }, [chat])
+  }, [cancelPendingApprovalBeforeUserMessage, chat])
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
@@ -222,6 +243,7 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: chat.status === 'submitted' || chat.status === 'streaming',
+    pendingApprovalId: findPendingToolApprovalId(chat.messages),
     error: chat.error,
     syncError,
     storageError: assistantThread.error?.message || null,

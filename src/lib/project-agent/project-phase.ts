@@ -58,6 +58,7 @@ function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): Proj
           'generate_character_image',
           'generate_location_image',
           'regenerate_panel_image',
+          'generate_edit_script_storyboard_images',
           'generate_episode_videos',
         ],
         planMode: [],
