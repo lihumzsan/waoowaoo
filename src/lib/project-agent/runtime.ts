@@ -27,12 +27,8 @@ import type {
   AgentRuntimeContextPartData,
   ProjectAgentStopPartData,
 } from './types'
-import { routeProjectAgentRequest } from './router'
-import { selectProjectAgentOperationsByGroups } from './operation-injection'
-import type { OperationIntent, ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
-import { resolveEditFirstWorkflowCapabilityOperationIds } from '@/lib/project-workflow/edit-first'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
 import type { ProjectAgentInteractionMode } from './types'
@@ -43,6 +39,8 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
+import { resolveEditFirstChoiceContinuation } from './edit-first-choice-continuation'
+import { resolveProjectAgentToolset } from './toolset'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -61,11 +59,6 @@ function writeDebugText(writer: UIMessageStreamWriter<UIMessage>, text: string) 
   writer.write({ type: 'text-delta', id: 'agent-debug', delta: text })
   writer.write({ type: 'text-end', id: 'agent-debug' })
   writer.write({ type: 'finish-step' })
-}
-
-function buildMessagePreview(text: string): string {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  return normalized.length > 200 ? `${normalized.slice(0, 200)}...` : normalized
 }
 
 function normalizeInteractionMode(value: unknown): ProjectAgentInteractionMode | undefined {
@@ -154,38 +147,6 @@ function readToolNamesAndHashes(step: unknown): Array<{ toolName: string; argsHa
   })
 }
 
-function routeRequestsEditFirstWorkflow(requestedGroups: ReadonlyArray<ReadonlyArray<string>>): boolean {
-  return requestedGroups.some((groupPath) => groupPath[0] === 'edit-script')
-}
-
-function constrainOperationIdsForEditFirstWorkflow(params: {
-  registry: ProjectAgentOperationRegistry
-  operationIds: string[]
-  allowedIntents: ReadonlyArray<OperationIntent>
-  workflow: Awaited<ReturnType<typeof resolveProjectPhase>>['editFirstWorkflow']
-  requestedGroups: ReadonlyArray<ReadonlyArray<string>>
-}): string[] {
-  const workflowApplies = params.workflow.active || routeRequestsEditFirstWorkflow(params.requestedGroups)
-  if (!workflowApplies) return params.operationIds
-
-  const allowedIntents = new Set<OperationIntent>(params.allowedIntents)
-  const allowedWorkflowOperations = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
-  const constrained = params.operationIds.filter((operationId) => {
-    const operation = params.registry[operationId]
-    if (!operation) return false
-    if (operation.intent !== 'act') return true
-    return allowedWorkflowOperations.has(operationId)
-  })
-
-  const nextOperationId = params.workflow.nextAction?.operationId ?? null
-  if (!nextOperationId || constrained.includes(nextOperationId)) return constrained
-  const nextOperation = params.registry[nextOperationId]
-  if (!nextOperation?.channels.tool) return constrained
-  if (!allowedIntents.has(nextOperation.intent)) return constrained
-  if (!allowedWorkflowOperations.has(nextOperationId)) return constrained
-  return [...constrained, nextOperationId]
-}
-
 export async function createProjectAgentChatResponse(input: {
   request: NextRequest
   userId: string
@@ -241,74 +202,31 @@ export async function createProjectAgentChatResponse(input: {
       }
       const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
       const operations = createProjectAgentOperationRegistry()
-      const allowedRequestedGroups = Array.from(new Set(
-        Object.values(operations)
-          .filter((operation) => operation.channels.tool)
-          .map((operation) => operation.groupPath.join('/')),
-      ))
-        .sort()
-        .map((serialized) => serialized.split('/').filter(Boolean))
-      const route = await routeProjectAgentRequest({
-        messages: runtimeMessages,
-        phase,
-        context,
-        model: resolved.languageModel,
-        allowedRequestedGroups,
-      })
       const executionMode = resolveProjectAgentExecutionMode({
         interactionMode: context.interactionMode,
-        routedIntent: route.intent,
       })
       const requestId = stableRequestId
+      const choiceContinuation = resolveEditFirstChoiceContinuation(runtimeMessages)
+      const toolset = resolveProjectAgentToolset({
+        registry: operations,
+        workflow: phase.editFirstWorkflow,
+        context,
+        executionMode,
+        continuationOperationId: choiceContinuation?.operationId ?? null,
+      })
+      const operationIds = toolset.operationIds
       projectAgentLogger.info({
-        action: route.needsClarification ? 'assistant.route.clarification' : 'assistant.tool.selection',
-        message: route.needsClarification ? 'Project agent route requires clarification' : 'Project agent tool selection decided',
+        action: 'assistant.toolset.resolved',
+        message: 'Project agent deterministic toolset resolved',
         requestId,
         projectId: input.projectId,
         userId: input.userId,
         details: {
           interactionMode: executionMode.interactionMode,
-          routedIntent: route.intent,
           effectiveIntent: executionMode.effectiveIntent,
-          domains: route.domains,
-          requestedGroups: route.requestedGroups,
-          latestUserTextPreview: buildMessagePreview(route.latestUserText),
-          ...(route.needsClarification
-            ? {
-                clarifyingQuestion: route.clarifyingQuestion,
-                reasoning: route.reasoning,
-              }
-            : {}),
+          editFirstWorkflow: phase.editFirstWorkflow,
+          toolset,
         },
-      })
-      if (route.needsClarification && route.clarifyingQuestion) {
-        writer.write({ type: 'start' })
-        writer.write({ type: 'start-step' })
-        writer.write({ type: 'text-start', id: 'clarification' })
-        writer.write({ type: 'text-delta', id: 'clarification', delta: route.clarifyingQuestion })
-        writer.write({ type: 'text-end', id: 'clarification' })
-        writer.write({ type: 'finish-step' })
-        writer.write({ type: 'finish', finishReason: 'stop' })
-        await releaseRunLockOnce()
-        return
-      }
-      const allowedIntents = executionMode.effectiveIntent === 'query'
-        ? (['query'] as const)
-        : executionMode.effectiveIntent === 'plan'
-          ? (['query', 'plan'] as const)
-          : (['query', 'plan', 'act'] as const)
-      const selection = selectProjectAgentOperationsByGroups({
-        registry: operations,
-        requestedGroups: route.requestedGroups,
-        maxTools: 45,
-        allowedIntents,
-      })
-      const operationIds = constrainOperationIdsForEditFirstWorkflow({
-        registry: operations,
-        operationIds: selection.operationIds,
-        allowedIntents,
-        workflow: phase.editFirstWorkflow,
-        requestedGroups: route.requestedGroups,
       })
       const toolEntries = operationIds.map((operationId) => {
         const operation = operations[operationId]
@@ -340,23 +258,23 @@ export async function createProjectAgentChatResponse(input: {
               }
             : {
                 execute: async (args: unknown, options?: ToolExecutionOptions) => {
-            const effectiveInput = requiresApproval && !isConfirmedOperationInput(args)
-              ? {
-                  ...(isRecord(args) ? args : {}),
-                  confirmed: true,
-                }
-              : args
-            return executeProjectAgentOperationFromTool({
-              request: input.request,
-              operationId,
-              projectId: input.projectId,
-              userId: input.userId,
-              context,
-              source: 'assistant-panel',
-              writer,
-              input: effectiveInput,
-              toolCallId: options?.toolCallId,
-            })
+                  const effectiveInput = requiresApproval && !isConfirmedOperationInput(args)
+                    ? {
+                        ...(isRecord(args) ? args : {}),
+                        confirmed: true,
+                      }
+                    : args
+                  return executeProjectAgentOperationFromTool({
+                    request: input.request,
+                    operationId,
+                    projectId: input.projectId,
+                    userId: input.userId,
+                    context,
+                    source: 'assistant-panel',
+                    writer,
+                    input: effectiveInput,
+                    toolCallId: options?.toolCallId,
+                  })
                 },
               }),
         }
@@ -369,12 +287,15 @@ export async function createProjectAgentChatResponse(input: {
         }
       })
       const tools = Object.fromEntries(toolEntries.map((item) => item.entry)) as ToolSet
-      const systemPrompt = buildProjectAgentSystemPrompt({
+      const baseSystemPrompt = buildProjectAgentSystemPrompt({
         locale,
         projectId: input.projectId,
         episodeId: context.episodeId || 'unknown',
         interactionMode: executionMode.interactionMode,
       })
+      const systemPrompt = choiceContinuation
+        ? `${baseSystemPrompt}\n\n[剪辑先行选择卡续跑指令]\n${choiceContinuation.instruction}`
+        : baseSystemPrompt
       const modelMessages = await toModelMessages(runtimeMessages)
       writeOperationDataPart<AgentRuntimeContextPartData>(writer, 'data-agent-runtime-context', {
         requestId,
@@ -389,7 +310,13 @@ export async function createProjectAgentChatResponse(input: {
           model: modelMessages.length,
         },
         contextTokenEstimate: estimateContextTokens(modelMessages),
-        route,
+        toolset: {
+          source: toolset.source,
+          effectiveIntent: toolset.effectiveIntent,
+          coreOperationIds: toolset.coreOperationIds,
+          workflowOperationIds: toolset.workflowOperationIds,
+          continuationOperationId: toolset.continuationOperationId,
+        },
         editFirstWorkflow: phase.editFirstWorkflow,
         selectedTools: toolEntries.map((item) => item.debugTool),
       })
@@ -398,36 +325,36 @@ export async function createProjectAgentChatResponse(input: {
           '[agentDebug]',
           `requestId=${requestId}`,
           `interactionMode=${executionMode.interactionMode}`,
-          `routedIntent=${route.intent}`,
           `effectiveIntent=${executionMode.effectiveIntent}`,
-          `requestedGroups=${JSON.stringify(route.requestedGroups)}`,
-          `alwaysOn=${String(selection.alwaysOnOperationIds.length)}`,
+          `toolsetSource=${toolset.source}`,
+          `coreTools=${String(toolset.coreOperationIds.length)}`,
+          `workflowTools=${String(toolset.workflowOperationIds.length)}`,
           `tools=${String(operationIds.length)}`,
           `editFirstStage=${phase.editFirstWorkflow.stage}`,
+          ...(choiceContinuation ? [`choiceContinuation=${choiceContinuation.operationId}`] : []),
         ].join('\n'))
         writeOperationDataPart<AgentDebugPartData>(writer, 'data-agent-debug', {
           requestId,
           interactionMode: executionMode.interactionMode,
-          routedIntent: route.intent,
           effectiveIntent: executionMode.effectiveIntent,
-          requestedGroups: route.requestedGroups,
-          alwaysOnOperationIds: selection.alwaysOnOperationIds,
+          toolsetSource: toolset.source,
+          coreOperationIds: toolset.coreOperationIds,
+          workflowOperationIds: toolset.workflowOperationIds,
           operationIds,
         })
       }
       projectAgentLogger.info({
-        action: 'assistant.tool.selection.result',
-        message: 'Project agent tool selection result',
+        action: 'assistant.toolset.result',
+        message: 'Project agent toolset result',
         requestId,
         projectId: input.projectId,
         userId: input.userId,
         details: {
           interactionMode: executionMode.interactionMode,
-          routedIntent: route.intent,
           effectiveIntent: executionMode.effectiveIntent,
-          requestedGroups: selection.requestedGroups,
           toolChannelCount: Object.values(operations).filter((operation) => operation.channels.tool).length,
           editFirstWorkflow: phase.editFirstWorkflow,
+          toolset,
           operationIds,
         },
       })

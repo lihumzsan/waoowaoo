@@ -88,10 +88,10 @@ export interface AgentPlanPartData {
 export interface AgentDebugPartData {
   requestId: string
   interactionMode: ProjectAgentInteractionMode
-  routedIntent: 'query' | 'plan' | 'act'
   effectiveIntent: 'query' | 'plan' | 'act'
-  requestedGroups: string[][]
-  alwaysOnOperationIds: string[]
+  toolsetSource: string
+  coreOperationIds: string[]
+  workflowOperationIds: string[]
   operationIds: string[]
 }
 
@@ -108,7 +108,13 @@ export interface AgentRuntimeContextPartData {
     model: number
   }
   contextTokenEstimate: number | null
-  route: unknown
+  toolset: {
+    source: string
+    effectiveIntent: 'query' | 'plan' | 'act'
+    coreOperationIds: string[]
+    workflowOperationIds: string[]
+    continuationOperationId: string | null
+  }
   editFirstWorkflow: EditFirstWorkflowState
   selectedTools: Array<{
     operationId: string

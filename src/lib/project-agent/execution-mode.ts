@@ -1,18 +1,17 @@
-import type { ProjectAgentRouteDecision } from './router'
+import type { OperationIntent } from '@/lib/operations/types'
 import type { ProjectAgentInteractionMode } from './types'
 
 export interface ProjectAgentExecutionResolution {
   interactionMode: ProjectAgentInteractionMode
-  effectiveIntent: ProjectAgentRouteDecision['intent']
+  effectiveIntent: OperationIntent
 }
 
 export function resolveProjectAgentExecutionMode(input: {
   interactionMode?: ProjectAgentInteractionMode
-  routedIntent: ProjectAgentRouteDecision['intent']
 }): ProjectAgentExecutionResolution {
   const interactionMode = input.interactionMode ?? 'auto'
 
-  if (interactionMode === 'plan' && input.routedIntent === 'act') {
+  if (interactionMode === 'plan') {
     return {
       interactionMode,
       effectiveIntent: 'plan',
@@ -21,6 +20,6 @@ export function resolveProjectAgentExecutionMode(input: {
 
   return {
     interactionMode,
-    effectiveIntent: input.routedIntent,
+    effectiveIntent: 'act',
   }
 }

@@ -2,22 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
-import type { ProjectAgentRouteDecision } from '@/lib/project-agent/router'
+import type { EditFirstWorkflowOperationId, EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
-  routeResult: {
-    intent: 'query' as const,
-    domains: ['asset'] as const,
-    requestedGroups: [['asset', 'character']] as const,
-    needsClarification: false,
-    clarifyingQuestion: null as string | null,
-    reasoning: ['route to character asset tools'],
-    latestUserText: 'show character info',
-  } as ProjectAgentRouteDecision,
   writerEvents: [] as Array<Record<string, unknown>>,
 }))
 
@@ -39,21 +30,7 @@ const phaseState = vi.hoisted(() => ({
     },
     nextAction: null,
     allowedOperationIds: [],
-  } as {
-    active: boolean
-    stage: string
-    blocking: {
-      kind: string
-      reason: string | null
-    }
-    nextAction: {
-      id: string
-      operationId: string
-      title: string
-      requiresUserConfirmation: boolean
-    } | null
-    allowedOperationIds: string[]
-  },
+  } as EditFirstWorkflowState,
 }))
 
 vi.mock('ai', async () => {
@@ -62,7 +39,6 @@ vi.mock('ai', async () => {
     ...actual,
     safeValidateUIMessages: vi.fn(async ({ messages }) => ({ success: true, data: messages })),
     convertToModelMessages: vi.fn(async (messages) => messages),
-    tool: vi.fn((definition) => definition),
     streamText: vi.fn((input) => {
       streamState.capturedToolNames = Object.keys(input.tools ?? {})
       streamState.capturedTools = input.tools ?? {}
@@ -101,12 +77,12 @@ vi.mock('@/lib/project-agent/message-compression', () => ({
 
 vi.mock('@/lib/project-agent/project-phase', () => ({
   resolveProjectPhase: vi.fn(async () => ({
-    phase: 'storyboard_ready',
+    phase: 'draft',
     progress: {
-      clipCount: 1,
-      screenplayClipCount: 1,
-      storyboardCount: 1,
-      panelCount: 1,
+      clipCount: 0,
+      screenplayClipCount: 0,
+      storyboardCount: 0,
+      panelCount: 0,
     },
     activePlanRuns: [],
     activePlanRunCount: 0,
@@ -118,10 +94,6 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
     },
     editFirstWorkflow: phaseState.editFirstWorkflow,
   })),
-}))
-
-vi.mock('@/lib/project-agent/router', () => ({
-  routeProjectAgentRequest: vi.fn(async () => streamState.routeResult),
 }))
 
 vi.mock('@/lib/project-agent/stop-conditions', () => ({
@@ -155,11 +127,86 @@ vi.mock('@/lib/api-errors', () => ({
 }))
 
 import { createProjectAgentChatResponse } from '@/lib/project-agent/runtime'
-import { getProjectModelConfig } from '@/lib/config-service'
-import { resolveProjectAgentLanguageModel } from '@/lib/project-agent/model'
 
 function buildRequest(): NextRequest {
   return new Request('http://localhost') as unknown as NextRequest
+}
+
+function buildWorkflow(stage: EditFirstWorkflowState['stage'], operationIds: string[]): EditFirstWorkflowState {
+  const operationId = operationIds[0]
+  return {
+    active: true,
+    stage,
+    blocking: {
+      kind: operationId ? 'needs_confirmation' : 'none',
+      reason: null,
+    },
+    nextAction: operationId
+      ? {
+          id: operationId,
+          operationId: operationId as EditFirstWorkflowOperationId,
+          title: operationId,
+          requiresUserConfirmation: true,
+        }
+      : null,
+    allowedOperationIds: operationIds as EditFirstWorkflowState['allowedOperationIds'],
+  }
+}
+
+function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
+  return makeTestOperation({
+    id,
+    summary: id,
+    intent,
+    groupPath: id.startsWith('get_') || id.startsWith('list_') ? ['project', 'read'] : ['edit-script'],
+    prerequisites: { episodeId: 'optional' },
+    effects: intent === 'act' ? EFFECTS_BILLABLE : EFFECTS_NONE,
+    confirmation: intent === 'act' ? { required: true, summary: 'billable operation' } : { required: false },
+    inputSchema: z.object({}),
+    outputSchema: z.unknown(),
+    execute: async () => ({}),
+  })
+}
+
+function createRegistry(): ProjectAgentOperationRegistry {
+  const queryIds = [
+    'ui_cancel',
+    'ui_confirm',
+    'ui_single_select',
+    'ui_multi_select',
+    'ui_safety_ack',
+    'get_project_phase',
+    'get_project_context',
+    'get_project_snapshot',
+    'get_task_status',
+    'get_project_command',
+    'list_recent_commands',
+    'list_skill_catalog',
+    'list_saved_skills',
+    'get_project_assets',
+    'get_project_costs',
+    'get_project_data',
+    'get_task',
+    'list_tasks',
+    'request_edit_first_choice',
+  ]
+  const actIds = [
+    'generate_edit_screenplay',
+    'revise_edit_screenplay',
+    'generate_edit_style_previews',
+    'generate_edit_director_decoupage',
+    'generate_edit_script',
+    'generate_edit_script_assets',
+    'generate_edit_cinematography_shot_plan',
+    'generate_edit_script_storyboard',
+    'generate_edit_script_storyboard_images',
+    'generate_episode_videos',
+    'render_final_video',
+  ]
+  return Object.fromEntries([
+    ...queryIds.map((id) => [id, makeOperation(id, 'query')] as const),
+    ...actIds.map((id) => [id, makeOperation(id, 'act')] as const),
+  ])
 }
 
 async function flushAsyncWork() {
@@ -167,7 +214,24 @@ async function flushAsyncWork() {
   await Promise.resolve()
 }
 
-describe('project agent runtime tool routing', () => {
+async function runAssistant(params: {
+  context?: Record<string, unknown>
+  text?: string
+}) {
+  const response = await createProjectAgentChatResponse({
+    request: buildRequest(),
+    userId: 'user-1',
+    projectId: 'project-1',
+    context: params.context ?? { episodeId: 'episode-1' },
+    messages: [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: params.text ?? '民俗恐怖片' }] },
+    ],
+  })
+  await flushAsyncWork()
+  return response
+}
+
+describe('project agent runtime deterministic tool injection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     streamState.capturedToolNames = []
@@ -175,703 +239,82 @@ describe('project agent runtime tool routing', () => {
     streamState.capturedSystem = ''
     streamState.writerEvents = []
     loggerState.info.mockReset()
-    phaseState.editFirstWorkflow = {
-      active: false,
-      stage: 'not_started',
-      blocking: {
-        kind: 'none',
-        reason: null,
-      },
-      nextAction: null,
-      allowedOperationIds: [],
-    }
-    registryState.registry = {
-      get_character_detail: makeTestOperation({
-        id: 'get_character_detail',
-        summary: 'Get character detail',
-        intent: 'query',
-        groupPath: ['asset', 'character'],
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      regenerate_panel_image: makeTestOperation({
-        id: 'regenerate_panel_image',
-        summary: 'Regenerate panel image',
-        intent: 'act',
-        groupPath: ['media'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_edit_screenplay: makeTestOperation({
-        id: 'generate_edit_screenplay',
-        summary: 'Generate edit screenplay',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      request_edit_first_choice: makeTestOperation({
-        id: 'request_edit_first_choice',
-        summary: 'Request edit-first choice card',
-        intent: 'query',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({ choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style']) }),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_edit_style_previews: makeTestOperation({
-        id: 'generate_edit_style_previews',
-        summary: 'Generate edit style previews',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      revise_edit_screenplay: makeTestOperation({
-        id: 'revise_edit_screenplay',
-        summary: 'Revise edit screenplay',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_edit_director_decoupage: makeTestOperation({
-        id: 'generate_edit_director_decoupage',
-        summary: 'Generate director decoupage',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_edit_script: makeTestOperation({
-        id: 'generate_edit_script',
-        summary: 'Generate edit core table',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_edit_script_storyboard_images: makeTestOperation({
-        id: 'generate_edit_script_storyboard_images',
-        summary: 'Generate missing edit-first storyboard images',
-        intent: 'act',
-        groupPath: ['edit-script'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      generate_episode_videos: makeTestOperation({
-        id: 'generate_episode_videos',
-        summary: 'Generate episode videos',
-        intent: 'act',
-        groupPath: ['media', 'video'],
-        prerequisites: { episodeId: 'required' },
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true, summary: 'billable operation' },
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      get_project_phase: makeTestOperation({
-        id: 'get_project_phase',
-        summary: 'Get project phase',
-        intent: 'query',
-        groupPath: ['project', 'read'],
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      search_skills: makeTestOperation({
-        id: 'search_skills',
-        summary: 'Search skills',
-        intent: 'query',
-        groupPath: ['skill'],
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-      create_plan: makeTestOperation({
-        id: 'create_plan',
-        summary: 'Create plan',
-        intent: 'plan',
-        groupPath: ['skill'],
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({}),
-        outputSchema: z.unknown(),
-        execute: async () => ({}),
-      }),
-    }
+    registryState.registry = createRegistry()
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
   })
 
-  it('injects direct business tools when router requests direct operation groups', async () => {
-    streamState.routeResult = {
-      intent: 'query',
-      domains: ['asset'],
-      requestedGroups: [['asset', 'character']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['character asset read request'],
-      latestUserText: 'show character',
-    }
-
-    const response = await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'show character' }] },
-      ],
-    })
-    await flushAsyncWork()
+  it('injects edit-first choice and screenplay tools without an LLM router', async () => {
+    const response = await runAssistant({})
 
     expect(response.status).toBe(200)
-    expect(vi.mocked(getProjectModelConfig)).toHaveBeenCalledWith('project-1', 'user-1')
-    expect(vi.mocked(resolveProjectAgentLanguageModel)).toHaveBeenCalledWith({
-      userId: 'user-1',
-      analysisModelKey: 'llm::project-analysis',
-    })
-    expect(streamState.capturedToolNames).toContain('get_character_detail')
-    expect(streamState.capturedToolNames).not.toContain('regenerate_panel_image')
-    expect(streamState.capturedSystem).toContain('get_project_phase')
+    expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([
+      'get_project_phase',
+      'get_project_context',
+      'request_edit_first_choice',
+      'generate_edit_screenplay',
+    ]))
+    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
+    expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'assistant.tool.selection.result',
-      requestId: 'req-1',
-      projectId: 'project-1',
+      action: 'assistant.toolset.result',
       details: expect.objectContaining({
-        operationIds: expect.arrayContaining(['get_character_detail']),
-        requestedGroups: [['asset', 'character']],
+        operationIds: expect.arrayContaining(['request_edit_first_choice', 'generate_edit_screenplay']),
       }),
     }))
   })
 
-  it('injects panel media tools directly when router requests media group', async () => {
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['storyboard'],
-      requestedGroups: [['media']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['panel image regeneration request'],
-      latestUserText: 'regenerate panel image',
-    }
+  it('keeps screenplay review card available after screenplay generation', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_edit_screenplay',
+    ])
 
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'regenerate panel image' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('regenerate_panel_image')
-    expect(streamState.capturedSystem).toContain('get_project_phase')
-  })
-
-  it('returns clarification stream without selecting tools when router requires clarification', async () => {
-    streamState.routeResult = {
-      intent: 'query',
-      domains: ['unknown'],
-      requestedGroups: [['project', 'read']],
-      needsClarification: true,
-      clarifyingQuestion: 'Please clarify which part of the project you want me to inspect.',
-      reasoning: ['request is ambiguous'],
-      latestUserText: 'help me with this',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: {},
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'help me with this' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toEqual([])
-    expect(streamState.writerEvents).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'text-delta', delta: 'Please clarify which part of the project you want me to inspect.' }),
-    ]))
-  })
-
-  it('does not inject act tools in plan interaction mode', async () => {
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['storyboard'],
-      requestedGroups: [['media'], ['skill']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants a plan before acting'],
-      latestUserText: 'plan this storyboard change',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'plan' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'plan this storyboard change' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).not.toContain('regenerate_panel_image')
-  })
-
-  it('injects skill planning tools for open-ended creative plans', async () => {
-    streamState.routeResult = {
-      intent: 'plan',
-      domains: ['skill'],
-      requestedGroups: [['skill']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['open creative goal needs capability planning'],
-      latestUserText: '给我一个希区柯克风格恐怖片计划',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'plan' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '给我一个希区柯克风格恐怖片计划' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('search_skills')
-    expect(streamState.capturedToolNames).toContain('create_plan')
-    expect(streamState.capturedToolNames).not.toContain('regenerate_panel_image')
-  })
-
-  it('injects business act tools in auto interaction mode when router selects their group', async () => {
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['storyboard'],
-      requestedGroups: [['media']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['auto mode should honor act intent'],
-      latestUserText: 'regenerate panel image',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'regenerate panel image' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('regenerate_panel_image')
-  })
-
-  it('blocks edit-first act tools while style previews are still generating', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'style_preview_generating',
-      blocking: {
-        kind: 'processing',
-        reason: 'style preview images are still generating',
-      },
-      nextAction: null,
-      allowedOperationIds: [],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants the next edit-first step'],
-      latestUserText: '同意，下一步',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '同意，下一步' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('get_project_phase')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
-  })
-
-  it('injects the edit-first choice-card tool so the model can ask duration via tool use', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'ready_to_generate_screenplay',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: null,
-      },
-      nextAction: {
-        id: 'generate_edit_screenplay',
-        operationId: 'generate_edit_screenplay',
-        title: 'Generate edit screenplay',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_screenplay'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants edit-first generation'],
-      latestUserText: '开始生成短片',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '开始生成短片' }] },
-      ],
-    })
-    await flushAsyncWork()
+    await runAssistant({ text: '剧本满意' })
 
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.writerEvents).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'data-assistant-choice-card' }),
-    ]))
-  })
-
-  it('does not block screenplay generation when no assistant choice card is present', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'ready_to_generate_screenplay',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: null,
-      },
-      nextAction: {
-        id: 'generate_edit_screenplay',
-        operationId: 'generate_edit_screenplay',
-        title: 'Generate edit screenplay',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_screenplay'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user chose duration'],
-      latestUserText: '我选择 60 秒，请继续',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '我选择 60 秒，请继续' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
-  })
-
-  it('injects the immediate next edit-first act tool and lets runtime approval handle confirmation', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'ready_to_generate_director_decoupage',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: null,
-      },
-      nextAction: {
-        id: 'generate_edit_director_decoupage',
-        operationId: 'generate_edit_director_decoupage',
-        title: 'Generate director decoupage',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_director_decoupage'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants the next edit-first step'],
-      latestUserText: '同意，下一步',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '同意，下一步' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
-    expect(streamState.capturedTools.generate_edit_director_decoupage?.needsApproval).toBe(true)
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('revise_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
-  })
-
-  it('marks billable assistant tools as approval-gated instead of executing before approval', async () => {
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['asset'],
-      requestedGroups: [['media']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants a billable media action'],
-      latestUserText: '重新生成这张图',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '重新生成这张图' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('regenerate_panel_image')
-    expect(streamState.capturedTools.regenerate_panel_image?.needsApproval).toBe(true)
-  })
-
-  it('injects the workflow immediate next edit-first act tool without hidden card confirmation', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'ready_to_generate_edit_script',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: null,
-      },
-      nextAction: {
-        id: 'generate_edit_script',
-        operationId: 'generate_edit_script',
-        title: 'Generate edit core table',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_script'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants the next edit-first step'],
-      latestUserText: '好的继续',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        {
-          id: 'u1',
-          role: 'user',
-          parts: [{
-            type: 'text',
-            text: '好的继续',
-          }],
-        },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('generate_edit_script')
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
-  })
-
-  it('injects style preview regeneration during style choice without exposing later edit-first act tools', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'needs_style_choice',
-      blocking: {
-        kind: 'needs_user_choice',
-        reason: 'choose and confirm one completed style preview',
-      },
-      nextAction: null,
-      allowedOperationIds: ['generate_edit_style_previews'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants darker regenerated style candidates'],
-      latestUserText: '重新生成一下，要求更黑暗一些',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '重新生成一下，要求更黑暗一些' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
-  })
-
-  it('injects style preview generation and screenplay revision after screenplay review', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'screenplay_ready_for_review',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: null,
-      },
-      nextAction: {
-        id: 'generate_edit_style_previews',
-        operationId: 'generate_edit_style_previews',
-        title: 'Generate style previews',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_style_previews', 'revise_edit_screenplay'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user approved screenplay'],
-      latestUserText: '剧本可以，继续生成风格图',
-    }
-
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '剧本可以，继续生成风格图' }] },
-      ],
-    })
-    await flushAsyncWork()
-
-    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).toContain('revise_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_director_decoupage')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
   })
 
-  it('injects storyboard image generation instead of video generation when edit-first panel images are missing', async () => {
-    phaseState.editFirstWorkflow = {
-      active: true,
-      stage: 'ready_to_generate_storyboard_images',
-      blocking: {
-        kind: 'needs_confirmation',
-        reason: 'storyboard panel images are missing',
-      },
-      nextAction: {
-        id: 'generate_edit_script_storyboard_images',
-        operationId: 'generate_edit_script_storyboard_images',
-        title: 'Generate storyboard images',
-        requiresUserConfirmation: true,
-      },
-      allowedOperationIds: ['generate_edit_script_storyboard_images'],
-    }
-    streamState.routeResult = {
-      intent: 'act',
-      domains: ['edit-script'],
-      requestedGroups: [['edit-script']],
-      needsClarification: false,
-      clarifyingQuestion: null,
-      reasoning: ['user wants storyboard images'],
-      latestUserText: '生成分镜图片',
-    }
+  it('injects asset generation at the assets stage', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_assets', ['generate_edit_script_assets'])
 
-    await createProjectAgentChatResponse({
-      request: buildRequest(),
-      userId: 'user-1',
-      projectId: 'project-1',
-      context: { episodeId: 'ep-1', interactionMode: 'auto' },
-      messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '生成分镜图片' }] },
-      ],
-    })
-    await flushAsyncWork()
+    await runAssistant({ text: '继续生成资产' })
+
+    expect(streamState.capturedToolNames).toContain('generate_edit_script_assets')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+  })
+
+  it('injects storyboard image generation before video generation', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_storyboard_images', [
+      'generate_edit_script_storyboard_images',
+    ])
+
+    await runAssistant({ text: '生成分镜图片' })
 
     expect(streamState.capturedToolNames).toContain('generate_edit_script_storyboard_images')
-    expect(streamState.capturedTools.generate_edit_script_storyboard_images?.needsApproval).toBe(true)
     expect(streamState.capturedToolNames).not.toContain('generate_episode_videos')
+  })
+
+  it('injects video generation only after storyboard images are ready', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_videos', ['generate_episode_videos'])
+
+    await runAssistant({ text: '生成视频' })
+
+    expect(streamState.capturedToolNames).toContain('generate_episode_videos')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script_storyboard_images')
+  })
+
+  it('does not inject act tools in explicit plan mode', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', ['generate_edit_script'])
+
+    await runAssistant({
+      context: { episodeId: 'episode-1', interactionMode: 'plan' },
+      text: '先给我计划',
+    })
+
+    expect(streamState.capturedToolNames).toContain('get_project_phase')
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
   })
 })

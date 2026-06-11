@@ -37,7 +37,7 @@ function renderRuntimeContextData(value: unknown): string[] {
     formatJsonBlock({
       requestId: value.requestId ?? null,
       modelKey: value.modelKey ?? null,
-      route: value.route ?? null,
+      toolset: value.toolset ?? null,
       selectedTools: value.selectedTools ?? [],
       messageCounts: value.messageCounts ?? null,
       contextTokenEstimate: value.contextTokenEstimate ?? null,

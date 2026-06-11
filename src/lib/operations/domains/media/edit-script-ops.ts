@@ -29,6 +29,7 @@ import {
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import type { UIMessage, UIMessageStreamWriter } from 'ai'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 
@@ -231,6 +232,35 @@ function buildEditScreenplayGenerationPrompt(input: GenerateEditScreenplayInput)
   ].join('\n')
 }
 
+function buildChoiceCardFeedbackText(choiceType: EditFirstChoiceType, locale: 'zh' | 'en'): string {
+  const isEnglish = locale === 'en'
+  if (choiceType === 'duration_and_aspect_ratio') {
+    return isEnglish
+      ? 'Before writing the screenplay, choose the short-film duration and aspect ratio in the card below.'
+      : '生成剧本前，请先在下方卡片中选择短片时长和画面比例。'
+  }
+  if (choiceType === 'screenplay_review') {
+    return isEnglish
+      ? 'The screenplay is ready. Review it in the card below: confirm to continue, or submit revision notes.'
+      : '剧本已生成，请在下方卡片中审核：确认后继续，或提交修改意见。'
+  }
+  return isEnglish
+    ? 'The visual style candidates are ready. Choose one in the card below to continue to director decoupage.'
+    : '视觉风格候选已准备好，请在下方卡片中选择一个方向继续生成导演拆镜。'
+}
+
+function writeChoiceCardFeedbackText(params: {
+  writer: UIMessageStreamWriter<UIMessage> | null | undefined
+  toolCallId: string
+  text: string
+}) {
+  if (!params.writer) return
+  const id = `choice-feedback-${params.toolCallId}`
+  params.writer.write({ type: 'text-start', id })
+  params.writer.write({ type: 'text-delta', id, delta: params.text })
+  params.writer.write({ type: 'text-end', id })
+}
+
 function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSummaryOutput {
   return {
     ...(payload.id ? { id: payload.id } : {}),
@@ -396,14 +426,20 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
         })
         const choiceType: EditFirstChoiceType = input.choiceType
+        const locale = resolveLocale(ctx.context.locale)
         const card = await buildEditFirstAssistantChoiceCard({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
-          locale: resolveLocale(ctx.context.locale),
+          locale,
           workflow,
           choiceType,
           toolCallId,
+        })
+        writeChoiceCardFeedbackText({
+          writer: ctx.writer,
+          toolCallId,
+          text: buildChoiceCardFeedbackText(choiceType, locale),
         })
         writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', card)
         return requestEditFirstChoiceOutputSchema.parse({
