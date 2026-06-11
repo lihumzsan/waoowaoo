@@ -64,12 +64,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function isConfirmationRequiredOutput(value: unknown): boolean {
+  return isRecord(value) && value.confirmationRequired === true
+}
+
 function hasRenderedToolOutput(parts: readonly unknown[], toolCallId: string): boolean {
   return parts.some((part) => {
     if (!isRecord(part)) return false
-    return part.type === 'tool-call'
-      && part.toolCallId === toolCallId
-      && ('result' in part || part.isError === true)
+    const type = typeof part.type === 'string' ? part.type : ''
+    if (part.toolCallId !== toolCallId) return false
+    if (type === 'tool-call') {
+      if (isConfirmationRequiredOutput(part.result)) return false
+      return 'result' in part || part.isError === true
+    }
+    if (type === 'dynamic-tool' || type.startsWith('tool-')) {
+      if (isConfirmationRequiredOutput(part.output)) return false
+      return part.state === 'output-available'
+        || part.state === 'output-error'
+        || part.state === 'output-denied'
+    }
+    return false
   })
 }
 
@@ -929,11 +943,35 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
 }
 
 
-export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
+function readToolApprovalId(payload: unknown): string | null {
+  if (!isRecord(payload)) return null
+  const id = payload.id
+  return typeof id === 'string' && id.trim() ? id.trim() : null
+}
+
+export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps & {
+  onRespondToolApproval?: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
+  confirmationSubmittingKey?: string | null
+}) {
   const t = useTranslations('assistantAgent')
   const toolStatus = props.status.type
   const inputText = JSON.stringify(props.args ?? {}, null, 2)
   const outputText = props.result === undefined ? '' : JSON.stringify(props.result, null, 2)
+  const approvalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
+    ? readToolApprovalId(props.interrupt.payload)
+    : null
+  if (approvalId && props.onRespondToolApproval) {
+    return (
+      <ConfirmationActionCard
+        operationId={props.toolName}
+        summary={`${t('toolCall.needsAction')} · ${props.toolName}`}
+        onConfirm={async () => props.onRespondToolApproval?.({ approvalId, approved: true })}
+        onCancel={async () => props.onRespondToolApproval?.({ approvalId, approved: false })}
+        confirmPending={props.confirmationSubmittingKey === `approval:${approvalId}:approve`}
+        cancelPending={props.confirmationSubmittingKey === `approval:${approvalId}:deny`}
+      />
+    )
+  }
   const summaryText = toolStatus === 'complete'
     ? t('toolCall.success')
     : toolStatus === 'requires-action'
@@ -968,6 +1006,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
 interface WorkspaceAssistantMessagePartComponentsOptions {
   onConfirmOperation: (data: ConfirmationRequestPartData) => Promise<void>
   onCancelOperation: (data: ConfirmationRequestPartData) => Promise<void>
+  onRespondToolApproval: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey: string | null
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
@@ -989,6 +1028,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
 export function useWorkspaceAssistantMessagePartComponents({
   onConfirmOperation,
   onCancelOperation,
+  onRespondToolApproval,
   confirmationSubmittingKey,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
@@ -1000,7 +1040,13 @@ export function useWorkspaceAssistantMessagePartComponents({
     Text: MarkdownTextPart,
     Reasoning: WorkspaceAssistantReasoningPart,
     tools: {
-      Fallback: WorkspaceAssistantToolCallCard,
+      Fallback: (props) => (
+        <WorkspaceAssistantToolCallCard
+          {...props}
+          onRespondToolApproval={onRespondToolApproval}
+          confirmationSubmittingKey={confirmationSubmittingKey}
+        />
+      ),
     },
     data: {
       by_name: {
@@ -1041,6 +1087,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     onCancelOperation,
     onConfirmEditStylePreviewChoice,
     onConfirmOperation,
+    onRespondToolApproval,
     onSetProjectVideoRatioChoice,
     onSendChoiceMessage,
   ])

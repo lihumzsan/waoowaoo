@@ -3,7 +3,12 @@
 import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
-import { lastAssistantMessageIsCompleteWithToolCalls, type ChatStatus, type UIMessage } from 'ai'
+import {
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  lastAssistantMessageIsCompleteWithToolCalls,
+  type ChatStatus,
+  type UIMessage,
+} from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -39,6 +44,11 @@ interface UseWorkspaceAssistantRuntimeResult {
     tool: string
     toolCallId: string
     output: unknown
+  }) => Promise<void>
+  addToolApprovalResponse: (params: {
+    approvalId: string
+    approved: boolean
+    reason?: string
   }) => Promise<void>
   replaceMessages: (messages: UIMessage[]) => void
   appendMessages: (messages: UIMessage[]) => void
@@ -88,7 +98,10 @@ export function useWorkspaceAssistantRuntime({
   const chat = useChat({
     id: chatId,
     transport,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: ({ messages }) => (
+      lastAssistantMessageIsCompleteWithToolCalls({ messages })
+      || lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
+    ),
   })
   const runtime = useAISDKRuntime(chat)
   const hydratedSessionKeyRef = useRef<string | null>(null)
@@ -133,6 +146,19 @@ export function useWorkspaceAssistantRuntime({
       tool: params.tool,
       toolCallId: params.toolCallId,
       output: params.output,
+    })
+  }, [chat])
+
+  const addToolApprovalResponse = useCallback(async (params: {
+    approvalId: string
+    approved: boolean
+    reason?: string
+  }) => {
+    chat.clearError()
+    await chat.addToolApprovalResponse({
+      id: params.approvalId,
+      approved: params.approved,
+      ...(params.reason ? { reason: params.reason } : {}),
     })
   }, [chat])
 
@@ -203,6 +229,7 @@ export function useWorkspaceAssistantRuntime({
     sendMessage,
     sendHiddenMessage,
     addToolOutput,
+    addToolApprovalResponse,
     replaceMessages,
     appendMessages,
   }

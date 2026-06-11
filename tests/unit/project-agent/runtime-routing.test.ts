@@ -7,6 +7,7 @@ import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers
 
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
+  capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
   routeResult: {
     intent: 'query' as const,
@@ -64,6 +65,7 @@ vi.mock('ai', async () => {
     tool: vi.fn((definition) => definition),
     streamText: vi.fn((input) => {
       streamState.capturedToolNames = Object.keys(input.tools ?? {})
+      streamState.capturedTools = input.tools ?? {}
       streamState.capturedSystem = input.system
       return {
         toUIMessageStream: () => ({
@@ -169,6 +171,7 @@ describe('project agent runtime tool routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     streamState.capturedToolNames = []
+    streamState.capturedTools = {}
     streamState.capturedSystem = ''
     streamState.writerEvents = []
     loggerState.info.mockReset()
@@ -643,9 +646,36 @@ describe('project agent runtime tool routing', () => {
 
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
     expect(streamState.capturedToolNames).toContain('generate_edit_director_decoupage')
+    expect(streamState.capturedTools.generate_edit_director_decoupage?.needsApproval).toBe(true)
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+  })
+
+  it('marks billable assistant tools as approval-gated instead of executing before approval', async () => {
+    streamState.routeResult = {
+      intent: 'act',
+      domains: ['asset'],
+      requestedGroups: [['media']],
+      needsClarification: false,
+      clarifyingQuestion: null,
+      reasoning: ['user wants a billable media action'],
+      latestUserText: '重新生成这张图',
+    }
+
+    await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'ep-1', interactionMode: 'auto' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '重新生成这张图' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(streamState.capturedToolNames).toContain('regenerate_panel_image')
+    expect(streamState.capturedTools.regenerate_panel_image?.needsApproval).toBe(true)
   })
 
   it('injects the workflow immediate next edit-first act tool without hidden card confirmation', async () => {

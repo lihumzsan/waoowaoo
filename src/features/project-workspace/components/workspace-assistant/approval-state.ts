@@ -39,6 +39,10 @@ function isCompletedToolOutputPart(part: unknown): boolean {
   const record = part as Record<string, unknown>
   const type = typeof record.type === 'string' ? record.type : ''
   if (type !== 'dynamic-tool' && !type.startsWith('tool-')) return false
+  if (record.output && typeof record.output === 'object' && !Array.isArray(record.output)) {
+    const output = record.output as Record<string, unknown>
+    if (output.confirmationRequired === true) return false
+  }
   return record.state === 'output-available' || record.state === 'output-error'
 }
 

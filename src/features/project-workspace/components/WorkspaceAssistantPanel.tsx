@@ -334,6 +334,18 @@ export default function WorkspaceAssistantPanel({
     return () => window.removeEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
   }, [sendAssistantMessageOnce])
   const [confirmationSubmittingKey, setConfirmationSubmittingKey] = useState<string | null>(null)
+  const handleRespondToolApproval = async (params: {
+    approvalId: string
+    approved: boolean
+    reason?: string
+  }) => {
+    setConfirmationSubmittingKey(`approval:${params.approvalId}:${params.approved ? 'approve' : 'deny'}`)
+    try {
+      await assistantRuntime.addToolApprovalResponse(params)
+    } finally {
+      setConfirmationSubmittingKey(null)
+    }
+  }
   const handleConfirmOperation = async (confirmation: ConfirmationRequestPartData) => {
     const operationId = confirmation.operationId
     const toolCallId = typeof confirmation.toolCallId === 'string' ? confirmation.toolCallId.trim() : ''
@@ -356,16 +368,18 @@ export default function WorkspaceAssistantPanel({
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok) {
-        await assistantRuntime.addToolOutput({
-          tool: operationId,
+        await assistantRuntime.sendHiddenMessage(JSON.stringify({
+          type: 'assistant_tool_approval_result',
+          operationId,
           toolCallId,
+          approvalId,
           output: buildOperationFailureToolOutput({
             operationId,
             code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
             message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
             details: payload,
           }),
-        })
+        }))
         return
       }
       const successData = readConfirmedOperationSuccessData(payload)
@@ -377,21 +391,25 @@ export default function WorkspaceAssistantPanel({
           fallbackEpisodeId: episodeId ?? null,
         })
       }
-      await assistantRuntime.addToolOutput({
-        tool: operationId,
+      await assistantRuntime.sendHiddenMessage(JSON.stringify({
+        type: 'assistant_tool_approval_result',
+        operationId,
         toolCallId,
+        approvalId,
         output: payload,
-      })
+      }))
     } catch (error) {
-      await assistantRuntime.addToolOutput({
-        tool: operationId,
+      await assistantRuntime.sendHiddenMessage(JSON.stringify({
+        type: 'assistant_tool_approval_result',
+        operationId,
         toolCallId,
+        approvalId,
         output: buildOperationFailureToolOutput({
           operationId,
           code: 'CONFIRMED_OPERATION_CLIENT_FAILED',
           message: error instanceof Error ? error.message : String(error),
         }),
-      })
+      }))
     } finally {
       setConfirmationSubmittingKey(null)
     }
@@ -418,23 +436,27 @@ export default function WorkspaceAssistantPanel({
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok) {
-        await assistantRuntime.addToolOutput({
-          tool: operationId,
+        await assistantRuntime.sendHiddenMessage(JSON.stringify({
+          type: 'assistant_tool_approval_result',
+          operationId,
           toolCallId,
+          approvalId,
           output: buildOperationFailureToolOutput({
             operationId,
             code: 'CONFIRMED_OPERATION_REQUEST_FAILED',
             message: readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')),
             details: payload,
           }),
-        })
+        }))
         return
       }
-      await assistantRuntime.addToolOutput({
-        tool: operationId,
+      await assistantRuntime.sendHiddenMessage(JSON.stringify({
+        type: 'assistant_tool_approval_result',
+        operationId,
         toolCallId,
+        approvalId,
         output: payload,
-      })
+      }))
     } finally {
       setConfirmationSubmittingKey(null)
     }
@@ -509,6 +531,7 @@ export default function WorkspaceAssistantPanel({
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     onConfirmOperation: handleConfirmOperation,
     onCancelOperation: handleCancelOperation,
+    onRespondToolApproval: handleRespondToolApproval,
     confirmationSubmittingKey,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,

@@ -12,6 +12,7 @@ import {
 import type { Tool } from '@ai-sdk/provider-utils'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
+import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { writeOperationDataPart } from '@/lib/operations/types'
@@ -43,6 +44,10 @@ import {
 } from './run-lock'
 
 type UnknownObject = { [key: string]: unknown }
+
+function isRecord(value: unknown): value is UnknownObject {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
 
 const projectAgentLogger = createScopedLogger({
   module: 'project-agent.runtime',
@@ -307,10 +312,18 @@ export async function createProjectAgentChatResponse(input: {
       const toolEntries = operationIds.map((operationId) => {
         const operation = operations[operationId]
         const description = localizeSelectableToolDescription(operationId, operation.summary, locale)
+        const requiresApproval = shouldRequireAssistantConfirmation(operation.confirmation)
         const definition: Tool<unknown, unknown> = {
           description,
           inputSchema: operation.inputSchema,
+          ...(requiresApproval ? { needsApproval: true } : {}),
           execute: async (args: unknown, options?: ToolExecutionOptions) => {
+            const effectiveInput = requiresApproval && !isConfirmedOperationInput(args)
+              ? {
+                  ...(isRecord(args) ? args : {}),
+                  confirmed: true,
+                }
+              : args
             return executeProjectAgentOperationFromTool({
               request: input.request,
               operationId,
@@ -319,7 +332,7 @@ export async function createProjectAgentChatResponse(input: {
               context,
               source: 'assistant-panel',
               writer,
-              input: args,
+              input: effectiveInput,
               toolCallId: options?.toolCallId,
             })
           },
