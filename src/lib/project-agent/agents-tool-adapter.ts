@@ -68,6 +68,17 @@ export interface CreateProjectAgentOperationToolParams {
   context: ProjectAgentContext
   assistantPermissionMode: AssistantPermissionMode
   writer: UIMessageStreamWriter<UIMessage>
+  /**
+   * Live availability predicate, re-evaluated by the Agents SDK before every
+   * model turn. Omit for tools that are always available.
+   */
+  isEnabled?: () => Promise<boolean>
+  /**
+   * Called after every execution attempt (success or failure). The runtime
+   * uses it to invalidate its cached workflow state so the next turn's
+   * isEnabled evaluations see the post-execution project state.
+   */
+  onExecutionSettled?: () => void
 }
 
 export function createProjectAgentOperationTool(
@@ -84,19 +95,24 @@ export function createProjectAgentOperationTool(
     parameters: params.operation.toolInputSchema as never,
     strict: true,
     ...(requiresApproval ? { needsApproval: true } : {}),
-    execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => (
-      executeProjectAgentOperationFromTool({
-        request: params.request,
-        operationId: params.operation.id,
-        projectId: params.projectId,
-        userId: params.userId,
-        context: params.context,
-        assistantPermissionMode: params.assistantPermissionMode,
-        source: 'assistant-panel',
-        writer: params.writer,
-        input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
-        toolCallId: readToolCallId(details),
-      })
-    ),
+    ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
+    execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
+      try {
+        return await executeProjectAgentOperationFromTool({
+          request: params.request,
+          operationId: params.operation.id,
+          projectId: params.projectId,
+          userId: params.userId,
+          context: params.context,
+          assistantPermissionMode: params.assistantPermissionMode,
+          source: 'assistant-panel',
+          writer: params.writer,
+          input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
+          toolCallId: readToolCallId(details),
+        })
+      } finally {
+        params.onExecutionSettled?.()
+      }
+    },
   })
 }

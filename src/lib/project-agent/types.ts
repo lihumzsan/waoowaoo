@@ -137,6 +137,7 @@ export interface AgentRuntimeContextPartData {
     source: string
     coreOperationIds: string[]
     workflowOperationIds: string[]
+    initialEnabledOperationIds: string[]
     continuationOperationId: string | null
     resumeOperationId: string | null
     includeChoiceOperation: boolean

@@ -34,18 +34,28 @@ export type EditFirstWorkflowBlockingKind =
   | 'needs_confirmation'
   | 'failed'
 
-export type EditFirstWorkflowOperationId =
-  | 'generate_edit_screenplay'
-  | 'revise_edit_screenplay'
-  | 'generate_edit_style_previews'
-  | 'generate_edit_director_decoupage'
-  | 'generate_edit_script'
-  | 'generate_edit_script_assets'
-  | 'generate_edit_cinematography_shot_plan'
-  | 'generate_edit_script_storyboard'
-  | 'generate_edit_script_storyboard_images'
-  | 'generate_episode_videos'
-  | 'render_final_video'
+/**
+ * Canonical surface of every operation the edit-first workflow can ever
+ * require. The project agent registers all of them up front and gates
+ * availability live per turn, so this list must stay in sync with the stages
+ * above — the derived union type enforces that any stage referencing a new
+ * operation also adds it here.
+ */
+export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
+  'generate_edit_screenplay',
+  'revise_edit_screenplay',
+  'generate_edit_style_previews',
+  'generate_edit_director_decoupage',
+  'generate_edit_script',
+  'generate_edit_script_assets',
+  'generate_edit_cinematography_shot_plan',
+  'generate_edit_script_storyboard',
+  'generate_edit_script_storyboard_images',
+  'generate_episode_videos',
+  'render_final_video',
+] as const
+
+export type EditFirstWorkflowOperationId = (typeof EDIT_FIRST_WORKFLOW_OPERATION_IDS)[number]
 
 export interface EditFirstWorkflowAction {
   id: string

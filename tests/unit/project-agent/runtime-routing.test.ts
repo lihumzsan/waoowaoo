@@ -8,6 +8,7 @@ import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers
 
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
+  capturedEnabledToolNames: [] as string[],
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
   capturedModelSettings: {} as Record<string, unknown>,
@@ -118,6 +119,15 @@ vi.mock('@openai/agents', () => {
 
   const run = vi.fn(async (agent: Agent, runInput: unknown) => {
     streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
+    // Mirrors the Agents SDK getAllTools() behavior: tools with an isEnabled
+    // predicate are filtered per model turn before being exposed to the model.
+    const enabledToolNames: string[] = []
+    for (const tool of agent.tools) {
+      const isEnabled = (tool as { isEnabled?: unknown }).isEnabled
+      const enabled = typeof isEnabled === 'function' ? await (isEnabled as () => Promise<boolean>)() : true
+      if (enabled) enabledToolNames.push(tool.name)
+    }
+    streamState.capturedEnabledToolNames = enabledToolNames
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
     streamState.capturedSystem = agent.instructions
     streamState.capturedModelSettings = agent.modelSettings
@@ -350,6 +360,7 @@ describe('project agent runtime deterministic tool injection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     streamState.capturedToolNames = []
+    streamState.capturedEnabledToolNames = []
     streamState.capturedTools = {}
     streamState.capturedSystem = ''
     streamState.capturedModelSettings = {}
@@ -369,6 +380,8 @@ describe('project agent runtime deterministic tool injection', () => {
       'request_edit_first_choice',
       'generate_edit_screenplay',
     ]))
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
@@ -481,13 +494,13 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
   })
 
-  it('injects asset generation at the assets stage', async () => {
+  it('enables only asset generation among act tools at the assets stage', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_assets', ['generate_edit_script_assets'])
 
     await runAssistant({ text: '继续生成资产' })
 
-    expect(streamState.capturedToolNames).toContain('generate_edit_script_assets')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_assets')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_screenplay')
   })
 
   it('skips execution approval in auto mode while keeping choice cards approval-free', async () => {
@@ -499,24 +512,24 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedSystem).toContain('Assistant 权限模式：auto')
   })
 
-  it('injects storyboard image generation before video generation', async () => {
+  it('enables storyboard image generation but not video generation before images are ready', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_storyboard_images', [
       'generate_edit_script_storyboard_images',
     ])
 
     await runAssistant({ text: '生成分镜图片' })
 
-    expect(streamState.capturedToolNames).toContain('generate_edit_script_storyboard_images')
-    expect(streamState.capturedToolNames).not.toContain('generate_episode_videos')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_storyboard_images')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_episode_videos')
   })
 
-  it('injects video generation only after storyboard images are ready', async () => {
+  it('enables video generation only after storyboard images are ready', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_videos', ['generate_episode_videos'])
 
     await runAssistant({ text: '生成视频' })
 
-    expect(streamState.capturedToolNames).toContain('generate_episode_videos')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script_storyboard_images')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_episode_videos')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_storyboard_images')
   })
 
   it('injects the immediate workflow operation on the single assistant path', async () => {

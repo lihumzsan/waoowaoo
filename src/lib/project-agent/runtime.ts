@@ -61,7 +61,15 @@ import {
   safelyUpdateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
-import { resolveProjectAgentToolset } from './toolset'
+import {
+  isProjectAgentOperationAlwaysEnabled,
+  isProjectAgentOperationEnabled,
+  resolveProjectAgentToolset,
+} from './toolset'
+import {
+  resolveEditFirstWorkflowState,
+  type EditFirstWorkflowState,
+} from '@/lib/project-workflow/edit-first'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
   PROJECT_AGENT_MAX_TURNS,
@@ -291,6 +299,65 @@ async function maybeCreateProjectAgentWait(params: {
   return followUpMode
 }
 
+interface ProjectAgentLiveWorkflowState {
+  get(): Promise<EditFirstWorkflowState>
+  invalidate(): void
+}
+
+/**
+ * Live view of the edit-first workflow state for one run. Tool isEnabled
+ * predicates read it before every model turn; every operation execution
+ * invalidates it, so a stage advanced by a completed operation is visible to
+ * the very next turn's tool surface. Lookups are deduplicated and a fetch
+ * failure falls back to the last known state instead of failing the run.
+ */
+function createProjectAgentLiveWorkflowState(params: {
+  requestId: string
+  projectId: string
+  userId: string
+  episodeId: string | null
+  initial: EditFirstWorkflowState
+}): ProjectAgentLiveWorkflowState {
+  let current = params.initial
+  let stale = false
+  let pending: Promise<EditFirstWorkflowState> | null = null
+  return {
+    async get() {
+      if (!stale) return current
+      pending ??= resolveEditFirstWorkflowState({
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+      })
+        .then((workflow) => {
+          current = workflow
+          stale = false
+          return workflow
+        })
+        .catch((error: unknown) => {
+          projectAgentLogger.warn({
+            action: 'assistant.workflow.refresh.failed',
+            message: 'Project agent live workflow refresh failed; using last known state',
+            requestId: params.requestId,
+            projectId: params.projectId,
+            userId: params.userId,
+            details: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+          return current
+        })
+        .finally(() => {
+          pending = null
+        })
+      return pending
+    },
+    invalidate() {
+      stale = true
+    },
+  }
+}
+
 function buildRunContext(params: {
   requestId: string
   projectId: string
@@ -368,15 +435,26 @@ export async function createProjectAgentChatResponse(input: {
   const requestId = stableRequestId
   const choiceContinuation = control.kind === 'choice' ? control.continuation : null
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
+  const liveWorkflow = createProjectAgentLiveWorkflowState({
+    requestId,
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: context.episodeId || null,
+    initial: phase.editFirstWorkflow,
+  })
   const toolset = resolveProjectAgentToolset({
     registry: operations,
-    workflow: phase.editFirstWorkflow,
     context,
     continuationOperationId: choiceContinuation?.operationId ?? null,
     resumeOperationId: approvalInterruption?.operationId ?? null,
     includeChoiceOperation: !choiceContinuation,
   })
   const operationIds = toolset.operationIds
+  const initialEnabledOperationIds = operationIds.filter((operationId) => isProjectAgentOperationEnabled({
+    toolset,
+    workflow: phase.editFirstWorkflow,
+    operationId,
+  }))
   const selectedTools = operationIds.map((operationId) => {
     const operation = operations[operationId]
     if (!operation) {
@@ -423,6 +501,7 @@ export async function createProjectAgentChatResponse(input: {
         source: toolset.source,
         coreOperationIds: toolset.coreOperationIds,
         workflowOperationIds: toolset.workflowOperationIds,
+        initialEnabledOperationIds,
         continuationOperationId: toolset.continuationOperationId,
         resumeOperationId: toolset.resumeOperationId,
         includeChoiceOperation: toolset.includeChoiceOperation,
@@ -473,6 +552,7 @@ export async function createProjectAgentChatResponse(input: {
       `coreTools=${String(toolset.coreOperationIds.length)}`,
       `workflowTools=${String(toolset.workflowOperationIds.length)}`,
       `tools=${String(operationIds.length)}`,
+      `enabledTools=${String(initialEnabledOperationIds.length)}`,
       `editFirstStage=${phase.editFirstWorkflow.stage}`,
       ...(choiceContinuation ? [`choiceContinuation=${choiceContinuation.operationId}`] : []),
     ].join('\n')))
@@ -521,6 +601,14 @@ export async function createProjectAgentChatResponse(input: {
         },
         onError: (error) => (error instanceof Error ? error.message : String(error)),
       },
+      ...(isProjectAgentOperationAlwaysEnabled(toolset, item.operation.id) ? {} : {
+        isEnabled: async () => isProjectAgentOperationEnabled({
+          toolset,
+          workflow: await liveWorkflow.get(),
+          operationId: item.operation.id,
+        }),
+      }),
+      onExecutionSettled: () => liveWorkflow.invalidate(),
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
 

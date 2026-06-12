@@ -1,6 +1,9 @@
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import { resolveEditFirstWorkflowCapabilityOperationIds } from '@/lib/project-workflow/edit-first'
+import {
+  EDIT_FIRST_WORKFLOW_OPERATION_IDS,
+  resolveEditFirstWorkflowCapabilityOperationIds,
+} from '@/lib/project-workflow/edit-first'
 import type { ProjectAgentContext } from './types'
 
 const CORE_OPERATION_IDS = [
@@ -26,8 +29,19 @@ const CORE_OPERATION_IDS = [
 
 const EDIT_FIRST_CHOICE_OPERATION_ID = 'request_edit_first_choice'
 
+/**
+ * Tool surface for a project agent run.
+ *
+ * Registration is static per run: every edit-first workflow operation is
+ * registered up front so the agent definition (and any serialized RunState)
+ * stays stable across the whole run. Availability is live per model turn:
+ * each workflow tool carries an isEnabled predicate evaluated against the
+ * current workflow state, so when an operation completes mid-run and the
+ * workflow advances, the next stage's tool becomes callable on the very next
+ * turn — no new run or toolset rebuild required.
+ */
 export interface ProjectAgentToolset {
-  source: 'deterministic-workflow'
+  source: 'live-workflow'
   operationIds: string[]
   coreOperationIds: string[]
   workflowOperationIds: string[]
@@ -67,7 +81,6 @@ function pushRequiredTool(params: {
 
 export function resolveProjectAgentToolset(params: {
   registry: ProjectAgentOperationRegistry
-  workflow: EditFirstWorkflowState
   context: ProjectAgentContext
   continuationOperationId?: string | null
   resumeOperationId?: string | null
@@ -76,7 +89,7 @@ export function resolveProjectAgentToolset(params: {
   const operationIds: string[] = []
   const coreOperationIds: string[] = []
   const workflowOperationIds: string[] = []
-  const includeChoiceOperation = params.includeChoiceOperation !== false
+  const includeChoiceOperation = params.includeChoiceOperation !== false && Boolean(params.context.episodeId)
 
   for (const operationId of CORE_OPERATION_IDS) {
     const beforeLength = operationIds.length
@@ -90,7 +103,7 @@ export function resolveProjectAgentToolset(params: {
     }
   }
 
-  if (params.context.episodeId && includeChoiceOperation) {
+  if (includeChoiceOperation) {
     const beforeLength = operationIds.length
     pushRequiredTool({
       registry: params.registry,
@@ -102,8 +115,7 @@ export function resolveProjectAgentToolset(params: {
     }
   }
 
-  const workflowCapabilityOperationIds = resolveEditFirstWorkflowCapabilityOperationIds(params.workflow)
-  for (const operationId of workflowCapabilityOperationIds) {
+  for (const operationId of EDIT_FIRST_WORKFLOW_OPERATION_IDS) {
     const beforeLength = operationIds.length
     pushRequiredTool({
       registry: params.registry,
@@ -112,19 +124,6 @@ export function resolveProjectAgentToolset(params: {
     })
     if (operationIds.length > beforeLength) {
       workflowOperationIds.push(operationId)
-    }
-  }
-
-  const nextOperationId = params.workflow.nextAction?.operationId ?? null
-  if (nextOperationId) {
-    const beforeLength = operationIds.length
-    pushRequiredTool({
-      registry: params.registry,
-      operationIds,
-      operationId: nextOperationId,
-    })
-    if (operationIds.length > beforeLength) {
-      workflowOperationIds.push(nextOperationId)
     }
   }
 
@@ -155,7 +154,7 @@ export function resolveProjectAgentToolset(params: {
   }
 
   return {
-    source: 'deterministic-workflow',
+    source: 'live-workflow',
     operationIds,
     coreOperationIds,
     workflowOperationIds,
@@ -163,4 +162,39 @@ export function resolveProjectAgentToolset(params: {
     resumeOperationId,
     includeChoiceOperation,
   }
+}
+
+/**
+ * Operations whose availability does not depend on the live workflow state:
+ * read/UI core tools, the choice card (its registration already encodes the
+ * gating), and the run's resume/continuation operation — a restored approval
+ * or choice continuation must stay callable even if the workflow has moved
+ * past the stage that originally offered it.
+ */
+export function isProjectAgentOperationAlwaysEnabled(
+  toolset: ProjectAgentToolset,
+  operationId: string,
+): boolean {
+  return toolset.coreOperationIds.includes(operationId)
+    || operationId === toolset.continuationOperationId
+    || operationId === toolset.resumeOperationId
+    || operationId === EDIT_FIRST_CHOICE_OPERATION_ID
+}
+
+/**
+ * Live availability of one registered operation against the current workflow
+ * state. Evaluated once per model turn (via each tool's isEnabled), so the
+ * tool surface the model sees always reflects the project as it is now, not
+ * as it was when the run started.
+ */
+export function isProjectAgentOperationEnabled(params: {
+  toolset: ProjectAgentToolset
+  workflow: EditFirstWorkflowState
+  operationId: string
+}): boolean {
+  if (isProjectAgentOperationAlwaysEnabled(params.toolset, params.operationId)) return true
+  const enabledOperationIds = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
+  const nextOperationId = params.workflow.nextAction?.operationId ?? null
+  if (nextOperationId) enabledOperationIds.add(nextOperationId)
+  return enabledOperationIds.has(params.operationId)
 }
