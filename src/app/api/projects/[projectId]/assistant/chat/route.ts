@@ -27,7 +27,7 @@ import {
 import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
-  supersedePendingProjectAgentInterruptions,
+  declinePendingProjectAgentInterruptionsForUserTurn,
 } from '@/lib/project-agent/interruptions'
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
@@ -209,10 +209,10 @@ async function resolveProjectAgentControl(params: {
 
   if (!controlAction) {
     await supersedePendingRunsInScope(scope)
-    const supersededInterruptions = await supersedePendingProjectAgentInterruptions(scope)
+    const declinedInterruptions = await declinePendingProjectAgentInterruptionsForUserTurn(scope)
     return {
       kind: 'user_turn',
-      supersededInterruptions,
+      declinedInterruptions,
     }
   }
 

@@ -216,7 +216,7 @@ vi.mock('@/lib/project-agent/interruptions', () => ({
   createProjectAgentApprovalInterruption: vi.fn(async () => 'interruption-row-1'),
   clearProjectAgentInterruptionRunState: vi.fn(async () => undefined),
   reopenProjectAgentInterruption: vi.fn(async () => undefined),
-  supersedePendingProjectAgentInterruptions: vi.fn(async () => []),
+  declinePendingProjectAgentInterruptionsForUserTurn: vi.fn(async () => []),
 }))
 
 vi.mock('@/lib/project-agent/waits', () => ({
@@ -232,7 +232,7 @@ import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-fir
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
   kind: 'user_turn',
-  supersededInterruptions: [],
+  declinedInterruptions: [],
 }
 
 function buildRun(controlKind: ProjectAgentRunRecord['controlKind'] = 'user_turn'): ProjectAgentRunRecord {
@@ -530,6 +530,44 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.capturedEnabledToolNames).toContain('generate_episode_videos')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_storyboard_images')
+  })
+
+  it('projects a declined approval into the model input before the user message', async () => {
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun(),
+      control: {
+        kind: 'user_turn',
+        declinedInterruptions: [{
+          id: 'interruption-1',
+          approvalId: 'approval-1',
+          runId: 'run-previous',
+          type: 'approval',
+          operationId: 'generate_edit_script',
+        }],
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '先回答我一个问题' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(response.status).toBe(200)
+    const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
+    const noteIndex = runInputItems.findIndex((item) => (
+      item.role === 'user' && typeof item.content === 'string' && item.content.includes('[approval_declined]')
+    ))
+    const userIndex = runInputItems.findIndex((item) => (
+      item.role === 'user' && typeof item.content === 'string' && item.content.includes('先回答我一个问题')
+    ))
+    expect(noteIndex).toBeGreaterThanOrEqual(0)
+    expect(userIndex).toBeGreaterThanOrEqual(0)
+    expect(noteIndex).toBeLessThan(userIndex)
+    expect(runInputItems[noteIndex].content).toContain('operation=generate_edit_script')
   })
 
   it('injects the immediate workflow operation on the single assistant path', async () => {

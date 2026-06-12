@@ -12,6 +12,8 @@
     "statusReady": "Ready",
     "errorTitle": "Error",
     "errorHint": "Include the requestId for debugging, or retry the same instruction.",
+    "sendErrorBusy": "The assistant is still processing the previous action, so this message was not sent. Wait for it to finish and try again.",
+    "sendErrorGeneric": "Failed to send the message. Your input is kept — please retry.",
     "permissionModeLabel": "Permission",
     "permissionModeAsk": "Ask",
     "permissionModeAuto": "Auto",

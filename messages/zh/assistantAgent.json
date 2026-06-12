@@ -12,6 +12,8 @@
     "statusReady": "就绪",
     "errorTitle": "发生错误",
     "errorHint": "请附上 requestId 以便排查；你也可以直接重试一次相同指令。",
+    "sendErrorBusy": "助手正在处理上一个操作，这条消息没有发出去。请等当前处理完成后重试。",
+    "sendErrorGeneric": "消息发送失败，内容已保留，请重试。",
     "permissionModeLabel": "权限",
     "permissionModeAsk": "Ask",
     "permissionModeAuto": "Auto",

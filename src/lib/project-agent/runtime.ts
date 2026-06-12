@@ -54,8 +54,8 @@ import {
   clearProjectAgentInterruptionRunState,
   createProjectAgentApprovalInterruption,
   reopenProjectAgentInterruption,
+  type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
-  type SupersededProjectAgentInterruption,
 } from './interruptions'
 import {
   safelyUpdateProjectAgentRunStatus,
@@ -98,7 +98,7 @@ interface ProjectAgentAgentsRunContext {
 export type ProjectAgentResolvedControl =
   | {
     kind: 'user_turn'
-    supersededInterruptions: SupersededProjectAgentInterruption[]
+    declinedInterruptions: DeclinedProjectAgentInterruption[]
   }
   | {
     kind: 'approval'
@@ -187,6 +187,45 @@ function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
     }
   }
   return items
+}
+
+/**
+ * Projects a control fact into the model input. Control decisions live in
+ * interruption rows, never in message history — so when a pending approval is
+ * declined out-of-band (the user replied instead of answering the card), the
+ * fresh run must be told explicitly. This mirrors what state.reject() does for
+ * the card-deny path; without it the model would re-attempt the operation it
+ * just announced.
+ */
+function buildDeclinedApprovalsInputItem(
+  declined: DeclinedProjectAgentInterruption[],
+): AgentInputItem | null {
+  const declinedApprovals = declined.filter((item) => item.type === 'approval')
+  if (declinedApprovals.length === 0) return null
+  const lines = [
+    '[approval_declined]',
+    ...declinedApprovals.map((item) => `operation=${item.operationId}`),
+    'The user did not approve the pending operation approval(s) above and sent a new message instead. Treat the approval(s) as rejected: do not re-run or re-request these operations unless the user explicitly asks. Respond to the user message that follows.',
+  ]
+  return {
+    role: 'user',
+    content: lines.join('\n'),
+  } satisfies AgentInputItem
+}
+
+/**
+ * The declined-approval note must be read before the user's new message, so it
+ * is inserted right before the trailing user item.
+ */
+function withDeclinedApprovalsNote(
+  items: AgentInputItem[],
+  note: AgentInputItem | null,
+): AgentInputItem[] {
+  if (!note) return items
+  const lastItem = items[items.length - 1]
+  const isTrailingUserItem = !!lastItem && 'role' in lastItem && lastItem.role === 'user'
+  if (!isTrailingUserItem) return [...items, note]
+  return [...items.slice(0, items.length - 1), note, lastItem]
 }
 
 function buildTaskFollowUpInputItem(followUp: ProjectAgentWaitFollowUp): AgentInputItem {
@@ -470,7 +509,12 @@ export async function createProjectAgentChatResponse(input: {
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
     : [
-        ...toAgentInputItems(runtimeMessages),
+        ...(control.kind === 'user_turn'
+          ? withDeclinedApprovalsNote(
+              toAgentInputItems(runtimeMessages),
+              buildDeclinedApprovalsInputItem(control.declinedInterruptions),
+            )
+          : toAgentInputItems(runtimeMessages)),
         ...(control.kind === 'choice' ? control.continuation.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
       ]
@@ -523,12 +567,12 @@ export async function createProjectAgentChatResponse(input: {
     } satisfies ProjectAgentInterruptionResolvedPartData))
   }
   if (control.kind === 'user_turn') {
-    for (const superseded of control.supersededInterruptions) {
+    for (const declined of control.declinedInterruptions) {
       initialChunks.push(createDataChunk('data-agent-interruption-resolved', {
-        runId: superseded.runId,
-        interruptionId: superseded.id,
-        approvalId: superseded.approvalId,
-        outcome: 'superseded',
+        runId: declined.runId,
+        interruptionId: declined.id,
+        approvalId: declined.approvalId,
+        outcome: declined.type === 'approval' ? 'rejected' : 'superseded',
       } satisfies ProjectAgentInterruptionResolvedPartData))
     }
   }

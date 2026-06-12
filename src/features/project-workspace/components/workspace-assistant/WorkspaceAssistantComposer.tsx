@@ -32,6 +32,18 @@ function cx(...names: Array<string | false | null | undefined>) {
   return names.filter(Boolean).join(' ')
 }
 
+/**
+ * Maps raw send-failure payloads (API error JSON, transport errors) to a
+ * user-readable explanation. A failed send must be unmissable: the user's
+ * message bubble stays in the thread without a reply, so a silent or truncated
+ * error reads as "the assistant died".
+ */
+function resolveComposerErrorMessageKey(error: string): 'panel.sendErrorBusy' | 'panel.sendErrorGeneric' {
+  return error.includes('PROJECT_AGENT_RUN_ACTIVE')
+    ? 'panel.sendErrorBusy'
+    : 'panel.sendErrorGeneric'
+}
+
 export function WorkspaceAssistantComposer({
   value,
   error,
@@ -203,9 +215,13 @@ export function WorkspaceAssistantComposer({
         document.body,
       )}
       {error ? (
-        <p className="mt-1 min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
+        >
+          <p className="font-medium">{t(resolveComposerErrorMessageKey(error))}</p>
+          <p className="mt-0.5 break-all text-[11px] leading-4 opacity-75">{error}</p>
+        </div>
       ) : null}
     </div>
   )

@@ -28,7 +28,7 @@ const interruptionMock = vi.hoisted(() => ({
   consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
   consumeProjectAgentChoiceInterruption: vi.fn(async (): Promise<unknown> => null),
   getPendingProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
-  supersedePendingProjectAgentInterruptions: vi.fn(async (): Promise<unknown[]> => []),
+  declinePendingProjectAgentInterruptionsForUserTurn: vi.fn(async (): Promise<unknown[]> => []),
 }))
 
 const runMock = vi.hoisted(() => ({
@@ -217,9 +217,9 @@ describe('project assistant chat route', () => {
     })
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       runLock: { key: 'lock-key', token: 'lock-token' },
-      control: { kind: 'user_turn', supersededInterruptions: [] },
+      control: { kind: 'user_turn', declinedInterruptions: [] },
     }))
-    expect(interruptionMock.supersedePendingProjectAgentInterruptions).toHaveBeenCalledTimes(1)
+    expect(interruptionMock.declinePendingProjectAgentInterruptionsForUserTurn).toHaveBeenCalledTimes(1)
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a pending approval interruption via structured control', async () => {
@@ -269,8 +269,8 @@ describe('project assistant chat route', () => {
         interruption: expect.objectContaining({ id: 'interruption-1', runState: 'serialized-state' }),
       }),
     }))
-    // approval resume must not touch supersede or history inference
-    expect(interruptionMock.supersedePendingProjectAgentInterruptions).not.toHaveBeenCalled()
+    // approval resume must not touch the user-turn decline path or history inference
+    expect(interruptionMock.declinePendingProjectAgentInterruptionsForUserTurn).not.toHaveBeenCalled()
   })
 
   it('POST /api/projects/[projectId]/assistant/runs/[runId]/approval -> consumes approval through the run-scoped endpoint', async () => {

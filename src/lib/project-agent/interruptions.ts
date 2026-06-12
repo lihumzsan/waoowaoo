@@ -296,9 +296,11 @@ export async function reopenProjectAgentInterruption(interruptionId: string): Pr
 }
 
 /**
- * Marks every pending interruption in the scope as superseded. Called when the
- * user starts a fresh turn instead of answering: the old run is abandoned, so
- * its interruptions must never be resumable again. RunState is dropped.
+ * Marks every pending interruption in the scope as superseded. Internal
+ * replacement path: a newly created interruption displaces any older pending
+ * one (a scope has at most one pending interruption). For the user-message
+ * path use declinePendingProjectAgentInterruptionsForUserTurn, which records
+ * the rejection decision instead. RunState is dropped.
  */
 export interface SupersededProjectAgentInterruption {
   id: string
@@ -333,6 +335,82 @@ export async function supersedePendingProjectAgentInterruptions(
     },
   })
   return pending
+}
+
+export interface DeclinedProjectAgentInterruption {
+  id: string
+  approvalId: string
+  runId: string | null
+  type: ProjectAgentInterruptionType
+  operationId: string
+}
+
+/**
+ * Resolves every pending interruption in the scope when the user sends a
+ * fresh message instead of answering the card. Unified control semantics:
+ * any non-approve response to a pending approval is a rejection. Approvals
+ * are therefore consumed with {approved:false, via:'user_message'} so the
+ * decision stays an auditable control fact, and the caller projects it into
+ * the next run's model input. Choice interruptions carry no reject semantics
+ * and are superseded. RunState is dropped in both cases — the old run must
+ * never be resumable again.
+ */
+export async function declinePendingProjectAgentInterruptionsForUserTurn(
+  scope: ProjectAgentInterruptionScope,
+): Promise<DeclinedProjectAgentInterruption[]> {
+  const { assistantId, scopeRef } = buildScope(scope)
+  const pending = await prisma.projectAgentInterruption.findMany({
+    where: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId,
+      scopeRef,
+      status: 'pending',
+    },
+    select: { id: true, approvalId: true, runId: true, type: true, operationId: true },
+  })
+  if (pending.length === 0) return []
+
+  const resolvedAt = new Date()
+  const approvalIds = pending.filter((record) => record.type === 'approval').map((record) => record.id)
+  const nonApprovalIds = pending.filter((record) => record.type !== 'approval').map((record) => record.id)
+  if (approvalIds.length > 0) {
+    await prisma.projectAgentInterruption.updateMany({
+      where: {
+        id: { in: approvalIds },
+        status: 'pending',
+      },
+      data: {
+        status: 'consumed',
+        response: {
+          approved: false,
+          via: 'user_message',
+        },
+        runState: null,
+        consumedAt: resolvedAt,
+      },
+    })
+  }
+  if (nonApprovalIds.length > 0) {
+    await prisma.projectAgentInterruption.updateMany({
+      where: {
+        id: { in: nonApprovalIds },
+        status: 'pending',
+      },
+      data: {
+        status: 'superseded',
+        runState: null,
+        consumedAt: resolvedAt,
+      },
+    })
+  }
+  return pending.map((record) => ({
+    id: record.id,
+    approvalId: record.approvalId,
+    runId: record.runId,
+    type: record.type as ProjectAgentInterruptionType,
+    operationId: record.operationId,
+  }))
 }
 
 /**
