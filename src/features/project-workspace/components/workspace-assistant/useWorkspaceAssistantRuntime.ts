@@ -4,8 +4,11 @@ import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import {
+  DefaultChatTransport,
+  readUIMessageStream,
   type ChatStatus,
   type UIMessage,
+  type UIMessageChunk,
 } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -22,6 +25,12 @@ import {
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+
+class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
+  public toUIMessageChunkStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
+    return this.processResponseStream(stream)
+  }
+}
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -48,11 +57,14 @@ interface UseWorkspaceAssistantRuntimeResult {
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
   submitChoiceResponse: (params: {
+    runId: string
+    interruptionId: string | null
     choiceType: WorkspaceAssistantChoiceType
     toolCallId: string | null
     output: Record<string, unknown>
   }) => Promise<void>
   submitTaskFollowUp: (params: {
+    runId: string
     waitId: string
     claimId: string
   }) => Promise<void>
@@ -110,11 +122,13 @@ export function useWorkspaceAssistantRuntime({
     sendAutomaticallyWhen: shouldSendWorkspaceAssistantAutomatically,
   })
   const runtime = useAISDKRuntime(chat)
+  const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [controlPending, setControlPending] = useState(false)
 
   const replaceMessages = useCallback((messages: UIMessage[]) => {
     chat.setMessages(ensureUniqueUIMessages(messages))
@@ -144,53 +158,90 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages((current) => ensureUniqueUIMessages([...current, ...messages]))
   }, [chat])
 
+  const mergeStreamedAssistantMessage = useCallback((message: UIMessage) => {
+    chat.setMessages((current) => {
+      const index = current.findIndex((item) => item.id === message.id)
+      if (index >= 0) {
+        return ensureUniqueUIMessages([
+          ...current.slice(0, index),
+          message,
+          ...current.slice(index + 1),
+        ])
+      }
+      return ensureUniqueUIMessages([...current, message])
+    })
+  }, [chat])
+
+  const sendControlRequest = useCallback(async (params: {
+    runId: string
+    endpoint: 'approval' | 'choice' | 'task-follow-up'
+    payload: Record<string, unknown>
+  }) => {
+    chat.clearError()
+    setControlPending(true)
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/assistant/runs/${encodeURIComponent(params.runId)}/${params.endpoint}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            messages: chat.messages,
+            context: contextPayload,
+            assistantPermissionMode,
+            ...params.payload,
+          }),
+        },
+      )
+      if (!response.ok || !response.body) {
+        const errorText = await response.text().catch(() => '')
+        throw new Error(errorText || `PROJECT_AGENT_CONTROL_REQUEST_FAILED:${String(response.status)}`)
+      }
+      const chunkStream = controlTransport.toUIMessageChunkStream(response.body)
+      for await (const message of readUIMessageStream({
+        stream: chunkStream,
+        terminateOnError: true,
+      })) {
+        mergeStreamedAssistantMessage(message)
+      }
+    } finally {
+      setControlPending(false)
+    }
+  }, [assistantPermissionMode, chat, contextPayload, controlTransport, mergeStreamedAssistantMessage, projectId])
+
   const submitChoiceResponse = useCallback(async (params: {
+    runId: string
+    interruptionId: string | null
     choiceType: WorkspaceAssistantChoiceType
     toolCallId: string | null
     output: Record<string, unknown>
   }) => {
-    chat.clearError()
-    await chat.sendMessage({
-      text: '',
-      metadata: {
-        custom: {
-          workspaceAssistantHidden: true,
-        },
-      },
-    }, {
-      body: {
-        control: {
-          type: 'choice_response',
-          choiceType: params.choiceType,
-          toolCallId: params.toolCallId,
-          output: params.output,
-        },
+    await sendControlRequest({
+      runId: params.runId,
+      endpoint: 'choice',
+      payload: {
+        interruptionId: params.interruptionId,
+        choiceType: params.choiceType,
+        toolCallId: params.toolCallId,
+        output: params.output,
       },
     })
-  }, [chat])
+  }, [sendControlRequest])
 
   const submitTaskFollowUp = useCallback(async (params: {
+    runId: string
     waitId: string
     claimId: string
   }) => {
-    chat.clearError()
-    await chat.sendMessage({
-      text: '',
-      metadata: {
-        custom: {
-          workspaceAssistantHidden: true,
-        },
-      },
-    }, {
-      body: {
-        control: {
-          type: 'task_follow_up',
-          waitId: params.waitId,
-          claimId: params.claimId,
-        },
+    await sendControlRequest({
+      runId: params.runId,
+      endpoint: 'task-follow-up',
+      payload: {
+        waitId: params.waitId,
+        claimId: params.claimId,
       },
     })
-  }, [chat])
+  }, [sendControlRequest])
 
   const addToolApprovalResponse = useCallback(async (params: {
     approvalId: string
@@ -202,24 +253,16 @@ export function useWorkspaceAssistantRuntime({
     if (!interruption || interruption.approvalId !== params.approvalId) {
       throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
     }
-    await chat.sendMessage({
-      text: params.approved ? 'Tool approval accepted.' : 'Tool approval rejected.',
-      metadata: {
-        custom: {
-          workspaceAssistantHidden: true,
-        },
-      },
-    }, {
-      body: {
-        control: {
-          type: 'approval_response',
-          interruptionId: interruption.interruptionId,
-          approved: params.approved,
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
+    await sendControlRequest({
+      runId: interruption.runId,
+      endpoint: 'approval',
+      payload: {
+        interruptionId: interruption.interruptionId,
+        approved: params.approved,
+        ...(params.reason ? { reason: params.reason } : {}),
       },
     })
-  }, [chat])
+  }, [chat, sendControlRequest])
 
   useEffect(() => {
     if (assistantThread.isLoading) return
@@ -280,7 +323,7 @@ export function useWorkspaceAssistantRuntime({
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: chat.status === 'submitted' || chat.status === 'streaming',
+    pending: controlPending || chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: findPendingToolApprovalId(chat.messages),
     approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
     error: chat.error,

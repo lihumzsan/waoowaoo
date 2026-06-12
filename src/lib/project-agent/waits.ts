@@ -5,6 +5,7 @@ import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
+import { safelyUpdateProjectAgentRunStatus } from './runs'
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed'
@@ -18,7 +19,7 @@ export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed'
  * The mode is declared on the operation definition (agentFlow.onTaskComplete) and
  * recorded here when the wait is created.
  */
-export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'await_user_choice'
+export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'await_user_choice' | 'complete'
 
 interface ProjectAgentWaitScopeInput {
   projectId: string
@@ -28,6 +29,7 @@ interface ProjectAgentWaitScopeInput {
 }
 
 export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput {
+  runId: string
   operationId: string
   taskIds: string[]
   followUpMode: ProjectAgentWaitFollowUpMode
@@ -35,6 +37,7 @@ export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput 
 
 interface ProjectAgentWaitRow {
   id: string
+  runId: string | null
   projectId: string
   userId: string
   assistantId: string
@@ -62,6 +65,7 @@ export interface ProjectAgentWaitTaskSnapshot {
 }
 
 export interface ProjectAgentWaitFollowUp {
+  runId: string | null
   waitId: string
   followUpKey: string
   operationId: string
@@ -161,6 +165,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
   await prisma.$executeRaw`
     INSERT INTO project_agent_waits (
       id,
+      runId,
       projectId,
       userId,
       assistantId,
@@ -175,6 +180,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
     )
     VALUES (
       ${id},
+      ${input.runId},
       ${input.projectId},
       ${input.userId},
       ${assistantId},
@@ -190,6 +196,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
   `
   await resolveNewProjectAgentWaitFromCurrentTasks({
     waitId: id,
+    runId: input.runId,
     projectId: input.projectId,
     userId: input.userId,
     taskIds,
@@ -246,7 +253,10 @@ export function resolveWaitTerminalNextStatus(params: {
   followUpMode: string
   terminalStatus: ProjectAgentWaitTerminalStatus
 }): Extract<ProjectAgentWaitStatus, 'resolved' | 'followed'> {
-  if (params.followUpMode === 'await_user_choice' && params.terminalStatus === 'completed') {
+  if (
+    (params.followUpMode === 'await_user_choice' || params.followUpMode === 'complete')
+    && params.terminalStatus === 'completed'
+  ) {
     return 'followed'
   }
   return 'resolved'
@@ -254,6 +264,7 @@ export function resolveWaitTerminalNextStatus(params: {
 
 async function applyWaitTerminalStatus(input: {
   waitId: string
+  runId?: string | null
   followUpMode: string
   terminalStatus: ProjectAgentWaitTerminalStatus
   terminalTaskIds: string[]
@@ -276,10 +287,18 @@ async function applyWaitTerminalStatus(input: {
     WHERE id = ${input.waitId}
       AND status = 'pending'
   `
+  if (nextStatus === 'followed' && input.terminalStatus === 'completed') {
+    await safelyUpdateProjectAgentRunStatus({
+      runId: input.runId,
+      status: input.followUpMode === 'complete' ? 'completed' : 'awaiting_choice',
+      stopReason: input.followUpMode === 'complete' ? 'task_completed' : 'awaiting_user_choice',
+    })
+  }
 }
 
 async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
   waitId: string
+  runId?: string | null
   projectId: string
   userId: string
   taskIds: string[]
@@ -312,6 +331,7 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
 
   await applyWaitTerminalStatus({
     waitId: input.waitId,
+    runId: input.runId,
     followUpMode: input.followUpMode,
     terminalStatus: result.terminalStatus,
     terminalTaskIds: result.terminalTaskIds,
@@ -330,6 +350,7 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
     SELECT
       id,
+      runId,
       projectId,
       userId,
       assistantId,
@@ -379,6 +400,7 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
 
     await applyWaitTerminalStatus({
       waitId: row.id,
+      runId: row.runId,
       followUpMode: row.followUpMode,
       terminalStatus: result.terminalStatus,
       terminalTaskIds: result.terminalTaskIds,
@@ -418,6 +440,7 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>(Prisma.sql`
     SELECT
       id,
+      runId,
       projectId,
       userId,
       assistantId,
@@ -451,6 +474,7 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
     const taskIds = parseStringArray(row.taskIds)
     const failedTaskIds = parseStringArray(row.failedTaskIds)
     return [{
+      runId: row.runId,
       waitId: row.id,
       followUpKey: row.followUpKey,
       operationId: row.operationId,
@@ -512,6 +536,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
     SELECT
       id,
+      runId,
       projectId,
       userId,
       assistantId,
@@ -546,6 +571,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
     const taskIds = parseStringArray(row.taskIds)
     const failedTaskIds = parseStringArray(row.failedTaskIds)
     return [{
+      runId: row.runId,
       waitId: row.id,
       followUpKey: row.followUpKey,
       operationId: row.operationId,
@@ -566,6 +592,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
  * the claim does not match or the wait was already followed — exactly-once.
  */
 export async function consumeProjectAgentWaitFollowUp(input: {
+  runId: string
   waitId: string
   claimId: string
   projectId: string
@@ -577,6 +604,7 @@ export async function consumeProjectAgentWaitFollowUp(input: {
         followedAt = NOW(3),
         updatedAt = NOW(3)
     WHERE id = ${input.waitId}
+      AND runId = ${input.runId}
       AND projectId = ${input.projectId}
       AND userId = ${input.userId}
       AND status = 'claimed'
@@ -588,6 +616,7 @@ export async function consumeProjectAgentWaitFollowUp(input: {
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
     SELECT
       id,
+      runId,
       projectId,
       userId,
       assistantId,
@@ -617,6 +646,7 @@ export async function consumeProjectAgentWaitFollowUp(input: {
   const taskIds = parseStringArray(row.taskIds)
   const failedTaskIds = parseStringArray(row.failedTaskIds)
   return {
+    runId: row.runId,
     waitId: row.id,
     followUpKey: row.followUpKey,
     operationId: row.operationId,

@@ -84,13 +84,37 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_INVALID:${operationId}:${key}`)
       }
     }
-    const agentFlow = op.agentFlow as { onTaskComplete?: unknown } | undefined
+    const agentFlow = op.agentFlow as {
+      onTaskComplete?: unknown
+      onTaskFailed?: unknown
+      interruptsFor?: unknown
+    } | undefined
     if (agentFlow !== undefined) {
       if (!agentFlow || typeof agentFlow !== 'object' || Array.isArray(agentFlow)) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INVALID:${operationId}`)
       }
-      if (agentFlow.onTaskComplete !== 'resume_agent' && agentFlow.onTaskComplete !== 'await_user_choice') {
+      if (
+        agentFlow.onTaskComplete !== undefined
+        && agentFlow.onTaskComplete !== 'resume_agent'
+        && agentFlow.onTaskComplete !== 'await_user_choice'
+        && agentFlow.onTaskComplete !== 'complete'
+      ) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
+      }
+      if (
+        agentFlow.onTaskFailed !== undefined
+        && agentFlow.onTaskFailed !== 'resume_agent'
+        && agentFlow.onTaskFailed !== 'fail'
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_FAILED_INVALID:${operationId}`)
+      }
+      if (
+        agentFlow.interruptsFor !== undefined
+        && agentFlow.interruptsFor !== null
+        && agentFlow.interruptsFor !== 'approval'
+        && agentFlow.interruptsFor !== 'choice'
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INTERRUPTS_FOR_INVALID:${operationId}`)
       }
     }
     const confirmation = op.confirmation as { required?: unknown } | undefined
@@ -110,6 +134,21 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     })
     if (needsConfirm && channels.tool === true && confirmation.required !== true) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_MISMATCH:${operationId}`)
+    }
+    const toolInputSchema = op.toolInputSchema as { properties?: unknown; required?: unknown; additionalProperties?: unknown } | undefined
+    if (channels.tool === true) {
+      if (!toolInputSchema || typeof toolInputSchema !== 'object' || Array.isArray(toolInputSchema)) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_MISSING:${operationId}`)
+      }
+      if (!toolInputSchema.properties || typeof toolInputSchema.properties !== 'object' || Array.isArray(toolInputSchema.properties)) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_PROPERTIES_INVALID:${operationId}`)
+      }
+      if (!Array.isArray(toolInputSchema.required)) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_REQUIRED_INVALID:${operationId}`)
+      }
+      if (toolInputSchema.additionalProperties !== false) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_ADDITIONAL_PROPERTIES_INVALID:${operationId}`)
+      }
     }
   }
 }

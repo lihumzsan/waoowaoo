@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
-import { apiHandler, ApiError } from '@/lib/api-errors'
+import type { Prisma } from '@prisma/client'
+import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { createProjectAgentChatResponse } from '@/lib/project-agent'
@@ -25,11 +26,19 @@ import {
 } from '@/lib/project-agent/control'
 import {
   consumeProjectAgentApprovalInterruption,
+  consumeProjectAgentChoiceInterruption,
   supersedePendingProjectAgentInterruptions,
 } from '@/lib/project-agent/interruptions'
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import {
+  createProjectAgentRun,
+  getProjectAgentRun,
+  safelyUpdateProjectAgentRunStatus,
+  supersedePendingRunsInScope,
+  type ProjectAgentRunRecord,
+} from '@/lib/project-agent/runs'
 
 type RequestBody = {
   messages?: unknown
@@ -60,6 +69,7 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_REQUIRED'
       || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_INVALID'
       || error.message === 'PROJECT_AGENT_CONTROL_INVALID'
+      || error.message === 'PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED'
       || error.message === 'PROJECT_AGENT_CHOICE_RESPONSE_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
@@ -189,10 +199,12 @@ async function resolveProjectAgentControl(params: {
   controlAction: ProjectAgentControlAction | null
   scope: ProjectAgentControlScope
   messages: UIMessage[]
+  run: ProjectAgentRunRecord
 }): Promise<ProjectAgentResolvedControl> {
   const { controlAction, scope } = params
 
   if (!controlAction) {
+    await supersedePendingRunsInScope(scope)
     const supersededInterruptions = await supersedePendingProjectAgentInterruptions(scope)
     return {
       kind: 'user_turn',
@@ -203,6 +215,7 @@ async function resolveProjectAgentControl(params: {
   if (controlAction.type === 'approval_response') {
     const interruption = await consumeProjectAgentApprovalInterruption({
       ...scope,
+      runId: controlAction.runId,
       interruptionId: controlAction.interruptionId,
       response: {
         approved: controlAction.approved,
@@ -224,6 +237,20 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'choice_response') {
+    if (controlAction.interruptionId) {
+      const consumedChoice = await consumeProjectAgentChoiceInterruption({
+        ...scope,
+        runId: controlAction.runId,
+        interruptionId: controlAction.interruptionId,
+        response: controlAction.output as Prisma.InputJsonObject,
+      })
+      if (!consumedChoice) {
+        throw new ApiError('CONFLICT', {
+          code: 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
+          message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
+        })
+      }
+    }
     const continuation = resolveEditFirstChoiceContinuation({
       choiceType: controlAction.choiceType,
       toolCallId: controlAction.toolCallId,
@@ -235,6 +262,7 @@ async function resolveProjectAgentControl(params: {
     }
     return {
       kind: 'choice',
+      interruptionId: controlAction.interruptionId,
       choiceType: controlAction.choiceType,
       toolCallId: controlAction.toolCallId,
       continuation,
@@ -242,6 +270,7 @@ async function resolveProjectAgentControl(params: {
   }
 
   const followUp = await consumeProjectAgentWaitFollowUp({
+    runId: controlAction.runId,
     waitId: controlAction.waitId,
     claimId: controlAction.claimId,
     projectId: scope.projectId,
@@ -281,6 +310,36 @@ export const GET = apiHandler(async (
     throw mapProjectAgentError(error)
   }
 })
+
+async function resolveProjectAgentRunForRequest(params: {
+  request: NextRequest
+  controlAction: ProjectAgentControlAction | null
+  scope: ProjectAgentControlScope
+}): Promise<ProjectAgentRunRecord> {
+  if (!params.controlAction) {
+    return await createProjectAgentRun({
+      ...params.scope,
+      requestId: getRequestId(params.request) ?? crypto.randomUUID(),
+      controlKind: 'user_turn',
+    })
+  }
+  const run = await getProjectAgentRun({
+    ...params.scope,
+    runId: params.controlAction.runId,
+  })
+  if (!run) {
+    throw new ApiError('CONFLICT', {
+      code: 'PROJECT_AGENT_RUN_NOT_FOUND',
+      message: 'the agent run is not available for this control action',
+    })
+  }
+  await safelyUpdateProjectAgentRunStatus({
+    runId: run.id,
+    status: 'running',
+    stopReason: params.controlAction.type,
+  })
+  return run
+}
 
 export const PUT = apiHandler(async (
   request: NextRequest,
@@ -367,6 +426,9 @@ export const POST = apiHandler(async (
     const locale = readLocaleFromBody(body)
     const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
     const controlAction = parseProjectAgentControlAction(body.control)
+    if (controlAction && request.headers.get('x-project-agent-run-control') !== '1') {
+      throw new Error('PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED')
+    }
     const requestMessages = await validateThreadMessages(body.messages)
     const userId = authResult.session.user.id
     const episodeId = readEpisodeIdFromRequestBody(body)
@@ -391,11 +453,18 @@ export const POST = apiHandler(async (
         message: 'another assistant run is already active for this thread',
       })
     }
+    let run: ProjectAgentRunRecord | null = null
     try {
+      run = await resolveProjectAgentRunForRequest({
+        request,
+        controlAction,
+        scope,
+      })
       const control = await resolveProjectAgentControl({
         controlAction,
         scope,
         messages,
+        run,
       })
       return await createProjectAgentChatResponse({
         request,
@@ -404,11 +473,21 @@ export const POST = apiHandler(async (
         context: body.context,
         messages,
         assistantPermissionMode,
+        run,
         control,
         runLock,
       })
     } catch (error) {
       await safelyReleaseProjectAgentRunLock(runLock)
+      if (run) {
+        await safelyUpdateProjectAgentRunStatus({
+          runId: run.id,
+          status: 'failed',
+          stopReason: 'control_resolution_failed',
+          errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        })
+      }
       throw error
     }
   } catch (error) {

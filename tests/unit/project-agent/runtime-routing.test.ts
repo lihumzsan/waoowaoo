@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowOperationId, EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type { ProjectAgentRunRecord } from '@/lib/project-agent/runs'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 const streamState = vi.hoisted(() => ({
@@ -19,6 +20,10 @@ const registryState = vi.hoisted(() => ({
 
 const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
+}))
+
+const runState = vi.hoisted(() => ({
+  safelyUpdateProjectAgentRunStatus: vi.fn(async () => undefined),
 }))
 
 const phaseState = vi.hoisted(() => ({
@@ -208,12 +213,30 @@ vi.mock('@/lib/project-agent/waits', () => ({
   createProjectAgentWait: vi.fn(async () => 'wait-1'),
 }))
 
+vi.mock('@/lib/project-agent/runs', () => ({
+  safelyUpdateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
+}))
+
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
   kind: 'user_turn',
   supersededInterruptions: [],
+}
+
+function buildRun(controlKind: ProjectAgentRunRecord['controlKind'] = 'user_turn'): ProjectAgentRunRecord {
+  return {
+    id: `run-${controlKind}`,
+    projectId: 'project-1',
+    userId: 'user-1',
+    assistantId: 'workspace-command',
+    scopeRef: 'episode:episode-1',
+    episodeId: 'episode-1',
+    requestId: 'request-1',
+    status: 'running',
+    controlKind,
+  }
 }
 
 function buildRequest(): NextRequest {
@@ -313,6 +336,7 @@ async function runAssistant(params: {
     projectId: 'project-1',
     context: params.context ?? { episodeId: 'episode-1' },
     assistantPermissionMode: params.assistantPermissionMode ?? 'ask',
+    run: buildRun(),
     control: USER_TURN_CONTROL,
     messages: [
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: params.text ?? '民俗恐怖片' }] },
@@ -330,6 +354,7 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedSystem = ''
     streamState.capturedModelSettings = {}
     loggerState.info.mockReset()
+    runState.safelyUpdateProjectAgentRunStatus.mockClear()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
   })
@@ -347,6 +372,10 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-user_turn',
+      status: 'completed',
+    }))
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.toolset.resolved',
       details: expect.objectContaining({
@@ -376,8 +405,10 @@ describe('project agent runtime deterministic tool injection', () => {
       projectId: 'project-1',
       context: { episodeId: 'episode-1' },
       assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
       control: {
         kind: 'choice',
+        interruptionId: 'choice-interruption-1',
         choiceType: 'duration_and_aspect_ratio',
         toolCallId: 'tool-choice-1',
         continuation: continuation!,
@@ -408,10 +439,12 @@ describe('project agent runtime deterministic tool injection', () => {
       projectId: 'project-1',
       context: { episodeId: 'episode-1' },
       assistantPermissionMode: 'ask',
+      run: buildRun('approval_response'),
       control: {
         kind: 'approval',
         interruption: {
           id: 'interruption-1',
+          runId: 'run-approval_response',
           type: 'approval',
           status: 'consumed',
           operationId: 'generate_edit_screenplay',

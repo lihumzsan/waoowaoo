@@ -21,6 +21,7 @@ import {
 import type {
   EditFirstChoiceType,
 } from '@/lib/project-agent/choice-card'
+import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
@@ -364,6 +365,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         }))
         writeOperationDataPart<EditStylePreviewGenerationPartData>(ctx.writer, 'data-edit-style-preview-generation', {
           operationId: 'generate_edit_style_previews',
+          agentRunId: ctx.context.runId ?? null,
           projectId: result.projectId,
           episodeId: result.episodeId,
           screenplayId: result.screenplayId,
@@ -400,6 +402,10 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         })
         const choiceType: EditFirstChoiceType = input.choiceType
         const locale = resolveLocale(ctx.context.locale)
+        const runId = ctx.context.runId?.trim()
+        if (!runId) {
+          throw new Error('REQUEST_EDIT_FIRST_CHOICE_RUN_ID_REQUIRED')
+        }
         const card = await buildEditFirstAssistantChoiceCard({
           projectId: ctx.projectId,
           userId: ctx.userId,
@@ -409,7 +415,24 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           choiceType,
           toolCallId,
         })
-        writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', card)
+        const interruptionId = await createProjectAgentChoiceInterruption({
+          runId,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          assistantId: 'workspace-command',
+          operationId: 'request_edit_first_choice',
+          toolCallId,
+          payload: {
+            choiceType,
+            cardId: card.cardId,
+          },
+        })
+        writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', {
+          ...card,
+          runId,
+          interruptionId,
+        })
         return requestEditFirstChoiceOutputSchema.parse({
           emitted: true,
           choiceType,

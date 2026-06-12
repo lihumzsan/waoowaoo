@@ -3,9 +3,11 @@ import type {
   OperationConfirmation,
   OperationGroupPath,
   OperationPrerequisites,
+  ProjectAgentToolInputSchema,
   ProjectAgentOperationRegistry,
   ProjectAgentOperationRegistryDraft,
 } from './types'
+import { createProjectAgentToolInputSchema } from './tool-input-schema'
 
 export interface OperationPackDefaults {
   groupPath: OperationGroupPath
@@ -59,6 +61,15 @@ function mergeConfirmation(
     required: base.required === true,
     summary: base.summary ?? null,
     budget: base.budget ?? null,
+  }
+}
+
+function createEmptyToolInputSchema(): ProjectAgentToolInputSchema {
+  return {
+    type: 'object',
+    properties: {},
+    required: [],
+    additionalProperties: false,
   }
 }
 
@@ -116,13 +127,21 @@ export function withOperationPack(
       groupPath,
       defaultsGroupPath: normalizedDefaults.groupPath,
     })
+    const channels = normalizeChannels(operation.channels ?? normalizedDefaults.channels)
     out[operationId] = {
       ...operation,
       summary: normalizeOperationSummary(operation),
       groupPath,
-      channels: normalizeChannels(operation.channels ?? normalizedDefaults.channels),
+      channels,
       prerequisites: mergePrerequisites(operation, normalizedDefaults),
       confirmation: mergeConfirmation(operation, normalizedDefaults),
+      toolInputSchema: channels.tool
+        ? createProjectAgentToolInputSchema({
+            operationId,
+            inputSchema: operation.inputSchema,
+            explicitToolInputSchema: operation.toolInputSchema,
+          })
+        : createEmptyToolInputSchema(),
     }
   }
   return out

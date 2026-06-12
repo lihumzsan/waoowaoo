@@ -162,6 +162,14 @@ vi.mock('@/lib/project-agent/choice-card', () => ({
   buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
 }))
 
+const interruptionMock = vi.hoisted(() => ({
+  createProjectAgentChoiceInterruption: vi.fn(async () => 'choice-interruption-1'),
+}))
+
+vi.mock('@/lib/project-agent/interruptions', () => ({
+  createProjectAgentChoiceInterruption: interruptionMock.createProjectAgentChoiceInterruption,
+}))
+
 const workflowMock = vi.hoisted(() => ({
   resolveEditFirstWorkflowState: vi.fn(async () => ({
     active: true,
@@ -188,6 +196,7 @@ function buildContext(writer: UIMessageStreamWriter<UIMessage> | null = null): P
     context: {
       locale: 'zh',
       episodeId: 'episode-1',
+      runId: 'run-1',
     },
     writer,
     toolCallId: 'tool-call-choice',
@@ -385,12 +394,23 @@ describe('edit-script operations', () => {
       choiceType: 'duration_and_aspect_ratio',
       toolCallId: 'tool-call-choice',
     }))
+    expect(interruptionMock.createProjectAgentChoiceInterruption).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+      operationId: 'request_edit_first_choice',
+      toolCallId: 'tool-call-choice',
+      payload: {
+        choiceType: 'duration_and_aspect_ratio',
+        cardId: 'edit-first-duration-aspect-ratio',
+      },
+    }))
     expect(writerEvents).toEqual([
       expect.objectContaining({
         type: 'data-assistant-choice-card',
         data: expect.objectContaining({
           cardId: 'edit-first-duration-aspect-ratio',
           toolCallId: 'tool-call-choice',
+          runId: 'run-1',
+          interruptionId: 'choice-interruption-1',
         }),
       }),
     ])

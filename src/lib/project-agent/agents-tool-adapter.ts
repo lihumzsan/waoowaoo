@@ -22,6 +22,19 @@ function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function normalizeToolInputForExecution(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeToolInputForExecution)
+  }
+  if (!isRecord(value)) return value
+  const out: UnknownObject = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (child === null) continue
+    out[key] = normalizeToolInputForExecution(child)
+  }
+  return out
+}
+
 function injectConfirmedInput(input: unknown, requiresApproval: boolean): unknown {
   if (!requiresApproval || isConfirmedOperationInput(input)) return input
   if (isRecord(input)) {
@@ -68,7 +81,7 @@ export function createProjectAgentOperationTool(
   return tool({
     name: params.operation.id,
     description: params.description,
-    parameters: params.operation.inputSchema as never,
+    parameters: params.operation.toolInputSchema as never,
     strict: true,
     ...(requiresApproval ? { needsApproval: true } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => (
@@ -81,7 +94,7 @@ export function createProjectAgentOperationTool(
         assistantPermissionMode: params.assistantPermissionMode,
         source: 'assistant-panel',
         writer: params.writer,
-        input: injectConfirmedInput(toolInput, requiresApproval),
+        input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
         toolCallId: readToolCallId(details),
       })
     ),

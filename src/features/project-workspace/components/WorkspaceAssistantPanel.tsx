@@ -56,6 +56,7 @@ import {
 } from '@/lib/project-agent/permission-mode'
 
 interface ProjectAgentWaitFollowUp {
+  runId: string | null
   waitId: string
   followUpKey: string
   operationId: string
@@ -171,7 +172,7 @@ export default function WorkspaceAssistantPanel({
   })
   const assistantRuntimeRef = useRef(assistantRuntime)
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
-  const queuedTaskFollowUpsRef = useRef<Array<{ waitId: string; claimId: string }>>([])
+  const queuedTaskFollowUpsRef = useRef<Array<{ runId: string; waitId: string; claimId: string }>>([])
   const [dismissedChoiceCardKeys, setDismissedChoiceCardKeys] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     assistantRuntimeRef.current = assistantRuntime
@@ -207,7 +208,7 @@ export default function WorkspaceAssistantPanel({
   // Claimed follow-ups are consumed exactly once by the chat endpoint
   // (task_follow_up control). If sending fails, the claim simply expires
   // server-side and the wait becomes claimable again — no local bookkeeping.
-  const sendTaskFollowUp = useCallback(async (followUp: { waitId: string; claimId: string }) => {
+  const sendTaskFollowUp = useCallback(async (followUp: { runId: string; waitId: string; claimId: string }) => {
     const runtime = assistantRuntimeRef.current
     if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) {
       queuedTaskFollowUpsRef.current = [...queuedTaskFollowUpsRef.current, followUp]
@@ -241,7 +242,9 @@ export default function WorkspaceAssistantPanel({
       if (episodeId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
       }
+      if (!followUp.runId) continue
       await sendTaskFollowUp({
+        runId: followUp.runId,
         waitId: followUp.waitId,
         claimId: followUp.claimId,
       })
@@ -320,21 +323,28 @@ export default function WorkspaceAssistantPanel({
     }
   }
   const handleSubmitChoiceResponse = async (params: {
+    runId: string
+    interruptionId: string | null
     choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
     toolCallId: string | null
     output: Record<string, unknown>
   }) => {
     await assistantRuntime.submitChoiceResponse({
+      runId: params.runId,
+      interruptionId: params.interruptionId,
       choiceType: params.choiceType,
       toolCallId: params.toolCallId,
       output: params.output,
     })
   }
   const handleStylePreviewSelected = useCallback(async (params: {
+    runId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => {
     await assistantRuntimeRef.current.submitChoiceResponse({
+      runId: params.runId,
+      interruptionId: null,
       choiceType: 'style',
       toolCallId: null,
       output: {

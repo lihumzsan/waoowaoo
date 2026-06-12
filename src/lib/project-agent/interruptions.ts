@@ -4,7 +4,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 
-export type ProjectAgentInterruptionType = 'approval'
+export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
 export type ProjectAgentInterruptionStatus = 'pending' | 'consumed' | 'superseded'
 
 export interface ProjectAgentInterruptionScope {
@@ -16,12 +16,23 @@ export interface ProjectAgentInterruptionScope {
 
 export interface ProjectAgentApprovalInterruptionRecord {
   id: string
+  runId: string | null
   type: ProjectAgentInterruptionType
   status: ProjectAgentInterruptionStatus
   operationId: string
   approvalId: string
   toolCallId: string | null
   runState: string
+}
+
+export interface ProjectAgentChoiceInterruptionRecord {
+  id: string
+  runId: string | null
+  type: 'choice'
+  status: ProjectAgentInterruptionStatus
+  operationId: string
+  toolCallId: string | null
+  payload: Prisma.JsonValue
 }
 
 const projectAgentInterruptionLogger = createScopedLogger({
@@ -48,6 +59,7 @@ function buildScope(scope: ProjectAgentInterruptionScope): {
  * The serialized RunState stays server-side; clients only ever see the id.
  */
 export async function createProjectAgentApprovalInterruption(params: ProjectAgentInterruptionScope & {
+  runId: string
   operationId: string
   approvalId: string
   toolCallId: string | null
@@ -67,6 +79,7 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
   }
   const record = await prisma.projectAgentInterruption.create({
     data: {
+      runId: params.runId,
       projectId: params.projectId,
       userId: params.userId,
       assistantId,
@@ -85,12 +98,51 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
   return record.id
 }
 
+export async function createProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
+  runId: string
+  operationId: string
+  toolCallId: string | null
+  payload: Prisma.InputJsonValue
+}): Promise<string> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const superseded = await supersedePendingProjectAgentInterruptions(params)
+  if (superseded.length > 0) {
+    projectAgentInterruptionLogger.warn({
+      action: 'assistant.choice-interruption.superseded-by-new',
+      message: 'Pending project agent interruptions superseded by a new choice interruption',
+      projectId: params.projectId,
+      userId: params.userId,
+      details: { supersededIds: superseded.map((record) => record.id) },
+    })
+  }
+  const record = await prisma.projectAgentInterruption.create({
+    data: {
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      episodeId: params.episodeId ?? null,
+      type: 'choice',
+      status: 'pending',
+      operationId: params.operationId,
+      approvalId: `choice:${crypto.randomUUID()}`,
+      toolCallId: params.toolCallId,
+      payload: params.payload,
+      runState: null,
+    },
+    select: { id: true },
+  })
+  return record.id
+}
+
 /**
  * Atomically consumes a pending approval interruption (pending -> consumed).
  * Returns null when the interruption is missing, already consumed, superseded,
  * or out of scope — callers must treat that as a protocol conflict, never guess.
  */
 export async function consumeProjectAgentApprovalInterruption(params: ProjectAgentInterruptionScope & {
+  runId: string
   interruptionId: string
   response: Prisma.InputJsonValue
 }): Promise<ProjectAgentApprovalInterruptionRecord | null> {
@@ -98,6 +150,7 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
   const record = await prisma.projectAgentInterruption.findFirst({
     where: {
       id: params.interruptionId,
+      runId: params.runId,
       projectId: params.projectId,
       userId: params.userId,
       assistantId,
@@ -122,12 +175,57 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
 
   return {
     id: record.id,
+    runId: record.runId,
     type: 'approval',
     status: 'consumed',
     operationId: record.operationId,
     approvalId: record.approvalId,
     toolCallId: record.toolCallId,
     runState: record.runState,
+  }
+}
+
+export async function consumeProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
+  runId: string
+  interruptionId: string
+  response: Prisma.InputJsonValue
+}): Promise<ProjectAgentChoiceInterruptionRecord | null> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const record = await prisma.projectAgentInterruption.findFirst({
+    where: {
+      id: params.interruptionId,
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      type: 'choice',
+    },
+  })
+  if (!record || record.status !== 'pending') return null
+
+  const consumed = await prisma.projectAgentInterruption.updateMany({
+    where: {
+      id: record.id,
+      runId: params.runId,
+      status: 'pending',
+    },
+    data: {
+      status: 'consumed',
+      response: params.response,
+      consumedAt: new Date(),
+    },
+  })
+  if (consumed.count !== 1) return null
+
+  return {
+    id: record.id,
+    runId: record.runId,
+    type: 'choice',
+    status: 'consumed',
+    operationId: record.operationId,
+    toolCallId: record.toolCallId,
+    payload: record.payload,
   }
 }
 
@@ -168,6 +266,7 @@ export async function reopenProjectAgentInterruption(interruptionId: string): Pr
 export interface SupersededProjectAgentInterruption {
   id: string
   approvalId: string
+  runId: string | null
 }
 
 export async function supersedePendingProjectAgentInterruptions(
@@ -182,7 +281,7 @@ export async function supersedePendingProjectAgentInterruptions(
       scopeRef,
       status: 'pending',
     },
-    select: { id: true, approvalId: true },
+    select: { id: true, approvalId: true, runId: true },
   })
   if (pending.length === 0) return []
   await prisma.projectAgentInterruption.updateMany({

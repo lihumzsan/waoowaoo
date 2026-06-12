@@ -27,6 +27,7 @@ import type {
   ProjectAgentContext,
   ProjectAgentInterruptionPartData,
   ProjectAgentInterruptionResolvedPartData,
+  ProjectAgentRunPartData,
   ProjectAgentStopPartData,
 } from './types'
 import {
@@ -56,6 +57,10 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
   type SupersededProjectAgentInterruption,
 } from './interruptions'
+import {
+  safelyUpdateProjectAgentRunStatus,
+  type ProjectAgentRunRecord,
+} from './runs'
 import { resolveProjectAgentToolset } from './toolset'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
@@ -95,6 +100,7 @@ export type ProjectAgentResolvedControl =
   }
   | {
     kind: 'choice'
+    interruptionId: string | null
     choiceType: EditFirstChoiceType
     toolCallId: string | null
     continuation: EditFirstChoiceContinuation
@@ -249,6 +255,10 @@ function resolveWaitFollowUpModeForOperations(
   operationIds: string[],
 ): ProjectAgentWaitFollowUpMode {
   if (operationIds.length === 0) return 'resume_agent'
+  const allComplete = operationIds.every((operationId) => (
+    registry[operationId]?.agentFlow?.onTaskComplete === 'complete'
+  ))
+  if (allComplete) return 'complete'
   const allAwaitUserChoice = operationIds.every((operationId) => (
     registry[operationId]?.agentFlow?.onTaskComplete === 'await_user_choice'
   ))
@@ -258,22 +268,26 @@ function resolveWaitFollowUpModeForOperations(
 async function maybeCreateProjectAgentWait(params: {
   stopPart: ProjectAgentStopPartData | null
   registry: ProjectAgentOperationRegistry
+  runId: string
   projectId: string
   userId: string
   episodeId: string | null
-}) {
+}): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
-    return
+    return null
   }
+  const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, params.stopPart.operationIds)
   await createProjectAgentWait({
+    runId: params.runId,
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.episodeId,
     assistantId: 'workspace-command',
     operationId: params.stopPart.operationIds.join(','),
     taskIds: params.stopPart.taskIds,
-    followUpMode: resolveWaitFollowUpModeForOperations(params.registry, params.stopPart.operationIds),
+    followUpMode,
   })
+  return followUpMode
 }
 
 function buildRunContext(params: {
@@ -297,6 +311,7 @@ export async function createProjectAgentChatResponse(input: {
   context: unknown
   messages: unknown
   assistantPermissionMode: AssistantPermissionMode
+  run: ProjectAgentRunRecord
   control: ProjectAgentResolvedControl
   runLock?: ProjectAgentRunLock | null
 }): Promise<Response> {
@@ -320,6 +335,7 @@ export async function createProjectAgentChatResponse(input: {
   const contextBase = normalizeProjectAgentContext(input.context)
   const context: ProjectAgentContext = {
     ...contextBase,
+    runId: input.run.id,
   }
   const phase = await resolveProjectPhase({
     projectId: input.projectId,
@@ -381,6 +397,13 @@ export async function createProjectAgentChatResponse(input: {
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [
+    createDataChunk('data-agent-run', {
+      runId: input.run.id,
+      requestId,
+      status: 'running',
+      controlKind: input.run.controlKind,
+      stopReason: null,
+    } satisfies ProjectAgentRunPartData),
     createDataChunk('data-agent-runtime-context', {
       runtime: 'openai-agents-sdk',
       requestId,
@@ -413,6 +436,7 @@ export async function createProjectAgentChatResponse(input: {
 
   if (control.kind === 'approval') {
     initialChunks.push(createDataChunk('data-agent-interruption-resolved', {
+      runId: input.run.id,
       interruptionId: control.interruption.id,
       approvalId: control.interruption.approvalId,
       outcome: control.approved ? 'approved' : 'rejected',
@@ -421,6 +445,7 @@ export async function createProjectAgentChatResponse(input: {
   if (control.kind === 'user_turn') {
     for (const superseded of control.supersededInterruptions) {
       initialChunks.push(createDataChunk('data-agent-interruption-resolved', {
+        runId: superseded.runId,
         interruptionId: superseded.id,
         approvalId: superseded.approvalId,
         outcome: 'superseded',
@@ -429,6 +454,8 @@ export async function createProjectAgentChatResponse(input: {
   }
   if (control.kind === 'choice') {
     initialChunks.push(createDataChunk('data-assistant-choice-resolved', {
+      runId: input.run.id,
+      interruptionId: control.interruptionId,
       choiceType: control.choiceType,
       toolCallId: control.toolCallId,
     } satisfies ProjectAgentChoiceResolvedPartData))
@@ -577,6 +604,7 @@ export async function createProjectAgentChatResponse(input: {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
           const interruptionId = await createProjectAgentApprovalInterruption({
+            runId: input.run.id,
             projectId: input.projectId,
             userId: input.userId,
             episodeId: context.episodeId || null,
@@ -587,6 +615,7 @@ export async function createProjectAgentChatResponse(input: {
             runState: result.state.toString(),
           })
           chunks.push(createDataChunk('data-agent-interruption', {
+            runId: input.run.id,
             requestId,
             interruptionId,
             approvalId,
@@ -597,15 +626,21 @@ export async function createProjectAgentChatResponse(input: {
               description: toolDescriptions.get(operationId) ?? operationId,
             },
           } satisfies ProjectAgentInterruptionPartData))
+          await safelyUpdateProjectAgentRunStatus({
+            runId: input.run.id,
+            status: 'awaiting_approval',
+            stopReason: 'awaiting_approval',
+          })
         }
 
         if (approvalInterruption) {
           await clearProjectAgentInterruptionRunState(approvalInterruption.id)
         }
 
-        await maybeCreateProjectAgentWait({
+        const waitFollowUpMode = await maybeCreateProjectAgentWait({
           stopPart: latestStopPart,
           registry: operations,
+          runId: input.run.id,
           projectId: input.projectId,
           userId: input.userId,
           episodeId: context.episodeId || null,
@@ -615,7 +650,43 @@ export async function createProjectAgentChatResponse(input: {
         }
 
         if (completionError && !approvalItem) {
+          await safelyUpdateProjectAgentRunStatus({
+            runId: input.run.id,
+            status: 'failed',
+            stopReason: 'completion_error',
+            errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
+            errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
+          })
           throw completionError
+        }
+        if (!approvalItem) {
+          if (latestStopPart?.reason === 'awaiting_external_task') {
+            await safelyUpdateProjectAgentRunStatus({
+              runId: input.run.id,
+              status: 'awaiting_task',
+              stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
+            })
+          } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
+            await safelyUpdateProjectAgentRunStatus({
+              runId: input.run.id,
+              status: 'awaiting_choice',
+              stopReason: 'awaiting_user_choice',
+            })
+          } else if (latestStopPart?.reason === 'tool_error') {
+            await safelyUpdateProjectAgentRunStatus({
+              runId: input.run.id,
+              status: 'failed',
+              stopReason: 'tool_error',
+              errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
+              errorMessage: latestStopPart.operationIds.join(','),
+            })
+          } else {
+            await safelyUpdateProjectAgentRunStatus({
+              runId: input.run.id,
+              status: 'completed',
+              stopReason: 'completed',
+            })
+          }
         }
         return chunks
       },
@@ -626,6 +697,13 @@ export async function createProjectAgentChatResponse(input: {
     return response
   } catch (error) {
     await releaseRunLockOnce()
+    await safelyUpdateProjectAgentRunStatus({
+      runId: input.run.id,
+      status: 'failed',
+      stopReason: 'run_failed',
+      errorCode: 'PROJECT_AGENT_RUN_FAILED',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    })
     if (approvalInterruption) {
       await reopenProjectAgentInterruption(approvalInterruption.id)
     }

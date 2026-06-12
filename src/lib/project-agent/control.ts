@@ -9,18 +9,22 @@ type UnknownRecord = Record<string, unknown>
 export type ProjectAgentControlAction =
   | {
     type: 'approval_response'
+    runId: string
     interruptionId: string
     approved: boolean
     reason: string | null
   }
   | {
     type: 'choice_response'
+    runId: string
+    interruptionId: string | null
     choiceType: EditFirstChoiceType
     toolCallId: string | null
     output: UnknownRecord
   }
   | {
     type: 'task_follow_up'
+    runId: string
     waitId: string
     claimId: string
   }
@@ -46,12 +50,14 @@ export function parseProjectAgentControlAction(value: unknown): ProjectAgentCont
   }
 
   if (value.type === 'approval_response') {
+    const runId = readNonEmptyString(value.runId)
     const interruptionId = readNonEmptyString(value.interruptionId)
-    if (!interruptionId || typeof value.approved !== 'boolean') {
+    if (!runId || !interruptionId || typeof value.approved !== 'boolean') {
       throw new Error('PROJECT_AGENT_CONTROL_INVALID')
     }
     return {
       type: 'approval_response',
+      runId,
       interruptionId,
       approved: value.approved,
       reason: readNonEmptyString(value.reason),
@@ -59,11 +65,15 @@ export function parseProjectAgentControlAction(value: unknown): ProjectAgentCont
   }
 
   if (value.type === 'choice_response') {
-    if (!isEditFirstChoiceType(value.choiceType) || !isRecord(value.output)) {
+    const runId = readNonEmptyString(value.runId)
+    const interruptionId = readNonEmptyString(value.interruptionId)
+    if (!runId || !isEditFirstChoiceType(value.choiceType) || !isRecord(value.output)) {
       throw new Error('PROJECT_AGENT_CONTROL_INVALID')
     }
     return {
       type: 'choice_response',
+      runId,
+      interruptionId,
       choiceType: value.choiceType,
       toolCallId: readNonEmptyString(value.toolCallId),
       output: value.output,
@@ -71,13 +81,15 @@ export function parseProjectAgentControlAction(value: unknown): ProjectAgentCont
   }
 
   if (value.type === 'task_follow_up') {
+    const runId = readNonEmptyString(value.runId)
     const waitId = readNonEmptyString(value.waitId)
     const claimId = readNonEmptyString(value.claimId)
-    if (!waitId || !claimId) {
+    if (!runId || !waitId || !claimId) {
       throw new Error('PROJECT_AGENT_CONTROL_INVALID')
     }
     return {
       type: 'task_follow_up',
+      runId,
       waitId,
       claimId,
     }

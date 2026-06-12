@@ -16,10 +16,19 @@ export type ProjectAssistantId = 'workspace-command'
 export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
+  runId?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null
   selectedAssetId?: string | null
+}
+
+export interface ProjectAgentRunPartData {
+  runId: string
+  requestId: string
+  status: 'running' | 'awaiting_approval' | 'awaiting_choice' | 'awaiting_task' | 'completed' | 'failed' | 'cancelled'
+  controlKind: 'user_turn' | 'approval_response' | 'choice_response' | 'task_follow_up'
+  stopReason?: string | null
 }
 
 export interface ProjectContextPartData {
@@ -52,6 +61,7 @@ export type ProjectAgentStopPartData =
   }
 
 export interface ProjectAgentInterruptionPartData {
+  runId: string
   requestId: string
   interruptionId: string
   approvalId: string
@@ -66,12 +76,15 @@ export interface ProjectAgentInterruptionPartData {
 export type ProjectAgentInterruptionOutcome = 'approved' | 'rejected' | 'superseded'
 
 export interface ProjectAgentInterruptionResolvedPartData {
+  runId?: string | null
   interruptionId: string
   approvalId: string
   outcome: ProjectAgentInterruptionOutcome
 }
 
 export interface ProjectAgentChoiceResolvedPartData {
+  runId?: string | null
+  interruptionId?: string | null
   choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
   toolCallId?: string | null
   cardId?: string | null
@@ -169,6 +182,8 @@ export interface ProjectAgentChoiceCardGroup {
 
 export interface ProjectAgentChoiceCardPartData {
   cardId: string
+  runId?: string | null
+  interruptionId?: string | null
   toolCallId: string
   choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
   variant?: ProjectAgentChoiceCardVariant
@@ -210,6 +225,7 @@ export interface TaskBatchSubmittedPartData {
 
 export interface EditStylePreviewGenerationPartData {
   operationId: 'generate_edit_style_previews'
+  agentRunId?: string | null
   projectId: string
   episodeId: string
   screenplayId: string
@@ -258,6 +274,7 @@ export interface ProjectAssistantThreadSnapshot {
 
 export type WorkspaceAssistantPartType =
   | 'data-agent-debug'
+  | 'data-agent-run'
   | 'data-agent-interruption'
   | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'

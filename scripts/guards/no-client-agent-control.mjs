@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 // Agent continuation control (approval / choice / task follow-up) must travel
-// through the structured chat `control` body and server-side interruption/wait
-// rows. The client never encodes control state into message metadata and never
-// decides continuation semantics. These terms are the legacy metadata-control
-// protocol surface; they must not reappear in client code.
+// through run-scoped endpoints and server-side interruption/wait rows. The
+// client never encodes control state into message metadata and never decides
+// continuation semantics. These terms are the legacy metadata-control protocol
+// surface; they must not reappear in client code.
 
 const roots = [
   'src/features',

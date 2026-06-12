@@ -25,6 +25,14 @@ describe('project agent Agents SDK runtime guard', () => {
     expect(route).not.toContain('addToolApprovalResponse')
   })
 
+  it('uses the public model-facing tool schema in the Agents SDK adapter', () => {
+    const adapter = readSource('src/lib/project-agent/agents-tool-adapter.ts')
+
+    expect(adapter).toContain('operation.toolInputSchema')
+    expect(adapter).not.toContain('parameters: params.operation.inputSchema')
+    expect(adapter).not.toContain('parameters: operation.inputSchema')
+  })
+
   it('resolves continuation control from interruption rows, never from message history', () => {
     const route = readSource('src/app/api/projects/[projectId]/assistant/chat/route.ts')
 

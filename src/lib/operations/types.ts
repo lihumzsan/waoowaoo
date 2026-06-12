@@ -67,7 +67,9 @@ export interface OperationConfirmation {
  * Failed tasks always resume the agent so it can report and recover.
  */
 export interface OperationAgentFlow {
-  onTaskComplete: 'resume_agent' | 'await_user_choice'
+  onTaskComplete?: 'resume_agent' | 'await_user_choice' | 'complete'
+  onTaskFailed?: 'resume_agent' | 'fail'
+  interruptsFor?: 'approval' | 'choice' | null
 }
 
 export type RuntimeSchemaSafeParseResult<T> =
@@ -76,6 +78,21 @@ export type RuntimeSchemaSafeParseResult<T> =
 
 export type RuntimeSchema<T> = FlexibleSchema<T> & {
   safeParse: (input: unknown) => RuntimeSchemaSafeParseResult<T>
+}
+
+export type JsonPrimitive = string | number | boolean | null
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
+export interface JsonObject {
+  [key: string]: JsonValue
+}
+
+export interface ProjectAgentToolInputSchema {
+  [key: string]: JsonValue | undefined
+  type: 'object'
+  properties: Record<string, JsonValue>
+  required: string[]
+  additionalProperties: false
+  description?: string
 }
 
 export type ProjectAgentToolErrorCode =
@@ -120,6 +137,12 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   effects: OperationEffects
   confirmation?: OperationConfirmation
   agentFlow?: OperationAgentFlow
+  /**
+   * Model-facing OpenAI Agents SDK tool input schema.
+   * This schema must never expose internal execution fields such as
+   * `confirmed`, and must be strict structured-output compatible.
+   */
+  toolInputSchema?: ProjectAgentToolInputSchema
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
   execute: BivariantOperationExecute<Input, Output>
@@ -131,6 +154,7 @@ export interface ProjectAgentOperationDefinition<Input = unknown, Output = unkno
   channels: OperationChannels
   prerequisites: OperationPrerequisites
   confirmation: OperationConfirmation
+  toolInputSchema: ProjectAgentToolInputSchema
 }
 
 export type ProjectAgentOperationRegistryDraft = Record<ProjectAgentOperationId, ProjectAgentOperationDefinitionBase>

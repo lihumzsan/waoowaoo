@@ -293,6 +293,8 @@ function RatioChoiceShape(props: {
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
   onSubmitChoiceResponse: (params: {
+    runId: string
+    interruptionId: string | null
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
     toolCallId: string | null
     output: Record<string, unknown>
@@ -324,6 +326,12 @@ export function AssistantChoiceCardView(props: {
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
   const isStylePreviewGroup = activeGroup?.key === 'stylePreviewId'
 
+  const readChoiceRunId = (): string => {
+    const runId = card.runId?.trim()
+    if (!runId) throw new Error('ASSISTANT_CHOICE_CARD_RUN_ID_MISSING')
+    return runId
+  }
+
   const handleReplySubmit = async () => {
     const trimmedReply = replyText.trim()
     const replyKey = card.replyToolOutputKey?.trim() || 'replyText'
@@ -332,6 +340,8 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       await props.onSubmitChoiceResponse({
+        runId: readChoiceRunId(),
+        interruptionId: card.interruptionId ?? null,
         choiceType: card.choiceType,
         toolCallId: card.toolCallId,
         output: {
@@ -358,6 +368,8 @@ export function AssistantChoiceCardView(props: {
       const labels = resolveChoiceCardSelectionLabels(card.groups, selections)
       if (card.submit.kind === 'submit_tool_output') {
         await props.onSubmitChoiceResponse({
+          runId: readChoiceRunId(),
+          interruptionId: card.interruptionId ?? null,
           choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
@@ -380,6 +392,8 @@ export function AssistantChoiceCardView(props: {
           aspectRatio,
         })
         await props.onSubmitChoiceResponse({
+          runId: readChoiceRunId(),
+          interruptionId: card.interruptionId ?? null,
           choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
@@ -406,6 +420,8 @@ export function AssistantChoiceCardView(props: {
           aspectRatio,
         })
         await props.onSubmitChoiceResponse({
+          runId: readChoiceRunId(),
+          interruptionId: card.interruptionId ?? null,
           choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
@@ -731,6 +747,7 @@ function truncateStylePreviewErrorMessage(message: string | null | undefined): s
 
 export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData> & {
   onStyleSelected?: (params: {
+    runId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
@@ -789,6 +806,8 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     preview: ProjectEditStylePreview,
   ) => {
     if (!isEditStylePreviewChoiceReady(preview)) return
+    const runId = data.agentRunId?.trim()
+    if (!runId) throw new Error('ASSISTANT_STYLE_PREVIEW_AGENT_RUN_ID_MISSING')
     setSelectingPreviewId(item.id)
     try {
       await confirmStylePreview.mutateAsync({
@@ -797,6 +816,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
         aspectRatio: preview.aspectRatio,
       })
       await props.onStyleSelected?.({
+        runId,
         stylePreviewId: item.id,
         aspectRatio: preview.aspectRatio,
       })
@@ -1053,6 +1073,8 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
   onSubmitChoiceResponse: (params: {
+    runId: string
+    interruptionId: string | null
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
     toolCallId: string | null
     output: Record<string, unknown>
@@ -1068,6 +1090,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
   onStylePreviewSelected?: (params: {
+    runId: string
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
@@ -1101,6 +1124,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     },
     data: {
       by_name: {
+        'agent-run': HiddenRuntimeContextDataCard,
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
         'assistant-choice-card': hideChoiceCards

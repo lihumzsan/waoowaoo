@@ -9,6 +9,7 @@ import type { UIMessage } from 'ai'
  */
 
 export interface WorkspaceAssistantPendingInterruption {
+  runId: string
   interruptionId: string
   approvalId: string
   operationId: string
@@ -27,10 +28,12 @@ function readInterruptionPart(part: unknown): WorkspaceAssistantPendingInterrupt
   const data = isRecord(part.data) ? part.data : null
   if (!data) return null
   const interruptionId = readNonEmptyString(data.interruptionId)
+  const runId = readNonEmptyString(data.runId)
   const approvalId = readNonEmptyString(data.approvalId)
   const operationId = readNonEmptyString(data.operationId)
-  if (!interruptionId || !approvalId || !operationId) return null
+  if (!runId || !interruptionId || !approvalId || !operationId) return null
   return {
+    runId,
     interruptionId,
     approvalId,
     operationId,

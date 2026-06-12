@@ -9,6 +9,7 @@ import type {
   ProjectAgentOperationDefinition,
   RuntimeSchema,
 } from '@/lib/operations/types'
+import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 
 export const EFFECTS_NONE: OperationEffects = {
   writes: false,
@@ -54,9 +55,12 @@ export function makeTestOperation<Input, Output>(params: {
     prerequisites: params.prerequisites ?? { episodeId: 'optional' },
     effects: params.effects ?? EFFECTS_NONE,
     confirmation: params.confirmation ?? { required: false },
+    toolInputSchema: createProjectAgentToolInputSchema({
+      operationId: params.id,
+      inputSchema: params.inputSchema as RuntimeSchema<unknown>,
+    }),
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,
     execute: params.execute,
   }
 }
-

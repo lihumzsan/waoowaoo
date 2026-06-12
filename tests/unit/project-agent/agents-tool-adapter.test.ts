@@ -3,7 +3,8 @@ import { RunContext } from '@openai/agents'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationTool } from '@/lib/project-agent/agents-tool-adapter'
-import type { ProjectAgentOperationDefinition } from '@/lib/operations/types'
+import type { ProjectAgentOperationDefinition, RuntimeSchema } from '@/lib/operations/types'
+import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 import { EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
 
 const executeState = vi.hoisted(() => ({
@@ -15,6 +16,10 @@ vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
 }))
 
 function buildOperation(): ProjectAgentOperationDefinition {
+  const inputSchema = z.object({
+    episodeId: z.string().min(1),
+    confirmed: z.boolean().optional(),
+  })
   return {
     id: 'generate_edit_script',
     summary: 'Generate edit script',
@@ -32,10 +37,11 @@ function buildOperation(): ProjectAgentOperationDefinition {
       required: true,
       summary: 'Confirm billable generation',
     },
-    inputSchema: z.object({
-      episodeId: z.string().min(1),
-      confirmed: z.boolean().optional(),
+    toolInputSchema: createProjectAgentToolInputSchema({
+      operationId: 'generate_edit_script',
+      inputSchema: inputSchema as RuntimeSchema<unknown>,
     }),
+    inputSchema,
     outputSchema: z.object({
       success: z.boolean(),
     }),

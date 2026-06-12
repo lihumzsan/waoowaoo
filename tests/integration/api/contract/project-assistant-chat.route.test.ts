@@ -26,7 +26,35 @@ const waitMock = vi.hoisted(() => ({
 
 const interruptionMock = vi.hoisted(() => ({
   consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
+  consumeProjectAgentChoiceInterruption: vi.fn(async (): Promise<unknown> => null),
   supersedePendingProjectAgentInterruptions: vi.fn(async (): Promise<unknown[]> => []),
+}))
+
+const runMock = vi.hoisted(() => ({
+  createProjectAgentRun: vi.fn(async (): Promise<unknown> => ({
+    id: 'run-1',
+    projectId: 'project-1',
+    userId: 'user-1',
+    assistantId: 'workspace-command',
+    scopeRef: 'episode:episode-1',
+    episodeId: 'episode-1',
+    requestId: 'request-1',
+    status: 'running',
+    controlKind: 'user_turn',
+  })),
+  getProjectAgentRun: vi.fn(async (): Promise<unknown> => ({
+    id: 'run-1',
+    projectId: 'project-1',
+    userId: 'user-1',
+    assistantId: 'workspace-command',
+    scopeRef: 'episode:episode-1',
+    episodeId: 'episode-1',
+    requestId: 'request-1',
+    status: 'running',
+    controlKind: 'approval_response',
+  })),
+  safelyUpdateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
+  supersedePendingRunsInScope: vi.fn(async (): Promise<string[]> => []),
 }))
 
 const runLockMock = vi.hoisted(() => ({
@@ -47,6 +75,9 @@ const compressionState = vi.hoisted(() => ({
 }))
 
 const persistenceMock = vi.hoisted(() => ({
+  buildProjectAssistantScopeRef: vi.fn((input: { projectId: string; episodeId?: string | null }) => (
+    input.episodeId ? `episode:${input.episodeId}` : `project:${input.projectId}`
+  )),
   loadProjectAssistantThread: vi.fn(async (): Promise<unknown> => null),
   saveProjectAssistantThread: vi.fn(async (): Promise<unknown> => ({
     id: 'thread-1',
@@ -107,6 +138,7 @@ vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMo
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
 vi.mock('@/lib/project-agent/waits', () => waitMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionMock)
+vi.mock('@/lib/project-agent/runs', () => runMock)
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
 vi.mock('@/lib/project-agent/thread-log', () => threadLogMock)
 vi.mock('@/lib/config-service', () => modelConfigMock)
@@ -124,6 +156,9 @@ import {
   GET as waitsGet,
   POST as waitsPost,
 } from '@/app/api/projects/[projectId]/assistant/waits/route'
+import { POST as approvalPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route'
+import { POST as choicePost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route'
+import { POST as taskFollowUpPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route'
 
 describe('project assistant chat route', () => {
   beforeEach(() => {
@@ -188,6 +223,7 @@ describe('project assistant chat route', () => {
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a pending approval interruption via structured control', async () => {
     interruptionMock.consumeProjectAgentApprovalInterruption.mockResolvedValueOnce({
       id: 'interruption-1',
+      runId: 'run-1',
       type: 'approval',
       status: 'consumed',
       operationId: 'generate_edit_screenplay',
@@ -200,12 +236,14 @@ describe('project assistant chat route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
             type: 'approval_response',
+            runId: 'run-1',
             interruptionId: 'interruption-1',
             approved: true,
           },
@@ -217,6 +255,7 @@ describe('project assistant chat route', () => {
     expect(response.status).toBe(200)
     expect(interruptionMock.consumeProjectAgentApprovalInterruption).toHaveBeenCalledWith(expect.objectContaining({
       interruptionId: 'interruption-1',
+      runId: 'run-1',
       projectId: 'project-1',
       userId: 'user-1',
       response: { approved: true, reason: null },
@@ -232,6 +271,75 @@ describe('project assistant chat route', () => {
     expect(interruptionMock.supersedePendingProjectAgentInterruptions).not.toHaveBeenCalled()
   })
 
+  it('POST /api/projects/[projectId]/assistant/runs/[runId]/approval -> consumes approval through the run-scoped endpoint', async () => {
+    interruptionMock.consumeProjectAgentApprovalInterruption.mockResolvedValueOnce({
+      id: 'interruption-1',
+      runId: 'run-1',
+      type: 'approval',
+      status: 'consumed',
+      operationId: 'generate_edit_screenplay',
+      approvalId: 'approval-1',
+      toolCallId: 'call-1',
+      runState: 'serialized-state',
+    })
+
+    const response = await approvalPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1/approval',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'approve' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          interruptionId: 'interruption-1',
+          approved: true,
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(interruptionMock.consumeProjectAgentApprovalInterruption).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+      interruptionId: 'interruption-1',
+    }))
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'approval',
+        approved: true,
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects public control payloads outside run-scoped endpoints', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'approve' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'approval_response',
+            runId: 'run-1',
+            interruptionId: 'interruption-1',
+            approved: true,
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED' }),
+      }),
+    }))
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> rejects a stale approval response with a conflict', async () => {
     interruptionMock.consumeProjectAgentApprovalInterruption.mockResolvedValueOnce(null)
 
@@ -239,12 +347,14 @@ describe('project assistant chat route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
             type: 'approval_response',
+            runId: 'run-1',
             interruptionId: 'interruption-stale',
             approved: true,
           },
@@ -267,12 +377,15 @@ describe('project assistant chat route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
             type: 'choice_response',
+            runId: 'run-1',
+            interruptionId: null,
             choiceType: 'style',
             toolCallId: null,
             output: {
@@ -298,8 +411,54 @@ describe('project assistant chat route', () => {
     }))
   })
 
+  it('POST /api/projects/[projectId]/assistant/runs/[runId]/choice -> consumes choice through the run-scoped endpoint', async () => {
+    interruptionMock.consumeProjectAgentChoiceInterruption.mockResolvedValueOnce({
+      id: 'choice-interruption-1',
+      runId: 'run-1',
+      type: 'choice',
+      status: 'consumed',
+      operationId: 'request_edit_first_choice',
+      toolCallId: 'tool-choice-1',
+      payload: { choiceType: 'duration_and_aspect_ratio' },
+    })
+
+    const response = await choicePost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1/choice',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '鬼故事' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          interruptionId: 'choice-interruption-1',
+          choiceType: 'duration_and_aspect_ratio',
+          toolCallId: 'tool-choice-1',
+          output: {
+            ok: true,
+            durationSeconds: 60,
+            aspectRatio: '16:9',
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(interruptionMock.consumeProjectAgentChoiceInterruption).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+      interruptionId: 'choice-interruption-1',
+    }))
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'choice',
+        choiceType: 'duration_and_aspect_ratio',
+      }),
+    }))
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a claimed wait follow-up exactly once', async () => {
     waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce({
+      runId: 'run-1',
       waitId: 'wait-1',
       followUpKey: 'project-agent-wait:wait-1:completed',
       operationId: 'generate_edit_script',
@@ -316,12 +475,14 @@ describe('project assistant chat route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
             type: 'task_follow_up',
+            runId: 'run-1',
             waitId: 'wait-1',
             claimId: 'claim-1',
           },
@@ -332,6 +493,7 @@ describe('project assistant chat route', () => {
 
     expect(response.status).toBe(200)
     expect(waitMock.consumeProjectAgentWaitFollowUp).toHaveBeenCalledWith({
+      runId: 'run-1',
       waitId: 'wait-1',
       claimId: 'claim-1',
       projectId: 'project-1',
@@ -345,6 +507,49 @@ describe('project assistant chat route', () => {
     }))
   })
 
+  it('POST /api/projects/[projectId]/assistant/runs/[runId]/task-follow-up -> consumes wait follow-up through the run-scoped endpoint', async () => {
+    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce({
+      runId: 'run-1',
+      waitId: 'wait-1',
+      followUpKey: 'project-agent-wait:wait-1:completed',
+      operationId: 'generate_edit_script',
+      taskIds: ['task-1'],
+      failedTaskIds: [],
+      terminalStatus: 'completed',
+      total: 1,
+      successCount: 1,
+      failedCount: 0,
+      claimId: 'claim-1',
+    })
+
+    const response = await taskFollowUpPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1/task-follow-up',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          waitId: 'wait-1',
+          claimId: 'claim-1',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(waitMock.consumeProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+      waitId: 'wait-1',
+      claimId: 'claim-1',
+    }))
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'task_follow_up',
+      }),
+    }))
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> rejects an unclaimed task follow-up with a conflict', async () => {
     waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce(null)
 
@@ -352,12 +557,14 @@ describe('project assistant chat route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
             type: 'task_follow_up',
+            runId: 'run-1',
             waitId: 'wait-1',
             claimId: 'claim-expired',
           },
