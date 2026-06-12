@@ -94,4 +94,44 @@ describe('createProjectAgentUiMessageStream', () => {
 
     expect(chunks.filter((chunk) => chunk.type === 'tool-input-start')).toHaveLength(1)
   })
+
+  it('synthesizes a dynamic tool invocation before a resumed tool output when the adapter omits it', async () => {
+    streamState.chunks = [
+      {
+        type: 'tool-output-available',
+        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        output: { ok: true },
+      } as UIMessageChunk,
+      { type: 'finish' } as UIMessageChunk,
+    ]
+
+    const chunks = await readChunks(createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      toolNames: ['generate_edit_screenplay'],
+      beforeFinish: async () => [],
+      onSettled: async () => undefined,
+    }))
+
+    expect(chunks.slice(0, 3)).toEqual([
+      expect.objectContaining({
+        type: 'tool-input-start',
+        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolName: 'generate_edit_screenplay',
+        dynamic: true,
+      }),
+      expect.objectContaining({
+        type: 'tool-input-available',
+        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolName: 'generate_edit_screenplay',
+        input: {},
+        dynamic: true,
+      }),
+      expect.objectContaining({
+        type: 'tool-output-available',
+        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        output: { ok: true },
+      }),
+    ])
+  })
 })

@@ -28,6 +28,13 @@ function isToolApprovalRequestChunk(chunk: ProjectAgentUiChunk): boolean {
   return readChunkString(chunk, 'type') === 'tool-approval-request'
 }
 
+function isToolOutputChunk(chunk: ProjectAgentUiChunk): boolean {
+  const type = readChunkString(chunk, 'type')
+  return type === 'tool-output-available'
+    || type === 'tool-output-error'
+    || type === 'tool-output-denied'
+}
+
 function inferToolNameFromCallId(toolCallId: string, toolNames: readonly string[]): string {
   const normalized = toolCallId.startsWith('tool_') ? toolCallId.slice('tool_'.length) : toolCallId
   const match = [...toolNames]
@@ -84,7 +91,7 @@ export function createProjectAgentUiMessageStream(params: {
         if (toolCallId && isToolInputChunk(chunk)) {
           startedToolCallIds.add(toolCallId)
         }
-        if (toolCallId && isToolApprovalRequestChunk(chunk) && !startedToolCallIds.has(toolCallId)) {
+        if (toolCallId && (isToolApprovalRequestChunk(chunk) || isToolOutputChunk(chunk)) && !startedToolCallIds.has(toolCallId)) {
           const toolName = inferToolNameFromCallId(toolCallId, params.toolNames ?? [])
           for (const syntheticChunk of createSyntheticToolInputChunks({ toolCallId, toolName })) {
             startedToolCallIds.add(toolCallId)
