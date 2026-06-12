@@ -245,6 +245,28 @@ describe('workspace assistant panel layout', () => {
     })).toBe('loading')
   })
 
+  it('keeps style preview loading label scoped to the card namespace in supported locales', () => {
+    const rendererSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+      'utf8',
+    )
+    const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
+      cards: {
+        stylePreviewLoading?: string
+      }
+    }
+    const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
+      cards: {
+        stylePreviewLoading?: string
+      }
+    }
+
+    expect(rendererSource).toContain("t('cards.stylePreviewLoading')")
+    expect(rendererSource).not.toContain("t('loading')")
+    expect(zhMessages.cards.stylePreviewLoading).toBe('加载中...')
+    expect(enMessages.cards.stylePreviewLoading).toBe('Loading...')
+  })
+
   it('keeps edit script video prompt stage translated in supported locales', () => {
     const zhProgressSource = readFileSync(join(process.cwd(), 'messages/zh/progress.json'), 'utf8')
     const enProgressSource = readFileSync(join(process.cwd(), 'messages/en/progress.json'), 'utf8')

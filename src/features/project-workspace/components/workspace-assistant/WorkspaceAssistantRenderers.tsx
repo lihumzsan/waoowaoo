@@ -893,7 +893,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                       : ready
                         ? t('cards.stylePreviewReady')
                         : loading
-                          ? t('loading')
+                          ? t('cards.stylePreviewLoading')
                           : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
                   </span>
                 </div>

@@ -178,6 +178,7 @@
     "stylePreviewGenerationTitle": "Generating Visual Style Candidates",
     "stylePreviewChoiceTitle": "Choose Visual Style",
     "stylePreviewGenerationCount": "{count} candidates",
+    "stylePreviewLoading": "Loading...",
     "stylePreviewGenerationStatus": "Generating · {status}",
     "stylePreviewGenerationFailed": "Generation failed",
     "stylePreviewGenerationFailedReason": "Reason: {reason}",
