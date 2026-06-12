@@ -912,13 +912,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           return (
             <div
               key={item.id}
-              className={`overflow-hidden rounded-xl border bg-white/80 ${
-                confirmed
-                  ? 'border-[var(--glass-accent-from)] ring-2 ring-[var(--glass-accent-from)]/20'
-                  : failed
-                    ? 'border-[var(--glass-tone-warn-fg)]/35'
-                    : 'border-[var(--glass-stroke-base)]'
-              }`}
+              className={`overflow-hidden rounded-xl border bg-white/80 ${failed ? 'border-[var(--glass-tone-warn-fg)]/35' : 'border-[var(--glass-stroke-base)]'}`}
             >
               <div className="relative min-h-36 overflow-hidden bg-neutral-100">
                 <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
@@ -963,20 +957,20 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                     className={`mt-1 h-3 w-3 shrink-0 text-[var(--glass-text-tertiary)] transition-transform group-hover:text-[var(--glass-text-secondary)] ${summaryExpanded ? 'rotate-180' : ''}`}
                   />
                 </button>
-                <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
-                  <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
-                  <span>
-                    {failed
-                      ? t('cards.stylePreviewGenerationFailed')
-                      : confirmed
-                        ? t('cards.stylePreviewConfirmed')
+                {!confirmed ? (
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
+                    <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
+                    <span>
+                      {failed
+                        ? t('cards.stylePreviewGenerationFailed')
                         : ready
-                        ? t('cards.stylePreviewReady')
-                        : loading
-                          ? t('cards.stylePreviewLoading')
-                          : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
-                  </span>
-                </div>
+                          ? t('cards.stylePreviewReady')
+                          : loading
+                            ? t('cards.stylePreviewLoading')
+                            : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
+                    </span>
+                  </div>
+                ) : null}
                 {failed && errorMessage ? (
                   <div className="rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[10px] leading-4 text-[var(--glass-tone-warn-fg)]">
                     {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
@@ -985,7 +979,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                 {confirmed ? (
                   <button
                     type="button"
-                    className="mt-1 inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-xl border border-[var(--glass-accent-from)]/35 bg-[var(--glass-accent-from)]/10 px-3 py-2 text-sm font-medium text-[var(--glass-accent-from)]"
+                    className="mt-1 inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-xl border border-[var(--glass-stroke-base)] bg-neutral-100 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)]"
                     disabled
                   >
                     <AppIcon name="check" className="h-4 w-4" />

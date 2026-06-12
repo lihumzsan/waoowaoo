@@ -6,7 +6,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createTranslator } from 'use-intl/core'
 import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
-import { WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
+import {
+  shouldDockWorkspaceStylePreviewGenerationCard,
+  WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
+} from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
   resolveDisplayedEditStylePreviewItems,
   resolveEditStylePreviewCardStatus,
@@ -289,6 +292,21 @@ describe('workspace assistant panel layout', () => {
         aspectRatio: '16:9',
       },
     ])
+  })
+
+  it('docks style preview generation only until the user confirms a style', () => {
+    expect(shouldDockWorkspaceStylePreviewGenerationCard({
+      hasCard: true,
+      stylePreviewConfirmed: false,
+    })).toBe(true)
+    expect(shouldDockWorkspaceStylePreviewGenerationCard({
+      hasCard: true,
+      stylePreviewConfirmed: true,
+    })).toBe(false)
+    expect(shouldDockWorkspaceStylePreviewGenerationCard({
+      hasCard: false,
+      stylePreviewConfirmed: false,
+    })).toBe(false)
   })
 
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {

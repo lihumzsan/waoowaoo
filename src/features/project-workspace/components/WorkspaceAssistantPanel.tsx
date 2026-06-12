@@ -98,6 +98,13 @@ export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
   maskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)',
 } satisfies CSSProperties
 
+export function shouldDockWorkspaceStylePreviewGenerationCard(params: {
+  hasCard: boolean
+  stylePreviewConfirmed: boolean
+}): boolean {
+  return params.hasCard && !params.stylePreviewConfirmed
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -434,11 +441,10 @@ export default function WorkspaceAssistantPanel({
     return findPendingWorkspaceAssistantInterruption(assistantRuntime.messages)
   }, [assistantRuntime.messages])
   const serverPendingApproval = assistantRuntime.pendingRunApproval
-  const shouldDockStylePreviewGenerationCard = Boolean(
-    displayedStylePreviewGenerationCard
-      && !activeStylePreviewConfirmed
-      && !serverPendingApproval,
-  )
+  const shouldDockStylePreviewGenerationCard = shouldDockWorkspaceStylePreviewGenerationCard({
+    hasCard: Boolean(displayedStylePreviewGenerationCard),
+    stylePreviewConfirmed: activeStylePreviewConfirmed,
+  })
   const shouldRenderServerApprovalCard = Boolean(
     serverPendingApproval
       && messagePendingInterruption?.approvalId !== serverPendingApproval.approvalId,
