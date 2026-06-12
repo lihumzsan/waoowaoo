@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
-import { findPendingToolApprovalId } from '@/lib/project-agent/ui-message-approval'
+import {
+  findLatestProjectAgentApprovalResponse,
+  findPendingAgentInterruption,
+  findPendingToolApprovalId,
+} from '@/lib/project-agent/ui-message-approval'
 
 describe('findPendingToolApprovalId', () => {
   it('returns the latest pending approval id from assistant tool parts', () => {
@@ -44,5 +48,66 @@ describe('findPendingToolApprovalId', () => {
     }] satisfies UIMessage[]
 
     expect(findPendingToolApprovalId(messages)).toBeNull()
+  })
+
+  it('prefers the latest Agents SDK interruption data part', () => {
+    const messages = [{
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'data-agent-interruption',
+          data: {
+            requestId: 'req-1',
+            approvalId: 'approval-1',
+            operationId: 'generate_edit_script',
+            runState: 'serialized-state',
+            toolCallId: 'tool-call-1',
+            display: {
+              title: 'generate_edit_script',
+              description: 'Generate edit script',
+            },
+          },
+        },
+      ],
+    }] satisfies UIMessage[]
+
+    expect(findPendingToolApprovalId(messages)).toBe('approval-1')
+    expect(findPendingAgentInterruption(messages, 'approval-1')).toEqual({
+      requestId: 'req-1',
+      approvalId: 'approval-1',
+      operationId: 'generate_edit_script',
+      runState: 'serialized-state',
+      toolCallId: 'tool-call-1',
+      display: {
+        title: 'generate_edit_script',
+        description: 'Generate edit script',
+      },
+    })
+  })
+
+  it('extracts the latest hidden approval resume payload from user metadata', () => {
+    const messages = [{
+      id: 'user-1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Tool approval accepted.' }],
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+          projectAgentApprovalResponse: {
+            approvalId: 'approval-1',
+            approved: true,
+            runState: 'serialized-state',
+          },
+        },
+      },
+    }] satisfies UIMessage[]
+
+    expect(findLatestProjectAgentApprovalResponse(messages)).toEqual({
+      approvalId: 'approval-1',
+      approved: true,
+      runState: 'serialized-state',
+      reason: null,
+    })
   })
 })

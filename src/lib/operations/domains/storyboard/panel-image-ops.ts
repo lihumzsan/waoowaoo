@@ -592,7 +592,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         storyboardId: z.string().min(1),
         insertAfterPanelId: z.string().min(1),
         sourcePanelId: z.string().min(1),
-        variant: z.record(z.unknown()),
+        variant: z.record(z.string(), z.unknown()),
       }).passthrough(),
       outputSchema: taskSubmitOutputWithMutationBatch({
         panelId: z.string().min(1),

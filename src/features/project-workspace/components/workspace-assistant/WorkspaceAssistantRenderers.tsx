@@ -130,27 +130,16 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
 export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
   const t = useTranslations('assistantAgent')
   if (data.reason === 'awaiting_user_confirmation') return null
-  const title = data.reason === 'step_cap'
-    ? t('cards.maxSteps')
-    : data.reason === 'awaiting_external_task'
+  const title = data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTask')
-      : data.reason === 'repeated_tool_call'
-          ? t('cards.repeatedToolCall')
-          : t('cards.toolErrorBoundary')
-  const detail = data.reason === 'step_cap'
-    ? t('cards.stepUsage', { stepCount: data.stepCount, maxSteps: data.maxSteps })
-    : data.reason === 'awaiting_external_task'
+      : t('cards.toolErrorBoundary')
+  const detail = data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTaskDetail', {
           operations: data.operationIds.join(', '),
           tasks: data.taskIds.length > 0 ? data.taskIds.join(', ') : t('cards.unknownTask'),
           phases: data.phases.length > 0 ? data.phases.join(', ') : t('cards.none'),
         })
-      : data.reason === 'repeated_tool_call'
-          ? t('cards.repeatedToolCallDetail', {
-              tool: data.toolName,
-              hash: data.argsHash,
-            })
-          : t('cards.toolErrorBoundaryDetail', {
+      : t('cards.toolErrorBoundaryDetail', {
           operations: data.operationIds.join(', '),
           codes: data.codes.length > 0 ? data.codes.join(', ') : t('cards.none'),
         })

@@ -126,7 +126,7 @@ export function createPlanRunOperations(): ProjectAgentOperationRegistryDraft {
           dependsOn: z.array(z.string()).optional(),
           inputArtifacts: z.array(z.string()).optional(),
           outputArtifacts: z.array(z.string()).optional(),
-          input: z.record(z.unknown()).optional().nullable(),
+          input: z.record(z.string(), z.unknown()).optional().nullable(),
         })).optional(),
       }),
       outputSchema: z.unknown(),

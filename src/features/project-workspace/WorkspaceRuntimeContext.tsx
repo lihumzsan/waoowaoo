@@ -25,7 +25,7 @@ export interface WorkspaceRuntimeValue {
   assetsLoading: boolean
   isTransitioning: boolean
   isConfirmingAssets: boolean
-  isStartingPlan: boolean
+  isAssistantWorkflowStarting: boolean
   videoRatio: string | null | undefined
   videoModel: string | null | undefined
   singleShotVideoModel: string | null | undefined
@@ -34,7 +34,7 @@ export interface WorkspaceRuntimeValue {
   userVideoModels: WorkspaceVideoModelOption[]
   onNovelTextChange: (value: string) => Promise<void>
   onVideoRatioChange: (value: string) => Promise<void>
-  onRequestAssistantPlan: () => Promise<void>
+  onRequestAssistantGuidance: () => Promise<void>
   onGenerateEditScreenplay: (prompt: string) => Promise<void>
   onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>

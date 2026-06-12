@@ -69,10 +69,10 @@ interface BuildWorkspaceControllerViewModelParams {
     isAssetAnalysisRunning: boolean
     isConfirmingAssets: boolean
     isTransitioning: boolean
-    isStartingPlan: boolean
+    isAssistantWorkflowStarting: boolean
     transitionProgress: { step?: string; total?: number; current?: number }
     handleAnalyzeAssets: () => Promise<void>
-    requestAssistantPlan: () => Promise<void>
+    requestAssistantGuidance: () => Promise<void>
     showCreatingToast: boolean
   }
   videoState: {

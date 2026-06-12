@@ -12,8 +12,6 @@ export type UnknownObject = { [key: string]: unknown }
 
 export type ProjectAssistantId = 'workspace-command'
 
-export type ProjectAgentInteractionMode = 'auto' | 'plan' | 'fast'
-
 export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
@@ -21,7 +19,6 @@ export interface ProjectAgentContext {
   selectedPanelId?: string | null
   selectedClipId?: string | null
   selectedAssetId?: string | null
-  interactionMode?: ProjectAgentInteractionMode
 }
 
 export interface ProjectContextPartData {
@@ -35,11 +32,6 @@ export interface ProjectPhasePartData {
 
 export type ProjectAgentStopPartData =
   | {
-    reason: 'step_cap'
-    stepCount: number
-    maxSteps: number
-  }
-  | {
     reason: 'awaiting_external_task'
     stepCount: number
     operationIds: string[]
@@ -52,17 +44,30 @@ export type ProjectAgentStopPartData =
     operationIds: string[]
   }
   | {
-    reason: 'repeated_tool_call'
-    stepCount: number
-    toolName: string
-    argsHash: string
-  }
-  | {
     reason: 'tool_error'
     stepCount: number
     operationIds: string[]
     codes: string[]
   }
+
+export interface ProjectAgentApprovalResponseData {
+  approvalId: string
+  approved: boolean
+  runState: string
+  reason?: string | null
+}
+
+export interface ProjectAgentInterruptionPartData {
+  requestId: string
+  approvalId: string
+  operationId: string
+  runState: string
+  toolCallId?: string | null
+  display: {
+    title: string
+    description: string
+  }
+}
 
 export interface AgentPlanPartData {
   draftPlanId: string
@@ -87,8 +92,6 @@ export interface AgentPlanPartData {
 
 export interface AgentDebugPartData {
   requestId: string
-  interactionMode: ProjectAgentInteractionMode
-  effectiveIntent: 'query' | 'plan' | 'act'
   toolsetSource: string
   coreOperationIds: string[]
   workflowOperationIds: string[]
@@ -96,12 +99,12 @@ export interface AgentDebugPartData {
 }
 
 export interface AgentRuntimeContextPartData {
+  runtime: 'openai-agents-sdk'
   requestId: string
   modelKey: string
   locale: string
   projectId: string
   episodeId?: string | null
-  interactionMode: ProjectAgentInteractionMode
   messageCounts: {
     normalized: number
     runtime: number
@@ -110,7 +113,6 @@ export interface AgentRuntimeContextPartData {
   contextTokenEstimate: number | null
   toolset: {
     source: string
-    effectiveIntent: 'query' | 'plan' | 'act'
     coreOperationIds: string[]
     workflowOperationIds: string[]
     continuationOperationId: string | null
@@ -245,6 +247,7 @@ export interface ProjectAssistantThreadSnapshot {
 
 export type WorkspaceAssistantPartType =
   | 'data-agent-debug'
+  | 'data-agent-interruption'
   | 'data-agent-runtime-context'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'

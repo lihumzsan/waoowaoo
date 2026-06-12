@@ -4,7 +4,6 @@ import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import {
-  lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
   type ChatStatus,
   type UIMessage,
@@ -15,9 +14,11 @@ import {
   useProjectAssistantThread,
   useProjectAssistantThreadSync,
 } from '@/lib/query/hooks'
-import type { ProjectAgentInteractionMode } from '@/lib/project-agent/types'
 import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
-import { findPendingToolApprovalId } from '@/lib/project-agent/ui-message-approval'
+import {
+  findPendingAgentInterruption,
+  findPendingToolApprovalId,
+} from '@/lib/project-agent/ui-message-approval'
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -26,7 +27,6 @@ interface UseWorkspaceAssistantRuntimeParams {
   selectedPanelId?: string | null
   selectedClipId?: string | null
   selectedAssetId?: string | null
-  interactionMode: ProjectAgentInteractionMode
 }
 
 interface UseWorkspaceAssistantRuntimeResult {
@@ -59,9 +59,8 @@ interface UseWorkspaceAssistantRuntimeResult {
 export function buildWorkspaceAssistantChatId(params: {
   projectId: string
   episodeId?: string
-  interactionMode: ProjectAgentInteractionMode
 }): string {
-  return `workspace-command:${params.projectId}:${params.episodeId || 'global'}:${params.interactionMode}`
+  return `workspace-command:${params.projectId}:${params.episodeId || 'global'}`
 }
 
 export function useWorkspaceAssistantRuntime({
@@ -71,13 +70,11 @@ export function useWorkspaceAssistantRuntime({
   selectedPanelId,
   selectedClipId,
   selectedAssetId,
-  interactionMode,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
   const chatId = buildWorkspaceAssistantChatId({
     projectId,
     episodeId,
-    interactionMode,
   })
   const assistantThread = useProjectAssistantThread(projectId, episodeId)
   const { save: saveAssistantThread } = useProjectAssistantThreadSync(projectId, episodeId, locale)
@@ -89,8 +86,7 @@ export function useWorkspaceAssistantRuntime({
     selectedPanelId,
     selectedClipId,
     selectedAssetId,
-    interactionMode,
-  }), [episodeId, interactionMode, locale, projectId, selectedAssetId, selectedClipId, selectedPanelId, selectedScopeRef])
+  }), [episodeId, locale, projectId, selectedAssetId, selectedClipId, selectedPanelId, selectedScopeRef])
   const transport = useMemo(() => new AssistantChatTransport({
     api: `/api/projects/${projectId}/assistant/chat`,
     body: {
@@ -106,10 +102,7 @@ export function useWorkspaceAssistantRuntime({
         suppressNextAutomaticSendRef.current = false
         return false
       }
-      return (
-        lastAssistantMessageIsCompleteWithToolCalls({ messages })
-        || lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
-      )
+      return lastAssistantMessageIsCompleteWithToolCalls({ messages })
     },
   })
   const runtime = useAISDKRuntime(chat)
@@ -123,16 +116,40 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages(ensureUniqueUIMessages(messages))
   }, [chat])
 
+  const sendAgentApprovalResponse = useCallback(async (params: {
+    approvalId: string
+    approved: boolean
+    reason?: string
+  }) => {
+    const interruption = findPendingAgentInterruption(chat.messages, params.approvalId)
+    if (!interruption) {
+      throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
+    }
+    await chat.sendMessage({
+      text: params.approved ? 'Tool approval accepted.' : 'Tool approval rejected.',
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+          projectAgentApprovalResponse: {
+            approvalId: params.approvalId,
+            approved: params.approved,
+            runState: interruption.runState,
+            ...(params.reason ? { reason: params.reason } : {}),
+          },
+        },
+      },
+    })
+  }, [chat])
+
   const cancelPendingApprovalBeforeUserMessage = useCallback(async () => {
-    const approvalId = findPendingToolApprovalId(chat.messages)
-    if (!approvalId) return
-    suppressNextAutomaticSendRef.current = true
-    await chat.addToolApprovalResponse({
-      id: approvalId,
+    const interruption = findPendingAgentInterruption(chat.messages)
+    if (!interruption) return
+    await sendAgentApprovalResponse({
+      approvalId: interruption.approvalId,
       approved: false,
       reason: 'user_interrupted',
     })
-  }, [chat])
+  }, [chat.messages, sendAgentApprovalResponse])
 
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
@@ -176,12 +193,8 @@ export function useWorkspaceAssistantRuntime({
     reason?: string
   }) => {
     chat.clearError()
-    await chat.addToolApprovalResponse({
-      id: params.approvalId,
-      approved: params.approved,
-      ...(params.reason ? { reason: params.reason } : {}),
-    })
-  }, [chat])
+    await sendAgentApprovalResponse(params)
+  }, [chat, sendAgentApprovalResponse])
 
   useEffect(() => {
     if (assistantThread.isLoading) return

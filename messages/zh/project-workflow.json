@@ -109,7 +109,7 @@
     "storyToScriptFailed": "内容转剧本失败",
     "scriptToStoryboardFailed": "剧本转分镜失败",
     "assistantPlanRequired": "请在右侧 AI 助手中描述目标，让助手自由判断下一步。",
-    "assistantPlanRequest": "请读取当前项目上下文里的故事内容，然后自由判断下一步该怎么做。你可以搜索并加载合适的 Skill，创建并校验计划；如果需要写入、长任务或计费操作，请先请求确认。",
+    "assistantGuidanceRequest": "请读取当前项目上下文里的故事内容，然后自由判断下一步该怎么做。你可以搜索并加载合适的 Skill，创建并校验计划；如果需要写入、长任务或计费操作，请先请求确认。",
     "taskStreamTimeout": "任务执行超时，请检查任务是否仍在运行，或重新触发"
   },
   "rebuildConfirm": {

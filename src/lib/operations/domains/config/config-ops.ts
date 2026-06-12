@@ -231,7 +231,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       inputSchema: z.object({}),
       outputSchema: z.object({
         configurable: z.boolean(),
-        capabilityOverrides: z.record(z.record(z.union([z.string(), z.number(), z.boolean()]))),
+        capabilityOverrides: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))),
       }).passthrough(),
       execute: async (ctx) => {
         const deployment = getDeploymentConfig()

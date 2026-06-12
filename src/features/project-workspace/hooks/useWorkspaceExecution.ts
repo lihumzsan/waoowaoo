@@ -60,10 +60,10 @@ export function useWorkspaceExecution({
     }
   }, [analyzeProjectAssetsMutation, episodeId, isAssetAnalysisRunning, onRefresh, t])
 
-  const requestAssistantPlan = useCallback(async () => {
+  const requestAssistantGuidance = useCallback(async () => {
     dispatchWorkspaceAssistantMessage({
-      key: `assistant-plan-request:${projectId}:${episodeId || 'global'}:${Date.now().toString(36)}`,
-      message: t('execution.assistantPlanRequest'),
+      key: `assistant-guidance-request:${projectId}:${episodeId || 'global'}:${Date.now().toString(36)}`,
+      message: t('execution.assistantGuidanceRequest'),
     })
   }, [episodeId, projectId, t])
 
@@ -73,7 +73,7 @@ export function useWorkspaceExecution({
     isTransitioning,
     transitionProgress,
     handleAnalyzeAssets,
-    requestAssistantPlan,
+    requestAssistantGuidance,
     showCreatingToast: false,
   }
 }

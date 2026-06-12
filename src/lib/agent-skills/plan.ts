@@ -22,7 +22,7 @@ export const agentPlanStepInputSchema = z.object({
   outputArtifacts: z.array(z.string().min(1)).optional(),
   dependsOn: z.array(z.string().min(1)).optional(),
   requiresApproval: z.boolean().optional(),
-  input: z.record(z.unknown()).optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
 })
 
 export const agentPlanInputSchema = z.object({

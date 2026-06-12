@@ -7,7 +7,6 @@ describe('project agent prompt copy', () => {
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      interactionMode: 'plan',
     })
 
     expect(prompt).toContain('只能使用当前注入的 tool 定义和当前项目上下文')
@@ -43,7 +42,6 @@ describe('project agent prompt copy', () => {
       locale: 'en',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      interactionMode: 'auto',
     })
 
     expect(prompt).toContain('treat that dependency order as a dependency gate')

@@ -1,5 +1,4 @@
 import type { ProjectAgentLocale } from './locale'
-import type { ProjectAgentInteractionMode } from './types'
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   asset_hub_list_folders: {
@@ -62,7 +61,6 @@ export function buildProjectAgentSystemPrompt(params: {
   locale: ProjectAgentLocale
   projectId: string
   episodeId: string
-  interactionMode: ProjectAgentInteractionMode
 }): string {
   if (params.locale === 'en') {
     return [
@@ -100,18 +98,11 @@ export function buildProjectAgentSystemPrompt(params: {
       'When you see staleArtifacts or failedItems: explain the reason first and recommend the next action.',
       'You may only use the tools injected into the current turn. Tool availability is deterministically selected from the current workflow stage and project state.',
       'Do not assume missing tools exist. If a needed operation is not injected, explain the current prerequisite in user-friendly terms instead of mentioning internal tool availability.',
-      'interactionMode=auto means follow the current workflow stage; interactionMode=plan means use planning/read-only tools; interactionMode=fast means allow direct execution when safety rules permit it.',
-      params.interactionMode === 'plan'
-        ? 'The current interactionMode is plan. Prefer explanation, planning, and approval preparation. Do not execute act tools directly in this mode.'
-        : params.interactionMode === 'fast'
-          ? 'The current interactionMode is fast. You may use injected act tools directly when the safety rules allow it.'
-          : 'The current interactionMode is auto. Follow the current workflow stage and use the injected tool set.',
       'Answer concisely in English.',
       'Before taking action, call get_project_phase to understand the current project state, progress, failed items, and available actions.',
       'If you need panel-level detail, call get_project_snapshot with detail=full.',
       `projectId=${params.projectId}`,
       `episodeId=${params.episodeId}`,
-      `interactionMode=${params.interactionMode}`,
     ].join('\n')
   }
 
@@ -150,18 +141,11 @@ export function buildProjectAgentSystemPrompt(params: {
     '当你看到 staleArtifacts 或 failedItems：优先解释原因与推荐动作（例如重跑计划、或执行更小粒度的 act 修复）。',
     '你只能使用当前会话注入的 tools 来完成任务（会根据当前 workflow 阶段与项目状态确定）。tool 定义中已包含使用说明，无需额外列举。',
     '不要假设未注入的工具存在。如果需要的 operation 没有注入，用用户能理解的方式说明当前缺少的前置条件，不要提内部工具可用性。',
-    'interactionMode=auto 表示跟随当前 workflow 阶段；interactionMode=plan 表示只使用规划/读取类工具；interactionMode=fast 表示在安全规则允许时可直接执行。',
-    params.interactionMode === 'plan'
-      ? '当前 interactionMode=plan。优先做解释、规划和审批准备，不要在该模式下直接执行 act 工具。'
-      : params.interactionMode === 'fast'
-        ? '当前 interactionMode=fast。在满足安全规则时，可以直接使用已注入的 act 工具执行。'
-        : '当前 interactionMode=auto。跟随当前 workflow 阶段，使用已注入工具集。',
     '回答简洁，用中文。',
     '在采取行动前，先调用 get_project_phase 了解当前项目状态、进度、失败项和可用操作。',
     '如果需要分镜面板级别的细节，调用 get_project_snapshot 并传入 detail=full。',
     `projectId=${params.projectId}`,
     `episodeId=${params.episodeId}`,
-    `interactionMode=${params.interactionMode}`,
   ].join('\n')
 }
 

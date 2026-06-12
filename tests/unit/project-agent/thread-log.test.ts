@@ -85,7 +85,7 @@ describe('project assistant thread log', () => {
           data: {
             requestId: 'request-1',
             modelKey: 'model-1',
-            toolset: { source: 'deterministic-workflow', effectiveIntent: 'act' },
+            toolset: { source: 'deterministic-workflow' },
             selectedTools: [{ operationId: 'get_project_context' }],
             messageCounts: { normalized: 3, runtime: 2, model: 2 },
             contextTokenEstimate: 120,

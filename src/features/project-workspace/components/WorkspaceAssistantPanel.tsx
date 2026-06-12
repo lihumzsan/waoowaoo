@@ -147,7 +147,6 @@ export default function WorkspaceAssistantPanel({
     selectedPanelId: selection?.selectedPanelId ?? null,
     selectedClipId: selection?.selectedClipId ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
-    interactionMode: 'fast',
   })
   const assistantRuntimeRef = useRef(assistantRuntime)
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())

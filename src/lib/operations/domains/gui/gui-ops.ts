@@ -109,7 +109,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         generateFromReference: z.boolean().optional(),
         customDescription: z.string().optional(),
         count: z.number().int().positive().max(6).optional(),
-        meta: z.record(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {

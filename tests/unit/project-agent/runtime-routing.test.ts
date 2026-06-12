@@ -9,7 +9,6 @@ const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
-  writerEvents: [] as Array<Record<string, unknown>>,
 }))
 
 const registryState = vi.hoisted(() => ({
@@ -38,28 +37,79 @@ vi.mock('ai', async () => {
   return {
     ...actual,
     safeValidateUIMessages: vi.fn(async ({ messages }) => ({ success: true, data: messages })),
-    convertToModelMessages: vi.fn(async (messages) => messages),
-    streamText: vi.fn((input) => {
-      streamState.capturedToolNames = Object.keys(input.tools ?? {})
-      streamState.capturedTools = input.tools ?? {}
-      streamState.capturedSystem = input.system
-      return {
-        toUIMessageStream: () => ({
-          pipeThrough: () => undefined,
-        }),
-      }
-    }),
-    createUIMessageStream: vi.fn(({ execute }) => {
-      const writer = {
-        write: (chunk: Record<string, unknown>) => {
-          streamState.writerEvents.push(chunk)
-        },
-        merge: vi.fn(),
-      }
-      void execute({ writer })
-      return { writer }
-    }),
     createUIMessageStreamResponse: vi.fn(() => new Response('ok', { status: 200 })),
+  }
+})
+
+vi.mock('@openai/agents-extensions/ai-sdk', () => ({
+  aisdk: vi.fn((model) => model),
+}))
+
+vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
+  createAiSdkUiMessageStream: vi.fn(() => new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'finish' })
+      controller.close()
+    },
+  })),
+}))
+
+vi.mock('@openai/agents', () => {
+  class Agent {
+    name: string
+    instructions: string
+    tools: Array<{ name: string; needsApproval?: unknown }>
+
+    constructor(config: {
+      name: string
+      instructions: string
+      tools: Array<{ name: string; needsApproval?: unknown }>
+    }) {
+      this.name = config.name
+      this.instructions = config.instructions
+      this.tools = config.tools
+    }
+  }
+
+  class RunContext {
+    context: unknown
+
+    constructor(context: unknown) {
+      this.context = context
+    }
+  }
+
+  class RunState {
+    static async fromStringWithContext() {
+      throw new Error('RUN_STATE_RESUME_NOT_USED_IN_TEST')
+    }
+  }
+
+  const run = vi.fn(async (agent: Agent) => {
+    streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
+    streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
+    streamState.capturedSystem = agent.instructions
+    return {
+      completed: Promise.resolve(),
+      interruptions: [],
+      state: {
+        getInterruptions: () => [],
+        toString: () => '',
+      },
+    }
+  })
+
+  const tool = vi.fn((definition: { name: string; needsApproval?: unknown }) => ({
+    type: 'function',
+    ...definition,
+  }))
+
+  return {
+    Agent,
+    RunContext,
+    RunState,
+    run,
+    tool,
   }
 })
 
@@ -88,18 +138,8 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
     activePlanRunCount: 0,
     failedItems: [],
     staleArtifacts: [],
-    availableActions: {
-      actMode: [],
-      planMode: [],
-    },
+    availableActions: [],
     editFirstWorkflow: phaseState.editFirstWorkflow,
-  })),
-}))
-
-vi.mock('@/lib/project-agent/stop-conditions', () => ({
-  createProjectAgentStopController: vi.fn(() => ({
-    stopWhen: undefined,
-    buildStopPart: () => null,
   })),
 }))
 
@@ -237,7 +277,6 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedToolNames = []
     streamState.capturedTools = {}
     streamState.capturedSystem = ''
-    streamState.writerEvents = []
     loggerState.info.mockReset()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
@@ -256,9 +295,11 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'assistant.toolset.result',
+      action: 'assistant.toolset.resolved',
       details: expect.objectContaining({
-        operationIds: expect.arrayContaining(['request_edit_first_choice', 'generate_edit_screenplay']),
+        toolset: expect.objectContaining({
+          operationIds: expect.arrayContaining(['request_edit_first_choice', 'generate_edit_screenplay']),
+        }),
       }),
     }))
   })
@@ -305,16 +346,16 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).not.toContain('generate_edit_script_storyboard_images')
   })
 
-  it('does not inject act tools in explicit plan mode', async () => {
+  it('injects the immediate workflow operation on the single assistant path', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', ['generate_edit_script'])
 
     await runAssistant({
-      context: { episodeId: 'episode-1', interactionMode: 'plan' },
-      text: '先给我计划',
+      context: { episodeId: 'episode-1' },
+      text: '继续生成剪辑表',
     })
 
     expect(streamState.capturedToolNames).toContain('get_project_phase')
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
-    expect(streamState.capturedToolNames).not.toContain('generate_edit_script')
+    expect(streamState.capturedToolNames).toContain('generate_edit_script')
   })
 })

@@ -18,6 +18,7 @@ import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
+import { findLatestProjectAgentApprovalResponse } from '@/lib/project-agent/ui-message-approval'
 
 type RequestBody = {
   messages?: unknown
@@ -117,6 +118,14 @@ async function compressThreadMessagesIfNeeded(params: {
     locale: params.locale,
     model: resolved.languageModel,
   })
+}
+
+async function validateThreadMessages(messages: unknown) {
+  const validation = await safeValidateUIMessages({ messages })
+  if (!validation.success) {
+    throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
+  }
+  return ensureUniqueUIMessages(validation.data)
 }
 
 export const runtime = 'nodejs'
@@ -225,12 +234,16 @@ export const POST = apiHandler(async (
 
   try {
     const locale = readLocaleFromBody(body)
-    const messages = await compressThreadMessagesIfNeeded({
-      userId: authResult.session.user.id,
-      projectId,
-      locale,
-      messages: body.messages,
-    })
+    const requestMessages = await validateThreadMessages(body.messages)
+    const approvalResponse = findLatestProjectAgentApprovalResponse(requestMessages)
+    const messages = approvalResponse
+      ? requestMessages
+      : await compressThreadMessagesIfNeeded({
+          userId: authResult.session.user.id,
+          projectId,
+          locale,
+          messages: requestMessages,
+        })
     const episodeId = readEpisodeIdFromRequestBody(body)
     const runLock = await acquireProjectAgentRunLock({
       projectId,
@@ -251,6 +264,7 @@ export const POST = apiHandler(async (
         projectId,
         context: body.context,
         messages,
+        approvalResponse,
         runLock,
       })
     } catch (error) {

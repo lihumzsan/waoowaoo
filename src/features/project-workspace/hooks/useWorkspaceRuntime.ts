@@ -13,7 +13,7 @@ interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
   isTransitioning: boolean
   isConfirmingAssets: boolean
-  isStartingPlan: boolean
+  isAssistantWorkflowStarting: boolean
   videoRatio: string | undefined
   videoModel: string | undefined
   singleShotVideoModel: string | undefined
@@ -29,7 +29,7 @@ interface UseWorkspaceRuntimeParams {
   }> | undefined
   handleUpdateEpisode: (key: string, value: unknown) => Promise<void>
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
-  onRequestAssistantPlan: () => Promise<void>
+  onRequestAssistantGuidance: () => Promise<void>
   handleGenerateEditScreenplay: (prompt: string) => Promise<void>
   handleGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
@@ -76,7 +76,7 @@ export function useWorkspaceRuntime({
   assetsLoading,
   isTransitioning,
   isConfirmingAssets,
-  isStartingPlan,
+  isAssistantWorkflowStarting,
   videoRatio,
   videoModel,
   singleShotVideoModel,
@@ -85,7 +85,7 @@ export function useWorkspaceRuntime({
   userVideoModels,
   handleUpdateEpisode,
   handleUpdateConfig,
-  onRequestAssistantPlan,
+  onRequestAssistantGuidance,
   handleGenerateEditScreenplay,
   handleGenerateEditDirectorDecoupage,
   handleGenerateEditScript,
@@ -119,7 +119,7 @@ export function useWorkspaceRuntime({
     assetsLoading,
     isTransitioning,
     isConfirmingAssets,
-    isStartingPlan,
+    isAssistantWorkflowStarting,
     videoRatio,
     videoModel,
     singleShotVideoModel,
@@ -128,7 +128,7 @@ export function useWorkspaceRuntime({
     userVideoModels: resolvedUserVideoModels,
     onNovelTextChange: (value) => handleUpdateEpisode('novelText', value),
     onVideoRatioChange: (value) => handleUpdateConfig('videoRatio', value),
-    onRequestAssistantPlan,
+    onRequestAssistantGuidance,
     onGenerateEditScreenplay: handleGenerateEditScreenplay,
     onGenerateEditDirectorDecoupage: handleGenerateEditDirectorDecoupage,
     onGenerateEditScript: handleGenerateEditScript,
@@ -185,10 +185,10 @@ export function useWorkspaceRuntime({
     handleUpdateVideoPlanPrompt,
     handleUpdateVideoPrompt,
     isConfirmingAssets,
-    isStartingPlan,
+    isAssistantWorkflowStarting,
     isTransitioning,
     openAssetLibrary,
-    onRequestAssistantPlan,
+    onRequestAssistantGuidance,
     resolvedUserVideoModels,
     capabilityOverrides,
     singleShotVideoModel,

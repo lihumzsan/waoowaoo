@@ -2,27 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { buildWorkspaceAssistantChatId } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
 
 describe('workspace assistant runtime chat id', () => {
-  it('includes interaction mode so mode switch recreates chat session', () => {
-    const autoId = buildWorkspaceAssistantChatId({
+  it('scopes chat sessions by project and episode only', () => {
+    const episodeId = buildWorkspaceAssistantChatId({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      interactionMode: 'auto',
     })
-    const fastId = buildWorkspaceAssistantChatId({
+    const globalId = buildWorkspaceAssistantChatId({
       projectId: 'project-1',
-      episodeId: 'episode-1',
-      interactionMode: 'fast',
-    })
-    const planId = buildWorkspaceAssistantChatId({
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      interactionMode: 'plan',
     })
 
-    expect(autoId).toBe('workspace-command:project-1:episode-1:auto')
-    expect(fastId).toBe('workspace-command:project-1:episode-1:fast')
-    expect(planId).toBe('workspace-command:project-1:episode-1:plan')
-    expect(autoId).not.toBe(fastId)
-    expect(planId).not.toBe(fastId)
+    expect(episodeId).toBe('workspace-command:project-1:episode-1')
+    expect(globalId).toBe('workspace-command:project-1:global')
+    expect(episodeId).not.toBe(globalId)
   })
 })

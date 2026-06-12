@@ -1,7 +1,6 @@
-import type { OperationIntent, ProjectAgentOperationRegistry } from '@/lib/operations/types'
+import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveEditFirstWorkflowCapabilityOperationIds } from '@/lib/project-workflow/edit-first'
-import type { ProjectAgentExecutionResolution } from './execution-mode'
 import type { ProjectAgentContext } from './types'
 
 const CORE_OPERATION_IDS = [
@@ -29,28 +28,19 @@ const EDIT_FIRST_CHOICE_OPERATION_ID = 'request_edit_first_choice'
 
 export interface ProjectAgentToolset {
   source: 'deterministic-workflow'
-  effectiveIntent: OperationIntent
   operationIds: string[]
   coreOperationIds: string[]
   workflowOperationIds: string[]
   continuationOperationId: string | null
 }
 
-function isIntentAllowed(operationIntent: OperationIntent, effectiveIntent: OperationIntent): boolean {
-  if (effectiveIntent === 'query') return operationIntent === 'query'
-  if (effectiveIntent === 'plan') return operationIntent === 'query' || operationIntent === 'plan'
-  return true
-}
-
 function pushOptionalTool(params: {
   registry: ProjectAgentOperationRegistry
   operationIds: string[]
   operationId: string
-  effectiveIntent: OperationIntent
 }) {
   const operation = params.registry[params.operationId]
   if (!operation?.channels.tool) return
-  if (!isIntentAllowed(operation.intent, params.effectiveIntent)) return
   if (!params.operationIds.includes(params.operationId)) {
     params.operationIds.push(params.operationId)
   }
@@ -60,7 +50,6 @@ function pushRequiredTool(params: {
   registry: ProjectAgentOperationRegistry
   operationIds: string[]
   operationId: string
-  effectiveIntent: OperationIntent
 }) {
   const operation = params.registry[params.operationId]
   if (!operation) {
@@ -69,7 +58,6 @@ function pushRequiredTool(params: {
   if (!operation.channels.tool) {
     throw new Error(`PROJECT_AGENT_REQUIRED_OPERATION_NOT_TOOL:${params.operationId}`)
   }
-  if (!isIntentAllowed(operation.intent, params.effectiveIntent)) return
   if (!params.operationIds.includes(params.operationId)) {
     params.operationIds.push(params.operationId)
   }
@@ -79,13 +67,11 @@ export function resolveProjectAgentToolset(params: {
   registry: ProjectAgentOperationRegistry
   workflow: EditFirstWorkflowState
   context: ProjectAgentContext
-  executionMode: ProjectAgentExecutionResolution
   continuationOperationId?: string | null
 }): ProjectAgentToolset {
   const operationIds: string[] = []
   const coreOperationIds: string[] = []
   const workflowOperationIds: string[] = []
-  const effectiveIntent = params.executionMode.effectiveIntent
 
   for (const operationId of CORE_OPERATION_IDS) {
     const beforeLength = operationIds.length
@@ -93,7 +79,6 @@ export function resolveProjectAgentToolset(params: {
       registry: params.registry,
       operationIds,
       operationId,
-      effectiveIntent,
     })
     if (operationIds.length > beforeLength) {
       coreOperationIds.push(operationId)
@@ -106,7 +91,6 @@ export function resolveProjectAgentToolset(params: {
       registry: params.registry,
       operationIds,
       operationId: EDIT_FIRST_CHOICE_OPERATION_ID,
-      effectiveIntent,
     })
     if (operationIds.length > beforeLength) {
       workflowOperationIds.push(EDIT_FIRST_CHOICE_OPERATION_ID)
@@ -120,7 +104,6 @@ export function resolveProjectAgentToolset(params: {
       registry: params.registry,
       operationIds,
       operationId,
-      effectiveIntent,
     })
     if (operationIds.length > beforeLength) {
       workflowOperationIds.push(operationId)
@@ -134,7 +117,6 @@ export function resolveProjectAgentToolset(params: {
       registry: params.registry,
       operationIds,
       operationId: nextOperationId,
-      effectiveIntent,
     })
     if (operationIds.length > beforeLength) {
       workflowOperationIds.push(nextOperationId)
@@ -148,7 +130,6 @@ export function resolveProjectAgentToolset(params: {
       registry: params.registry,
       operationIds,
       operationId: continuationOperationId,
-      effectiveIntent,
     })
     if (operationIds.length > beforeLength) {
       workflowOperationIds.push(continuationOperationId)
@@ -157,7 +138,6 @@ export function resolveProjectAgentToolset(params: {
 
   return {
     source: 'deterministic-workflow',
-    effectiveIntent,
     operationIds,
     coreOperationIds,
     workflowOperationIds,

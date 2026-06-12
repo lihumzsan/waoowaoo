@@ -65,21 +65,6 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
-  if (params.context.interactionMode === 'plan' && operation.effects.writes) {
-    return {
-      ok: false,
-      error: buildToolError({
-        code: 'OPERATION_NOT_ALLOWED',
-        message: 'PROJECT_AGENT_OPERATION_NOT_ALLOWED_IN_PLAN_MODE',
-        operationId: params.operationId,
-        details: {
-          interactionMode: 'plan',
-          effects: operation.effects,
-        },
-      }),
-    }
-  }
-
   const parsed = operation.inputSchema.safeParse(params.input)
   if (!parsed.success) {
     return {

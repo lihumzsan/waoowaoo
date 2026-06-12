@@ -26,48 +26,30 @@ export interface ProjectPhaseSnapshot {
   activePlanRunCount: number
   failedItems: string[]
   staleArtifacts: string[]
-  availableActions: {
-    actMode: string[]
-    planMode: string[]
-  }
+  availableActions: string[]
   editFirstWorkflow: EditFirstWorkflowState
 }
 
 function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): ProjectPhaseSnapshot['availableActions'] {
   if (!hasEpisode) {
-    return {
-      actMode: [],
-      planMode: [],
-    }
+    return []
   }
 
   switch (phase) {
     case PROJECT_PHASE.DRAFT:
-      return {
-        actMode: [],
-        planMode: ['screenwriting', 'story-structure'],
-      }
+      return ['screenwriting', 'story-structure']
     case PROJECT_PHASE.SCRIPT_READY:
-      return {
-        actMode: [],
-        planMode: ['storyboard-direction', 'visual-continuity'],
-      }
+      return ['storyboard-direction', 'visual-continuity']
     case PROJECT_PHASE.STORYBOARD_READY:
-      return {
-        actMode: [
-          'generate_character_image',
-          'generate_location_image',
-          'regenerate_panel_image',
-          'generate_edit_script_storyboard_images',
-          'generate_episode_videos',
-        ],
-        planMode: [],
-      }
+      return [
+        'generate_character_image',
+        'generate_location_image',
+        'regenerate_panel_image',
+        'generate_edit_script_storyboard_images',
+        'generate_episode_videos',
+      ]
     default:
-      return {
-        actMode: [],
-        planMode: [],
-      }
+      return []
   }
 }
 

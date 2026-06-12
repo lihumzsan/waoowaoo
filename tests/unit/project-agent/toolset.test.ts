@@ -70,7 +70,6 @@ describe('project agent deterministic toolset', () => {
       registry: registry(),
       workflow: workflow('ready_to_generate_screenplay', ['generate_edit_screenplay']),
       context: { episodeId: 'episode-1' },
-      executionMode: { interactionMode: 'auto', effectiveIntent: 'act' },
     })
 
     expect(result.operationIds).toEqual(expect.arrayContaining([
@@ -86,7 +85,6 @@ describe('project agent deterministic toolset', () => {
       registry: registry(),
       workflow: workflow('ready_to_generate_assets', ['generate_edit_script_assets']),
       context: { episodeId: 'episode-1' },
-      executionMode: { interactionMode: 'auto', effectiveIntent: 'act' },
     })
 
     expect(result.operationIds).toContain('generate_edit_script_assets')
@@ -98,24 +96,10 @@ describe('project agent deterministic toolset', () => {
       registry: registry(),
       workflow: workflow('ready_to_generate_storyboard_images', ['generate_edit_script_storyboard_images']),
       context: { episodeId: 'episode-1' },
-      executionMode: { interactionMode: 'auto', effectiveIntent: 'act' },
     })
 
     expect(result.operationIds).toContain('generate_edit_script_storyboard_images')
     expect(result.operationIds).not.toContain('generate_episode_videos')
-  })
-
-  it('does not expose act tools in plan mode', () => {
-    const result = resolveProjectAgentToolset({
-      registry: registry(),
-      workflow: workflow('ready_to_generate_edit_script', ['generate_edit_script']),
-      context: { episodeId: 'episode-1' },
-      executionMode: { interactionMode: 'plan', effectiveIntent: 'plan' },
-    })
-
-    expect(result.operationIds).toContain('get_project_phase')
-    expect(result.operationIds).toContain('request_edit_first_choice')
-    expect(result.operationIds).not.toContain('generate_edit_script')
   })
 
   it('fails explicitly when a workflow stage references a missing required operation', () => {
@@ -126,7 +110,6 @@ describe('project agent deterministic toolset', () => {
       registry: missingRegistry,
       workflow: workflow('ready_to_generate_assets', ['generate_edit_script_assets']),
       context: { episodeId: 'episode-1' },
-      executionMode: { interactionMode: 'auto', effectiveIntent: 'act' },
     })).toThrow('PROJECT_AGENT_REQUIRED_OPERATION_MISSING:generate_edit_script_assets')
   })
 })

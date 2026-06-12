@@ -922,7 +922,7 @@ async function executeGenerateVideoGroupOperation(params: {
 }) {
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const gridMode = params.input.gridMode === '3x3' ? '3x3' : '2x2'
+  const gridMode: '2x2' | '3x3' = params.input.gridMode === '3x3' ? '3x3' : '2x2'
   const shotNumbers = Array.isArray(params.input.shotNumbers)
     ? params.input.shotNumbers.map((value) => Number(value))
     : []
@@ -958,7 +958,7 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
 }) {
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const gridMode = params.input.gridMode === '3x3' ? '3x3' : '2x2'
+  const gridMode: '2x2' | '3x3' = params.input.gridMode === '3x3' ? '3x3' : '2x2'
   const editScript = await prisma.projectEditScript.findFirst({
     where: { episodeId, projectId: params.ctx.projectId },
     select: { shotsJson: true },
@@ -978,6 +978,7 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
       results: [],
       noop: true,
       reason: '没有足够镜头组成连续视频片段',
+      gridMode,
     }
   }
 
@@ -1146,7 +1147,7 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
     ...submitted.result,
     groupId: submitted.groupId,
     episodeId,
-    sourceMode: 'asset_reference',
+    sourceMode: 'asset_reference' as const,
     blockIndex,
     shotNumbers: submitted.shotNumbers,
     durationSec: submitted.durationSec,
@@ -1195,7 +1196,7 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
       shotNumbers: item.shotNumbers,
       durationSec: item.durationSec,
     })),
-    sourceMode: 'asset_reference',
+    sourceMode: 'asset_reference' as const,
   }
 }
 
@@ -1311,7 +1312,7 @@ const generatePanelVideoInputSchema = z.object({
   panelIndex: z.number().int().min(0).max(2000).optional(),
   videoModel: z.string().min(1),
   firstLastFrame: z.unknown().optional(),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough().refine((value) => Boolean(value.panelId || (value.storyboardId && typeof value.panelIndex === 'number')), {
   message: 'panelId or (storyboardId + panelIndex) is required',
   path: ['panelId'],
@@ -1323,7 +1324,7 @@ const generateEpisodeVideosInputSchema = z.object({
   limit: z.number().int().positive().max(50).optional(),
   videoModel: z.string().min(1),
   firstLastFrame: z.unknown().optional(),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateVideoGroupInputSchema = z.object({
@@ -1332,7 +1333,7 @@ const generateVideoGroupInputSchema = z.object({
   gridMode: z.enum(VIDEO_GRID_MODES),
   shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
   videoModel: z.string().min(1),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateEpisodeVideoGroupsInputSchema = z.object({
@@ -1340,7 +1341,7 @@ const generateEpisodeVideoGroupsInputSchema = z.object({
   episodeId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
   videoModel: z.string().min(1),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateEpisodeVideosAutoInputSchema = z.object({
@@ -1348,7 +1349,7 @@ const generateEpisodeVideosAutoInputSchema = z.object({
   episodeId: z.string().min(1).optional(),
   videoModel: z.string().min(1),
   groupVideoModel: z.string().min(1).optional(),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateAssetReferenceVideoInputSchema = z.object({
@@ -1357,7 +1358,7 @@ const generateAssetReferenceVideoInputSchema = z.object({
   blockIndex: z.number().int().min(0).max(59),
   videoModel: z.string().min(1),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateEpisodeAssetReferenceVideosInputSchema = z.object({
@@ -1365,7 +1366,7 @@ const generateEpisodeAssetReferenceVideosInputSchema = z.object({
   episodeId: z.string().min(1).optional(),
   videoModel: z.string().min(1),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
-  generationOptions: z.record(z.unknown()).optional(),
+  generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 export function createVideoGenerationOperations(): ProjectAgentOperationRegistryDraft {

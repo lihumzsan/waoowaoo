@@ -117,7 +117,7 @@ const executablePlanStepInputSchema = z.object({
   outputArtifacts: z.array(z.string().min(1)).optional(),
   dependsOn: z.array(z.string().min(1)).optional(),
   requiresApproval: z.boolean().optional(),
-  input: z.record(z.unknown()).optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
 })
 
 const executePlanInputSchema = z.object({
@@ -142,7 +142,7 @@ const executePlanOutputSchema = z.object({
 const invokeOperationInputSchema = z.object({
   skillId: z.string().min(1),
   operationId: z.string().min(1),
-  input: z.record(z.unknown()).optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
   confirmed: z.boolean().optional(),
 })
 

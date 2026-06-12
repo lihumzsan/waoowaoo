@@ -52,7 +52,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'needs_episode',
       projectId: 'project-1',
       userId: 'user-1',
-      context: { interactionMode: 'auto' },
+      context: {},
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -83,7 +83,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'needs_episode',
       projectId: 'project-1',
       userId: 'user-1',
-      context: { interactionMode: 'auto' },
+      context: {},
       source: 'assistant-panel',
       writer: buildWriter(),
       input: { episodeId: 'ep-1' },
@@ -112,7 +112,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'forbids_episode',
       projectId: 'project-1',
       userId: 'user-1',
-      context: { interactionMode: 'auto', episodeId: 'ep-1' },
+      context: { episodeId: 'ep-1' },
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -143,7 +143,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'forbids_episode',
       projectId: 'project-1',
       userId: 'user-1',
-      context: { interactionMode: 'auto' },
+      context: {},
       source: 'assistant-panel',
       writer: buildWriter(),
       input: { episodeId: 'ep-1' },
@@ -155,7 +155,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  it('[plan mode + writes] -> returns OPERATION_NOT_ALLOWED and does not execute', async () => {
+  it('[write without operation confirmation requirement] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       writes_op: makeTestOperation({
@@ -174,37 +174,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'writes_op',
       projectId: 'project-1',
       userId: 'user-1',
-      context: { interactionMode: 'plan', episodeId: 'ep-1' },
-      source: 'assistant-panel',
-      writer: buildWriter(),
-      input: {},
-    })
-
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('OPERATION_NOT_ALLOWED')
-    expect(execute).not.toHaveBeenCalled()
-  })
-
-  it('[plan mode + query] -> allows execution', async () => {
-    const execute = vi.fn(async () => ({ ok: true }))
-    registryState.registry = {
-      query_op: makeTestOperation({
-        id: 'query_op',
-        intent: 'query',
-        effects: EFFECTS_NONE,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ ok: z.boolean() }),
-        execute,
-      }),
-    }
-
-    const result = await executeProjectAgentOperationFromTool({
-      request: buildRequest(),
-      operationId: 'query_op',
-      projectId: 'project-1',
-      userId: 'user-1',
-      context: { interactionMode: 'plan' },
+      context: {},
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
