@@ -146,6 +146,7 @@ describe('project assistant chat route', () => {
             selectedClipId: 'clip-1',
             selectedAssetId: 'asset-1',
           },
+          assistantPermissionMode: 'ask',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -163,6 +164,7 @@ describe('project assistant chat route', () => {
         selectedClipId: 'clip-1',
         selectedAssetId: 'asset-1',
       },
+      assistantPermissionMode: 'ask',
     }))
     expect(runLockMock.acquireProjectAgentRunLock).toHaveBeenCalledWith({
       projectId: 'project-1',
@@ -193,6 +195,7 @@ describe('project assistant chat route', () => {
           context: {
             episodeId: 'episode-1',
           },
+          assistantPermissionMode: 'auto',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -239,6 +242,7 @@ describe('project assistant chat route', () => {
           context: {
             locale: 'en',
           },
+          assistantPermissionMode: 'auto',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -253,6 +257,7 @@ describe('project assistant chat route', () => {
     expect(messageCompressionMock.compressMessages).toHaveBeenCalledTimes(1)
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       messages: compressionState.compressedMessages,
+      assistantPermissionMode: 'auto',
     }))
   })
 
@@ -293,6 +298,51 @@ describe('project assistant chat route', () => {
     }))
   })
 
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects missing assistant permission mode', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        code: 'INVALID_PARAMS',
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_REQUIRED' }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects invalid assistant permission mode', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+          assistantPermissionMode: 'fast',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        code: 'INVALID_PARAMS',
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_INVALID' }),
+      }),
+    }))
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> maps runtime errors into API error payloads', async () => {
     projectAgentMock.createProjectAgentChatResponse.mockRejectedValueOnce(new Error('PROJECT_AGENT_MODEL_NOT_CONFIGURED'))
 
@@ -302,6 +352,7 @@ describe('project assistant chat route', () => {
         method: 'POST',
         body: {
           messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+          assistantPermissionMode: 'ask',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },

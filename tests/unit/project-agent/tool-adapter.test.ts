@@ -52,6 +52,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -92,6 +93,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'ask',
       source: 'assistant-panel',
       writer,
       input: {},
@@ -101,7 +103,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(writer.write).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.error.code).toBe('OPERATION_PREREQUISITE_MISSING')
+    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
     expect(result.error.message).toBe('PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED')
     expect(result.error.details).toEqual({ approval: 'ai-sdk-tool-approval' })
     expect(execute).not.toHaveBeenCalled()
@@ -132,6 +134,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'ask',
       source: 'assistant-panel',
       writer,
       input: { confirmed: true },
@@ -165,6 +168,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -197,6 +201,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -229,6 +234,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -261,6 +267,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -291,6 +298,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -321,6 +329,7 @@ describe('executeProjectAgentOperationFromTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},

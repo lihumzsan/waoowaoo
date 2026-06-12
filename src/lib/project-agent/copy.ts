@@ -1,4 +1,5 @@
 import type { ProjectAgentLocale } from './locale'
+import type { AssistantPermissionMode } from './permission-mode'
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   asset_hub_list_folders: {
@@ -47,6 +48,53 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
   },
 }
 
+const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: string }> = {
+  request_edit_first_choice: {
+    zh: '确认选择',
+    en: 'Confirm choices',
+  },
+  generate_edit_screenplay: {
+    zh: '生成剧本',
+    en: 'Generate screenplay',
+  },
+  revise_edit_screenplay: {
+    zh: '修改剧本',
+    en: 'Revise screenplay',
+  },
+  generate_edit_style_previews: {
+    zh: '生成视觉风格',
+    en: 'Generate visual styles',
+  },
+  generate_edit_director_decoupage: {
+    zh: '生成导演拆镜',
+    en: 'Generate director decoupage',
+  },
+  generate_edit_script: {
+    zh: '生成剪辑表',
+    en: 'Generate edit table',
+  },
+  generate_edit_script_assets: {
+    zh: '生成剪辑资产',
+    en: 'Generate edit assets',
+  },
+  generate_edit_script_storyboard: {
+    zh: '生成分镜文本',
+    en: 'Generate storyboard text',
+  },
+  generate_edit_script_storyboard_images: {
+    zh: '生成分镜图片',
+    en: 'Generate storyboard images',
+  },
+  generate_episode_videos: {
+    zh: '生成视频片段',
+    en: 'Generate video clips',
+  },
+  render_final_video: {
+    zh: '渲染最终视频',
+    en: 'Render final video',
+  },
+}
+
 export function localizeSelectableToolDescription(
   operationId: string,
   fallback: string,
@@ -57,10 +105,20 @@ export function localizeSelectableToolDescription(
   return copy[locale]
 }
 
+export function localizeProjectAgentOperationTitle(
+  operationId: string,
+  locale: ProjectAgentLocale,
+): string {
+  const copy = PROJECT_AGENT_OPERATION_TITLE_COPY[operationId]
+  if (!copy) return locale === 'en' ? 'Project operation' : '项目操作'
+  return copy[locale]
+}
+
 export function buildProjectAgentSystemPrompt(params: {
   locale: ProjectAgentLocale
   projectId: string
   episodeId: string
+  assistantPermissionMode: AssistantPermissionMode
 }): string {
   if (params.locale === 'en') {
     return [
@@ -80,6 +138,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'After style previews are ready and before calling generate_edit_director_decoupage, call request_edit_first_choice with choiceType="style" and wait for the user to click the card. If the user says they dislike the candidates or asks to regenerate/adjust them, call generate_edit_style_previews again with styleDirection, count<=3, and replaceExisting=true instead of forcing them to choose. Do not ask them to type the style, and do not invent or render card JSON in text.',
       'After the visual style is selected, execute the immediate next edit-first operation by calling the corresponding injected operation directly. Do not call request_edit_first_choice for execution permission. If the operation needs user approval, runtime will automatically show an approval card and return the approved, denied, failed, or completed result to you as the original tool result.',
       'When the assistant panel displays a choice card for edit-first duration, screenplay review, visual style, or aspect ratio, wait for the user to click or submit that card. Do not choose for the user, do not ask them to type the same choice, and do not call the dependent next act tool until the content-choice card submission returns.',
+      `Assistant permission mode: ${params.assistantPermissionMode}. This controls execution approval only. In auto mode, tool execution may be pre-authorized, but you still must not choose duration, aspect ratio, screenplay review outcome, visual style, or any other content decision for the user. Missing human choices require a choice card or a clear question.`,
       'For edit-first production, treat that dependency order as a dependency gate. Before any act tool call, read project state and identify the earliest missing required artifact. You may only execute the operation that creates the immediate next artifact, or repair/regenerate the current-stage artifact the user is responding to. User execution approval is handled by runtime approval cards, not by request_edit_first_choice.',
       'If the current immediate next artifact is the edit script/core edit table, focus only on screenplay/director-decoupage/edit-table discussion and generation. After the edit script/core edit table is ready, stop open-ended creative discussion and only summarize the table, report blocking issues, or ask the user to confirm the immediate next operation.',
       'Never skip ahead, batch multiple future stages, run a later-stage operation, or perform unrelated project mutations from the assistant panel. If the user asks for any non-next operation, explain in user-friendly terms what is currently needed next; do not mention workflow gates, injected tools, permissions, or internal operation availability.',
@@ -124,6 +183,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '风格候选 ready 后、调用 generate_edit_director_decoupage 前，先调用 request_edit_first_choice 并传 choiceType="style"，然后等待用户点击卡片；如果用户表示不满意、要求重做或调整候选图，必须再次调用 generate_edit_style_previews，并用 styleDirection 传入用户方向，count 不得超过 3，replaceExisting=true；不要强迫用户先选一个。不要要求用户用文字输入风格，也不要在文本里编造或渲染卡片 JSON。',
     '视觉风格选中后，后续当前唯一下一步 edit-first operation 要直接调用对应已注入 operation。不要用 request_edit_first_choice 做执行权限确认；如果该 operation 需要用户批准，runtime 会自动展示批准卡，并把批准、拒绝、失败或完成结果作为原 tool result 返回给你。',
     '当 assistant 面板展示剪辑先行时长、剧本审核、视觉风格或画面比例选择卡时，必须等待用户点击或提交卡片。不要替用户选择，不要要求用户再用文字输入同样选择，也不要在内容选择卡提交成功前调用依赖它的下一步 act tool。',
+    `Assistant 权限模式：${params.assistantPermissionMode}。该模式只控制执行审批。auto 模式代表 tool 执行可能已预授权，但你仍然不能替用户选择时长、画面比例、剧本审核结论、视觉风格或任何内容决策；缺少用户选择时必须发起选择卡或明确提问。`,
     '剪辑先行制作必须把上述产物依赖顺序当作产物依赖约束。每次调用 act tool 前，必须先读取项目状态并识别最早缺失的必要产物；你只能执行创建当前下一步产物的 operation，或修复/重生成用户正在反馈的当前阶段产物。执行批准由 runtime approval card 处理，不由 request_edit_first_choice 处理。',
     '如果当前唯一下一步产物是剪辑先行表/剪辑核心表，只能围绕剧本、导演拆镜和剪辑表进行讨论与生成。剪辑先行表/剪辑核心表 ready 后，停止开放式创意讨论，只能总结当前表、报告阻塞问题，或请求用户确认唯一下一步 operation。',
     '禁止跳步、批量推进多个未来阶段、执行后置阶段 operation，或在 assistant 面板里做无关项目修改。如果用户要求执行非下一步操作，必须用用户能理解的方式说明当前需要先完成什么；不要提 workflow 门禁、工具注入、权限或内部 operation 可用性。',

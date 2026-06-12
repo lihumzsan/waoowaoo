@@ -1,12 +1,16 @@
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
+import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import {
   type ProjectAgentToolError,
   type ProjectAgentToolErrorCode,
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
+import {
+  shouldRequireAssistantToolApproval,
+  type AssistantPermissionMode,
+} from '@/lib/project-agent/permission-mode'
 import type { ProjectAgentContext } from '@/lib/project-agent/types'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 
@@ -47,6 +51,7 @@ export async function executeProjectAgentOperationFromTool(params: {
   projectId: string
   userId: string
   context: ProjectAgentContext
+  assistantPermissionMode: AssistantPermissionMode
   source: string
   writer: UIMessageStreamWriter<UIMessage>
   input: unknown
@@ -122,12 +127,16 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
-  const requiresConfirmation = shouldRequireAssistantConfirmation(operation.confirmation)
+  const requiresConfirmation = shouldRequireAssistantToolApproval({
+    mode: params.assistantPermissionMode,
+    operation,
+  })
   if (requiresConfirmation && !isConfirmedOperationInput(params.input)) {
     return {
       ok: false,
+      confirmationRequired: true,
       error: buildToolError({
-        code: 'OPERATION_PREREQUISITE_MISSING',
+        code: 'CONFIRMATION_REQUIRED',
         message: 'PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED',
         operationId: params.operationId,
         details: {

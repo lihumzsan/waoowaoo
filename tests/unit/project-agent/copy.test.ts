@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from '@/lib/project-agent/copy'
+import {
+  buildProjectAgentSystemPrompt,
+  localizeProjectAgentOperationTitle,
+  localizeSelectableToolDescription,
+} from '@/lib/project-agent/copy'
 
 describe('project agent prompt copy', () => {
   it('uses direct operation rules instead of fixed workflow or skill-gateway rules', () => {
@@ -7,6 +11,7 @@ describe('project agent prompt copy', () => {
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
+      assistantPermissionMode: 'ask',
     })
 
     expect(prompt).toContain('只能使用当前注入的 tool 定义和当前项目上下文')
@@ -44,6 +49,7 @@ describe('project agent prompt copy', () => {
       locale: 'en',
       projectId: 'project-1',
       episodeId: 'episode-1',
+      assistantPermissionMode: 'auto',
     })
 
     expect(prompt).toContain('treat that dependency order as a dependency gate')
@@ -62,6 +68,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('by calling the corresponding injected operation directly')
     expect(prompt).toContain('runtime approval cards')
     expect(prompt).toContain('When the assistant panel displays a choice card for edit-first duration, screenplay review, visual style, or aspect ratio')
+    expect(prompt).toContain('Assistant permission mode: auto')
     expect(prompt).toContain('After generate_edit_screenplay succeeds, present the screenplay content, then call request_edit_first_choice with choiceType="screenplay_review"')
     expect(prompt).toContain('call revise_edit_screenplay instead of postponing the change to visual style previews')
     expect(prompt).toContain('generate_edit_style_previews')
@@ -78,6 +85,12 @@ describe('project agent prompt copy', () => {
     expect(zhDescription).toContain('必须来自用户通过 request_edit_first_choice 选择卡确认的结果')
     expect(enDescription).toContain('You must pass prompt, durationSeconds, and aspectRatio')
     expect(enDescription).toContain('confirmed through request_edit_first_choice')
+  })
+
+  it('localizes user-facing operation titles without exposing internal ids', () => {
+    expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'zh')).toBe('生成剧本')
+    expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'en')).toBe('Generate screenplay')
+    expect(localizeProjectAgentOperationTitle('unknown_internal_tool', 'zh')).toBe('项目操作')
   })
 
   it('describes screenplay revision as review-stage only with structured fields', () => {

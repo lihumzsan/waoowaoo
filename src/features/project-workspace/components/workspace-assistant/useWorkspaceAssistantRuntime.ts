@@ -19,6 +19,7 @@ import {
   findPendingAgentInterruption,
   findPendingToolApprovalId,
 } from '@/lib/project-agent/ui-message-approval'
+import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -27,6 +28,7 @@ interface UseWorkspaceAssistantRuntimeParams {
   selectedPanelId?: string | null
   selectedClipId?: string | null
   selectedAssetId?: string | null
+  assistantPermissionMode: AssistantPermissionMode
 }
 
 interface UseWorkspaceAssistantRuntimeResult {
@@ -69,6 +71,7 @@ export function useWorkspaceAssistantRuntime({
   selectedPanelId,
   selectedClipId,
   selectedAssetId,
+  assistantPermissionMode,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
   const chatId = buildWorkspaceAssistantChatId({
@@ -90,8 +93,9 @@ export function useWorkspaceAssistantRuntime({
     api: `/api/projects/${projectId}/assistant/chat`,
     body: {
       context: contextPayload,
+      assistantPermissionMode,
     },
-  }), [contextPayload, projectId])
+  }), [assistantPermissionMode, contextPayload, projectId])
   const suppressNextAutomaticSendRef = useRef(false)
   const chat = useChat({
     id: chatId,

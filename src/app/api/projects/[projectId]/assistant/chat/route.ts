@@ -19,12 +19,14 @@ import {
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
 import { findLatestProjectAgentApprovalResponse } from '@/lib/project-agent/ui-message-approval'
+import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 type RequestBody = {
   messages?: unknown
   context?: unknown
   episodeId?: string | null
   locale?: string | null
+  assistantPermissionMode?: unknown
 }
 
 function mapProjectAgentError(error: unknown): ApiError {
@@ -44,6 +46,8 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_AGENT_TOOL_SELECTION_INVALID'
       || error.message === 'PROJECT_AGENT_TOOL_SELECTION_TOO_LARGE'
       || error.message === 'PROJECT_AGENT_MESSAGE_SUMMARY_EMPTY'
+      || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_REQUIRED'
+      || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
         code: error.message,
@@ -234,6 +238,7 @@ export const POST = apiHandler(async (
 
   try {
     const locale = readLocaleFromBody(body)
+    const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
     const requestMessages = await validateThreadMessages(body.messages)
     const approvalResponse = findLatestProjectAgentApprovalResponse(requestMessages)
     const messages = approvalResponse
@@ -264,6 +269,7 @@ export const POST = apiHandler(async (
         projectId,
         context: body.context,
         messages,
+        assistantPermissionMode,
         approvalResponse,
         runLock,
       })

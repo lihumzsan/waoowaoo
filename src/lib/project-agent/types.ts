@@ -7,6 +7,7 @@ import type {
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { PlanValidationIssue } from '@/lib/agent-skills/types'
+import type { AssistantPermissionMode } from './permission-mode'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -108,6 +109,7 @@ export interface AgentRuntimeContextPartData {
   requestId: string
   modelKey: string
   locale: string
+  assistantPermissionMode: AssistantPermissionMode
   projectId: string
   episodeId?: string | null
   messageCounts: {

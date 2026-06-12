@@ -54,6 +54,7 @@ describe('createProjectAgentOperationTool', () => {
       context: {
         episodeId: 'episode-1',
       },
+      assistantPermissionMode: 'ask',
       writer: {
         write: vi.fn(),
         merge: vi.fn(),
@@ -79,9 +80,53 @@ describe('createProjectAgentOperationTool', () => {
       projectId: 'project-1',
       userId: 'user-1',
       toolCallId: 'call-1',
+      assistantPermissionMode: 'ask',
       input: {
         episodeId: 'episode-1',
         confirmed: true,
+      },
+    }))
+  })
+
+  it('skips Agents SDK approval in auto mode while preserving the execution path', async () => {
+    const tool = createProjectAgentOperationTool({
+      request: new Request('http://localhost') as unknown as NextRequest,
+      operation: buildOperation(),
+      description: 'Generate edit script',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        episodeId: 'episode-1',
+      },
+      assistantPermissionMode: 'auto',
+      writer: {
+        write: vi.fn(),
+        merge: vi.fn(),
+        onError: (error) => (error instanceof Error ? error.message : String(error)),
+      },
+    })
+
+    expect(tool.type).toBe('function')
+    if (tool.type !== 'function') throw new Error('EXPECTED_FUNCTION_TOOL')
+    expect(await tool.needsApproval(new RunContext(), { episodeId: 'episode-1' }, 'call-1')).toBe(false)
+
+    await tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'generate_edit_script',
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })
+
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
+      operationId: 'generate_edit_script',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantPermissionMode: 'auto',
+      toolCallId: 'call-1',
+      input: {
+        episodeId: 'episode-1',
       },
     }))
   })

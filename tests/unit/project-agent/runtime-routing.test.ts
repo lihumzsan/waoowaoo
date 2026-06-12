@@ -262,12 +262,14 @@ async function flushAsyncWork() {
 async function runAssistant(params: {
   context?: Record<string, unknown>
   text?: string
+  assistantPermissionMode?: 'ask' | 'auto'
 }) {
   const response = await createProjectAgentChatResponse({
     request: buildRequest(),
     userId: 'user-1',
     projectId: 'project-1',
     context: params.context ?? { episodeId: 'episode-1' },
+    assistantPermissionMode: params.assistantPermissionMode ?? 'ask',
     messages: [
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: params.text ?? '民俗恐怖片' }] },
     ],
@@ -299,6 +301,7 @@ describe('project agent runtime deterministic tool injection', () => {
       'generate_edit_screenplay',
     ]))
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
+    expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.toolset.resolved',
@@ -316,6 +319,7 @@ describe('project agent runtime deterministic tool injection', () => {
       userId: 'user-1',
       projectId: 'project-1',
       context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
         {
@@ -368,6 +372,15 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.capturedToolNames).toContain('generate_edit_script_assets')
     expect(streamState.capturedToolNames).not.toContain('generate_edit_screenplay')
+  })
+
+  it('skips execution approval in auto mode while keeping choice cards approval-free', async () => {
+    const response = await runAssistant({ assistantPermissionMode: 'auto' })
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
+    expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
+    expect(streamState.capturedSystem).toContain('Assistant 权限模式：auto')
   })
 
   it('injects storyboard image generation before video generation', async () => {

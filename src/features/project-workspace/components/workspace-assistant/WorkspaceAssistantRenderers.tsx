@@ -12,7 +12,7 @@ import {
 import type { ChatStatus, UIMessage } from 'ai'
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -41,6 +41,8 @@ import type { ProjectEditScreenplay, ProjectEditStylePreview } from '@/types/pro
 import { queryKeys } from '@/lib/query/keys'
 import { dispatchWorkspaceAssistantMessage } from './assistant-send-event'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
+import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
+import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -959,6 +961,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   confirmationSubmittingKey?: string | null
 }) {
   const t = useTranslations('assistantAgent')
+  const locale = normalizeProjectAgentLocale(useLocale())
+  const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
   const toolStatus = props.status.type
   const inputText = JSON.stringify(props.args ?? {}, null, 2)
   const outputText = props.result === undefined ? '' : JSON.stringify(props.result, null, 2)
@@ -969,7 +973,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
     return (
       <ConfirmationActionCard
         operationId={props.toolName}
-        summary={`${t('toolCall.needsAction')} · ${props.toolName}`}
+        summary={`${t('toolCall.needsAction')} · ${operationTitle}`}
         onConfirm={async () => props.onRespondToolApproval?.({ approvalId, approved: true })}
         onCancel={async () => props.onRespondToolApproval?.({ approvalId, approved: false })}
         confirmPending={props.confirmationSubmittingKey === `approval:${approvalId}:approve`}
@@ -987,7 +991,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name={toolStatus === 'incomplete' ? 'loader' : 'settingsHex'} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
-        <span className="min-w-0 truncate">{summaryText} · {props.toolName}</span>
+        <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="ml-5 mt-1 space-y-2 text-[11px]">

@@ -53,6 +53,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -84,6 +85,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: { episodeId: 'ep-1' },
@@ -113,6 +115,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: { episodeId: 'ep-1' },
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},
@@ -144,6 +147,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: { episodeId: 'ep-1' },
@@ -155,7 +159,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  it('[write without operation confirmation requirement] -> allows execution', async () => {
+  it('[auto write without operation confirmation requirement] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       writes_op: makeTestOperation({
@@ -175,6 +179,70 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       projectId: 'project-1',
       userId: 'user-1',
       context: {},
+      assistantPermissionMode: 'auto',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('[ask normal operation without approval] -> returns CONFIRMATION_REQUIRED and does not execute', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    registryState.registry = {
+      reads_op: makeTestOperation({
+        id: 'reads_op',
+        intent: 'query',
+        effects: EFFECTS_NONE,
+        confirmation: { required: false },
+        inputSchema: z.object({ confirmed: z.boolean().optional() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute,
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'reads_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'ask',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.confirmationRequired).toBe(true)
+    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('[ask choice-card operation without approval] -> allows execution', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    registryState.registry = {
+      request_edit_first_choice: makeTestOperation({
+        id: 'request_edit_first_choice',
+        intent: 'query',
+        effects: EFFECTS_NONE,
+        confirmation: { required: false },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute,
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'request_edit_first_choice',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'ask',
       source: 'assistant-panel',
       writer: buildWriter(),
       input: {},

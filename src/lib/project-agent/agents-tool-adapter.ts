@@ -5,11 +5,15 @@ import {
 } from '@openai/agents'
 import type { NextRequest } from 'next/server'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
-import { isConfirmedOperationInput, shouldRequireAssistantConfirmation } from '@/lib/operations/confirmation'
+import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import type {
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
+import {
+  shouldRequireAssistantToolApproval,
+  type AssistantPermissionMode,
+} from './permission-mode'
 import type { ProjectAgentContext } from './types'
 
 type UnknownObject = { [key: string]: unknown }
@@ -49,13 +53,17 @@ export interface CreateProjectAgentOperationToolParams {
   projectId: string
   userId: string
   context: ProjectAgentContext
+  assistantPermissionMode: AssistantPermissionMode
   writer: UIMessageStreamWriter<UIMessage>
 }
 
 export function createProjectAgentOperationTool(
   params: CreateProjectAgentOperationToolParams,
 ): Tool {
-  const requiresApproval = shouldRequireAssistantConfirmation(params.operation.confirmation)
+  const requiresApproval = shouldRequireAssistantToolApproval({
+    mode: params.assistantPermissionMode,
+    operation: params.operation,
+  })
 
   return tool({
     name: params.operation.id,
@@ -70,6 +78,7 @@ export function createProjectAgentOperationTool(
         projectId: params.projectId,
         userId: params.userId,
         context: params.context,
+        assistantPermissionMode: params.assistantPermissionMode,
         source: 'assistant-panel',
         writer: params.writer,
         input: injectConfirmedInput(toolInput, requiresApproval),

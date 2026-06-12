@@ -27,8 +27,13 @@ import type {
   ProjectAgentInterruptionPartData,
   ProjectAgentStopPartData,
 } from './types'
-import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from './copy'
+import {
+  buildProjectAgentSystemPrompt,
+  localizeProjectAgentOperationTitle,
+  localizeSelectableToolDescription,
+} from './copy'
 import { normalizeProjectAgentLocale } from './locale'
+import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
 import { createProjectAgentWait } from './waits'
@@ -199,10 +204,12 @@ function createInterruptionPart(params: {
   requestId: string
   runState: string
   approvalItem: RunToolApprovalItem
+  locale: string
   toolDescriptions: Map<string, string>
 }): ProjectAgentInterruptionPartData {
   const operationId = params.approvalItem.name ?? 'unknown_operation'
   const description = params.toolDescriptions.get(operationId) ?? operationId
+  const titleLocale = normalizeProjectAgentLocale(params.locale)
   return {
     requestId: params.requestId,
     approvalId: readApprovalId(params.approvalItem),
@@ -210,7 +217,7 @@ function createInterruptionPart(params: {
     runState: params.runState,
     toolCallId: readApprovalToolCallId(params.approvalItem),
     display: {
-      title: operationId,
+      title: localizeProjectAgentOperationTitle(operationId, titleLocale),
       description,
     },
   }
@@ -255,6 +262,7 @@ export async function createProjectAgentChatResponse(input: {
   projectId: string
   context: unknown
   messages: unknown
+  assistantPermissionMode: AssistantPermissionMode
   approvalResponse?: ProjectAgentApprovalResponseData | null
   runLock?: ProjectAgentRunLock | null
 }): Promise<Response> {
@@ -332,6 +340,7 @@ export async function createProjectAgentChatResponse(input: {
       requestId,
       modelKey: analysisModelKey,
       locale,
+      assistantPermissionMode: input.assistantPermissionMode,
       projectId: input.projectId,
       episodeId: context.episodeId || null,
       messageCounts: {
@@ -399,6 +408,7 @@ export async function createProjectAgentChatResponse(input: {
       projectId: input.projectId,
       userId: input.userId,
       context,
+      assistantPermissionMode: input.assistantPermissionMode,
       writer: {
         write: (chunk) => {
           sideChannelChunks.push(chunk as unknown as ProjectAgentUiChunk)
@@ -415,6 +425,7 @@ export async function createProjectAgentChatResponse(input: {
     locale,
     projectId: input.projectId,
     episodeId: context.episodeId || 'unknown',
+    assistantPermissionMode: input.assistantPermissionMode,
   })
   const systemPrompt = choiceContinuation
     ? `${baseSystemPrompt}\n\n[剪辑先行选择卡续跑指令]\n${choiceContinuation.instruction}`
@@ -498,6 +509,7 @@ export async function createProjectAgentChatResponse(input: {
             requestId,
             runState: result.state.toString(),
             approvalItem,
+            locale,
             toolDescriptions,
           })))
         }
