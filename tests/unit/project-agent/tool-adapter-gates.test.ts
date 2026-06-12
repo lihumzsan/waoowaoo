@@ -189,7 +189,40 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).toHaveBeenCalledTimes(1)
   })
 
-  it('[ask normal operation without approval] -> returns CONFIRMATION_REQUIRED and does not execute', async () => {
+  it('[ask confirmation-marked operation without approval] -> returns CONFIRMATION_REQUIRED and does not execute', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    registryState.registry = {
+      confirm_op: makeTestOperation({
+        id: 'confirm_op',
+        intent: 'act',
+        effects: EFFECTS_WRITE,
+        confirmation: { required: true },
+        inputSchema: z.object({ confirmed: z.boolean().optional() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute,
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'confirm_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'ask',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.confirmationRequired).toBe(true)
+    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('[ask low-risk read operation without approval] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       reads_op: makeTestOperation({
@@ -197,7 +230,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
         intent: 'query',
         effects: EFFECTS_NONE,
         confirmation: { required: false },
-        inputSchema: z.object({ confirmed: z.boolean().optional() }),
+        inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute,
       }),
@@ -215,11 +248,8 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       input: {},
     })
 
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.confirmationRequired).toBe(true)
-    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
-    expect(execute).not.toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
   })
 
   it('[ask choice-card operation without approval] -> allows execution', async () => {

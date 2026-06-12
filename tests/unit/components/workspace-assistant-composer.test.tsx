@@ -16,14 +16,19 @@ describe('WorkspaceAssistantComposer', () => {
         value: '继续生成剪辑表',
         error: null,
         pending: false,
+        assistantPermissionMode: 'ask',
         onChange: () => undefined,
         onSubmit: async () => undefined,
+        onAssistantPermissionModeChange: () => undefined,
       }),
     )
 
     expect(html).toContain('aria-label="panel.send"')
     expect(html).toContain('lucide-arrow-right')
     expect(html).toContain('absolute bottom-1.5 right-1.5')
+    expect(html).toContain('aria-label="panel.permissionModeToggle"')
+    expect(html).toContain('lucide-lock')
+    expect(html).toContain('absolute bottom-1.5 left-1.5')
     expect(html).toContain('h-8 w-8')
     expect(html).not.toContain('>panel.send<')
     expect(html).not.toContain('panel.assistantHint')

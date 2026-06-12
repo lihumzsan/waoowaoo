@@ -36,5 +36,6 @@ export function shouldRequireAssistantToolApproval(params: {
   operation: ProjectAgentOperationDefinition
 }): boolean {
   if (isHumanInputOperation(params.operation.id)) return false
-  return params.mode === 'ask'
+  if (params.mode === 'auto') return false
+  return params.operation.confirmation.required === true
 }

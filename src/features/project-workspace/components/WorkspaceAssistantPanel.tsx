@@ -7,7 +7,6 @@ import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
 } from '@assistant-ui/react'
-import { AppIcon } from '@/components/ui/icons'
 import {
   AssistantChoiceCardView,
   EditStylePreviewGenerationDataCard,
@@ -504,34 +503,9 @@ export default function WorkspaceAssistantPanel({
         >
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
-              <div className="mx-4 mt-4 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white/90 px-3 py-2 text-xs text-[var(--glass-text-secondary)]">
-                <div className="flex min-w-0 items-center gap-2">
-                  <AppIcon name="lock" className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">{t('panel.permissionModeLabel')}</span>
-                </div>
-                <div className="grid h-8 shrink-0 grid-cols-2 rounded-xl bg-neutral-100 p-0.5">
-                  {(['ask', 'auto'] as const).map((mode) => {
-                    const selected = assistantPermissionMode === mode
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        aria-pressed={selected}
-                        aria-label={t(`panel.permissionMode${mode === 'ask' ? 'Ask' : 'Auto'}`)}
-                        title={t(`panel.permissionModeDescription${mode === 'ask' ? 'Ask' : 'Auto'}`)}
-                        className={`flex min-w-14 items-center justify-center gap-1.5 rounded-[10px] px-2 text-xs font-medium transition-colors ${selected ? 'bg-white text-[var(--glass-text-primary)] shadow-sm' : 'text-[var(--glass-text-tertiary)] hover:text-[var(--glass-text-secondary)]'}`}
-                        onClick={() => setAssistantPermissionMode(mode)}
-                      >
-                        <AppIcon name={mode === 'ask' ? 'lock' : 'bolt'} className="h-3.5 w-3.5 shrink-0" />
-                        <span>{t(`panel.permissionMode${mode === 'ask' ? 'Ask' : 'Auto'}`)}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
               <ThreadPrimitive.Viewport
                 autoScroll
-                className="flex-1 overflow-y-auto px-5 pb-4 pt-3"
+                className="flex-1 overflow-y-auto px-5 pb-4 pt-4"
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 <div>
@@ -577,8 +551,10 @@ export default function WorkspaceAssistantPanel({
                     value={composerText}
                     error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
                     pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                    assistantPermissionMode={assistantPermissionMode}
                     onChange={setComposerText}
                     onSubmit={handleComposerSubmit}
+                    onAssistantPermissionModeChange={setAssistantPermissionMode}
                   />
                 </div>
               </div>

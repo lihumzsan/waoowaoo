@@ -26,11 +26,14 @@ describe('assistant permission mode', () => {
     expect(() => parseAssistantPermissionMode('fast')).toThrow('PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_INVALID')
   })
 
-  it('requires approval for normal operations in ask mode regardless of operation risk', () => {
+  it('keeps approval off for low-risk operations in ask mode', () => {
     expect(shouldRequireAssistantToolApproval({
       mode: 'ask',
       operation: buildOperation('get_project_context'),
-    })).toBe(true)
+    })).toBe(false)
+  })
+
+  it('requires approval for confirmation-marked operations in ask mode', () => {
     expect(shouldRequireAssistantToolApproval({
       mode: 'ask',
       operation: makeTestOperation({
