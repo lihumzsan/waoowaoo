@@ -4,7 +4,6 @@ import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import {
-  lastAssistantMessageIsCompleteWithToolCalls,
   type ChatStatus,
   type UIMessage,
 } from 'ai'
@@ -98,17 +97,10 @@ export function useWorkspaceAssistantRuntime({
       assistantPermissionMode,
     },
   }), [assistantPermissionMode, contextPayload, projectId])
-  const suppressNextAutomaticSendRef = useRef(false)
   const chat = useChat({
     id: chatId,
     transport,
-    sendAutomaticallyWhen: ({ messages }) => {
-      if (suppressNextAutomaticSendRef.current) {
-        suppressNextAutomaticSendRef.current = false
-        return false
-      }
-      return lastAssistantMessageIsCompleteWithToolCalls({ messages })
-    },
+    sendAutomaticallyWhen: shouldSendWorkspaceAssistantAutomatically,
   })
   const runtime = useAISDKRuntime(chat)
   const hydratedSessionKeyRef = useRef<string | null>(null)
@@ -283,4 +275,8 @@ export function useWorkspaceAssistantRuntime({
     replaceMessages,
     appendMessages,
   }
+}
+
+export function shouldSendWorkspaceAssistantAutomatically(): boolean {
+  return false
 }
