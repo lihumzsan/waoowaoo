@@ -306,6 +306,7 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
               storyboardId: true,
               panelIndex: true,
               panelNumber: true,
+              updatedAt: true,
               shotType: true,
               cameraMove: true,
               description: true,

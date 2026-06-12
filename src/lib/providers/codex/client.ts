@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
   CODEX_DEFAULT_MODEL_ID,
+  CODEX_DEFAULT_REASONING_EFFORT,
+  CODEX_DEFAULT_SERVICE_TIER,
 } from './constants'
 
 export type CodexChatMessage = {
@@ -90,6 +92,14 @@ const DEFAULT_CODEX_EXEC_TIMEOUT_MS = 20 * 60 * 1000
 const CODEX_FORCE_KILL_GRACE_MS = 5000
 const OUTPUT_TRUNCATE_LIMIT = 4000
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
+const CODEX_RUNTIME_CONFIG_ARGS = [
+  '--config',
+  'approval_policy="never"',
+  '--config',
+  `model_reasoning_effort="${CODEX_DEFAULT_REASONING_EFFORT}"`,
+  '--config',
+  `service_tier="${CODEX_DEFAULT_SERVICE_TIER}"`,
+]
 
 function readTimeoutMs(raw: string | undefined): number {
   if (!raw) return DEFAULT_CODEX_EXEC_TIMEOUT_MS
@@ -138,8 +148,7 @@ export function buildCodexExecArgs(params: {
     'exec',
     '--ephemeral',
     '--json',
-    '--config',
-    'approval_policy="never"',
+    ...CODEX_RUNTIME_CONFIG_ARGS,
     '--color',
     'never',
     '--sandbox',
@@ -176,8 +185,7 @@ export function buildCodexImageExecArgs(params: {
     'exec',
     '--ephemeral',
     '--json',
-    '--config',
-    'approval_policy="never"',
+    ...CODEX_RUNTIME_CONFIG_ARGS,
     '--color',
     'never',
     '--enable',

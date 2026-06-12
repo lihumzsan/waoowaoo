@@ -10,9 +10,9 @@ describe('provider card model type filters', () => {
     expect(getAddableModelTypesForProvider('codex')).toEqual(['llm', 'image'])
     expect(getVisibleModelTypesForProvider('codex', {
       llm: [{
-        modelId: 'gpt-5.4',
-        modelKey: 'codex::gpt-5.4',
-        name: 'Codex GPT-5.4',
+        modelId: 'gpt-5.5',
+        modelKey: 'codex::gpt-5.5',
+        name: 'Codex GPT-5.5',
         type: 'llm',
         provider: 'codex',
         price: 0,

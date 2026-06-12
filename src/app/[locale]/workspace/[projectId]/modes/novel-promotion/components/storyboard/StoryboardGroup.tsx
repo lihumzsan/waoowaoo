@@ -95,12 +95,24 @@ export default function StoryboardGroup({
     onPanelVariant,
   })
 
+  const panelOutputById = useMemo(() => {
+    const map = new Map<string, { imageUrl: string | null; updatedAt: string | null }>()
+    for (const panel of textPanels) {
+      map.set(panel.id, {
+        imageUrl: panel.imageUrl ?? null,
+        updatedAt: panel.updatedAt ?? null,
+      })
+    }
+    return map
+  }, [textPanels])
+
   const {
     panelTaskErrorMap,
     clearPanelTaskError,
   } = useStoryboardGroupTaskErrors({
     projectId,
     episodeId,
+    panelOutputById,
   })
 
   const isPanelTaskRunning = useCallback(

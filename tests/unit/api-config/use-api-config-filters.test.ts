@@ -119,9 +119,9 @@ describe('api config filters', () => {
     ]
     const models: CustomModel[] = [
       {
-        modelId: 'gpt-5.4',
+        modelId: 'gpt-5.5',
         modelKey: CODEX_DEFAULT_MODEL_KEY,
-        name: 'Codex GPT-5.4',
+        name: 'Codex GPT-5.5',
         type: 'llm',
         provider: CODEX_PROVIDER_KEY,
         price: 0,

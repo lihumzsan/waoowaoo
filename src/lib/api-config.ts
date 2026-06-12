@@ -130,7 +130,7 @@ const CODEX_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
   {
     modelId: CODEX_DEFAULT_MODEL_ID,
     modelKey: CODEX_DEFAULT_MODEL_KEY,
-    name: 'Codex GPT-5.4',
+    name: 'Codex GPT-5.5',
     type: 'llm',
     provider: CODEX_PROVIDER_KEY,
     price: 0,

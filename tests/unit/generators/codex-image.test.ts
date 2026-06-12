@@ -90,7 +90,7 @@ describe('CodexImageGenerator', () => {
     const call = runCodexImageGenerationMock.mock.calls[0]![0]
     expect(call).toMatchObject({
       codexPath: 'C:\\codex.exe',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       imagePaths: [],
     })
     expect(call.prompt).toContain('Mode: text-to-image')

@@ -97,7 +97,7 @@ type PresetModel = Omit<CustomModel, 'enabled' | 'modelKey' | 'price'>
 // 预设模型
 export const PRESET_MODELS: PresetModel[] = [
     // 文本模型
-    { modelId: CODEX_DEFAULT_MODEL_ID, name: 'Codex GPT-5.4', type: 'llm', provider: CODEX_PROVIDER_KEY },
+    { modelId: CODEX_DEFAULT_MODEL_ID, name: 'Codex GPT-5.5', type: 'llm', provider: CODEX_PROVIDER_KEY },
     { modelId: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', type: 'llm', provider: 'openrouter' },
     { modelId: '~openai/gpt-latest', name: 'OpenAI GPT Latest', type: 'llm', provider: 'openrouter' },
     { modelId: 'openai/gpt-5.5-pro', name: 'GPT-5.5 Pro', type: 'llm', provider: 'openrouter' },

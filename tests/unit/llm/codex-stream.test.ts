@@ -38,8 +38,8 @@ describe('codex llm stream branch', () => {
     vi.clearAllMocks()
     resolveLlmRuntimeModelMock.mockResolvedValue({
       provider: 'codex',
-      modelId: 'gpt-5.4',
-      modelKey: 'codex::gpt-5.4',
+      modelId: 'gpt-5.5',
+      modelKey: 'codex::gpt-5.5',
     })
     getProviderConfigMock.mockResolvedValue({
       id: 'codex',
@@ -61,7 +61,7 @@ describe('codex llm stream branch', () => {
 
     const completion = await chatCompletionStream(
       'user-1',
-      'codex::gpt-5.4',
+      'codex::gpt-5.5',
       [{ role: 'user', content: 'hello' }],
       {},
       {
@@ -73,7 +73,7 @@ describe('codex llm stream branch', () => {
 
     expect(runCodexTextCompletionMock).toHaveBeenCalledWith({
       codexPath: '%USERPROFILE%\\.codex\\.sandbox-bin\\codex.exe',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'hello' }],
       cwd: process.cwd(),
     })
@@ -86,14 +86,14 @@ describe('codex llm stream branch', () => {
   it('wraps non-stream codex output as a chat completion', async () => {
     const completion = await chatCompletion(
       'user-1',
-      'codex::gpt-5.4',
+      'codex::gpt-5.5',
       [{ role: 'user', content: 'hello' }],
       {},
     )
 
     expect(runCodexTextCompletionMock).toHaveBeenCalledWith({
       codexPath: '%USERPROFILE%\\.codex\\.sandbox-bin\\codex.exe',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'hello' }],
       cwd: process.cwd(),
     })

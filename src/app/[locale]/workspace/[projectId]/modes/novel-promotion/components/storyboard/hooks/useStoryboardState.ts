@@ -33,6 +33,7 @@ export interface StoryboardPanel {
   estimatedDialogueSeconds?: number
   candidateImages?: string
   imageUrl?: string | null
+  updatedAt?: string | null
   photographyRules?: string | null  // 单镜头摄影规则JSON
   actingNotes?: string | null       // 演技指导数据JSON
   imageTaskRunning?: boolean  // 任务态运行状态（由 tasks 派生）
@@ -115,6 +116,12 @@ export function useStoryboardState({
       (a.panelIndex || 0) - (b.panelIndex || 0)
     )
     return sortedPanels.map((p) => {
+      const panelRecord = p as unknown as Record<string, unknown>
+      const updatedAt = typeof panelRecord.updatedAt === 'string'
+        ? panelRecord.updatedAt
+        : panelRecord.updatedAt instanceof Date
+          ? panelRecord.updatedAt.toISOString()
+          : null
       const parsedChars = p.characters ? JSON.parse(p.characters) : []
       const actingMetadata = (() => {
         if (!p.actingNotes) return null
@@ -166,6 +173,7 @@ export function useStoryboardState({
           : undefined,
         candidateImages: p.candidateImages || undefined,
         imageUrl: p.imageUrl,
+        updatedAt,
         photographyRules: p.photographyRules,
         actingNotes: p.actingNotes,
         imageTaskRunning: p.imageTaskRunning || false

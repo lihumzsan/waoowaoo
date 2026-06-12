@@ -57,7 +57,6 @@ describe('codex cli client', () => {
 
   it('builds the read-only codex exec command', () => {
     const args = buildCodexExecArgs({
-      model: 'gpt-5.4',
       outputPath: 'C:\\tmp\\out.txt',
       imagePaths: ['C:\\tmp\\image.png'],
     })
@@ -68,6 +67,10 @@ describe('codex cli client', () => {
       '--json',
       '--config',
       'approval_policy="never"',
+      '--config',
+      'model_reasoning_effort="xhigh"',
+      '--config',
+      'service_tier="fast"',
       '--color',
       'never',
       '--sandbox',
@@ -82,7 +85,7 @@ describe('codex cli client', () => {
       '--disable',
       'shell_snapshot',
       '-m',
-      'gpt-5.4',
+      'gpt-5.5',
       '--output-last-message',
       'C:\\tmp\\out.txt',
       '-i',
@@ -93,7 +96,6 @@ describe('codex cli client', () => {
 
   it('builds the danger-full-access codex exec command for image generation', () => {
     const args = buildCodexImageExecArgs({
-      model: 'gpt-5.4',
       outputPath: 'C:\\tmp\\last-message.json',
       imagePaths: ['C:\\tmp\\ref-1.png', 'C:\\tmp\\ref-2.png'],
     })
@@ -104,6 +106,10 @@ describe('codex cli client', () => {
       '--json',
       '--config',
       'approval_policy="never"',
+      '--config',
+      'model_reasoning_effort="xhigh"',
+      '--config',
+      'service_tier="fast"',
       '--color',
       'never',
       '--enable',
@@ -120,7 +126,7 @@ describe('codex cli client', () => {
       '--disable',
       'shell_snapshot',
       '-m',
-      'gpt-5.4',
+      'gpt-5.5',
       '--output-last-message',
       'C:\\tmp\\last-message.json',
       '-i',
@@ -146,7 +152,7 @@ describe('codex cli client', () => {
 
     const result = await runCodexTextCompletion({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'say ok' }],
       timeoutMs: 1000,
     })
@@ -173,7 +179,7 @@ describe('codex cli client', () => {
 
     await runCodexTextCompletion({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'hello from stdin' }],
       timeoutMs: 1000,
     })
@@ -198,7 +204,7 @@ describe('codex cli client', () => {
 
     const result = await runCodexSelfCheck({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       timeoutMs: 1000,
     })
 
@@ -224,7 +230,7 @@ describe('codex cli client', () => {
 
     const result = await runCodexImageGeneration({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       prompt: 'Generate one image and report image_path JSON.',
       timeoutMs: 1000,
     })
@@ -256,7 +262,7 @@ describe('codex cli client', () => {
 
     await runCodexImageGeneration({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       prompt: 'Generate one image from stdin.',
       timeoutMs: 1000,
     })
@@ -294,7 +300,7 @@ describe('codex cli client', () => {
 
       const result = await runCodexImageGeneration({
         codexPath: process.execPath,
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         prompt: 'Generate one image.',
         timeoutMs: 1000,
       })
@@ -340,7 +346,7 @@ describe('codex cli client', () => {
 
       const result = await runCodexImageGeneration({
         codexPath: process.execPath,
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         prompt: 'Generate one image from this reference.',
         imagePaths: [referencePath],
         timeoutMs: 1000,
@@ -367,7 +373,7 @@ describe('codex cli client', () => {
 
     await expect(runCodexImageGeneration({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       prompt: 'Generate one image.',
       timeoutMs: 1000,
     })).rejects.toMatchObject({
@@ -388,7 +394,7 @@ describe('codex cli client', () => {
 
     await expect(runCodexTextCompletion({
       codexPath: process.execPath,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'fail' }],
       timeoutMs: 1000,
     })).rejects.toMatchObject({
@@ -410,7 +416,7 @@ describe('codex cli client', () => {
 
       const pending = runCodexTextCompletion({
         codexPath: process.execPath,
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         messages: [{ role: 'user', content: 'hang' }],
         timeoutMs: 100,
       })
