@@ -46,6 +46,7 @@
 - 任何会改变 Git 状态或历史的操作必须先获得用户明确同意，包括但不限于：`commit`、`push`、`pull`、`merge`、`rebase`、`cherry-pick`、`reset`、`checkout`（修改性用法）、创建/删除分支、打标签。
 - 在未获同意前，不得进行代码改写、暂存、提交、同步、回滚或历史重写。
 - 可以执行测试构建 build lint等测试命令
+- 若本地开发服务可能正在运行，禁止直接用 `npm run build` 做验证；必须使用 `npm run build:verify`，避免 Next dev server 与生产构建同时写入 `.next` 导致开发服务损坏。
 - 不需要运行browser use，不要打开浏览器试图测试
 - 用于项目测试页面修改不需要自动commit
 
@@ -57,7 +58,7 @@
 - commit message 必须包含清晰标题和简洁正文。正文只需说明：变更摘要、关键验证结果、必要的风险或后续任务；不需要逐文件写详细流水账。
 - 提交前必须通过 `git status` 和 `git diff --cached` 核对提交范围；发现无关 staged 文件时必须先排除，不得直接提交。
 - Husky `pre-commit` 不运行测试；提交前需要的测试由执行者按改动风险主动运行，并在最终回复或 commit 正文中简要记录。
-- Husky `pre-push` 必须运行完整验证；push 前必须通过 `npm run verify:push`，不得跳过。
+- Husky `pre-push` 必须运行完整验证；push 前必须通过 `npm run verify:push`，不得跳过。`verify:push` 内部已使用 `npm run build:verify`，避免破坏正在运行的 dev server。
 - push 仍然必须获得用户单独明确授权；本地 commit 授权不等于 push 授权。
 - 用户要求的临时功能测试页面修改时不需要提交
 

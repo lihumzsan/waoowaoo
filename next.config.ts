@@ -3,15 +3,23 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
+const configuredDistDir = process.env.NEXT_DIST_DIR?.trim() || ''
+if (configuredDistDir && (configuredDistDir.startsWith('/') || configuredDistDir.includes('..'))) {
+  throw new Error('NEXT_DIST_DIR must be a relative project-local directory')
+}
+
+const nextDistDir = configuredDistDir || '.next'
+
 const globalFunctionTraceExcludes = [
   './.git/**/*',
-  './.next/cache/**/*',
+  `./${nextDistDir}/cache/**/*`,
   './docker-logs/**/*',
   './logs/**/*',
   './*.log',
 ]
 
 const nextConfig: NextConfig = {
+  ...(configuredDistDir ? { distDir: configuredDistDir } : {}),
   // 已删除 ignoreBuildErrors / ignoreDuringBuilds，构建保持严格门禁
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental
   logging: false,
