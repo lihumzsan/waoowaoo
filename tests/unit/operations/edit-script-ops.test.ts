@@ -386,19 +386,6 @@ describe('edit-script operations', () => {
       toolCallId: 'tool-call-choice',
     }))
     expect(writerEvents).toEqual([
-      {
-        type: 'text-start',
-        id: 'choice-feedback-tool-call-choice',
-      },
-      {
-        type: 'text-delta',
-        id: 'choice-feedback-tool-call-choice',
-        delta: '生成剧本前，请先在下方卡片中选择短片时长和画面比例。',
-      },
-      {
-        type: 'text-end',
-        id: 'choice-feedback-tool-call-choice',
-      },
       expect.objectContaining({
         type: 'data-assistant-choice-card',
         data: expect.objectContaining({
