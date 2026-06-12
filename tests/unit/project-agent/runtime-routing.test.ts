@@ -326,6 +326,11 @@ describe('project agent runtime deterministic tool injection', () => {
     ]))
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
+    expect(streamState.capturedModelSettings).toEqual(expect.objectContaining({
+      frequencyPenalty: 0.7,
+      presencePenalty: 0.1,
+      temperature: 0,
+    }))
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.toolset.resolved',
