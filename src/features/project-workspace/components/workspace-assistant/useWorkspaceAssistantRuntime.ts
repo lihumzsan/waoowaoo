@@ -34,10 +34,19 @@ export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screen
 type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 
+/**
+ * 'approve' resumes the run and executes the approved operation, so the UI may
+ * show the operation as actively running. 'deny' only delivers the rejection to
+ * the agent — nothing executes, and the reply streams like a normal assistant
+ * turn without any operation-running affordance.
+ */
+type WorkspaceAssistantControlIntent = 'approve' | 'deny' | 'choice' | 'task_follow_up'
+
 interface WorkspaceAssistantTrackedRun {
   runId: string
   status: WorkspaceAssistantRunStatus
   operationId: string | null
+  intent: WorkspaceAssistantControlIntent | null
 }
 
 interface WorkspaceAssistantPendingApproval {
@@ -192,6 +201,18 @@ export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunS
   return status === 'running'
 }
 
+/**
+ * The operation-running affordance is only meaningful when the tracked control
+ * action actually executes the operation. Denying an approval merely delivers
+ * the rejection to the agent, so no operation is pending.
+ */
+export function resolveWorkspaceAssistantPendingOperationId(
+  trackedRun: Pick<WorkspaceAssistantTrackedRun, 'operationId' | 'intent'> | null,
+): string | null {
+  if (!trackedRun || trackedRun.intent === 'deny') return null
+  return trackedRun.operationId
+}
+
 export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
   return !isWorkspaceAssistantRunBusyStatus(status)
 }
@@ -205,6 +226,7 @@ function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTracked
     runId,
     status: data.status,
     operationId: null,
+    intent: null,
   }
 }
 
@@ -385,6 +407,7 @@ export function useWorkspaceAssistantRuntime({
     runId: string
     status: WorkspaceAssistantRunStatus
     operationId?: string | null
+    intent?: WorkspaceAssistantControlIntent | null
     pendingApproval?: WorkspaceAssistantPendingApproval | null
   }) => {
     const { runId, status } = params
@@ -404,6 +427,7 @@ export function useWorkspaceAssistantRuntime({
       runId,
       status,
       operationId: params.operationId ?? (current?.runId === runId ? current.operationId : null),
+      intent: params.intent ?? (current?.runId === runId ? current.intent : null),
     }))
   }, [])
 
@@ -416,13 +440,19 @@ export function useWorkspaceAssistantRuntime({
   const sendControlRequest = useCallback(async (params: {
     runId: string
     endpoint: WorkspaceAssistantControlEndpoint
+    intent: WorkspaceAssistantControlIntent
     operationId?: string | null
     payload: Record<string, unknown>
   }) => {
     chat.clearError()
     settledRunIdsRef.current.delete(params.runId)
     setPendingRunApproval((current) => current?.runId === params.runId ? null : current)
-    setActiveControlRun({ runId: params.runId, status: 'running', operationId: params.operationId ?? null })
+    setActiveControlRun({
+      runId: params.runId,
+      status: 'running',
+      operationId: params.operationId ?? null,
+      intent: params.intent,
+    })
     try {
       const controlMessageId = createWorkspaceAssistantControlMessageId({
         runId: params.runId,
@@ -482,6 +512,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'choice',
+      intent: 'choice',
       payload: {
         interruptionId: params.interruptionId,
         choiceType: params.choiceType,
@@ -499,6 +530,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'task-follow-up',
+      intent: 'task_follow_up',
       operationId: null,
       payload: {
         waitId: params.waitId,
@@ -520,6 +552,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: interruption.runId,
       endpoint: 'approval',
+      intent: params.approved ? 'approve' : 'deny',
       operationId: interruption.operationId,
       payload: {
         interruptionId: interruption.interruptionId,
@@ -541,6 +574,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'approval',
+      intent: params.approved ? 'approve' : 'deny',
       operationId: params.operationId,
       payload: {
         interruptionId: params.interruptionId,
@@ -648,7 +682,7 @@ export function useWorkspaceAssistantRuntime({
     syncError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
-    pendingOperationId: activeControlRun?.operationId ?? null,
+    pendingOperationId: resolveWorkspaceAssistantPendingOperationId(activeControlRun),
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,

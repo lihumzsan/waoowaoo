@@ -5,6 +5,7 @@ import {
   findLatestWorkspaceAssistantRun,
   isWorkspaceAssistantRunBusyStatus,
   mergeWorkspaceAssistantStreamedMessage,
+  resolveWorkspaceAssistantPendingOperationId,
   shouldClearWorkspaceAssistantControlPending,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
@@ -79,7 +80,20 @@ describe('workspace assistant runtime chat id', () => {
       runId: 'run-new',
       status: 'running',
       operationId: null,
+      intent: null,
     })
+  })
+
+  it('never reports a pending operation while a denial is being delivered', () => {
+    expect(resolveWorkspaceAssistantPendingOperationId({
+      operationId: 'generate_edit_script',
+      intent: 'deny',
+    })).toBeNull()
+    expect(resolveWorkspaceAssistantPendingOperationId({
+      operationId: 'generate_edit_script',
+      intent: 'approve',
+    })).toBe('generate_edit_script')
+    expect(resolveWorkspaceAssistantPendingOperationId(null)).toBeNull()
   })
 
   it('creates a stable non-empty assistant message id for run-scoped control streams', () => {
