@@ -439,6 +439,7 @@ export default function WorkspaceAssistantPanel({
     serverPendingApproval
       && messagePendingInterruption?.approvalId !== serverPendingApproval.approvalId,
   )
+  const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
       const next = new Set(current)
@@ -610,14 +611,14 @@ export default function WorkspaceAssistantPanel({
               </ThreadPrimitive.Viewport>
 
               <div className="mx-4 mb-2 shrink-0">
-                {activeChoiceCard ? (
+                {displayedActiveChoiceCard ? (
                   <div className="mb-2">
                     <AssistantChoiceCardView
-                      data={activeChoiceCard.data}
+                      data={displayedActiveChoiceCard.data}
                       onSubmitChoiceResponse={handleSubmitChoiceResponse}
                       onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
-                      onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}
+                      onSubmitted={() => handleChoiceCardSubmitted(displayedActiveChoiceCard.key)}
                     />
                   </div>
                 ) : null}

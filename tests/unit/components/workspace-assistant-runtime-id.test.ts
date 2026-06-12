@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWorkspaceAssistantChatId,
+  createWorkspaceAssistantControlMessageId,
   findLatestWorkspaceAssistantRun,
   isWorkspaceAssistantRunBusyStatus,
+  mergeWorkspaceAssistantStreamedMessage,
   shouldClearWorkspaceAssistantControlPending,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
@@ -78,6 +80,43 @@ describe('workspace assistant runtime chat id', () => {
       status: 'running',
       operationId: null,
     })
+  })
+
+  it('creates a stable non-empty assistant message id for run-scoped control streams', () => {
+    expect(createWorkspaceAssistantControlMessageId({
+      runId: ' run-1 ',
+      endpoint: 'choice',
+      nonce: 'nonce-1',
+    })).toBe('workspace-control:choice:run-1:nonce-1')
+  })
+
+  it('rejects control stream messages with empty ids before they can freeze persistence', () => {
+    expect(() => mergeWorkspaceAssistantStreamedMessage([], {
+      id: '',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'hello' }],
+    })).toThrow('PROJECT_ASSISTANT_STREAM_MESSAGE_ID_EMPTY')
+  })
+
+  it('merges streamed control updates by their concrete message id', () => {
+    const current = mergeWorkspaceAssistantStreamedMessage([], {
+      id: 'workspace-control:choice:run-1:nonce-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'first chunk' }],
+    })
+    const next = mergeWorkspaceAssistantStreamedMessage(current, {
+      id: 'workspace-control:choice:run-1:nonce-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'final chunk' }],
+    })
+
+    expect(next).toEqual([
+      {
+        id: 'workspace-control:choice:run-1:nonce-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'final chunk' }],
+      },
+    ])
   })
 
 })

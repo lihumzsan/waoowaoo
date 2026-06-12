@@ -18,7 +18,11 @@ import {
   useProjectAssistantThreadSync,
 } from '@/lib/query/hooks'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
-import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
+import {
+  ensureUniqueUIMessages,
+  validatePersistableUIMessages,
+  type UIMessagesPersistabilityError,
+} from '@/lib/project-agent/ui-message-validation'
 import {
   collectResolvedInterruptionApprovalIds,
   findPendingToolApprovalId,
@@ -27,6 +31,7 @@ import {
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 
 interface WorkspaceAssistantTrackedRun {
@@ -113,6 +118,56 @@ export function buildWorkspaceAssistantChatId(params: {
   episodeId?: string
 }): string {
   return `workspace-command:${params.projectId}:${params.episodeId || 'global'}`
+}
+
+let workspaceAssistantControlMessageSequence = 0
+
+function createWorkspaceAssistantControlNonce(): string {
+  workspaceAssistantControlMessageSequence += 1
+  const sequence = workspaceAssistantControlMessageSequence.toString(36)
+  const randomId = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${sequence}`
+  return `${sequence}-${randomId}`
+}
+
+export function createWorkspaceAssistantControlMessageId(params: {
+  runId: string
+  endpoint: WorkspaceAssistantControlEndpoint
+  nonce?: string
+}): string {
+  const runId = params.runId.trim()
+  if (!runId) throw new Error('PROJECT_ASSISTANT_CONTROL_RUN_ID_MISSING')
+  const nonce = params.nonce?.trim() || createWorkspaceAssistantControlNonce()
+  return `workspace-control:${params.endpoint}:${runId}:${nonce}`
+}
+
+export function mergeWorkspaceAssistantStreamedMessage(
+  currentMessages: readonly UIMessage[],
+  message: UIMessage,
+): UIMessage[] {
+  const messageId = message.id.trim()
+  if (!messageId) throw new Error('PROJECT_ASSISTANT_STREAM_MESSAGE_ID_EMPTY')
+  const normalizedMessage = messageId === message.id
+    ? message
+    : {
+      ...message,
+      id: messageId,
+    }
+  const existingIndex = currentMessages.findIndex((item) => item.id === messageId)
+  const nextMessages = existingIndex >= 0
+    ? [
+      ...currentMessages.slice(0, existingIndex),
+      normalizedMessage,
+      ...currentMessages.slice(existingIndex + 1),
+    ]
+    : [...currentMessages, normalizedMessage]
+  return ensureUniqueUIMessages(nextMessages)
+}
+
+function formatPersistabilityError(error: UIMessagesPersistabilityError): string {
+  const messageIndex = error.messageIndex === null ? 'root' : String(error.messageIndex)
+  return `PROJECT_ASSISTANT_THREAD_NOT_PERSISTABLE:${error.code}:${messageIndex}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -242,6 +297,7 @@ export function useWorkspaceAssistantRuntime({
   const runtime = useAISDKRuntime(chat)
   const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
   const hydratedSessionKeyRef = useRef<string | null>(null)
+  const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
@@ -250,8 +306,44 @@ export function useWorkspaceAssistantRuntime({
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
   const [pendingRunApproval, setPendingRunApproval] = useState<WorkspaceAssistantPendingApproval | null>(null)
 
+  useEffect(() => {
+    latestMessagesRef.current = chat.messages
+  }, [chat.messages])
+
+  const persistMessagesNow = useCallback(async (messages: UIMessage[]): Promise<boolean> => {
+    const validation = validatePersistableUIMessages(messages)
+    if (!validation.ok) {
+      setSyncError(formatPersistabilityError(validation.error))
+      return false
+    }
+    const signature = JSON.stringify(validation.messages)
+    if (signature === lastPersistedSignatureRef.current) return true
+
+    const persistJob = persistQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        await saveAssistantThread(validation.messages)
+        lastPersistedSignatureRef.current = signature
+        setSyncError(null)
+      })
+      .catch((error: unknown) => {
+        setSyncError(error instanceof Error ? error.message : String(error))
+        throw error
+      })
+    persistQueueRef.current = persistJob
+
+    try {
+      await persistJob
+      return true
+    } catch {
+      return false
+    }
+  }, [saveAssistantThread])
+
   const replaceMessages = useCallback((messages: UIMessage[]) => {
-    chat.setMessages(ensureUniqueUIMessages(messages))
+    const nextMessages = ensureUniqueUIMessages(messages)
+    latestMessagesRef.current = nextMessages
+    chat.setMessages(nextMessages)
   }, [chat])
 
   // The user's new message supersedes any pending approval server-side; the
@@ -275,21 +367,18 @@ export function useWorkspaceAssistantRuntime({
 
   const appendMessages = useCallback((messages: UIMessage[]) => {
     if (messages.length === 0) return
-    chat.setMessages((current) => ensureUniqueUIMessages([...current, ...messages]))
+    chat.setMessages((current) => {
+      const nextMessages = ensureUniqueUIMessages([...current, ...messages])
+      latestMessagesRef.current = nextMessages
+      return nextMessages
+    })
   }, [chat])
 
-  const mergeStreamedAssistantMessage = useCallback((message: UIMessage) => {
-    chat.setMessages((current) => {
-      const index = current.findIndex((item) => item.id === message.id)
-      if (index >= 0) {
-        return ensureUniqueUIMessages([
-          ...current.slice(0, index),
-          message,
-          ...current.slice(index + 1),
-        ])
-      }
-      return ensureUniqueUIMessages([...current, message])
-    })
+  const mergeStreamedAssistantMessage = useCallback((message: UIMessage): UIMessage[] => {
+    const nextMessages = mergeWorkspaceAssistantStreamedMessage(latestMessagesRef.current, message)
+    latestMessagesRef.current = nextMessages
+    chat.setMessages(nextMessages)
+    return nextMessages
   }, [chat])
 
   const applyTrackedRunStatus = useCallback((params: {
@@ -326,7 +415,7 @@ export function useWorkspaceAssistantRuntime({
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
-    endpoint: 'approval' | 'choice' | 'task-follow-up'
+    endpoint: WorkspaceAssistantControlEndpoint
     operationId?: string | null
     payload: Record<string, unknown>
   }) => {
@@ -335,13 +424,17 @@ export function useWorkspaceAssistantRuntime({
     setPendingRunApproval((current) => current?.runId === params.runId ? null : current)
     setActiveControlRun({ runId: params.runId, status: 'running', operationId: params.operationId ?? null })
     try {
+      const controlMessageId = createWorkspaceAssistantControlMessageId({
+        runId: params.runId,
+        endpoint: params.endpoint,
+      })
       const response = await fetch(
         `/api/projects/${projectId}/assistant/runs/${encodeURIComponent(params.runId)}/${params.endpoint}`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            messages: chat.messages,
+            messages: latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages,
             context: contextPayload,
             assistantPermissionMode,
             ...params.payload,
@@ -356,13 +449,28 @@ export function useWorkspaceAssistantRuntime({
       for await (const message of readUIMessageStream({
         stream: chunkStream,
         terminateOnError: true,
+        message: {
+          id: controlMessageId,
+          role: 'assistant',
+          parts: [],
+        },
       })) {
         mergeStreamedAssistantMessage(message)
       }
+      await persistMessagesNow(latestMessagesRef.current)
     } finally {
       await refreshTrackedRunStatus(params.runId).catch(() => undefined)
     }
-  }, [assistantPermissionMode, chat, contextPayload, controlTransport, mergeStreamedAssistantMessage, projectId, refreshTrackedRunStatus])
+  }, [
+    assistantPermissionMode,
+    chat,
+    contextPayload,
+    controlTransport,
+    mergeStreamedAssistantMessage,
+    persistMessagesNow,
+    projectId,
+    refreshTrackedRunStatus,
+  ])
 
   const submitChoiceResponse = useCallback(async (params: {
     runId: string
@@ -497,26 +605,19 @@ export function useWorkspaceAssistantRuntime({
   useEffect(() => {
     if (hydratedSessionKeyRef.current !== chatId) return
     if (chat.status === 'submitted' || chat.status === 'streaming') return
-    if (!isPersistableUIMessages(chat.messages)) return
+    if (activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status)) return
+    const validation = validatePersistableUIMessages(chat.messages)
+    if (!validation.ok) {
+      setSyncError(formatPersistabilityError(validation.error))
+      return
+    }
     const signature = JSON.stringify(chat.messages)
     if (signature === lastPersistedSignatureRef.current) return
     if (persistTimerRef.current !== null) {
       window.clearTimeout(persistTimerRef.current)
     }
     persistTimerRef.current = window.setTimeout(() => {
-      const nextMessages = chat.messages
-      const nextSignature = JSON.stringify(nextMessages)
-      persistQueueRef.current = persistQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          try {
-            await saveAssistantThread(nextMessages)
-            lastPersistedSignatureRef.current = nextSignature
-            setSyncError(null)
-          } catch (error) {
-            setSyncError(error instanceof Error ? error.message : String(error))
-          }
-        })
+      void persistMessagesNow(chat.messages)
     }, 400)
 
     return () => {
@@ -525,7 +626,7 @@ export function useWorkspaceAssistantRuntime({
         persistTimerRef.current = null
       }
     }
-  }, [chat.messages, chat.status, chatId, saveAssistantThread])
+  }, [activeControlRun, chat.messages, chat.status, chatId, persistMessagesNow])
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
-import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
+import {
+  ensureUniqueUIMessages,
+  isPersistableUIMessages,
+  validatePersistableUIMessages,
+} from '@/lib/project-agent/ui-message-validation'
 
 describe('isPersistableUIMessages', () => {
   it('rejects non-array input', () => {
@@ -10,6 +14,22 @@ describe('isPersistableUIMessages', () => {
   it('rejects messages missing required core fields', () => {
     expect(isPersistableUIMessages([{ role: 'assistant', parts: [{ type: 'text', text: 'hi' }] }])).toBe(false)
     expect(isPersistableUIMessages([{ id: 'x', role: 'assistant', parts: [] }])).toBe(false)
+  })
+
+  it('returns a concrete validation error for empty assistant message ids', () => {
+    expect(validatePersistableUIMessages([
+      {
+        id: '',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'control response' }],
+      },
+    ])).toEqual({
+      ok: false,
+      error: {
+        code: 'message_id_missing',
+        messageIndex: 0,
+      },
+    })
   })
 
   it('accepts a minimal valid UIMessage list', () => {
