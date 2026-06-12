@@ -3,9 +3,58 @@ import { createAiSdkUiMessageStream } from '@openai/agents-extensions/ai-sdk-ui'
 
 export type ProjectAgentUiChunk = UIMessageChunk
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readChunkString(chunk: ProjectAgentUiChunk, key: string): string | null {
+  if (!isRecord(chunk)) return null
+  const record = chunk as unknown as Record<string, unknown>
+  const value = record[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 function isFinishChunk(chunk: ProjectAgentUiChunk): boolean {
   const candidate = chunk as { type?: unknown }
   return candidate.type === 'finish'
+}
+
+function isToolInputChunk(chunk: ProjectAgentUiChunk): boolean {
+  const type = readChunkString(chunk, 'type')
+  return type === 'tool-input-start' || type === 'tool-input-available'
+}
+
+function isToolApprovalRequestChunk(chunk: ProjectAgentUiChunk): boolean {
+  return readChunkString(chunk, 'type') === 'tool-approval-request'
+}
+
+function inferToolNameFromCallId(toolCallId: string, toolNames: readonly string[]): string {
+  const normalized = toolCallId.startsWith('tool_') ? toolCallId.slice('tool_'.length) : toolCallId
+  const match = [...toolNames]
+    .sort((left, right) => right.length - left.length)
+    .find((toolName) => normalized === toolName || normalized.startsWith(`${toolName}_`))
+  return match ?? (normalized.split('_').slice(0, -1).join('_') || 'tool')
+}
+
+function createSyntheticToolInputChunks(params: {
+  toolCallId: string
+  toolName: string
+}): ProjectAgentUiChunk[] {
+  return [
+    {
+      type: 'tool-input-start',
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+      dynamic: true,
+    },
+    {
+      type: 'tool-input-available',
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+      input: {},
+      dynamic: true,
+    },
+  ] as unknown as ProjectAgentUiChunk[]
 }
 
 export function createDataChunk(type: string, data: unknown): ProjectAgentUiChunk {
@@ -18,6 +67,7 @@ export function createDataChunk(type: string, data: unknown): ProjectAgentUiChun
 export function createProjectAgentUiMessageStream(params: {
   source: Parameters<typeof createAiSdkUiMessageStream>[0]
   initialChunks: ProjectAgentUiChunk[]
+  toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onSettled: () => Promise<void>
@@ -28,14 +78,29 @@ export function createProjectAgentUiMessageStream(params: {
     async start(controller) {
       const reader = converted.getReader()
       let finishChunk: ProjectAgentUiChunk | null = null
+      const startedToolCallIds = new Set<string>()
+      const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
+        const toolCallId = readChunkString(chunk, 'toolCallId')
+        if (toolCallId && isToolInputChunk(chunk)) {
+          startedToolCallIds.add(toolCallId)
+        }
+        if (toolCallId && isToolApprovalRequestChunk(chunk) && !startedToolCallIds.has(toolCallId)) {
+          const toolName = inferToolNameFromCallId(toolCallId, params.toolNames ?? [])
+          for (const syntheticChunk of createSyntheticToolInputChunks({ toolCallId, toolName })) {
+            startedToolCallIds.add(toolCallId)
+            controller.enqueue(syntheticChunk)
+          }
+        }
+        controller.enqueue(chunk)
+      }
       try {
         for (const chunk of params.initialChunks) {
-          controller.enqueue(chunk)
+          enqueueChunk(chunk)
         }
 
         while (true) {
           for (const chunk of params.drainChunks?.() ?? []) {
-            controller.enqueue(chunk)
+            enqueueChunk(chunk)
           }
           const read = await reader.read()
           if (read.done) break
@@ -43,21 +108,21 @@ export function createProjectAgentUiMessageStream(params: {
             finishChunk = read.value
             continue
           }
-          controller.enqueue(read.value)
+          enqueueChunk(read.value)
           for (const chunk of params.drainChunks?.() ?? []) {
-            controller.enqueue(chunk)
+            enqueueChunk(chunk)
           }
         }
 
         for (const chunk of params.drainChunks?.() ?? []) {
-          controller.enqueue(chunk)
+          enqueueChunk(chunk)
         }
         const trailingChunks = await params.beforeFinish()
         for (const chunk of trailingChunks) {
-          controller.enqueue(chunk)
+          enqueueChunk(chunk)
         }
         if (finishChunk) {
-          controller.enqueue(finishChunk)
+          enqueueChunk(finishChunk)
         }
         controller.close()
       } catch (error) {
