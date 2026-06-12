@@ -407,6 +407,7 @@ export default function WorkspaceAssistantPanel({
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     onRespondToolApproval: handleRespondToolApproval,
     confirmationSubmittingKey,
+    approvalRespondedIds: assistantRuntime.approvalRespondedIds,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,

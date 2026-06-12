@@ -4,6 +4,7 @@ import {
   findLatestProjectAgentApprovalResponse,
   findPendingAgentInterruption,
   findPendingToolApprovalId,
+  findRespondedAgentApprovalIds,
 } from '@/lib/project-agent/ui-message-approval'
 
 describe('findPendingToolApprovalId', () => {
@@ -98,6 +99,7 @@ describe('findPendingToolApprovalId', () => {
             approvalId: 'approval-1',
             approved: true,
             runState: 'serialized-state',
+            operationId: 'generate_edit_screenplay',
           },
         },
       },
@@ -107,7 +109,52 @@ describe('findPendingToolApprovalId', () => {
       approvalId: 'approval-1',
       approved: true,
       runState: 'serialized-state',
+      operationId: 'generate_edit_screenplay',
       reason: null,
     })
+  })
+
+  it('does not treat an already responded Agents SDK interruption as pending', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-interruption',
+            data: {
+              requestId: 'req-1',
+              approvalId: 'approval-1',
+              operationId: 'generate_edit_screenplay',
+              runState: 'serialized-state',
+              toolCallId: 'tool-call-1',
+              display: {
+                title: '生成剧本',
+                description: 'Generate screenplay',
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Tool approval accepted.' }],
+        metadata: {
+          custom: {
+            workspaceAssistantHidden: true,
+            projectAgentApprovalResponse: {
+              approvalId: 'approval-1',
+              approved: true,
+              runState: 'serialized-state',
+              operationId: 'generate_edit_screenplay',
+            },
+          },
+        },
+      },
+    ] satisfies UIMessage[]
+
+    expect(findRespondedAgentApprovalIds(messages).has('approval-1')).toBe(true)
+    expect(findPendingToolApprovalId(messages)).toBeNull()
   })
 })

@@ -32,6 +32,8 @@ export interface ProjectAgentToolset {
   coreOperationIds: string[]
   workflowOperationIds: string[]
   continuationOperationId: string | null
+  resumeOperationId: string | null
+  includeChoiceOperation: boolean
 }
 
 function pushOptionalTool(params: {
@@ -68,10 +70,13 @@ export function resolveProjectAgentToolset(params: {
   workflow: EditFirstWorkflowState
   context: ProjectAgentContext
   continuationOperationId?: string | null
+  resumeOperationId?: string | null
+  includeChoiceOperation?: boolean
 }): ProjectAgentToolset {
   const operationIds: string[] = []
   const coreOperationIds: string[] = []
   const workflowOperationIds: string[] = []
+  const includeChoiceOperation = params.includeChoiceOperation !== false
 
   for (const operationId of CORE_OPERATION_IDS) {
     const beforeLength = operationIds.length
@@ -85,7 +90,7 @@ export function resolveProjectAgentToolset(params: {
     }
   }
 
-  if (params.context.episodeId) {
+  if (params.context.episodeId && includeChoiceOperation) {
     const beforeLength = operationIds.length
     pushRequiredTool({
       registry: params.registry,
@@ -136,11 +141,26 @@ export function resolveProjectAgentToolset(params: {
     }
   }
 
+  const resumeOperationId = params.resumeOperationId ?? null
+  if (resumeOperationId) {
+    const beforeLength = operationIds.length
+    pushRequiredTool({
+      registry: params.registry,
+      operationIds,
+      operationId: resumeOperationId,
+    })
+    if (operationIds.length > beforeLength) {
+      workflowOperationIds.push(resumeOperationId)
+    }
+  }
+
   return {
     source: 'deterministic-workflow',
     operationIds,
     coreOperationIds,
     workflowOperationIds,
     continuationOperationId,
+    resumeOperationId,
+    includeChoiceOperation,
   }
 }

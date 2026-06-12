@@ -84,23 +84,47 @@ vi.mock('@openai/agents', () => {
   }
 
   class RunState {
+    approved = false
+    rejected = false
+
     static async fromStringWithContext() {
-      throw new Error('RUN_STATE_RESUME_NOT_USED_IN_TEST')
+      return new RunState()
+    }
+
+    getInterruptions() {
+      return [{
+        name: 'generate_edit_screenplay',
+        rawItem: {
+          id: 'approval-1',
+          callId: 'tool-generate-screenplay-1',
+        },
+      }]
+    }
+
+    approve() {
+      this.approved = true
+    }
+
+    reject() {
+      this.rejected = true
     }
   }
 
-  const run = vi.fn(async (agent: Agent) => {
+  const run = vi.fn(async (agent: Agent, runInput: unknown) => {
     streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
     streamState.capturedSystem = agent.instructions
     streamState.capturedModelSettings = agent.modelSettings
+    const state = runInput instanceof RunState
+      ? runInput
+      : {
+          getInterruptions: () => [],
+          toString: () => '',
+        }
     return {
       completed: Promise.resolve(),
       interruptions: [],
-      state: {
-        getInterruptions: () => [],
-        toString: () => '',
-      },
+      state,
     }
   })
 
@@ -348,6 +372,34 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedModelSettings).not.toHaveProperty('toolChoice')
     expect(streamState.capturedSystem).toContain('剪辑先行选择卡续跑指令')
     expect(streamState.capturedSystem).toContain('说明后调用 generate_edit_screenplay')
+    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('request_edit_first_choice')
+  })
+
+  it('keeps the interrupted approval operation available when resuming after workflow state changed', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      approvalResponse: {
+        approvalId: 'approval-1',
+        approved: true,
+        runState: 'serialized-state',
+        operationId: 'generate_edit_screenplay',
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
+      ],
+    })
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
   })
 
   it('keeps screenplay review card available after screenplay generation', async () => {

@@ -120,6 +120,24 @@ describe('project agent runtime signal', () => {
     })
   })
 
+  it('[choice card emitted] -> await_user_confirmation signal', () => {
+    expect(normalizeOperationRuntimeSignal({
+      toolName: 'request_edit_first_choice',
+      output: {
+        ok: true,
+        data: {
+          emitted: true,
+          choiceType: 'duration_and_aspect_ratio',
+          cardId: 'edit-first-duration-aspect-ratio',
+          workflowStage: 'ready_to_generate_screenplay',
+        },
+      },
+    })).toEqual({
+      kind: 'await_user_confirmation',
+      operationId: 'request_edit_first_choice',
+    })
+  })
+
   it('[terminal or idle] -> done signal', () => {
     expect(normalizeOperationRuntimeSignal({
       toolName: 'get_task_status',

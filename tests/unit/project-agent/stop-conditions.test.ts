@@ -95,6 +95,27 @@ describe('project agent business stop signals', () => {
     })
   })
 
+  it('[choice card emitted] -> stops so the agent waits for the user choice', () => {
+    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+      toolName: 'request_edit_first_choice',
+      output: {
+        ok: true,
+        data: {
+          emitted: true,
+          choiceType: 'duration_and_aspect_ratio',
+          cardId: 'edit-first-duration-aspect-ratio',
+          workflowStage: 'ready_to_generate_screenplay',
+        },
+      },
+    }])
+
+    expect(stopPart).toEqual({
+      reason: 'awaiting_user_confirmation',
+      stepCount: 1,
+      operationIds: ['request_edit_first_choice'],
+    })
+  })
+
   it('[tool error] -> emits explicit tool error stop data', () => {
     const stopPart = buildProjectAgentStopPartFromToolOutputs([{
       toolName: 'generate_edit_script',

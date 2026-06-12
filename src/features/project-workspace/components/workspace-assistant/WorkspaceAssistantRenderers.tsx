@@ -960,6 +960,7 @@ function readToolApprovalId(payload: unknown): string | null {
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps & {
   onRespondToolApproval?: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey?: string | null
+  approvalRespondedIds?: ReadonlySet<string>
 }) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -970,6 +971,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   const approvalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
     ? readToolApprovalId(props.interrupt.payload)
     : null
+  if (approvalId && props.approvalRespondedIds?.has(approvalId)) return null
   if (approvalId && props.onRespondToolApproval) {
     return (
       <ConfirmationActionCard
@@ -1017,6 +1019,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
 interface WorkspaceAssistantMessagePartComponentsOptions {
   onRespondToolApproval: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey: string | null
+  approvalRespondedIds?: ReadonlySet<string>
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
   onSubmitChoiceResponse: (params: {
@@ -1038,6 +1041,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
 export function useWorkspaceAssistantMessagePartComponents({
   onRespondToolApproval,
   confirmationSubmittingKey,
+  approvalRespondedIds,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
   onSubmitChoiceResponse,
@@ -1053,6 +1057,7 @@ export function useWorkspaceAssistantMessagePartComponents({
           {...props}
           onRespondToolApproval={onRespondToolApproval}
           confirmationSubmittingKey={confirmationSubmittingKey}
+          approvalRespondedIds={approvalRespondedIds}
         />
       ),
     },
@@ -1082,6 +1087,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     },
   }), [
     confirmationSubmittingKey,
+    approvalRespondedIds,
     hideChoiceCards,
     hideStylePreviewGenerationCards,
     onConfirmEditStylePreviewChoice,

@@ -209,6 +209,14 @@ function normalizeActiveOperationTasks(toolName: string, data: UnknownRecord | n
   }
 }
 
+function normalizeChoiceCardSignal(toolName: string, data: UnknownRecord | null): OperationRuntimeSignal | null {
+  if (toolName !== 'request_edit_first_choice' || !data || data.emitted !== true) return null
+  return {
+    kind: 'await_user_confirmation',
+    operationId: toolName,
+  }
+}
+
 export function normalizeOperationRuntimeSignal(input: NormalizeOperationRuntimeSignalInput): OperationRuntimeSignal {
   const taskSubmittedPart = normalizeTaskSubmittedPart(input.output)
   if (taskSubmittedPart) return taskSubmittedPart
@@ -218,6 +226,9 @@ export function normalizeOperationRuntimeSignal(input: NormalizeOperationRuntime
     const asyncSignal = normalizeAsyncSignal(input.toolName, data)
     if (asyncSignal) return asyncSignal
   }
+
+  const choiceCardSignal = normalizeChoiceCardSignal(input.toolName, readWrappedData(input.output))
+  if (choiceCardSignal) return choiceCardSignal
 
   if (isRecord(input.output) && input.output.confirmationRequired === true) {
     const error = readErrorRecord(input.output)

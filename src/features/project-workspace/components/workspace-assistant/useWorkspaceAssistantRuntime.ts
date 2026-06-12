@@ -16,6 +16,7 @@ import {
 } from '@/lib/query/hooks'
 import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
+  findRespondedAgentApprovalIds,
   findPendingAgentInterruption,
   findPendingToolApprovalId,
 } from '@/lib/project-agent/ui-message-approval'
@@ -38,6 +39,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   status: ChatStatus
   pending: boolean
   pendingApprovalId: string | null
+  approvalRespondedIds: ReadonlySet<string>
   error: Error | undefined
   syncError: string | null
   storageError: string | null
@@ -137,6 +139,7 @@ export function useWorkspaceAssistantRuntime({
             approvalId: params.approvalId,
             approved: params.approved,
             runState: interruption.runState,
+            operationId: interruption.operationId,
             ...(params.reason ? { reason: params.reason } : {}),
           },
         },
@@ -145,7 +148,9 @@ export function useWorkspaceAssistantRuntime({
   }, [chat])
 
   const cancelPendingApprovalBeforeUserMessage = useCallback(async () => {
-    const interruption = findPendingAgentInterruption(chat.messages)
+    const pendingApprovalId = findPendingToolApprovalId(chat.messages)
+    if (!pendingApprovalId) return
+    const interruption = findPendingAgentInterruption(chat.messages, pendingApprovalId)
     if (!interruption) return
     await sendAgentApprovalResponse({
       approvalId: interruption.approvalId,
@@ -266,6 +271,7 @@ export function useWorkspaceAssistantRuntime({
     status: chat.status,
     pending: chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: findPendingToolApprovalId(chat.messages),
+    approvalRespondedIds: findRespondedAgentApprovalIds(chat.messages),
     error: chat.error,
     syncError,
     storageError: assistantThread.error?.message || null,

@@ -9,8 +9,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function findPendingToolApprovalId(messages: readonly UIMessage[]): string | null {
+  const respondedApprovalIds = findRespondedAgentApprovalIds(messages)
   const interruption = findPendingAgentInterruption(messages)
-  if (interruption) return interruption.approvalId
+  if (interruption && !respondedApprovalIds.has(interruption.approvalId)) return interruption.approvalId
 
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex]
@@ -21,7 +22,7 @@ export function findPendingToolApprovalId(messages: readonly UIMessage[]): strin
       if (part.state !== 'approval-requested') continue
       const approval = isRecord(part.approval) ? part.approval : null
       const id = approval?.id
-      if (typeof id === 'string' && id.trim().length > 0) return id.trim()
+      if (typeof id === 'string' && id.trim().length > 0 && !respondedApprovalIds.has(id.trim())) return id.trim()
     }
   }
   return null
@@ -90,12 +91,28 @@ function parseApprovalResponseData(value: unknown): ProjectAgentApprovalResponse
     return null
   }
   const reason = value.reason
+  const operationId = value.operationId
   return {
     approvalId,
     approved,
     runState,
+    operationId: typeof operationId === 'string' ? operationId : null,
     reason: typeof reason === 'string' ? reason : null,
   }
+}
+
+export function findRespondedAgentApprovalIds(messages: readonly UIMessage[]): ReadonlySet<string> {
+  const approvalIds = new Set<string>()
+  for (const message of messages) {
+    if (!message || message.role !== 'user') continue
+    const metadata = message.metadata
+    if (!isRecord(metadata)) continue
+    const custom = metadata.custom
+    if (!isRecord(custom)) continue
+    const response = parseApprovalResponseData(custom.projectAgentApprovalResponse)
+    if (response) approvalIds.add(response.approvalId)
+  }
+  return approvalIds
 }
 
 export function findLatestProjectAgentApprovalResponse(

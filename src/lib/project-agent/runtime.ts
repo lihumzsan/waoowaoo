@@ -316,11 +316,15 @@ export async function createProjectAgentChatResponse(input: {
   const operations = createProjectAgentOperationRegistry()
   const requestId = stableRequestId
   const choiceContinuation = resolveEditFirstChoiceContinuation(runtimeMessages)
+  const approvalResponse = input.approvalResponse ?? null
+  const approvalResumeOperationId = approvalResponse?.operationId?.trim() || null
   const toolset = resolveProjectAgentToolset({
     registry: operations,
     workflow: phase.editFirstWorkflow,
     context,
     continuationOperationId: choiceContinuation?.operationId ?? null,
+    resumeOperationId: approvalResumeOperationId,
+    includeChoiceOperation: !choiceContinuation || Boolean(approvalResponse),
   })
   const operationIds = toolset.operationIds
   const selectedTools = operationIds.map((operationId) => {
@@ -354,6 +358,8 @@ export async function createProjectAgentChatResponse(input: {
         coreOperationIds: toolset.coreOperationIds,
         workflowOperationIds: toolset.workflowOperationIds,
         continuationOperationId: toolset.continuationOperationId,
+        resumeOperationId: toolset.resumeOperationId,
+        includeChoiceOperation: toolset.includeChoiceOperation,
       },
       editFirstWorkflow: phase.editFirstWorkflow,
       selectedTools: selectedTools.map((item) => ({
@@ -460,7 +466,6 @@ export async function createProjectAgentChatResponse(input: {
     locale,
   })
 
-  const approvalResponse = input.approvalResponse ?? null
   const runInput = approvalResponse
     ? await (async () => {
         const state = await RunState.fromStringWithContext<ProjectAgentAgentsRunContext, Agent<ProjectAgentAgentsRunContext>>(

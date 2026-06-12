@@ -55,6 +55,7 @@ export interface ProjectAgentApprovalResponseData {
   approvalId: string
   approved: boolean
   runState: string
+  operationId?: string | null
   reason?: string | null
 }
 
@@ -123,6 +124,8 @@ export interface AgentRuntimeContextPartData {
     coreOperationIds: string[]
     workflowOperationIds: string[]
     continuationOperationId: string | null
+    resumeOperationId: string | null
+    includeChoiceOperation: boolean
   }
   editFirstWorkflow: EditFirstWorkflowState
   selectedTools: Array<{

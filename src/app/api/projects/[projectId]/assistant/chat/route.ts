@@ -18,7 +18,10 @@ import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
-import { findLatestProjectAgentApprovalResponse } from '@/lib/project-agent/ui-message-approval'
+import {
+  findLatestProjectAgentApprovalResponse,
+  findPendingAgentInterruption,
+} from '@/lib/project-agent/ui-message-approval'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 type RequestBody = {
@@ -240,7 +243,16 @@ export const POST = apiHandler(async (
     const locale = readLocaleFromBody(body)
     const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
     const requestMessages = await validateThreadMessages(body.messages)
-    const approvalResponse = findLatestProjectAgentApprovalResponse(requestMessages)
+    const latestApprovalResponse = findLatestProjectAgentApprovalResponse(requestMessages)
+    const approvalInterruption = latestApprovalResponse
+      ? findPendingAgentInterruption(requestMessages, latestApprovalResponse.approvalId)
+      : null
+    const approvalResponse = latestApprovalResponse && !latestApprovalResponse.operationId && approvalInterruption
+      ? {
+          ...latestApprovalResponse,
+          operationId: approvalInterruption.operationId,
+        }
+      : latestApprovalResponse
     const messages = approvalResponse
       ? requestMessages
       : await compressThreadMessagesIfNeeded({

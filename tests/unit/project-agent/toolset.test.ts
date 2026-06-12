@@ -91,6 +91,33 @@ describe('project agent deterministic toolset', () => {
     expect(result.operationIds).not.toContain('generate_edit_screenplay')
   })
 
+  it('can hide choice-card tools during a choice continuation run', () => {
+    const result = resolveProjectAgentToolset({
+      registry: registry(),
+      workflow: workflow('ready_to_generate_screenplay', ['generate_edit_screenplay']),
+      context: { episodeId: 'episode-1' },
+      continuationOperationId: 'generate_edit_screenplay',
+      includeChoiceOperation: false,
+    })
+
+    expect(result.operationIds).toContain('generate_edit_screenplay')
+    expect(result.operationIds).not.toContain('request_edit_first_choice')
+    expect(result.includeChoiceOperation).toBe(false)
+  })
+
+  it('keeps the resumed approval operation visible even when the workflow has moved on', () => {
+    const result = resolveProjectAgentToolset({
+      registry: registry(),
+      workflow: workflow('screenplay_ready_for_review', ['generate_edit_style_previews']),
+      context: { episodeId: 'episode-1' },
+      resumeOperationId: 'generate_edit_screenplay',
+    })
+
+    expect(result.operationIds).toContain('generate_edit_screenplay')
+    expect(result.operationIds).toContain('generate_edit_style_previews')
+    expect(result.resumeOperationId).toBe('generate_edit_screenplay')
+  })
+
   it('exposes storyboard image generation before video generation', () => {
     const result = resolveProjectAgentToolset({
       registry: registry(),
