@@ -3,6 +3,7 @@ import {
   buildWorkspaceAssistantChatId,
   findLatestWorkspaceAssistantRun,
   isWorkspaceAssistantRunBusyStatus,
+  resolveWorkspaceAssistantChoicePendingOperationId,
   shouldClearWorkspaceAssistantControlPending,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
@@ -76,6 +77,26 @@ describe('workspace assistant runtime chat id', () => {
     expect(run).toEqual({
       runId: 'run-new',
       status: 'running',
+      operationId: null,
     })
+  })
+
+  it('derives a display operation for run-scoped choice continuations', () => {
+    expect(resolveWorkspaceAssistantChoicePendingOperationId({
+      choiceType: 'duration_and_aspect_ratio',
+      output: { ok: true, durationSeconds: 30, aspectRatio: '16:9' },
+    })).toBe('generate_edit_screenplay')
+    expect(resolveWorkspaceAssistantChoicePendingOperationId({
+      choiceType: 'screenplay_review',
+      output: { ok: true, decision: 'approve' },
+    })).toBe('generate_edit_style_previews')
+    expect(resolveWorkspaceAssistantChoicePendingOperationId({
+      choiceType: 'screenplay_review',
+      output: { ok: true, decision: 'revise', revisionNotes: '更惊悚' },
+    })).toBe('revise_edit_screenplay')
+    expect(resolveWorkspaceAssistantChoicePendingOperationId({
+      choiceType: 'style',
+      output: { ok: true, stylePreviewId: 'style-1', aspectRatio: '16:9' },
+    })).toBe('generate_edit_director_decoupage')
   })
 })

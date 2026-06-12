@@ -32,6 +32,7 @@ type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 interface WorkspaceAssistantTrackedRun {
   runId: string
   status: WorkspaceAssistantRunStatus
+  operationId: string | null
 }
 
 class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
@@ -62,6 +63,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   syncError: string | null
   storageError: string | null
   storageLoading: boolean
+  pendingOperationId: string | null
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
   submitChoiceResponse: (params: {
@@ -126,6 +128,7 @@ function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTracked
   return {
     runId,
     status: data.status,
+    operationId: null,
   }
 }
 
@@ -137,6 +140,24 @@ export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]):
       const run = readWorkspaceAssistantRunPart(message.parts[partIndex])
       if (run) return run
     }
+  }
+  return null
+}
+
+function readChoiceOutputString(output: Record<string, unknown>, key: string): string | null {
+  return readNonEmptyString(output[key])
+}
+
+export function resolveWorkspaceAssistantChoicePendingOperationId(params: {
+  choiceType: WorkspaceAssistantChoiceType
+  output: Record<string, unknown>
+}): string | null {
+  if (params.choiceType === 'duration_and_aspect_ratio') return 'generate_edit_screenplay'
+  if (params.choiceType === 'style') return 'generate_edit_director_decoupage'
+  if (params.choiceType === 'screenplay_review') {
+    const decision = readChoiceOutputString(params.output, 'decision')
+    if (decision === 'approve') return 'generate_edit_style_previews'
+    if (decision === 'revise') return 'revise_edit_screenplay'
   }
   return null
 }
@@ -250,29 +271,39 @@ export function useWorkspaceAssistantRuntime({
     })
   }, [chat])
 
-  const applyTrackedRunStatus = useCallback((runId: string, status: WorkspaceAssistantRunStatus) => {
+  const applyTrackedRunStatus = useCallback((params: {
+    runId: string
+    status: WorkspaceAssistantRunStatus
+    operationId?: string | null
+  }) => {
+    const { runId, status } = params
     if (shouldClearWorkspaceAssistantControlPending(status)) {
       settledRunIdsRef.current.add(runId)
       setActiveControlRun((current) => current?.runId === runId ? null : current)
       return
     }
-    setActiveControlRun({ runId, status })
+    setActiveControlRun((current) => ({
+      runId,
+      status,
+      operationId: params.operationId ?? (current?.runId === runId ? current.operationId : null),
+    }))
   }, [])
 
   const refreshTrackedRunStatus = useCallback(async (runId: string): Promise<WorkspaceAssistantRunStatus> => {
     const status = await fetchWorkspaceAssistantRunStatus({ projectId, episodeId, runId })
-    applyTrackedRunStatus(runId, status)
+    applyTrackedRunStatus({ runId, status })
     return status
   }, [applyTrackedRunStatus, episodeId, projectId])
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
     endpoint: 'approval' | 'choice' | 'task-follow-up'
+    operationId?: string | null
     payload: Record<string, unknown>
   }) => {
     chat.clearError()
     settledRunIdsRef.current.delete(params.runId)
-    setActiveControlRun({ runId: params.runId, status: 'running' })
+    setActiveControlRun({ runId: params.runId, status: 'running', operationId: params.operationId ?? null })
     try {
       const response = await fetch(
         `/api/projects/${projectId}/assistant/runs/${encodeURIComponent(params.runId)}/${params.endpoint}`,
@@ -313,6 +344,10 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'choice',
+      operationId: resolveWorkspaceAssistantChoicePendingOperationId({
+        choiceType: params.choiceType,
+        output: params.output,
+      }),
       payload: {
         interruptionId: params.interruptionId,
         choiceType: params.choiceType,
@@ -330,6 +365,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'task-follow-up',
+      operationId: null,
       payload: {
         waitId: params.waitId,
         claimId: params.claimId,
@@ -350,6 +386,7 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: interruption.runId,
       endpoint: 'approval',
+      operationId: interruption.operationId,
       payload: {
         interruptionId: interruption.interruptionId,
         approved: params.approved,
@@ -375,7 +412,7 @@ export function useWorkspaceAssistantRuntime({
     const latestRun = findLatestWorkspaceAssistantRun(chat.messages)
     if (!latestRun) return
     if (!isWorkspaceAssistantRunBusyStatus(latestRun.status)) {
-      applyTrackedRunStatus(latestRun.runId, latestRun.status)
+      applyTrackedRunStatus(latestRun)
       return
     }
     if (settledRunIdsRef.current.has(latestRun.runId)) return
@@ -463,6 +500,7 @@ export function useWorkspaceAssistantRuntime({
     syncError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
+    pendingOperationId: activeControlRun?.operationId ?? null,
     sendMessage,
     sendHiddenMessage,
     submitChoiceResponse,

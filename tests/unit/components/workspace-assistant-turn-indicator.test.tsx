@@ -65,4 +65,12 @@ describe('workspace assistant turn indicator', () => {
     expect(html).toContain('assistant-thinking-minimal')
     expect(html).toContain('flex flex-col gap-3 px-1 py-1')
   })
+
+  it('renders the thinking placeholder while a server run remains pending after the chat stream is ready', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceAssistantPendingTurnPlaceholder status="ready" pending />,
+    )
+
+    expect(html).toContain('assistant-thinking-minimal')
+  })
 })

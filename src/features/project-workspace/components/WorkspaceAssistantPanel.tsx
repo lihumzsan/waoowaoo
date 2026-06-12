@@ -9,6 +9,7 @@ import {
 } from '@assistant-ui/react'
 import {
   AssistantChoiceCardView,
+  WorkspaceAssistantActiveRunCard,
   EditStylePreviewGenerationDataCard,
   findLatestAssistantMessageIdAfterLatestUser,
   shouldShowPendingAssistantTurnPlaceholder,
@@ -436,8 +437,13 @@ export default function WorkspaceAssistantPanel({
   const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
     status: assistantRuntime.status,
     activeAssistantMessageId: activeThinkingAssistantMessageId,
-    pending: assistantRuntime.pending && !assistantRuntime.storageLoading,
+    pending: assistantRuntime.pending && !assistantRuntime.storageLoading && !assistantRuntime.pendingOperationId,
   })
+  const showActiveRunCard = Boolean(
+    assistantRuntime.pending
+      && !assistantRuntime.storageLoading
+      && assistantRuntime.pendingOperationId,
+  )
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
     event.preventDefault()
@@ -537,7 +543,13 @@ export default function WorkspaceAssistantPanel({
                       )}
                     </ThreadPrimitive.Messages>
                     {showPendingAssistantTurnPlaceholder ? (
-                      <WorkspaceAssistantPendingTurnPlaceholder status={assistantRuntime.status} />
+                      <WorkspaceAssistantPendingTurnPlaceholder
+                        status={assistantRuntime.status}
+                        pending={assistantRuntime.pending && !assistantRuntime.storageLoading && !assistantRuntime.pendingOperationId}
+                      />
+                    ) : null}
+                    {showActiveRunCard ? (
+                      <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />
                     ) : null}
                     {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
                       <EditStylePreviewGenerationDataCard

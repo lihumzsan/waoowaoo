@@ -264,6 +264,24 @@ export function ConfirmationActionCard(props: {
   )
 }
 
+export function WorkspaceAssistantActiveRunCard(props: {
+  operationId: string | null
+}) {
+  const t = useTranslations('assistantAgent')
+  const locale = normalizeProjectAgentLocale(useLocale())
+  const operationTitle = localizeProjectAgentOperationTitle(props.operationId ?? '', locale)
+  return (
+    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+      <div className="flex items-center gap-2">
+        <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
+        <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
+          {t('toolCall.running')} · {operationTitle}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function isEditScriptVideoRatio(value: string | undefined): value is EditScriptVideoRatio {
   return typeof value === 'string' && EDIT_SCRIPT_VIDEO_RATIOS.includes(value as EditScriptVideoRatio)
 }
@@ -1230,11 +1248,12 @@ export function WorkspaceAssistantThreadMessage(props: {
 
 export function WorkspaceAssistantPendingTurnPlaceholder(props: {
   status: ChatStatus
+  pending?: boolean
 }) {
   return (
     <div className="space-y-1">
       <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-        <WorkspaceAssistantThinkingIndicator status={props.status} />
+        <WorkspaceAssistantThinkingIndicator status={props.pending ? 'streaming' : props.status} />
       </div>
     </div>
   )
