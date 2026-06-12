@@ -43,6 +43,7 @@ prisma/data
 .env.local
 .env.*.local
 .env.test
+.official-content
 
 # 文档和杂项
 *.md

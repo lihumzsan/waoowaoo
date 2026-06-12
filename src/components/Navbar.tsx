@@ -12,6 +12,7 @@ import UpdateNoticeModal from './UpdateNoticeModal'
 import { useGithubReleaseUpdate } from '@/hooks/common/useGithubReleaseUpdate'
 import { Link } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
+import { fetchPublicDeploymentIsCloud } from '@/lib/deployment/public-client'
 import type { ProfileSection } from '@/lib/profile/sections'
 
 interface NavbarSettingsBoundary {
@@ -42,6 +43,7 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
   const [checkMsgFading, setCheckMsgFading] = useState(false)
   const [manualChecking, setManualChecking] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showOfficialPublicPages, setShowOfficialPublicPages] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsMenuStyle, setSettingsMenuStyle] = useState<CSSProperties | null>(null)
   const settingsTriggerRef = useRef<HTMLDivElement>(null)
@@ -75,6 +77,16 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPublicDeploymentIsCloud().then((isCloud) => {
+      if (!cancelled) setShowOfficialPublicPages(isCloud)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -279,12 +291,14 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
 
               ) : (
                 <>
-                  <Link
-                    href={{ pathname: '/pricing' }}
-                    className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
-                  >
-                    {t('pricing')}
-                  </Link>
+                  {showOfficialPublicPages ? (
+                    <Link
+                      href={{ pathname: '/pricing' }}
+                      className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
+                    >
+                      {t('pricing')}
+                    </Link>
+                  ) : null}
                   <Link
                     href={{ pathname: '/auth/signin' }}
                     className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"

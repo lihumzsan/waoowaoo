@@ -1,7 +1,9 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
+import { fetchPublicDeploymentIsCloud } from '@/lib/deployment/public-client'
 
 const FOOTER_LINKS = [
   { href: '/pricing', labelKey: 'pricing' },
@@ -13,6 +15,17 @@ const FOOTER_LINKS = [
 
 export default function PublicFooter() {
   const t = useTranslations('legal.publicFooter')
+  const [showOfficialLinks, setShowOfficialLinks] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPublicDeploymentIsCloud().then((isCloud) => {
+      if (!cancelled) setShowOfficialLinks(isCloud)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <footer className="border-t border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-surface)]/55 px-4 py-8 text-sm text-[var(--glass-text-muted)] backdrop-blur-xl">
@@ -21,17 +34,19 @@ export default function PublicFooter() {
           <p className="font-semibold text-[var(--glass-text-secondary)]">{t('brand')}</p>
           <p>{t('betaNotice')}</p>
         </div>
-        <nav aria-label={t('navLabel')} className="flex flex-wrap gap-x-5 gap-y-2">
-          {FOOTER_LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={{ pathname: item.href }}
-              className="transition-colors hover:text-[var(--glass-text-primary)]"
-            >
-              {t(`links.${item.labelKey}`)}
-            </Link>
-          ))}
-        </nav>
+        {showOfficialLinks ? (
+          <nav aria-label={t('navLabel')} className="flex flex-wrap gap-x-5 gap-y-2">
+            {FOOTER_LINKS.map((item) => (
+              <Link
+                key={item.href}
+                href={{ pathname: item.href }}
+                className="transition-colors hover:text-[var(--glass-text-primary)]"
+              >
+                {t(`links.${item.labelKey}`)}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
       </div>
     </footer>
   )

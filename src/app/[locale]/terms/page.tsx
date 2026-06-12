@@ -1,31 +1,26 @@
-import { getTranslations } from 'next-intl/server'
 import LegalPageShell from '@/components/legal/LegalPageShell'
+import { normalizeOfficialLocale, readOfficialLegalPage } from '@/lib/public-site/official-content'
+import { requireOfficialCloudPublicPage } from '@/lib/public-site/visibility'
+import type { Locale } from '@/i18n/routing'
 
-const SECTION_KEYS = [
-  'merchant',
-  'service',
-  'credits',
-  'acceptableUse',
-  'content',
-  'account',
-  'payments',
-  'liability',
-  'law',
-] as const
+export const dynamic = 'force-dynamic'
 
-export default async function TermsPage() {
-  const t = await getTranslations('legal.terms')
+export default async function TermsPage({
+  params,
+}: {
+  readonly params: Promise<{ readonly locale: Locale }>
+}) {
+  requireOfficialCloudPublicPage()
+  const { locale } = await params
+  const content = readOfficialLegalPage('terms', normalizeOfficialLocale(locale))
 
   return (
     <LegalPageShell
-      eyebrow={t('eyebrow')}
-      title={t('title')}
-      description={t('description')}
-      updatedAt={t('updatedAt')}
-      sections={SECTION_KEYS.map((key) => ({
-        title: t(`sections.${key}.title`),
-        body: t(`sections.${key}.body`),
-      }))}
+      eyebrow={content.eyebrow}
+      title={content.title}
+      description={content.description}
+      updatedAt={content.updatedAt}
+      sections={content.sections}
     />
   )
 }

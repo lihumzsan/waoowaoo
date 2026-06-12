@@ -28,11 +28,16 @@ describe('public payment-readiness pages', () => {
   it('keeps pricing, policy, refund, and contact routes present', () => {
     const pages = PUBLIC_PAGE_PATHS.map((path) => readRepoFile(path))
 
-    expect(pages[0]).toContain("getTranslations('pricing')")
-    expect(pages[1]).toContain("getTranslations('legal.terms')")
-    expect(pages[2]).toContain("getTranslations('legal.privacy')")
-    expect(pages[3]).toContain("getTranslations('legal.refund')")
-    expect(pages[4]).toContain("getTranslations('contact')")
+    for (const page of pages) {
+      expect(page).toContain("export const dynamic = 'force-dynamic'")
+      expect(page).toContain('requireOfficialCloudPublicPage()')
+    }
+
+    expect(pages[0]).toContain('readOfficialPricingPage')
+    expect(pages[1]).toContain("readOfficialLegalPage('terms'")
+    expect(pages[2]).toContain("readOfficialLegalPage('privacy'")
+    expect(pages[3]).toContain("readOfficialLegalPage('refund-policy'")
+    expect(pages[4]).toContain('readOfficialContactPage')
   })
 
   it('loads public legal namespaces through the i18n request config', () => {
@@ -46,11 +51,22 @@ describe('public payment-readiness pages', () => {
     expect(i18n).toContain('contact: contact.default')
   })
 
-  it('exposes public footer links and placeholder merchant disclosure content', () => {
+  it('keeps official public links and content private by default', () => {
     const footer = readRepoFile('src/components/PublicFooter.tsx')
+    const navbar = readRepoFile('src/components/Navbar.tsx')
     const contactZh = JSON.parse(readRepoFile('messages/zh/contact.json')) as {
-      publicInfo: { fields: { registrationRegion: { value: string } } }
+      publicInfo: {
+        fields: {
+          companyName: { value: string }
+          registrationRegion: { value: string }
+          registrationNumber: { value: string }
+          supportEmail: { value: string }
+        }
+      }
       portalOnly: { items: Record<string, string> }
+    }
+    const legalZh = JSON.parse(readRepoFile('messages/zh/legal.json')) as {
+      publicFooter: { brand: string }
     }
 
     expect(footer).toContain("href: '/pricing'")
@@ -58,7 +74,13 @@ describe('public payment-readiness pages', () => {
     expect(footer).toContain("href: '/privacy'")
     expect(footer).toContain("href: '/refund-policy'")
     expect(footer).toContain("href: '/contact'")
+    expect(footer).toContain('fetchPublicDeploymentIsCloud')
+    expect(navbar).toContain('fetchPublicDeploymentIsCloud')
+    expect(legalZh.publicFooter.brand).toBe('waoowaoo')
+    expect(contactZh.publicInfo.fields.companyName.value).toContain('待提供')
     expect(contactZh.publicInfo.fields.registrationRegion.value).toBe('Hong Kong')
+    expect(contactZh.publicInfo.fields.registrationNumber.value).toBe('待提供')
+    expect(contactZh.publicInfo.fields.supportEmail.value).toContain('待提供')
     expect(Object.keys(contactZh.portalOnly.items)).toEqual([
       'certificate',
       'businessRegistration',
@@ -66,6 +88,16 @@ describe('public payment-readiness pages', () => {
       'owners',
       'bank',
     ])
+  })
+
+  it('keeps private official content outside git and docker build contexts', () => {
+    const gitignore = readRepoFile('.gitignore')
+    const dockerignore = readRepoFile('.dockerignore')
+    const envExample = readRepoFile('.env.example')
+
+    expect(gitignore).toContain('.official-content/')
+    expect(dockerignore).toContain('.official-content')
+    expect(envExample).toContain('OFFICIAL_CONTENT_DIR=.official-content')
   })
 
   it('keeps localized message files valid JSON', () => {

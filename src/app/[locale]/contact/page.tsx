@@ -1,27 +1,19 @@
-import { getTranslations } from 'next-intl/server'
 import Navbar from '@/components/Navbar'
 import PublicFooter from '@/components/PublicFooter'
+import { normalizeOfficialLocale, readOfficialContactPage } from '@/lib/public-site/official-content'
+import { requireOfficialCloudPublicPage } from '@/lib/public-site/visibility'
+import type { Locale } from '@/i18n/routing'
 
-const PUBLIC_INFO_KEYS = [
-  'companyName',
-  'registrationRegion',
-  'registrationNumber',
-  'registeredAddress',
-  'supportEmail',
-  'supportPhone',
-  'supportHours',
-] as const
+export const dynamic = 'force-dynamic'
 
-const PORTAL_ONLY_KEYS = [
-  'certificate',
-  'businessRegistration',
-  'directors',
-  'owners',
-  'bank',
-] as const
-
-export default async function ContactPage() {
-  const t = await getTranslations('contact')
+export default async function ContactPage({
+  params,
+}: {
+  readonly params: Promise<{ readonly locale: Locale }>
+}) {
+  requireOfficialCloudPublicPage()
+  const { locale } = await params
+  const content = readOfficialContactPage(normalizeOfficialLocale(locale))
 
   return (
     <div className="glass-page min-h-screen">
@@ -29,29 +21,29 @@ export default async function ContactPage() {
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-12 sm:px-6 lg:px-8">
         <section className="mb-10 space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--glass-tone-info-fg)]">
-            {t('eyebrow')}
+            {content.eyebrow}
           </p>
           <h1 className="text-4xl font-semibold tracking-normal text-[var(--glass-text-primary)] md:text-5xl">
-            {t('title')}
+            {content.title}
           </h1>
           <p className="max-w-3xl text-base leading-7 text-[var(--glass-text-secondary)]">
-            {t('description')}
+            {content.description}
           </p>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-surface)]/72 p-6 backdrop-blur-xl">
             <h2 className="mb-4 text-xl font-semibold tracking-normal text-[var(--glass-text-primary)]">
-              {t('publicInfo.title')}
+              {content.publicInfo.title}
             </h2>
             <dl className="grid gap-4">
-              {PUBLIC_INFO_KEYS.map((key) => (
-                <div key={key} className="grid gap-1 border-b border-[var(--glass-stroke-soft)] pb-3 last:border-b-0 last:pb-0">
+              {content.publicInfo.fields.map((field) => (
+                <div key={field.label} className="grid gap-1 border-b border-[var(--glass-stroke-soft)] pb-3 last:border-b-0 last:pb-0">
                   <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--glass-text-muted)]">
-                    {t(`publicInfo.fields.${key}.label`)}
+                    {field.label}
                   </dt>
                   <dd className="text-sm leading-6 text-[var(--glass-text-secondary)]">
-                    {t(`publicInfo.fields.${key}.value`)}
+                    {field.value}
                   </dd>
                 </div>
               ))}
@@ -60,14 +52,14 @@ export default async function ContactPage() {
 
           <section className="rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-surface)]/72 p-6 backdrop-blur-xl">
             <h2 className="mb-4 text-xl font-semibold tracking-normal text-[var(--glass-text-primary)]">
-              {t('portalOnly.title')}
+              {content.portalOnly.title}
             </h2>
             <p className="mb-4 text-sm leading-7 text-[var(--glass-text-secondary)]">
-              {t('portalOnly.description')}
+              {content.portalOnly.description}
             </p>
             <div className="grid gap-3 text-sm leading-6 text-[var(--glass-text-secondary)]">
-              {PORTAL_ONLY_KEYS.map((key) => (
-                <p key={key}>{t(`portalOnly.items.${key}`)}</p>
+              {content.portalOnly.items.map((item) => (
+                <p key={item}>{item}</p>
               ))}
             </div>
           </section>
