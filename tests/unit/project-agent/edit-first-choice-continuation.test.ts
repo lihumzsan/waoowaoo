@@ -62,6 +62,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
     expect(continuation?.instruction).toContain('用户原始创意需求："民俗恐怖片"')
     expect(continuation?.instruction).toContain('durationSeconds=60')
     expect(continuation?.instruction).toContain('aspectRatio=16:9')
+    expect(continuation?.instruction).toContain('必须先用一句用户可见自然语言说明')
     expect(continuation?.instruction).toContain('必须直接调用 generate_edit_screenplay')
   })
 
@@ -79,6 +80,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
       operationId: 'generate_edit_style_previews',
     }))
     expect(continuation?.instruction).toContain('剧本审核卡已经返回用户确认')
+    expect(continuation?.instruction).toContain('必须先用一句用户可见自然语言说明')
     expect(continuation?.instruction).toContain('必须直接调用 generate_edit_style_previews')
   })
 
@@ -97,6 +99,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
       operationId: 'revise_edit_screenplay',
     }))
     expect(continuation?.instruction).toContain('用户修改意见："更克苏鲁一些"')
+    expect(continuation?.instruction).toContain('必须先用一句用户可见自然语言说明')
     expect(continuation?.instruction).toContain('必须直接调用 revise_edit_screenplay')
   })
 
@@ -115,6 +118,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
       operationId: 'generate_edit_director_decoupage',
     }))
     expect(continuation?.instruction).toContain('stylePreviewId=style-1')
+    expect(continuation?.instruction).toContain('必须先用一句用户可见自然语言说明')
     expect(continuation?.instruction).toContain('必须直接调用 generate_edit_director_decoupage')
   })
 
