@@ -598,6 +598,7 @@ model ProjectAgentWait {
   episodeId       String?
   operationId     String    @db.VarChar(128)
   taskIds         Json
+  followUpMode    String    @default("resume_agent") @db.VarChar(32)
   status          String    @default("pending") @db.VarChar(32)
   terminalStatus  String?   @db.VarChar(32)
   terminalTaskIds Json?
@@ -618,6 +619,32 @@ model ProjectAgentWait {
   @@index([followUpKey])
   @@index([claimId])
   @@map("project_agent_waits")
+}
+
+model ProjectAgentInterruption {
+  id          String    @id @default(uuid())
+  projectId   String
+  userId      String
+  assistantId String    @db.VarChar(64)
+  scopeRef    String    @db.VarChar(64)
+  episodeId   String?
+  type        String    @db.VarChar(32)
+  status      String    @default("pending") @db.VarChar(32)
+  operationId String    @db.VarChar(128)
+  approvalId  String    @db.VarChar(128)
+  toolCallId  String?   @db.VarChar(128)
+  payload     Json
+  runState    String?   @db.LongText
+  response    Json?
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
+  @@index([userId])
+  @@map("project_agent_interruptions")
 }
 
 model ProjectAssistantToolSelection {
@@ -774,6 +801,7 @@ model Project {
   planApprovals      PlanApproval[]
   assistantThreads   ProjectAssistantThread[]
   agentWaits         ProjectAgentWait[]
+  agentInterruptions ProjectAgentInterruption[]
   assistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches    MutationBatch[]
   savedSkills        SavedSkill[]
@@ -898,6 +926,7 @@ model User {
   planApprovals           PlanApproval[]
   projectAssistantThreads ProjectAssistantThread[]
   projectAgentWaits       ProjectAgentWait[]
+  projectAgentInterruptions ProjectAgentInterruption[]
   projectAssistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches         MutationBatch[]
   savedSkills             SavedSkill[]

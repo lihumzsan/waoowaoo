@@ -84,6 +84,15 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_INVALID:${operationId}:${key}`)
       }
     }
+    const agentFlow = op.agentFlow as { onTaskComplete?: unknown } | undefined
+    if (agentFlow !== undefined) {
+      if (!agentFlow || typeof agentFlow !== 'object' || Array.isArray(agentFlow)) {
+        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INVALID:${operationId}`)
+      }
+      if (agentFlow.onTaskComplete !== 'resume_agent' && agentFlow.onTaskComplete !== 'await_user_choice') {
+        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
+      }
+    }
     const confirmation = op.confirmation as { required?: unknown } | undefined
     if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_MISSING:${operationId}`)

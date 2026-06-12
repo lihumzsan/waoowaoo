@@ -51,29 +51,30 @@ export type ProjectAgentStopPartData =
     codes: string[]
   }
 
-export interface ProjectAgentApprovalResponseData {
-  approvalId: string
-  approved: boolean
-  runState: string
-  operationId?: string | null
-  reason?: string | null
-}
-
-export interface ProjectAgentChoiceResponseData {
-  toolCallId?: string | null
-  output: UnknownObject
-}
-
 export interface ProjectAgentInterruptionPartData {
   requestId: string
+  interruptionId: string
   approvalId: string
   operationId: string
-  runState: string
   toolCallId?: string | null
   display: {
     title: string
     description: string
   }
+}
+
+export type ProjectAgentInterruptionOutcome = 'approved' | 'rejected' | 'superseded'
+
+export interface ProjectAgentInterruptionResolvedPartData {
+  interruptionId: string
+  approvalId: string
+  outcome: ProjectAgentInterruptionOutcome
+}
+
+export interface ProjectAgentChoiceResolvedPartData {
+  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+  toolCallId?: string | null
+  cardId?: string | null
 }
 
 export interface AgentPlanPartData {
@@ -258,9 +259,11 @@ export interface ProjectAssistantThreadSnapshot {
 export type WorkspaceAssistantPartType =
   | 'data-agent-debug'
   | 'data-agent-interruption'
+  | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
+  | 'data-assistant-choice-resolved'
   | 'data-edit-style-preview-generation'
   | 'data-project-phase'
   | 'data-task-submitted'

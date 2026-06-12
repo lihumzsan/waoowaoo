@@ -23,6 +23,16 @@ describe('project agent Agents SDK runtime guard', () => {
 
     expect(runtime).not.toContain('addToolApprovalResponse')
     expect(route).not.toContain('addToolApprovalResponse')
-    expect(route).toContain('findLatestProjectAgentApprovalResponse')
+  })
+
+  it('resolves continuation control from interruption rows, never from message history', () => {
+    const route = readSource('src/app/api/projects/[projectId]/assistant/chat/route.ts')
+
+    expect(route).toContain('parseProjectAgentControlAction')
+    expect(route).toContain('consumeProjectAgentApprovalInterruption')
+    expect(route).toContain('consumeProjectAgentWaitFollowUp')
+    expect(route).not.toContain('findLatestProjectAgentApprovalResponse')
+    expect(route).not.toContain('projectAgentApprovalResponse')
+    expect(route).not.toContain('projectAgentChoiceResponse')
   })
 })

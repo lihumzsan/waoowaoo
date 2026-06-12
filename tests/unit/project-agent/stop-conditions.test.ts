@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION,
+  PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN,
   PROJECT_AGENT_MAX_TURNS,
-  buildProjectAgentStopPartFromToolOutputs,
+  createProjectAgentStopController,
 } from '@/lib/project-agent/stop-conditions'
+
+function toolErrorOutput(operationId: string, code: string) {
+  return {
+    toolName: operationId,
+    output: {
+      ok: false,
+      error: {
+        operationId,
+        code,
+      },
+    },
+  }
+}
 
 describe('project agent business stop signals', () => {
   it('exposes the Agents SDK max turn cap constant', () => {
@@ -10,7 +25,8 @@ describe('project agent business stop signals', () => {
   })
 
   it('[async task submitted] -> emits external task wait stop data', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
       toolName: 'generate_edit_script',
       output: {
         ok: true,
@@ -32,7 +48,8 @@ describe('project agent business stop signals', () => {
   })
 
   it('[task status active] -> emits external task wait stop data', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
       toolName: 'get_task_status',
       output: {
         ok: true,
@@ -57,7 +74,8 @@ describe('project agent business stop signals', () => {
   })
 
   it('[task status terminal] -> returns null so the agent can summarize completed results', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
       toolName: 'get_task_status',
       output: {
         ok: true,
@@ -76,7 +94,8 @@ describe('project agent business stop signals', () => {
   })
 
   it('[confirmation required] -> keeps a business confirmation stop signal for legacy operation errors', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
       toolName: 'delete_storyboard_panel',
       output: {
         ok: false,
@@ -96,7 +115,8 @@ describe('project agent business stop signals', () => {
   })
 
   it('[choice card emitted] -> stops so the agent waits for the user choice', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
       toolName: 'request_edit_first_choice',
       output: {
         ok: true,
@@ -116,23 +136,77 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('[tool error] -> emits explicit tool error stop data', () => {
-    const stopPart = buildProjectAgentStopPartFromToolOutputs([{
-      toolName: 'generate_edit_script',
-      output: {
-        ok: false,
-        error: {
-          operationId: 'generate_edit_script',
-          code: 'OPERATION_EXECUTION_FAILED',
-        },
-      },
-    }])
+  it('[first tool error] -> returns the error to the model instead of stopping', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([
+      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+    ])
+    expect(stopPart).toBeNull()
+  })
 
+  it('[repeated same-operation errors] -> stops once the per-operation budget is exhausted', () => {
+    const controller = createProjectAgentStopController()
+    expect(controller.evaluateStep([
+      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+    ])).toBeNull()
+
+    const stopPart = controller.evaluateStep([
+      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+    ])
+    expect(stopPart).toEqual({
+      reason: 'tool_error',
+      stepCount: 2,
+      operationIds: ['generate_edit_script'],
+      codes: ['OPERATION_EXECUTION_FAILED'],
+    })
+    expect(PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION).toBe(2)
+  })
+
+  it('[errors across different operations] -> stops once the per-run budget is exhausted', () => {
+    const controller = createProjectAgentStopController()
+    expect(controller.evaluateStep([toolErrorOutput('op_a', 'OPERATION_EXECUTION_FAILED')])).toBeNull()
+    expect(controller.evaluateStep([toolErrorOutput('op_b', 'OPERATION_INPUT_INVALID')])).toBeNull()
+    expect(controller.evaluateStep([toolErrorOutput('op_c', 'OPERATION_EXECUTION_FAILED')])).toBeNull()
+    const stopPart = controller.evaluateStep([toolErrorOutput('op_d', 'OPERATION_EXECUTION_FAILED')])
+    expect(stopPart).toEqual(expect.objectContaining({
+      reason: 'tool_error',
+      operationIds: ['op_d'],
+    }))
+    expect(PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN).toBe(4)
+  })
+
+  it('[fatal error code] -> stops immediately without retry budget', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([
+      toolErrorOutput('generate_edit_script', 'OPERATION_NOT_ALLOWED'),
+    ])
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 1,
       operationIds: ['generate_edit_script'],
-      codes: ['OPERATION_EXECUTION_FAILED'],
+      codes: ['OPERATION_NOT_ALLOWED'],
     })
+  })
+
+  it('[error after recovery] -> a successful await signal still wins over earlier errors', () => {
+    const controller = createProjectAgentStopController()
+    expect(controller.evaluateStep([
+      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+    ])).toBeNull()
+    const stopPart = controller.evaluateStep([{
+      toolName: 'generate_edit_director_decoupage',
+      output: {
+        ok: true,
+        data: {
+          async: true,
+          taskId: 'task-9',
+          status: 'queued',
+        },
+      },
+    }])
+    expect(stopPart).toEqual(expect.objectContaining({
+      reason: 'awaiting_external_task',
+      taskIds: ['task-9'],
+    }))
   })
 })

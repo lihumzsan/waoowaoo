@@ -1,6 +1,7 @@
-import type { UIMessage } from 'ai'
+import { randomUUID } from 'node:crypto'
+import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { ProjectAgentChoiceResponseData } from './types'
+import type { EditFirstChoiceType } from './choice-card'
 
 type ChoiceContinuationOperationId =
   | 'generate_edit_screenplay'
@@ -14,30 +15,16 @@ interface UnknownRecord {
 
 export interface EditFirstChoiceContinuation {
   operationId: ChoiceContinuationOperationId
-  instruction: string
+  /**
+   * Synthetic function_call/function_call_result pair injected into the next
+   * run input so the model sees its own choice request answered in-band,
+   * instead of receiving the choice through system-prompt prose.
+   */
+  inputItems: AgentInputItem[]
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readTextPart(part: unknown): string {
-  if (!isRecord(part)) return ''
-  return part.type === 'text' && typeof part.text === 'string' ? part.text : ''
-}
-
-function readMessageText(message: UIMessage): string {
-  return message.parts.map(readTextPart).join('').trim()
-}
-
-function readLatestUserTextBefore(messages: readonly UIMessage[], beforeIndex: number): string {
-  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (!message || message.role !== 'user') continue
-    const text = readMessageText(message)
-    if (text) return text
-  }
-  return ''
 }
 
 function readString(value: unknown): string | null {
@@ -60,25 +47,6 @@ function readDurationSeconds(output: UnknownRecord): number | null {
     if (Number.isInteger(parsed) && parsed > 0 && parsed <= 120) return parsed
   }
   return null
-}
-
-function parseChoiceResponseData(value: unknown): ProjectAgentChoiceResponseData | null {
-  if (!isRecord(value)) return null
-  if (!isRecord(value.output)) return null
-  const toolCallId = value.toolCallId
-  return {
-    toolCallId: typeof toolCallId === 'string' ? toolCallId : null,
-    output: value.output,
-  }
-}
-
-function readChoiceResponseOutput(message: UIMessage): UnknownRecord | null {
-  const metadata = message.metadata
-  if (!isRecord(metadata)) return null
-  const custom = metadata.custom
-  if (!isRecord(custom)) return null
-  const response = parseChoiceResponseData(custom.projectAgentChoiceResponse)
-  return response?.output ?? null
 }
 
 function buildDurationAndAspectRatioInstruction(params: {
@@ -129,69 +97,105 @@ function buildStyleInstruction(params: {
   ].join('\n')
 }
 
-function resolveChoiceContinuationFromOutput(params: {
+function buildChoiceInputItems(params: {
+  toolCallId: string | null
+  choiceType: EditFirstChoiceType
+  result: UnknownRecord
+  instruction: string
+}): AgentInputItem[] {
+  const callId = params.toolCallId ?? `edit_first_choice_${randomUUID()}`
+  return [
+    {
+      type: 'function_call',
+      callId,
+      name: 'request_edit_first_choice',
+      status: 'completed',
+      arguments: JSON.stringify({ choiceType: params.choiceType }),
+    } as AgentInputItem,
+    {
+      type: 'function_call_result',
+      callId,
+      name: 'request_edit_first_choice',
+      status: 'completed',
+      output: {
+        type: 'text',
+        text: JSON.stringify({
+          ok: true,
+          choiceType: params.choiceType,
+          ...params.result,
+          instruction: params.instruction,
+        }),
+      },
+    } as AgentInputItem,
+  ]
+}
+
+export function resolveEditFirstChoiceContinuation(params: {
+  choiceType: EditFirstChoiceType
+  toolCallId: string | null
   output: UnknownRecord
   latestUserText: string
 }): EditFirstChoiceContinuation | null {
-  if (params.output.ok !== true) return null
-  const choiceType = readString(params.output.choiceType)
-  if (choiceType === 'duration_and_aspect_ratio') {
+  if (params.output.ok !== true && params.output.ok !== undefined) return null
+
+  if (params.choiceType === 'duration_and_aspect_ratio') {
     const durationSeconds = readDurationSeconds(params.output)
     const aspectRatio = readAspectRatio(params.output.aspectRatio)
     if (!durationSeconds || !aspectRatio || !params.latestUserText) return null
     return {
       operationId: 'generate_edit_screenplay',
-      instruction: buildDurationAndAspectRatioInstruction({
-        userPrompt: params.latestUserText,
-        durationSeconds,
-        aspectRatio,
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        result: { durationSeconds, aspectRatio },
+        instruction: buildDurationAndAspectRatioInstruction({
+          userPrompt: params.latestUserText,
+          durationSeconds,
+          aspectRatio,
+        }),
       }),
     }
   }
 
-  if (choiceType === 'screenplay_review') {
+  if (params.choiceType === 'screenplay_review') {
     const decision = readString(params.output.decision)
     if (decision === 'revise') {
-      const revisionNotes = readString(params.output.revisionNotes)
+      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
       return {
         operationId: 'revise_edit_screenplay',
-        instruction: buildScreenplayRevisionInstruction(revisionNotes),
+        inputItems: buildChoiceInputItems({
+          toolCallId: params.toolCallId,
+          choiceType: params.choiceType,
+          result: { decision: 'revise', revisionNotes },
+          instruction: buildScreenplayRevisionInstruction(revisionNotes),
+        }),
       }
     }
     if (decision === 'approve') {
       return {
         operationId: 'generate_edit_style_previews',
-        instruction: buildScreenplayApprovedInstruction(),
+        inputItems: buildChoiceInputItems({
+          toolCallId: params.toolCallId,
+          choiceType: params.choiceType,
+          result: { decision: 'approve' },
+          instruction: buildScreenplayApprovedInstruction(),
+        }),
       }
     }
+    return null
   }
 
-  if (choiceType === 'style') {
-    const stylePreviewId = readString(params.output.stylePreviewId)
-    const aspectRatio = readAspectRatio(params.output.aspectRatio)
-    if (!stylePreviewId || !aspectRatio) return null
-    return {
-      operationId: 'generate_edit_director_decoupage',
+  const stylePreviewId = readString(params.output.stylePreviewId)
+  const aspectRatio = readAspectRatio(params.output.aspectRatio)
+  if (!stylePreviewId || !aspectRatio) return null
+  return {
+    operationId: 'generate_edit_director_decoupage',
+    inputItems: buildChoiceInputItems({
+      toolCallId: params.toolCallId,
+      choiceType: params.choiceType,
+      result: { stylePreviewId, aspectRatio, saved: true },
       instruction: buildStyleInstruction({ stylePreviewId, aspectRatio }),
-    }
+    }),
   }
-
-  return null
-}
-
-export function resolveEditFirstChoiceContinuation(
-  messages: readonly UIMessage[],
-): EditFirstChoiceContinuation | null {
-  const latestMessageIndex = messages.length - 1
-  const latestMessage = messages[latestMessageIndex]
-  if (!latestMessage || latestMessage.role !== 'user') return null
-
-  const output = readChoiceResponseOutput(latestMessage)
-  if (!output) return null
-  const latestUserText = readLatestUserTextBefore(messages, latestMessageIndex)
-  return resolveChoiceContinuationFromOutput({
-    output,
-    latestUserText,
-  })
 }

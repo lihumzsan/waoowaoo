@@ -15,11 +15,13 @@ import {
 } from '@/lib/query/hooks'
 import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
-  findRespondedAgentApprovalIds,
-  findPendingAgentInterruption,
+  collectResolvedInterruptionApprovalIds,
   findPendingToolApprovalId,
-} from '@/lib/project-agent/ui-message-approval'
+  findPendingWorkspaceAssistantInterruption,
+} from './interruption-parts'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+
+export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
@@ -46,8 +48,13 @@ interface UseWorkspaceAssistantRuntimeResult {
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
   submitChoiceResponse: (params: {
-    toolCallId: string
-    output: unknown
+    choiceType: WorkspaceAssistantChoiceType
+    toolCallId: string | null
+    output: Record<string, unknown>
+  }) => Promise<void>
+  submitTaskFollowUp: (params: {
+    waitId: string
+    claimId: string
   }) => Promise<void>
   addToolApprovalResponse: (params: {
     approvalId: string
@@ -113,49 +120,12 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages(ensureUniqueUIMessages(messages))
   }, [chat])
 
-  const sendAgentApprovalResponse = useCallback(async (params: {
-    approvalId: string
-    approved: boolean
-    reason?: string
-  }) => {
-    const interruption = findPendingAgentInterruption(chat.messages, params.approvalId)
-    if (!interruption) {
-      throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
-    }
-    await chat.sendMessage({
-      text: params.approved ? 'Tool approval accepted.' : 'Tool approval rejected.',
-      metadata: {
-        custom: {
-          workspaceAssistantHidden: true,
-          projectAgentApprovalResponse: {
-            approvalId: params.approvalId,
-            approved: params.approved,
-            runState: interruption.runState,
-            operationId: interruption.operationId,
-            ...(params.reason ? { reason: params.reason } : {}),
-          },
-        },
-      },
-    })
-  }, [chat])
-
-  const cancelPendingApprovalBeforeUserMessage = useCallback(async () => {
-    const pendingApprovalId = findPendingToolApprovalId(chat.messages)
-    if (!pendingApprovalId) return
-    const interruption = findPendingAgentInterruption(chat.messages, pendingApprovalId)
-    if (!interruption) return
-    await sendAgentApprovalResponse({
-      approvalId: interruption.approvalId,
-      approved: false,
-      reason: 'user_interrupted',
-    })
-  }, [chat.messages, sendAgentApprovalResponse])
-
+  // The user's new message supersedes any pending approval server-side; the
+  // stream answers with an interruption-resolved part so the card closes.
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
-    await cancelPendingApprovalBeforeUserMessage()
     await chat.sendMessage({ text })
-  }, [cancelPendingApprovalBeforeUserMessage, chat])
+  }, [chat])
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
@@ -175,8 +145,9 @@ export function useWorkspaceAssistantRuntime({
   }, [chat])
 
   const submitChoiceResponse = useCallback(async (params: {
-    toolCallId: string
-    output: unknown
+    choiceType: WorkspaceAssistantChoiceType
+    toolCallId: string | null
+    output: Record<string, unknown>
   }) => {
     chat.clearError()
     await chat.sendMessage({
@@ -184,10 +155,38 @@ export function useWorkspaceAssistantRuntime({
       metadata: {
         custom: {
           workspaceAssistantHidden: true,
-          projectAgentChoiceResponse: {
-            toolCallId: params.toolCallId,
-            output: params.output,
-          },
+        },
+      },
+    }, {
+      body: {
+        control: {
+          type: 'choice_response',
+          choiceType: params.choiceType,
+          toolCallId: params.toolCallId,
+          output: params.output,
+        },
+      },
+    })
+  }, [chat])
+
+  const submitTaskFollowUp = useCallback(async (params: {
+    waitId: string
+    claimId: string
+  }) => {
+    chat.clearError()
+    await chat.sendMessage({
+      text: '',
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+        },
+      },
+    }, {
+      body: {
+        control: {
+          type: 'task_follow_up',
+          waitId: params.waitId,
+          claimId: params.claimId,
         },
       },
     })
@@ -199,8 +198,28 @@ export function useWorkspaceAssistantRuntime({
     reason?: string
   }) => {
     chat.clearError()
-    await sendAgentApprovalResponse(params)
-  }, [chat, sendAgentApprovalResponse])
+    const interruption = findPendingWorkspaceAssistantInterruption(chat.messages)
+    if (!interruption || interruption.approvalId !== params.approvalId) {
+      throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
+    }
+    await chat.sendMessage({
+      text: params.approved ? 'Tool approval accepted.' : 'Tool approval rejected.',
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+        },
+      },
+    }, {
+      body: {
+        control: {
+          type: 'approval_response',
+          interruptionId: interruption.interruptionId,
+          approved: params.approved,
+          ...(params.reason ? { reason: params.reason } : {}),
+        },
+      },
+    })
+  }, [chat])
 
   useEffect(() => {
     if (assistantThread.isLoading) return
@@ -263,7 +282,7 @@ export function useWorkspaceAssistantRuntime({
     status: chat.status,
     pending: chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: findPendingToolApprovalId(chat.messages),
-    approvalRespondedIds: findRespondedAgentApprovalIds(chat.messages),
+    approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
     error: chat.error,
     syncError,
     storageError: assistantThread.error?.message || null,
@@ -271,6 +290,7 @@ export function useWorkspaceAssistantRuntime({
     sendMessage,
     sendHiddenMessage,
     submitChoiceResponse,
+    submitTaskFollowUp,
     addToolApprovalResponse,
     replaceMessages,
     appendMessages,

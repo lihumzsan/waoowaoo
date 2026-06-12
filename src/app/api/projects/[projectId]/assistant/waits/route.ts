@@ -4,7 +4,6 @@ import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import {
   claimResolvedProjectAgentWaitFollowUps,
   listResolvedProjectAgentWaitFollowUps,
-  markProjectAgentWaitFollowed,
 } from '@/lib/project-agent/waits'
 
 export const runtime = 'nodejs'
@@ -79,35 +78,11 @@ export const POST = apiHandler(async (
     })
   }
 
-  const waitId = typeof bodyRecord.waitId === 'string'
-    ? bodyRecord.waitId.trim()
-    : ''
-  const claimId = typeof bodyRecord.claimId === 'string'
-    ? bodyRecord.claimId.trim()
-    : ''
-  if (!waitId) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'WAIT_ID_REQUIRED',
-      field: 'waitId',
-      message: 'waitId is required',
-    })
-  }
-  if (!claimId) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'CLAIM_ID_REQUIRED',
-      field: 'claimId',
-      message: 'claimId is required',
-    })
-  }
-
-  await markProjectAgentWaitFollowed({
-    waitId,
-    claimId,
-    projectId,
-    userId: authResult.session.user.id,
-  })
-
-  return NextResponse.json({
-    success: true,
+  // Claimed follow-ups are consumed exactly once by the chat endpoint via the
+  // structured task_follow_up control action; there is no manual mark step.
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'INVALID_WAIT_FOLLOW_UP_ACTION',
+    field: 'action',
+    message: 'only action=claim is supported',
   })
 })

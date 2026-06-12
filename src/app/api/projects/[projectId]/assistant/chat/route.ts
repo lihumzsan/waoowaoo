@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { safeValidateUIMessages } from 'ai'
+import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { createProjectAgentChatResponse } from '@/lib/project-agent'
+import type { ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { compressMessages, shouldCompressMessages } from '@/lib/project-agent/message-compression'
 import { resolveProjectAgentLanguageModel } from '@/lib/project-agent/model'
@@ -19,9 +20,15 @@ import {
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
 import {
-  findLatestProjectAgentApprovalResponse,
-  findPendingAgentInterruption,
-} from '@/lib/project-agent/ui-message-approval'
+  parseProjectAgentControlAction,
+  type ProjectAgentControlAction,
+} from '@/lib/project-agent/control'
+import {
+  consumeProjectAgentApprovalInterruption,
+  supersedePendingProjectAgentInterruptions,
+} from '@/lib/project-agent/interruptions'
+import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
+import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 type RequestBody = {
@@ -30,6 +37,7 @@ type RequestBody = {
   episodeId?: string | null
   locale?: string | null
   assistantPermissionMode?: unknown
+  control?: unknown
 }
 
 function mapProjectAgentError(error: unknown): ApiError {
@@ -51,6 +59,8 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_AGENT_MESSAGE_SUMMARY_EMPTY'
       || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_REQUIRED'
       || error.message === 'PROJECT_AGENT_ASSISTANT_PERMISSION_MODE_INVALID'
+      || error.message === 'PROJECT_AGENT_CONTROL_INVALID'
+      || error.message === 'PROJECT_AGENT_CHOICE_RESPONSE_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
         code: error.message,
@@ -133,6 +143,120 @@ async function validateThreadMessages(messages: unknown) {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
   return ensureUniqueUIMessages(validation.data)
+}
+
+function isWorkspaceAssistantHiddenMessage(message: UIMessage): boolean {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  const custom = (metadata as Record<string, unknown>).custom
+  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return false
+  return (custom as Record<string, unknown>).workspaceAssistantHidden === true
+}
+
+function readLatestVisibleUserText(messages: readonly UIMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (!message || message.role !== 'user') continue
+    if (isWorkspaceAssistantHiddenMessage(message)) continue
+    const text = message.parts
+      .flatMap((part) => {
+        const record = part as { type?: unknown; text?: unknown }
+        return record.type === 'text' && typeof record.text === 'string' && record.text.trim()
+          ? [record.text]
+          : []
+      })
+      .join('\n')
+      .trim()
+    if (text) return text
+  }
+  return ''
+}
+
+interface ProjectAgentControlScope {
+  projectId: string
+  userId: string
+  episodeId: string | null
+  assistantId: 'workspace-command'
+}
+
+/**
+ * Resolves the structured control action against the database. Control state
+ * lives in interruption/wait rows with one-time consumption semantics — a
+ * mismatch is a protocol conflict and fails loudly instead of being guessed
+ * from message history.
+ */
+async function resolveProjectAgentControl(params: {
+  controlAction: ProjectAgentControlAction | null
+  scope: ProjectAgentControlScope
+  messages: UIMessage[]
+}): Promise<ProjectAgentResolvedControl> {
+  const { controlAction, scope } = params
+
+  if (!controlAction) {
+    const supersededInterruptions = await supersedePendingProjectAgentInterruptions(scope)
+    return {
+      kind: 'user_turn',
+      supersededInterruptions,
+    }
+  }
+
+  if (controlAction.type === 'approval_response') {
+    const interruption = await consumeProjectAgentApprovalInterruption({
+      ...scope,
+      interruptionId: controlAction.interruptionId,
+      response: {
+        approved: controlAction.approved,
+        reason: controlAction.reason,
+      },
+    })
+    if (!interruption) {
+      throw new ApiError('CONFLICT', {
+        code: 'PROJECT_AGENT_INTERRUPTION_NOT_PENDING',
+        message: 'the approval interruption is not pending (already consumed, superseded, or unknown)',
+      })
+    }
+    return {
+      kind: 'approval',
+      interruption,
+      approved: controlAction.approved,
+      reason: controlAction.reason,
+    }
+  }
+
+  if (controlAction.type === 'choice_response') {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: controlAction.choiceType,
+      toolCallId: controlAction.toolCallId,
+      output: controlAction.output,
+      latestUserText: readLatestVisibleUserText(params.messages),
+    })
+    if (!continuation) {
+      throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
+    }
+    return {
+      kind: 'choice',
+      choiceType: controlAction.choiceType,
+      toolCallId: controlAction.toolCallId,
+      continuation,
+    }
+  }
+
+  const followUp = await consumeProjectAgentWaitFollowUp({
+    waitId: controlAction.waitId,
+    claimId: controlAction.claimId,
+    projectId: scope.projectId,
+    userId: scope.userId,
+  })
+  if (!followUp) {
+    throw new ApiError('CONFLICT', {
+      code: 'PROJECT_AGENT_WAIT_FOLLOW_UP_NOT_CLAIMED',
+      message: 'the wait follow-up is not claimable (claim mismatch or already followed)',
+    })
+  }
+  return {
+    kind: 'task_follow_up',
+    followUp,
+  }
 }
 
 export const runtime = 'nodejs'
@@ -242,32 +366,25 @@ export const POST = apiHandler(async (
   try {
     const locale = readLocaleFromBody(body)
     const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
+    const controlAction = parseProjectAgentControlAction(body.control)
     const requestMessages = await validateThreadMessages(body.messages)
-    const latestApprovalResponse = findLatestProjectAgentApprovalResponse(requestMessages)
-    const approvalInterruption = latestApprovalResponse
-      ? findPendingAgentInterruption(requestMessages, latestApprovalResponse.approvalId)
-      : null
-    const approvalResponse = latestApprovalResponse && !latestApprovalResponse.operationId && approvalInterruption
-      ? {
-          ...latestApprovalResponse,
-          operationId: approvalInterruption.operationId,
-        }
-      : latestApprovalResponse
-    const messages = approvalResponse
+    const userId = authResult.session.user.id
+    const episodeId = readEpisodeIdFromRequestBody(body)
+    const scope = {
+      projectId,
+      userId,
+      episodeId,
+      assistantId: 'workspace-command' as const,
+    }
+    const messages = controlAction?.type === 'approval_response'
       ? requestMessages
       : await compressThreadMessagesIfNeeded({
-          userId: authResult.session.user.id,
+          userId,
           projectId,
           locale,
           messages: requestMessages,
         })
-    const episodeId = readEpisodeIdFromRequestBody(body)
-    const runLock = await acquireProjectAgentRunLock({
-      projectId,
-      userId: authResult.session.user.id,
-      episodeId,
-      assistantId: 'workspace-command',
-    })
+    const runLock = await acquireProjectAgentRunLock(scope)
     if (!runLock) {
       throw new ApiError('CONFLICT', {
         code: 'PROJECT_AGENT_RUN_ACTIVE',
@@ -275,14 +392,19 @@ export const POST = apiHandler(async (
       })
     }
     try {
+      const control = await resolveProjectAgentControl({
+        controlAction,
+        scope,
+        messages,
+      })
       return await createProjectAgentChatResponse({
         request,
-        userId: authResult.session.user.id,
+        userId,
         projectId,
         context: body.context,
         messages,
         assistantPermissionMode,
-        approvalResponse,
+        control,
         runLock,
       })
     } catch (error) {

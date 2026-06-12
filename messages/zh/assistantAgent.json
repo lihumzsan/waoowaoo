@@ -41,14 +41,6 @@
     "result": "结果",
     "waiting": "等待工具返回结果..."
   },
-  "autoFollowUp": {
-    "taskCompleted": "后台任务 {operation} 已完成（taskId: {taskId}）。请先读取最新项目状态和任务结果，再判断制作流程下一步；不要假设结果，如果下一步需要写入或计费，按当前确认规则请求用户确认。",
-    "taskFailed": "后台任务 {operation} 执行失败（taskId: {taskId}）。请读取最新项目状态和任务错误，向用户说明失败原因和可执行的下一步。",
-    "batchCompleted": "后台批量任务 {operation} 已全部完成（共 {total} 个）。请先读取最新项目状态和任务结果，再判断制作流程下一步；不要假设结果，如果下一步需要写入或计费，按当前确认规则请求用户确认。",
-    "batchFailed": "后台批量任务 {operation} 已结束，其中 {failed}/{total} 个失败。请读取最新项目状态和任务错误，向用户说明失败范围和可执行的下一步。",
-    "waitCompleted": "系统检测到后台任务 {operation} 已完成（共 {total} 个）。请先调用 get_project_context 读取最新项目状态和任务结果，再向用户汇总；如果最新 workflow 有唯一下一步 nextAction，直接调用对应已注入 operation，让 runtime 弹出确认卡；不要直接轮询任务状态，也不要要求用户手动输入继续。",
-    "waitFailed": "系统检测到后台任务 {operation} 已结束：{success} 个成功，{failed}/{total} 个失败。请先调用 get_project_context 读取最新项目状态和任务错误，只处理失败项或向用户说明放弃原因；不要重做已成功项，也不要直接轮询任务状态。"
-  },
   "thread": {
     "user": "用户",
     "modelOutput": "模型输出",
@@ -185,7 +177,6 @@
     "stylePreviewOpenPreview": "放大预览风格图",
     "stylePreviewReady": "已生成，可选择",
     "stylePreviewSelect": "选择这个风格",
-    "stylePreviewSelectedMessage": "已选择风格 {title} 和画面比例 {aspectRatio}，请读取最新项目状态并继续当前唯一下一步。",
     "stylePreviewSummaryExpand": "展开",
     "stylePreviewSummaryCollapse": "收起",
     "operationExecutionFailedFallback": "操作执行失败",

@@ -39,7 +39,6 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { apiFetch } from '@/lib/api-fetch'
 import type { ProjectEditScreenplay, ProjectEditStylePreview } from '@/types/project'
 import { queryKeys } from '@/lib/query/keys'
-import { dispatchWorkspaceAssistantMessage } from './assistant-send-event'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
@@ -294,7 +293,8 @@ function RatioChoiceShape(props: {
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
   onSubmitChoiceResponse: (params: {
-    toolCallId: string
+    choiceType: ProjectAgentChoiceCardPartData['choiceType']
+    toolCallId: string | null
     output: Record<string, unknown>
   }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
@@ -332,6 +332,7 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       await props.onSubmitChoiceResponse({
+        choiceType: card.choiceType,
         toolCallId: card.toolCallId,
         output: {
           ok: true,
@@ -357,6 +358,7 @@ export function AssistantChoiceCardView(props: {
       const labels = resolveChoiceCardSelectionLabels(card.groups, selections)
       if (card.submit.kind === 'submit_tool_output') {
         await props.onSubmitChoiceResponse({
+          choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -378,6 +380,7 @@ export function AssistantChoiceCardView(props: {
           aspectRatio,
         })
         await props.onSubmitChoiceResponse({
+          choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -403,6 +406,7 @@ export function AssistantChoiceCardView(props: {
           aspectRatio,
         })
         await props.onSubmitChoiceResponse({
+          choiceType: card.choiceType,
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -709,8 +713,13 @@ export function resolveEditStylePreviewCardStatus(params: {
 }): EditStylePreviewCardStatus {
   if (params.preview?.status === 'failed' || params.taskState?.phase === 'failed') return 'failed'
   if (isEditStylePreviewChoiceReady(params.preview)) return 'completed'
-  if (params.loading === true && !params.preview) return 'loading'
-  return 'generating'
+  // 'generating' requires positive evidence: an active task, or a preview row
+  // that has not produced its image yet. Missing data is a loading state,
+  // never fake progress (a finished batch must not show as generating after
+  // a tab switch just because queries are refetching).
+  if (params.taskState?.phase === 'queued' || params.taskState?.phase === 'processing') return 'generating'
+  if (params.preview) return 'generating'
+  return 'loading'
 }
 
 function truncateStylePreviewErrorMessage(message: string | null | undefined): string | null {
@@ -720,7 +729,12 @@ function truncateStylePreviewErrorMessage(message: string | null | undefined): s
   return singleLine.length > 180 ? `${singleLine.slice(0, 180)}...` : singleLine
 }
 
-export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData>) {
+export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData> & {
+  onStyleSelected?: (params: {
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+  }) => Promise<void>
+}) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
   const data: EditStylePreviewGenerationPartData = props.data
@@ -782,13 +796,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
         stylePreviewId: item.id,
         aspectRatio: preview.aspectRatio,
       })
-      dispatchWorkspaceAssistantMessage({
-        key: `style-preview-selected:${data.screenplayId}:${item.id}`,
-        hidden: true,
-        message: t('cards.stylePreviewSelectedMessage', {
-          title: item.title,
-          aspectRatio: preview.aspectRatio,
-        }),
+      await props.onStyleSelected?.({
+        stylePreviewId: item.id,
+        aspectRatio: preview.aspectRatio,
       })
     } finally {
       setSelectingPreviewId(null)
@@ -975,6 +985,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   onRespondToolApproval?: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey?: string | null
   approvalRespondedIds?: ReadonlySet<string>
+  pendingApprovalId?: string | null
 }) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -982,10 +993,14 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   const toolStatus = props.status.type
   const inputText = JSON.stringify(props.args ?? {}, null, 2)
   const outputText = props.result === undefined ? '' : JSON.stringify(props.result, null, 2)
-  const approvalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
+  const rawApprovalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
     ? readToolApprovalId(props.interrupt.payload)
     : null
-  if (approvalId && props.approvalRespondedIds?.has(approvalId)) return null
+  if (rawApprovalId && props.approvalRespondedIds?.has(rawApprovalId)) return null
+  // Only render an answerable approval card when the server has a matching
+  // pending interruption row; orphaned approval requests degrade to the plain
+  // tool-call detail row instead of an unanswerable card.
+  const approvalId = rawApprovalId && props.pendingApprovalId === rawApprovalId ? rawApprovalId : null
   if (approvalId && props.onRespondToolApproval) {
     return (
       <ConfirmationActionCard
@@ -1034,10 +1049,12 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   onRespondToolApproval: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey: string | null
   approvalRespondedIds?: ReadonlySet<string>
+  pendingApprovalId?: string | null
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
   onSubmitChoiceResponse: (params: {
-    toolCallId: string
+    choiceType: ProjectAgentChoiceCardPartData['choiceType']
+    toolCallId: string | null
     output: Record<string, unknown>
   }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
@@ -1050,17 +1067,23 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
+  onStylePreviewSelected?: (params: {
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+  }) => Promise<void>
 }
 
 export function useWorkspaceAssistantMessagePartComponents({
   onRespondToolApproval,
   confirmationSubmittingKey,
   approvalRespondedIds,
+  pendingApprovalId,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
   onSubmitChoiceResponse,
   onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
+  onStylePreviewSelected,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
@@ -1072,6 +1095,7 @@ export function useWorkspaceAssistantMessagePartComponents({
           onRespondToolApproval={onRespondToolApproval}
           confirmationSubmittingKey={confirmationSubmittingKey}
           approvalRespondedIds={approvalRespondedIds}
+          pendingApprovalId={pendingApprovalId}
         />
       ),
     },
@@ -1091,7 +1115,14 @@ export function useWorkspaceAssistantMessagePartComponents({
             ),
         'edit-style-preview-generation': hideStylePreviewGenerationCards
           ? HiddenRuntimeContextDataCard
-          : EditStylePreviewGenerationDataCard,
+          : (props) => (
+              <EditStylePreviewGenerationDataCard
+                {...props}
+                onStyleSelected={onStylePreviewSelected}
+              />
+            ),
+        'agent-interruption-resolved': HiddenRuntimeContextDataCard,
+        'assistant-choice-resolved': HiddenRuntimeContextDataCard,
         'project-phase': ProjectPhaseDataCard,
         'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
@@ -1102,11 +1133,13 @@ export function useWorkspaceAssistantMessagePartComponents({
   }), [
     confirmationSubmittingKey,
     approvalRespondedIds,
+    pendingApprovalId,
     hideChoiceCards,
     hideStylePreviewGenerationCards,
     onConfirmEditStylePreviewChoice,
     onRespondToolApproval,
     onSetProjectVideoRatioChoice,
+    onStylePreviewSelected,
     onSubmitChoiceResponse,
   ])
 }

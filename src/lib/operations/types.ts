@@ -56,6 +56,20 @@ export interface OperationConfirmation {
   } | null
 }
 
+/**
+ * Agent continuation semantics for this operation, declared next to the
+ * operation itself so runtime never special-cases operation ids.
+ * onTaskComplete controls what happens when all async tasks submitted by this
+ * operation complete successfully:
+ * - resume_agent (default): wake the agent with a follow-up turn.
+ * - await_user_choice: the completed artifacts require a user decision next
+ *   (e.g. picking a style preview); the agent must NOT be woken.
+ * Failed tasks always resume the agent so it can report and recover.
+ */
+export interface OperationAgentFlow {
+  onTaskComplete: 'resume_agent' | 'await_user_choice'
+}
+
 export type RuntimeSchemaSafeParseResult<T> =
   | { success: true; data: T }
   | { success: false; error: { issues: unknown } }
@@ -105,6 +119,7 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
   confirmation?: OperationConfirmation
+  agentFlow?: OperationAgentFlow
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
   execute: BivariantOperationExecute<Input, Output>

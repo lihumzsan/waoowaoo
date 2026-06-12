@@ -41,7 +41,6 @@ import {
 import {
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
-import { shouldSendAssistantWaitFollowUp } from './workspace-assistant/wait-follow-up'
 import {
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
@@ -172,8 +171,7 @@ export default function WorkspaceAssistantPanel({
   })
   const assistantRuntimeRef = useRef(assistantRuntime)
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
-  const consumedWaitFollowUpKeysRef = useRef<Set<string>>(new Set())
-  const queuedAutoFollowUpRef = useRef<string[]>([])
+  const queuedTaskFollowUpsRef = useRef<Array<{ waitId: string; claimId: string }>>([])
   const [dismissedChoiceCardKeys, setDismissedChoiceCardKeys] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     assistantRuntimeRef.current = assistantRuntime
@@ -206,21 +204,23 @@ export default function WorkspaceAssistantPanel({
     if (pendingSyncs.length === 0) return
     void Promise.all(pendingSyncs)
   }, [assistantRuntime.messages, episodeId, projectId, queryClient])
-  const sendAutoFollowUpMessage = useCallback(async (message: string): Promise<boolean> => {
+  // Claimed follow-ups are consumed exactly once by the chat endpoint
+  // (task_follow_up control). If sending fails, the claim simply expires
+  // server-side and the wait becomes claimable again — no local bookkeeping.
+  const sendTaskFollowUp = useCallback(async (followUp: { waitId: string; claimId: string }) => {
     const runtime = assistantRuntimeRef.current
     if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) {
-      queuedAutoFollowUpRef.current = [...queuedAutoFollowUpRef.current, message]
-      return true
+      queuedTaskFollowUpsRef.current = [...queuedTaskFollowUpsRef.current, followUp]
+      return
     }
-    await runtime.sendHiddenMessage(message)
-    return true
+    await runtime.submitTaskFollowUp(followUp)
   }, [])
   useEffect(() => {
     if (assistantRuntime.pending || assistantRuntime.storageLoading || assistantRuntime.pendingApprovalId) return
-    const [queuedMessage, ...remainingMessages] = queuedAutoFollowUpRef.current
-    if (!queuedMessage) return
-    queuedAutoFollowUpRef.current = remainingMessages
-    void assistantRuntime.sendHiddenMessage(queuedMessage)
+    const [queuedFollowUp, ...remainingFollowUps] = queuedTaskFollowUpsRef.current
+    if (!queuedFollowUp) return
+    queuedTaskFollowUpsRef.current = remainingFollowUps
+    void assistantRuntime.submitTaskFollowUp(queuedFollowUp)
   }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.pendingApprovalId, assistantRuntime.storageLoading])
   const flushResolvedWaitFollowUps = useCallback(async () => {
     const runtime = assistantRuntimeRef.current
@@ -237,38 +237,16 @@ export default function WorkspaceAssistantPanel({
     const payload = await response.json().catch(() => null) as ProjectAgentWaitFollowUpResponse | null
     if (!payload?.success || !Array.isArray(payload.followUps)) return
     for (const followUp of payload.followUps) {
-      if (consumedWaitFollowUpKeysRef.current.has(followUp.followUpKey)) continue
       await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
       if (episodeId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
       }
-      if (shouldSendAssistantWaitFollowUp(followUp)) {
-        const sent = await sendAutoFollowUpMessage(
-          followUp.terminalStatus === 'failed'
-            ? t('autoFollowUp.waitFailed', {
-                operation: followUp.operationId,
-                success: followUp.successCount,
-                failed: followUp.failedCount,
-                total: followUp.total,
-              })
-            : t('autoFollowUp.waitCompleted', {
-                operation: followUp.operationId,
-                total: followUp.total,
-              }),
-        )
-        if (!sent) continue
-      }
-      consumedWaitFollowUpKeysRef.current.add(followUp.followUpKey)
-      await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          waitId: followUp.waitId,
-          claimId: followUp.claimId,
-        }),
+      await sendTaskFollowUp({
+        waitId: followUp.waitId,
+        claimId: followUp.claimId,
       })
     }
-  }, [episodeId, projectId, queryClient, sendAutoFollowUpMessage, t])
+  }, [episodeId, projectId, queryClient, sendTaskFollowUp])
   useEffect(() => {
     if (assistantRuntime.storageLoading) return
     void flushResolvedWaitFollowUps()
@@ -342,14 +320,30 @@ export default function WorkspaceAssistantPanel({
     }
   }
   const handleSubmitChoiceResponse = async (params: {
-    toolCallId: string
+    choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+    toolCallId: string | null
     output: Record<string, unknown>
   }) => {
     await assistantRuntime.submitChoiceResponse({
+      choiceType: params.choiceType,
       toolCallId: params.toolCallId,
       output: params.output,
     })
   }
+  const handleStylePreviewSelected = useCallback(async (params: {
+    stylePreviewId: string
+    aspectRatio: EditScriptVideoRatio
+  }) => {
+    await assistantRuntimeRef.current.submitChoiceResponse({
+      choiceType: 'style',
+      toolCallId: null,
+      output: {
+        ok: true,
+        stylePreviewId: params.stylePreviewId,
+        aspectRatio: params.aspectRatio,
+      },
+    })
+  }, [])
   const handleConfirmEditStylePreviewChoice = async (params: {
     projectId: string
     episodeId: string
@@ -417,11 +411,13 @@ export default function WorkspaceAssistantPanel({
     onRespondToolApproval: handleRespondToolApproval,
     confirmationSubmittingKey,
     approvalRespondedIds: assistantRuntime.approvalRespondedIds,
+    pendingApprovalId: assistantRuntime.pendingApprovalId,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
+    onStylePreviewSelected: handleStylePreviewSelected,
   })
   const activeThinkingAssistantMessageId = useMemo(() => {
     if (assistantRuntime.status !== 'streaming') return null
@@ -538,6 +534,7 @@ export default function WorkspaceAssistantPanel({
                         name="edit-style-preview-generation"
                         status={{ type: 'complete' }}
                         data={displayedStylePreviewGenerationCard.data}
+                        onStyleSelected={handleStylePreviewSelected}
                       />
                     ) : null}
                   </div>

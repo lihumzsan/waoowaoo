@@ -21,7 +21,12 @@ const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
   listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
   claimResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
-  markProjectAgentWaitFollowed: vi.fn(async (): Promise<void> => undefined),
+  consumeProjectAgentWaitFollowUp: vi.fn(async (): Promise<unknown> => null),
+}))
+
+const interruptionMock = vi.hoisted(() => ({
+  consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
+  supersedePendingProjectAgentInterruptions: vi.fn(async (): Promise<unknown[]> => []),
 }))
 
 const runLockMock = vi.hoisted(() => ({
@@ -101,6 +106,7 @@ vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
 vi.mock('@/lib/project-agent/waits', () => waitMock)
+vi.mock('@/lib/project-agent/interruptions', () => interruptionMock)
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
 vi.mock('@/lib/project-agent/thread-log', () => threadLogMock)
 vi.mock('@/lib/config-service', () => modelConfigMock)
@@ -174,6 +180,217 @@ describe('project assistant chat route', () => {
     })
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       runLock: { key: 'lock-key', token: 'lock-token' },
+      control: { kind: 'user_turn', supersededInterruptions: [] },
+    }))
+    expect(interruptionMock.supersedePendingProjectAgentInterruptions).toHaveBeenCalledTimes(1)
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> consumes a pending approval interruption via structured control', async () => {
+    interruptionMock.consumeProjectAgentApprovalInterruption.mockResolvedValueOnce({
+      id: 'interruption-1',
+      type: 'approval',
+      status: 'consumed',
+      operationId: 'generate_edit_screenplay',
+      approvalId: 'approval-1',
+      toolCallId: 'call-1',
+      runState: 'serialized-state',
+    })
+
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'approval_response',
+            interruptionId: 'interruption-1',
+            approved: true,
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(interruptionMock.consumeProjectAgentApprovalInterruption).toHaveBeenCalledWith(expect.objectContaining({
+      interruptionId: 'interruption-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      response: { approved: true, reason: null },
+    }))
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'approval',
+        approved: true,
+        interruption: expect.objectContaining({ id: 'interruption-1', runState: 'serialized-state' }),
+      }),
+    }))
+    // approval resume must not touch supersede or history inference
+    expect(interruptionMock.supersedePendingProjectAgentInterruptions).not.toHaveBeenCalled()
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects a stale approval response with a conflict', async () => {
+    interruptionMock.consumeProjectAgentApprovalInterruption.mockResolvedValueOnce(null)
+
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'approval_response',
+            interruptionId: 'interruption-stale',
+            approved: true,
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(409)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_INTERRUPTION_NOT_PENDING' }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> resolves a choice response into an in-band continuation', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'choice_response',
+            choiceType: 'style',
+            toolCallId: null,
+            output: {
+              ok: true,
+              stylePreviewId: 'style-1',
+              aspectRatio: '9:16',
+            },
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'choice',
+        choiceType: 'style',
+        continuation: expect.objectContaining({
+          operationId: 'generate_edit_director_decoupage',
+        }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> consumes a claimed wait follow-up exactly once', async () => {
+    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce({
+      waitId: 'wait-1',
+      followUpKey: 'project-agent-wait:wait-1:completed',
+      operationId: 'generate_edit_script',
+      taskIds: ['task-1'],
+      failedTaskIds: [],
+      terminalStatus: 'completed',
+      total: 1,
+      successCount: 1,
+      failedCount: 0,
+      claimId: 'claim-1',
+    })
+
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'task_follow_up',
+            waitId: 'wait-1',
+            claimId: 'claim-1',
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(waitMock.consumeProjectAgentWaitFollowUp).toHaveBeenCalledWith({
+      waitId: 'wait-1',
+      claimId: 'claim-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+    })
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'task_follow_up',
+        followUp: expect.objectContaining({ waitId: 'wait-1' }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects an unclaimed task follow-up with a conflict', async () => {
+    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce(null)
+
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'task_follow_up',
+            waitId: 'wait-1',
+            claimId: 'claim-expired',
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(409)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects malformed control payloads', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: { type: 'unknown_action' },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_CONTROL_INVALID' }),
+      }),
     }))
   })
 
@@ -464,7 +681,7 @@ describe('project assistant chat route', () => {
     })
   })
 
-  it('POST /api/projects/[projectId]/assistant/waits -> marks a follow-up as consumed', async () => {
+  it('POST /api/projects/[projectId]/assistant/waits -> rejects legacy manual follow-up marking', async () => {
     const response = await waitsPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/waits',
@@ -474,14 +691,12 @@ describe('project assistant chat route', () => {
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
 
-    expect(response.status).toBe(200)
-    expect(waitMock.markProjectAgentWaitFollowed).toHaveBeenCalledWith({
-      waitId: 'wait-1',
-      claimId: 'claim-1',
-      projectId: 'project-1',
-      userId: 'user-1',
-    })
-    await expect(response.json()).resolves.toEqual({ success: true })
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'INVALID_WAIT_FOLLOW_UP_ACTION' }),
+      }),
+    }))
   })
 
   it('GET /api/projects/[projectId]/assistant/chat -> loads persisted workspace thread from database service', async () => {

@@ -3,6 +3,7 @@ import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import {
   applyProjectAgentWaitTaskSnapshot,
   applyProjectAgentWaitTerminalEvent,
+  resolveWaitTerminalNextStatus,
 } from '@/lib/project-agent/waits'
 
 describe('project agent waits', () => {
@@ -74,5 +75,26 @@ describe('project agent waits', () => {
       failedTaskIds: [],
       terminalStatus: null,
     })
+  })
+
+  it('[await_user_choice completed] -> closes the wait without waking the agent', () => {
+    expect(resolveWaitTerminalNextStatus({
+      followUpMode: 'await_user_choice',
+      terminalStatus: 'completed',
+    })).toBe('followed')
+  })
+
+  it('[await_user_choice failed] -> still resumes the agent so it can report the failure', () => {
+    expect(resolveWaitTerminalNextStatus({
+      followUpMode: 'await_user_choice',
+      terminalStatus: 'failed',
+    })).toBe('resolved')
+  })
+
+  it('[resume_agent completed] -> becomes claimable for an agent follow-up turn', () => {
+    expect(resolveWaitTerminalNextStatus({
+      followUpMode: 'resume_agent',
+      terminalStatus: 'completed',
+    })).toBe('resolved')
   })
 })

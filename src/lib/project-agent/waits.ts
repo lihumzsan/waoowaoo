@@ -9,6 +9,17 @@ import { buildProjectAssistantScopeRef } from './persistence'
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed'
 
+/**
+ * What happens when every task behind the wait reaches a terminal state.
+ * - resume_agent: the wait becomes claimable and the agent is woken with a follow-up turn.
+ * - await_user_choice: completion means the user must pick something next; the wait is
+ *   closed immediately and the agent is never woken. Failures still resume the agent
+ *   so it can report and recover.
+ * The mode is declared on the operation definition (agentFlow.onTaskComplete) and
+ * recorded here when the wait is created.
+ */
+export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'await_user_choice'
+
 interface ProjectAgentWaitScopeInput {
   projectId: string
   userId: string
@@ -19,6 +30,7 @@ interface ProjectAgentWaitScopeInput {
 export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput {
   operationId: string
   taskIds: string[]
+  followUpMode: ProjectAgentWaitFollowUpMode
 }
 
 interface ProjectAgentWaitRow {
@@ -30,6 +42,7 @@ interface ProjectAgentWaitRow {
   episodeId: string | null
   operationId: string
   taskIds: unknown
+  followUpMode: string
   status: string
   terminalStatus: string | null
   terminalTaskIds: unknown | null
@@ -155,6 +168,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
       episodeId,
       operationId,
       taskIds,
+      followUpMode,
       status,
       createdAt,
       updatedAt
@@ -168,6 +182,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
       ${input.episodeId ?? null},
       ${input.operationId},
       ${JSON.stringify(taskIds)},
+      ${input.followUpMode},
       'pending',
       NOW(3),
       NOW(3)
@@ -178,6 +193,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
     projectId: input.projectId,
     userId: input.userId,
     taskIds,
+    followUpMode: input.followUpMode,
   })
   return id
 }
@@ -221,11 +237,53 @@ export function applyProjectAgentWaitTerminalEvent(
   }
 }
 
+/**
+ * Pure decision: a completed await_user_choice wait is closed immediately
+ * (the next step belongs to the user, not the agent); everything else becomes
+ * claimable so a follow-up turn can wake the agent.
+ */
+export function resolveWaitTerminalNextStatus(params: {
+  followUpMode: string
+  terminalStatus: ProjectAgentWaitTerminalStatus
+}): Extract<ProjectAgentWaitStatus, 'resolved' | 'followed'> {
+  if (params.followUpMode === 'await_user_choice' && params.terminalStatus === 'completed') {
+    return 'followed'
+  }
+  return 'resolved'
+}
+
+async function applyWaitTerminalStatus(input: {
+  waitId: string
+  followUpMode: string
+  terminalStatus: ProjectAgentWaitTerminalStatus
+  terminalTaskIds: string[]
+  failedTaskIds: string[]
+}): Promise<void> {
+  const nextStatus = resolveWaitTerminalNextStatus({
+    followUpMode: input.followUpMode,
+    terminalStatus: input.terminalStatus,
+  })
+  await prisma.$executeRaw`
+    UPDATE project_agent_waits
+    SET status = ${nextStatus},
+        terminalStatus = ${input.terminalStatus},
+        terminalTaskIds = ${JSON.stringify(input.terminalTaskIds)},
+        failedTaskIds = ${JSON.stringify(input.failedTaskIds)},
+        followUpKey = ${buildFollowUpKey(input.waitId, input.terminalStatus)},
+        followedAt = ${nextStatus === 'followed' ? new Date() : null},
+        resolvedAt = NOW(3),
+        updatedAt = NOW(3)
+    WHERE id = ${input.waitId}
+      AND status = 'pending'
+  `
+}
+
 async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
   waitId: string
   projectId: string
   userId: string
   taskIds: string[]
+  followUpMode: ProjectAgentWaitFollowUpMode
 }): Promise<void> {
   const tasks = await prisma.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
     SELECT id, status
@@ -252,18 +310,13 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
     return
   }
 
-  await prisma.$executeRaw`
-    UPDATE project_agent_waits
-    SET status = 'resolved',
-        terminalStatus = ${result.terminalStatus},
-        terminalTaskIds = ${JSON.stringify(result.terminalTaskIds)},
-        failedTaskIds = ${JSON.stringify(result.failedTaskIds)},
-        followUpKey = ${buildFollowUpKey(input.waitId, result.terminalStatus)},
-        resolvedAt = NOW(3),
-        updatedAt = NOW(3)
-    WHERE id = ${input.waitId}
-      AND status = 'pending'
-  `
+  await applyWaitTerminalStatus({
+    waitId: input.waitId,
+    followUpMode: input.followUpMode,
+    terminalStatus: result.terminalStatus,
+    terminalTaskIds: result.terminalTaskIds,
+    failedTaskIds: result.failedTaskIds,
+  })
 }
 
 export async function resolveProjectAgentWaitsForTaskEvent(input: {
@@ -284,6 +337,7 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
       episodeId,
       operationId,
       taskIds,
+      followUpMode,
       status,
       terminalStatus,
       terminalTaskIds,
@@ -323,18 +377,13 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
       continue
     }
 
-    await prisma.$executeRaw`
-      UPDATE project_agent_waits
-      SET status = 'resolved',
-          terminalStatus = ${result.terminalStatus},
-          terminalTaskIds = ${JSON.stringify(result.terminalTaskIds)},
-          failedTaskIds = ${JSON.stringify(result.failedTaskIds)},
-          followUpKey = ${buildFollowUpKey(row.id, result.terminalStatus)},
-          resolvedAt = NOW(3),
-          updatedAt = NOW(3)
-      WHERE id = ${row.id}
-        AND status = 'pending'
-    `
+    await applyWaitTerminalStatus({
+      waitId: row.id,
+      followUpMode: row.followUpMode,
+      terminalStatus: result.terminalStatus,
+      terminalTaskIds: result.terminalTaskIds,
+      failedTaskIds: result.failedTaskIds,
+    })
   }
 }
 
@@ -511,13 +560,18 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
   })
 }
 
-export async function markProjectAgentWaitFollowed(input: {
+/**
+ * Atomically consumes a claimed wait follow-up (claimed -> followed) and
+ * returns its details for building the follow-up turn input. Returns null when
+ * the claim does not match or the wait was already followed — exactly-once.
+ */
+export async function consumeProjectAgentWaitFollowUp(input: {
   waitId: string
   claimId: string
   projectId: string
   userId: string
-}): Promise<void> {
-  await prisma.$executeRaw`
+}): Promise<ProjectAgentWaitFollowUp | null> {
+  const affected = await prisma.$executeRaw`
     UPDATE project_agent_waits
     SET status = 'followed',
         followedAt = NOW(3),
@@ -529,4 +583,49 @@ export async function markProjectAgentWaitFollowed(input: {
       AND claimId = ${input.claimId}
       AND followedAt IS NULL
   `
+  if (affected !== 1) return null
+
+  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
+    SELECT
+      id,
+      projectId,
+      userId,
+      assistantId,
+      scopeRef,
+      episodeId,
+      operationId,
+      taskIds,
+      followUpMode,
+      status,
+      terminalStatus,
+      terminalTaskIds,
+      failedTaskIds,
+      followUpKey,
+      claimId,
+      claimedAt,
+      claimExpiresAt,
+      followedAt,
+      createdAt,
+      resolvedAt
+    FROM project_agent_waits
+    WHERE id = ${input.waitId}
+  `
+  const row = rows[0]
+  if (!row || (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') || !row.followUpKey) {
+    return null
+  }
+  const taskIds = parseStringArray(row.taskIds)
+  const failedTaskIds = parseStringArray(row.failedTaskIds)
+  return {
+    waitId: row.id,
+    followUpKey: row.followUpKey,
+    operationId: row.operationId,
+    taskIds,
+    failedTaskIds,
+    terminalStatus: row.terminalStatus,
+    total: taskIds.length,
+    successCount: Math.max(taskIds.length - failedTaskIds.length, 0),
+    failedCount: failedTaskIds.length,
+    claimId: input.claimId,
+  }
 }

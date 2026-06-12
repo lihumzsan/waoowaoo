@@ -1,153 +1,154 @@
 import { describe, expect, it } from 'vitest'
-import type { UIMessage } from 'ai'
 import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
 
-function userMessage(id: string, text: string): UIMessage {
+function readSyntheticToolResult(continuation: ReturnType<typeof resolveEditFirstChoiceContinuation>): {
+  callId: string
+  name: string
+  parsed: Record<string, unknown>
+} {
+  expect(continuation).not.toBeNull()
+  const [callItem, resultItem] = continuation!.inputItems as Array<Record<string, unknown>>
+  expect(callItem.type).toBe('function_call')
+  expect(resultItem.type).toBe('function_call_result')
+  expect(callItem.callId).toBe(resultItem.callId)
+  const output = resultItem.output as { type: string; text: string }
+  expect(output.type).toBe('text')
   return {
-    id,
-    role: 'user',
-    parts: [{ type: 'text', text }],
-  }
-}
-
-function hiddenChoiceResponseMessage(id: string, output: Record<string, unknown>): UIMessage {
-  return {
-    id,
-    role: 'user',
-    metadata: {
-      custom: {
-        workspaceAssistantHidden: true,
-        projectAgentChoiceResponse: {
-          toolCallId: 'tool-call-1',
-          output,
-        },
-      },
-    },
-    parts: [{ type: 'text', text: '' }],
-  }
-}
-
-function assistantToolOutputMessage(id: string, output: Record<string, unknown>): UIMessage {
-  return {
-    id,
-    role: 'assistant',
-    parts: [{
-      type: 'tool-request_edit_first_choice',
-      toolCallId: 'tool-call-legacy',
-      state: 'output-available',
-      output,
-    } as unknown as UIMessage['parts'][number]],
+    callId: String(resultItem.callId),
+    name: String(resultItem.name),
+    parsed: JSON.parse(output.text) as Record<string, unknown>,
   }
 }
 
 describe('resolveEditFirstChoiceContinuation', () => {
   it('continues to screenplay generation after duration and aspect ratio are selected', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '民俗恐怖片'),
-      hiddenChoiceResponseMessage('user-choice-1', {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-call-1',
+      latestUserText: '民俗恐怖片',
+      output: {
         ok: true,
-        choiceType: 'duration_and_aspect_ratio',
         durationSeconds: 60,
         aspectRatio: '16:9',
         selections: {
           durationSeconds: '60',
           aspectRatio: '16:9',
         },
-      }),
-    ])
+      },
+    })
 
     expect(continuation).toEqual(expect.objectContaining({
       operationId: 'generate_edit_screenplay',
     }))
-    expect(continuation?.instruction).toContain('用户原始创意需求："民俗恐怖片"')
-    expect(continuation?.instruction).toContain('durationSeconds=60')
-    expect(continuation?.instruction).toContain('aspectRatio=16:9')
-    expect(continuation?.instruction).toContain('本轮目标是生成剧本')
-    expect(continuation?.instruction).toContain('说明后调用 generate_edit_screenplay')
+    const { callId, name, parsed } = readSyntheticToolResult(continuation)
+    expect(callId).toBe('tool-call-1')
+    expect(name).toBe('request_edit_first_choice')
+    expect(parsed.choiceType).toBe('duration_and_aspect_ratio')
+    expect(parsed.durationSeconds).toBe(60)
+    expect(parsed.aspectRatio).toBe('16:9')
+    const instruction = String(parsed.instruction)
+    expect(instruction).toContain('用户原始创意需求："民俗恐怖片"')
+    expect(instruction).toContain('本轮目标是生成剧本')
+    expect(instruction).toContain('说明后调用 generate_edit_screenplay')
   })
 
   it('continues to style preview generation after screenplay approval', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '生成一部科幻短片'),
-      hiddenChoiceResponseMessage('user-choice-1', {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '生成一部科幻短片',
+      output: {
         ok: true,
-        choiceType: 'screenplay_review',
         decision: 'approve',
-      }),
-    ])
+      },
+    })
 
     expect(continuation).toEqual(expect.objectContaining({
       operationId: 'generate_edit_style_previews',
     }))
-    expect(continuation?.instruction).toContain('剧本审核卡已经返回用户确认')
-    expect(continuation?.instruction).toContain('本轮目标是生成视觉风格候选')
-    expect(continuation?.instruction).toContain('说明后调用 generate_edit_style_previews')
+    const { parsed } = readSyntheticToolResult(continuation)
+    expect(parsed.decision).toBe('approve')
+    const instruction = String(parsed.instruction)
+    expect(instruction).toContain('剧本审核卡已经返回用户确认')
+    expect(instruction).toContain('说明后调用 generate_edit_style_previews')
   })
 
   it('continues to screenplay revision after screenplay notes are submitted', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '生成一部科幻短片'),
-      hiddenChoiceResponseMessage('user-choice-1', {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '生成一部科幻短片',
+      output: {
         ok: true,
-        choiceType: 'screenplay_review',
         decision: 'revise',
         revisionNotes: '更克苏鲁一些',
-      }),
-    ])
+      },
+    })
 
     expect(continuation).toEqual(expect.objectContaining({
       operationId: 'revise_edit_screenplay',
     }))
-    expect(continuation?.instruction).toContain('用户修改意见："更克苏鲁一些"')
-    expect(continuation?.instruction).toContain('本轮目标是修改剧本')
-    expect(continuation?.instruction).toContain('说明后调用 revise_edit_screenplay')
+    const { parsed } = readSyntheticToolResult(continuation)
+    const instruction = String(parsed.instruction)
+    expect(instruction).toContain('用户修改意见："更克苏鲁一些"')
+    expect(instruction).toContain('说明后调用 revise_edit_screenplay')
   })
 
   it('continues to director decoupage after style selection is saved', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '生成一部民俗恐怖短片'),
-      hiddenChoiceResponseMessage('user-choice-1', {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'style',
+      toolCallId: null,
+      latestUserText: '生成一部民俗恐怖短片',
+      output: {
         ok: true,
-        choiceType: 'style',
         stylePreviewId: 'style-1',
         aspectRatio: '9:16',
-      }),
-    ])
+      },
+    })
 
     expect(continuation).toEqual(expect.objectContaining({
       operationId: 'generate_edit_director_decoupage',
     }))
-    expect(continuation?.instruction).toContain('stylePreviewId=style-1')
-    expect(continuation?.instruction).toContain('本轮目标是生成导演拆镜')
-    expect(continuation?.instruction).toContain('说明后调用 generate_edit_director_decoupage')
+    const { callId, parsed } = readSyntheticToolResult(continuation)
+    expect(callId).toMatch(/^edit_first_choice_/)
+    expect(parsed.stylePreviewId).toBe('style-1')
+    const instruction = String(parsed.instruction)
+    expect(instruction).toContain('本轮目标是生成导演拆镜')
+    expect(instruction).toContain('说明后调用 generate_edit_director_decoupage')
   })
 
-  it('ignores stale choice output once a later user message exists', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '民俗恐怖片'),
-      hiddenChoiceResponseMessage('user-choice-1', {
+  it('rejects an incomplete duration/aspect-ratio selection', () => {
+    expect(resolveEditFirstChoiceContinuation({
+      choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-call-1',
+      latestUserText: '民俗恐怖片',
+      output: {
         ok: true,
-        choiceType: 'duration_and_aspect_ratio',
         durationSeconds: 60,
-        aspectRatio: '16:9',
-      }),
-      userMessage('user-2', '等一下，先不要生成'),
-    ])
-
-    expect(continuation).toBeNull()
+      },
+    })).toBeNull()
   })
 
-  it('does not continue from legacy assistant tool output without a user choice response', () => {
-    const continuation = resolveEditFirstChoiceContinuation([
-      userMessage('user-1', '民俗恐怖片'),
-      assistantToolOutputMessage('assistant-1', {
+  it('rejects a screenplay review without a decision', () => {
+    expect(resolveEditFirstChoiceContinuation({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '生成一部科幻短片',
+      output: {
         ok: true,
-        choiceType: 'duration_and_aspect_ratio',
-        durationSeconds: 60,
-        aspectRatio: '16:9',
-      }),
-    ])
+      },
+    })).toBeNull()
+  })
 
-    expect(continuation).toBeNull()
+  it('rejects a style selection without a preview id', () => {
+    expect(resolveEditFirstChoiceContinuation({
+      choiceType: 'style',
+      toolCallId: null,
+      latestUserText: '生成一部民俗恐怖短片',
+      output: {
+        ok: true,
+        aspectRatio: '9:16',
+      },
+    })).toBeNull()
   })
 })

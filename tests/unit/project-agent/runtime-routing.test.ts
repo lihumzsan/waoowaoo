@@ -10,6 +10,7 @@ const streamState = vi.hoisted(() => ({
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
   capturedModelSettings: {} as Record<string, unknown>,
+  capturedRunInput: null as unknown,
 }))
 
 const registryState = vi.hoisted(() => ({
@@ -115,6 +116,7 @@ vi.mock('@openai/agents', () => {
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
     streamState.capturedSystem = agent.instructions
     streamState.capturedModelSettings = agent.modelSettings
+    streamState.capturedRunInput = runInput
     const state = runInput instanceof RunState
       ? runInput
       : {
@@ -195,7 +197,24 @@ vi.mock('@/lib/api-errors', () => ({
   getRequestId: vi.fn(() => 'req-1'),
 }))
 
-import { createProjectAgentChatResponse } from '@/lib/project-agent/runtime'
+vi.mock('@/lib/project-agent/interruptions', () => ({
+  createProjectAgentApprovalInterruption: vi.fn(async () => 'interruption-row-1'),
+  clearProjectAgentInterruptionRunState: vi.fn(async () => undefined),
+  reopenProjectAgentInterruption: vi.fn(async () => undefined),
+  supersedePendingProjectAgentInterruptions: vi.fn(async () => []),
+}))
+
+vi.mock('@/lib/project-agent/waits', () => ({
+  createProjectAgentWait: vi.fn(async () => 'wait-1'),
+}))
+
+import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
+import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
+
+const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
+  kind: 'user_turn',
+  supersededInterruptions: [],
+}
 
 function buildRequest(): NextRequest {
   return new Request('http://localhost') as unknown as NextRequest
@@ -294,6 +313,7 @@ async function runAssistant(params: {
     projectId: 'project-1',
     context: params.context ?? { episodeId: 'episode-1' },
     assistantPermissionMode: params.assistantPermissionMode ?? 'ask',
+    control: USER_TURN_CONTROL,
     messages: [
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: params.text ?? '民俗恐怖片' }] },
     ],
@@ -337,41 +357,44 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('guides the continuation tool after a choice card response without forcing toolChoice', async () => {
+  it('feeds the choice back as an in-band tool result and narrows the toolset', async () => {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-choice-1',
+      latestUserText: '民俗恐怖片',
+      output: {
+        ok: true,
+        durationSeconds: 60,
+        aspectRatio: '16:9',
+      },
+    })
+    expect(continuation).not.toBeNull()
+
     const response = await createProjectAgentChatResponse({
       request: buildRequest(),
       userId: 'user-1',
       projectId: 'project-1',
       context: { episodeId: 'episode-1' },
       assistantPermissionMode: 'ask',
+      control: {
+        kind: 'choice',
+        choiceType: 'duration_and_aspect_ratio',
+        toolCallId: 'tool-choice-1',
+        continuation: continuation!,
+      },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
-        {
-          id: 'u2',
-          role: 'user',
-          metadata: {
-            custom: {
-              workspaceAssistantHidden: true,
-              projectAgentChoiceResponse: {
-                toolCallId: 'tool-choice-1',
-                output: {
-                  ok: true,
-                  choiceType: 'duration_and_aspect_ratio',
-                  durationSeconds: 60,
-                  aspectRatio: '16:9',
-                },
-              },
-            },
-          },
-          parts: [{ type: 'text', text: '' }],
-        },
       ],
     })
+    await flushAsyncWork()
 
     expect(response.status).toBe(200)
     expect(streamState.capturedModelSettings).not.toHaveProperty('toolChoice')
-    expect(streamState.capturedSystem).toContain('剪辑先行选择卡续跑指令')
-    expect(streamState.capturedSystem).toContain('说明后调用 generate_edit_screenplay')
+    // continuation guidance travels as a synthetic in-band tool result, not via system prompt
+    expect(streamState.capturedSystem).not.toContain('剪辑先行选择卡续跑指令')
+    const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
+    expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
+    expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).not.toContain('request_edit_first_choice')
   })
@@ -385,16 +408,25 @@ describe('project agent runtime deterministic tool injection', () => {
       projectId: 'project-1',
       context: { episodeId: 'episode-1' },
       assistantPermissionMode: 'ask',
-      approvalResponse: {
-        approvalId: 'approval-1',
+      control: {
+        kind: 'approval',
+        interruption: {
+          id: 'interruption-1',
+          type: 'approval',
+          status: 'consumed',
+          operationId: 'generate_edit_screenplay',
+          approvalId: 'approval-1',
+          toolCallId: 'tool-generate-screenplay-1',
+          runState: 'serialized-state',
+        },
         approved: true,
-        runState: 'serialized-state',
-        operationId: 'generate_edit_screenplay',
+        reason: null,
       },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
       ],
     })
+    await flushAsyncWork()
 
     expect(response.status).toBe(200)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
