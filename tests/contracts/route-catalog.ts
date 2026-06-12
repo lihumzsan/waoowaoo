@@ -123,6 +123,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/log/route.ts',
+  'src/app/api/projects/[projectId]/assistant/runs/[runId]/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route.ts',

@@ -55,6 +55,11 @@ describe('workspace assistant turn indicator', () => {
       status: 'ready',
       activeAssistantMessageId: null,
     })).toBe(false)
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      status: 'ready',
+      activeAssistantMessageId: null,
+      pending: true,
+    })).toBe(true)
 
     const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder status="submitted" />)
     expect(html).toContain('assistant-thinking-minimal')

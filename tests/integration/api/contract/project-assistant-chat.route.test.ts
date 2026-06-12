@@ -158,6 +158,7 @@ import {
 } from '@/app/api/projects/[projectId]/assistant/waits/route'
 import { POST as approvalPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route'
 import { POST as choicePost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route'
+import { GET as runGet } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/route'
 import { POST as taskFollowUpPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route'
 
 describe('project assistant chat route', () => {
@@ -307,6 +308,45 @@ describe('project assistant chat route', () => {
       control: expect.objectContaining({
         kind: 'approval',
         approved: true,
+      }),
+    }))
+  })
+
+  it('GET /api/projects/[projectId]/assistant/runs/[runId] -> returns the server-side run status', async () => {
+    runMock.getProjectAgentRun.mockResolvedValueOnce({
+      id: 'run-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-1',
+      status: 'running',
+      controlKind: 'approval_response',
+    })
+
+    const response = await runGet(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1?episodeId=episode-1',
+        method: 'GET',
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(runMock.getProjectAgentRun).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      episodeId: 'episode-1',
+      runId: 'run-1',
+    })
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      success: true,
+      run: expect.objectContaining({
+        id: 'run-1',
+        status: 'running',
+        controlKind: 'approval_response',
       }),
     }))
   })

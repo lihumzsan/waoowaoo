@@ -98,8 +98,11 @@ export function findLatestAssistantMessageIdAfterLatestUser(
 export function shouldShowPendingAssistantTurnPlaceholder(params: {
   readonly status: ChatStatus
   readonly activeAssistantMessageId: string | null
+  readonly pending?: boolean
 }): boolean {
-  return params.status === 'submitted' || (params.status === 'streaming' && !params.activeAssistantMessageId)
+  return params.status === 'submitted'
+    || (params.status === 'streaming' && !params.activeAssistantMessageId)
+    || (params.pending === true && params.status !== 'streaming')
 }
 
 export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {

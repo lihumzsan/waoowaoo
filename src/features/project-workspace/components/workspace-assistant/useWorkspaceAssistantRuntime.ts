@@ -12,10 +12,12 @@ import {
 } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { apiFetch } from '@/lib/api-fetch'
 import {
   useProjectAssistantThread,
   useProjectAssistantThreadSync,
 } from '@/lib/query/hooks'
+import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import { ensureUniqueUIMessages, isPersistableUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   collectResolvedInterruptionApprovalIds,
@@ -25,6 +27,12 @@ import {
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
+
+interface WorkspaceAssistantTrackedRun {
+  runId: string
+  status: WorkspaceAssistantRunStatus
+}
 
 class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
   public toUIMessageChunkStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
@@ -84,6 +92,75 @@ export function buildWorkspaceAssistantChatId(params: {
   return `workspace-command:${params.projectId}:${params.episodeId || 'global'}`
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function isWorkspaceAssistantRunStatus(value: unknown): value is WorkspaceAssistantRunStatus {
+  return value === 'running'
+    || value === 'awaiting_approval'
+    || value === 'awaiting_choice'
+    || value === 'awaiting_task'
+    || value === 'completed'
+    || value === 'failed'
+    || value === 'cancelled'
+}
+
+export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunStatus): boolean {
+  return status === 'running'
+}
+
+export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
+  return !isWorkspaceAssistantRunBusyStatus(status)
+}
+
+function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTrackedRun | null {
+  if (!isRecord(part) || part.type !== 'data-agent-run') return null
+  const data = isRecord(part.data) ? part.data : null
+  const runId = readNonEmptyString(data?.runId)
+  if (!runId || !isWorkspaceAssistantRunStatus(data?.status)) return null
+  return {
+    runId,
+    status: data.status,
+  }
+}
+
+export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]): WorkspaceAssistantTrackedRun | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex]
+    if (!message || message.role !== 'assistant') continue
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const run = readWorkspaceAssistantRunPart(message.parts[partIndex])
+      if (run) return run
+    }
+  }
+  return null
+}
+
+async function fetchWorkspaceAssistantRunStatus(params: {
+  projectId: string
+  episodeId?: string | null
+  runId: string
+}): Promise<WorkspaceAssistantRunStatus> {
+  const query = params.episodeId ? `?episodeId=${encodeURIComponent(params.episodeId)}` : ''
+  const response = await apiFetch(
+    `/api/projects/${params.projectId}/assistant/runs/${encodeURIComponent(params.runId)}${query}`,
+  )
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok || !isRecord(payload)) {
+    throw new Error('PROJECT_AGENT_RUN_STATUS_FETCH_FAILED')
+  }
+  const run = isRecord(payload.run) ? payload.run : null
+  if (!isWorkspaceAssistantRunStatus(run?.status)) {
+    throw new Error('PROJECT_AGENT_RUN_STATUS_INVALID')
+  }
+  return run.status
+}
+
 export function useWorkspaceAssistantRuntime({
   projectId,
   episodeId,
@@ -127,8 +204,9 @@ export function useWorkspaceAssistantRuntime({
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
+  const settledRunIdsRef = useRef<Set<string>>(new Set())
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [controlPending, setControlPending] = useState(false)
+  const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
 
   const replaceMessages = useCallback((messages: UIMessage[]) => {
     chat.setMessages(ensureUniqueUIMessages(messages))
@@ -172,13 +250,29 @@ export function useWorkspaceAssistantRuntime({
     })
   }, [chat])
 
+  const applyTrackedRunStatus = useCallback((runId: string, status: WorkspaceAssistantRunStatus) => {
+    if (shouldClearWorkspaceAssistantControlPending(status)) {
+      settledRunIdsRef.current.add(runId)
+      setActiveControlRun((current) => current?.runId === runId ? null : current)
+      return
+    }
+    setActiveControlRun({ runId, status })
+  }, [])
+
+  const refreshTrackedRunStatus = useCallback(async (runId: string): Promise<WorkspaceAssistantRunStatus> => {
+    const status = await fetchWorkspaceAssistantRunStatus({ projectId, episodeId, runId })
+    applyTrackedRunStatus(runId, status)
+    return status
+  }, [applyTrackedRunStatus, episodeId, projectId])
+
   const sendControlRequest = useCallback(async (params: {
     runId: string
     endpoint: 'approval' | 'choice' | 'task-follow-up'
     payload: Record<string, unknown>
   }) => {
     chat.clearError()
-    setControlPending(true)
+    settledRunIdsRef.current.delete(params.runId)
+    setActiveControlRun({ runId: params.runId, status: 'running' })
     try {
       const response = await fetch(
         `/api/projects/${projectId}/assistant/runs/${encodeURIComponent(params.runId)}/${params.endpoint}`,
@@ -205,9 +299,9 @@ export function useWorkspaceAssistantRuntime({
         mergeStreamedAssistantMessage(message)
       }
     } finally {
-      setControlPending(false)
+      await refreshTrackedRunStatus(params.runId).catch(() => undefined)
     }
-  }, [assistantPermissionMode, chat, contextPayload, controlTransport, mergeStreamedAssistantMessage, projectId])
+  }, [assistantPermissionMode, chat, contextPayload, controlTransport, mergeStreamedAssistantMessage, projectId, refreshTrackedRunStatus])
 
   const submitChoiceResponse = useCallback(async (params: {
     runId: string
@@ -278,6 +372,45 @@ export function useWorkspaceAssistantRuntime({
   }, [assistantThread.data, assistantThread.isLoading, chat.messages, chatId, replaceMessages])
 
   useEffect(() => {
+    const latestRun = findLatestWorkspaceAssistantRun(chat.messages)
+    if (!latestRun) return
+    if (!isWorkspaceAssistantRunBusyStatus(latestRun.status)) {
+      applyTrackedRunStatus(latestRun.runId, latestRun.status)
+      return
+    }
+    if (settledRunIdsRef.current.has(latestRun.runId)) return
+    if (chat.status === 'submitted' || chat.status === 'streaming') return
+    setActiveControlRun((current) => current?.runId === latestRun.runId
+      ? current
+      : latestRun)
+  }, [applyTrackedRunStatus, chat.messages, chat.status])
+
+  useEffect(() => {
+    if (!activeControlRun || !isWorkspaceAssistantRunBusyStatus(activeControlRun.status)) return
+    let cancelled = false
+    let timer: number | null = null
+
+    const poll = () => {
+      timer = window.setTimeout(() => {
+        void refreshTrackedRunStatus(activeControlRun.runId)
+          .catch(() => undefined)
+          .finally(() => {
+            if (cancelled) return
+            poll()
+          })
+      }, 1500)
+    }
+
+    poll()
+    return () => {
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [activeControlRun, refreshTrackedRunStatus])
+
+  useEffect(() => {
     if (hydratedSessionKeyRef.current !== chatId) return
     if (chat.status === 'submitted' || chat.status === 'streaming') return
     if (!isPersistableUIMessages(chat.messages)) return
@@ -323,7 +456,7 @@ export function useWorkspaceAssistantRuntime({
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: controlPending || chat.status === 'submitted' || chat.status === 'streaming',
+    pending: Boolean(activeControlRun) || chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: findPendingToolApprovalId(chat.messages),
     approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
     error: chat.error,

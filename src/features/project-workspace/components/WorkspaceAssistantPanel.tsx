@@ -436,6 +436,7 @@ export default function WorkspaceAssistantPanel({
   const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
     status: assistantRuntime.status,
     activeAssistantMessageId: activeThinkingAssistantMessageId,
+    pending: assistantRuntime.pending && !assistantRuntime.storageLoading,
   })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
