@@ -7,6 +7,6 @@ export const config = {
     // 匹配所有路径，除了 api、_next/static、_next/image、favicon.ico 等
     matcher: [
         // 匹配所有路径
-        '/((?!api|m|demo-assets|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|webp|svg|gif|ico|mp4|mov|webm|mp3|wav|m4a)).*)'
+        '/((?!api|m|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|webp|svg|gif|ico|mp4|mov|webm|mp3|wav|m4a)).*)'
     ]
 };

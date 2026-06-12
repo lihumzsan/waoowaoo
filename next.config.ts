@@ -9,7 +9,6 @@ const globalFunctionTraceExcludes = [
   './docker-logs/**/*',
   './logs/**/*',
   './*.log',
-  './public/demo-assets/**/*',
 ]
 
 const nextConfig: NextConfig = {
