@@ -57,6 +57,7 @@ describe('workspace assistant choice card actions', () => {
           type: 'data-edit-style-preview-generation',
           data: {
             operationId: 'generate_edit_style_previews',
+            agentRunId: 'run-1',
             projectId: 'project-1',
             episodeId: 'episode-1',
             screenplayId: 'screenplay-1',
@@ -85,6 +86,7 @@ describe('workspace assistant choice card actions', () => {
     const active = findActiveStylePreviewGenerationCard(messages)
 
     expect(active?.data.screenplayId).toBe('screenplay-1')
+    expect(active?.data.agentRunId).toBe('run-1')
     expect(active?.data.items.map((item) => item.id)).toEqual(['preview-1'])
   })
 

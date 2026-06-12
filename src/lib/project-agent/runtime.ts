@@ -103,6 +103,7 @@ export type ProjectAgentResolvedControl =
     interruptionId: string | null
     choiceType: EditFirstChoiceType
     toolCallId: string | null
+    cardId: string | null
     continuation: EditFirstChoiceContinuation
   }
   | {
@@ -458,6 +459,7 @@ export async function createProjectAgentChatResponse(input: {
       interruptionId: control.interruptionId,
       choiceType: control.choiceType,
       toolCallId: control.toolCallId,
+      cardId: control.cardId,
     } satisfies ProjectAgentChoiceResolvedPartData))
   }
 

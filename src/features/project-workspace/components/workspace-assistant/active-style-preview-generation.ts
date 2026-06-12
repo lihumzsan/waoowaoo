@@ -24,6 +24,9 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   const data = isRecord(part.data) ? part.data : null
   if (!data || data.operationId !== 'generate_edit_style_previews') return null
   if (typeof data.projectId !== 'string' || typeof data.episodeId !== 'string' || typeof data.screenplayId !== 'string') return null
+  const agentRunId = typeof data.agentRunId === 'string' && data.agentRunId.trim()
+    ? data.agentRunId.trim()
+    : null
   if (!Array.isArray(data.items)) return null
   const items = data.items.flatMap((item): EditStylePreviewGenerationPartData['items'] => {
     if (!isRecord(item)) return []
@@ -41,6 +44,7 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   if (items.length === 0) return null
   return {
     operationId: 'generate_edit_style_previews',
+    ...(agentRunId ? { agentRunId } : {}),
     projectId: data.projectId,
     episodeId: data.episodeId,
     screenplayId: data.screenplayId,

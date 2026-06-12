@@ -41,6 +41,23 @@ function assistantChoiceCardMessage(id: string): UIMessage {
   }
 }
 
+function assistantChoiceResolvedMessage(id: string): UIMessage {
+  return {
+    id,
+    role: 'assistant',
+    parts: [{
+      type: 'data-assistant-choice-resolved',
+      data: {
+        runId: 'run-1',
+        interruptionId: 'choice-interruption-1',
+        choiceType: 'duration_and_aspect_ratio',
+        toolCallId: 'tool-call-1',
+        cardId: 'edit-first-duration-aspect-ratio',
+      },
+    } as unknown as UIMessage['parts'][number]],
+  }
+}
+
 function hiddenChoiceResponseMessage(id: string): UIMessage {
   return {
     id,
@@ -91,6 +108,16 @@ describe('workspace assistant active choice card', () => {
       userMessage('user-1', '开始生成'),
       assistantChoiceCardMessage('assistant-1'),
       hiddenChoiceResponseMessage('user-choice-1'),
+    ], new Set())
+
+    expect(active).toBeNull()
+  })
+
+  it('does not restore a choice card that has a resolved control part after refresh', () => {
+    const active = findActiveChoiceCard([
+      userMessage('user-1', '开始生成'),
+      assistantChoiceCardMessage('assistant-1'),
+      assistantChoiceResolvedMessage('assistant-2'),
     ], new Set())
 
     expect(active).toBeNull()

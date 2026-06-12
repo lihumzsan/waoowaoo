@@ -107,6 +107,10 @@ function readEpisodeIdFromRequestBody(body: RequestBody): string | null {
   return null
 }
 
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 function readLocaleFromBody(body: RequestBody): 'zh' | 'en' {
   if (body.context && typeof body.context === 'object') {
     return normalizeProjectAgentLocale((body.context as Record<string, unknown>).locale)
@@ -265,6 +269,7 @@ async function resolveProjectAgentControl(params: {
       interruptionId: controlAction.interruptionId,
       choiceType: controlAction.choiceType,
       toolCallId: controlAction.toolCallId,
+      cardId: readNonEmptyString(controlAction.output.cardId),
       continuation,
     }
   }

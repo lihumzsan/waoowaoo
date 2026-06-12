@@ -411,6 +411,7 @@ describe('project agent runtime deterministic tool injection', () => {
         interruptionId: 'choice-interruption-1',
         choiceType: 'duration_and_aspect_ratio',
         toolCallId: 'tool-choice-1',
+        cardId: 'edit-first-duration-aspect-ratio',
         continuation: continuation!,
       },
       messages: [
