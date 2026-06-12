@@ -27,6 +27,7 @@ const waitMock = vi.hoisted(() => ({
 const interruptionMock = vi.hoisted(() => ({
   consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
   consumeProjectAgentChoiceInterruption: vi.fn(async (): Promise<unknown> => null),
+  getPendingProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
   supersedePendingProjectAgentInterruptions: vi.fn(async (): Promise<unknown[]> => []),
 }))
 
@@ -324,6 +325,15 @@ describe('project assistant chat route', () => {
       status: 'running',
       controlKind: 'approval_response',
     })
+    interruptionMock.getPendingProjectAgentApprovalInterruption.mockResolvedValueOnce({
+      id: 'interruption-1',
+      runId: 'run-1',
+      type: 'approval',
+      status: 'pending',
+      operationId: 'generate_edit_director_decoupage',
+      approvalId: 'approval-1',
+      toolCallId: 'tool-call-1',
+    })
 
     const response = await runGet(
       buildMockRequest({
@@ -341,6 +351,13 @@ describe('project assistant chat route', () => {
       episodeId: 'episode-1',
       runId: 'run-1',
     })
+    expect(interruptionMock.getPendingProjectAgentApprovalInterruption).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      episodeId: 'episode-1',
+      runId: 'run-1',
+    })
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       success: true,
       run: expect.objectContaining({
@@ -348,6 +365,12 @@ describe('project assistant chat route', () => {
         status: 'running',
         controlKind: 'approval_response',
       }),
+      pendingApproval: {
+        interruptionId: 'interruption-1',
+        approvalId: 'approval-1',
+        operationId: 'generate_edit_director_decoupage',
+        toolCallId: 'tool-call-1',
+      },
     }))
   })
 

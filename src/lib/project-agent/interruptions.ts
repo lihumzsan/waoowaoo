@@ -185,6 +185,43 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
   }
 }
 
+export async function getPendingProjectAgentApprovalInterruption(params: ProjectAgentInterruptionScope & {
+  runId: string
+}): Promise<Omit<ProjectAgentApprovalInterruptionRecord, 'runState'> | null> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const record = await prisma.projectAgentInterruption.findFirst({
+    where: {
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      type: 'approval',
+      status: 'pending',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      runId: true,
+      type: true,
+      status: true,
+      operationId: true,
+      approvalId: true,
+      toolCallId: true,
+    },
+  })
+  if (!record) return null
+  return {
+    id: record.id,
+    runId: record.runId,
+    type: 'approval',
+    status: 'pending',
+    operationId: record.operationId,
+    approvalId: record.approvalId,
+    toolCallId: record.toolCallId,
+  }
+}
+
 export async function consumeProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
   runId: string
   interruptionId: string

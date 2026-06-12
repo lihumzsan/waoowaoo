@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
+import { getPendingProjectAgentApprovalInterruption } from '@/lib/project-agent/interruptions'
 import { getProjectAgentRun } from '@/lib/project-agent/runs'
 
 export const runtime = 'nodejs'
@@ -30,6 +31,13 @@ export const GET = apiHandler(async (
       },
     }, { status: 404 })
   }
+  const pendingApproval = await getPendingProjectAgentApprovalInterruption({
+    projectId,
+    userId: authResult.session.user.id,
+    episodeId,
+    assistantId: 'workspace-command',
+    runId,
+  })
 
   return NextResponse.json({
     success: true,
@@ -42,5 +50,13 @@ export const GET = apiHandler(async (
       controlKind: run.controlKind,
       requestId: run.requestId,
     },
+    pendingApproval: pendingApproval
+      ? {
+          interruptionId: pendingApproval.id,
+          approvalId: pendingApproval.approvalId,
+          operationId: pendingApproval.operationId,
+          toolCallId: pendingApproval.toolCallId,
+        }
+      : null,
   })
 })

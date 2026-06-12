@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   AssistantRuntimeProvider,
@@ -9,6 +9,7 @@ import {
 } from '@assistant-ui/react'
 import {
   AssistantChoiceCardView,
+  ConfirmationActionCard,
   WorkspaceAssistantActiveRunCard,
   EditStylePreviewGenerationDataCard,
   findLatestAssistantMessageIdAfterLatestUser,
@@ -42,6 +43,7 @@ import {
 import {
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
+import { findPendingWorkspaceAssistantInterruption } from './workspace-assistant/interruption-parts'
 import {
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
@@ -55,6 +57,8 @@ import {
   isAssistantPermissionMode,
   type AssistantPermissionMode,
 } from '@/lib/project-agent/permission-mode'
+import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
+import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 
 interface ProjectAgentWaitFollowUp {
   runId: string | null
@@ -143,6 +147,7 @@ export default function WorkspaceAssistantPanel({
   onEditScriptPendingChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
+  const locale = normalizeProjectAgentLocale(useLocale())
   const queryClient = useQueryClient()
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const confirmEditStylePreview = useConfirmProjectEditStylePreview(projectId)
@@ -323,6 +328,21 @@ export default function WorkspaceAssistantPanel({
       setConfirmationSubmittingKey(null)
     }
   }
+  const handleRespondRunApproval = async (params: {
+    runId: string
+    interruptionId: string
+    approvalId: string
+    operationId: string
+    approved: boolean
+    reason?: string
+  }) => {
+    setConfirmationSubmittingKey(`approval:${params.approvalId}:${params.approved ? 'approve' : 'deny'}`)
+    try {
+      await assistantRuntime.addRunApprovalResponse(params)
+    } finally {
+      setConfirmationSubmittingKey(null)
+    }
+  }
   const handleSubmitChoiceResponse = async (params: {
     runId: string
     interruptionId: string | null
@@ -411,6 +431,14 @@ export default function WorkspaceAssistantPanel({
   const activeStylePreviewConfirmed = (activeStylePreviewScreenplay.data?.stylePreviews ?? [])
     .some((preview) => preview.status === 'confirmed')
   const shouldDockStylePreviewGenerationCard = Boolean(displayedStylePreviewGenerationCard && !activeStylePreviewConfirmed)
+  const messagePendingInterruption = useMemo(() => {
+    return findPendingWorkspaceAssistantInterruption(assistantRuntime.messages)
+  }, [assistantRuntime.messages])
+  const serverPendingApproval = assistantRuntime.pendingRunApproval
+  const shouldRenderServerApprovalCard = Boolean(
+    serverPendingApproval
+      && messagePendingInterruption?.approvalId !== serverPendingApproval.approvalId,
+  )
   const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
     setDismissedChoiceCardKeys((current) => {
       const next = new Set(current)
@@ -550,6 +578,23 @@ export default function WorkspaceAssistantPanel({
                     ) : null}
                     {showActiveRunCard ? (
                       <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />
+                    ) : null}
+                    {shouldRenderServerApprovalCard && serverPendingApproval ? (
+                      <ConfirmationActionCard
+                        operationId={serverPendingApproval.operationId}
+                        title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
+                        subtitle={t('cards.confirmationRequired')}
+                        onConfirm={async () => handleRespondRunApproval({
+                          ...serverPendingApproval,
+                          approved: true,
+                        })}
+                        onCancel={async () => handleRespondRunApproval({
+                          ...serverPendingApproval,
+                          approved: false,
+                        })}
+                        confirmPending={confirmationSubmittingKey === `approval:${serverPendingApproval.approvalId}:approve`}
+                        cancelPending={confirmationSubmittingKey === `approval:${serverPendingApproval.approvalId}:deny`}
+                      />
                     ) : null}
                     {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
                       <EditStylePreviewGenerationDataCard

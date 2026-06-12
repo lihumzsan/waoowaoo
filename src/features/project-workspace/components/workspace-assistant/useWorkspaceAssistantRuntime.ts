@@ -35,6 +35,18 @@ interface WorkspaceAssistantTrackedRun {
   operationId: string | null
 }
 
+interface WorkspaceAssistantPendingApproval {
+  runId: string
+  interruptionId: string
+  approvalId: string
+  operationId: string
+}
+
+interface WorkspaceAssistantRunSnapshot {
+  status: WorkspaceAssistantRunStatus
+  pendingApproval: WorkspaceAssistantPendingApproval | null
+}
+
 class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
   public toUIMessageChunkStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
     return this.processResponseStream(stream)
@@ -64,6 +76,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageError: string | null
   storageLoading: boolean
   pendingOperationId: string | null
+  pendingRunApproval: WorkspaceAssistantPendingApproval | null
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
   submitChoiceResponse: (params: {
@@ -80,6 +93,14 @@ interface UseWorkspaceAssistantRuntimeResult {
   }) => Promise<void>
   addToolApprovalResponse: (params: {
     approvalId: string
+    approved: boolean
+    reason?: string
+  }) => Promise<void>
+  addRunApprovalResponse: (params: {
+    runId: string
+    interruptionId: string
+    approvalId: string
+    operationId: string
     approved: boolean
     reason?: string
   }) => Promise<void>
@@ -144,29 +165,25 @@ export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]):
   return null
 }
 
-function readChoiceOutputString(output: Record<string, unknown>, key: string): string | null {
-  return readNonEmptyString(output[key])
-}
-
-export function resolveWorkspaceAssistantChoicePendingOperationId(params: {
-  choiceType: WorkspaceAssistantChoiceType
-  output: Record<string, unknown>
-}): string | null {
-  if (params.choiceType === 'duration_and_aspect_ratio') return 'generate_edit_screenplay'
-  if (params.choiceType === 'style') return 'generate_edit_director_decoupage'
-  if (params.choiceType === 'screenplay_review') {
-    const decision = readChoiceOutputString(params.output, 'decision')
-    if (decision === 'approve') return 'generate_edit_style_previews'
-    if (decision === 'revise') return 'revise_edit_screenplay'
+function readPendingApproval(payload: unknown, runId: string): WorkspaceAssistantPendingApproval | null {
+  if (!isRecord(payload)) return null
+  const interruptionId = readNonEmptyString(payload.interruptionId)
+  const approvalId = readNonEmptyString(payload.approvalId)
+  const operationId = readNonEmptyString(payload.operationId)
+  if (!interruptionId || !approvalId || !operationId) return null
+  return {
+    runId,
+    interruptionId,
+    approvalId,
+    operationId,
   }
-  return null
 }
 
-async function fetchWorkspaceAssistantRunStatus(params: {
+async function fetchWorkspaceAssistantRunSnapshot(params: {
   projectId: string
   episodeId?: string | null
   runId: string
-}): Promise<WorkspaceAssistantRunStatus> {
+}): Promise<WorkspaceAssistantRunSnapshot> {
   const query = params.episodeId ? `?episodeId=${encodeURIComponent(params.episodeId)}` : ''
   const response = await apiFetch(
     `/api/projects/${params.projectId}/assistant/runs/${encodeURIComponent(params.runId)}${query}`,
@@ -179,7 +196,10 @@ async function fetchWorkspaceAssistantRunStatus(params: {
   if (!isWorkspaceAssistantRunStatus(run?.status)) {
     throw new Error('PROJECT_AGENT_RUN_STATUS_INVALID')
   }
-  return run.status
+  return {
+    status: run.status,
+    pendingApproval: readPendingApproval(payload.pendingApproval, params.runId),
+  }
 }
 
 export function useWorkspaceAssistantRuntime({
@@ -228,6 +248,7 @@ export function useWorkspaceAssistantRuntime({
   const settledRunIdsRef = useRef<Set<string>>(new Set())
   const [syncError, setSyncError] = useState<string | null>(null)
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
+  const [pendingRunApproval, setPendingRunApproval] = useState<WorkspaceAssistantPendingApproval | null>(null)
 
   const replaceMessages = useCallback((messages: UIMessage[]) => {
     chat.setMessages(ensureUniqueUIMessages(messages))
@@ -275,8 +296,16 @@ export function useWorkspaceAssistantRuntime({
     runId: string
     status: WorkspaceAssistantRunStatus
     operationId?: string | null
+    pendingApproval?: WorkspaceAssistantPendingApproval | null
   }) => {
     const { runId, status } = params
+    if (status === 'awaiting_approval' && params.pendingApproval) {
+      settledRunIdsRef.current.add(runId)
+      setActiveControlRun((current) => current?.runId === runId ? null : current)
+      setPendingRunApproval(params.pendingApproval)
+      return
+    }
+    setPendingRunApproval((current) => current?.runId === runId ? null : current)
     if (shouldClearWorkspaceAssistantControlPending(status)) {
       settledRunIdsRef.current.add(runId)
       setActiveControlRun((current) => current?.runId === runId ? null : current)
@@ -290,9 +319,9 @@ export function useWorkspaceAssistantRuntime({
   }, [])
 
   const refreshTrackedRunStatus = useCallback(async (runId: string): Promise<WorkspaceAssistantRunStatus> => {
-    const status = await fetchWorkspaceAssistantRunStatus({ projectId, episodeId, runId })
-    applyTrackedRunStatus({ runId, status })
-    return status
+    const snapshot = await fetchWorkspaceAssistantRunSnapshot({ projectId, episodeId, runId })
+    applyTrackedRunStatus({ runId, status: snapshot.status, pendingApproval: snapshot.pendingApproval })
+    return snapshot.status
   }, [applyTrackedRunStatus, episodeId, projectId])
 
   const sendControlRequest = useCallback(async (params: {
@@ -303,6 +332,7 @@ export function useWorkspaceAssistantRuntime({
   }) => {
     chat.clearError()
     settledRunIdsRef.current.delete(params.runId)
+    setPendingRunApproval((current) => current?.runId === params.runId ? null : current)
     setActiveControlRun({ runId: params.runId, status: 'running', operationId: params.operationId ?? null })
     try {
       const response = await fetch(
@@ -344,10 +374,6 @@ export function useWorkspaceAssistantRuntime({
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'choice',
-      operationId: resolveWorkspaceAssistantChoicePendingOperationId({
-        choiceType: params.choiceType,
-        output: params.output,
-      }),
       payload: {
         interruptionId: params.interruptionId,
         choiceType: params.choiceType,
@@ -389,6 +415,27 @@ export function useWorkspaceAssistantRuntime({
       operationId: interruption.operationId,
       payload: {
         interruptionId: interruption.interruptionId,
+        approved: params.approved,
+        ...(params.reason ? { reason: params.reason } : {}),
+      },
+    })
+  }, [chat, sendControlRequest])
+
+  const addRunApprovalResponse = useCallback(async (params: {
+    runId: string
+    interruptionId: string
+    approvalId: string
+    operationId: string
+    approved: boolean
+    reason?: string
+  }) => {
+    chat.clearError()
+    await sendControlRequest({
+      runId: params.runId,
+      endpoint: 'approval',
+      operationId: params.operationId,
+      payload: {
+        interruptionId: params.interruptionId,
         approved: params.approved,
         ...(params.reason ? { reason: params.reason } : {}),
       },
@@ -494,18 +541,20 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: Boolean(activeControlRun) || chat.status === 'submitted' || chat.status === 'streaming',
-    pendingApprovalId: findPendingToolApprovalId(chat.messages),
+    pendingApprovalId: findPendingToolApprovalId(chat.messages) ?? pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
     error: chat.error,
     syncError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
     pendingOperationId: activeControlRun?.operationId ?? null,
+    pendingRunApproval,
     sendMessage,
     sendHiddenMessage,
     submitChoiceResponse,
     submitTaskFollowUp,
     addToolApprovalResponse,
+    addRunApprovalResponse,
     replaceMessages,
     appendMessages,
   }
