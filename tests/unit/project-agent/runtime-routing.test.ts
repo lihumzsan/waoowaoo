@@ -9,6 +9,7 @@ const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
+  capturedModelSettings: {} as Record<string, unknown>,
 }))
 
 const registryState = vi.hoisted(() => ({
@@ -58,15 +59,18 @@ vi.mock('@openai/agents', () => {
   class Agent {
     name: string
     instructions: string
+    modelSettings: Record<string, unknown>
     tools: Array<{ name: string; needsApproval?: unknown }>
 
     constructor(config: {
       name: string
       instructions: string
+      modelSettings?: Record<string, unknown>
       tools: Array<{ name: string; needsApproval?: unknown }>
     }) {
       this.name = config.name
       this.instructions = config.instructions
+      this.modelSettings = config.modelSettings ?? {}
       this.tools = config.tools
     }
   }
@@ -89,6 +93,7 @@ vi.mock('@openai/agents', () => {
     streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
     streamState.capturedSystem = agent.instructions
+    streamState.capturedModelSettings = agent.modelSettings
     return {
       completed: Promise.resolve(),
       interruptions: [],
@@ -277,6 +282,7 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedToolNames = []
     streamState.capturedTools = {}
     streamState.capturedSystem = ''
+    streamState.capturedModelSettings = {}
     loggerState.info.mockReset()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
@@ -302,6 +308,44 @@ describe('project agent runtime deterministic tool injection', () => {
         }),
       }),
     }))
+  })
+
+  it('forces the continuation tool after a choice card response', async () => {
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
+        {
+          id: 'u2',
+          role: 'user',
+          metadata: {
+            custom: {
+              workspaceAssistantHidden: true,
+              projectAgentChoiceResponse: {
+                toolCallId: 'tool-choice-1',
+                output: {
+                  ok: true,
+                  choiceType: 'duration_and_aspect_ratio',
+                  durationSeconds: 60,
+                  aspectRatio: '16:9',
+                },
+              },
+            },
+          },
+          parts: [{ type: 'text', text: '' }],
+        },
+      ],
+    })
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedModelSettings).toEqual(expect.objectContaining({
+      toolChoice: 'generate_edit_screenplay',
+    }))
+    expect(streamState.capturedSystem).toContain('剪辑先行选择卡续跑指令')
+    expect(streamState.capturedSystem).toContain('必须直接调用 generate_edit_screenplay')
   })
 
   it('keeps screenplay review card available after screenplay generation', async () => {
