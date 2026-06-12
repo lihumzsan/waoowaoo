@@ -51,12 +51,27 @@ function readStringArray(value: unknown): string[] {
   return value.flatMap((item) => typeof item === 'string' && item.trim() ? [item.trim()] : [])
 }
 
+/**
+ * A `z.never()` input field serializes to `{ "not": {} }`. Such fields are
+ * execution-layer guards that forbid a value entirely, so they must never be
+ * exposed to the model: strict-mode normalization would otherwise publish them
+ * as required-but-unsatisfiable parameters and bait the model into filling
+ * them. Zod validation on the execute path still rejects any value that
+ * bypasses the tool schema.
+ */
+function isNeverSchema(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  const not = value.not
+  return isRecord(not) && Object.keys(not).length === 0
+}
+
 function readProperties(schema: JsonObject): Record<string, JsonValue> {
   const value = schema.properties
   if (!isRecord(value) || Array.isArray(value)) return {}
   const out: Record<string, JsonValue> = {}
   for (const [key, property] of Object.entries(value)) {
     if (key === 'confirmed') continue
+    if (isNeverSchema(property)) continue
     out[key] = toJsonValue(property)
   }
   return out
@@ -176,6 +191,13 @@ function assertNoForbiddenToolSchemaSurface(params: {
   const properties = value.properties
   if (isRecord(properties) && Object.prototype.hasOwnProperty.call(properties, 'confirmed')) {
     throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_CONFIRMED_EXPOSED:${operationId}:${path}`)
+  }
+  if (isRecord(properties)) {
+    for (const [propertyKey, propertySchema] of Object.entries(properties)) {
+      if (isNeverSchema(propertySchema)) {
+        throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_NEVER_EXPOSED:${operationId}:${path}/${propertyKey}`)
+      }
+    }
   }
 
   const required = readStringArray(value.required)

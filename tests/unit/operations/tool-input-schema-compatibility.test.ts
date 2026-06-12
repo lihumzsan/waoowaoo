@@ -32,6 +32,28 @@ function collectConfirmedProperties(value: unknown, out: string[], path = '#') {
   }
 }
 
+function collectNeverProperties(value: unknown, out: string[], path = '#') {
+  if (!value || typeof value !== 'object') return
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectNeverProperties(item, out, `${path}/${String(index)}`))
+    return
+  }
+  const record = value as Record<string, unknown>
+  const properties = record.properties
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    for (const [key, property] of Object.entries(properties)) {
+      if (!property || typeof property !== 'object' || Array.isArray(property)) continue
+      const not = (property as Record<string, unknown>).not
+      if (not && typeof not === 'object' && !Array.isArray(not) && Object.keys(not).length === 0) {
+        out.push(`${path}/properties/${key}`)
+      }
+    }
+  }
+  for (const [key, child] of Object.entries(record)) {
+    collectNeverProperties(child, out, `${path}/${key}`)
+  }
+}
+
 function collectOptionalProperties(value: unknown, out: string[], path = '#') {
   if (!value || typeof value !== 'object') return
   if (Array.isArray(value)) {
@@ -80,6 +102,41 @@ describe('tool input schema compatibility', () => {
       }
     }
     expect(violations).toEqual([])
+  })
+
+  it('never exposes z.never() guard fields in model-facing tool schemas', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const violations: Array<{ id: string; path: string }> = []
+    for (const operation of Object.values(registry)) {
+      if (!operation.channels.tool) continue
+      const paths: string[] = []
+      collectNeverProperties(operation.toolInputSchema, paths)
+      for (const path of paths) {
+        violations.push({ id: operation.id, path })
+      }
+    }
+    expect(violations).toEqual([])
+  })
+
+  it('hides the forbidden prompt field of generate_edit_script from the model but still rejects it at execution', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.generate_edit_script
+    expect(operation).toBeDefined()
+    expect(Object.keys(operation.toolInputSchema.properties)).not.toContain('prompt')
+    expect(operation.toolInputSchema.required).not.toContain('prompt')
+
+    const parsed = operation.inputSchema.safeParse({
+      confirmed: true,
+      prompt: 'should be rejected',
+      screenplayId: 'screenplay-1',
+    })
+    expect(parsed.success).toBe(false)
+
+    const parsedWithoutPrompt = operation.inputSchema.safeParse({
+      confirmed: true,
+      screenplayId: 'screenplay-1',
+    })
+    expect(parsedWithoutPrompt.success).toBe(true)
   })
 
   it('makes every model-facing tool property required for OpenAI strict schema conversion', () => {
