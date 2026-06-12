@@ -759,6 +759,14 @@ export function resolveEditStylePreviewCardStatus(params: {
   return 'loading'
 }
 
+export function resolveDisplayedEditStylePreviewItems(params: {
+  readonly items: EditStylePreviewGenerationPartData['items']
+  readonly previewsById: ReadonlyMap<string, ProjectEditStylePreview>
+}): EditStylePreviewGenerationPartData['items'] {
+  const confirmedItem = params.items.find((item) => params.previewsById.get(item.id)?.status === 'confirmed')
+  return confirmedItem ? [confirmedItem] : params.items
+}
+
 function truncateStylePreviewErrorMessage(message: string | null | undefined): string | null {
   const normalized = message?.trim()
   if (!normalized) return null
@@ -800,6 +808,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     refetchInterval: (query) => {
       const screenplay = query.state.data ?? null
       const previews = screenplay?.stylePreviews ?? []
+      if (previews.some((preview) => preview.status === 'confirmed')) return false
       const allTerminal = data.items.every((item) => {
         const preview = previews.find((candidate) => candidate.id === item.id) ?? null
         return isEditStylePreviewTerminal(preview)
@@ -811,7 +820,11 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     const previews = screenplayQuery.data?.stylePreviews ?? []
     return new Map(previews.map((preview) => [preview.id, preview]))
   }, [screenplayQuery.data?.stylePreviews])
-  const cardStatuses = useMemo(() => data.items.map((item) => {
+  const displayedItems = useMemo(() => resolveDisplayedEditStylePreviewItems({
+    items: data.items,
+    previewsById,
+  }), [data.items, previewsById])
+  const cardStatuses = useMemo(() => displayedItems.map((item) => {
     const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
     const preview = previewsById.get(item.id) ?? null
     return resolveEditStylePreviewCardStatus({
@@ -819,7 +832,8 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       taskState,
       loading: screenplayQuery.isLoading || taskTargetStateQuery.isLoading,
     })
-  }), [data.items, previewsById, screenplayQuery.isLoading, taskStateMap, taskTargetStateQuery.isLoading])
+  }), [displayedItems, previewsById, screenplayQuery.isLoading, taskStateMap, taskTargetStateQuery.isLoading])
+  const hasConfirmedPreview = displayedItems.some((item) => previewsById.get(item.id)?.status === 'confirmed')
   const hasGeneratingPreview = cardStatuses.some((status) => status === 'generating')
 
   const handleSelectStylePreview = async (
@@ -858,21 +872,27 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   }
 
   return (
-    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
       <div className="flex items-center gap-2">
         <AppIcon
           name={hasGeneratingPreview ? 'loader' : 'check'}
           className={`h-3.5 w-3.5 text-[var(--glass-text-tertiary)] ${hasGeneratingPreview ? 'animate-spin' : ''}`}
         />
         <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">
-          {hasGeneratingPreview ? t('cards.stylePreviewGenerationTitle') : t('cards.stylePreviewChoiceTitle')}
+          {hasConfirmedPreview
+            ? t('cards.stylePreviewConfirmedTitle')
+            : hasGeneratingPreview
+              ? t('cards.stylePreviewGenerationTitle')
+              : t('cards.stylePreviewChoiceTitle')}
         </div>
         <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
-          {t('cards.stylePreviewGenerationCount', { count: data.items.length })}
+          {hasConfirmedPreview
+            ? t('cards.stylePreviewConfirmedBadge')
+            : t('cards.stylePreviewGenerationCount', { count: displayedItems.length })}
         </div>
       </div>
       <div className="mt-2 space-y-2">
-        {data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
+        {displayedItems.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
           const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
           const preview = previewsById.get(item.id) ?? null
           const rawStage = taskState?.stageLabel || taskState?.stage || null
@@ -887,11 +907,18 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           const loading = cardStatus === 'loading'
           const selecting = selectingPreviewId === item.id
           const summaryExpanded = expandedSummaryIds.has(item.id)
+          const confirmed = preview?.status === 'confirmed'
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
           return (
             <div
               key={item.id}
-              className={`overflow-hidden rounded-xl border bg-white/80 ${failed ? 'border-[var(--glass-tone-warn-fg)]/35' : 'border-[var(--glass-stroke-base)]'}`}
+              className={`overflow-hidden rounded-xl border bg-white/80 ${
+                confirmed
+                  ? 'border-[var(--glass-accent-from)] ring-2 ring-[var(--glass-accent-from)]/20'
+                  : failed
+                    ? 'border-[var(--glass-tone-warn-fg)]/35'
+                    : 'border-[var(--glass-stroke-base)]'
+              }`}
             >
               <div className="relative min-h-36 overflow-hidden bg-neutral-100">
                 <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
@@ -941,7 +968,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                   <span>
                     {failed
                       ? t('cards.stylePreviewGenerationFailed')
-                      : ready
+                      : confirmed
+                        ? t('cards.stylePreviewConfirmed')
+                        : ready
                         ? t('cards.stylePreviewReady')
                         : loading
                           ? t('cards.stylePreviewLoading')
@@ -953,7 +982,16 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                     {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
                   </div>
                 ) : null}
-                {ready && preview.status !== 'confirmed' ? (
+                {confirmed ? (
+                  <button
+                    type="button"
+                    className="mt-1 inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-xl border border-[var(--glass-accent-from)]/35 bg-[var(--glass-accent-from)]/10 px-3 py-2 text-sm font-medium text-[var(--glass-accent-from)]"
+                    disabled
+                  >
+                    <AppIcon name="check" className="h-4 w-4" />
+                    {t('cards.stylePreviewConfirmed')}
+                  </button>
+                ) : ready ? (
                   <button
                     type="button"
                     className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/90 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"

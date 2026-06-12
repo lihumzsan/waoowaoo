@@ -8,6 +8,7 @@ import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/c
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import { WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
+  resolveDisplayedEditStylePreviewItems,
   resolveEditStylePreviewCardStatus,
   resolveProgressStageLabel,
   WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS,
@@ -245,6 +246,51 @@ describe('workspace assistant panel layout', () => {
     })).toBe('loading')
   })
 
+  it('shows only the confirmed style preview after a visual style is selected', () => {
+    const items = [
+      {
+        id: 'preview-a',
+        styleKey: 'style_a',
+        title: 'Style A',
+        summary: 'A',
+        taskId: 'task-a',
+        aspectRatio: '16:9',
+      },
+      {
+        id: 'preview-b',
+        styleKey: 'style_b',
+        title: 'Style B',
+        summary: 'B',
+        taskId: 'task-b',
+        aspectRatio: '16:9',
+      },
+      {
+        id: 'preview-c',
+        styleKey: 'style_c',
+        title: 'Style C',
+        summary: 'C',
+        taskId: 'task-c',
+        aspectRatio: '16:9',
+      },
+    ] satisfies Parameters<typeof resolveDisplayedEditStylePreviewItems>[0]['items']
+    const previewsById = new Map<string, ProjectEditStylePreview>([
+      ['preview-a', buildStylePreview({ id: 'preview-a', status: 'completed' })],
+      ['preview-b', buildStylePreview({ id: 'preview-b', status: 'confirmed' })],
+      ['preview-c', buildStylePreview({ id: 'preview-c', status: 'completed' })],
+    ])
+
+    expect(resolveDisplayedEditStylePreviewItems({ items, previewsById })).toEqual([
+      {
+        id: 'preview-b',
+        styleKey: 'style_b',
+        title: 'Style B',
+        summary: 'B',
+        taskId: 'task-b',
+        aspectRatio: '16:9',
+      },
+    ])
+  })
+
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {
     const rendererSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
@@ -253,11 +299,13 @@ describe('workspace assistant panel layout', () => {
     const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
       cards: {
         stylePreviewLoading?: string
+        stylePreviewConfirmed?: string
       }
     }
     const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
       cards: {
         stylePreviewLoading?: string
+        stylePreviewConfirmed?: string
       }
     }
 
@@ -265,6 +313,8 @@ describe('workspace assistant panel layout', () => {
     expect(rendererSource).not.toContain("t('loading')")
     expect(zhMessages.cards.stylePreviewLoading).toBe('加载中...')
     expect(enMessages.cards.stylePreviewLoading).toBe('Loading...')
+    expect(zhMessages.cards.stylePreviewConfirmed).toBe('已确认风格')
+    expect(enMessages.cards.stylePreviewConfirmed).toBe('Style confirmed')
   })
 
   it('keeps edit script video prompt stage translated in supported locales', () => {

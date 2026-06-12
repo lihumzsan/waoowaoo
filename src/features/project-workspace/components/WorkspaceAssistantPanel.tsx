@@ -430,11 +430,15 @@ export default function WorkspaceAssistantPanel({
   const displayedStylePreviewGenerationCard = activeStylePreviewGenerationCard ?? recoveredStylePreviewGenerationCard
   const activeStylePreviewConfirmed = (activeStylePreviewScreenplay.data?.stylePreviews ?? [])
     .some((preview) => preview.status === 'confirmed')
-  const shouldDockStylePreviewGenerationCard = Boolean(displayedStylePreviewGenerationCard && !activeStylePreviewConfirmed)
   const messagePendingInterruption = useMemo(() => {
     return findPendingWorkspaceAssistantInterruption(assistantRuntime.messages)
   }, [assistantRuntime.messages])
   const serverPendingApproval = assistantRuntime.pendingRunApproval
+  const shouldDockStylePreviewGenerationCard = Boolean(
+    displayedStylePreviewGenerationCard
+      && !activeStylePreviewConfirmed
+      && !serverPendingApproval,
+  )
   const shouldRenderServerApprovalCard = Boolean(
     serverPendingApproval
       && messagePendingInterruption?.approvalId !== serverPendingApproval.approvalId,
