@@ -9,10 +9,12 @@ Target total duration: {{duration_seconds}} seconds
 
 Test-launch hard constraints:
 - The screenplay must fit a short film of no more than 120 seconds. Even if the user asks for longer, write only a version that can be completed within two minutes.
-- No real-person category: do not write real public figures, celebrities, human actor casting, face likeness, or live-action real-person setups. Characters must be fictional and suitable for animation, illustration, stylized CG, object/creature-led, or abstract visual storytelling.
+- No real-person category: do not write real public figures, celebrities, human actor casting, face likeness, or live-action real-person setups. Characters must be fictional and must not require real-person depiction.
 
 Responsibility boundary:
 - Only write story content here. Do not write camera language, shot size, composition, camera movement, editing rhythm, group/single structure, video prompts, sound effects, BGM, or post-production notes.
+- Only write plot facts here. Do not generate any style prompt for the screenplay, scenes, or characters. Do not output or lock visual style, art direction, art medium, material texture, color style, lighting style, camera style, sound style, Style Bible, image prompt, video prompt, or any style description directly usable for image/video generation.
+- If the user's original request contains style, art direction, art medium, or visual-effect requirements, do not write them into the screenplay text; those requirements are handled separately by the later style-candidate / Style Bible stage.
 - The downstream AI edit table will use this screenplay as the only plot truth, so the screenplay must clearly express characters, scenes, causal events, action progression, and the ending beat.
 
 Screenplay format:
@@ -22,7 +24,7 @@ Story Summary:
 State the core story in 1-2 sentences.
 
 Character List:
-Character Name: 2-3 stable visual traits + key identity/state + necessary speaking quality. Keep the same character name everywhere; do not switch between synonyms.
+Character Name: 2-3 objective stable appearance/status traits needed for plot identification + key identity/state + necessary speaking quality. Do not write art style, material texture, color style, lighting style, or any image/video generation prompt. Keep the same character name everywhere; do not switch between synonyms.
 
 Scene 1 | INT/EXT. Location - Time
 
@@ -46,6 +48,7 @@ Writing rules:
 - Use the unified scene heading format: "Scene N | INT/EXT. Location - Time". N must start at 1 and increase continuously.
 - Every new scene must start with a scene heading before action or dialogue.
 - Action paragraphs must contain only visible, performable plot facts that the downstream edit table can split. Do not write psychological explanation, theme summary, or director commentary.
+- Scenes, props, and characters inside action paragraphs may contain only plot facts and spatial facts. Do not write scene style, character style, art direction, art medium, material texture, color style, lighting style, or any other style prompt.
 - Dialogue paragraphs must contain only what a character actually says aloud. If tone, pause, or performance style is needed, put it in parentheses after the character name, such as "Kyle (lowering his voice):".
 - You may write "Narrator (V.O.)" or "Character Name (O.S.)", but the line must be story-required spoken content. Do not write it as subtitles or screen text.
 - When a character first appears, they must be identifiable from the Character List by stable identity and visual traits. Do not suddenly change a character's appearance, costume, or identity in action paragraphs.

@@ -59,11 +59,34 @@ describe('edit script block-first prompt flow', () => {
     expect(screenplayPrompt).not.toContain('画幅')
     expect(screenplayPrompt).not.toContain('aspect_ratio')
     expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
+    expect(screenplayPrompt).toContain('这里只写剧情事实，不生成剧本、场景、人物的任何风格提示词')
+    expect(screenplayPrompt).toContain('禁止输出或固化视觉风格、画风、美术媒介、材质质感、色彩风格、光影风格、镜头风格、声音风格、Style Bible、image prompt、video prompt')
+    expect(screenplayPrompt).toContain('如果用户原始需求包含风格、画风、美术媒介或视觉效果要求，不要把它写进剧本文本')
+    expect(screenplayPrompt).toContain('角色名：2-3 个客观、剧情识别所需的稳定外观/状态特征')
+    expect(screenplayPrompt).toContain('动作段落里的场景、道具和人物只允许写剧情事实与空间事实')
     expect(screenplayPrompt).toContain('不要出现“镜头”“特写”“推镜”“剪切”“CUT TO”')
     expect(screenplayPrompt).not.toContain('项目风格输入')
     expect(screenplayPrompt).not.toContain('project_style_json')
     expect(screenplayPrompt).not.toContain('Style Bible（唯一风格来源）')
     expect(screenplayPrompt).not.toContain('柔和自然光，低对比度，轻微柔焦')
+
+    const revisionPrompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+      locale: 'zh',
+      variables: {
+        original_user_request: '生成一条黏土动画风格短片',
+        current_screenplay_text: screenplayText,
+        revision_instruction: '改成更黑暗的黏土动画风格',
+        duration_seconds: '8',
+        aspect_ratio: '9:16',
+      },
+    })
+
+    expect(revisionPrompt).toContain('这里只写剧情事实，不生成剧本、场景、人物的任何风格提示词')
+    expect(revisionPrompt).toContain('如果用户修改要求包含视觉风格、画风、美术媒介或视觉效果变化，不要把它写进剧本文本')
+    expect(revisionPrompt).toContain('剧本修改阶段只能吸收其中非视觉的剧情、情绪或主题意图')
+    expect(revisionPrompt).toContain('动作段落里的场景、道具和人物只允许写剧情事实与空间事实')
+    expect(revisionPrompt).not.toContain('如果用户要求风格、主题、氛围或剧情方向变化')
 
     const stylePreviewPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
