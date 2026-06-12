@@ -27,11 +27,7 @@ import type {
   ProjectAgentInterruptionPartData,
   ProjectAgentStopPartData,
 } from './types'
-import {
-  buildProjectAgentContinuationNotice,
-  buildProjectAgentSystemPrompt,
-  localizeSelectableToolDescription,
-} from './copy'
+import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
@@ -152,14 +148,6 @@ function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
     { type: 'text-delta', id: 'agent-debug', delta: text },
     { type: 'text-end', id: 'agent-debug' },
     { type: 'finish-step' },
-  ].map((chunk) => chunk as unknown as ProjectAgentUiChunk)
-}
-
-function createAssistantTextChunks(id: string, text: string): ProjectAgentUiChunk[] {
-  return [
-    { type: 'text-start', id },
-    { type: 'text-delta', id, delta: text },
-    { type: 'text-end', id },
   ].map((chunk) => chunk as unknown as ProjectAgentUiChunk)
 }
 
@@ -365,13 +353,6 @@ export async function createProjectAgentChatResponse(input: {
       })),
     } satisfies AgentRuntimeContextPartData),
   ]
-
-  if (choiceContinuation) {
-    initialChunks.push(...createAssistantTextChunks(
-      'agent-continuation-notice',
-      buildProjectAgentContinuationNotice(locale, choiceContinuation.operationId),
-    ))
-  }
 
   if (agentDebug) {
     initialChunks.push(...createDebugTextChunks([

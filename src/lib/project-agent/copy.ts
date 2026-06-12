@@ -57,20 +57,6 @@ export function localizeSelectableToolDescription(
   return copy[locale]
 }
 
-export function buildProjectAgentContinuationNotice(
-  locale: ProjectAgentLocale,
-  operationId: string,
-): string {
-  if (operationId === 'generate_edit_screenplay') {
-    return locale === 'en'
-      ? 'I will start screenplay generation with the selected duration and aspect ratio. Please confirm the operation below.'
-      : '我将按你选择的时长和画面比例发起剧本生成，请在下方确认是否继续。'
-  }
-  return locale === 'en'
-    ? 'I will start the next project operation. Please confirm it below.'
-    : '我将发起下一步项目操作，请在下方确认是否继续。'
-}
-
 export function buildProjectAgentSystemPrompt(params: {
   locale: ProjectAgentLocale
   projectId: string

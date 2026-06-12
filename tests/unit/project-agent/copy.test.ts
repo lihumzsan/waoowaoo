@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildProjectAgentContinuationNotice,
-  buildProjectAgentSystemPrompt,
-  localizeSelectableToolDescription,
-} from '@/lib/project-agent/copy'
+import { buildProjectAgentSystemPrompt, localizeSelectableToolDescription } from '@/lib/project-agent/copy'
 
 describe('project agent prompt copy', () => {
   it('uses direct operation rules instead of fixed workflow or skill-gateway rules', () => {
@@ -78,11 +74,6 @@ describe('project agent prompt copy', () => {
     expect(zhDescription).toContain('必须来自用户通过 request_edit_first_choice 选择卡确认的结果')
     expect(enDescription).toContain('You must pass prompt, durationSeconds, and aspectRatio')
     expect(enDescription).toContain('confirmed through request_edit_first_choice')
-  })
-
-  it('localizes continuation notices for forced screenplay generation', () => {
-    expect(buildProjectAgentContinuationNotice('zh', 'generate_edit_screenplay')).toContain('发起剧本生成')
-    expect(buildProjectAgentContinuationNotice('en', 'generate_edit_screenplay')).toContain('start screenplay generation')
   })
 
   it('describes screenplay revision as review-stage only with structured fields', () => {
