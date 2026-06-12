@@ -313,12 +313,11 @@ export default function WorkspaceAssistantPanel({
       setConfirmationSubmittingKey(null)
     }
   }
-  const handleSubmitChoiceToolOutput = async (params: {
+  const handleSubmitChoiceResponse = async (params: {
     toolCallId: string
     output: Record<string, unknown>
   }) => {
-    await assistantRuntime.addToolOutput({
-      tool: 'request_edit_first_choice',
+    await assistantRuntime.submitChoiceResponse({
       toolCallId: params.toolCallId,
       output: params.output,
     })
@@ -391,7 +390,7 @@ export default function WorkspaceAssistantPanel({
     confirmationSubmittingKey,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
-    onSubmitChoiceToolOutput: handleSubmitChoiceToolOutput,
+    onSubmitChoiceResponse: handleSubmitChoiceResponse,
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
   })
@@ -521,7 +520,7 @@ export default function WorkspaceAssistantPanel({
                   <div className="mb-2">
                     <AssistantChoiceCardView
                       data={activeChoiceCard.data}
-                      onSubmitChoiceToolOutput={handleSubmitChoiceToolOutput}
+                      onSubmitChoiceResponse={handleSubmitChoiceResponse}
                       onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
                       onSubmitted={() => handleChoiceCardSubmitted(activeChoiceCard.key)}

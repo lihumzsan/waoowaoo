@@ -10,13 +10,30 @@ function userMessage(id: string, text: string): UIMessage {
   }
 }
 
-function assistantChoiceOutputMessage(id: string, output: Record<string, unknown>): UIMessage {
+function hiddenChoiceResponseMessage(id: string, output: Record<string, unknown>): UIMessage {
+  return {
+    id,
+    role: 'user',
+    metadata: {
+      custom: {
+        workspaceAssistantHidden: true,
+        projectAgentChoiceResponse: {
+          toolCallId: 'tool-call-1',
+          output,
+        },
+      },
+    },
+    parts: [{ type: 'text', text: '' }],
+  }
+}
+
+function assistantToolOutputMessage(id: string, output: Record<string, unknown>): UIMessage {
   return {
     id,
     role: 'assistant',
     parts: [{
       type: 'tool-request_edit_first_choice',
-      toolCallId: 'tool-call-1',
+      toolCallId: 'tool-call-legacy',
       state: 'output-available',
       output,
     } as unknown as UIMessage['parts'][number]],
@@ -27,7 +44,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
   it('continues to screenplay generation after duration and aspect ratio are selected', () => {
     const continuation = resolveEditFirstChoiceContinuation([
       userMessage('user-1', '民俗恐怖片'),
-      assistantChoiceOutputMessage('assistant-1', {
+      hiddenChoiceResponseMessage('user-choice-1', {
         ok: true,
         choiceType: 'duration_and_aspect_ratio',
         durationSeconds: 60,
@@ -51,7 +68,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
   it('continues to style preview generation after screenplay approval', () => {
     const continuation = resolveEditFirstChoiceContinuation([
       userMessage('user-1', '生成一部科幻短片'),
-      assistantChoiceOutputMessage('assistant-1', {
+      hiddenChoiceResponseMessage('user-choice-1', {
         ok: true,
         choiceType: 'screenplay_review',
         decision: 'approve',
@@ -68,7 +85,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
   it('continues to screenplay revision after screenplay notes are submitted', () => {
     const continuation = resolveEditFirstChoiceContinuation([
       userMessage('user-1', '生成一部科幻短片'),
-      assistantChoiceOutputMessage('assistant-1', {
+      hiddenChoiceResponseMessage('user-choice-1', {
         ok: true,
         choiceType: 'screenplay_review',
         decision: 'revise',
@@ -86,7 +103,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
   it('continues to director decoupage after style selection is saved', () => {
     const continuation = resolveEditFirstChoiceContinuation([
       userMessage('user-1', '生成一部民俗恐怖短片'),
-      assistantChoiceOutputMessage('assistant-1', {
+      hiddenChoiceResponseMessage('user-choice-1', {
         ok: true,
         choiceType: 'style',
         stylePreviewId: 'style-1',
@@ -104,13 +121,27 @@ describe('resolveEditFirstChoiceContinuation', () => {
   it('ignores stale choice output once a later user message exists', () => {
     const continuation = resolveEditFirstChoiceContinuation([
       userMessage('user-1', '民俗恐怖片'),
-      assistantChoiceOutputMessage('assistant-1', {
+      hiddenChoiceResponseMessage('user-choice-1', {
         ok: true,
         choiceType: 'duration_and_aspect_ratio',
         durationSeconds: 60,
         aspectRatio: '16:9',
       }),
       userMessage('user-2', '等一下，先不要生成'),
+    ])
+
+    expect(continuation).toBeNull()
+  })
+
+  it('does not continue from legacy assistant tool output without a user choice response', () => {
+    const continuation = resolveEditFirstChoiceContinuation([
+      userMessage('user-1', '民俗恐怖片'),
+      assistantToolOutputMessage('assistant-1', {
+        ok: true,
+        choiceType: 'duration_and_aspect_ratio',
+        durationSeconds: 60,
+        aspectRatio: '16:9',
+      }),
     ])
 
     expect(continuation).toBeNull()

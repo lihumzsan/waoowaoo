@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import type { ProjectAgentChoiceResponseData } from './types'
 
 type ChoiceContinuationOperationId =
   | 'generate_edit_screenplay'
@@ -61,12 +62,23 @@ function readDurationSeconds(output: UnknownRecord): number | null {
   return null
 }
 
-function readChoiceToolOutput(part: unknown): UnknownRecord | null {
-  if (!isRecord(part)) return null
-  if (part.type !== 'tool-request_edit_first_choice') return null
-  if (part.state !== 'output-available') return null
-  if (!isRecord(part.output)) return null
-  return part.output
+function parseChoiceResponseData(value: unknown): ProjectAgentChoiceResponseData | null {
+  if (!isRecord(value)) return null
+  if (!isRecord(value.output)) return null
+  const toolCallId = value.toolCallId
+  return {
+    toolCallId: typeof toolCallId === 'string' ? toolCallId : null,
+    output: value.output,
+  }
+}
+
+function readChoiceResponseOutput(message: UIMessage): UnknownRecord | null {
+  const metadata = message.metadata
+  if (!isRecord(metadata)) return null
+  const custom = metadata.custom
+  if (!isRecord(custom)) return null
+  const response = parseChoiceResponseData(custom.projectAgentChoiceResponse)
+  return response?.output ?? null
 }
 
 function buildDurationAndAspectRatioInstruction(params: {
@@ -169,18 +181,13 @@ export function resolveEditFirstChoiceContinuation(
 ): EditFirstChoiceContinuation | null {
   const latestMessageIndex = messages.length - 1
   const latestMessage = messages[latestMessageIndex]
-  if (!latestMessage || latestMessage.role !== 'assistant') return null
+  if (!latestMessage || latestMessage.role !== 'user') return null
 
+  const output = readChoiceResponseOutput(latestMessage)
+  if (!output) return null
   const latestUserText = readLatestUserTextBefore(messages, latestMessageIndex)
-  for (let partIndex = latestMessage.parts.length - 1; partIndex >= 0; partIndex -= 1) {
-    const output = readChoiceToolOutput(latestMessage.parts[partIndex])
-    if (!output) continue
-    const continuation = resolveChoiceContinuationFromOutput({
-      output,
-      latestUserText,
-    })
-    if (continuation) return continuation
-  }
-
-  return null
+  return resolveChoiceContinuationFromOutput({
+    output,
+    latestUserText,
+  })
 }

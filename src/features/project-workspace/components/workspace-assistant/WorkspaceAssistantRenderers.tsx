@@ -290,7 +290,7 @@ function RatioChoiceShape(props: {
 
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
-  onSubmitChoiceToolOutput: (params: {
+  onSubmitChoiceResponse: (params: {
     toolCallId: string
     output: Record<string, unknown>
   }) => Promise<void>
@@ -328,7 +328,7 @@ export function AssistantChoiceCardView(props: {
     setSubmitting(true)
     setError(null)
     try {
-      await props.onSubmitChoiceToolOutput({
+      await props.onSubmitChoiceResponse({
         toolCallId: card.toolCallId,
         output: {
           ok: true,
@@ -353,7 +353,7 @@ export function AssistantChoiceCardView(props: {
     try {
       const labels = resolveChoiceCardSelectionLabels(card.groups, selections)
       if (card.submit.kind === 'submit_tool_output') {
-        await props.onSubmitChoiceToolOutput({
+        await props.onSubmitChoiceResponse({
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -374,7 +374,7 @@ export function AssistantChoiceCardView(props: {
           projectId: card.submit.projectId,
           aspectRatio,
         })
-        await props.onSubmitChoiceToolOutput({
+        await props.onSubmitChoiceResponse({
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -399,7 +399,7 @@ export function AssistantChoiceCardView(props: {
           stylePreviewId,
           aspectRatio,
         })
-        await props.onSubmitChoiceToolOutput({
+        await props.onSubmitChoiceResponse({
           toolCallId: card.toolCallId,
           output: {
             ok: true,
@@ -1013,7 +1013,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   confirmationSubmittingKey: string | null
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
-  onSubmitChoiceToolOutput: (params: {
+  onSubmitChoiceResponse: (params: {
     toolCallId: string
     output: Record<string, unknown>
   }) => Promise<void>
@@ -1034,7 +1034,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   confirmationSubmittingKey,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
-  onSubmitChoiceToolOutput,
+  onSubmitChoiceResponse,
   onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
@@ -1059,7 +1059,7 @@ export function useWorkspaceAssistantMessagePartComponents({
           : (props) => (
               <AssistantChoiceCardView
                 data={props.data}
-                onSubmitChoiceToolOutput={onSubmitChoiceToolOutput}
+                onSubmitChoiceResponse={onSubmitChoiceResponse}
                 onSetProjectVideoRatioChoice={onSetProjectVideoRatioChoice}
                 onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
@@ -1081,7 +1081,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     onConfirmEditStylePreviewChoice,
     onRespondToolApproval,
     onSetProjectVideoRatioChoice,
-    onSubmitChoiceToolOutput,
+    onSubmitChoiceResponse,
   ])
 }
 

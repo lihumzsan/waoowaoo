@@ -57,6 +57,11 @@ export interface ProjectAgentApprovalResponseData {
   reason?: string | null
 }
 
+export interface ProjectAgentChoiceResponseData {
+  toolCallId?: string | null
+  output: UnknownObject
+}
+
 export interface ProjectAgentInterruptionPartData {
   requestId: string
   approvalId: string

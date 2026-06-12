@@ -103,9 +103,20 @@ function readTextFromParts(parts: readonly unknown[]): string {
   }).join('\n')
 }
 
+function isProjectAgentRuntimeControlMessage(message: UIMessage): boolean {
+  if (message.role !== 'user') return false
+  if (!isRecord(message.metadata)) return false
+  const custom = message.metadata.custom
+  return isRecord(custom) && (
+    isRecord(custom.projectAgentChoiceResponse)
+    || isRecord(custom.projectAgentApprovalResponse)
+  )
+}
+
 function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
   const items: AgentInputItem[] = []
   for (const message of messages) {
+    if (isProjectAgentRuntimeControlMessage(message)) continue
     const text = readTextFromParts(message.parts)
     if (!text.trim()) continue
     if (message.role === 'user') {

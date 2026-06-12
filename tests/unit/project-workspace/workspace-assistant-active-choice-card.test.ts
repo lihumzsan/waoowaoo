@@ -41,6 +41,28 @@ function assistantChoiceCardMessage(id: string): UIMessage {
   }
 }
 
+function hiddenChoiceResponseMessage(id: string): UIMessage {
+  return {
+    id,
+    role: 'user',
+    metadata: {
+      custom: {
+        workspaceAssistantHidden: true,
+        projectAgentChoiceResponse: {
+          toolCallId: 'tool-call-1',
+          output: {
+            ok: true,
+            choiceType: 'duration_and_aspect_ratio',
+            durationSeconds: 60,
+            aspectRatio: '16:9',
+          },
+        },
+      },
+    },
+    parts: [{ type: 'text', text: '' }],
+  }
+}
+
 describe('workspace assistant active choice card', () => {
   it('returns a choice card created after the latest user message', () => {
     const active = findActiveChoiceCard([
@@ -59,6 +81,16 @@ describe('workspace assistant active choice card', () => {
       userMessage('user-1', '开始生成'),
       assistantChoiceCardMessage('assistant-1'),
       userMessage('user-2', '我选择 60 秒和 16:9 画面比例，请继续。'),
+    ], new Set())
+
+    expect(active).toBeNull()
+  })
+
+  it('does not restore an old choice card after a hidden choice response was submitted', () => {
+    const active = findActiveChoiceCard([
+      userMessage('user-1', '开始生成'),
+      assistantChoiceCardMessage('assistant-1'),
+      hiddenChoiceResponseMessage('user-choice-1'),
     ], new Set())
 
     expect(active).toBeNull()

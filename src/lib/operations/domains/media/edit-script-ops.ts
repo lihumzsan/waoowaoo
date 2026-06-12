@@ -29,7 +29,6 @@ import {
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
-import type { UIMessage, UIMessageStreamWriter } from 'ai'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 

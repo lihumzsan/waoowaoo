@@ -42,8 +42,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageLoading: boolean
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
-  addToolOutput: (params: {
-    tool: string
+  submitChoiceResponse: (params: {
     toolCallId: string
     output: unknown
   }) => Promise<void>
@@ -174,16 +173,22 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages((current) => ensureUniqueUIMessages([...current, ...messages]))
   }, [chat])
 
-  const addToolOutput = useCallback(async (params: {
-    tool: string
+  const submitChoiceResponse = useCallback(async (params: {
     toolCallId: string
     output: unknown
   }) => {
     chat.clearError()
-    await chat.addToolOutput({
-      tool: params.tool,
-      toolCallId: params.toolCallId,
-      output: params.output,
+    await chat.sendMessage({
+      text: '',
+      metadata: {
+        custom: {
+          workspaceAssistantHidden: true,
+          projectAgentChoiceResponse: {
+            toolCallId: params.toolCallId,
+            output: params.output,
+          },
+        },
+      },
     })
   }, [chat])
 
@@ -263,7 +268,7 @@ export function useWorkspaceAssistantRuntime({
     storageLoading: assistantThread.isLoading,
     sendMessage,
     sendHiddenMessage,
-    addToolOutput,
+    submitChoiceResponse,
     addToolApprovalResponse,
     replaceMessages,
     appendMessages,
