@@ -29,6 +29,8 @@ import {
 } from './workspace-assistant/panel-layout'
 import {
   isWorkspaceAssistantSendMessageEvent,
+  releaseWorkspaceAssistantMessageKey,
+  reserveWorkspaceAssistantMessageKey,
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
 import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
@@ -39,6 +41,7 @@ import {
 import {
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
+import { shouldSendAssistantWaitFollowUp } from './workspace-assistant/wait-follow-up'
 import {
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
@@ -239,20 +242,22 @@ export default function WorkspaceAssistantPanel({
       if (episodeId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
       }
-      const sent = await sendAutoFollowUpMessage(
-        followUp.terminalStatus === 'failed'
-          ? t('autoFollowUp.waitFailed', {
-              operation: followUp.operationId,
-              success: followUp.successCount,
-              failed: followUp.failedCount,
-              total: followUp.total,
-            })
-          : t('autoFollowUp.waitCompleted', {
-              operation: followUp.operationId,
-              total: followUp.total,
-            }),
-      )
-      if (!sent) continue
+      if (shouldSendAssistantWaitFollowUp(followUp)) {
+        const sent = await sendAutoFollowUpMessage(
+          followUp.terminalStatus === 'failed'
+            ? t('autoFollowUp.waitFailed', {
+                operation: followUp.operationId,
+                success: followUp.successCount,
+                failed: followUp.failedCount,
+                total: followUp.total,
+              })
+            : t('autoFollowUp.waitCompleted', {
+                operation: followUp.operationId,
+                total: followUp.total,
+              }),
+        )
+        if (!sent) continue
+      }
       consumedWaitFollowUpKeysRef.current.add(followUp.followUpKey)
       await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
         method: 'POST',
@@ -277,15 +282,19 @@ export default function WorkspaceAssistantPanel({
   }, [flushResolvedWaitFollowUps, subscribeTaskEvents])
   const consumedMessageKeysRef = useRef<Set<string>>(new Set())
   const sendAssistantMessageOnce = useCallback(async (key: string, message: string, hidden = false) => {
-    const normalizedKey = key.trim()
     const normalizedMessage = message.trim()
-    if (!normalizedKey || !normalizedMessage) return
-    if (consumedMessageKeysRef.current.has(normalizedKey)) return
-    consumedMessageKeysRef.current.add(normalizedKey)
-    if (hidden) {
-      await assistantRuntime.sendHiddenMessage(normalizedMessage)
-    } else {
-      await assistantRuntime.sendMessage(normalizedMessage)
+    if (!normalizedMessage) return
+    const reservedKey = reserveWorkspaceAssistantMessageKey(key, consumedMessageKeysRef.current)
+    if (!reservedKey) return
+    try {
+      if (hidden) {
+        await assistantRuntime.sendHiddenMessage(normalizedMessage)
+      } else {
+        await assistantRuntime.sendMessage(normalizedMessage)
+      }
+    } catch (error) {
+      releaseWorkspaceAssistantMessageKey(reservedKey, consumedMessageKeysRef.current)
+      throw error
     }
   }, [assistantRuntime])
   const handleComposerSubmit = useCallback(async () => {

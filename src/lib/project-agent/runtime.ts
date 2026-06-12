@@ -441,9 +441,7 @@ export async function createProjectAgentChatResponse(input: {
     instructions: systemPrompt,
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
-      frequencyPenalty: 0.7,
-      presencePenalty: 0.1,
-      temperature: 0,
+      temperature: 0.2,
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {

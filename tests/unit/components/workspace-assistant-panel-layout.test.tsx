@@ -237,6 +237,14 @@ describe('workspace assistant panel layout', () => {
     })).toBe('generating')
   })
 
+  it('separates style preview loading state from active generation', () => {
+    expect(resolveEditStylePreviewCardStatus({
+      preview: null,
+      taskState: undefined,
+      loading: true,
+    })).toBe('loading')
+  })
+
   it('keeps edit script video prompt stage translated in supported locales', () => {
     const zhProgressSource = readFileSync(join(process.cwd(), 'messages/zh/progress.json'), 'utf8')
     const enProgressSource = readFileSync(join(process.cwd(), 'messages/en/progress.json'), 'utf8')

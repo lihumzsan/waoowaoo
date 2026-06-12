@@ -700,14 +700,16 @@ function isEditStylePreviewTerminal(preview: ProjectEditStylePreview | null): bo
   return preview?.status === 'completed' || preview?.status === 'confirmed' || preview?.status === 'failed'
 }
 
-export type EditStylePreviewCardStatus = 'generating' | 'completed' | 'failed'
+export type EditStylePreviewCardStatus = 'loading' | 'generating' | 'completed' | 'failed'
 
 export function resolveEditStylePreviewCardStatus(params: {
   readonly preview: ProjectEditStylePreview | null
   readonly taskState: TaskTargetState | undefined
+  readonly loading?: boolean
 }): EditStylePreviewCardStatus {
   if (params.preview?.status === 'failed' || params.taskState?.phase === 'failed') return 'failed'
   if (isEditStylePreviewChoiceReady(params.preview)) return 'completed'
+  if (params.loading === true && !params.preview) return 'loading'
   return 'generating'
 }
 
@@ -731,9 +733,10 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     targetId: item.id,
     types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
   })), [data.items])
-  const taskStateMap = useTaskTargetStateMap(data.projectId, taskTargets, {
+  const taskTargetStateQuery = useTaskTargetStateMap(data.projectId, taskTargets, {
     enabled: taskTargets.length > 0,
-  }).byKey
+  })
+  const taskStateMap = taskTargetStateQuery.byKey
   const screenplayQuery = useQuery({
     queryKey: queryKeys.project.editScreenplay(data.projectId, data.episodeId),
     queryFn: async (): Promise<ProjectEditScreenplay | null> => {
@@ -759,8 +762,12 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   const cardStatuses = useMemo(() => data.items.map((item) => {
     const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
     const preview = previewsById.get(item.id) ?? null
-    return resolveEditStylePreviewCardStatus({ preview, taskState })
-  }), [data.items, previewsById, taskStateMap])
+    return resolveEditStylePreviewCardStatus({
+      preview,
+      taskState,
+      loading: screenplayQuery.isLoading || taskTargetStateQuery.isLoading,
+    })
+  }), [data.items, previewsById, screenplayQuery.isLoading, taskStateMap, taskTargetStateQuery.isLoading])
   const hasGeneratingPreview = cardStatuses.some((status) => status === 'generating')
 
   const handleSelectStylePreview = async (
@@ -819,9 +826,14 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           const preview = previewsById.get(item.id) ?? null
           const rawStage = taskState?.stageLabel || taskState?.stage || null
           const stageLabel = resolveProgressStageLabel(rawStage, progressT)
-          const cardStatus = resolveEditStylePreviewCardStatus({ preview, taskState })
+          const cardStatus = resolveEditStylePreviewCardStatus({
+            preview,
+            taskState,
+            loading: screenplayQuery.isLoading || taskTargetStateQuery.isLoading,
+          })
           const ready = cardStatus === 'completed' && isEditStylePreviewChoiceReady(preview)
           const failed = cardStatus === 'failed'
+          const loading = cardStatus === 'loading'
           const selecting = selectingPreviewId === item.id
           const summaryExpanded = expandedSummaryIds.has(item.id)
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
@@ -880,7 +892,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                       ? t('cards.stylePreviewGenerationFailed')
                       : ready
                         ? t('cards.stylePreviewReady')
-                        : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
+                        : loading
+                          ? t('loading')
+                          : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
                   </span>
                 </div>
                 {failed && errorMessage ? (

@@ -256,6 +256,7 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
     },
     onSuccess: async (screenplay) => {
       if (!projectId) return
+      queryClient.setQueryData(queryKeys.project.editScreenplay(projectId, screenplay.episodeId), screenplay)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, screenplay.episodeId) }),
