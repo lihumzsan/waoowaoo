@@ -436,7 +436,6 @@ export async function createProjectAgentChatResponse(input: {
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
       temperature: 0.2,
-      ...(choiceContinuation ? { toolChoice: choiceContinuation.operationId } : {}),
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {

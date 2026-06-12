@@ -313,7 +313,7 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('forces the continuation tool after a choice card response', async () => {
+  it('guides the continuation tool after a choice card response without forcing toolChoice', async () => {
     const response = await createProjectAgentChatResponse({
       request: buildRequest(),
       userId: 'user-1',
@@ -345,11 +345,9 @@ describe('project agent runtime deterministic tool injection', () => {
     })
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedModelSettings).toEqual(expect.objectContaining({
-      toolChoice: 'generate_edit_screenplay',
-    }))
+    expect(streamState.capturedModelSettings).not.toHaveProperty('toolChoice')
     expect(streamState.capturedSystem).toContain('剪辑先行选择卡续跑指令')
-    expect(streamState.capturedSystem).toContain('必须直接调用 generate_edit_screenplay')
+    expect(streamState.capturedSystem).toContain('说明后调用 generate_edit_screenplay')
   })
 
   it('keeps screenplay review card available after screenplay generation', async () => {

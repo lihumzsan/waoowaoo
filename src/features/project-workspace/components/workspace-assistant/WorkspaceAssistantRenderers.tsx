@@ -228,7 +228,8 @@ export function WorkspaceAssistantReasoningPart(props: ReasoningMessagePartProps
 
 export function ConfirmationActionCard(props: {
   operationId: string
-  summary: string
+  title: string
+  subtitle: string
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
   confirmPending: boolean
@@ -237,8 +238,8 @@ export function ConfirmationActionCard(props: {
   const t = useTranslations('assistantAgent')
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{t('cards.confirmationRequired')}</div>
-      <div className="mt-1 leading-5">{props.summary}</div>
+      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
+      <div className="mt-1 leading-5">{props.subtitle}</div>
       <div className="mt-3 flex gap-2">
         <button
           type="button"
@@ -973,7 +974,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
     return (
       <ConfirmationActionCard
         operationId={props.toolName}
-        summary={`${t('toolCall.needsAction')} · ${operationTitle}`}
+        title={operationTitle}
+        subtitle={t('cards.confirmationRequired')}
         onConfirm={async () => props.onRespondToolApproval?.({ approvalId, approved: true })}
         onCancel={async () => props.onRespondToolApproval?.({ approvalId, approved: false })}
         confirmPending={props.confirmationSubmittingKey === `approval:${approvalId}:approve`}
