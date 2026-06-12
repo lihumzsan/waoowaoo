@@ -27,8 +27,11 @@ describe('WorkspaceAssistantComposer', () => {
     expect(html).toContain('lucide-arrow-right')
     expect(html).toContain('absolute bottom-1.5 right-1.5')
     expect(html).toContain('aria-label="panel.permissionModeToggle"')
+    expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('lucide-lock')
-    expect(html).toContain('absolute bottom-1.5 left-1.5')
+    expect(html).toContain('lucide-chevron-down')
+    expect(html).toContain('absolute bottom-2 left-2')
+    expect(html).toContain('h-6')
     expect(html).toContain('h-8 w-8')
     expect(html).not.toContain('>panel.send<')
     expect(html).not.toContain('panel.assistantHint')
@@ -37,15 +40,35 @@ describe('WorkspaceAssistantComposer', () => {
 
   it('uses a short creative phrase instead of an instructional placeholder', () => {
     const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
-      panel: { composerPlaceholder: string }
+      panel: {
+        composerPlaceholder: string
+        permissionModeToggle: string
+        permissionModeMenuTitle: string
+        permissionModeDescriptionAsk: string
+        permissionModeDescriptionAuto: string
+      }
     }
     const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
-      panel: { composerPlaceholder: string }
+      panel: {
+        composerPlaceholder: string
+        permissionModeToggle: string
+        permissionModeMenuTitle: string
+        permissionModeDescriptionAsk: string
+        permissionModeDescriptionAuto: string
+      }
     }
 
     expect(zhMessages.panel.composerPlaceholder).toBe('和 AI 一起创造')
     expect(zhMessages.panel.composerPlaceholder).not.toContain('读取项目状态')
+    expect(zhMessages.panel.permissionModeToggle).toContain('打开切换菜单')
+    expect(zhMessages.panel.permissionModeMenuTitle).toBe('权限模式')
+    expect(zhMessages.panel.permissionModeDescriptionAsk).toContain('只读查询直接执行')
+    expect(zhMessages.panel.permissionModeDescriptionAuto).toContain('业务选择仍必须等用户决定')
     expect(enMessages.panel.composerPlaceholder).toBe('Create with AI')
     expect(enMessages.panel.composerPlaceholder).not.toContain('read project state')
+    expect(enMessages.panel.permissionModeToggle).toContain('Open mode menu')
+    expect(enMessages.panel.permissionModeMenuTitle).toBe('Permission mode')
+    expect(enMessages.panel.permissionModeDescriptionAsk).toContain('read-only queries run directly')
+    expect(enMessages.panel.permissionModeDescriptionAuto).toContain('content choices still wait for the user')
   })
 })
