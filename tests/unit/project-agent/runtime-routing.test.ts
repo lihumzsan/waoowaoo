@@ -9,10 +9,13 @@ import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
   capturedEnabledToolNames: [] as string[],
+  capturedEnabledToolNamesAfterExecution: [] as string[],
   capturedTools: {} as Record<string, { needsApproval?: unknown }>,
   capturedSystem: '',
   capturedModelSettings: {} as Record<string, unknown>,
   capturedRunInput: null as unknown,
+  simulateSecondTurnAfterFirstWorkflowTool: false,
+  executedToolNames: [] as string[],
 }))
 
 const registryState = vi.hoisted(() => ({
@@ -40,6 +43,10 @@ const phaseState = vi.hoisted(() => ({
   } as EditFirstWorkflowState,
 }))
 
+const workflowRefreshState = vi.hoisted(() => ({
+  resolveEditFirstWorkflowState: vi.fn(),
+}))
+
 vi.mock('ai', async () => {
   const actual = await vi.importActual<typeof import('ai')>('ai')
   return {
@@ -63,17 +70,24 @@ vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
 }))
 
 vi.mock('@openai/agents', () => {
+  type MockTool = {
+    name: string
+    needsApproval?: unknown
+    isEnabled?: boolean | (() => boolean | Promise<boolean>)
+    execute?: (input: unknown, runContext: unknown, details: unknown) => unknown | Promise<unknown>
+  }
+
   class Agent {
     name: string
     instructions: string
     modelSettings: Record<string, unknown>
-    tools: Array<{ name: string; needsApproval?: unknown }>
+    tools: MockTool[]
 
     constructor(config: {
       name: string
       instructions: string
       modelSettings?: Record<string, unknown>
-      tools: Array<{ name: string; needsApproval?: unknown }>
+      tools: MockTool[]
     }) {
       this.name = config.name
       this.instructions = config.instructions
@@ -117,17 +131,40 @@ vi.mock('@openai/agents', () => {
     }
   }
 
-  const run = vi.fn(async (agent: Agent, runInput: unknown) => {
-    streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
+  async function collectEnabledToolNames(tools: MockTool[]): Promise<string[]> {
     // Mirrors the Agents SDK getAllTools() behavior: tools with an isEnabled
     // predicate are filtered per model turn before being exposed to the model.
     const enabledToolNames: string[] = []
-    for (const tool of agent.tools) {
-      const isEnabled = (tool as { isEnabled?: unknown }).isEnabled
-      const enabled = typeof isEnabled === 'function' ? await (isEnabled as () => Promise<boolean>)() : true
+    for (const tool of tools) {
+      const isEnabled = tool.isEnabled
+      const enabled = typeof isEnabled === 'function'
+        ? await isEnabled()
+        : isEnabled !== false
       if (enabled) enabledToolNames.push(tool.name)
     }
-    streamState.capturedEnabledToolNames = enabledToolNames
+    return enabledToolNames
+  }
+
+  const run = vi.fn(async (agent: Agent, runInput: unknown) => {
+    streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
+    streamState.capturedEnabledToolNames = await collectEnabledToolNames(agent.tools)
+    if (streamState.simulateSecondTurnAfterFirstWorkflowTool) {
+      const executable = agent.tools.find((tool) => (
+        streamState.capturedEnabledToolNames.includes(tool.name)
+        && typeof tool.execute === 'function'
+        && tool.name.startsWith('generate_edit_')
+      ))
+      if (!executable?.execute) {
+        throw new Error('TEST_EXECUTABLE_WORKFLOW_TOOL_NOT_FOUND')
+      }
+      streamState.executedToolNames.push(executable.name)
+      await executable.execute({}, {}, {
+        toolCall: {
+          callId: `tool-${executable.name}-1`,
+        },
+      })
+      streamState.capturedEnabledToolNamesAfterExecution = await collectEnabledToolNames(agent.tools)
+    }
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
     streamState.capturedSystem = agent.instructions
     streamState.capturedModelSettings = agent.modelSettings
@@ -145,7 +182,7 @@ vi.mock('@openai/agents', () => {
     }
   })
 
-  const tool = vi.fn((definition: { name: string; needsApproval?: unknown }) => ({
+  const tool = vi.fn((definition: MockTool) => ({
     type: 'function',
     ...definition,
   }))
@@ -188,6 +225,14 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
     editFirstWorkflow: phaseState.editFirstWorkflow,
   })),
 }))
+
+vi.mock('@/lib/project-workflow/edit-first', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/project-workflow/edit-first')>('@/lib/project-workflow/edit-first')
+  return {
+    ...actual,
+    resolveEditFirstWorkflowState: workflowRefreshState.resolveEditFirstWorkflowState,
+  }
+})
 
 vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
   executeProjectAgentOperationFromTool: vi.fn(async () => ({ ok: true, data: {} })),
@@ -361,13 +406,19 @@ describe('project agent runtime deterministic tool injection', () => {
     vi.clearAllMocks()
     streamState.capturedToolNames = []
     streamState.capturedEnabledToolNames = []
+    streamState.capturedEnabledToolNamesAfterExecution = []
     streamState.capturedTools = {}
     streamState.capturedSystem = ''
     streamState.capturedModelSettings = {}
+    streamState.capturedRunInput = null
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = false
+    streamState.executedToolNames = []
     loggerState.info.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+    workflowRefreshState.resolveEditFirstWorkflowState.mockReset()
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValue(phaseState.editFirstWorkflow)
   })
 
   it('injects edit-first choice and screenplay tools without an LLM router', async () => {
@@ -581,5 +632,27 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toContain('get_project_phase')
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
     expect(streamState.capturedToolNames).toContain('generate_edit_script')
+  })
+
+  it('fails loudly when live workflow refresh fails after a tool mutates state', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_director_decoupage', [
+      'generate_edit_director_decoupage',
+    ])
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+    workflowRefreshState.resolveEditFirstWorkflowState.mockRejectedValueOnce(new Error('DB_WORKFLOW_REFRESH_FAILED'))
+
+    await expect(runAssistant({ text: '继续生成导演拆镜' })).rejects.toThrow(
+      /PROJECT_AGENT_RUN_FAILED requestId=req-1: DB_WORKFLOW_REFRESH_FAILED/,
+    )
+
+    expect(streamState.executedToolNames).toEqual(['generate_edit_director_decoupage'])
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toEqual([])
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-user_turn',
+      status: 'failed',
+      stopReason: 'run_failed',
+      errorCode: 'PROJECT_AGENT_RUN_FAILED',
+      errorMessage: 'DB_WORKFLOW_REFRESH_FAILED',
+    }))
   })
 })

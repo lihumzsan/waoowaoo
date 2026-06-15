@@ -347,8 +347,9 @@ interface ProjectAgentLiveWorkflowState {
  * Live view of the edit-first workflow state for one run. Tool isEnabled
  * predicates read it before every model turn; every operation execution
  * invalidates it, so a stage advanced by a completed operation is visible to
- * the very next turn's tool surface. Lookups are deduplicated and a fetch
- * failure falls back to the last known state instead of failing the run.
+ * the very next turn's tool surface. Lookups are deduplicated; refresh
+ * failures must fail the run because stale workflow state would expose the
+ * wrong tool surface.
  */
 function createProjectAgentLiveWorkflowState(params: {
   requestId: string
@@ -372,19 +373,6 @@ function createProjectAgentLiveWorkflowState(params: {
           current = workflow
           stale = false
           return workflow
-        })
-        .catch((error: unknown) => {
-          projectAgentLogger.warn({
-            action: 'assistant.workflow.refresh.failed',
-            message: 'Project agent live workflow refresh failed; using last known state',
-            requestId: params.requestId,
-            projectId: params.projectId,
-            userId: params.userId,
-            details: {
-              error: error instanceof Error ? error.message : String(error),
-            },
-          })
-          return current
         })
         .finally(() => {
           pending = null
