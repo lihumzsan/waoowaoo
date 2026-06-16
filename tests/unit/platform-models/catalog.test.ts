@@ -23,6 +23,8 @@ describe('platform model catalog', () => {
     expect(modelKeys).toContain('google::gemini-3-flash-preview')
     expect(modelKeys).toContain('fal::banana-2')
     expect(modelKeys).toContain('ark::doubao-seedance-2-0-260128')
+    expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0')
+    expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0-fast')
 
     expect(getPlatformDefaultModels()).toEqual({
       analysisModel: 'google::gemini-3-flash-preview',

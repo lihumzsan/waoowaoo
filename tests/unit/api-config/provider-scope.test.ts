@@ -21,7 +21,7 @@ function model(type: CustomModel['type']): CustomModel {
 describe('api config provider scope', () => {
   it('allows model types only for the supported providers', () => {
     expect(getAddableModelTypesForProvider('ark')).toEqual(['llm', 'image', 'video'])
-    expect(getAddableModelTypesForProvider('openrouter')).toEqual(['llm'])
+    expect(getAddableModelTypesForProvider('openrouter')).toEqual(['llm', 'video'])
     expect(getAddableModelTypesForProvider('fal')).toEqual(['image', 'video'])
     expect(getAddableModelTypesForProvider('google')).toEqual(['llm', 'image', 'video', 'music'])
     expect(getAddableModelTypesForProvider('unsupported-provider')).toEqual([])

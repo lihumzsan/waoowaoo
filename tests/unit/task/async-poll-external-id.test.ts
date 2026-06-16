@@ -38,4 +38,14 @@ describe('async poll externalId contract', () => {
     expect(parsed.type).toBe('VIDEO')
     expect(parsed.requestId).toBe('task_456')
   })
+
+  it('parses and formats OPENROUTER video externalId', () => {
+    const externalId = formatExternalId('OPENROUTER', 'VIDEO', 'job_789')
+    expect(externalId).toBe('OPENROUTER:VIDEO:job_789')
+
+    const parsed = parseExternalId(externalId)
+    expect(parsed.provider).toBe('OPENROUTER')
+    expect(parsed.type).toBe('VIDEO')
+    expect(parsed.requestId).toBe('job_789')
+  })
 })

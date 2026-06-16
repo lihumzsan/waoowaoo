@@ -5,6 +5,7 @@ import {
   GOOGLE_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
   GOOGLE_PLATFORM_MODEL_PRESETS,
 } from '@/lib/ai-providers/google/models'
+import { OPENROUTER_PLATFORM_MODEL_PRESETS } from '@/lib/ai-providers/openrouter/models'
 import type { DefaultModelsPayload } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
@@ -14,6 +15,7 @@ export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
   ...GOOGLE_PLATFORM_MODEL_PRESETS,
   ...FAL_PLATFORM_MODEL_PRESETS,
   ...ARK_PLATFORM_MODEL_PRESETS,
+  ...OPENROUTER_PLATFORM_MODEL_PRESETS,
 ]
 
 export const PLATFORM_DEFAULT_MODEL_KEYS: Record<PlatformDefaultModelField, string> = {

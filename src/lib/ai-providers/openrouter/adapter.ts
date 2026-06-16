@@ -1,6 +1,21 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
+import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { createOpenAiSdkLanguageModel } from '@/lib/ai-providers/shared/language-model'
+import { resolveOpenRouterOptionSchema } from './models'
 import { runOpenRouterLlmCompletion, runOpenRouterLlmStream, runOpenRouterVisionCompletion } from './llm'
+import { executeOpenRouterVideoGeneration } from './video'
+
+function describeOpenRouterMediaVariant(
+  modality: 'video',
+  selection: Parameters<NonNullable<AiProviderAdapter['video']>['describe']>[0],
+) {
+  return describeMediaVariantBase({
+    modality,
+    selection,
+    executionMode: 'async',
+    optionSchema: resolveOpenRouterOptionSchema(modality, selection.modelId),
+  })
+}
 
 export const openRouterAdapter: AiProviderAdapter = {
   providerKey: 'openrouter',
@@ -18,4 +33,8 @@ export const openRouterAdapter: AiProviderAdapter = {
   },
   completeVision: runOpenRouterVisionCompletion,
   streamLlm: runOpenRouterLlmStream,
+  video: {
+    describe: (selection) => describeOpenRouterMediaVariant('video', selection),
+    execute: executeOpenRouterVideoGeneration,
+  },
 }

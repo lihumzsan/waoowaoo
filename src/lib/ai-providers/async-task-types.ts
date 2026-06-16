@@ -5,6 +5,7 @@ export type AsyncExternalIdProvider =
   | 'ARK'
   | 'GEMINI'
   | 'GOOGLE'
+  | 'OPENROUTER'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'BATCH'
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { API_CONFIG_CATALOG_PROVIDERS } from '@/lib/ai-registry/api-config-catalog'
 import { resolveAiProviderAdapter, resolveAsyncTaskProviderByCode } from '@/lib/ai-providers'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
+import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
+import { OPENROUTER_API_CONFIG_CATALOG_MODELS } from '@/lib/ai-providers/openrouter/models'
 
 describe('provider scope', () => {
   it('registers only the supported provider set', () => {
@@ -17,21 +19,46 @@ describe('provider scope', () => {
     expect(resolveAiProviderAdapter('google').providerKey).toBe('google')
   })
 
-  it('keeps async polling limited to ark, fal, and google', () => {
+  it('keeps async polling limited to registered media async providers', () => {
     expect([
       resolveAsyncTaskProviderByCode('ARK').providerCode,
       resolveAsyncTaskProviderByCode('FAL').providerCode,
       resolveAsyncTaskProviderByCode('GEMINI').providerCode,
       resolveAsyncTaskProviderByCode('GOOGLE').providerCode,
+      resolveAsyncTaskProviderByCode('OPENROUTER').providerCode,
     ].sort()).toEqual([
       'ARK',
       'FAL',
       'GEMINI',
       'GOOGLE',
+      'OPENROUTER',
     ])
   })
 
   it('exposes only image and video generation on FAL', () => {
     expect(Object.keys(falAdapter).sort()).toEqual(['image', 'providerKey', 'video'])
+  })
+
+  it('exposes OpenRouter LLM and video models through the provider catalog', () => {
+    expect(Object.keys(openRouterAdapter).sort()).toEqual([
+      'completeLlm',
+      'completeVision',
+      'languageModel',
+      'providerKey',
+      'streamLlm',
+      'video',
+    ])
+    expect(OPENROUTER_API_CONFIG_CATALOG_MODELS).toContainEqual({
+      modelId: 'bytedance/seedance-2.0',
+      name: 'Seedance 2.0',
+      type: 'video',
+      provider: 'openrouter',
+    })
+    expect(OPENROUTER_API_CONFIG_CATALOG_MODELS).toContainEqual({
+      modelId: 'bytedance/seedance-2.0-fast',
+      name: 'Seedance 2.0 Fast',
+      type: 'video',
+      provider: 'openrouter',
+    })
   })
 })
