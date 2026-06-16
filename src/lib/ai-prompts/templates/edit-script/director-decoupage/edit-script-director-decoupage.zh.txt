@@ -13,7 +13,8 @@
 编剧剧本：
 {{screenplay_text}}
 
-目标总时长秒数：{{duration_seconds}}
+时长档位与节奏约束：
+{{duration_guidance}}
 画幅：{{aspect_ratio}}
 
 Style Bible：
@@ -21,7 +22,7 @@ Style Bible：
 
 输出要求：
 - shots 必须按剧本事件顺序生成，shotNumber 从 1 连续递增。
-- durationSec 总和应接近目标总时长。
+- durationSec 总和应符合所选时长档位，允许按叙事自然取舍，但不得超过 120 秒。
 - 每个 shot 必须有明确 continuityIn 和 continuityOut；第一个 shot 的 continuityIn 写明从开场建立，最后一个 shot 的 continuityOut 写明收束方式。
 - hardBans 必须合并 Style Bible 的导演禁用项、视觉/镜头禁用项和剧本事实禁用项。
 

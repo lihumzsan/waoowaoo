@@ -31,6 +31,8 @@ const styleBibleJson = JSON.stringify({
     hardBans: ['不要字幕', '不要水印', '不要logo'],
   },
 })
+const durationGuidance = '中时长档位，约 60 秒。允许完整起承转合，最终总时长可按叙事自然落在约 45-75 秒，不要机械凑满固定秒数。'
+const englishDurationGuidance = 'Medium duration tier, around 60 seconds. Allow a complete beginning, turn, and ending; the final total duration may naturally land around 45-75 seconds instead of mechanically matching an exact second count.'
 
 describe('edit script block-first prompt flow', () => {
   it('builds a screenplay-first prompt chain with style preview candidates before the single confirmed style source', () => {
@@ -49,15 +51,17 @@ describe('edit script block-first prompt flow', () => {
       locale: 'zh',
       variables: {
         user_request: '生成一条连续短片',
-        duration_seconds: '8',
+        duration_guidance: durationGuidance,
+        aspect_ratio: '16:9',
       },
     })
 
     expect(screenplayPrompt).toContain('AI 可控短片剧本')
     expect(screenplayPrompt).toContain('剧本必须适配不超过 120 秒的短片')
     expect(screenplayPrompt).toContain('禁止真人类型')
-    expect(screenplayPrompt).not.toContain('画幅')
+    expect(screenplayPrompt).toContain('最终画面比例：16:9')
     expect(screenplayPrompt).not.toContain('aspect_ratio')
+    expect(screenplayPrompt).toContain('不要机械凑满固定秒数')
     expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
     expect(screenplayPrompt).toContain('这里只写剧情事实，不生成剧本、场景、人物的任何风格提示词')
     expect(screenplayPrompt).toContain('禁止输出或固化视觉风格、画风、美术媒介、材质质感、色彩风格、光影风格、镜头风格、声音风格、Style Bible、image prompt、video prompt')
@@ -77,7 +81,7 @@ describe('edit script block-first prompt flow', () => {
         original_user_request: '生成一条黏土动画风格短片',
         current_screenplay_text: screenplayText,
         revision_instruction: '改成更黑暗的黏土动画风格',
-        duration_seconds: '8',
+        duration_guidance: durationGuidance,
         aspect_ratio: '9:16',
       },
     })
@@ -94,7 +98,7 @@ describe('edit script block-first prompt flow', () => {
       variables: {
         user_request: '生成一条禅修短片',
         screenplay_text: screenplayText,
-        duration_seconds: '8',
+        duration_guidance: durationGuidance,
         style_direction: '更黑暗一些',
         style_preview_count: '2',
       },
@@ -141,7 +145,7 @@ describe('edit script block-first prompt flow', () => {
         user_request: '生成一条连续短片',
         screenplay_text: screenplayText,
         director_decoupage_json: JSON.stringify({ shots: [] }),
-        duration_seconds: '8',
+        duration_guidance: durationGuidance,
         aspect_ratio: '9:16',
         style_bible_json: styleBibleJson,
       },
@@ -152,7 +156,7 @@ describe('edit script block-first prompt flow', () => {
     expect(primaryPrompt).toContain('Director Decoupage 是 shot 创作事实')
     expect(primaryPrompt).toContain('剪辑先行表总时长不得超过 120 秒')
     expect(primaryPrompt).toContain('不得引入真人类型、实拍真人、真人演员、写实真人')
-    expect(primaryPrompt).toContain('顶层 durationSec 必须小于或等于 120')
+    expect(primaryPrompt).toContain('顶层 durationSec 必须符合所选时长档位的范围')
     expect(primaryPrompt).toContain('videoBlocks 是技术生成主结构')
     expect(primaryPrompt).toContain('本阶段只做结构整理、时长合法化和 videoBlock 分组')
     expect(primaryPrompt).toContain('禁止输出 camera、shotScale、lens、cameraPosition、depthOfField、imagePrompt、videoPrompt')
@@ -239,7 +243,7 @@ describe('edit script block-first prompt flow', () => {
         user_request: 'Create a continuous short film',
         screenplay_text: screenplayText,
         director_decoupage_json: JSON.stringify({ shots: [] }),
-        duration_seconds: '8',
+        duration_guidance: englishDurationGuidance,
         aspect_ratio: '9:16',
         style_bible_json: styleBibleJson,
       },

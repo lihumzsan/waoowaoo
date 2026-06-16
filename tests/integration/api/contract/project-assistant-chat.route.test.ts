@@ -498,7 +498,7 @@ describe('project assistant chat route', () => {
           toolCallId: 'tool-choice-1',
           output: {
             ok: true,
-            durationSeconds: 60,
+            durationTier: 'medium',
             aspectRatio: '16:9',
           },
         },

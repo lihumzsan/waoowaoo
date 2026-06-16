@@ -1,7 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { WorkspaceRuntimeValue, WorkspaceVideoBlockArrangementBlock } from '../WorkspaceRuntimeContext'
+import type {
+  WorkspaceEditScreenplayGenerationInput,
+  WorkspaceRuntimeValue,
+  WorkspaceVideoBlockArrangementBlock,
+} from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type {
@@ -31,7 +35,7 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateEpisode: (key: string, value: unknown) => Promise<void>
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
-  handleGenerateEditScreenplay: (prompt: string) => Promise<void>
+  handleGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
   handleGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
   handleRegenerateStoryboardText: (storyboardId: string) => Promise<void>

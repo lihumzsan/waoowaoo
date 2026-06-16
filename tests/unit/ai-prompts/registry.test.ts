@@ -35,7 +35,7 @@ describe('ai prompt registry', () => {
         original_user_request: '做一个60秒恐怖短片',
         current_screenplay_text: '标题：《旧钟》',
         revision_instruction: '改得更克苏鲁一些',
-        duration_seconds: '60',
+        duration_guidance: '中时长档位，约 60 秒。允许完整起承转合。',
         aspect_ratio: '16:9',
       },
     })

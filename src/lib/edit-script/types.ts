@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
+import { EDIT_FIRST_DURATION_TIERS } from './duration-tier'
 
 export const EDIT_ASSET_KINDS = ['character', 'location'] as const
 export type EditAssetKind = (typeof EDIT_ASSET_KINDS)[number]
@@ -416,6 +417,8 @@ export const getEditCinematographyShotPlanRequestSchema = z.object({
 export const createEditScreenplayRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   prompt: z.string().trim().min(1),
+  durationTier: z.enum(EDIT_FIRST_DURATION_TIERS),
+  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
 })
 
 export const getEditScreenplayRequestSchema = z.object({

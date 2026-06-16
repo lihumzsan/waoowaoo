@@ -112,6 +112,19 @@ vi.mock('@/lib/storage', () => ({
   getSignedUrl: vi.fn((key: string) => `https://cdn.example.com/${key}`),
 }))
 
+const structuredUserPrompt = [
+  '做一个科幻短片',
+  '',
+  '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+].join('\n')
+
+const structuredRevisedUserPrompt = [
+  '做一个60秒 16:9 科幻短片',
+  '',
+  '剧本修改要求：改得更克苏鲁一些',
+  '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+].join('\n')
+
 import {
   confirmProjectEditStylePreview,
   generateProjectEditScreenplay,
@@ -279,7 +292,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
@@ -288,7 +301,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
@@ -298,7 +311,7 @@ describe('edit script generation status persistence', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       editScreenplayId: 'screenplay-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       decoupageJson: {
         strategy: 'director_decoupage',
         schemaVersion: 1,
@@ -370,7 +383,7 @@ describe('edit script generation status persistence', () => {
       id: 'edit-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       title: 'Sci-Fi Short',
@@ -415,7 +428,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'screenplay_ready',
@@ -429,6 +442,8 @@ describe('edit script generation status persistence', () => {
       userId: 'user-1',
       locale: 'zh',
       prompt: '做一个科幻短片',
+      durationTier: 'medium',
+      aspectRatio: '16:9',
     })
 
     expect(screenplay.id).toBe('screenplay-1')
@@ -446,10 +461,12 @@ describe('edit script generation status persistence', () => {
     }))
     expect(prismaMock.projectEditScreenplay.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
+        userPrompt: structuredUserPrompt,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'screenplay_ready',
       }),
       update: expect.objectContaining({
+        userPrompt: structuredUserPrompt,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'screenplay_ready',
       }),
@@ -472,7 +489,11 @@ describe('edit script generation status persistence', () => {
         id: 'screenplay-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
-        userPrompt: '做一个60秒 16:9 科幻短片',
+        userPrompt: [
+          '做一个60秒 16:9 科幻短片',
+          '',
+          '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+        ].join('\n'),
         styleBibleJson: null,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'screenplay_ready',
@@ -481,12 +502,7 @@ describe('edit script generation status persistence', () => {
         id: 'screenplay-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
-        userPrompt: [
-          '做一个60秒 16:9 科幻短片',
-          '',
-          '剧本修改要求：改得更克苏鲁一些',
-          '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
-        ].join('\n'),
+        userPrompt: structuredRevisedUserPrompt,
         styleBibleJson: null,
         screenplayText: '标题：《深空低语》\n\n故事梗概：空间站收到不可名状的深海星图。',
         status: 'screenplay_ready',
@@ -500,7 +516,7 @@ describe('edit script generation status persistence', () => {
       userId: 'user-1',
       locale: 'zh',
       revisionInstruction: '改得更克苏鲁一些',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
     })
 
@@ -518,6 +534,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'screenplay-1' },
       data: expect.objectContaining({
+        userPrompt: structuredRevisedUserPrompt,
         screenplayText: '标题：《深空低语》\n\n故事梗概：空间站收到不可名状的深海星图。',
         status: 'screenplay_ready',
       }),
@@ -539,7 +556,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个60秒 16:9 科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'screenplay_ready',
@@ -610,7 +627,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个60秒 16:9 科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'style_preview_ready',
@@ -701,7 +718,7 @@ describe('edit script generation status persistence', () => {
         id: 'screenplay-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
-        userPrompt: '做一个科幻短片',
+        userPrompt: structuredUserPrompt,
         styleBibleJson: null,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'style_preview_ready',
@@ -727,7 +744,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
@@ -827,7 +844,7 @@ describe('edit script generation status persistence', () => {
         id: 'screenplay-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
-        userPrompt: '做一个科幻短片',
+        userPrompt: structuredUserPrompt,
         styleBibleJson: null,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
         status: 'style_preview_ready',
@@ -838,7 +855,7 @@ describe('edit script generation status persistence', () => {
       id: 'screenplay-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStylePreviewOptions.stylePreviews[1].styleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'ready',
@@ -945,7 +962,7 @@ describe('edit script generation status persistence', () => {
       id: 'edit-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       title: 'Sci-Fi Short',
@@ -1010,7 +1027,7 @@ describe('edit script generation status persistence', () => {
       id: 'edit-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      userPrompt: '做一个科幻短片',
+      userPrompt: structuredUserPrompt,
       styleBibleJson: mockStyleBible,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       title: 'Sci-Fi Short',
@@ -1113,7 +1130,7 @@ describe('edit script generation status persistence', () => {
       where: { episodeId: 'episode-1' },
       create: expect.objectContaining({
         status: 'generating',
-        userPrompt: '做一个科幻短片',
+        userPrompt: structuredUserPrompt,
         styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
         shotCount: 0,
@@ -1122,7 +1139,7 @@ describe('edit script generation status persistence', () => {
       }),
       update: expect.objectContaining({
         status: 'generating',
-        userPrompt: '做一个科幻短片',
+        userPrompt: structuredUserPrompt,
         styleBibleJson: mockStyleBible,
         screenplayText: expect.stringContaining('标题：《科幻短片》'),
         shotCount: 0,

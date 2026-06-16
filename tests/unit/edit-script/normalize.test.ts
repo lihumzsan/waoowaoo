@@ -4,8 +4,11 @@ import {
   normalizeEditAssetRequirements,
   normalizeEditScriptCore,
   normalizeEditScriptStructure,
-  resolveEditScriptDefaults,
 } from '@/lib/edit-script/normalize'
+import {
+  readEditFirstDurationTierFromText,
+  requireEditFirstDurationSpecFromPrompt,
+} from '@/lib/edit-script/duration-tier'
 
 describe('edit script normalization', () => {
   it('keeps the minimum edit table fields and enforces continuous shot numbers', () => {
@@ -412,21 +415,19 @@ describe('edit script normalization', () => {
     })).toThrow('EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_MISSING:1')
   })
 
-  it('defaults short-film requests to 60 seconds without prescribing shot count', () => {
-    expect(resolveEditScriptDefaults('给我一个库布里克风格科幻短片')).toEqual({
-      durationSeconds: 60,
-    })
-    expect(resolveEditScriptDefaults('给我一个一分钟科幻短片')).toEqual({
-      durationSeconds: 60,
-    })
+  it('maps explicit edit-first duration text to duration tiers without prescribing exact seconds', () => {
+    expect(readEditFirstDurationTierFromText('给我一个一分钟科幻短片')).toBe('medium')
+    expect(readEditFirstDurationTierFromText('make it 30 seconds')).toBe('short')
+    expect(readEditFirstDurationTierFromText('make it 90 seconds')).toBe('long')
+    expect(readEditFirstDurationTierFromText('make it 2 minutes')).toBe('long')
+    expect(readEditFirstDurationTierFromText('make it 300 seconds')).toBeNull()
   })
 
-  it('caps edit-first test launch duration requests to 120 seconds', () => {
-    expect(resolveEditScriptDefaults('给我一个3分钟科幻短片')).toEqual({
-      durationSeconds: 120,
-    })
-    expect(resolveEditScriptDefaults('make a 300 seconds sci-fi short')).toEqual({
-      durationSeconds: 120,
+  it('requires a persisted duration tier before downstream edit-first generation', () => {
+    expect(() => requireEditFirstDurationSpecFromPrompt('给我一个库布里克风格科幻短片')).toThrow('EDIT_FIRST_DURATION_TIER_REQUIRED')
+    expect(requireEditFirstDurationSpecFromPrompt('剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。')).toMatchObject({
+      tier: 'medium',
+      targetSeconds: 60,
     })
   })
 })

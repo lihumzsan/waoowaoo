@@ -3,6 +3,8 @@ import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-la
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
+import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 
 export type WorkspaceCanvasNodeKind =
   | 'analysis'
@@ -26,7 +28,12 @@ export type WorkspaceCanvasNodeKind =
 export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
-  | { readonly type: 'generate_edit_screenplay'; readonly prompt: string }
+  | {
+      readonly type: 'generate_edit_screenplay'
+      readonly prompt: string
+      readonly durationTier: EditFirstDurationTier
+      readonly aspectRatio: EditScriptVideoRatio
+    }
   | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }

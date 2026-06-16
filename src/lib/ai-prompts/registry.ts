@@ -161,23 +161,23 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE]: {
     pathStem: 'edit-script/style-bible',
-    variableKeys: ['user_request', 'duration_seconds', 'aspect_ratio', 'project_style_json'],
+    variableKeys: ['user_request', 'duration_guidance', 'aspect_ratio', 'project_style_json'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS]: {
     pathStem: 'edit-script/style-preview-options',
-    variableKeys: ['user_request', 'screenplay_text', 'duration_seconds', 'style_direction', 'style_preview_count'],
+    variableKeys: ['user_request', 'screenplay_text', 'duration_guidance', 'style_direction', 'style_preview_count'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY]: {
     pathStem: 'edit-script/screenplay',
-    variableKeys: ['user_request', 'duration_seconds'],
+    variableKeys: ['user_request', 'duration_guidance', 'aspect_ratio'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION]: {
     pathStem: 'edit-script/screenplay-revision',
-    variableKeys: ['original_user_request', 'current_screenplay_text', 'revision_instruction', 'duration_seconds', 'aspect_ratio'],
+    variableKeys: ['original_user_request', 'current_screenplay_text', 'revision_instruction', 'duration_guidance', 'aspect_ratio'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE]: {
     pathStem: 'edit-script/director-decoupage',
-    variableKeys: ['user_request', 'screenplay_text', 'style_bible_json', 'duration_seconds', 'aspect_ratio'],
+    variableKeys: ['user_request', 'screenplay_text', 'style_bible_json', 'duration_guidance', 'aspect_ratio'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY]: {
     pathStem: 'edit-script/primary',
@@ -185,7 +185,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'user_request',
       'screenplay_text',
       'director_decoupage_json',
-      'duration_seconds',
+      'duration_guidance',
       'aspect_ratio',
       'style_bible_json',
     ],

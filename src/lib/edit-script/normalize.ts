@@ -229,31 +229,3 @@ export function normalizeEditAssetRequirements(
 
   return assets
 }
-
-export const MAX_EDIT_FIRST_TEST_DURATION_SECONDS = 120
-
-function clampEditFirstDurationSeconds(durationSeconds: number): number {
-  return Math.min(MAX_EDIT_FIRST_TEST_DURATION_SECONDS, Math.max(10, durationSeconds))
-}
-
-export function resolveEditScriptDefaults(userPrompt: string): { durationSeconds: number } {
-  const text = userPrompt.trim()
-  const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:分钟|minute|minutes|min)/i)
-  if (minuteMatch) {
-    const minutes = Number(minuteMatch[1])
-    if (Number.isFinite(minutes) && minutes > 0) {
-      const durationSeconds = clampEditFirstDurationSeconds(Math.round(minutes * 60))
-      return { durationSeconds }
-    }
-  }
-
-  const secondMatch = text.match(/(\d+)\s*(?:秒|second|seconds|sec|s)/i)
-  if (secondMatch) {
-    const durationSeconds = Number(secondMatch[1])
-    if (Number.isInteger(durationSeconds) && durationSeconds > 0) {
-      return { durationSeconds: clampEditFirstDurationSeconds(durationSeconds) }
-    }
-  }
-
-  return { durationSeconds: 60 }
-}

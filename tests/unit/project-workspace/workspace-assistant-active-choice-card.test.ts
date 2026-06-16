@@ -10,10 +10,10 @@ const choiceCard: ProjectAgentChoiceCardPartData = {
   title: '选择短片时长和画面比例',
   groups: [
     {
-      key: 'durationSeconds',
+      key: 'durationTier',
       label: '时长',
       required: true,
-      options: [{ value: '60', label: '60 秒' }],
+      options: [{ value: 'medium', label: '中 · 约 60 秒' }],
     },
   ],
   submitLabel: '继续生成',
@@ -70,7 +70,7 @@ function hiddenChoiceResponseMessage(id: string): UIMessage {
           output: {
             ok: true,
             choiceType: 'duration_and_aspect_ratio',
-            durationSeconds: 60,
+            durationTier: 'medium',
             aspectRatio: '16:9',
           },
         },

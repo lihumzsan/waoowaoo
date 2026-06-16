@@ -30,7 +30,8 @@ User original request:
 Generated screenplay:
 {screenplay_text}
 
-Target total duration: {duration_seconds} seconds
+Duration tier and pacing constraint:
+{duration_guidance}
 
 Return JSON only. Do not return markdown or explanations. Schema (stylePreviews has at most 3 items, but the actual output must contain exactly {style_preview_count} items):
 {

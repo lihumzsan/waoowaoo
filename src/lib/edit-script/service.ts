@@ -21,7 +21,6 @@ import {
   normalizeDirectorDecoupage,
   normalizeEditAssetRequirements,
   normalizeEditScriptStructure,
-  resolveEditScriptDefaults,
 } from './normalize'
 import type {
   EditCinematographyShotPlanPayload,
@@ -50,6 +49,14 @@ import {
 } from './types'
 import { designEditAssetRequirements } from './asset-design'
 import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
+import {
+  buildEditFirstDurationGuidance,
+  buildEditFirstStructuredUserPrompt,
+  requireEditFirstDurationSpecFromPrompt,
+  resolveEditFirstDurationSpec,
+  stripEditFirstStructuredParameters,
+  type EditFirstDurationTier,
+} from './duration-tier'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -69,6 +76,8 @@ interface GenerateEditScreenplayInput {
   readonly userId: string
   readonly locale: Locale
   readonly prompt: string
+  readonly durationTier: EditFirstDurationTier
+  readonly aspectRatio: EditScriptVideoRatio
 }
 
 interface ReviseEditScreenplayInput {
@@ -79,8 +88,8 @@ interface ReviseEditScreenplayInput {
   readonly locale: Locale
   readonly screenplayId?: string
   readonly revisionInstruction: string
-  readonly durationSeconds: number
-  readonly aspectRatio: '9:16' | '16:9' | '21:9'
+  readonly durationTier: EditFirstDurationTier
+  readonly aspectRatio: EditScriptVideoRatio
 }
 
 interface GenerateEditStylePreviewsInput {
@@ -382,24 +391,25 @@ function buildRevisedEditScreenplayUserPrompt(input: {
   readonly locale: Locale
   readonly originalPrompt: string
   readonly revisionInstruction: string
-  readonly durationSeconds: number
+  readonly durationTier: EditFirstDurationTier
   readonly aspectRatio: EditScriptVideoRatio
 }): string {
-  const normalizedOriginal = input.originalPrompt.trim()
+  const normalizedOriginal = stripEditFirstStructuredParameters(input.originalPrompt)
   const normalizedInstruction = input.revisionInstruction.trim()
+  const spec = resolveEditFirstDurationSpec(input.durationTier)
   if (input.locale === 'en') {
     return [
       normalizedOriginal,
       '',
       `Revision instruction: ${normalizedInstruction}`,
-      `Structured edit-first parameters: target duration ${String(input.durationSeconds)} seconds; final aspect ratio ${input.aspectRatio}.`,
+      `Structured edit-first parameters: duration tier ${spec.tier} (${spec.enLabel}, around ${String(spec.targetSeconds)} seconds); final aspect ratio ${input.aspectRatio}.`,
     ].join('\n')
   }
   return [
     normalizedOriginal,
     '',
     `剧本修改要求：${normalizedInstruction}`,
-    `剪辑先行结构化参数：目标总时长 ${String(input.durationSeconds)} 秒；最终画面比例 ${input.aspectRatio}。`,
+    `剪辑先行结构化参数：时长档位 ${spec.tier}（${spec.zhLabel}，约 ${String(spec.targetSeconds)} 秒）；最终画面比例 ${input.aspectRatio}。`,
   ].join('\n')
 }
 
@@ -513,7 +523,7 @@ async function generateEditStylePreviewOptions(input: {
   readonly locale: Locale
   readonly userPrompt: string
   readonly screenplayText: string
-  readonly durationSeconds: number
+  readonly durationGuidance: string
   readonly styleDirection: string
   readonly count: number
 }): Promise<readonly EditStylePreviewOption[]> {
@@ -526,7 +536,7 @@ async function generateEditStylePreviewOptions(input: {
     variables: {
       user_request: input.userPrompt,
       screenplay_text: input.screenplayText,
-      duration_seconds: String(input.durationSeconds),
+      duration_guidance: input.durationGuidance,
       style_direction: input.styleDirection,
       style_preview_count: String(input.count),
     },
@@ -882,7 +892,7 @@ async function markEditScriptGenerating(input: {
   readonly userPrompt: string
   readonly styleBible: EditScriptStyleBible
   readonly screenplayText: string
-  readonly durationSeconds: number
+  readonly initialDurationSeconds: number
 }): Promise<void> {
   await prisma.projectEditScript.upsert({
     where: { episodeId: input.episodeId },
@@ -894,7 +904,7 @@ async function markEditScriptGenerating(input: {
       screenplayText: input.screenplayText,
       title: 'Generating edit table',
       logline: null,
-      durationSec: input.durationSeconds,
+      durationSec: input.initialDurationSeconds,
       shotCount: 0,
       status: 'generating',
       shotsJson: [] as unknown as Prisma.InputJsonValue,
@@ -906,7 +916,7 @@ async function markEditScriptGenerating(input: {
       screenplayText: input.screenplayText,
       title: 'Generating edit table',
       logline: null,
-      durationSec: input.durationSeconds,
+      durationSec: input.initialDurationSeconds,
       shotCount: 0,
       status: 'generating',
       shotsJson: [] as unknown as Prisma.InputJsonValue,
@@ -971,7 +981,7 @@ async function markEditScriptFailed(input: {
   readonly episodeId: string
   readonly userPrompt: string
   readonly styleBible?: EditScriptStyleBible
-  readonly durationSeconds: number
+  readonly initialDurationSeconds: number
   readonly message: string
 }): Promise<void> {
   await prisma.projectEditScript.upsert({
@@ -984,7 +994,7 @@ async function markEditScriptFailed(input: {
       screenplayText: null,
       title: 'Edit table generation failed',
       logline: input.message,
-      durationSec: input.durationSeconds,
+      durationSec: input.initialDurationSeconds,
       shotCount: 0,
       status: 'failed',
       shotsJson: [] as unknown as Prisma.InputJsonValue,
@@ -1274,7 +1284,13 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
   if (!episode || !project) throw new ApiError('NOT_FOUND')
 
   const model = resolveTextModel(config)
-  const defaults = resolveEditScriptDefaults(input.prompt)
+  const spec = resolveEditFirstDurationSpec(input.durationTier)
+  const structuredUserPrompt = buildEditFirstStructuredUserPrompt({
+    prompt: input.prompt,
+    durationTier: input.durationTier,
+    aspectRatio: input.aspectRatio,
+    locale,
+  })
   const screenplayText = await runPromptTextStep({
     userId: input.userId,
     projectId: input.projectId,
@@ -1282,8 +1298,9 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
     locale,
     promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
     variables: {
-      user_request: input.prompt,
-      duration_seconds: String(defaults.durationSeconds),
+      user_request: structuredUserPrompt,
+      duration_guidance: buildEditFirstDurationGuidance(spec, locale),
+      aspect_ratio: input.aspectRatio,
     },
     stepTitle: 'Edit screenplay',
     stepIndex: 1,
@@ -1294,13 +1311,13 @@ export async function generateProjectEditScreenplay(input: GenerateEditScreenpla
     create: {
       projectId: input.projectId,
       episodeId: input.episodeId,
-      userPrompt: input.prompt,
+      userPrompt: structuredUserPrompt,
       styleBibleJson: Prisma.JsonNull,
       screenplayText,
       status: EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY,
     },
     update: {
-      userPrompt: input.prompt,
+      userPrompt: structuredUserPrompt,
       styleBibleJson: Prisma.JsonNull,
       screenplayText,
       status: EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY,
@@ -1355,6 +1372,7 @@ export async function reviseProjectEditScreenplay(input: ReviseEditScreenplayInp
   }
 
   const model = resolveTextModel(config)
+  const spec = resolveEditFirstDurationSpec(input.durationTier)
   const revisedScreenplayText = await runPromptTextStep({
     userId: input.userId,
     projectId: input.projectId,
@@ -1365,7 +1383,7 @@ export async function reviseProjectEditScreenplay(input: ReviseEditScreenplayInp
       original_user_request: screenplay.userPrompt,
       current_screenplay_text: screenplay.screenplayText,
       revision_instruction: input.revisionInstruction,
-      duration_seconds: String(input.durationSeconds),
+      duration_guidance: buildEditFirstDurationGuidance(spec, locale),
       aspect_ratio: input.aspectRatio,
     },
     stepTitle: 'Revise edit screenplay',
@@ -1380,7 +1398,7 @@ export async function reviseProjectEditScreenplay(input: ReviseEditScreenplayInp
         locale,
         originalPrompt: screenplay.userPrompt,
         revisionInstruction: input.revisionInstruction,
-        durationSeconds: input.durationSeconds,
+        durationTier: input.durationTier,
         aspectRatio: input.aspectRatio,
       }),
       styleBibleJson: Prisma.JsonNull,
@@ -1448,7 +1466,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
 
   const model = resolveTextModel(config)
   const imageModel = resolveStylePreviewImageModel(config)
-  const defaults = resolveEditScriptDefaults(screenplay.userPrompt)
+  const durationSpec = requireEditFirstDurationSpecFromPrompt(screenplay.userPrompt)
   try {
     const styleOptions = await generateEditStylePreviewOptions({
       userId: input.userId,
@@ -1457,7 +1475,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
       locale,
       userPrompt: screenplay.userPrompt,
       screenplayText: screenplay.screenplayText,
-      durationSeconds: defaults.durationSeconds,
+      durationGuidance: buildEditFirstDurationGuidance(durationSpec, locale),
       styleDirection: input.styleDirection?.trim() ?? '',
       count,
     })
@@ -1578,7 +1596,7 @@ export async function generateProjectEditDirectorDecoupage(input: GenerateEditDi
   })
   const styleBible = parseRequiredStyleBibleJson(screenplay.styleBibleJson)
   const model = resolveTextModel(config)
-  const defaults = resolveEditScriptDefaults(screenplay.userPrompt)
+  const durationSpec = requireEditFirstDurationSpecFromPrompt(screenplay.userPrompt)
   const raw = await runPromptStep({
     userId: input.userId,
     projectId: input.projectId,
@@ -1589,7 +1607,7 @@ export async function generateProjectEditDirectorDecoupage(input: GenerateEditDi
       user_request: screenplay.userPrompt,
       screenplay_text: screenplay.screenplayText,
       style_bible_json: stringifyForPrompt(styleBible),
-      duration_seconds: String(defaults.durationSeconds),
+      duration_guidance: buildEditFirstDurationGuidance(durationSpec, locale),
       aspect_ratio: project.videoRatio,
     },
     stepTitle: 'Edit director decoupage',
@@ -1654,7 +1672,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
   })
   const userPrompt = screenplay.userPrompt
   const styleBible = parseRequiredStyleBibleJson(screenplay.styleBibleJson)
-  const defaults = resolveEditScriptDefaults(userPrompt)
+  const durationSpec = requireEditFirstDurationSpecFromPrompt(userPrompt)
   const screenplayText = screenplay.screenplayText
   const directorDecoupage = await resolveReadyEditDirectorDecoupage({
     projectId: input.projectId,
@@ -1667,7 +1685,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
     userPrompt,
     styleBible,
     screenplayText,
-    durationSeconds: defaults.durationSeconds,
+    initialDurationSeconds: durationSpec.targetSeconds,
   })
   await notifyGenerationStep(input.onGenerationStepPersisted, {
     stage: 'edit_script_prepare',
@@ -1686,7 +1704,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
         user_request: userPrompt,
         screenplay_text: screenplayText,
         director_decoupage_json: stringifyForPrompt(directorDecoupageJson),
-        duration_seconds: String(defaults.durationSeconds),
+        duration_guidance: buildEditFirstDurationGuidance(durationSpec, locale),
         aspect_ratio: effectiveVideoRatio,
         style_bible_json: stringifyForPrompt(styleBible),
       },
@@ -1839,7 +1857,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
       episodeId: input.episodeId,
       userPrompt,
       styleBible,
-      durationSeconds: defaults.durationSeconds,
+      initialDurationSeconds: durationSpec.targetSeconds,
       message,
     })
     throw caught

@@ -3,6 +3,8 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
+import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type {
   WorkspaceBatchVideoGenerationParams,
@@ -22,6 +24,12 @@ export interface WorkspaceVideoBlockArrangementBlock {
   readonly shotNumbers: readonly number[]
 }
 
+export interface WorkspaceEditScreenplayGenerationInput {
+  readonly prompt: string
+  readonly durationTier: EditFirstDurationTier
+  readonly aspectRatio: EditScriptVideoRatio
+}
+
 export interface WorkspaceRuntimeValue {
   assetsLoading: boolean
   isTransitioning: boolean
@@ -36,7 +44,7 @@ export interface WorkspaceRuntimeValue {
   onNovelTextChange: (value: string) => Promise<void>
   onVideoRatioChange: (value: string) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
-  onGenerateEditScreenplay: (prompt: string) => Promise<void>
+  onGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
   onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
   onRegenerateStoryboardText: (storyboardId: string) => Promise<void>

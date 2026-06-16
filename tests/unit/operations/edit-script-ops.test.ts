@@ -136,10 +136,10 @@ const choiceCardMock = vi.hoisted(() => ({
     title: '选择短片时长和画面比例',
     groups: [
       {
-        key: 'durationSeconds',
+        key: 'durationTier',
         label: '时长',
         required: true,
-        options: [{ value: '60', label: '60 秒' }],
+        options: [{ value: 'medium', label: '中 · 约 60 秒' }],
       },
       {
         key: 'aspectRatio',
@@ -239,7 +239,7 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_screenplay.execute(buildContext(), {
       prompt: 'make a short film',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
       confirmed: true,
     })
@@ -251,11 +251,9 @@ describe('edit-script operations', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      prompt: [
-        'make a short film',
-        '',
-        '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
-      ].join('\n'),
+      prompt: 'make a short film',
+      durationTier: 'medium',
+      aspectRatio: '16:9',
     }))
   })
 
@@ -263,7 +261,7 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
       prompt: 'make a cyberpunk short film',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
       confirmed: true,
       artStyle: 'cyberpunk',
@@ -272,22 +270,20 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: [
-        'make a cyberpunk short film',
-        '',
-        '剪辑先行结构化参数：目标总时长 60 秒；最终画面比例 16:9。',
-      ].join('\n'),
+      prompt: 'make a cyberpunk short film',
+      durationTier: 'medium',
+      aspectRatio: '16:9',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
     }))
   })
 
-  it('keeps screenplay duration and aspect ratio as structured tool fields', async () => {
+  it('keeps screenplay duration tier and aspect ratio as structured tool fields', async () => {
     const operations = createEditScriptOperations()
     await operations.generate_edit_screenplay.execute(buildContext(), {
       prompt: 'make a vertical short film',
-      durationSeconds: 90,
+      durationTier: 'long',
       aspectRatio: '9:16',
       confirmed: true,
       videoRatio: '9:16',
@@ -296,18 +292,16 @@ describe('edit-script operations', () => {
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      prompt: [
-        'make a vertical short film',
-        '',
-        '剪辑先行结构化参数：目标总时长 90 秒；最终画面比例 9:16。',
-      ].join('\n'),
+      prompt: 'make a vertical short film',
+      durationTier: 'long',
+      aspectRatio: '9:16',
     }))
     expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
       videoRatio: expect.anything(),
     }))
   })
 
-  it('requires screenplay duration and aspect ratio in the structured tool schema', () => {
+  it('requires screenplay duration tier and aspect ratio in the structured tool schema', () => {
     const operations = createEditScriptOperations()
 
     expect(operations.generate_edit_screenplay.inputSchema.safeParse({
@@ -316,19 +310,19 @@ describe('edit-script operations', () => {
     }).success).toBe(false)
     expect(operations.generate_edit_screenplay.inputSchema.safeParse({
       prompt: 'make a short film',
-      durationSeconds: 121,
+      durationTier: 'extra_long',
       aspectRatio: '16:9',
       confirmed: true,
     }).success).toBe(false)
     expect(operations.generate_edit_screenplay.inputSchema.safeParse({
       prompt: 'make a short film',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '4:3',
       confirmed: true,
     }).success).toBe(false)
     expect(operations.generate_edit_screenplay.inputSchema.safeParse({
       prompt: 'make a short film',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
       confirmed: true,
     }).success).toBe(true)
@@ -338,7 +332,7 @@ describe('edit-script operations', () => {
     const operations = createEditScriptOperations()
     const result = await operations.revise_edit_screenplay.execute(buildContext(), {
       revisionInstruction: '改得更克苏鲁一些',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
       screenplayId: 'screenplay-1',
       confirmed: true,
@@ -354,12 +348,12 @@ describe('edit-script operations', () => {
       locale: 'zh',
       screenplayId: 'screenplay-1',
       revisionInstruction: '改得更克苏鲁一些',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
     }))
   })
 
-  it('requires screenplay revision instruction, duration, and aspect ratio in the structured schema', () => {
+  it('requires screenplay revision instruction, duration tier, and aspect ratio in the structured schema', () => {
     const operations = createEditScriptOperations()
 
     expect(operations.revise_edit_screenplay.inputSchema.safeParse({
@@ -368,7 +362,7 @@ describe('edit-script operations', () => {
     }).success).toBe(false)
     expect(operations.revise_edit_screenplay.inputSchema.safeParse({
       revisionInstruction: '改得更克苏鲁一些',
-      durationSeconds: 60,
+      durationTier: 'medium',
       aspectRatio: '16:9',
       confirmed: true,
     }).success).toBe(true)

@@ -18,7 +18,8 @@ Screenplay:
 Director Decoupage:
 {{director_decoupage_json}}
 
-Target duration seconds: {{duration_seconds}}
+Duration tier and pacing constraint:
+{{duration_guidance}}
 Aspect ratio: {{aspect_ratio}}
 Style Bible:
 {{style_bible_json}}
@@ -57,7 +58,7 @@ Hard requirements:
 - shots must fully inherit Director Decoupage shots. shotNumber starts at 1 and increases continuously. Do not skip, duplicate, or reorder.
 - Each shot durationSec must be an integer from 1 to 5.
 - Top-level durationSec must equal the sum of shot durationSec.
-- Top-level durationSec must be less than or equal to 120.
+- Top-level durationSec must fit the selected duration tier range, allowing natural narrative variation, and must be less than or equal to 120.
 - videoBlocks must cover all shots in original shotNumber order. Do not skip, duplicate, or reorder.
 - single must contain exactly 1 shot, and that shot durationSec must be at least 4 seconds.
 - group must contain 2-9 continuous shots, and total group duration must be 2-15 seconds.

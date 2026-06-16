@@ -251,6 +251,7 @@ import {
 } from '@/app/api/projects/[projectId]/edit-script/route'
 import {
   PATCH as editScreenplayPatch,
+  POST as editScreenplayPost,
 } from '@/app/api/projects/[projectId]/edit-script/screenplay/route'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
@@ -292,6 +293,54 @@ describe('project edit script route', () => {
       stylePreviewId: 'style-preview-1',
       aspectRatio: '21:9',
     })
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/screenplay -> requires duration tier and aspect ratio', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script/screenplay',
+      method: 'POST',
+      headers: { 'accept-language': 'zh' },
+      body: {
+        episodeId: 'episode-1',
+        prompt: 'one minute sci-fi',
+        durationTier: 'medium',
+        aspectRatio: '16:9',
+      },
+    })
+
+    const response = await editScreenplayPost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.screenplay?.status).toBe('screenplay_ready')
+    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+      request,
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      prompt: 'one minute sci-fi',
+      durationTier: 'medium',
+      aspectRatio: '16:9',
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/screenplay -> rejects old fixed-second payloads', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script/screenplay',
+      method: 'POST',
+      body: {
+        episodeId: 'episode-1',
+        prompt: 'one minute sci-fi',
+        durationSeconds: 60,
+        aspectRatio: '16:9',
+      },
+    })
+
+    const response = await editScreenplayPost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+
+    expect(response.status).toBe(400)
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
   })
 
   it('POST /api/projects/[projectId]/edit-script -> submits async edit-script task so canvas can render progress states', async () => {

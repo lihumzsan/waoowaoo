@@ -28,10 +28,10 @@ describe('resolveEditFirstChoiceContinuation', () => {
       latestUserText: '民俗恐怖片',
       output: {
         ok: true,
-        durationSeconds: 60,
+        durationTier: 'medium',
         aspectRatio: '16:9',
         selections: {
-          durationSeconds: '60',
+          durationTier: 'medium',
           aspectRatio: '16:9',
         },
       },
@@ -44,12 +44,10 @@ describe('resolveEditFirstChoiceContinuation', () => {
     expect(callId).toBe('tool-call-1')
     expect(name).toBe('request_edit_first_choice')
     expect(parsed.choiceType).toBe('duration_and_aspect_ratio')
-    expect(parsed.durationSeconds).toBe(60)
+    expect(parsed.prompt).toBe('民俗恐怖片')
+    expect(parsed.durationTier).toBe('medium')
     expect(parsed.aspectRatio).toBe('16:9')
-    const instruction = String(parsed.instruction)
-    expect(instruction).toContain('用户原始创意需求："民俗恐怖片"')
-    expect(instruction).toContain('本轮目标是生成剧本')
-    expect(instruction).toContain('说明后调用 generate_edit_screenplay')
+    expect(parsed.nextOperationId).toBe('generate_edit_screenplay')
   })
 
   it('continues to style preview generation after screenplay approval', () => {
@@ -68,9 +66,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
     }))
     const { parsed } = readSyntheticToolResult(continuation)
     expect(parsed.decision).toBe('approve')
-    const instruction = String(parsed.instruction)
-    expect(instruction).toContain('剧本审核卡已经返回用户确认')
-    expect(instruction).toContain('说明后调用 generate_edit_style_previews')
+    expect(parsed.nextOperationId).toBe('generate_edit_style_previews')
   })
 
   it('continues to screenplay revision after screenplay notes are submitted', () => {
@@ -89,9 +85,8 @@ describe('resolveEditFirstChoiceContinuation', () => {
       operationId: 'revise_edit_screenplay',
     }))
     const { parsed } = readSyntheticToolResult(continuation)
-    const instruction = String(parsed.instruction)
-    expect(instruction).toContain('用户修改意见："更克苏鲁一些"')
-    expect(instruction).toContain('说明后调用 revise_edit_screenplay')
+    expect(parsed.nextOperationId).toBe('revise_edit_screenplay')
+    expect(parsed.revisionNotes).toBe('更克苏鲁一些')
   })
 
   it('continues to director decoupage after style selection is saved', () => {
@@ -112,9 +107,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
     const { callId, parsed } = readSyntheticToolResult(continuation)
     expect(callId).toMatch(/^edit_first_choice_/)
     expect(parsed.stylePreviewId).toBe('style-1')
-    const instruction = String(parsed.instruction)
-    expect(instruction).toContain('本轮目标是生成导演拆镜')
-    expect(instruction).toContain('说明后调用 generate_edit_director_decoupage')
+    expect(parsed.nextOperationId).toBe('generate_edit_director_decoupage')
   })
 
   it('rejects an incomplete duration/aspect-ratio selection', () => {
@@ -124,7 +117,7 @@ describe('resolveEditFirstChoiceContinuation', () => {
       latestUserText: '民俗恐怖片',
       output: {
         ok: true,
-        durationSeconds: 60,
+        durationTier: 'medium',
       },
     })).toBeNull()
   })

@@ -25,7 +25,7 @@ import {
   buildEditFirstAssistantChoiceCard,
   editFirstUserTextHasDuration,
   readEditFirstAspectRatio,
-  readEditFirstDurationSeconds,
+  readEditFirstDurationTier,
 } from '@/lib/project-agent/choice-card'
 
 function workflow(
@@ -55,9 +55,10 @@ describe('edit-first assistant choice cards', () => {
     expect(editFirstUserTextHasDuration('我选择 60 秒')).toBe(true)
     expect(editFirstUserTextHasDuration('make it 90 seconds')).toBe(true)
     expect(editFirstUserTextHasDuration('开始生成短片')).toBe(false)
-    expect(readEditFirstDurationSeconds('我选择一分钟')).toBe(60)
-    expect(readEditFirstDurationSeconds('make it 2 minutes')).toBe(120)
-    expect(readEditFirstDurationSeconds('make it 180 seconds')).toBe(180)
+    expect(readEditFirstDurationTier('我选择一分钟')).toBe('medium')
+    expect(readEditFirstDurationTier('make it 90 seconds')).toBe('long')
+    expect(readEditFirstDurationTier('make it 2 minutes')).toBe('long')
+    expect(readEditFirstDurationTier('make it 180 seconds')).toBeNull()
     expect(readEditFirstAspectRatio('我选择 16:9')).toBe('16:9')
   })
 
@@ -79,7 +80,7 @@ describe('edit-first assistant choice cards', () => {
       title: '选择短片时长和画面比例',
       groups: [
         {
-          key: 'durationSeconds',
+          key: 'durationTier',
           required: true,
         },
         {
@@ -92,7 +93,7 @@ describe('edit-first assistant choice cards', () => {
         projectId: 'project-1',
       },
     })
-    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['30', '60', '90', '120'])
+    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['short', 'medium', 'long'])
     expect(card.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
     expect(prismaState.screenplayFindFirst).not.toHaveBeenCalled()
   })

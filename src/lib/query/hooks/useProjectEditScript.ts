@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
+import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ProjectEditCinematographyShotPlan, ProjectEditDirectorDecoupage, ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
 import { queryKeys } from '../keys'
@@ -32,6 +33,8 @@ interface CreateEditScriptInput {
 interface CreateEditScreenplayInput {
   episodeId: string
   prompt: string
+  durationTier: EditFirstDurationTier
+  aspectRatio: EditScriptVideoRatio
 }
 
 interface ConfirmEditStylePreviewInput {

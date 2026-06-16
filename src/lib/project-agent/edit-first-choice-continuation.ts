@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { EditFirstChoiceType } from './choice-card'
+import {
+  isEditFirstDurationTier,
+  type EditFirstDurationTier,
+} from '@/lib/edit-script/duration-tier'
 
 type ChoiceContinuationOperationId =
   | 'generate_edit_screenplay'
@@ -36,16 +40,12 @@ function readAspectRatio(value: unknown): EditScriptVideoRatio | null {
   return null
 }
 
-function readDurationSeconds(output: UnknownRecord): number | null {
-  const direct = output.durationSeconds
-  if (typeof direct === 'number' && Number.isInteger(direct) && direct > 0 && direct <= 120) return direct
+function readDurationTier(output: UnknownRecord): EditFirstDurationTier | null {
+  const direct = output.durationTier
+  if (isEditFirstDurationTier(direct)) return direct
   const selections = isRecord(output.selections) ? output.selections : null
-  const selected = selections?.durationSeconds
-  if (typeof selected === 'number' && Number.isInteger(selected) && selected > 0 && selected <= 120) return selected
-  if (typeof selected === 'string') {
-    const parsed = Number(selected)
-    if (Number.isInteger(parsed) && parsed > 0 && parsed <= 120) return parsed
-  }
+  const selected = selections?.durationTier
+  if (isEditFirstDurationTier(selected)) return selected
   return null
 }
 
@@ -91,22 +91,22 @@ export function resolveEditFirstChoiceContinuation(params: {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
 
   if (params.choiceType === 'duration_and_aspect_ratio') {
-    const durationSeconds = readDurationSeconds(params.output)
+    const durationTier = readDurationTier(params.output)
     const aspectRatio = readAspectRatio(params.output.aspectRatio)
-    if (!durationSeconds || !aspectRatio || !params.latestUserText) return null
+    if (!durationTier || !aspectRatio || !params.latestUserText) return null
     return {
-        operationId: 'generate_edit_screenplay',
-        inputItems: buildChoiceInputItems({
-          toolCallId: params.toolCallId,
-          choiceType: params.choiceType,
-          nextOperationId: 'generate_edit_screenplay',
-          result: {
-            userPrompt: params.latestUserText,
-            durationSeconds,
-            aspectRatio,
-          },
-        }),
-      }
+      operationId: 'generate_edit_screenplay',
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        nextOperationId: 'generate_edit_screenplay',
+        result: {
+          prompt: params.latestUserText,
+          durationTier,
+          aspectRatio,
+        },
+      }),
+    }
   }
 
   if (params.choiceType === 'screenplay_review') {

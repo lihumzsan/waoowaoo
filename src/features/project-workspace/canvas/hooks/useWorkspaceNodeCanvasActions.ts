@@ -19,7 +19,11 @@ export function useWorkspaceNodeCanvasActions() {
     }
 
     if (action.type === 'generate_edit_screenplay') {
-      await runtime.onGenerateEditScreenplay(action.prompt)
+      await runtime.onGenerateEditScreenplay({
+        prompt: action.prompt,
+        durationTier: action.durationTier,
+        aspectRatio: action.aspectRatio,
+      })
       return
     }
 

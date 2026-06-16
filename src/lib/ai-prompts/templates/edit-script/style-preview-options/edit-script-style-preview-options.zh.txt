@@ -30,7 +30,8 @@
 已生成剧本：
 {screenplay_text}
 
-目标总时长：{duration_seconds} 秒
+时长档位与节奏约束：
+{duration_guidance}
 
 只返回 JSON，不要 markdown，不要解释。Schema（stylePreviews 最多 3 项，但实际必须只包含 {style_preview_count} 项）:
 {

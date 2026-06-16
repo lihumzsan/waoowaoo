@@ -7,33 +7,24 @@ import type {
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from '@/lib/edit-script/types'
+import {
+  EDIT_FIRST_DURATION_TIERS,
+  readEditFirstDurationTierFromText,
+  resolveEditFirstDurationSpec,
+  type EditFirstDurationTier,
+} from '@/lib/edit-script/duration-tier'
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
 export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
 
-export function readEditFirstDurationSeconds(text: string): number | null {
-  const normalized = text.trim().toLowerCase()
-  if (!normalized) return null
-
-  if (/半分钟/.test(normalized)) return 30
-  if (/一分钟/.test(normalized)) return 60
-  if (/(两分钟|二分钟)/.test(normalized)) return 120
-
-  const durationMatch = normalized.match(/([0-9]+(?:\.[0-9]+)?)\s*(秒|s|sec|secs|second|seconds|分钟|minute|minutes|min|mins)/i)
-  if (!durationMatch) return null
-  const rawValue = Number(durationMatch[1])
-  if (!Number.isFinite(rawValue) || rawValue <= 0) return null
-  const unit = durationMatch[2] ?? ''
-  const seconds = /分钟|minute|minutes|min|mins/i.test(unit)
-    ? rawValue * 60
-    : rawValue
-  return Math.round(seconds)
+export function readEditFirstDurationTier(text: string): EditFirstDurationTier | null {
+  return readEditFirstDurationTierFromText(text)
 }
 
 export function editFirstUserTextHasDuration(text: string): boolean {
-  return readEditFirstDurationSeconds(text) !== null
+  return readEditFirstDurationTier(text) !== null
 }
 
 export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | null {
@@ -59,31 +50,19 @@ function buildDurationAndAspectRatioChoiceCard(params: {
       : '生成剧本前先同时确认这两项。当前测试上线支持生成两分钟以内的剪辑先行短片。',
     groups: [
       {
-        key: 'durationSeconds',
+        key: 'durationTier',
         label: isEnglish ? 'Duration' : '时长',
         required: true,
-        options: [
-          {
-            value: '30',
-            label: isEnglish ? '30 seconds' : '30 秒',
-            description: isEnglish ? 'Fast rhythm, minimal story beat.' : '节奏最快，只保留核心情节。',
-          },
-          {
-            value: '60',
-            label: isEnglish ? '60 seconds' : '60 秒',
-            description: isEnglish ? 'Balanced one-minute short.' : '一分钟短片，叙事和节奏较均衡。',
-          },
-          {
-            value: '90',
-            label: isEnglish ? '90 seconds' : '90 秒',
-            description: isEnglish ? 'More room for atmosphere and setup.' : '有更多铺垫和氛围空间。',
-          },
-          {
-            value: '120',
-            label: isEnglish ? '120 seconds' : '120 秒',
-            description: isEnglish ? 'Maximum duration for this test launch.' : '当前测试上线的最长时长。',
-          },
-        ],
+        options: EDIT_FIRST_DURATION_TIERS.map((tier) => {
+          const spec = resolveEditFirstDurationSpec(tier)
+          return {
+            value: tier,
+            label: isEnglish
+              ? `${spec.enLabel} · around ${String(spec.targetSeconds)} seconds`
+              : `${spec.zhLabel} · 约 ${String(spec.targetSeconds)} 秒`,
+            description: isEnglish ? spec.enGuidance : spec.zhGuidance,
+          }
+        }),
       },
       buildAspectRatioGroup(locale),
     ],

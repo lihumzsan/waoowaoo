@@ -32,7 +32,10 @@ import {
   useUpdateProjectEditScriptAssetRequirementDescription,
   useUpdateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/query/hooks'
-import type { WorkspaceVideoBlockArrangementBlock } from '../WorkspaceRuntimeContext'
+import type {
+  WorkspaceEditScreenplayGenerationInput,
+  WorkspaceVideoBlockArrangementBlock,
+} from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
   project,
@@ -134,9 +137,14 @@ export function useProjectWorkspaceController({
   const updateVideoPlanPrompt = useUpdateProjectEditScriptVideoBlockPrompt(projectId)
   const arrangeVideoBlocks = useArrangeProjectEditScriptVideoBlocks(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
-  const handleGenerateEditScreenplay = async (prompt: string) => {
+  const handleGenerateEditScreenplay = async (input: WorkspaceEditScreenplayGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await createEditScreenplay.mutateAsync({ episodeId, prompt })
+    await createEditScreenplay.mutateAsync({
+      episodeId,
+      prompt: input.prompt,
+      durationTier: input.durationTier,
+      aspectRatio: input.aspectRatio,
+    })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditDirectorDecoupage = async (screenplayId?: string) => {

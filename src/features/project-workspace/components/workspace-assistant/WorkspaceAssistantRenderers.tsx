@@ -42,6 +42,7 @@ import { queryKeys } from '@/lib/query/keys'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import { isEditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -405,6 +406,10 @@ export function AssistantChoiceCardView(props: {
         props.onSubmitted?.(card.cardId)
       } else if (card.submit.kind === 'set_project_video_ratio') {
         const aspectRatio = selections.aspectRatio
+        const durationTier = selections.durationTier
+        if (!isEditFirstDurationTier(durationTier)) {
+          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_DURATION_TIER')
+        }
         if (!isEditScriptVideoRatio(aspectRatio)) {
           throw new Error('ASSISTANT_CHOICE_CARD_INVALID_ASPECT_RATIO')
         }
@@ -421,7 +426,7 @@ export function AssistantChoiceCardView(props: {
             ok: true,
             choiceType: card.choiceType,
             cardId: card.cardId,
-            durationSeconds: Number(selections.durationSeconds),
+            durationTier,
             aspectRatio,
             selections,
             labels,

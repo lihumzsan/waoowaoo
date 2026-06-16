@@ -63,7 +63,7 @@ describe('edit script director decoupage', () => {
         user_request: 'Create a restrained suspense short.',
         screenplay_text: 'A protagonist approaches a closed door.',
         style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {}, hardBans: [] } }),
-        duration_seconds: '12',
+        duration_guidance: 'Short duration tier, around 30 seconds. Keep it to one compact event; the final total duration may naturally land around 20-40 seconds instead of mechanically matching an exact second count.',
         aspect_ratio: '9:16',
       },
     })

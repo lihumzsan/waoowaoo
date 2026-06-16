@@ -15,7 +15,7 @@ describe('project agent prompt copy', () => {
     })
 
     expect(prompt).toContain('只能使用当前注入的 tool 定义和当前项目上下文')
-    expect(prompt).toContain('时长+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜面板/图片 -> 视频片段 -> 最终成片')
+    expect(prompt).toContain('时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜面板/图片 -> 视频片段 -> 最终成片')
     expect(prompt).toContain('必须把上述产物依赖顺序当作产物依赖约束')
     expect(prompt).toContain('或修复/重生成用户正在反馈的当前阶段产物')
     expect(prompt).toContain('剪辑先行表/剪辑核心表 ready 后，停止开放式创意讨论')
@@ -83,9 +83,9 @@ describe('project agent prompt copy', () => {
     const zhDescription = localizeSelectableToolDescription('generate_edit_screenplay', 'fallback', 'zh')
     const enDescription = localizeSelectableToolDescription('generate_edit_screenplay', 'fallback', 'en')
 
-    expect(zhDescription).toContain('必须传入 prompt、durationSeconds、aspectRatio 三个字段')
+    expect(zhDescription).toContain('必须传入 prompt、durationTier、aspectRatio 三个字段')
     expect(zhDescription).toContain('必须来自用户通过 request_edit_first_choice 选择卡确认的结果')
-    expect(enDescription).toContain('You must pass prompt, durationSeconds, and aspectRatio')
+    expect(enDescription).toContain('You must pass prompt, durationTier, and aspectRatio')
     expect(enDescription).toContain('confirmed through request_edit_first_choice')
   })
 
@@ -100,9 +100,9 @@ describe('project agent prompt copy', () => {
     const enDescription = localizeSelectableToolDescription('revise_edit_screenplay', 'fallback', 'en')
 
     expect(zhDescription).toContain('仅在剧本已生成')
-    expect(zhDescription).toContain('必须传入 revisionInstruction、durationSeconds、aspectRatio')
+    expect(zhDescription).toContain('必须传入 revisionInstruction、durationTier、aspectRatio')
     expect(enDescription).toContain('Use only after the screenplay exists')
-    expect(enDescription).toContain('pass revisionInstruction, durationSeconds, and aspectRatio')
+    expect(enDescription).toContain('pass revisionInstruction, durationTier, and aspectRatio')
   })
 
   it('describes style preview generation as regeneratable with capped count and direction', () => {

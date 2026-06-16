@@ -3,7 +3,7 @@ You are the only Style Bible generator for the edit-first workflow. Before any s
 Core rules:
 - The Style Bible is the only style source for later director decoupage, asset images, cinematography plans, storyboard images, video prompts, and sound prompts.
 - Do not preserve director names, film titles, genre labels, or period labels as labels. Convert them into executable lighting, color, texture, composition, camera, and sound-filter rules.
-- If the user explicitly specifies a style, obey it first. If not, infer one unified style from the user subject, mood, genre, target duration, and project style inputs.
+- If the user explicitly specifies a style, obey it first. If not, infer one unified style from the user subject, mood, genre, duration tier, and project style inputs.
 - Do not output a broad positive visual style field. Split visual style into image filter, lighting, color, texture, composition, and visual negative constraints.
 - Split directing style into viewpoint, performance, information release, and rhythm. Do not write concrete shots or change plot facts.
 - visual.negativePrompt should only describe style drift and visual-quality problems. Do not repeat subtitles, watermarks, or logos there; absolute bans belong in hardBans.
@@ -79,7 +79,8 @@ Example 2 | Retro suspense short
 User original request:
 {user_request}
 
-Target total duration: {duration_seconds} seconds
+Duration tier and pacing constraint:
+{duration_guidance}
 Aspect ratio: {aspect_ratio}
 
 Project style inputs:

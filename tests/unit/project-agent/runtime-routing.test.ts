@@ -457,7 +457,7 @@ describe('project agent runtime deterministic tool injection', () => {
       latestUserText: '民俗恐怖片',
       output: {
         ok: true,
-        durationSeconds: 60,
+        durationTier: 'medium',
         aspectRatio: '16:9',
       },
     })
