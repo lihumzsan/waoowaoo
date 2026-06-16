@@ -225,6 +225,7 @@ export function useProjectWorkspaceController({
     handleUpdateClip: videoActions.handleUpdateClip,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,
+    handleGenerateStoryboardGridImages: imageActions.handleGenerateStoryboardGridImages,
     handleSelectPanelCandidate: imageActions.handleSelectPanelCandidate,
     handleCancelPanelCandidate: imageActions.handleCancelPanelCandidate,
     handleGenerateVideo: videoActions.handleGenerateVideo,

@@ -32,6 +32,7 @@ vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMo
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
+import { POST as generateStoryboardGridImagesPost } from '@/app/api/projects/[projectId]/edit-script/storyboard/images/block-grid/generate/route'
 
 describe('api contract - project media generation routes (operation adapter)', () => {
   beforeEach(() => {
@@ -111,6 +112,37 @@ describe('api contract - project media generation routes (operation adapter)', (
 
     expect(res.status).toBe(400)
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/storyboard/images/block-grid/generate -> submits storyboard grid image operation', async () => {
+    apiAdapterMock.executeProjectAgentOperationFromApi.mockResolvedValueOnce({
+      success: true,
+      taskId: 'task-grid-1',
+    })
+
+    const body = {
+      episodeId: 'episode-1',
+      editScriptId: 'edit-script-1',
+      sourceVideoBlockId: 'edit-script-1:video-block:1',
+      panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
+    }
+    const res = await generateStoryboardGridImagesPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/edit-script/storyboard/images/block-grid/generate',
+        method: 'POST',
+        body,
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(res.status).toBe(200)
+    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'generate_storyboard_grid_images',
+      projectId: 'project-1',
+      userId: 'user-1',
+      source: 'project-ui',
+      input: body,
+    }))
   })
 
   it('POST /api/projects/[projectId]/generate-video -> routes single/batch to explicit operations', async () => {

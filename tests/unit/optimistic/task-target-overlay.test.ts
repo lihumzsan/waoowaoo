@@ -103,6 +103,51 @@ describe('task-target-overlay', () => {
     expect(overlay).toBeNull()
   })
 
+  it('clears every overlay attached to the completed taskId', () => {
+    const queryClient = new QueryClient()
+    const projectId = 'project-1'
+
+    for (const panelId of ['panel-1', 'panel-2', 'panel-3', 'panel-4']) {
+      upsertTaskTargetOverlay(queryClient, {
+        projectId,
+        targetType: 'ProjectPanel',
+        targetId: panelId,
+        runningTaskId: 'task-grid',
+        runningTaskType: 'image_panel',
+        intent: 'regenerate',
+      })
+    }
+    upsertTaskTargetOverlay(queryClient, {
+      projectId,
+      targetType: 'ProjectPanel',
+      targetId: 'panel-5',
+      runningTaskId: 'task-other',
+      runningTaskType: 'image_panel',
+      intent: 'regenerate',
+    })
+
+    applyTaskLifecycleToOverlay(queryClient, {
+      projectId,
+      lifecycleType: TASK_EVENT_TYPE.FAILED,
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      taskId: 'task-grid',
+      taskType: 'image_panel',
+      intent: 'regenerate',
+      hasOutputAtStart: null,
+      progress: null,
+      stage: null,
+      stageLabel: null,
+      eventTs: new Date().toISOString(),
+    })
+
+    expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-1')).toBeNull()
+    expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-2')).toBeNull()
+    expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-3')).toBeNull()
+    expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-4')).toBeNull()
+    expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-5')?.runningTaskId).toBe('task-other')
+  })
+
   it('clears optimistic overlay when the real task completes', () => {
     const queryClient = new QueryClient()
     const projectId = 'project-1'

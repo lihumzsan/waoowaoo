@@ -516,6 +516,23 @@ async function normalizeMediaRouteUrl(input: string): Promise<string | null> {
   return await signStorageKey(storageKey)
 }
 
+async function normalizeStorageSignRouteUrl(input: string): Promise<string | null> {
+  const parsed = toUrlMaybe(input)
+  if (!parsed || parsed.pathname !== '/api/storage/sign') {
+    return null
+  }
+  const key = parsed.searchParams.get('key')?.trim()
+  if (!key || !isStorageKey(key)) {
+    throw new OutboundImageNormalizeError({
+      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
+      stage: 'normalize_original',
+      input,
+      message: `unsupported storage sign route key: ${key || '<empty>'}`,
+    })
+  }
+  return await signStorageKey(key)
+}
+
 export function unwrapNextImageDisplayUrl(input: string): string {
   return unwrapNextImageInternal(input)
 }
@@ -538,6 +555,11 @@ export async function normalizeToOriginalMediaUrl(input: string): Promise<string
   const mediaRouteUrl = await normalizeMediaRouteUrl(unwrappedInput)
   if (mediaRouteUrl) {
     return mediaRouteUrl
+  }
+
+  const storageSignRouteUrl = await normalizeStorageSignRouteUrl(unwrappedInput)
+  if (storageSignRouteUrl) {
+    return storageSignRouteUrl
   }
 
   if (unwrappedInput.startsWith('/')) {

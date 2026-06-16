@@ -1,26 +1,34 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import sharp from 'sharp'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
-const prismaMock = vi.hoisted(() => ({
-  project: {
-    findUnique: vi.fn(),
-  },
-  projectPanel: {
-    findUnique: vi.fn(),
-    update: vi.fn(async () => ({})),
-  },
-  projectStoryboardBlockingArtifact: {
-    findMany: vi.fn(),
-  },
-  projectEditScript: {
-    findFirst: vi.fn(),
-  },
-  projectEditScreenplay: {
-    findFirst: vi.fn(),
-  },
-}))
+const prismaMock = vi.hoisted(() => {
+  const projectPanelUpdate = vi.fn(async () => ({}))
+  return {
+    project: {
+      findUnique: vi.fn(),
+    },
+    projectPanel: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      update: projectPanelUpdate,
+    },
+    $transaction: vi.fn(async (handler: (tx: { projectPanel: { update: typeof projectPanelUpdate } }) => Promise<void>) => {
+      await handler({ projectPanel: { update: projectPanelUpdate } })
+    }),
+    projectStoryboardBlockingArtifact: {
+      findMany: vi.fn(),
+    },
+    projectEditScript: {
+      findFirst: vi.fn(),
+    },
+    projectEditScreenplay: {
+      findFirst: vi.fn(),
+    },
+  }
+})
 
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
@@ -131,7 +139,10 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   }
 })
 vi.mock('@/lib/ai-prompts', () => ({
-  AI_PROMPT_IDS: { PANEL_IMAGE_GENERATE: 'panel-image-generate' },
+  AI_PROMPT_IDS: {
+    PANEL_IMAGE_GENERATE: 'panel-image-generate',
+    PANEL_GRID_IMAGE_GENERATE: 'panel-grid-image-generate',
+  },
   buildAiPrompt: promptMock.buildPrompt,
 }))
 
@@ -179,7 +190,9 @@ describe('worker panel-image-task-handler behavior', () => {
       actingNotes: null,
       sketchImageUrl: null,
       imageUrl: null,
+      imageMediaId: null,
     })
+    prismaMock.projectPanel.findMany.mockResolvedValue([])
     prismaMock.projectStoryboardBlockingArtifact.findMany.mockResolvedValue([])
     prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
@@ -255,6 +268,25 @@ describe('worker panel-image-task-handler behavior', () => {
     })
   })
 
+  it('compare-only single generation -> returns candidates without mutating panel records', async () => {
+    const result = await handlePanelImageTask(buildJob({ candidateCount: 2, compareOnly: true }))
+
+    expect(result).toEqual({
+      panelId: 'panel-1',
+      candidateCount: 2,
+      imageUrl: 'cos/panel-candidate-1.png',
+      imageUrls: ['cos/panel-candidate-1.png', 'cos/panel-candidate-2.png'],
+      compareOnly: true,
+      promptDebug: expect.objectContaining({
+        omittedFields: [],
+        referenceImageCount: 3,
+      }),
+    })
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+    expect(utilsMock.uploadImageSourceToCos).toHaveBeenCalledTimes(2)
+    expect(prismaMock.projectPanel.update).not.toHaveBeenCalled()
+  })
+
   it('appends Style Bible block to final storyboard image prompt', async () => {
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
@@ -286,6 +318,31 @@ describe('worker panel-image-task-handler behavior', () => {
         prompt: expect.not.stringContaining('声音正向风格：'),
       }),
     )
+  })
+
+  it('compare-only field omission can remove the final Style Bible block', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+      styleBibleJson: buildZenStyleBibleFixture(),
+    })
+
+    const result = await handlePanelImageTask(buildJob({
+      candidateCount: 1,
+      compareOnly: true,
+      promptFieldOmissions: ['style_bible'],
+    }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        prompt: expect.not.stringContaining('系统 Style Bible 视觉要求（固定追加，必须遵守）：'),
+      }),
+    )
+    expect(result).toEqual(expect.objectContaining({
+      promptDebug: expect.objectContaining({
+        omittedFields: ['style_bible'],
+        prompt: 'panel-image-prompt',
+      }),
+    }))
   })
 
   it('includes selected previous panel images as generation references', async () => {
@@ -438,6 +495,219 @@ describe('worker panel-image-task-handler behavior', () => {
         }),
       }),
     )
+  })
+
+  it('grid payload -> generates one 2x2 image, crops cells, and persists panel images', async () => {
+    const gridSourceBuffer = await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 240, g: 240, b: 240 },
+      },
+    }).png().toBuffer()
+    const gridSource = `data:image/png;base64,${gridSourceBuffer.toString('base64')}`
+    const panels = [
+      {
+        id: 'panel-1',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        shotType: 'wide',
+        cameraMove: 'static',
+        description: 'first beat',
+        imagePrompt: 'first prompt',
+        videoPrompt: null,
+        location: 'Old Town',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+        srtSegment: 'first source',
+        photographyRules: JSON.stringify({
+          cameraPlan: {
+            shotBlocking: 'Hero stays near the left wall, looking toward the right side of the attic.',
+          },
+          lighting: { direction: 'right side window' },
+          verboseUnusedField: 'SHOULD_NOT_APPEAR_IN_GRID_PROMPT',
+        }),
+        actingNotes: null,
+        sketchImageUrl: null,
+        imageUrl: 'images/panel-1-old.jpg',
+        imageMediaId: 'media-panel-1-old',
+      },
+      {
+        id: 'panel-2',
+        storyboardId: 'storyboard-1',
+        panelIndex: 1,
+        shotType: 'close',
+        cameraMove: 'push',
+        description: 'second beat',
+        imagePrompt: 'second prompt',
+        videoPrompt: null,
+        location: 'Old Town',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+        srtSegment: 'second source',
+        photographyRules: null,
+        actingNotes: null,
+        sketchImageUrl: null,
+        imageUrl: null,
+        imageMediaId: null,
+      },
+    ]
+    prismaMock.projectPanel.findMany.mockResolvedValueOnce(panels)
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce(gridSource)
+    utilsMock.uploadImageSourceToCos.mockReset()
+    utilsMock.uploadImageSourceToCos
+      .mockResolvedValueOnce('images/panel-grid.png')
+      .mockResolvedValueOnce('images/panel-1-crop.jpg')
+      .mockResolvedValueOnce('images/panel-2-crop.jpg')
+
+    const result = await handlePanelImageTask(buildJob({
+      storyboardGrid: {
+        mode: '2x2',
+        sourceVideoBlockId: 'edit-1:videoBlock:1',
+        panelIds: ['panel-1', 'panel-2'],
+      },
+    }))
+
+    expect(result).toEqual({
+      panelIds: ['panel-1', 'panel-2'],
+      candidateCount: 2,
+      gridImageUrl: 'images/panel-grid.png',
+      imageUrls: ['images/panel-1-crop.jpg', 'images/panel-2-crop.jpg'],
+    })
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: 'storyboard-model-1',
+        prompt: 'panel-image-prompt',
+        options: expect.objectContaining({
+          aspectRatio: '16:9',
+        }),
+      }),
+    )
+    expect(utilsMock.uploadImageSourceToCos).toHaveBeenCalledTimes(3)
+    expect(utilsMock.uploadImageSourceToCos).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Buffer),
+      'panel-grid',
+      'edit-1-videoBlock-1-panel-1',
+    )
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
+    expect(prismaMock.projectPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: {
+        imageUrl: 'images/panel-1-crop.jpg',
+        candidateImages: null,
+        previousImageUrl: 'images/panel-1-old.jpg',
+        previousImageMediaId: 'media-panel-1-old',
+        imageMediaId: null,
+      },
+    })
+    expect(prismaMock.projectPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-2' },
+      data: {
+        imageUrl: 'images/panel-2-crop.jpg',
+        candidateImages: null,
+        previousImageUrl: null,
+        previousImageMediaId: null,
+        imageMediaId: null,
+      },
+    })
+    expect(promptMock.buildPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      promptId: 'panel-grid-image-generate',
+      variables: expect.objectContaining({
+        storyboard_grid_json_input: expect.stringContaining('"cell_position": "top_left"'),
+      }),
+    }))
+    const promptCalls = promptMock.buildPrompt.mock.calls as unknown as Array<[
+      { promptId?: string; variables?: { storyboard_grid_json_input?: unknown } },
+    ]>
+    const gridPromptCall = promptCalls.find((call) => call[0]?.promptId === 'panel-grid-image-generate')
+    const gridInput = gridPromptCall?.[0]?.variables?.storyboard_grid_json_input
+    expect(gridInput).toEqual(expect.stringContaining('Hero stays near the left wall'))
+    expect(gridInput).not.toEqual(expect.stringContaining('SHOULD_NOT_APPEAR_IN_GRID_PROMPT'))
+  })
+
+  it('compare-only grid generation -> returns cropped cells without mutating panel records', async () => {
+    const gridSourceBuffer = await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 240, g: 240, b: 240 },
+      },
+    }).png().toBuffer()
+    const gridSource = `data:image/png;base64,${gridSourceBuffer.toString('base64')}`
+    prismaMock.projectPanel.findMany.mockResolvedValueOnce([
+      {
+        id: 'panel-1',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        shotType: 'wide',
+        cameraMove: 'static',
+        description: 'first beat',
+        imagePrompt: 'first prompt',
+        videoPrompt: null,
+        location: 'Old Town',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+        srtSegment: 'first source',
+        photographyRules: null,
+        actingNotes: null,
+        sketchImageUrl: null,
+        imageUrl: 'images/panel-1-old.jpg',
+        imageMediaId: 'media-panel-1-old',
+      },
+      {
+        id: 'panel-2',
+        storyboardId: 'storyboard-1',
+        panelIndex: 1,
+        shotType: 'close',
+        cameraMove: 'push',
+        description: 'second beat',
+        imagePrompt: 'second prompt',
+        videoPrompt: null,
+        location: 'Old Town',
+        characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
+        srtSegment: 'second source',
+        photographyRules: null,
+        actingNotes: null,
+        sketchImageUrl: null,
+        imageUrl: null,
+        imageMediaId: null,
+      },
+    ])
+    utilsMock.resolveImageSourceFromGeneration.mockReset()
+    utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce(gridSource)
+    utilsMock.uploadImageSourceToCos.mockReset()
+    utilsMock.uploadImageSourceToCos
+      .mockResolvedValueOnce('images/panel-grid.png')
+      .mockResolvedValueOnce('images/panel-1-crop.jpg')
+      .mockResolvedValueOnce('images/panel-2-crop.jpg')
+
+    const result = await handlePanelImageTask(buildJob({
+      compareOnly: true,
+      storyboardGrid: {
+        mode: '2x2',
+        sourceVideoBlockId: 'edit-1:videoBlock:1',
+        panelIds: ['panel-1', 'panel-2'],
+      },
+    }))
+
+    expect(result).toEqual({
+      panelIds: ['panel-1', 'panel-2'],
+      candidateCount: 2,
+      gridImageUrl: 'images/panel-grid.png',
+      imageUrls: ['images/panel-1-crop.jpg', 'images/panel-2-crop.jpg'],
+      compareOnly: true,
+      promptDebug: expect.objectContaining({
+        omittedFields: [],
+        referenceImageCount: 6,
+      }),
+    })
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
+    expect(utilsMock.uploadImageSourceToCos).toHaveBeenCalledTimes(3)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    expect(prismaMock.projectPanel.update).not.toHaveBeenCalled()
   })
 
   it('regeneration branch -> keeps old image in previousImageUrl and stores candidates only', async () => {

@@ -139,6 +139,10 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'image/panel-generate',
     variableKeys: ['storyboard_text_json_input', 'source_text', 'aspect_ratio', 'style'],
   },
+  [AI_PROMPT_IDS.PANEL_GRID_IMAGE_GENERATE]: {
+    pathStem: 'image/panel-grid-generate',
+    variableKeys: ['storyboard_grid_json_input', 'source_text', 'aspect_ratio', 'style'],
+  },
   [AI_PROMPT_IDS.IMAGE_UPDATE_SHOT_PROMPT]: {
     pathStem: 'image/update-shot-prompt',
     variableKeys: ['prompt_input', 'user_input', 'video_prompt_input'],

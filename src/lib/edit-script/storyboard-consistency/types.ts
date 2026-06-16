@@ -178,6 +178,7 @@ export const shotBlockingSchema = z.object({
   screenPosition: z.string().trim().min(2),
   characterPlacements: z.array(characterPlacementSchema),
   cameraPlacement: z.string().trim().min(2),
+  cameraMovement: z.string().trim().min(2).optional(),
   composition: z.string().trim().min(2),
   continuityNote: z.string().trim().min(2),
 }).strict()

@@ -108,6 +108,7 @@ export {
     useGetProjectStoryboardStats,
     useUpdateProjectPanelVideoPrompt,
     useRegenerateProjectPanelImage,
+    useGenerateStoryboardGridImages,
     useRevertProjectPanelImage,
     useModifyProjectStoryboardImage,
     useDownloadProjectImages,

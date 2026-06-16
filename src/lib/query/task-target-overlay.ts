@@ -184,21 +184,24 @@ export function applyTaskLifecycleToOverlay(
     queryClient.setQueryData<TaskTargetOverlayMap>(
       queryKeys.tasks.targetStateOverlay(params.projectId),
       (prev) => {
-        if (!prev || !prev[key]) return prev || {}
-        const current = prev[key]
         const incomingTaskId = normalizeOptionalString(params.taskId)
-        const currentTaskId = normalizeOptionalString(current.runningTaskId)
-        if (
-          incomingTaskId &&
-          currentTaskId &&
-          incomingTaskId !== currentTaskId &&
-          !isOptimisticTaskId(currentTaskId)
-        ) {
-          return prev
-        }
+        if (!prev) return {}
         const next: TaskTargetOverlayMap = { ...prev }
-        delete next[key]
-        return next
+        let changed = false
+
+        for (const [overlayKey, current] of Object.entries(prev)) {
+          const currentTaskId = normalizeOptionalString(current.runningTaskId)
+          const isEventTarget = overlayKey === key
+          const matchesTerminalTask = Boolean(incomingTaskId && currentTaskId === incomingTaskId)
+          const matchesOptimisticEventTarget = Boolean(isEventTarget && currentTaskId && isOptimisticTaskId(currentTaskId))
+          const matchesEventTargetWithoutTask = isEventTarget && !incomingTaskId
+          if (!matchesTerminalTask && !matchesOptimisticEventTarget && !matchesEventTargetWithoutTask) continue
+
+          delete next[overlayKey]
+          changed = true
+        }
+
+        return changed ? next : prev
       },
     )
   }

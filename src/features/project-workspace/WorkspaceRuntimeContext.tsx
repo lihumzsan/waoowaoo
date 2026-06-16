@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
+import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
@@ -42,6 +43,13 @@ export interface WorkspaceRuntimeValue {
   onClipUpdate: (clipId: string, data: unknown) => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
+  onGenerateStoryboardGridImages: (payload: {
+    readonly episodeId: string
+    readonly editScriptId: string
+    readonly sourceVideoBlockId: string
+    readonly panelIds: readonly string[]
+    readonly generationMode?: StoryboardPanelImageGenerationMode
+  }) => Promise<void>
   onSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
   onCancelPanelCandidate: (panelId: string) => Promise<void>
   onGenerateVideo: (

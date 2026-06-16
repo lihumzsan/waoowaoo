@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma-retry', () => ({
   withPrismaRetry: vi.fn(async (fn: () => Promise<unknown>) => await fn()),
 }))
 
-import { createTask } from '@/lib/task/service'
+import { createTask, tryUpdateTaskProgress } from '@/lib/task/service'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('task service operation metadata', () => {
@@ -60,6 +60,65 @@ describe('task service operation metadata', () => {
         operationConfirmed: true,
         operationRequestId: 'req-1',
       }),
+    })
+  })
+
+  it('merges progress payload without dropping storyboard grid task input', async () => {
+    taskModelMock.findFirst.mockResolvedValueOnce({
+      payload: {
+        panelId: 'panel-1',
+        imageModel: 'fal::image-model',
+        storyboardGrid: {
+          mode: '2x2',
+          sourceVideoBlockId: 'block-1',
+          panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
+        },
+        meta: {
+          locale: 'zh',
+          flowId: 'single:image_panel',
+        },
+        ui: {
+          intent: 'generate',
+          hasOutputAtStart: true,
+        },
+      },
+    })
+    taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    const updated = await tryUpdateTaskProgress('task-1', 18, {
+      stage: 'generate_panel_grid',
+      meta: {
+        locale: 'zh',
+      },
+    })
+
+    expect(updated).toBe(true)
+    expect(taskModelMock.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'task-1',
+        status: { in: ['queued', 'processing'] },
+      },
+      data: {
+        progress: 18,
+        payload: {
+          panelId: 'panel-1',
+          imageModel: 'fal::image-model',
+          storyboardGrid: {
+            mode: '2x2',
+            sourceVideoBlockId: 'block-1',
+            panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
+          },
+          stage: 'generate_panel_grid',
+          meta: {
+            locale: 'zh',
+            flowId: 'single:image_panel',
+          },
+          ui: {
+            intent: 'generate',
+            hasOutputAtStart: true,
+          },
+        },
+      },
     })
   })
 })

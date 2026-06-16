@@ -120,6 +120,83 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
     })
 }
 
+export function useGenerateStoryboardGridImages(projectId: string, episodeId?: string | null) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (payload: {
+            episodeId: string
+            editScriptId: string
+            sourceVideoBlockId: string
+            panelIds: readonly string[]
+        }) => {
+            const res = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/images/block-grid/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            if (!res.ok) {
+                const error = await res.json().catch(() => ({}))
+                if (res.status === 402) throw new Error('额度不足，请获取额度后继续使用')
+                if (res.status === 429 || error?.code === 'RATE_LIMIT') {
+                    const retryAfter = error?.retryAfter || 60
+                    throw new Error(`API 配额超限，请等待 ${retryAfter} 秒后重试`)
+                }
+                throw new Error(resolveTaskErrorMessage(error, '四宫格分镜生成失败'))
+            }
+            return res.json()
+        },
+        onMutate: ({ panelIds }) => {
+            for (const panelId of panelIds) {
+                upsertTaskTargetOverlay(queryClient, {
+                    projectId,
+                    targetType: 'ProjectPanel',
+                    targetId: panelId,
+                    runningTaskType: TASK_TYPE.IMAGE_PANEL,
+                    intent: 'regenerate',
+                })
+            }
+        },
+        onSuccess: (payload, { panelIds }) => {
+            const record = payload && typeof payload === 'object' && !Array.isArray(payload)
+                ? payload as Record<string, unknown>
+                : {}
+            const taskId = typeof record.taskId === 'string' ? record.taskId : null
+            if (taskId) {
+                for (const panelId of panelIds) {
+                    upsertTaskTargetOverlay(queryClient, {
+                        projectId,
+                        targetType: 'ProjectPanel',
+                        targetId: panelId,
+                        runningTaskId: taskId,
+                        runningTaskType: TASK_TYPE.IMAGE_PANEL,
+                        intent: 'regenerate',
+                    })
+                }
+            }
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.tasks.targetStatesAll(projectId),
+                exact: false,
+            })
+        },
+        onError: (_error, { panelIds }) => {
+            for (const panelId of panelIds) {
+                clearTaskTargetOverlay(queryClient, {
+                    projectId,
+                    targetType: 'ProjectPanel',
+                    targetId: panelId,
+                })
+            }
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.tasks.targetStatesAll(projectId),
+                exact: false,
+            })
+            return invalidateStoryboardMutationCaches(queryClient, projectId, episodeId)
+        },
+    })
+}
+
 /**
  * 修改镜头图片（storyboard）
  */

@@ -85,6 +85,12 @@ describe('outbound-image normalization', () => {
     expect(normalized).toBe('https://app.example.com/signed/images/direct.png')
   })
 
+  it('resolves storage sign api route without fetching the authenticated route', async () => {
+    const normalized = await normalizeToOriginalMediaUrl('/api/storage/sign?key=images%2Fdirect.png&expires=3600')
+    expect(normalized).toBe('https://app.example.com/signed/images/direct.png')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('normalizes api relative path to absolute fetchable url', async () => {
     const normalized = await normalizeToOriginalMediaUrl('/api/files/images%2Fa.png')
     expect(normalized).toBe('https://app.example.com/api/files/images%2Fa.png')

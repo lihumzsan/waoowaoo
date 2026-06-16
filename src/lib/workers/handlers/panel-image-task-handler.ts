@@ -15,23 +15,21 @@ import {
   clampCount,
   collectPanelReferenceImageItemsWithDiagnostics,
   normalizeReferenceImageItemsForGeneration,
-  type NumberedReferenceImage,
   type ReferenceImageItem,
-  parsePanelCharacterReferences,
   pickFirstString,
   resolveNovelData,
 } from './image-task-handler-shared'
-import {
-  findAppearanceForStoryboardReference,
-  findCharacterForStoryboardReference,
-  type StoryboardPanelCharacterReference,
-} from '@/lib/storyboard-character-bindings'
-import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image'
 import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForStoryboardTask,
 } from '@/lib/edit-script/style-bible-prompt'
+import { buildPanelPrompt, buildPanelPromptContext } from './panel-image-prompt'
+import { parseStoryboardGridPayload, handlePanelGridImageTask } from './panel-grid-image-handler'
+import {
+  applyPanelPromptFieldOmissions,
+  parseStoryboardPromptFieldOmissions,
+} from '@/lib/storyboard/prompt-field-selection'
 
 const EMPTY_PANEL_REFERENCE_COLLECTION = {
   items: [],
@@ -40,168 +38,16 @@ const EMPTY_PANEL_REFERENCE_COLLECTION = {
   expectedCharacterReferenceCount: 0,
 } satisfies Awaited<ReturnType<typeof collectPanelReferenceImageItemsWithDiagnostics>>
 
-function parseJsonUnknown(raw: string | null | undefined): unknown | null {
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-function parseDescriptionList(raw: string | null | undefined): string[] {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-  } catch {
-    return []
-  }
-}
-
-function pickAppearanceDescription(appearance: {
-  descriptions?: string | null
-  description?: string | null
-  selectedIndex?: number | null
-}): string {
-  const descriptions = parseDescriptionList(appearance.descriptions || null)
-  if (descriptions.length > 0) {
-    const selectedIndex = typeof appearance.selectedIndex === 'number' ? appearance.selectedIndex : 0
-    const selected = descriptions[selectedIndex] || descriptions[0]
-    if (selected && selected.trim()) return selected.trim()
-  }
-  if (typeof appearance.description === 'string' && appearance.description.trim()) {
-    return appearance.description.trim()
-  }
-  return '无描述'
-}
-
-function buildPanelPromptContext(params: {
-  panel: {
-    id: string
-    shotType: string | null
-    cameraMove: string | null
-    description: string | null
-    imagePrompt: string | null
-    videoPrompt: string | null
-    location: string | null
-    characters: string | null
-    srtSegment: string | null
-    photographyRules: string | null
-    actingNotes: string | null
-  }
-  projectData: Awaited<ReturnType<typeof resolveNovelData>>
-  referenceImageNotes?: string[]
-  referenceImagesMap: NumberedReferenceImage[]
-}) {
-  const panelCharacters = parsePanelCharacterReferences(params.panel.characters)
-  const characterContexts = panelCharacters.map((reference) => {
-    const character = findCharacterForStoryboardReference(
-      params.projectData.characters || [],
-      reference as StoryboardPanelCharacterReference,
-    )
-    if (!character) {
-      return {
-        name: reference.name,
-        appearance: reference.appearance || null,
-        description: '无角色外貌数据',
-      }
-    }
-
-    const appearances = character.appearances || []
-    const matchedAppearance = findAppearanceForStoryboardReference(
-      appearances,
-      reference as StoryboardPanelCharacterReference,
-    ) || null
-
-    return {
-      name: character.name,
-      characterId: character.id || reference.characterId || null,
-      appearanceId: matchedAppearance?.id || reference.appearanceId || null,
-      appearance: matchedAppearance?.changeReason || null,
-      description: matchedAppearance ? pickAppearanceDescription(matchedAppearance) : '无角色外貌数据',
-      slot: reference.slot || null,
-    }
-  })
-
-  const photographyRules = parseJsonUnknown(params.panel.photographyRules)
-  const photographyRuleRecord = photographyRules && typeof photographyRules === 'object' && !Array.isArray(photographyRules)
-    ? photographyRules as Record<string, unknown>
-    : {}
-  const consistencyMetadataRecord = photographyRuleRecord.consistencyMetadata
-    && typeof photographyRuleRecord.consistencyMetadata === 'object'
-    && !Array.isArray(photographyRuleRecord.consistencyMetadata)
-    ? photographyRuleRecord.consistencyMetadata as Record<string, unknown>
-    : {}
-  const cameraPlanSource = photographyRuleRecord.cameraPlan ?? consistencyMetadataRecord.cameraPlan
-  const cameraPlanRecord = cameraPlanSource && typeof cameraPlanSource === 'object' && !Array.isArray(cameraPlanSource)
-    ? cameraPlanSource as Record<string, unknown>
-    : {}
-  const shotBlocking = cameraPlanRecord.shotBlocking ?? photographyRuleRecord.shotBlocking ?? null
-
-  const locationContext = (() => {
-    if (!params.panel.location) return null
-    const matchedLocation = (params.projectData.locations || []).find(
-      (item) => item.name.toLowerCase() === params.panel.location!.toLowerCase(),
-    )
-    if (!matchedLocation) return null
-    const selectedImage = (matchedLocation.images || []).find((item) => item.isSelected) || matchedLocation.images?.[0]
-    return {
-      name: matchedLocation.name,
-      description: selectedImage?.description || null,
-      spatial_profile: selectedImage && 'spatialProfileJson' in selectedImage ? selectedImage.spatialProfileJson ?? null : null,
-    }
-  })()
-
-  return {
-    panel: {
-      panel_id: params.panel.id,
-      shot_type: params.panel.shotType || '',
-      camera_move: params.panel.cameraMove || '',
-      description: params.panel.description || '',
-      image_prompt: params.panel.imagePrompt || '',
-      video_prompt: params.panel.videoPrompt || '',
-      location: params.panel.location || '',
-      characters: panelCharacters,
-      source_text: params.panel.srtSegment || '',
-      photography_rules: photographyRules,
-      shot_blocking: shotBlocking,
-      acting_notes: parseJsonUnknown(params.panel.actingNotes),
-    },
-    context: {
-      character_appearances: characterContexts,
-      location_reference: locationContext,
-      reference_images: params.referenceImagesMap,
-      additional_reference_images: (params.referenceImageNotes || []).map((note, index) => ({
-        reference_image_order: index + 1,
-        note,
-      })),
-    },
-  }
-}
-
-function buildPanelPrompt(params: {
-  locale: TaskJobData['locale']
-  aspectRatio: string
-  styleText: string
-  sourceText: string
-  contextJson: string
-}) {
-  return buildPrompt({
-    promptId: PROMPT_IDS.PANEL_IMAGE_GENERATE,
-    locale: params.locale,
-    variables: {
-      aspect_ratio: params.aspectRatio,
-      storyboard_text_json_input: params.contextJson,
-      source_text: params.sourceText || '无',
-      style: params.styleText,
-    },
-  })
-}
-
 export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as AnyObj
+  const promptFieldOmissions = payload.compareOnly === true
+    ? parseStoryboardPromptFieldOmissions(payload.promptFieldOmissions)
+    : []
+  const gridPayload = parseStoryboardGridPayload(payload.storyboardGrid)
+  if (gridPayload) {
+    return await handlePanelGridImageTask(job, payload, gridPayload)
+  }
+
   const panelId = pickFirstString(payload.panelId, job.data.targetId)
   if (!panelId) throw new Error('panelId missing')
 
@@ -317,12 +163,16 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     referenceImageNotes,
     referenceImagesMap,
   })
-  const contextJson = JSON.stringify(promptContext, null, 2)
+  const selectedPromptContext = applyPanelPromptFieldOmissions(promptContext, promptFieldOmissions)
+  const contextJson = JSON.stringify(selectedPromptContext, null, 2)
+  const sourceText = promptFieldOmissions.includes('panel.source_text')
+    ? ''
+    : panel.srtSegment || panel.description || ''
   const promptBase = buildPanelPrompt({
     locale: job.data.locale,
     aspectRatio,
     styleText: '',
-    sourceText: panel.srtSegment || panel.description || '',
+    sourceText,
     contextJson,
   })
   const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
@@ -330,12 +180,14 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     episodeId: job.data.episodeId,
     storyboardId: panel.storyboardId,
   })
-  const prompt = appendStyleBiblePromptBlock({
-    prompt: promptBase,
-    styleBible,
-    usage: 'storyboardImage',
-    locale: job.data.locale,
-  })
+  const prompt = promptFieldOmissions.includes('style_bible')
+    ? promptBase
+    : appendStyleBiblePromptBlock({
+      prompt: promptBase,
+      styleBible,
+      usage: 'storyboardImage',
+      locale: job.data.locale,
+    })
   logger.info({
     message: 'panel image prompt resolved',
     details: {
@@ -344,6 +196,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   })
 
   const candidates: string[] = []
+  const effectiveReferenceImages = promptFieldOmissions.includes('context.reference_images') ? [] : referenceImages
 
   for (let i = 0; i < candidateCount; i++) {
     await reportTaskProgress(job, 18 + Math.floor((i / Math.max(candidateCount, 1)) * 58), {
@@ -356,7 +209,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
       modelId: modelKey,
       prompt,
       options: {
-        referenceImages,
+        referenceImages: effectiveReferenceImages,
         aspectRatio,
       },
       // 单个任务内会串行生成多候选，若允许按 task.externalId 续接会复用上一候选外部任务结果。
@@ -366,6 +219,23 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
 
     const cosKey = await uploadImageSourceToCos(source, 'panel-candidate', `${panel.id}-${i}`)
     candidates.push(cosKey)
+  }
+
+  if (payload.compareOnly === true) {
+    return {
+      panelId: panel.id,
+      candidateCount: candidates.length,
+      imageUrl: candidates[0] || null,
+      imageUrls: candidates,
+      compareOnly: true,
+      promptDebug: {
+        omittedFields: promptFieldOmissions,
+        prompt,
+        contextJson,
+        sourceText,
+        referenceImageCount: effectiveReferenceImages.length,
+      },
+    }
   }
 
   const isFirstGeneration = !panel.imageUrl

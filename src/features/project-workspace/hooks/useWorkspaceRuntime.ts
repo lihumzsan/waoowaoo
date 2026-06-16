@@ -8,6 +8,7 @@ import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
 } from '../video-generation-types'
+import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 
 interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
@@ -37,6 +38,13 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateClip: (clipId: string, updates: Record<string, unknown>) => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
+  handleGenerateStoryboardGridImages: (payload: {
+    readonly episodeId: string
+    readonly editScriptId: string
+    readonly sourceVideoBlockId: string
+    readonly panelIds: readonly string[]
+    readonly generationMode?: StoryboardPanelImageGenerationMode
+  }) => Promise<void>
   handleSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
   handleCancelPanelCandidate: (panelId: string) => Promise<void>
   handleGenerateVideo: (
@@ -93,6 +101,7 @@ export function useWorkspaceRuntime({
   handleUpdateClip,
   openAssetLibrary,
   handleGeneratePanelImage,
+  handleGenerateStoryboardGridImages,
   handleSelectPanelCandidate,
   handleCancelPanelCandidate,
   handleGenerateVideo,
@@ -141,6 +150,7 @@ export function useWorkspaceRuntime({
     },
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
+    onGenerateStoryboardGridImages: handleGenerateStoryboardGridImages,
     onSelectPanelCandidate: handleSelectPanelCandidate,
     onCancelPanelCandidate: handleCancelPanelCandidate,
     onGenerateVideo: handleGenerateVideo,
@@ -169,6 +179,7 @@ export function useWorkspaceRuntime({
     handleGenerateEditStoryboard,
     handleGenerateEditStoryboardSpatialBlocking,
     handleGeneratePanelImage,
+    handleGenerateStoryboardGridImages,
     handleSelectPanelCandidate,
     handleCancelPanelCandidate,
     handleGenerateVideo,

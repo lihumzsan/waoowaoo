@@ -2054,6 +2054,9 @@ export function buildWorkspaceNodeCanvasProjection({
         const panel = panelByShotNumberForVideoPlan.get(shotNumber)
         return Boolean(panel && primaryPanelImageUrl(panel))
       })
+      const blockPanelIds = block.shotNumbers
+        .map((shotNumber) => panelByShotNumberForVideoPlan.get(shotNumber)?.id ?? null)
+        .filter((panelId): panelId is string => Boolean(panelId))
       const statusLabel = isRunning
         ? translate('status.processing')
         : validationKey || runtimeErrorMessage
@@ -2071,7 +2074,7 @@ export function buildWorkspaceNodeCanvasProjection({
               gridMode: block.gridMode === '3x3' ? '3x3' : '2x2',
               shotNumbers: block.shotNumbers,
             } : undefined
-          : singlePanel
+          : singlePanel && blockHasPanelImages
             ? {
                 type: 'generate_video',
                 storyboardId: singlePanel.storyboardId,
@@ -2087,6 +2090,33 @@ export function buildWorkspaceNodeCanvasProjection({
             blockIndex: index,
           }
         : undefined
+      const storyboardGridImageAction: WorkspaceCanvasNodeAction | undefined = !isRunning && blockPanelIds.length > 1
+        ? {
+            type: 'generate_storyboard_grid_images',
+            episodeId,
+            editScriptId: editScript.id,
+            sourceVideoBlockId: `${editScript.id}:video-block:${index + 1}`,
+            panelIds: blockPanelIds,
+            generationMode: 'grid',
+          }
+        : undefined
+      const storyboardSingleImageAction: WorkspaceCanvasNodeAction | undefined = !isRunning && blockPanelIds.length > 0
+        ? {
+            type: 'generate_storyboard_grid_images',
+            episodeId,
+            editScriptId: editScript.id,
+            sourceVideoBlockId: `${editScript.id}:video-block:${index + 1}`,
+            panelIds: blockPanelIds,
+            generationMode: 'single',
+          }
+        : undefined
+      const primaryAction = action ?? (!blockHasPanelImages ? storyboardSingleImageAction : undefined)
+      const primaryActionLabel = action
+        ? translate('actions.generateVideo')
+        : !blockHasPanelImages && storyboardSingleImageAction
+          ? translate('actions.generateStoryboardSingleImages')
+          : undefined
+      const imageRuntimeTargets = blockPanelIds.map((panelId) => TASK_RUNTIME_TARGETS.projectPanelImage(panelId))
       const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
       const nodeId = `video-plan:${editScript.id}:${index + 1}`
       const validationMessage = validationKey ? translate(`errors.${validationKey}`) : null
@@ -2134,6 +2164,7 @@ export function buildWorkspaceNodeCanvasProjection({
           statusLabel,
           isRunning,
           runtimeTargets: runtimeTargets(
+            ...imageRuntimeTargets,
             block.kind === 'single'
               ? TASK_RUNTIME_TARGETS.projectPanelVideo(singlePanel?.id)
               : TASK_RUNTIME_TARGETS.projectVideoGroup(matchingGroup?.id),
@@ -2171,10 +2202,12 @@ export function buildWorkspaceNodeCanvasProjection({
             assetReferences,
             validationMessage,
           },
-          actionLabel: action ? translate('actions.generateVideo') : undefined,
-          action,
+          actionLabel: primaryActionLabel,
+          action: primaryAction,
           secondaryActionLabel: arrangementAction ? translate('actions.arrangeVideoBlocks') : undefined,
           secondaryAction: arrangementAction,
+          tertiaryActionLabel: storyboardGridImageAction ? translate('actions.generateStoryboardGridImages') : undefined,
+          tertiaryAction: storyboardGridImageAction,
           onAction,
         },
       }))

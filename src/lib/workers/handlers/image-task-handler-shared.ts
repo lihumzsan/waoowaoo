@@ -50,7 +50,7 @@ interface LocationLike {
   images?: LocationImageLike[]
 }
 
-interface NovelProjectData {
+export interface NovelProjectData {
   videoRatio?: string | null
   characters?: CharacterLike[]
   locations?: LocationLike[]

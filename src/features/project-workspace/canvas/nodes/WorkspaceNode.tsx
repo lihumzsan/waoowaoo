@@ -1647,8 +1647,12 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const canToggleDetails = nodeCanToggleDetails(data.kind)
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
+  const tertiaryAction = data.tertiaryAction
   const secondaryActionIcon: AppIconName = secondaryAction?.type === 'open_video_block_arrangement'
     ? 'link'
+    : 'externalLink'
+  const tertiaryActionIcon: AppIconName = tertiaryAction?.type === 'generate_storyboard_grid_images'
+    ? 'grid'
     : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
@@ -1659,6 +1663,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     showDetailsToggle ||
     Boolean(action && data.actionLabel && !showHeaderAction) ||
     Boolean(secondaryAction && data.secondaryActionLabel) ||
+    Boolean(tertiaryAction && data.tertiaryActionLabel) ||
     nodeShowsMetaFooter(data.kind)
   )
   const runningData = isRunning ? { ...data, __running: true } : data
@@ -1776,6 +1781,19 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                     >
                       <AppIcon name={secondaryActionIcon} className="h-3.5 w-3.5" />
                       {data.secondaryActionLabel}
+                    </button>
+                  ) : null}
+                  {tertiaryAction && data.tertiaryActionLabel ? (
+                    <button
+                      type="button"
+                      className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={data.actionDisabled === true || isRunning}
+                      onClick={() => {
+                        if (!isRunning) data.onAction?.(tertiaryAction, data.nodeId)
+                      }}
+                    >
+                      <AppIcon name={tertiaryActionIcon} className="h-3.5 w-3.5" />
+                      {data.tertiaryActionLabel}
                     </button>
                   ) : null}
                 </div>

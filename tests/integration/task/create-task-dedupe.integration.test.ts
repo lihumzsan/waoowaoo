@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
-import { createTask } from '@/lib/task/service'
+import { createTask, tryUpdateTaskProgress } from '@/lib/task/service'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
@@ -10,6 +10,11 @@ const reconcileMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/task/reconcile', () => reconcileMock)
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
 
 describe('task service dedupe + orphan recovery', () => {
   beforeEach(async () => {
@@ -145,6 +150,75 @@ describe('task service dedupe + orphan recovery', () => {
       status: TASK_STATUS.FAILED,
       errorCode: 'TASK_LOCALE_REQUIRED',
       dedupeKey: null,
+    })
+  })
+
+  it('progress updates preserve storyboard grid payload for queue recovery', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const task = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        type: TASK_TYPE.IMAGE_PANEL,
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        status: TASK_STATUS.PROCESSING,
+        progress: 5,
+        payload: {
+          panelId: 'panel-1',
+          imageModel: 'fal::image-model',
+          storyboardGrid: {
+            mode: '2x2',
+            sourceVideoBlockId: 'block-1',
+            panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
+          },
+          meta: {
+            locale: 'zh',
+            flowId: 'single:image_panel',
+          },
+          ui: {
+            intent: 'generate',
+            hasOutputAtStart: true,
+          },
+        },
+        queuedAt: new Date(),
+        startedAt: new Date(),
+      },
+    })
+
+    const updated = await tryUpdateTaskProgress(task.id, 18, {
+      stage: 'generate_panel_grid',
+      meta: {
+        locale: 'zh',
+      },
+    })
+
+    expect(updated).toBe(true)
+    const stored = await prisma.task.findUnique({
+      where: { id: task.id },
+      select: { payload: true, progress: true },
+    })
+    const payload = asRecord(stored?.payload)
+    const storyboardGrid = asRecord(payload.storyboardGrid)
+    const meta = asRecord(payload.meta)
+    const ui = asRecord(payload.ui)
+
+    expect(stored?.progress).toBe(18)
+    expect(payload.stage).toBe('generate_panel_grid')
+    expect(storyboardGrid).toEqual({
+      mode: '2x2',
+      sourceVideoBlockId: 'block-1',
+      panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
+    })
+    expect(payload.imageModel).toBe('fal::image-model')
+    expect(meta).toEqual({
+      locale: 'zh',
+      flowId: 'single:image_panel',
+    })
+    expect(ui).toEqual({
+      intent: 'generate',
+      hasOutputAtStart: true,
     })
   })
 

@@ -61,6 +61,33 @@ function toNullableJson(value?: Prisma.InputJsonValue | Record<string, unknown> 
   return value as Prisma.InputJsonValue
 }
 
+function mergeNestedRecordField(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  key: string,
+) {
+  const baseValue = toObject(base[key])
+  const patchValue = toObject(patch[key])
+  if (Object.keys(baseValue).length === 0 && Object.keys(patchValue).length === 0) return undefined
+  return {
+    ...baseValue,
+    ...patchValue,
+  }
+}
+
+function mergeTaskProgressPayload(currentPayload: unknown, progressPayload: Record<string, unknown>) {
+  const current = toObject(currentPayload)
+  const next: Record<string, unknown> = {
+    ...current,
+    ...progressPayload,
+  }
+  const meta = mergeNestedRecordField(current, progressPayload, 'meta')
+  if (meta) next.meta = meta
+  const ui = mergeNestedRecordField(current, progressPayload, 'ui')
+  if (ui) next.ui = ui
+  return next
+}
+
 function parseTaskBillingInfo(raw: unknown): TaskBillingInfo | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   if (!('billable' in raw)) return null
@@ -460,11 +487,29 @@ export async function touchTaskHeartbeat(taskId: string) {
 }
 
 export async function tryUpdateTaskProgress(taskId: string, progress: number, payload?: Record<string, unknown> | null) {
+  if (payload) {
+    const current = await withPrismaRetry(() =>
+      taskModel.findFirst({
+        where: activeTaskWhere(taskId),
+        select: { payload: true },
+      })
+    )
+    if (!current) return false
+    const mergedPayload = mergeTaskProgressPayload(current.payload, payload)
+    const result = await taskModel.updateMany({
+      where: activeTaskWhere(taskId),
+      data: {
+        progress,
+        payload: toNullableJson(mergedPayload),
+      },
+    })
+    return result.count > 0
+  }
+
   const result = await taskModel.updateMany({
     where: activeTaskWhere(taskId),
     data: {
       progress,
-      ...(payload ? { payload: toNullableJson(payload) } : {}),
     },
   })
   return result.count > 0

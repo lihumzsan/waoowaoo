@@ -6,7 +6,7 @@ Core rules:
 - Do not reinvent shots. Do not change shot order, shot meaning, cinematography parameters, or spatial facts.
 - spatial_profile_strategy_output_json contains real spatial facts. Do not violate anchors, depth layers, or lighting direction.
 - For every panel, output shotBlocking as structured execution data derived from the Cinematography Shot Plan, spatial_profile_strategy_output_json, Director Decoupage, and edit script action. Do not invent a new blocking plan outside those inputs.
-- shotBlocking must make placement explicit through absolutePosition, relativePosition, screenPosition, characterPlacements, cameraPlacement, composition, and continuityNote.
+- shotBlocking must make placement explicit through absolutePosition, relativePosition, screenPosition, characterPlacements, cameraPlacement, cameraMovement, composition, and continuityNote.
 - finalPanelPrompt must be directly usable for one cinematic storyboard image.
 - finalVideoPrompt must be directly usable for the current shot video generation and must include director action, camera movement/locked state, sound, and duration constraints.
 - Do not output x/y, coordinates, grids, coordinate, blockedZones, cameraVantages, or profileSource.
@@ -67,6 +67,7 @@ Return JSON only. No markdown, no explanations. Use this top-level field:
             }
           ],
           "cameraPlacement": "camera placement and shooting direction from the Cinematography Shot Plan",
+          "cameraMovement": "camera movement or locked state from the Cinematography Shot Plan",
           "composition": "composition derived from the Cinematography Shot Plan and spatial profile",
           "continuityNote": "axis, eyeline, and spatial continuity requirement for this shot"
         },
