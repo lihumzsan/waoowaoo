@@ -35,8 +35,8 @@ describe('provider scope', () => {
     ])
   })
 
-  it('exposes only image and video generation on FAL', () => {
-    expect(Object.keys(falAdapter).sort()).toEqual(['image', 'providerKey', 'video'])
+  it('exposes image, video, and music generation on FAL', () => {
+    expect(Object.keys(falAdapter).sort()).toEqual(['image', 'music', 'providerKey', 'video'])
   })
 
   it('exposes OpenRouter LLM and video models through the provider catalog', () => {

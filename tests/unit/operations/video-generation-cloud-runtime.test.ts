@@ -23,7 +23,8 @@ const createMutationBatchMock = vi.hoisted(() => vi.fn(async () => ({
 })))
 
 const hasPanelVideoOutputMock = vi.hoisted(() => vi.fn(async () => false))
-const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => 'ark::doubao-seedance-2-0-260128'))
+const PLATFORM_VIDEO_MODEL = 'openrouter::bytedance/seedance-2.0-fast'
+const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => PLATFORM_VIDEO_MODEL))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/operations/submit-operation-task', () => ({ submitOperationTask: submitOperationTaskMock }))
@@ -103,7 +104,7 @@ describe('cloud video generation runtime options', () => {
     const result = await createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
       confirmed: true,
       panelId: 'panel-1',
-      videoModel: 'ark::doubao-seedance-2-0-260128',
+      videoModel: PLATFORM_VIDEO_MODEL,
       generationOptions: {
         resolution: '480p',
         generateAudio: true,
@@ -117,8 +118,8 @@ describe('cloud video generation runtime options', () => {
     })
     expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
-        videoModel: 'ark::doubao-seedance-2-0-260128',
-        groupVideoModel: 'ark::doubao-seedance-2-0-260128',
+        videoModel: PLATFORM_VIDEO_MODEL,
+        groupVideoModel: PLATFORM_VIDEO_MODEL,
         generationOptions: expect.objectContaining({
           resolution: '480p',
           generateAudio: true,
@@ -133,7 +134,7 @@ describe('cloud video generation runtime options', () => {
     await expect(createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
       confirmed: true,
       panelId: 'panel-1',
-      videoModel: 'ark::doubao-seedance-2-0-260128',
+      videoModel: PLATFORM_VIDEO_MODEL,
       generationOptions: {
         aspectRatio: '16:9',
       },
