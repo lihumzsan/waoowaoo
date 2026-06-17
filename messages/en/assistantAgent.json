@@ -118,6 +118,8 @@
     "dedupedLabel": "Deduped",
     "undoBatchIdLabel": "Undo Batch ID",
     "totalLabel": "Total",
+    "totalLabelWithCount": "Total: {count}",
+    "batchTaskAndTargetTotals": "Tasks: {tasks} · Targets: {targets}",
     "screenplayPreview": "Screenplay Preview",
     "storyboardPreview": "Storyboard Preview",
     "panelsLabel": "Panels {count}",

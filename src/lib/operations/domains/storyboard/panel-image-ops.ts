@@ -381,6 +381,8 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
           operationId: 'generate_edit_script_storyboard_images',
           total: taskResults.length,
+          taskTotal: taskResults.length,
+          targetTotal: panelIds.length,
           taskIds,
           results: resultRefs,
           mutationBatchId: mutationBatch.id,
@@ -390,6 +392,8 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           success: true,
           async: true,
           total: taskResults.length,
+          taskTotal: taskResults.length,
+          targetTotal: panelIds.length,
           taskIds,
           results: resultRefs,
           mutationBatchId: mutationBatch.id,

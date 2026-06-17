@@ -105,6 +105,12 @@ function readTaskBatchSubmittedPartData(value: unknown): TaskBatchSubmittedPartD
   const total = typeof value.total === 'number' && Number.isFinite(value.total)
     ? value.total
     : taskIds.length
+  const taskTotal = typeof value.taskTotal === 'number' && Number.isFinite(value.taskTotal)
+    ? value.taskTotal
+    : undefined
+  const targetTotal = typeof value.targetTotal === 'number' && Number.isFinite(value.targetTotal)
+    ? value.targetTotal
+    : undefined
   const mutationBatchId = readOptionalString(value.mutationBatchId)
   const results = Array.isArray(value.results)
     ? value.results.flatMap((item) => {
@@ -128,6 +134,8 @@ function readTaskBatchSubmittedPartData(value: unknown): TaskBatchSubmittedPartD
   return {
     operationId,
     total,
+    ...(taskTotal !== undefined ? { taskTotal } : {}),
+    ...(targetTotal !== undefined ? { targetTotal } : {}),
     taskIds,
     ...(results ? { results } : {}),
     ...(mutationBatchId !== undefined ? { mutationBatchId } : {}),
@@ -295,6 +303,12 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
   const total = typeof result.total === 'number' && Number.isFinite(result.total)
     ? result.total
     : taskIds.length
+  const taskTotal = typeof result.taskTotal === 'number' && Number.isFinite(result.taskTotal)
+    ? result.taskTotal
+    : undefined
+  const targetTotal = typeof result.targetTotal === 'number' && Number.isFinite(result.targetTotal)
+    ? result.targetTotal
+    : undefined
   const mutationBatchId = readOptionalString(result.mutationBatchId)
   const results = Array.isArray(result.results)
     ? result.results.flatMap((item) => {
@@ -318,6 +332,8 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
   return {
     operationId: params.operationId,
     total,
+    ...(taskTotal !== undefined ? { taskTotal } : {}),
+    ...(targetTotal !== undefined ? { targetTotal } : {}),
     taskIds,
     ...(results ? { results } : {}),
     ...(mutationBatchId !== undefined ? { mutationBatchId } : {}),

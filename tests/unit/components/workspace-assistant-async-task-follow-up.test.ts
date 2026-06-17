@@ -154,27 +154,29 @@ describe('workspace assistant async task follow-up', () => {
 
   it('creates batch task submission data from confirmed operation payload', () => {
     const data = createTaskBatchSubmittedDataFromOperationPayload({
-      operationId: 'generate_all_videos',
+      operationId: 'generate_edit_script_storyboard_images',
       payload: {
         result: {
           success: true,
           async: true,
-          total: 2,
-          taskIds: ['task-1', 'task-2'],
+          total: 1,
+          taskTotal: 1,
+          targetTotal: 2,
+          taskIds: ['task-grid-1'],
           results: [
             {
-              refId: 'shot-1',
-              taskId: 'task-1',
-              taskType: TASK_TYPE.IMAGE_CHARACTER,
-              targetType: 'CharacterAppearance',
-              targetId: 'appearance-1',
+              refId: 'panel-1',
+              taskId: 'task-grid-1',
+              taskType: TASK_TYPE.IMAGE_PANEL,
+              targetType: 'ProjectPanel',
+              targetId: 'panel-1',
             },
             {
-              refId: 'shot-2',
-              taskId: 'task-2',
-              taskType: TASK_TYPE.IMAGE_LOCATION,
-              targetType: 'LocationImage',
-              targetId: 'location-1',
+              refId: 'panel-2',
+              taskId: 'task-grid-1',
+              taskType: TASK_TYPE.IMAGE_PANEL,
+              targetType: 'ProjectPanel',
+              targetId: 'panel-2',
             },
           ],
           mutationBatchId: 'batch-1',
@@ -183,23 +185,25 @@ describe('workspace assistant async task follow-up', () => {
     })
 
     expect(data).toEqual({
-      operationId: 'generate_all_videos',
-      total: 2,
-      taskIds: ['task-1', 'task-2'],
+      operationId: 'generate_edit_script_storyboard_images',
+      total: 1,
+      taskTotal: 1,
+      targetTotal: 2,
+      taskIds: ['task-grid-1'],
       results: [
         {
-          refId: 'shot-1',
-          taskId: 'task-1',
-          taskType: TASK_TYPE.IMAGE_CHARACTER,
-          targetType: 'CharacterAppearance',
-          targetId: 'appearance-1',
+          refId: 'panel-1',
+          taskId: 'task-grid-1',
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: 'panel-1',
         },
         {
-          refId: 'shot-2',
-          taskId: 'task-2',
-          taskType: TASK_TYPE.IMAGE_LOCATION,
-          targetType: 'LocationImage',
-          targetId: 'location-1',
+          refId: 'panel-2',
+          taskId: 'task-grid-1',
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: 'panel-2',
         },
       ],
       mutationBatchId: 'batch-1',

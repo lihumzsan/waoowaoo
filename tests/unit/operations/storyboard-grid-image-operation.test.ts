@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import { writeOperationDataPart } from '@/lib/operations/types'
 import { TASK_TYPE } from '@/lib/task/types'
 
 type SubmitOperationTaskMockInput = Record<string, unknown> & {
@@ -16,14 +17,17 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-const submitOperationTaskMock = vi.hoisted(() => vi.fn(async (_input: SubmitOperationTaskMockInput) => ({
-  success: true,
-  async: true,
-  taskId: 'task-grid-1',
-  status: 'queued',
-  runId: null,
-  deduped: false,
-})))
+const submitOperationTaskMock = vi.hoisted(() => vi.fn(async (input: SubmitOperationTaskMockInput) => {
+  void input
+  return {
+    success: true,
+    async: true,
+    taskId: 'task-grid-1',
+    status: 'queued',
+    runId: null,
+    deduped: false,
+  }
+}))
 
 const createMutationBatchMock = vi.hoisted(() => vi.fn(async () => ({
   id: 'mutation-batch-grid-1',
@@ -208,6 +212,43 @@ describe('generate_edit_script_storyboard_images operation', () => {
     }))
     expect(submitOperationTaskMock.mock.calls[1]?.[0]?.payload).toEqual(expect.not.objectContaining({
       storyboardGrid: expect.anything(),
+    }))
+  })
+
+  it('reports grid batch task count separately from covered panel count', async () => {
+    const operation = createStoryboardPanelImageOperations().generate_edit_script_storyboard_images
+    const result = await operation.execute(buildContext(), {
+      episodeId: 'episode-1',
+      generationMode: 'grid',
+    })
+
+    expect(result).toMatchObject({
+      total: 1,
+      taskTotal: 1,
+      targetTotal: 2,
+      episodeId: 'episode-1',
+      panelIds: ['panel-1', 'panel-2'],
+      generationMode: 'grid',
+    })
+    expect(submitOperationTaskMock).toHaveBeenCalledTimes(1)
+    expect(writeOperationDataPart).toHaveBeenCalledWith(null, 'data-task-batch-submitted', expect.objectContaining({
+      operationId: 'generate_edit_script_storyboard_images',
+      total: 1,
+      taskTotal: 1,
+      targetTotal: 2,
+      taskIds: ['task-grid-1'],
+      results: [
+        expect.objectContaining({
+          refId: 'panel-1',
+          taskId: 'task-grid-1',
+          targetId: 'panel-1',
+        }),
+        expect.objectContaining({
+          refId: 'panel-2',
+          taskId: 'task-grid-1',
+          targetId: 'panel-2',
+        }),
+      ],
     }))
   })
 })

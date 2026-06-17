@@ -216,6 +216,8 @@ export interface TaskSubmittedPartData {
 export interface TaskBatchSubmittedPartData {
   operationId: string
   total: number
+  taskTotal?: number
+  targetTotal?: number
   taskIds: string[]
   results?: Array<{
     refId: string

@@ -686,6 +686,11 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   const t = useTranslations('assistantAgent')
   const revertMutationBatch = useRevertMutationBatch()
   const [undoResult, setUndoResult] = useState<{ ok: boolean; message?: string } | null>(null)
+  const taskTotal = data.taskTotal ?? data.taskIds.length
+  const targetTotal = data.targetTotal
+  const countLabel = typeof targetTotal === 'number' && targetTotal !== taskTotal
+    ? t('cards.batchTaskAndTargetTotals', { tasks: taskTotal, targets: targetTotal })
+    : t('cards.totalLabelWithCount', { count: data.total })
 
   const handleUndo = async () => {
     if (!data.mutationBatchId) return
@@ -707,7 +712,7 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="play" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t('cards.batchTaskSubmitted')} · {data.operationId} · {t('cards.totalLabel')}: {String(data.total)}</span>
+        <span className="min-w-0 truncate">{t('cards.batchTaskSubmitted')} · {data.operationId} · {countLabel}</span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="ml-5 mt-1 space-y-0.5 font-mono text-[11px]">
