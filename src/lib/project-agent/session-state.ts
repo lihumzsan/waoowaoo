@@ -238,6 +238,13 @@ function isAspectRatio(value: string | null): value is NonNullable<EditStylePrev
   return value === '9:16' || value === '16:9' || value === '21:9'
 }
 
+function resolveStylePreviewAgentRunId(run: ProjectAgentSessionRun | null): string | null {
+  if (!run) return null
+  if (run.operationId === 'generate_edit_style_previews') return run.runId
+  if (run.status === 'awaiting_choice' && run.controlKind === 'user_turn') return run.runId
+  return null
+}
+
 async function buildActiveStylePreviewGeneration(params: {
   projectId: string
   userId: string
@@ -274,6 +281,7 @@ async function buildActiveStylePreviewGeneration(params: {
   })
   if (!screenplay) return null
   if (screenplay.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
+  const agentRunId = resolveStylePreviewAgentRunId(params.run)
   const items = screenplay.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
     if (!preview.taskId) return []
     if (!isStylePreviewKey(preview.styleKey)) return []
@@ -291,7 +299,7 @@ async function buildActiveStylePreviewGeneration(params: {
     key: `screenplay:${screenplay.id}:style-previews`,
     data: {
       operationId: 'generate_edit_style_previews',
-      ...(params.run?.operationId === 'generate_edit_style_previews' ? { agentRunId: params.run.runId } : {}),
+      ...(agentRunId ? { agentRunId } : {}),
       projectId: screenplay.projectId,
       episodeId: screenplay.episodeId,
       screenplayId: screenplay.id,

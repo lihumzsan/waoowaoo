@@ -286,6 +286,71 @@ describe('project agent session-state', () => {
     }))
   })
 
+  it('keeps the awaiting style preview run id on the rebuilt style choice card after refresh', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
+      {
+        id: 'run-style-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantId: 'workspace-command',
+        scopeRef: 'episode:episode-1',
+        episodeId: 'episode-1',
+        requestId: 'request-style-1',
+        status: 'awaiting_choice',
+        controlKind: 'user_turn',
+        stopReason: 'awaiting_user_choice',
+      },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce(null)
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+      id: 'screenplay-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      stylePreviews: [
+        {
+          id: 'style-preview-a',
+          styleKey: 'style_a',
+          title: '风格 A',
+          summary: '风格 A 摘要',
+          taskId: 'task-style-a',
+          aspectRatio: '16:9',
+          status: 'completed',
+        },
+      ],
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.currentRun).toEqual({
+      runId: 'run-style-1',
+      status: 'awaiting_choice',
+      controlKind: 'user_turn',
+      operationId: null,
+    })
+    expect(state.activeStylePreviewGeneration?.data).toEqual(expect.objectContaining({
+      operationId: 'generate_edit_style_previews',
+      agentRunId: 'run-style-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      items: [
+        expect.objectContaining({
+          id: 'style-preview-a',
+          taskId: 'task-style-a',
+          aspectRatio: '16:9',
+        }),
+      ],
+    }))
+  })
+
   it('does not revive a consumed approval as the current operation after a stale run is cancelled', async () => {
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
       {
