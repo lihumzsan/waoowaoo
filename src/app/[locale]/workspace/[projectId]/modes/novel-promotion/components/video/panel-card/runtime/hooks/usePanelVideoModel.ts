@@ -7,8 +7,7 @@ import {
   resolveEffectiveVideoCapabilityFields,
 } from '@/lib/model-capabilities/video-effective'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
-
-const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
+import { normalizeDefaultVideoModel } from '@/lib/novel-promotion/video-model-defaults'
 
 interface UsePanelVideoModelParams {
   defaultVideoModel: string
@@ -63,11 +62,6 @@ function readSelectionForModel(
     selection[field] = value
   }
   return selection
-}
-
-function normalizeDefaultVideoModel(modelKey: string): string {
-  const value = modelKey.trim()
-  return value || DEFAULT_VIDEO_MODEL
 }
 
 export function usePanelVideoModel({

@@ -1,9 +1,15 @@
 import { getProviderConfig } from '@/lib/api-config'
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
 import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
+import {
+  COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID,
+  isSeedance2BerniniWorkflowKey,
+  resolveSeedance2BerniniWorkflowKey,
+} from '@/lib/providers/comfyui/seedance2-bernini-workflow'
 import { BaseVideoGenerator, type GenerateResult, type VideoGenerateParams } from './base'
 
 const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
@@ -17,11 +23,12 @@ const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
 }
 
 const COMFYUI_VIDEO_DIMENSION_ALIGNMENT = 32
+const BERNINI_VIDEO_DIMENSION_ALIGNMENT = 16
 
-function alignComfyUiVideoDimension(value: number): number {
+function alignComfyUiVideoDimension(value: number, alignment = COMFYUI_VIDEO_DIMENSION_ALIGNMENT): number {
   return Math.max(
     64,
-    Math.min(4096, Math.round(value / COMFYUI_VIDEO_DIMENSION_ALIGNMENT) * COMFYUI_VIDEO_DIMENSION_ALIGNMENT),
+    Math.min(4096, Math.round(value / alignment) * alignment),
   )
 }
 
@@ -30,6 +37,25 @@ function normalizeComfyUiVideoSize(size: { w: number; h: number } | null): { w: 
   return {
     w: alignComfyUiVideoDimension(size.w),
     h: alignComfyUiVideoDimension(size.h),
+  }
+}
+
+function normalizeBernini480pVideoSize(size: { w: number; h: number } | null): { w: number; h: number } {
+  const source = size || { w: 480, h: 848 }
+  const ratio = source.w > 0 && source.h > 0 ? source.w / source.h : 480 / 848
+  const shortSide = 480
+  const maxLongSide = 848
+
+  if (ratio >= 1) {
+    return {
+      w: Math.min(maxLongSide, alignComfyUiVideoDimension(shortSide * ratio, BERNINI_VIDEO_DIMENSION_ALIGNMENT)),
+      h: shortSide,
+    }
+  }
+
+  return {
+    w: shortSide,
+    h: Math.min(maxLongSide, alignComfyUiVideoDimension(shortSide / ratio, BERNINI_VIDEO_DIMENSION_ALIGNMENT)),
   }
 }
 
@@ -63,6 +89,13 @@ function normalizeComfyUiProviderError(error: unknown): string {
   return message
 }
 
+function normalizeComfyUiVideoWorkflowKey(rawWorkflowKey: string): string {
+  const normalizedModelKey = normalizeVideoModelKey(rawWorkflowKey)
+  return normalizedModelKey.startsWith('comfyui::')
+    ? normalizedModelKey.slice('comfyui::'.length)
+    : normalizedModelKey
+}
+
 type ComfyUiVideoWorkflowSelection = {
   workflowKey: string
   durationSeconds?: number
@@ -76,6 +109,7 @@ function resolveComfyUiVideoWorkflowSelection(
     multiShotRange?: unknown
     duration?: unknown
     ltx23WorkflowSelection?: unknown
+    hasReferenceAudio?: boolean
   },
 ): ComfyUiVideoWorkflowSelection {
   const trimmedWorkflowKey = workflowKey.trim()
@@ -86,8 +120,12 @@ function resolveComfyUiVideoWorkflowSelection(
     requestedDurationSeconds: typeof options?.duration === 'number' ? options.duration : null,
     panel: { videoPrompt: prompt },
   })
+  const selectedWorkflowKey = route?.selectedWorkflowKey ?? trimmedWorkflowKey
   return {
-    workflowKey: route?.selectedWorkflowKey ?? trimmedWorkflowKey,
+    workflowKey: resolveSeedance2BerniniWorkflowKey({
+      requestedWorkflowKey: selectedWorkflowKey,
+      hasReferenceAudio: options?.hasReferenceAudio === true,
+    }),
     ...(route ? { durationSeconds: route.durationSeconds } : {}),
   }
 }
@@ -117,8 +155,8 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
   protected async doGenerate(params: VideoGenerateParams): Promise<GenerateResult> {
     const { userId, imageUrl, prompt, options = {} } = params
     const workflowKey = typeof options.modelId === 'string' && options.modelId.trim()
-      ? options.modelId.trim()
-      : COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
+      ? normalizeComfyUiVideoWorkflowKey(options.modelId.trim())
+      : COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID
     if (isRemovedLegacyLtx23WorkflowKey(workflowKey)) {
       return {
         success: false,
@@ -136,18 +174,22 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
       }
     }
 
+    const referenceAudioUrls = normalizeComfyUiReferenceAudioUrls(options.referenceAudioUrls)
     const selectedWorkflow = resolveComfyUiVideoWorkflowSelection(workflowKey, prompt || '', {
       generationMode: options.generationMode,
       multiShotRange: options.multiShotRange,
       duration: options.duration,
       ltx23WorkflowSelection: options.ltx23WorkflowSelection,
+      hasReferenceAudio: !!referenceAudioUrls?.length,
     })
     const selectedWorkflowKey = selectedWorkflow.workflowKey
     const directSize = parseWxH(typeof options.size === 'string' ? options.size : undefined)
     const aspectSize = typeof options.aspectRatio === 'string'
       ? ASPECT_TO_SIZE[options.aspectRatio.trim()]
       : undefined
-    const targetSize = normalizeComfyUiVideoSize(directSize || aspectSize || null)
+    const targetSize = isSeedance2BerniniWorkflowKey(selectedWorkflowKey)
+      ? normalizeBernini480pVideoSize(directSize || aspectSize || null)
+      : normalizeComfyUiVideoSize(directSize || aspectSize || null)
 
     try {
       const llmApi = isComfyUiWorkflowLlmApiRequired(selectedWorkflowKey)
@@ -162,12 +204,13 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
         prompt: prompt || '',
         firstFrameImageUrl: imageUrl,
         referenceImageUrls: normalizeComfyUiReferenceImageUrls(options.referenceImageUrls),
-        referenceAudioUrls: normalizeComfyUiReferenceAudioUrls(options.referenceAudioUrls),
+        referenceAudioUrls,
         lastFrameImageUrl: typeof options.lastFrameImageUrl === 'string' ? options.lastFrameImageUrl : undefined,
         width: targetSize?.w,
         height: targetSize?.h,
         durationSeconds: selectedWorkflow.durationSeconds ?? (typeof options.duration === 'number' ? options.duration : undefined),
         fps: typeof options.fps === 'number' ? options.fps : undefined,
+        motionStrength: typeof options.motionStrength === 'number' ? options.motionStrength : undefined,
         llmApi,
       })
 

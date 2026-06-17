@@ -8,6 +8,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { hasPanelVideoOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { parseModelKeyStrict, type CapabilityValue } from '@/lib/model-config-contract'
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 import {
   resolveBuiltinCapabilitiesByModelKey,
 } from '@/lib/model-capabilities/lookup'
@@ -25,6 +26,10 @@ import {
   type Ltx23WorkflowRoutingResult,
 } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
+import {
+  SEEDANCE2_BERNINI_DEFAULT_FPS,
+  isSeedance2BerniniWorkflowKey,
+} from '@/lib/providers/comfyui/seedance2-bernini-workflow'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -76,11 +81,11 @@ function resolveVideoModelKeyFromPayload(payload: Record<string, unknown>): stri
   const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
   if (firstLast && typeof firstLast.flModel === 'string' && parseModelKeyStrict(firstLast.flModel)) {
     rejectRemovedLegacyLtx23ModelKey(firstLast.flModel)
-    return firstLast.flModel
+    return normalizeVideoModelKey(firstLast.flModel)
   }
   if (typeof payload.videoModel === 'string' && parseModelKeyStrict(payload.videoModel)) {
     rejectRemovedLegacyLtx23ModelKey(payload.videoModel)
-    return payload.videoModel
+    return normalizeVideoModelKey(payload.videoModel)
   }
   return null
 }
@@ -93,7 +98,53 @@ function requireVideoModelKeyFromPayload(payload: unknown): string {
     })
   }
   rejectRemovedLegacyLtx23ModelKey(payload.videoModel)
-  return payload.videoModel
+  return normalizeVideoModelKey(payload.videoModel)
+}
+
+function normalizeVideoPayloadModelKeys(payload: unknown): Record<string, unknown> {
+  if (!isRecord(payload)) return {}
+
+  const normalized: Record<string, unknown> = { ...payload }
+  if (typeof normalized.videoModel === 'string') {
+    normalized.videoModel = normalizeVideoModelKey(normalized.videoModel)
+  }
+  if (isRecord(normalized.firstLastFrame) && typeof normalized.firstLastFrame.flModel === 'string') {
+    normalized.firstLastFrame = {
+      ...normalized.firstLastFrame,
+      flModel: normalizeVideoModelKey(normalized.firstLastFrame.flModel),
+    }
+  }
+  if (isRecord(normalized.generationOptions) && typeof normalized.videoModel === 'string') {
+    normalized.generationOptions = normalizeVideoGenerationOptionsForModel(
+      normalized.videoModel,
+      normalized.generationOptions,
+    )
+  }
+  return normalized
+}
+
+function normalizeVideoGenerationOptionsForModel(
+  modelKey: string,
+  generationOptions: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isSeedance2BerniniWorkflowKey(modelKey)) return generationOptions
+
+  return {
+    ...generationOptions,
+    fps: SEEDANCE2_BERNINI_DEFAULT_FPS,
+  }
+}
+
+function normalizeVideoRuntimeSelectionsForModel(
+  modelKey: string,
+  runtimeSelections: Record<string, CapabilityValue>,
+): Record<string, CapabilityValue> {
+  if (!isSeedance2BerniniWorkflowKey(modelKey)) return runtimeSelections
+
+  return {
+    ...runtimeSelections,
+    fps: SEEDANCE2_BERNINI_DEFAULT_FPS,
+  }
 }
 
 function validateFirstLastFrameModel(input: unknown) {
@@ -136,8 +187,10 @@ async function validateVideoCapabilityCombination(input: {
   const builtinCaps = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
   if (!builtinCaps) return
 
-  const runtimeSelections = toVideoRuntimeSelections(payload.generationOptions)
-  runtimeSelections.generationMode = resolveVideoGenerationMode(payload)
+  const runtimeSelections = normalizeVideoRuntimeSelectionsForModel(modelKey, {
+    ...toVideoRuntimeSelections(payload.generationOptions),
+    generationMode: resolveVideoGenerationMode(payload),
+  })
 
   let resolvedOptions: Record<string, CapabilityValue>
   try {
@@ -593,13 +646,13 @@ export const POST = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
   const { session } = authResult
 
-  const body = await request.json()
+  const body = normalizeVideoPayloadModelKeys(await request.json())
   requireVideoModelKeyFromPayload(body)
   const locale = resolveRequiredTaskLocale(request, body)
   const isBatch = body?.all === true
 
   if (isBatch) {
-    const episodeId = body?.episodeId
+    const episodeId = typeof body.episodeId === 'string' ? body.episodeId.trim() : ''
     if (!episodeId) {
       throw new ApiError('INVALID_PARAMS')
     }
@@ -650,6 +703,7 @@ export const POST = apiHandler(async (
           payload: item.payload,
           modelKey: item.modelKey,
           durationOptions: capabilities?.video?.durationOptions,
+          fpsOptions: capabilities?.video?.fpsOptions,
         }),
       }
     })
@@ -766,6 +820,7 @@ export const POST = apiHandler(async (
     payload: routedPanel.payload,
     modelKey: routedPanel.modelKey,
     durationOptions: singleCapabilities?.video?.durationOptions,
+    fpsOptions: singleCapabilities?.video?.fpsOptions,
   })
   if (readinessIssue) {
     throw new ApiError('INVALID_PARAMS', {

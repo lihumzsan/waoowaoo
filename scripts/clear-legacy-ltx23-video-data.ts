@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
+import { COMFYUI_SEEDANCE2_BERNINI_MODEL_KEY } from '@/lib/providers/comfyui/seedance2-bernini-workflow'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   collectLegacyPanelIdsToClear,
@@ -18,7 +18,7 @@ type Args = {
   clearPanelVideos: boolean
 }
 
-const NEW_DEFAULT_VIDEO_MODEL = `comfyui::${COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID}`
+const NEW_DEFAULT_VIDEO_MODEL = COMFYUI_SEEDANCE2_BERNINI_MODEL_KEY
 const CLEANUP_TASK_TYPES = [TASK_TYPE.VIDEO_PANEL, TASK_TYPE.LIP_SYNC]
 
 function parseArgs(argv: string[]): Args {

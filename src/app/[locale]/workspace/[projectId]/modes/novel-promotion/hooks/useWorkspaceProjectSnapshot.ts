@@ -3,8 +3,7 @@
 import { useMemo } from 'react'
 import type { NovelPromotionWorkspaceProps } from '../types'
 import type { CapabilitySelections } from '@/lib/model-config-contract'
-
-const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
+import { normalizeDefaultVideoModel } from '@/lib/novel-promotion/video-model-defaults'
 
 function parseCapabilitySelections(raw: unknown): CapabilitySelections {
   if (!raw) return {}
@@ -19,11 +18,6 @@ function parseCapabilitySelections(raw: unknown): CapabilitySelections {
   } catch {
     return {}
   }
-}
-
-function normalizeDefaultVideoModel(model: string | null | undefined): string | undefined {
-  const value = typeof model === 'string' ? model.trim() : ''
-  return value || DEFAULT_VIDEO_MODEL
 }
 
 export function useWorkspaceProjectSnapshot({

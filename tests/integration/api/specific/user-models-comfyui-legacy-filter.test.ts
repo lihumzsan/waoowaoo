@@ -47,7 +47,7 @@ describe('api specific - user models ComfyUI legacy LTX2.3 filter', () => {
     vi.clearAllMocks()
   })
 
-  it('hides old LTX2.3 custom video models and keeps current profile helpers', async () => {
+  it('hides LTX2.3 custom video models and keeps the Bernini helper', async () => {
     const mod = await import('@/app/api/user/models/route')
     const req = buildMockRequest({
       path: '/api/user/models',
@@ -62,6 +62,7 @@ describe('api specific - user models ComfyUI legacy LTX2.3 filter', () => {
     const values = body.video.map((item) => item.value)
 
     expect(values).not.toContain('comfyui::basevideo/demo/LTX2.3-fast')
-    expect(values).toContain('comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2')
+    expect(values).not.toContain('comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2')
+    expect(values).toContain('comfyui::basevideo/seedance2/bernini-480p-i2v')
   })
 })

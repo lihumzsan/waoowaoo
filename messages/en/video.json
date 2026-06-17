@@ -195,6 +195,12 @@
     "duration": "Duration",
     "fps": "Frame rate",
     "resolution": "Resolution",
+    "motionStrength": "Motion strength",
+    "motionStrengthOption": {
+      "1": "Calm",
+      "2": "Normal motion",
+      "3": "Strong action"
+    },
     "aspectRatio": "Aspect ratio",
     "reasoningEffort": "Reasoning effort",
     "voice": "Voice",

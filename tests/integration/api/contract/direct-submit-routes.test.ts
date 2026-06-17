@@ -462,13 +462,14 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
     expectedSubmitEpisodeId: 'episode-1',
     expectedPayloadSubset: {
-      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       generationOptions: {
         resolution: '720p',
         duration: 5,
+        fps: 24,
       },
       firstLastFrame: {
-        flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        flModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       },
     },
   },
@@ -862,7 +863,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(submitTaskMock).toHaveBeenCalledTimes(2)
   })
 
-  it('single generate-video writes the auto-routed LTX2.3 profile into the submitted payload', async () => {
+  it('single generate-video normalizes removed LTX2.3 profile keys to Bernini in the submitted payload', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -909,21 +910,94 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-      ltx23WorkflowSelection: 'auto',
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       generationOptions: expect.objectContaining({
-        duration: 12,
+        duration: 6,
         resolution: '720p',
       }),
-      ltx23WorkflowRouting: expect.objectContaining({
-        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-        category: 'single_image_large_motion',
-        routed: true,
+    }))
+    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
+  })
+
+  it('single generate-video normalizes the Bernini audio lipsync key and stale fps before submit', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'doctor speaks in a static close-up',
+      videoPromptEditedByUser: false,
+      description: 'doctor speaks in a static close-up',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'close',
+      cameraMove: 'static',
+      sceneType: 'dialogue',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'office conversation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (
+      input?: CapabilityGenerationOptionsInput & { modelKey?: string },
+    ): Promise<CapabilityGenerationOptions> => {
+      expect(input?.modelKey).toBe('comfyui::basevideo/seedance2/bernini-480p-i2v')
+      expect(input?.runtimeSelections).toEqual(expect.objectContaining({
+        duration: 5,
+        fps: 24,
+        resolution: '480p',
+        generationMode: 'normal',
+        motionStrength: 2,
+      }))
+      return {
+        duration: 5,
+        fps: 24,
+        resolution: '480p',
+        generationMode: 'normal',
+        motionStrength: 2,
+      }
+    })
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 5,
+          fps: 25,
+          resolution: '480p',
+          motionStrength: 2,
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      generationOptions: expect.objectContaining({
+        duration: 5,
+        fps: 24,
+        resolution: '480p',
+        motionStrength: 2,
       }),
     }))
   })
 
-  it('single generate-video keeps slow locked camera prompts on single-image LTX2.3 payload', async () => {
+  it('single generate-video keeps slow locked camera prompts on Bernini after old LTX2.3 keys are normalized', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -970,22 +1044,17 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       generationOptions: expect.objectContaining({
-        duration: 12,
+        duration: 4,
         resolution: '720p',
       }),
-      ltx23WorkflowRouting: expect.objectContaining({
-        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-        category: 'single_image_precise',
-        routed: false,
-        reasons: ['slow_stable_camera_movement'],
-      }),
     }))
+    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
     expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
   })
 
-  it('single generate-video remaps stale first-last-frame-only LTX2.3 model in normal mode', async () => {
+  it('single generate-video normalizes stale first-last-frame-only LTX2.3 model in normal mode', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -1032,23 +1101,17 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       generationOptions: expect.objectContaining({
         duration: 6,
         resolution: '720p',
       }),
-      ltx23WorkflowRouting: expect.objectContaining({
-        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-        category: 'single_image_precise',
-        selectionMode: 'auto',
-        routed: true,
-        reasons: expect.arrayContaining(['first_last_frame_model_in_normal_mode']),
-      }),
     }))
+    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
     expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
   })
 
-  it('single generate-video uses auto-matched voice lines when routing LTX2.3 long audio', async () => {
+  it('single generate-video blocks old LTX2.3 long-audio requests after normalizing to Bernini', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -1080,19 +1143,6 @@ describe('api contract - direct submit routes (behavior)', () => {
         },
       ])
       .mockResolvedValueOnce([])
-    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input?: {
-      runtimeSelections?: Record<string, unknown>
-    }) => {
-      if (input?.runtimeSelections?.duration !== 24) {
-        throw new Error(`expected capability duration 24, got ${String(input?.runtimeSelections?.duration)}`)
-      }
-      return {
-        duration: 24,
-        generationMode: 'normal',
-        resolution: '720p',
-      }
-    })
-
     const res = await invokePostRoute({
       routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
       body: {
@@ -1110,19 +1160,11 @@ describe('api contract - direct submit routes (behavior)', () => {
       expectedProjectId: 'project-1',
     })
 
-    expect(res.status).toBe(200)
-    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
-    expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-      generationOptions: expect.objectContaining({
-        duration: 24,
-      }),
-      ltx23WorkflowRouting: expect.objectContaining({
-        selectedWorkflowKey: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-        durationSeconds: 23.7,
-        reasons: ['duration_over_12s'],
-      }),
-    }))
+    expect(res.status).toBe(400)
+    const body = await res.json() as { code?: string; details?: { issue?: { code?: string } } }
+    expect(body.code).toBe('VIDEO_READINESS_BLOCKED')
+    expect(body.details?.issue?.code).toBe('audio_duration_exceeds_model')
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('batch generate-video validates all ready panels before submitting any task', async () => {

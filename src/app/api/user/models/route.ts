@@ -18,6 +18,7 @@ import {
 } from '@/lib/model-config-contract'
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/model-pricing/catalog'
+import { isLegacyLtx23VideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
@@ -79,51 +80,16 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
     provider: 'comfyui',
   },
   {
-    modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-    name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
+    modelId: 'basevideo/seedance2/bernini-480p-i2v',
+    modelKey: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+    name: 'ComfyUI · Seedance2.0 Bernini 480p I2V',
     type: 'video',
     provider: 'comfyui',
   },
   {
-    modelId: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
-    name: 'ComfyUI · LTX 2.3 T8 微动 PromptRelay',
-    type: 'video',
-    provider: 'comfyui',
-  },
-  {
-    modelId: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-    name: 'ComfyUI · LTX 2.3 T8 单图大幅变化',
-    type: 'video',
-    provider: 'comfyui',
-  },
-  {
-    modelId: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
-    name: 'ComfyUI · LTX 2.3 T8 平滑首尾帧',
-    type: 'video',
-    provider: 'comfyui',
-  },
-  {
-    modelId: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-    name: 'ComfyUI · LTX 2.3 大麦茶 30 秒长视频',
-    type: 'video',
-    provider: 'comfyui',
-  },
-  {
-    modelId: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
-    name: 'ComfyUI · LTX 2.3 大麦茶长视频 PromptRelay',
-    type: 'video',
-    provider: 'comfyui',
-  },
-  {
-    modelId: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
-    modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
-    name: 'ComfyUI · LTX 2.3 大麦茶 AIO 无字幕',
+    modelId: 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
+    modelKey: 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
+    name: 'ComfyUI · Seedance2.0 Bernini 480p I2V Audio LipSync',
     type: 'video',
     provider: 'comfyui',
   },
@@ -250,7 +216,9 @@ function hasStoredProviderConnection(provider: StoredProvider): boolean {
 
 function isUserSelectableModel(model: StoredModel): boolean {
   const modelKey = toModelKey(model)
-  if (model.type === 'video' && isRemovedLegacyLtx23WorkflowKey(modelKey)) return false
+  if (model.type === 'video' && (isRemovedLegacyLtx23WorkflowKey(modelKey) || isLegacyLtx23VideoModelKey(modelKey))) {
+    return false
+  }
   if (model.type !== 'audio') return true
   const modelId = toModelId(model)
   return !AUDIO_MODEL_EXCLUDED_IDS.has(modelId)

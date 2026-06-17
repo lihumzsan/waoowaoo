@@ -38,6 +38,8 @@ const workerState = vi.hoisted(() => ({
 const LTX23_DEFAULT_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
 const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
 const LTX23_LARGE_MOTION_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage'
+const BERNINI_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
+const BERNINI_AUDIO_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
 
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
@@ -144,7 +146,18 @@ vi.mock('@/lib/media/outbound-image', () => ({
   normalizeToBase64ForGeneration: vi.fn(async (input: string) => input),
 }))
 vi.mock('@/lib/model-capabilities/lookup', () => ({
-  resolveBuiltinCapabilitiesByModelKey: vi.fn(() => ({ video: { firstlastframe: true } })),
+  resolveBuiltinCapabilitiesByModelKey: vi.fn((_modelType: string, modelKey: string) => {
+    if (modelKey === 'comfyui::basevideo/seedance2/bernini-480p-i2v') {
+      return {
+        video: {
+          durationOptions: [5, 10],
+          fpsOptions: [24],
+          firstlastframe: false,
+        },
+      }
+    }
+    return { video: { firstlastframe: true } }
+  }),
 }))
 vi.mock('@/lib/model-config-contract', () => ({
   parseModelKeyStrict: vi.fn(() => ({ provider: 'fal' })),
@@ -383,6 +396,68 @@ describe('worker video processor behavior', () => {
         }),
       }),
     )
+  })
+
+  it('VIDEO_PANEL: normalizes Bernini audio-lipsync payloads and stale fps before generation', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      srtSegment: 'Spoken subtitle text that must remain audio-only.',
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'Please answer clearly so the lip sync can follow the voice.',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 4_800,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_AUDIO_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 5,
+          fps: 25,
+          resolution: '480p',
+          motionStrength: 2,
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 4.8,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 2,
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+          resolution: '480p',
+        }),
+      }),
+    )
+
+    const generationCall = utilsMock.resolveVideoSourceFromGeneration.mock.calls[0]?.[1] as {
+      options?: { prompt?: string }
+    }
+    const prompt = generationCall.options?.prompt || ''
+    expect(prompt).toContain('Dialogue lines: none')
+    expect(prompt).not.toContain('Please answer clearly so the lip sync can follow the voice.')
+    expect(prompt).not.toContain('Spoken subtitle text that must remain audio-only.')
+    expect(prompt).not.toContain('If dialogue is listed')
   })
 
   it('VIDEO_PANEL: auto-routes default LTX2.3 long linked audio to the long-video profile', async () => {
@@ -633,6 +708,93 @@ describe('worker video processor behavior', () => {
         videoGenerationMode: 'normal',
       }),
     })
+  })
+
+  it('VIDEO_PANEL: sends Seedance2 Bernini motion strength and exact timing without LTX prompt enhancement', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_MODEL,
+        generationOptions: {
+          duration: 5,
+          fps: 24,
+          motionStrength: 1,
+          resolution: '480p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        imageUrl: 'https://signed.example/cos/panel-image.png',
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 5,
+          fps: 24,
+          motionStrength: 1,
+          resolution: '480p',
+          generationMode: 'normal',
+          prompt: expect.stringContaining('panel prompt'),
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: uses Bernini capability fps for audio-matched timing', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: '中年医生',
+        content: '陈迹你好，我现在需要问你一些问题。',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 3600,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 5,
+          motionStrength: 2,
+          resolution: '480p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 3.6,
+          fps: 24,
+          motionStrength: 2,
+          resolution: '480p',
+          generationMode: 'normal',
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+        }),
+      }),
+    )
   })
 
   it('VIDEO_PANEL: ignores stale structured multi-shot prompts when saved prompt was not user edited', async () => {

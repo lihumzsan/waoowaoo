@@ -139,6 +139,7 @@ export function useVideoPanelActions({
     matchedVoiceLines,
     selectedModel: videoModel.selectedModel,
     durationOptions: videoModel.selectedVideoCapabilities?.durationOptions,
+    fpsOptions: videoModel.selectedVideoCapabilities?.fpsOptions,
     context: {
       shotType: panel.textPanel?.shot_type ?? null,
       cameraMove: panel.textPanel?.camera_move ?? null,

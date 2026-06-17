@@ -106,6 +106,12 @@ function normalizeDurationOptions(value: unknown): number[] {
     .sort((left, right) => left - right)
 }
 
+function normalizeFpsOptions(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+}
+
 function clampToProductMaxDuration(value: number | null): number {
   if (value === null) return PRODUCT_VIDEO_MAX_DURATION_SECONDS
   return Math.min(value, PRODUCT_VIDEO_MAX_DURATION_SECONDS)
@@ -114,6 +120,7 @@ function clampToProductMaxDuration(value: number | null): number {
 export function getVideoTimingProfile(
   modelKey: string | null | undefined,
   durationOptions?: readonly number[] | null,
+  fpsOptions?: readonly number[] | null,
 ): VideoTimingProfile {
   const workflowProfile = getLtx23WorkflowProfile(modelKey)
   if (workflowProfile) {
@@ -128,16 +135,17 @@ export function getVideoTimingProfile(
   const configuredMaxDuration = configuredDurations.length > 0
     ? configuredDurations[configuredDurations.length - 1]
     : null
+  const configuredFps = normalizeFpsOptions(fpsOptions)[0] ?? COMFYUI_LTX23_DEFAULT_FPS
 
   if (normalized.includes('ltx2.3') || normalized.includes('ltx-2.3') || normalized.includes('/ltx')) {
     return {
-      fps: COMFYUI_LTX23_DEFAULT_FPS,
+      fps: configuredFps,
       maxDurationSeconds: clampToProductMaxDuration(configuredMaxDuration ?? COMFYUI_LTX23_MAX_DURATION_SECONDS),
     }
   }
 
   return {
-    fps: COMFYUI_LTX23_DEFAULT_FPS,
+    fps: configuredFps,
     maxDurationSeconds: clampToProductMaxDuration(configuredMaxDuration),
   }
 }
@@ -308,6 +316,7 @@ export function resolveAudioDrivenVideoTiming(params: {
   candidates: AudioDurationCandidate[]
   modelKey?: string | null
   durationOptions?: readonly number[] | null
+  fpsOptions?: readonly number[] | null
   context?: AudioDrivenVideoTimingContext | null
 }): ResolvedAudioDrivenVideoTiming | null {
   const binding = normalizeVideoDurationBinding(params.binding)
@@ -334,7 +343,7 @@ export function resolveAudioDrivenVideoTiming(params: {
 
   if (matchedVoiceLineIds.length === 0 || sourceDurationMs <= 0) return null
 
-  const profile = getVideoTimingProfile(params.modelKey, params.durationOptions)
+  const profile = getVideoTimingProfile(params.modelKey, params.durationOptions, params.fpsOptions)
   const audioDurationSeconds = Number((sourceDurationMs / 1000).toFixed(2))
   const padding = resolveContextAwarePadding(audioDurationSeconds, matchedVoiceLineIds.length, params.context)
   const requestedTargetDurationSeconds = normalizeTargetDurationSeconds(binding.targetDurationSeconds)

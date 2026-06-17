@@ -336,7 +336,7 @@ export function renderPanelContinuityPrompt(params: {
     buildCameraContinuityConstraint(packet, basePrompt),
     'Do not add unrequested hand-to-face gestures, glasses adjustment, head turns, profile turns, or body repositioning.',
     'The final frame must still contain the same visible character count, same location, same lighting, and no newly visible people.',
-    'If dialogue is listed, mouth movement and timing must match the exact listed dialogue.',
+    packet.dialogueLines.length > 0 && 'If dialogue is listed, mouth movement and timing must match the exact listed dialogue.',
     params.userEdited
       ? 'The creator prompt is an intent layer only; the hard continuity constraints above override conflicting creative wording.'
       : 'Rewrite or interpret the creator prompt only within the hard continuity constraints above.',

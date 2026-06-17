@@ -195,6 +195,12 @@
     "duration": "时长",
     "fps": "帧率",
     "resolution": "分辨率",
+    "motionStrength": "运动强度",
+    "motionStrengthOption": {
+      "1": "平静/微动",
+      "2": "常规动作",
+      "3": "强动作/激烈"
+    },
     "aspectRatio": "画幅比例",
     "reasoningEffort": "推理强度",
     "voice": "音色",

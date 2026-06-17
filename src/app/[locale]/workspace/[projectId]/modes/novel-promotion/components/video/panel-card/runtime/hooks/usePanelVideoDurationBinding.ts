@@ -11,6 +11,7 @@ interface UsePanelVideoDurationBindingParams {
   matchedVoiceLines: MatchedVoiceLine[]
   selectedModel?: string
   durationOptions?: readonly number[] | null
+  fpsOptions?: readonly number[] | null
   context?: {
     shotType?: string | null
     cameraMove?: string | null
@@ -26,6 +27,7 @@ export function usePanelVideoDurationBinding({
   matchedVoiceLines,
   selectedModel,
   durationOptions,
+  fpsOptions,
   context,
 }: UsePanelVideoDurationBindingParams) {
   const normalizedBinding = useMemo(
@@ -59,9 +61,10 @@ export function usePanelVideoDurationBinding({
       })),
       modelKey: selectedModel,
       durationOptions,
+      fpsOptions,
       context,
     }),
-    [availableVoiceLines, context, durationOptions, localBinding, selectedModel],
+    [availableVoiceLines, context, durationOptions, fpsOptions, localBinding, selectedModel],
   )
 
   const targetDurationOptions = useMemo(

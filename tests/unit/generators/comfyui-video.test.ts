@@ -23,6 +23,8 @@ vi.mock('@/lib/providers/comfyui/llm-api-config', () => ({
 const getProviderConfigMock = vi.mocked(getProviderConfig)
 const isComfyUiWorkflowLlmApiRequiredMock = vi.mocked(isComfyUiWorkflowLlmApiRequired)
 const runComfyUiVideoWorkflowMock = vi.mocked(runComfyUiVideoWorkflow)
+const BERNINI_WORKFLOW_ID = 'basevideo/seedance2/bernini-480p-i2v'
+const BERNINI_AUDIO_WORKFLOW_ID = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
 
 describe('ComfyUI video workflow selection', () => {
   it('auto-routes the default ltx23 workflow from prompt and duration context', () => {
@@ -60,6 +62,14 @@ describe('ComfyUI video workflow selection', () => {
       { generationMode: 'normal' },
     )).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion)
   })
+
+  it('keeps Seedance2 Bernini workflow requests out of the LTX2.3 auto-router', () => {
+    expect(selectComfyUiVideoWorkflowKey(
+      BERNINI_WORKFLOW_ID,
+      'GLOBAL: rain alley\nLOCAL: character runs forward for a long shot',
+      { generationMode: 'normal', duration: 16 },
+    )).toBe(BERNINI_WORKFLOW_ID)
+  })
 })
 
 describe('ComfyUI video generator', () => {
@@ -78,7 +88,7 @@ describe('ComfyUI video generator', () => {
     })
   })
 
-  it('auto-routes the default ltx23 workflow and forwards non-empty reference images', async () => {
+  it('normalizes removed LTX2.3 profile requests to Bernini and forwards non-empty reference images', async () => {
     const generator = new ComfyUIVideoGenerator()
 
     const result = await generator.generate({
@@ -86,6 +96,7 @@ describe('ComfyUI video generator', () => {
       imageUrl: 'https://example.com/first.png',
       prompt: 'GLOBAL: rain alley\nLOCAL: [0-16] character runs forward',
       options: {
+        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
         referenceImageUrls: [
           'https://example.com/ref-a.png',
           123,
@@ -99,8 +110,7 @@ describe('ComfyUI video generator', () => {
 
     expect(result.success).toBe(true)
     expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
-      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
-      durationSeconds: 12,
+      workflowKey: BERNINI_WORKFLOW_ID,
       referenceImageUrls: [
         'https://example.com/ref-a.png',
         'https://example.com/ref-b.png',
@@ -108,7 +118,7 @@ describe('ComfyUI video generator', () => {
     }))
   })
 
-  it('forwards non-empty reference audio urls to the ComfyUI video workflow', async () => {
+  it('routes Bernini video generation with reference audio to the audio lipsync workflow', async () => {
     const generator = new ComfyUIVideoGenerator()
 
     const result = await generator.generate({
@@ -129,6 +139,7 @@ describe('ComfyUI video generator', () => {
 
     expect(result.success).toBe(true)
     expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: BERNINI_AUDIO_WORKFLOW_ID,
       referenceAudioUrls: [
         'https://example.com/line-1.wav',
         'https://example.com/line-2.mp3',
@@ -138,12 +149,6 @@ describe('ComfyUI video generator', () => {
 
   it('rejects removed legacy LTX2.3 workflow keys instead of routing them', async () => {
     const generator = new ComfyUIVideoGenerator()
-    getProviderConfigMock.mockResolvedValueOnce({
-      id: 'comfyui',
-      name: 'ComfyUI',
-      apiKey: '',
-      baseUrl: '',
-    })
 
     const result = await generator.generate({
       userId: 'user-1',
@@ -158,5 +163,32 @@ describe('ComfyUI video generator', () => {
     expect(result.error).toContain('LEGACY_LTX23_WORKFLOW_REMOVED')
     expect(getProviderConfigMock).not.toHaveBeenCalled()
     expect(runComfyUiVideoWorkflowMock).not.toHaveBeenCalled()
+  })
+
+  it('forwards Bernini motion strength and timing controls to the ComfyUI workflow client', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'woman sits quietly by the window',
+      options: {
+        modelId: BERNINI_WORKFLOW_ID,
+        duration: 5,
+        fps: 24,
+        motionStrength: 1,
+        size: '480x848',
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: BERNINI_WORKFLOW_ID,
+      durationSeconds: 5,
+      fps: 24,
+      motionStrength: 1,
+      width: 480,
+      height: 848,
+    }))
   })
 })

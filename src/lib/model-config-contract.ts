@@ -41,6 +41,7 @@ export interface VideoCapabilities {
   durationOptions?: number[]
   fpsOptions?: number[]
   resolutionOptions?: string[]
+  motionStrengthOptions?: number[]
   firstlastframe?: boolean
   supportGenerateAudio?: boolean
   fieldI18n?: CapabilityFieldI18nMap
@@ -96,6 +97,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'durationOptions',
   'fpsOptions',
   'resolutionOptions',
+  'motionStrengthOptions',
   'firstlastframe',
   'supportGenerateAudio',
   'fieldI18n',
@@ -352,6 +354,15 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  const motionStrengthOptions = raw.motionStrengthOptions
+  if (motionStrengthOptions !== undefined && !isNumberArray(motionStrengthOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.motionStrengthOptions',
+      message: 'motionStrengthOptions must be a finite number array',
+    })
+  }
+
   if (raw.supportGenerateAudio !== undefined && typeof raw.supportGenerateAudio !== 'boolean') {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
@@ -375,6 +386,7 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     duration: isNumberArray(durationOptions) ? durationOptions : undefined,
     fps: isNumberArray(fpsOptions) ? fpsOptions : undefined,
     resolution: isStringArray(resolutionOptions) ? resolutionOptions : undefined,
+    motionStrength: isNumberArray(motionStrengthOptions) ? motionStrengthOptions : undefined,
   })
 }
 

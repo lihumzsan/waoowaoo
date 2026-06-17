@@ -949,6 +949,7 @@ export async function runComfyUiVideoWorkflow(params: {
   height?: number
   durationSeconds?: number
   fps?: number
+  motionStrength?: number
   llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
@@ -992,6 +993,7 @@ export async function runComfyUiVideoWorkflow(params: {
       fps,
       durationSeconds,
       targetFrameCount,
+      motionStrength: params.motionStrength,
       llmApi: params.llmApi,
     },
   )
