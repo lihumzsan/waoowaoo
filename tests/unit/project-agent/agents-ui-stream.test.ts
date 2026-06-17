@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessageChunk } from 'ai'
 
 const streamState = vi.hoisted(() => ({
   chunks: [] as UIMessageChunk[],
+  keepOpen: false,
+  cancel: vi.fn(),
 }))
 
 vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
@@ -11,7 +13,10 @@ vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
       for (const chunk of streamState.chunks) {
         controller.enqueue(chunk)
       }
-      controller.close()
+      if (!streamState.keepOpen) controller.close()
+    },
+    cancel() {
+      streamState.cancel()
     },
   })),
 }))
@@ -29,6 +34,12 @@ async function readChunks(stream: ReadableStream<UIMessageChunk>): Promise<UIMes
 }
 
 describe('createProjectAgentUiMessageStream', () => {
+  beforeEach(() => {
+    streamState.chunks = []
+    streamState.keepOpen = false
+    streamState.cancel.mockClear()
+  })
+
   it('synthesizes a dynamic tool invocation before an approval request when the adapter omits it', async () => {
     streamState.chunks = [
       {
@@ -133,5 +144,27 @@ describe('createProjectAgentUiMessageStream', () => {
         output: { ok: true },
       }),
     ])
+  })
+
+  it('marks the stream cancelled and settles once when the reader disconnects before finish', async () => {
+    streamState.keepOpen = true
+    const beforeFinish = vi.fn(async () => [])
+    const onCancel = vi.fn(async () => undefined)
+    const onSettled = vi.fn(async () => undefined)
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish,
+      onCancel,
+      onSettled,
+    })
+
+    const reader = stream.getReader()
+    await reader.cancel()
+
+    expect(streamState.cancel).toHaveBeenCalledTimes(1)
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onSettled).toHaveBeenCalledTimes(1)
+    expect(beforeFinish).not.toHaveBeenCalled()
   })
 })

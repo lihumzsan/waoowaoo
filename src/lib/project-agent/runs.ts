@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
+import { isProjectAgentRunLockActive } from './run-lock'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -35,6 +36,7 @@ export interface ProjectAgentRunRecord {
   requestId: string
   status: ProjectAgentRunStatus
   controlKind: ProjectAgentRunControlKind
+  stopReason?: string | null
 }
 
 const projectAgentRunLogger = createScopedLogger({
@@ -104,6 +106,7 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
       requestId: true,
       status: true,
       controlKind: true,
+      stopReason: true,
     },
   })
   return {
@@ -135,6 +138,7 @@ export async function getProjectAgentRun(params: ProjectAgentRunScope & {
       requestId: true,
       status: true,
       controlKind: true,
+      stopReason: true,
     },
   })
   if (!run) return null
@@ -169,6 +173,7 @@ export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRun
       requestId: true,
       status: true,
       controlKind: true,
+      stopReason: true,
     },
   })
   return runs.map((run) => ({
@@ -227,6 +232,85 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
       },
     })
   }
+}
+
+export async function cancelRunningProjectAgentRun(params: {
+  runId: string
+  stopReason: string
+  errorCode?: string | null
+  errorMessage?: string | null
+}): Promise<boolean> {
+  const result = await prisma.projectAgentRun.updateMany({
+    where: {
+      id: params.runId,
+      status: 'running',
+    },
+    data: {
+      status: 'cancelled',
+      stopReason: params.stopReason,
+      errorCode: params.errorCode ?? null,
+      errorMessage: params.errorMessage ?? null,
+      cancelledAt: new Date(),
+    },
+  })
+  return result.count > 0
+}
+
+export async function safelyCancelRunningProjectAgentRun(params: {
+  runId: string | null | undefined
+  stopReason: string
+  errorCode?: string | null
+  errorMessage?: string | null
+}): Promise<void> {
+  if (!params.runId) return
+  try {
+    await cancelRunningProjectAgentRun({
+      runId: params.runId,
+      stopReason: params.stopReason,
+      errorCode: params.errorCode,
+      errorMessage: params.errorMessage,
+    })
+  } catch (error) {
+    projectAgentRunLogger.error({
+      action: 'assistant.run.cancel-running.failed',
+      message: 'Failed to cancel running project agent run',
+      details: {
+        runId: params.runId,
+        stopReason: params.stopReason,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    })
+  }
+}
+
+export async function cancelUnlockedRunningProjectAgentRunsForScope(scope: ProjectAgentRunScope): Promise<string[]> {
+  const { assistantId, scopeRef } = buildRunScope(scope)
+  const runningRuns = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId,
+      scopeRef,
+      status: 'running',
+    },
+    select: { id: true },
+  })
+  if (runningRuns.length === 0) return []
+  if (await isProjectAgentRunLockActive(scope)) return []
+
+  const runIds = runningRuns.map((run) => run.id)
+  await prisma.projectAgentRun.updateMany({
+    where: {
+      id: { in: runIds },
+      status: 'running',
+    },
+    data: {
+      status: 'cancelled',
+      stopReason: 'orphaned_running_run',
+      cancelledAt: new Date(),
+    },
+  })
+  return runIds
 }
 
 export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): Promise<string[]> {

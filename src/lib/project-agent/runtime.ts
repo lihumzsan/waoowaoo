@@ -58,6 +58,7 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
+  safelyCancelRunningProjectAgentRun,
   safelyUpdateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
@@ -811,6 +812,12 @@ export async function createProjectAgentChatResponse(input: {
           }
         }
         return chunks
+      },
+      onCancel: async () => {
+        await safelyCancelRunningProjectAgentRun({
+          runId: input.run.id,
+          stopReason: 'stream_cancelled',
+        })
       },
       onSettled: releaseRunLockOnce,
     })

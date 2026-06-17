@@ -88,6 +88,39 @@ describe('invalidateByTarget', () => {
     })).toBe(true)
   })
 
+  it('ProjectEditScript invalidates episode scoped storyboard queries after spatial blocking tasks complete', () => {
+    const testClient = createQueryClient()
+
+    invalidateByTarget({
+      queryClient: testClient.queryClient,
+      projectId: 'project-1',
+      targetType: 'ProjectEditScript',
+      episodeId: 'episode-1',
+    })
+
+    expect(hasInvalidation(testClient, (arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.episodeData('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'episode-1'
+    })).toBe(true)
+    expect(hasInvalidation(testClient, (arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.storyboards.all('episode-1')[0]
+        && key[1] === 'episode-1'
+    })).toBe(true)
+    expect(hasInvalidation(testClient, (arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.project.editScript('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'edit-script'
+        && key[3] === 'episode-1'
+    })).toBe(true)
+  })
+
   it('ProjectEditStylePreview invalidates edit screenplay after preview image tasks complete', () => {
     const testClient = createQueryClient()
 

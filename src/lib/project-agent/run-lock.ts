@@ -45,6 +45,12 @@ export async function acquireProjectAgentRunLock(input: ProjectAgentRunLockScope
   return { key, token }
 }
 
+export async function isProjectAgentRunLockActive(input: ProjectAgentRunLockScope): Promise<boolean> {
+  const key = buildProjectAgentRunLockKey(input)
+  const token = await redis.get(key)
+  return typeof token === 'string' && token.length > 0
+}
+
 export async function releaseProjectAgentRunLock(lock: ProjectAgentRunLock): Promise<void> {
   const releaseScript = `
     if redis.call("GET", KEYS[1]) == ARGV[1] then

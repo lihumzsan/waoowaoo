@@ -11,6 +11,17 @@ const workflow = {
   allowedOperationIds: ['generate_edit_script_assets'],
 }
 
+type MockInterruption = {
+  id: string
+  runId: string
+  type: 'approval' | 'choice'
+  status: 'pending' | 'consumed'
+  operationId: string
+  approvalId: string
+  toolCallId: string | null
+  payload: Record<string, unknown>
+}
+
 const prismaMock = vi.hoisted(() => ({
   task: {
     findMany: vi.fn(async () => [
@@ -34,6 +45,7 @@ const workflowMock = vi.hoisted(() => ({
 }))
 
 const runsMock = vi.hoisted(() => ({
+  cancelUnlockedRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
   listRecentProjectAgentRunsForScope: vi.fn(async () => [
     {
       id: 'run-1',
@@ -45,12 +57,13 @@ const runsMock = vi.hoisted(() => ({
       requestId: 'request-1',
       status: 'awaiting_task',
       controlKind: 'approval_response',
+      stopReason: 'awaiting_task',
     },
   ]),
 }))
 
 const interruptionsMock = vi.hoisted(() => ({
-  getPendingProjectAgentInterruptionForScope: vi.fn(async () => ({
+  getPendingProjectAgentInterruptionForScope: vi.fn(async (): Promise<MockInterruption | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
     type: 'approval',
@@ -60,7 +73,7 @@ const interruptionsMock = vi.hoisted(() => ({
     toolCallId: 'tool-1',
     payload: {},
   })),
-  getLatestProjectAgentInterruptionForRun: vi.fn(async () => ({
+  getLatestProjectAgentInterruptionForRun: vi.fn(async (): Promise<MockInterruption | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
     type: 'approval',
@@ -138,8 +151,10 @@ describe('project agent session-state', () => {
         requestId: 'request-1',
         status: 'awaiting_task',
         controlKind: 'approval_response',
+        stopReason: 'awaiting_task',
       },
     ])
+    runsMock.cancelUnlockedRunningProjectAgentRunsForScope.mockResolvedValue([])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValue([
       {
         runId: 'run-1',
@@ -222,6 +237,7 @@ describe('project agent session-state', () => {
         requestId: 'request-choice-1',
         status: 'awaiting_choice',
         controlKind: 'user_turn',
+        stopReason: 'awaiting_user_choice',
       },
     ])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
@@ -268,5 +284,100 @@ describe('project agent session-state', () => {
         interruptionId: 'choice-interruption-1',
       }),
     }))
+  })
+
+  it('does not revive a consumed approval as the current operation after a stale run is cancelled', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
+      {
+        id: 'run-stale-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantId: 'workspace-command',
+        scopeRef: 'episode:episode-1',
+        episodeId: 'episode-1',
+        requestId: 'request-stale-1',
+        status: 'cancelled',
+        controlKind: 'user_turn',
+        stopReason: 'orphaned_running_run',
+      },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
+      id: 'interruption-stale-1',
+      runId: 'run-stale-1',
+      type: 'approval',
+      status: 'consumed',
+      operationId: 'generate_edit_script_storyboard',
+      approvalId: 'approval-stale-1',
+      toolCallId: 'tool-stale-1',
+      payload: {},
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(runsMock.cancelUnlockedRunningProjectAgentRunsForScope).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })
+    expect(state.pendingInteraction).toBeNull()
+    expect(state.currentRun).toEqual({
+      runId: 'run-stale-1',
+      status: 'cancelled',
+      controlKind: 'user_turn',
+      operationId: null,
+    })
+  })
+
+  it('keeps the approved operation visible while the approval response run is active', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
+      {
+        id: 'run-active-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantId: 'workspace-command',
+        scopeRef: 'episode:episode-1',
+        episodeId: 'episode-1',
+        requestId: 'request-active-1',
+        status: 'running',
+        controlKind: 'user_turn',
+        stopReason: 'approval_response',
+      },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
+      id: 'interruption-active-1',
+      runId: 'run-active-1',
+      type: 'approval',
+      status: 'consumed',
+      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+      approvalId: 'approval-active-1',
+      toolCallId: 'tool-active-1',
+      payload: {},
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.currentRun).toEqual({
+      runId: 'run-active-1',
+      status: 'running',
+      controlKind: 'user_turn',
+      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+    })
   })
 })

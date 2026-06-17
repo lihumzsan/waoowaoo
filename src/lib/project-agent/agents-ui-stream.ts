@@ -77,13 +77,24 @@ export function createProjectAgentUiMessageStream(params: {
   toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
+  onCancel?: () => Promise<void>
   onSettled: () => Promise<void>
 }): ReadableStream<ProjectAgentUiChunk> {
   const converted = createAiSdkUiMessageStream(params.source) as ReadableStream<ProjectAgentUiChunk>
+  let cancelled = false
+  let settled = false
+  let convertedReader: ReadableStreamDefaultReader<ProjectAgentUiChunk> | null = null
+
+  const settleOnce = async () => {
+    if (settled) return
+    settled = true
+    await params.onSettled()
+  }
 
   return new ReadableStream<ProjectAgentUiChunk>({
     async start(controller) {
       const reader = converted.getReader()
+      convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
       const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
@@ -109,6 +120,7 @@ export function createProjectAgentUiMessageStream(params: {
           for (const chunk of params.drainChunks?.() ?? []) {
             enqueueChunk(chunk)
           }
+          if (cancelled) break
           const read = await reader.read()
           if (read.done) break
           if (isFinishChunk(read.value)) {
@@ -120,6 +132,7 @@ export function createProjectAgentUiMessageStream(params: {
             enqueueChunk(chunk)
           }
         }
+        if (cancelled) return
 
         for (const chunk of params.drainChunks?.() ?? []) {
           enqueueChunk(chunk)
@@ -133,14 +146,23 @@ export function createProjectAgentUiMessageStream(params: {
         }
         controller.close()
       } catch (error) {
-        controller.error(error)
+        if (!cancelled) controller.error(error)
       } finally {
-        await params.onSettled()
+        await settleOnce()
       }
     },
     async cancel() {
-      await converted.cancel()
-      await params.onSettled()
+      cancelled = true
+      try {
+        if (convertedReader) {
+          await convertedReader.cancel()
+        } else {
+          await converted.cancel()
+        }
+      } finally {
+        await params.onCancel?.()
+        await settleOnce()
+      }
     },
   })
 }

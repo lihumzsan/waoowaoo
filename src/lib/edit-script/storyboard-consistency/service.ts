@@ -113,8 +113,8 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
   const ready = matchingStoryboards.find((item) => isStoryboardSpatialProfileStageReady(readString(item.plan.currentStage)))
   if (!ready) {
     throw new ApiError('CONFLICT', {
-      code: 'LOCATION_SPATIAL_PROFILE_REQUIRED',
-      message: 'Ready location spatial profiles are required before generating storyboard panels',
+      code: 'STORYBOARD_SPATIAL_BLOCKING_REQUIRED',
+      message: 'Ready storyboard spatial blocking is required before generating storyboard panels',
     })
   }
   const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({

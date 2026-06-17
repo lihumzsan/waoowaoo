@@ -14,6 +14,7 @@ import {
   type ProjectAgentInterruptionSnapshot,
 } from './interruptions'
 import {
+  cancelUnlockedRunningProjectAgentRunsForScope,
   listRecentProjectAgentRunsForScope,
   type ProjectAgentRunRecord,
   type ProjectAgentRunStatus,
@@ -178,10 +179,18 @@ function inferRunOperationId(params: {
 }): string | null {
   const runId = params.run?.id ?? null
   if (!runId) return null
+  if (!params.run || !isActiveRunStatus(params.run.status)) return null
   if (params.pendingInteraction?.runId === runId) return params.pendingInteraction.operationId
   const activeWait = params.waits.find((wait) => wait.runId === runId)
   if (activeWait) return activeWait.operationId
-  if (params.latestRunInterruption?.runId === runId) return params.latestRunInterruption.operationId
+  if (
+    params.run.status === 'running'
+    && params.run.stopReason === 'approval_response'
+    && params.latestRunInterruption?.runId === runId
+    && params.latestRunInterruption.status === 'consumed'
+  ) {
+    return params.latestRunInterruption.operationId
+  }
   return null
 }
 
@@ -299,6 +308,12 @@ export async function getProjectAgentSessionState(
     ...input,
     assistantId,
   }
+  await cancelUnlockedRunningProjectAgentRunsForScope({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId,
+  })
   const [workflow, runs, waits, pendingInterruption] = await Promise.all([
     resolveEditFirstWorkflowState({
       projectId: input.projectId,
