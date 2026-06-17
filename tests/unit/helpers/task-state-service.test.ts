@@ -1,15 +1,32 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TASK_TYPE } from '@/lib/task/types'
+
+const prismaMock = vi.hoisted(() => ({
+  task: {
+    findMany: vi.fn(),
+  },
+  $queryRaw: vi.fn(),
+}))
+
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+
 import {
   asBoolean,
   asNonEmptyString,
   asObject,
   buildIdleState,
+  extractStoryboardGridPanelIds,
   pairKey,
+  queryTaskTargetStates,
   resolveTargetState,
   toProgress,
 } from '@/lib/task/state-service'
 
 describe('task state service helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('normalizes primitive parsing helpers', () => {
     expect(pairKey('A', 'B')).toBe('A:B')
     expect(asObject({ ok: true })).toEqual({ ok: true })
@@ -21,6 +38,13 @@ describe('task state service helpers', () => {
     expect(toProgress(101)).toBe(100)
     expect(toProgress(-5)).toBe(0)
     expect(toProgress(Number.NaN)).toBeNull()
+    expect(
+      extractStoryboardGridPanelIds({
+        storyboardGrid: {
+          panelIds: ['panel-1', 'panel-2', 'panel-2', '', 123],
+        },
+      }),
+    ).toEqual(['panel-1', 'panel-2'])
   })
 
   it('builds idle state when no tasks found', () => {
@@ -101,5 +125,60 @@ describe('task state service helpers', () => {
     expect(state.phase).toBe('failed')
     expect(state.lastError?.code).toBe('CONFLICT')
     expect(state.lastError?.message).toBe('Task cancelled by user')
+  })
+
+  it('projects storyboard grid image task state to every covered panel target', async () => {
+    prismaMock.task.findMany.mockResolvedValue([])
+    prismaMock.$queryRaw.mockResolvedValue([
+      {
+        id: 'task-grid-1',
+        type: TASK_TYPE.IMAGE_PANEL,
+        status: 'processing',
+        progress: 35,
+        payload: {
+          storyboardGrid: {
+            mode: '2x2',
+            panelIds: ['panel-1', 'panel-2', 'panel-3'],
+          },
+          ui: {
+            intent: 'create',
+            hasOutputAtStart: false,
+          },
+        },
+        errorCode: null,
+        errorMessage: null,
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        updatedAt: new Date('2026-06-17T08:00:00.000Z'),
+      },
+    ])
+
+    const states = await queryTaskTargetStates({
+      projectId: 'project-1',
+      userId: 'user-1',
+      targets: [
+        { targetType: 'ProjectPanel', targetId: 'panel-2', types: [TASK_TYPE.IMAGE_PANEL] },
+        { targetType: 'ProjectPanel', targetId: 'panel-3', types: [TASK_TYPE.IMAGE_PANEL] },
+      ],
+    })
+
+    expect(states).toMatchObject([
+      {
+        targetType: 'ProjectPanel',
+        targetId: 'panel-2',
+        phase: 'processing',
+        runningTaskId: 'task-grid-1',
+        runningTaskType: TASK_TYPE.IMAGE_PANEL,
+        progress: 35,
+      },
+      {
+        targetType: 'ProjectPanel',
+        targetId: 'panel-3',
+        phase: 'processing',
+        runningTaskId: 'task-grid-1',
+        runningTaskType: TASK_TYPE.IMAGE_PANEL,
+        progress: 35,
+      },
+    ])
   })
 })

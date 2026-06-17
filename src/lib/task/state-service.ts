@@ -1,6 +1,8 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { coerceTaskIntent, type TaskIntent } from './intent'
+import { TASK_TYPE } from './types'
 
 export type TaskTargetQuery = {
   targetType: string
@@ -30,6 +32,19 @@ export type TaskTargetState = {
 
 const ACTIVE_STATUS = new Set(['queued', 'processing'])
 
+type TaskStateRow = {
+  id: string
+  type: string
+  status: string
+  progress: number
+  payload: unknown
+  errorCode: string | null
+  errorMessage: string | null
+  targetType: string
+  targetId: string
+  updatedAt: Date
+}
+
 export function pairKey(targetType: string, targetId: string) {
   return `${targetType}:${targetId}`
 }
@@ -37,6 +52,28 @@ export function pairKey(targetType: string, targetId: string) {
 export function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+function parseObject(value: unknown): Record<string, unknown> | null {
+  const objectValue = asObject(value)
+  if (objectValue) return objectValue
+  if (typeof value !== 'string') return null
+  try {
+    return asObject(JSON.parse(value) as unknown)
+  } catch {
+    return null
+  }
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value.flatMap((item) => typeof item === 'string' && item.trim() ? [item.trim()] : [])))
+}
+
+export function extractStoryboardGridPanelIds(payload: unknown): string[] {
+  const payloadObject = parseObject(payload)
+  const storyboardGrid = parseObject(payloadObject?.storyboardGrid)
+  return asStringArray(storyboardGrid?.panelIds)
 }
 
 export function asNonEmptyString(value: unknown): string | null {
@@ -190,6 +227,57 @@ export function resolveTargetState(
  */
 const QUERY_BATCH_SIZE = 50
 
+function targetAcceptsTaskType(target: TaskTargetQuery, taskType: string): boolean {
+  return !target.types?.length || target.types.includes(taskType)
+}
+
+function taskTargetKeys(row: Pick<TaskStateRow, 'targetType' | 'targetId' | 'type' | 'payload'>): string[] {
+  const keys = [pairKey(row.targetType, row.targetId)]
+  if (row.targetType === 'ProjectPanel' && row.type === TASK_TYPE.IMAGE_PANEL) {
+    for (const panelId of extractStoryboardGridPanelIds(row.payload)) {
+      keys.push(pairKey('ProjectPanel', panelId))
+    }
+  }
+  return Array.from(new Set(keys))
+}
+
+async function queryStoryboardGridImageRows(params: {
+  projectId: string
+  userId: string
+  panelIds: string[]
+}): Promise<TaskStateRow[]> {
+  const rows: TaskStateRow[] = []
+  for (let i = 0; i < params.panelIds.length; i += QUERY_BATCH_SIZE) {
+    const batch = params.panelIds.slice(i, i + QUERY_BATCH_SIZE)
+    if (!batch.length) continue
+    const panelPredicates = batch.map((panelId) =>
+      Prisma.sql`JSON_CONTAINS(JSON_EXTRACT(payload, '$.storyboardGrid.panelIds'), JSON_QUOTE(${panelId}))`
+    )
+    const batchRows = await prisma.$queryRaw<TaskStateRow[]>(Prisma.sql`
+      SELECT
+        id,
+        type,
+        status,
+        progress,
+        payload,
+        errorCode,
+        errorMessage,
+        targetType,
+        targetId,
+        updatedAt
+      FROM tasks
+      WHERE projectId = ${params.projectId}
+        AND userId = ${params.userId}
+        AND targetType = 'ProjectPanel'
+        AND type = ${TASK_TYPE.IMAGE_PANEL}
+        AND status IN ('queued', 'processing', 'completed', 'failed', 'canceled')
+        AND (${Prisma.join(panelPredicates, ' OR ')})
+    `)
+    rows.push(...batchRows)
+  }
+  return rows
+}
+
 export async function queryTaskTargetStates(params: {
   projectId: string
   userId: string
@@ -216,18 +304,10 @@ export async function queryTaskTargetStates(params: {
   const typeFilter = typeUnion.size > 0 ? { type: { in: Array.from(typeUnion) } } : {}
 
   // 分批查询，避免 MySQL sort buffer 溢出
-  const allRows: Array<{
-    id: string
-    type: string
-    status: string
-    progress: number
-    payload: unknown
-    errorCode: string | null
-    errorMessage: string | null
-    targetType: string
-    targetId: string
-    updatedAt: Date
-  }> = []
+  const allRowsById = new Map<string, TaskStateRow>()
+  const appendRows = (rows: TaskStateRow[]) => {
+    for (const row of rows) allRowsById.set(row.id, row)
+  }
 
   for (let i = 0; i < pairs.length; i += QUERY_BATCH_SIZE) {
     const batch = pairs.slice(i, i + QUERY_BATCH_SIZE)
@@ -258,18 +338,38 @@ export async function queryTaskTargetStates(params: {
         updatedAt: true,
       },
     })
-    allRows.push(...rows)
+    appendRows(rows)
+  }
+
+  const storyboardGridPanelIds = Array.from(
+    new Set(
+      params.targets
+        .filter((target) => target.targetType === 'ProjectPanel' && targetAcceptsTaskType(target, TASK_TYPE.IMAGE_PANEL))
+        .map((target) => target.targetId),
+    ),
+  )
+
+  if (storyboardGridPanelIds.length > 0) {
+    appendRows(
+      await queryStoryboardGridImageRows({
+        projectId: params.projectId,
+        userId: params.userId,
+        panelIds: storyboardGridPanelIds,
+      }),
+    )
   }
 
   // 应用层按 updatedAt desc 排序（每个 target 组内排序即可）
-  const grouped = new Map<string, typeof allRows>()
-  for (const row of allRows) {
-    const key = pairKey(row.targetType, row.targetId)
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.push(row)
-    } else {
-      grouped.set(key, [row])
+  const grouped = new Map<string, TaskStateRow[]>()
+  for (const row of allRowsById.values()) {
+    for (const key of taskTargetKeys(row)) {
+      if (!pairEntries.has(key)) continue
+      const existing = grouped.get(key)
+      if (existing) {
+        existing.push(row)
+      } else {
+        grouped.set(key, [row])
+      }
     }
   }
 
