@@ -94,16 +94,36 @@ type RunPair = {
   readonly grid: RunState
 }
 
+type SerialBlockRun = {
+  readonly sourceVideoBlockId: string
+  readonly blockIndex: number
+  readonly block: CompareBlock
+  readonly previousGridImageUrl: string | null
+  readonly run: RunState
+}
+
+type SerialRun = {
+  readonly id: string
+  readonly index: number
+  readonly omittedFields: readonly StoryboardPromptFieldId[]
+  readonly blocks: readonly SerialBlockRun[]
+}
+
 const COPY: Record<Locale, {
   readonly title: string
   readonly subtitle: string
-  readonly episodePlaceholder: string
+  readonly targetLabel: string
+  readonly targetPlaceholder: string
   readonly load: string
   readonly run: string
+  readonly runSerial: string
   readonly running: string
   readonly original: string
   readonly single: string
   readonly grid: string
+  readonly serial: string
+  readonly serialHint: string
+  readonly previousGridReference: string
   readonly selectBlock: string
   readonly empty: string
   readonly task: string
@@ -131,14 +151,19 @@ const COPY: Record<Locale, {
 }> = {
   zh: {
     title: '分镜四宫格对比实验',
-    subtitle: '同一组真实分镜，同时提交单张并行与四宫格并行任务；结果只显示在本页，不写回当前分镜。',
-    episodePlaceholder: 'episode id',
+    subtitle: '粘贴 workspace 地址或后缀后，同一组真实分镜会同时提交单张并行与四宫格并行任务；结果只显示在本页，不写回当前分镜。',
+    targetLabel: 'workspace 地址 / 后缀',
+    targetPlaceholder: '/zh/workspace/项目ID?episode=剧集ID',
     load: '加载',
     run: '同时测试',
+    runSerial: '四宫格串行套图',
     running: '处理中',
     original: '原始分镜',
     single: '单张并行',
     grid: '四宫格并行',
+    serial: '四宫格串行套图',
+    serialHint: '从当前 block 开始，最多连续提交后续 4 个多镜头 block；每个 block 会等待上一张完整四宫格完成后，再把它作为参考图输入下一张。',
+    previousGridReference: '参考上一张四宫格',
     selectBlock: '选择 block',
     empty: '没有可测试的多镜头 block',
     task: '任务',
@@ -166,14 +191,19 @@ const COPY: Record<Locale, {
   },
   en: {
     title: 'Storyboard Grid Comparison Lab',
-    subtitle: 'Submit single-panel parallel generation and 2x2 grid generation for the same real storyboard block. Results are displayed here only.',
-    episodePlaceholder: 'episode id',
+    subtitle: 'Paste a workspace URL or suffix, then submit single-panel parallel generation and 2x2 grid generation for the same real storyboard block. Results are displayed here only.',
+    targetLabel: 'workspace URL / suffix',
+    targetPlaceholder: '/en/workspace/project-id?episode=episode-id',
     load: 'Load',
     run: 'Run Both',
+    runSerial: 'Run Serial Grid Set',
     running: 'Running',
     original: 'Original Panels',
     single: 'Single Parallel',
     grid: '2x2 Grid Parallel',
+    serial: 'Serial 2x2 Grid Set',
+    serialHint: 'Starting from the selected block, submit up to 4 following multi-panel blocks. Each block waits for the previous complete grid and uses that grid as the next reference image.',
+    previousGridReference: 'Previous grid reference',
     selectBlock: 'Select Block',
     empty: 'No multi-panel block available',
     task: 'Task',
@@ -207,6 +237,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function buildTargetInput(projectId: string, episodeId: string): string {
+  if (!projectId && !episodeId) return ''
+  const params = episodeId ? `?episode=${episodeId}` : ''
+  return `/workspace/${projectId}${params}`
+}
+
+function parseTargetInput(input: string): { projectId: string; episodeId: string } {
+  const normalized = input.trim()
+  if (!normalized) return { projectId: '', episodeId: '' }
+
+  const withOrigin = normalized.startsWith('http://') || normalized.startsWith('https://')
+    ? normalized
+    : `http://localhost${normalized.startsWith('/') ? '' : '/'}${normalized}`
+  const url = new URL(withOrigin)
+  const segments = url.pathname.split('/').filter(Boolean)
+  const workspaceIndex = segments.indexOf('workspace')
+  const projectId = workspaceIndex >= 0
+    ? segments[workspaceIndex + 1] ?? ''
+    : segments[0] ?? ''
+  const episodeId = url.searchParams.get('episode') || url.searchParams.get('episodeId') || ''
+  return { projectId: projectId.trim(), episodeId: episodeId.trim() }
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -265,6 +318,12 @@ function parseTaskSnapshot(value: unknown): TaskSnapshot {
 
 function isTerminal(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'canceled' || status === 'dismissed'
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 }
 
 function displayUrl(url: string | null | undefined): string | null {
@@ -545,16 +604,19 @@ function PromptPreviewSection({ preview, loading, copy }: {
   )
 }
 
-export default function StoryboardGridLabClient({ locale, projectId, initialEpisodeId }: {
+export default function StoryboardGridLabClient({ locale, initialProjectId, initialEpisodeId }: {
   readonly locale: Locale
-  readonly projectId: string
+  readonly initialProjectId: string
   readonly initialEpisodeId: string
 }) {
   const copy = COPY[locale] ?? COPY.zh
+  const [targetInput, setTargetInput] = useState(buildTargetInput(initialProjectId, initialEpisodeId))
+  const [projectId, setProjectId] = useState(initialProjectId)
   const [episodeId, setEpisodeId] = useState(initialEpisodeId)
   const [source, setSource] = useState<CompareSource | null>(null)
   const [selectedBlockId, setSelectedBlockId] = useState('')
   const [runPairs, setRunPairs] = useState<readonly RunPair[]>([])
+  const [serialRuns, setSerialRuns] = useState<readonly SerialRun[]>([])
   const [omittedFields, setOmittedFields] = useState<ReadonlySet<StoryboardPromptFieldId>>(new Set())
   const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null)
   const [promptPreviewLoading, setPromptPreviewLoading] = useState(false)
@@ -562,6 +624,7 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
   const snapshotsRef = useRef<ReadonlyMap<string, TaskSnapshot>>(new Map())
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [serialSubmitting, setSerialSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedBlock = useMemo(() => {
@@ -570,12 +633,18 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
   }, [selectedBlockId, source])
 
   const loadSource = useCallback(async () => {
-    if (!episodeId.trim()) return
+    const target = parseTargetInput(targetInput)
+    if (!target.projectId || !target.episodeId) {
+      setError('PROJECT_AND_EPISODE_REQUIRED')
+      return
+    }
     setLoading(true)
     setError(null)
+    setProjectId(target.projectId)
+    setEpisodeId(target.episodeId)
     try {
-      const params = new URLSearchParams({ episodeId: episodeId.trim() })
-      const nextSource = await readJson<CompareSource>(await fetch(`/api/projects/${projectId}/debug/storyboard-grid-compare/source?${params.toString()}`))
+      const params = new URLSearchParams({ episodeId: target.episodeId })
+      const nextSource = await readJson<CompareSource>(await fetch(`/api/projects/${target.projectId}/debug/storyboard-grid-compare/source?${params.toString()}`))
       setSource(nextSource)
       setSelectedBlockId(nextSource.blocks[0]?.sourceVideoBlockId ?? '')
     } catch (loadError) {
@@ -583,7 +652,7 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
     } finally {
       setLoading(false)
     }
-  }, [episodeId, projectId])
+  }, [targetInput])
 
   useEffect(() => {
     if (initialEpisodeId) {
@@ -606,6 +675,7 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
     mode: 'single_parallel' | 'grid_2x2',
     block: CompareBlock,
     fieldsToOmit: readonly StoryboardPromptFieldId[],
+    previousGridImageUrl?: string | null,
   ): Promise<RunState> => {
     const response = await fetch(`/api/projects/${projectId}/debug/storyboard-grid-compare`, {
       method: 'POST',
@@ -615,6 +685,7 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
         episodeId,
         mode,
         omittedFields: fieldsToOmit,
+        ...(previousGridImageUrl ? { previousGridImageUrl } : {}),
         sourceVideoBlockId: block.sourceVideoBlockId,
         panelIds: block.panels.map((panel) => panel.id),
       }),
@@ -627,6 +698,31 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
       tasks: result.tasks,
     }
   }, [episodeId, locale, projectId])
+
+  const pollTaskSnapshot = useCallback(async (taskId: string): Promise<TaskSnapshot> => {
+    const snapshot = parseTaskSnapshot(await readJson<unknown>(await fetch(`/api/tasks/${taskId}`)))
+    setSnapshots((current) => {
+      const next = new Map(current)
+      next.set(taskId, snapshot)
+      return next
+    })
+    return snapshot
+  }, [])
+
+  const waitForCompletedGridImage = useCallback(async (taskId: string): Promise<string> => {
+    for (;;) {
+      const snapshot = await pollTaskSnapshot(taskId)
+      if (snapshot.status === 'completed') {
+        const url = gridImageUrl(snapshot.result)
+        if (!url) throw new Error('SERIAL_GRID_IMAGE_MISSING')
+        return url
+      }
+      if (isTerminal(snapshot.status)) {
+        throw new Error(snapshot.errorMessage || `SERIAL_GRID_TASK_${snapshot.status.toUpperCase()}`)
+      }
+      await delay(2500)
+    }
+  }, [pollTaskSnapshot])
 
   useEffect(() => {
     if (!selectedBlock || !episodeId.trim()) {
@@ -696,14 +792,65 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
     }
   }, [selectedBlock, selectedOmittedFields, submitMode, submitting])
 
+  const runSerialGridSet = useCallback(async () => {
+    if (!source || !selectedBlock || serialSubmitting) return
+    const startIndex = source.blocks.findIndex((block) => block.sourceVideoBlockId === selectedBlock.sourceVideoBlockId)
+    const serialBlocks = source.blocks.slice(Math.max(0, startIndex)).slice(0, 4)
+    if (serialBlocks.length === 0) return
+
+    setSerialSubmitting(true)
+    setError(null)
+    const fieldsToOmit = selectedOmittedFields
+    const serialRunId = `${Date.now()}:${selectedBlock.sourceVideoBlockId}`
+    const serialRunIndex = serialRuns.length + 1
+    setSerialRuns((current) => [{
+      id: serialRunId,
+      index: serialRunIndex,
+      omittedFields: fieldsToOmit,
+      blocks: [],
+    }, ...current])
+
+    try {
+      let previousGridImageUrl: string | null = null
+      for (const block of serialBlocks) {
+        const run = await submitMode('grid_2x2', block, fieldsToOmit, previousGridImageUrl)
+        setSerialRuns((current) => current.map((item) => item.id === serialRunId
+          ? {
+              ...item,
+              blocks: [
+                ...item.blocks,
+                {
+                  sourceVideoBlockId: block.sourceVideoBlockId,
+                  blockIndex: block.blockIndex,
+                  block,
+                  previousGridImageUrl,
+                  run,
+                },
+              ],
+            }
+          : item))
+        const taskId = run.tasks[0]?.taskId
+        if (!taskId) throw new Error('SERIAL_GRID_TASK_MISSING')
+        previousGridImageUrl = await waitForCompletedGridImage(taskId)
+      }
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'SERIAL_SUBMIT_FAILED')
+    } finally {
+      setSerialSubmitting(false)
+    }
+  }, [selectedBlock, selectedOmittedFields, serialRuns.length, serialSubmitting, source, submitMode, waitForCompletedGridImage])
+
   useEffect(() => {
     snapshotsRef.current = snapshots
   }, [snapshots])
 
-  const taskIds = useMemo(() => runPairs.flatMap((pair) => [
-    ...pair.single.tasks.map((task) => task.taskId),
-    ...pair.grid.tasks.map((task) => task.taskId),
-  ]), [runPairs])
+  const taskIds = useMemo(() => [
+    ...runPairs.flatMap((pair) => [
+      ...pair.single.tasks.map((task) => task.taskId),
+      ...pair.grid.tasks.map((task) => task.taskId),
+    ]),
+    ...serialRuns.flatMap((run) => run.blocks.flatMap((block) => block.run.tasks.map((task) => task.taskId))),
+  ], [runPairs, serialRuns])
 
   useEffect(() => {
     if (taskIds.length === 0) return
@@ -749,7 +896,8 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
 
   const blockOptions = source?.blocks ?? []
   const panels = selectedBlock?.panels ?? []
-  const canRun = Boolean(selectedBlock && !submitting)
+  const canRun = Boolean(selectedBlock && !submitting && !serialSubmitting)
+  const canRunSerial = Boolean(selectedBlock && !serialSubmitting && !submitting)
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-6 text-slate-950">
@@ -761,12 +909,12 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
 
         <section className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4">
           <label className="flex min-w-80 flex-1 flex-col gap-1 text-xs font-semibold text-slate-600">
-            <span>{copy.episodePlaceholder}</span>
+            <span>{copy.targetLabel}</span>
             <input
-              value={episodeId}
-              onChange={(event) => setEpisodeId(event.target.value)}
+              value={targetInput}
+              onChange={(event) => setTargetInput(event.target.value)}
               className="h-10 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-950 outline-none focus:border-slate-500"
-              placeholder={copy.episodePlaceholder}
+              placeholder={copy.targetPlaceholder}
             />
           </label>
           <label className="flex min-w-80 flex-1 flex-col gap-1 text-xs font-semibold text-slate-600">
@@ -802,7 +950,20 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
             <AppIcon name="play" className="h-4 w-4" />
             {submitting ? copy.running : copy.run}
           </button>
+          <button
+            type="button"
+            onClick={() => void runSerialGridSet()}
+            disabled={!canRunSerial}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-indigo-950 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            <AppIcon name="grid" className="h-4 w-4" />
+            {serialSubmitting ? copy.running : copy.runSerial}
+          </button>
         </section>
+
+        <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-900">
+          {copy.serialHint}
+        </div>
 
         {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -854,6 +1015,43 @@ export default function StoryboardGridLabClient({ locale, projectId, initialEpis
           </section>
 
           <section className="min-w-0 space-y-4">
+            {serialRuns.map((serialRun) => {
+              const omittedLabel = serialRun.omittedFields.length === 0
+                ? copy.omittedNone
+                : serialRun.omittedFields.map((fieldId) => fieldLabel(fieldId)).join(' · ')
+              return (
+                <div key={serialRun.id} className="rounded-lg border border-indigo-200 bg-white p-4">
+                  <div className="mb-4 space-y-1">
+                    <h2 className="text-sm font-semibold text-indigo-950">
+                      {copy.serial} #{serialRun.index}
+                    </h2>
+                    <p className="text-xs leading-5 text-slate-500">
+                      {copy.omittedPrefix}: {omittedLabel}
+                    </p>
+                  </div>
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {serialRun.blocks.map((blockRun, index) => (
+                      <div key={`${serialRun.id}:${blockRun.sourceVideoBlockId}`} className="rounded-lg border border-slate-200 p-3">
+                        <div className="mb-3 space-y-1">
+                          <h3 className="text-xs font-semibold text-slate-950">Block #{blockRun.blockIndex + 1}</h3>
+                          <p className="text-[11px] leading-4 text-slate-500">{blockRun.sourceVideoBlockId}</p>
+                          <p className="text-[11px] leading-4 text-indigo-700">
+                            {copy.previousGridReference}: {index === 0 || !blockRun.previousGridImageUrl ? '-' : blockRun.previousGridImageUrl}
+                          </p>
+                        </div>
+                        <ResultColumn
+                          title={copy.grid}
+                          run={blockRun.run}
+                          snapshots={snapshots}
+                          panels={blockRun.block.panels}
+                          copy={copy}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
             {runPairs.map((pair) => {
               const omittedLabel = pair.omittedFields.length === 0
                 ? copy.omittedNone

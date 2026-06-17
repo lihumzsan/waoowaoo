@@ -1,23 +1,23 @@
-import StoryboardGridLabClient from './storyboard-grid-lab-client'
+import StoryboardGridLabClient from '../workspace/[projectId]/storyboard-grid-lab/storyboard-grid-lab-client'
 import type { Locale } from '@/i18n/routing'
 
 type PageProps = {
   readonly params: Promise<{
     readonly locale: Locale
-    readonly projectId: string
   }>
   readonly searchParams: Promise<{
+    readonly projectId?: string
     readonly episode?: string
   }>
 }
 
-export default async function StoryboardGridLabPage({ params, searchParams }: PageProps) {
+export default async function StoryboardGridLabShortcutPage({ params, searchParams }: PageProps) {
   const resolvedParams = await params
   const resolvedSearchParams = await searchParams
   return (
     <StoryboardGridLabClient
       locale={resolvedParams.locale}
-      initialProjectId={resolvedParams.projectId}
+      initialProjectId={resolvedSearchParams.projectId ?? ''}
       initialEpisodeId={resolvedSearchParams.episode ?? ''}
     />
   )

@@ -56,6 +56,7 @@ type CompareSubmitInput = {
   readonly mode: StoryboardGridCompareMode
   readonly locale: Locale
   readonly omittedFields: readonly StoryboardPromptFieldId[]
+  readonly previousGridImageUrl?: string | null
 }
 
 function normalizeString(value: unknown): string {
@@ -84,6 +85,7 @@ export function parseStoryboardGridCompareSubmitBody(value: unknown): {
   readonly mode: StoryboardGridCompareMode
   readonly locale: Locale
   readonly omittedFields: readonly StoryboardPromptFieldId[]
+  readonly previousGridImageUrl: string | null
 } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ApiError('INVALID_PARAMS')
@@ -95,6 +97,7 @@ export function parseStoryboardGridCompareSubmitBody(value: unknown): {
   const mode = normalizeString(record.mode)
   const locale = locales.find((candidate) => candidate === normalizeString(record.locale))
   const omittedFields = parseStoryboardPromptFieldOmissions(record.omittedFields)
+  const previousGridImageUrl = normalizeString(record.previousGridImageUrl) || null
   if (!episodeId || !sourceVideoBlockId || panelIds.length < 2) {
     throw new ApiError('INVALID_PARAMS')
   }
@@ -107,7 +110,7 @@ export function parseStoryboardGridCompareSubmitBody(value: unknown): {
       field: 'locale',
     })
   }
-  return { episodeId, sourceVideoBlockId, panelIds, mode, locale, omittedFields }
+  return { episodeId, sourceVideoBlockId, panelIds, mode, locale, omittedFields, previousGridImageUrl }
 }
 
 export async function getStoryboardGridCompareSource(input: {
@@ -245,6 +248,12 @@ async function buildCompareBillingPayload(input: {
   }
 }
 
+function serialReferenceNote(locale: Locale): string {
+  return locale === 'en'
+    ? 'Previous complete 2x2 storyboard grid. Use it only as continuity reference for character identity, spatial axis, lighting direction, composition relationship, and scene consistency. Do not copy its exact actions or layout; generate the current block from the current cells.'
+    : '上一张完整 2x2 分镜套图。仅用于参考角色一致性、空间轴线、光线方向、构图关系和场景连续性；不要复制上一张的具体动作或布局，必须按当前四格内容生成。'
+}
+
 export async function submitStoryboardGridCompareRun(input: CompareSubmitInput) {
   const panelIds = input.panelIds.slice(0, 4)
   const panels = await assertComparePanels({
@@ -263,6 +272,10 @@ export async function submitStoryboardGridCompareRun(input: CompareSubmitInput) 
       referenceMode: 'asset',
       compareOnly: true,
       promptFieldOmissions: input.omittedFields,
+      ...(input.previousGridImageUrl ? {
+        previousGridImageUrl: input.previousGridImageUrl,
+        referenceImageNotes: [serialReferenceNote(input.locale)],
+      } : {}),
       storyboardGrid: {
         mode: '2x2',
         sourceVideoBlockId: input.sourceVideoBlockId,

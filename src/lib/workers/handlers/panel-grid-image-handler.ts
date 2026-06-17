@@ -20,7 +20,10 @@ import {
   resolveNovelData,
 } from './image-task-handler-shared'
 import { buildPanelGridPrompt } from './panel-image-prompt'
-import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image'
+import {
+  normalizeReferenceImagesForGeneration,
+  type OutboundImageNormalizationIssue,
+} from '@/lib/media/outbound-image'
 import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForStoryboardTask,
@@ -146,6 +149,12 @@ function readReferenceImageNotes(payload: AnyObj): string[] {
     : []
 }
 
+function readPreviousGridImageUrl(payload: AnyObj): string | null {
+  return typeof payload.previousGridImageUrl === 'string' && payload.previousGridImageUrl.trim()
+    ? payload.previousGridImageUrl.trim()
+    : null
+}
+
 function compactPhotographyRules(raw: string | null): Record<string, string> | null {
   const rules = parseJsonRecord(raw)
   if (!rules) return null
@@ -249,6 +258,42 @@ async function collectGridReferenceImages(input: {
     throw new Error(`PANEL_GRID_REFERENCE_NORMALIZE_FAILED:${normalizationIssues.map((issue) => `${issue.index}:${issue.code}`).join(';')}`)
   }
   return normalized
+}
+
+async function collectPreviousGridReferenceImage(input: {
+  readonly payload: AnyObj
+  readonly job: Job<TaskJobData>
+  readonly nextImageNumber: number
+}): Promise<{
+  readonly referenceImages: readonly string[]
+  readonly referenceImagesMap: readonly NumberedReferenceImage[]
+}> {
+  const previousGridImageUrl = readPreviousGridImageUrl(input.payload)
+  if (!previousGridImageUrl) {
+    return { referenceImages: [], referenceImagesMap: [] }
+  }
+  const normalizationIssues: OutboundImageNormalizationIssue[] = []
+  const referenceImages = await normalizeReferenceImagesForGeneration([previousGridImageUrl], {
+    onIssue: (issue) => {
+      normalizationIssues.push(issue)
+    },
+    context: { taskType: String(input.job.data.type), scope: 'panel-grid-image.previous-grid' },
+  })
+  if (normalizationIssues.length > 0) {
+    throw new Error(`PANEL_GRID_PREVIOUS_REFERENCE_NORMALIZE_FAILED:${normalizationIssues.map((issue) => `${issue.index}:${issue.code}`).join(';')}`)
+  }
+  return {
+    referenceImages,
+    referenceImagesMap: referenceImages.map((_, index) => ({
+      image_no: input.job.data.locale === 'en'
+        ? `Image ${input.nextImageNumber + index + 1}`
+        : `图 ${input.nextImageNumber + index + 1}`,
+      role: 'extra',
+      name: input.job.data.locale === 'en'
+        ? 'previous complete storyboard grid'
+        : '上一张完整分镜套图',
+    })),
+  }
 }
 
 export function buildCompactGridCell(input: {
@@ -380,7 +425,20 @@ export async function handlePanelGridImageTask(
     orderBy: { panelIndex: 'asc' },
   })
   const panels = assertGridPanels({ panels: rawPanels, grid })
-  const { referenceImages, referenceImagesMap } = await collectGridReferenceImages({ projectData, panels, job })
+  const baseReferences = await collectGridReferenceImages({ projectData, panels, job })
+  const previousGridReference = await collectPreviousGridReferenceImage({
+    payload,
+    job,
+    nextImageNumber: baseReferences.referenceImages.length,
+  })
+  const referenceImages = [
+    ...baseReferences.referenceImages,
+    ...previousGridReference.referenceImages,
+  ]
+  const referenceImagesMap = [
+    ...baseReferences.referenceImagesMap,
+    ...previousGridReference.referenceImagesMap,
+  ]
   const referenceImageNotes = readReferenceImageNotes(payload)
   const promptContext = buildGridPromptContext({
     panels,

@@ -25,6 +25,7 @@ export const POST = apiHandler(async (
     mode: body.mode,
     locale: body.locale,
     omittedFields: body.omittedFields,
+    previousGridImageUrl: body.previousGridImageUrl,
   })
 
   return NextResponse.json(result)

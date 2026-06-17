@@ -113,9 +113,18 @@ const promptMock = vi.hoisted(() => ({
   buildPrompt: vi.fn(() => 'panel-image-prompt'),
 }))
 
+const outboundImageMock = vi.hoisted(() => ({
+  normalizeReferenceImagesForGeneration: vi.fn(async (inputs: string[]) => inputs.map((input) => `normalized:${input}`)),
+  normalizeOptionalReferenceImagesForGeneration: vi.fn(async (inputs: string[]) => inputs.map((input) => `normalized:${input}`)),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
+vi.mock('@/lib/media/outbound-image', () => ({
+  normalizeReferenceImagesForGeneration: outboundImageMock.normalizeReferenceImagesForGeneration,
+  normalizeOptionalReferenceImagesForGeneration: outboundImageMock.normalizeOptionalReferenceImagesForGeneration,
+}))
 vi.mock('@/lib/logging/core', () => ({
   logInfo: vi.fn(),
   createScopedLogger: vi.fn(() => ({
@@ -628,7 +637,7 @@ describe('worker panel-image-task-handler behavior', () => {
     expect(gridInput).not.toEqual(expect.stringContaining('SHOULD_NOT_APPEAR_IN_GRID_PROMPT'))
   })
 
-  it('compare-only grid generation -> returns cropped cells without mutating panel records', async () => {
+  it('compare-only grid generation -> uses previous complete grid as serial reference without mutating panel records', async () => {
     const gridSourceBuffer = await sharp({
       create: {
         width: 8,
@@ -686,6 +695,7 @@ describe('worker panel-image-task-handler behavior', () => {
 
     const result = await handlePanelImageTask(buildJob({
       compareOnly: true,
+      previousGridImageUrl: 'images/previous-grid.png',
       storyboardGrid: {
         mode: '2x2',
         sourceVideoBlockId: 'edit-1:videoBlock:1',
@@ -701,10 +711,21 @@ describe('worker panel-image-task-handler behavior', () => {
       compareOnly: true,
       promptDebug: expect.objectContaining({
         omittedFields: [],
-        referenceImageCount: 6,
+        referenceImageCount: 7,
       }),
     })
+    expect(outboundImageMock.normalizeReferenceImagesForGeneration).toHaveBeenCalledWith(
+      ['images/previous-grid.png'],
+      expect.objectContaining({
+        context: expect.objectContaining({ scope: 'panel-grid-image.previous-grid' }),
+      }),
+    )
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(1)
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        referenceImages: expect.arrayContaining(['normalized:images/previous-grid.png']),
+      }),
+    }))
     expect(utilsMock.uploadImageSourceToCos).toHaveBeenCalledTimes(3)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
     expect(prismaMock.projectPanel.update).not.toHaveBeenCalled()
