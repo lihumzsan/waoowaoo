@@ -41,6 +41,9 @@ describe('api contract - infra routes (behavior)', () => {
     uploadDirAbs: '',
     uploadDirRel: '',
   }
+  const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
+  const originalProviderCredentialMode = process.env.PROVIDER_CREDENTIAL_MODE
+  const originalBillingMode = process.env.BILLING_MODE
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -59,6 +62,21 @@ describe('api contract - infra routes (behavior)', () => {
       delete process.env.UPLOAD_DIR
     } else {
       process.env.UPLOAD_DIR = originalUploadDir
+    }
+    if (originalDeploymentEdition === undefined) {
+      delete process.env.DEPLOYMENT_EDITION
+    } else {
+      process.env.DEPLOYMENT_EDITION = originalDeploymentEdition
+    }
+    if (originalProviderCredentialMode === undefined) {
+      delete process.env.PROVIDER_CREDENTIAL_MODE
+    } else {
+      process.env.PROVIDER_CREDENTIAL_MODE = originalProviderCredentialMode
+    }
+    if (originalBillingMode === undefined) {
+      delete process.env.BILLING_MODE
+    } else {
+      process.env.BILLING_MODE = originalBillingMode
     }
   })
 
@@ -107,6 +125,41 @@ describe('api contract - infra routes (behavior)', () => {
     expect(text).toContain('worker log line 1')
     expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8')
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="waoowaoo-logs-/)
+  })
+
+  it('GET /api/deployment exposes cloud mode before signup without requiring authentication', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    process.env.BILLING_MODE = 'ENFORCE'
+
+    const mod = await import('@/app/api/deployment/route')
+    const req = buildMockRequest({
+      path: '/api/deployment',
+      method: 'GET',
+    })
+    const res = await mod.GET(req, { params: Promise.resolve({}) })
+    const json = await res.json() as {
+      success: boolean
+      deployment: {
+        edition: string
+        providerCredentialMode: string
+        isCloud: boolean
+        usesPlatformProviderKeys: boolean
+      }
+      billingMode: string
+    }
+
+    expect(res.status).toBe(200)
+    expect(json).toEqual({
+      success: true,
+      deployment: {
+        edition: 'cloud',
+        providerCredentialMode: 'platform-key',
+        isCloud: true,
+        usesPlatformProviderKeys: true,
+      },
+      billingMode: 'ENFORCE',
+    })
   })
 
   it('GET /api/cos/image redirects to signed storage route with normalized query', async () => {
