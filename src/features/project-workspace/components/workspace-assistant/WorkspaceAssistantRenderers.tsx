@@ -121,7 +121,7 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="chart" className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">
-          {t('cards.projectPhase')} · {data.phase} · {t('cards.runs', { count: data.snapshot.activePlanRunCount })}
+          {t('cards.projectPhase')}
         </span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>

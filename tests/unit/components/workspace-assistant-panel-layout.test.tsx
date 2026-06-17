@@ -335,6 +335,38 @@ describe('workspace assistant panel layout', () => {
     expect(enMessages.cards.stylePreviewConfirmed).toBe('Style confirmed')
   })
 
+  it('keeps project phase card summary free of runtime phase metadata', () => {
+    const rendererSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+      'utf8',
+    )
+    const projectPhaseCardSource = rendererSource.slice(
+      rendererSource.indexOf('function ProjectPhaseDataCard'),
+      rendererSource.indexOf('export function AgentStopDataCard'),
+    )
+    const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
+      cards: {
+        projectPhase?: string
+        runs?: string
+      }
+    }
+    const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
+      cards: {
+        projectPhase?: string
+        runs?: string
+      }
+    }
+
+    expect(projectPhaseCardSource).toContain("t('cards.projectPhase')")
+    expect(projectPhaseCardSource).not.toContain('data.phase')
+    expect(projectPhaseCardSource).not.toContain('activePlanRunCount')
+    expect(projectPhaseCardSource).not.toContain("t('cards.runs'")
+    expect(zhMessages.cards.projectPhase).toBe('项目阶段')
+    expect(enMessages.cards.projectPhase).toBe('Project Phase')
+    expect(zhMessages.cards.runs).toBeUndefined()
+    expect(enMessages.cards.runs).toBeUndefined()
+  })
+
   it('keeps edit script video prompt stage translated in supported locales', () => {
     const zhProgressSource = readFileSync(join(process.cwd(), 'messages/zh/progress.json'), 'utf8')
     const enProgressSource = readFileSync(join(process.cwd(), 'messages/en/progress.json'), 'utf8')

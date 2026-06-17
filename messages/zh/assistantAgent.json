@@ -91,7 +91,6 @@
   },
   "cards": {
     "projectPhase": "项目阶段",
-    "runs": "运行 {count}",
     "clips": "Clips {count}",
     "screenplays": "剧本 {count}",
     "storyboards": "分镜 {count}",
