@@ -104,10 +104,11 @@ describe('edit script block-first prompt flow', () => {
     })
 
     expect(styleBiblePrompt).toContain('Style Bible 不得使用或暗示真人类型')
-    expect(styleBiblePrompt).toContain('即便用户要求“风格化 3D”也必须改写成非真人且非 3D')
+    expect(styleBiblePrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
+    expect(styleBiblePrompt).toContain('3D/CG 可作为动漫 3D、风格化 3D、非真人角色/物体/生物主导 CG')
     expect(styleBiblePrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
-    expect(styleBiblePrompt).toContain('3D、三维、3D 动画、3D 建模、3D 渲染、CG 渲染、CGI')
-    expect(styleBiblePrompt).not.toContain('风格化 CG')
+    expect(styleBiblePrompt).toContain('不要真人3D/CG渲染')
+    expect(styleBiblePrompt).not.toContain('必须改写成非真人且非 3D')
 
     const stylePreviewPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
@@ -128,11 +129,12 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).toContain('画面风格/影片基调')
     expect(stylePreviewPrompt).toContain('美术媒介/画风')
     expect(stylePreviewPrompt).toContain('用户最终只选一个候选')
-    expect(stylePreviewPrompt).toContain('至少两个候选必须采用明显不同的非真人且非 3D 美术媒介/画风')
+    expect(stylePreviewPrompt).toContain('至少两个候选必须采用明显不同的非真人美术媒介/画风')
     expect(stylePreviewPrompt).toContain('不要把多个候选只做成同一画风下的调色、明暗、颗粒或镜头滤镜变化')
     expect(stylePreviewPrompt).toContain('候选风格不得是真人类型、实拍真人、真人演员、写实真人')
-    expect(stylePreviewPrompt).toContain('即便是“风格化 3D”也不允许')
-    expect(stylePreviewPrompt).toContain('3D、三维、3D 动画、3D 建模、3D 渲染、CG 渲染、CGI')
+    expect(stylePreviewPrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
+    expect(stylePreviewPrompt).toContain('3D/CG 可以作为非真人美术媒介')
+    expect(stylePreviewPrompt).toContain('动漫 3D、风格化 3D/CG')
     expect(stylePreviewPrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
     expect(stylePreviewPrompt).toContain('aspectRatio 字段只是 schema 必填的技术占位值')
     expect(stylePreviewPrompt).toContain('最终影片画幅不由风格候选决定')
@@ -156,8 +158,8 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).not.toContain('project_style_json')
     expect(stylePreviewPrompt).not.toContain('春夏秋冬又一春')
     expect(stylePreviewPrompt).not.toContain('金基德')
-    expect(stylePreviewPrompt).not.toContain('风格化 3D/CG、插画')
-    expect(stylePreviewPrompt).not.toContain('风格化 CG')
+    expect(stylePreviewPrompt).not.toContain('即便是“风格化 3D”也不允许')
+    expect(stylePreviewPrompt).not.toContain('非真人且非 3D')
 
     const primaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
@@ -288,9 +290,10 @@ describe('edit script block-first prompt flow', () => {
     })
 
     expect(englishStyleBiblePrompt).toContain('Style Bible must not use or imply real-person')
-    expect(englishStyleBiblePrompt).toContain('Even if the user requests stylized 3D')
-    expect(englishStyleBiblePrompt).toContain('3D modeling, 3D rendering, CG rendering, or CGI')
-    expect(englishStyleBiblePrompt).not.toContain('stylized CG')
+    expect(englishStyleBiblePrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
+    expect(englishStyleBiblePrompt).toContain('3D/CG is allowed as anime 3D, stylized 3D')
+    expect(englishStyleBiblePrompt).toContain('no real-person 3D/CG rendering')
+    expect(englishStyleBiblePrompt).not.toContain('rewrite it into a non-real-person and non-3D')
 
     const englishStylePreviewPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
@@ -304,11 +307,12 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(englishStylePreviewPrompt).toContain('non-real-person and non-3D art medium')
-    expect(englishStylePreviewPrompt).toContain('Stylized 3D is also prohibited')
-    expect(englishStylePreviewPrompt).toContain('3D modeling, 3D rendering, CG rendering, CGI')
+    expect(englishStylePreviewPrompt).toContain('non-real-person art medium')
+    expect(englishStylePreviewPrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
+    expect(englishStylePreviewPrompt).toContain('3D/CG is allowed as a non-real-person art medium')
+    expect(englishStylePreviewPrompt).toContain('anime 3D, stylized 3D/CG')
     expect(englishStylePreviewPrompt).toContain('hardBans are chain-wide hard bans')
-    expect(englishStylePreviewPrompt).not.toContain('stylized 3D/CG')
-    expect(englishStylePreviewPrompt).not.toContain('stylized CG')
+    expect(englishStylePreviewPrompt).not.toContain('Stylized 3D is also prohibited')
+    expect(englishStylePreviewPrompt).not.toContain('non-3D')
   })
 })
