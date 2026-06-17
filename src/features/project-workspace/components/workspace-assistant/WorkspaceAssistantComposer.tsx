@@ -130,7 +130,7 @@ export function WorkspaceAssistantComposer({
     <div>
       <div className="flex flex-col rounded-[14px] px-3.5 pb-2 pt-2">
         <textarea
-          rows={1}
+          rows={2}
           value={value}
           disabled={pending}
           onChange={(event) => onChange(event.target.value)}
@@ -140,7 +140,7 @@ export function WorkspaceAssistantComposer({
             event.preventDefault()
             void onSubmit()
           }}
-          className="min-h-5 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-sm leading-5 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-sm leading-5 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         />
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
           <button

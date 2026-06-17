@@ -240,7 +240,7 @@ export function ConfirmationActionCard(props: {
 }) {
   const t = useTranslations('assistantAgent')
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] backdrop-blur-xl">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
       <div className="mt-3 flex gap-2">
@@ -272,7 +272,7 @@ export function WorkspaceAssistantActiveRunCard(props: {
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.operationId ?? '', locale)
   return (
-    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] backdrop-blur-xl">
       <div className="flex items-center gap-2">
         <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
         <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
@@ -470,7 +470,7 @@ export function AssistantChoiceCardView(props: {
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] backdrop-blur-xl">
       <div className="flex items-center gap-2">
         {canGoBack ? (
           <button
@@ -877,7 +877,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="flex items-center gap-2">
         <AppIcon
           name={hasGeneratingPreview ? 'loader' : 'check'}
