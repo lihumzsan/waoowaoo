@@ -21,19 +21,22 @@ describe('platform model catalog', () => {
     const modelKeys = models.map((model) => model.modelKey)
 
     expect(modelKeys).toContain('google::gemini-3-flash-preview')
-    expect(modelKeys).toContain('fal::banana-2')
+    expect(modelKeys).toContain('fal::gpt-image-2')
+    expect(modelKeys).toContain('fal::fal-ai/lyria3/pro')
     expect(modelKeys).toContain('ark::doubao-seedance-2-0-260128')
+    expect(modelKeys).toContain('openrouter::anthropic/claude-sonnet-4.6')
+    expect(modelKeys).toContain('openrouter::openai/gpt-5.5')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0-fast')
 
     expect(getPlatformDefaultModels()).toEqual({
-      analysisModel: 'google::gemini-3-flash-preview',
-      characterModel: 'fal::banana-2',
-      locationModel: 'fal::banana-2',
-      storyboardModel: 'fal::banana-2',
-      editModel: 'fal::banana-2',
-      videoModel: 'ark::doubao-seedance-2-0-260128',
-      musicModel: 'google::lyria-3-pro-preview',
+      analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+      characterModel: 'fal::gpt-image-2',
+      locationModel: 'fal::gpt-image-2',
+      storyboardModel: 'fal::gpt-image-2',
+      editModel: 'fal::gpt-image-2',
+      videoModel: 'openrouter::bytedance/seedance-2.0-fast',
+      musicModel: 'fal::fal-ai/lyria3/pro',
     })
   })
 

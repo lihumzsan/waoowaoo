@@ -157,9 +157,10 @@ describe('final render plan', () => {
     })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
   })
 
-  it('selects supported Google Lyria durations without exceeding Pro limits', () => {
+  it('selects supported Lyria durations without exceeding Pro limits', () => {
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-clip-preview', 118)).toBe(30)
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 31)).toBe(60)
+    expect(selectFinalRenderMusicDurationSeconds('fal::fal-ai/lyria3/pro', 121)).toBe(180)
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 181)).toBe(180)
   })
 

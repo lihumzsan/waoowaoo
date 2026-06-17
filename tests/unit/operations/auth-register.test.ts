@@ -10,6 +10,11 @@ const prismaMock = vi.hoisted(() => {
     },
     userBalance: {
       create: vi.fn(),
+      upsert: vi.fn(),
+    },
+    balanceTransaction: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
     },
     inviteCode: {
       findUnique: vi.fn(),
@@ -84,8 +89,17 @@ describe('auth register operation', () => {
       frozenAmount: 0,
       totalSpent: 0,
     })
+    prismaMock.__tx.userBalance.upsert.mockResolvedValue({
+      userId: 'user-1',
+      balance: 100,
+      frozenAmount: 0,
+      totalSpent: 0,
+    })
+    prismaMock.__tx.balanceTransaction.findFirst.mockResolvedValue(null)
+    prismaMock.__tx.balanceTransaction.create.mockResolvedValue({ id: 'transaction-1' })
     prismaMock.__tx.inviteCode.findUnique.mockResolvedValue({
       id: 'invite-1',
+      amount: 100,
       disabledAt: null,
       expiresAt: null,
       maxRedemptions: 5,
@@ -250,7 +264,7 @@ describe('auth register operation', () => {
     expect(prismaMock.__tx.userBalance.create.mock.calls).toEqual([])
   })
 
-  it('[cloud 注册带邀请码] -> 同一事务内创建用户、余额并消耗邀请码', async () => {
+  it('[cloud 注册带邀请码] -> 同一事务内创建用户、余额并按邀请码金额入账', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
@@ -281,8 +295,25 @@ describe('auth register operation', () => {
       data: {
         inviteCodeId: 'invite-1',
         userId: 'user-1',
-        amount: 0,
+        amount: 100,
       },
+    })
+    expect(prismaMock.__tx.userBalance.upsert).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      create: { userId: 'user-1', balance: 100, frozenAmount: 0, totalSpent: 0 },
+      update: { balance: { increment: 100 } },
+    })
+    expect(prismaMock.__tx.balanceTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-1',
+        type: 'adjust',
+        amount: 100,
+        balanceAfter: 100,
+        relatedId: 'invite-1',
+        operatorId: 'invite-code',
+        externalOrderId: 'invite-1',
+        idempotencyKey: 'invite:invite-1:user-1',
+      }),
     })
   })
 })

@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { hashInviteCode } from '@/lib/billing/invite-codes'
+import { addBalanceWithTransaction } from '@/lib/billing/ledger'
+import { toMoneyNumber } from '@/lib/billing/money'
 
 export interface RegisterUserInput {
   name: string
@@ -56,6 +58,14 @@ async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, r
     })
   }
 
+  const amount = toMoneyNumber(inviteCode.amount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'INVITE_CODE_AMOUNT_INVALID',
+      field: 'inviteCode',
+    })
+  }
+
   const claimed = await tx.inviteCode.updateMany({
     where: {
       id: inviteCode.id,
@@ -79,8 +89,16 @@ async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, r
     data: {
       inviteCodeId: inviteCode.id,
       userId,
-      amount: 0,
+      amount,
     },
+  })
+
+  await addBalanceWithTransaction(tx, userId, amount, {
+    type: 'adjust',
+    reason: 'registration invite code',
+    operatorId: 'invite-code',
+    externalOrderId: inviteCode.id,
+    idempotencyKey: `invite:${inviteCode.id}:${userId}`,
   })
 }
 

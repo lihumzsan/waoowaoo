@@ -6,6 +6,7 @@ const ORIGINAL_ENV = {
   DEPLOYMENT_EDITION: process.env.DEPLOYMENT_EDITION,
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
   PLATFORM_GOOGLE_API_KEY: process.env.PLATFORM_GOOGLE_API_KEY,
+  PLATFORM_OPENROUTER_API_KEY: process.env.PLATFORM_OPENROUTER_API_KEY,
   BILLING_MODE: process.env.BILLING_MODE,
 }
 
@@ -25,14 +26,14 @@ describe('platform provider config', () => {
   it('reads platform provider keys in platform-key mode', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
-    process.env.PLATFORM_GOOGLE_API_KEY = 'platform-google-key'
+    process.env.PLATFORM_OPENROUTER_API_KEY = 'platform-openrouter-key'
 
-    const config = await getProviderConfig('user-1', 'google')
+    const config = await getProviderConfig('user-1', 'openrouter')
 
     expect(config).toEqual({
-      id: 'google',
-      name: 'google',
-      apiKey: 'platform-google-key',
+      id: 'openrouter',
+      name: 'openrouter',
+      apiKey: 'platform-openrouter-key',
     })
     await expect(hasApiConfig('user-1')).resolves.toBe(true)
   })
@@ -40,9 +41,9 @@ describe('platform provider config', () => {
   it('fails explicitly when a required platform key is missing', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
-    delete process.env.PLATFORM_GOOGLE_API_KEY
+    delete process.env.PLATFORM_OPENROUTER_API_KEY
 
-    await expect(getProviderConfig('user-1', 'google')).rejects.toThrow('PLATFORM_PROVIDER_API_KEY_MISSING')
+    await expect(getProviderConfig('user-1', 'openrouter')).rejects.toThrow('PLATFORM_PROVIDER_API_KEY_MISSING')
   })
 
   it('uses platform models in platform-key mode without user config', async () => {
@@ -50,12 +51,14 @@ describe('platform provider config', () => {
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
     const models = await getUserModels('user-1')
-    expect(models.map((model) => model.modelKey)).toContain('google::gemini-3-flash-preview')
-    expect(models.map((model) => model.modelKey)).toContain('fal::banana-2')
+    expect(models.map((model) => model.modelKey)).toContain('openrouter::anthropic/claude-sonnet-4.6')
+    expect(models.map((model) => model.modelKey)).toContain('openrouter::openai/gpt-5.5')
+    expect(models.map((model) => model.modelKey)).toContain('fal::gpt-image-2')
+    expect(models.map((model) => model.modelKey)).toContain('fal::fal-ai/lyria3/pro')
 
-    await expect(resolveModelSelection('user-1', 'google::gemini-3-flash-preview', 'llm')).resolves.toMatchObject({
-      provider: 'google',
-      modelId: 'gemini-3-flash-preview',
+    await expect(resolveModelSelection('user-1', 'openrouter::anthropic/claude-sonnet-4.6', 'llm')).resolves.toMatchObject({
+      provider: 'openrouter',
+      modelId: 'anthropic/claude-sonnet-4.6',
       mediaType: 'llm',
     })
   })

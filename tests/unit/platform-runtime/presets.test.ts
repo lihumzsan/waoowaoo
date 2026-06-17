@@ -44,7 +44,7 @@ describe('platform runtime presets', () => {
       generateAudio: false,
     })
     expect(getPlatformRuntimePlan('video')).toMatchObject({
-      modelKey: 'ark::doubao-seedance-2-0-260128',
+      modelKey: 'openrouter::bytedance/seedance-2.0-fast',
       generationOptions: {
         resolution: '720p',
         generateAudio: false,
@@ -58,21 +58,21 @@ describe('platform runtime presets', () => {
     process.env.PLATFORM_VIDEO_RESOLUTION = '480p'
     process.env.PLATFORM_VIDEO_GENERATE_AUDIO = 'true'
     process.env.PLATFORM_MUSIC_DURATION_SECONDS = '90'
-    process.env.PLATFORM_MUSIC_OUTPUT_FORMAT = 'wav'
+    process.env.PLATFORM_MUSIC_OUTPUT_FORMAT = 'mp3'
 
     expect(getPlatformCapabilityDefaults()).toMatchObject({
-      'fal::banana-2': {
+      'fal::gpt-image-2': {
         resolution: '1024x1024',
         quality: 'high',
       },
-      'ark::doubao-seedance-2-0-260128': {
+      'openrouter::bytedance/seedance-2.0-fast': {
         resolution: '480p',
         generateAudio: true,
       },
     })
     expect(getPlatformMusicGenerationOptions()).toEqual({
       durationSeconds: 90,
-      outputFormat: 'wav',
+      outputFormat: 'mp3',
     })
   })
 

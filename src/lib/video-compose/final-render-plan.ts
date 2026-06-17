@@ -107,7 +107,7 @@ export interface FinalRenderMusicPromptInput {
 }
 
 const editScriptShotsSchema = z.array(editScriptShotSchema)
-const GOOGLE_LYRIA_PRO_DURATIONS = [30, 60, 90, 120, 180] as const
+const LYRIA_PRO_DURATIONS = [30, 60, 90, 120, 180] as const
 
 function normalizeString(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -241,10 +241,10 @@ export function resolveFinalRenderDimensions(videoRatio: string | null | undefin
 export function selectFinalRenderMusicDurationSeconds(modelKey: string, targetDurationSeconds: number): number {
   const target = Math.max(1, Math.ceil(targetDurationSeconds))
   if (modelKey.includes('lyria-3-clip-preview')) return 30
-  for (const duration of GOOGLE_LYRIA_PRO_DURATIONS) {
+  for (const duration of LYRIA_PRO_DURATIONS) {
     if (target <= duration) return duration
   }
-  return GOOGLE_LYRIA_PRO_DURATIONS[GOOGLE_LYRIA_PRO_DURATIONS.length - 1]
+  return LYRIA_PRO_DURATIONS[LYRIA_PRO_DURATIONS.length - 1]
 }
 
 export function parseFinalRenderEditScriptShots(value: unknown): readonly FinalRenderEditShot[] {

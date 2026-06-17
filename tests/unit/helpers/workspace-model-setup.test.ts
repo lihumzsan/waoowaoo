@@ -17,18 +17,18 @@ describe('workspace model setup guidance', () => {
   it('cloud runtime default analysisModel -> 不需要引导设置', () => {
     const payload = {
       preference: {
-        analysisModel: 'google::gemini-3-flash-preview',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
       },
       deployment: {
         isCloud: true,
       },
       runtimeDefaults: {
-        analysisModel: 'google::gemini-3-flash-preview',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
       },
     }
 
     expect(hasConfiguredAnalysisModel(payload)).toBe(true)
-    expect(readConfiguredAnalysisModel(payload)).toBe('google::gemini-3-flash-preview')
+    expect(readConfiguredAnalysisModel(payload)).toBe('openrouter::anthropic/claude-sonnet-4.6')
     expect(shouldGuideToModelSetup(payload)).toBe(false)
   })
 

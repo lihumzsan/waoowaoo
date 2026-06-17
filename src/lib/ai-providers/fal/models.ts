@@ -15,7 +15,9 @@ import {
 } from '@/lib/ai-providers/shared/openai-image'
 
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
-export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = 'fal::banana-2'
+export const FAL_LYRIA_3_PRO_MODEL_ID = 'fal-ai/lyria3/pro'
+export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`
+export const FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = `fal::${FAL_LYRIA_3_PRO_MODEL_ID}`
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/fast'
@@ -29,6 +31,7 @@ export const FAL_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as cons
 export const FAL_PLATFORM_MODEL_PRESETS = [
   { provider: 'fal', modelId: 'banana-2', name: 'Banana 2', type: 'image' },
   { provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
+  { provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, name: 'Lyria 3 Pro', type: 'music' },
 ] as const satisfies ReadonlyArray<PlatformModelPreset>
 
 export const FAL_VIDEO_MODEL_IDS = new Set([
@@ -56,6 +59,18 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     provider: 'fal',
     modelId: FAL_GPT_IMAGE_2_MODEL_ID,
     capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS], qualityOptions: [...FAL_GPT_IMAGE_2_QUALITY_OPTIONS] } },
+  },
+  {
+    modelType: 'music',
+    provider: 'fal',
+    modelId: FAL_LYRIA_3_PRO_MODEL_ID,
+    capabilities: {
+      music: {
+        durationSecondsOptions: [30, 60, 90, 120, 180],
+        vocalModeOptions: ['instrumental', 'vocal'],
+        outputFormatOptions: ['mp3'],
+      },
+    },
   },
   {
     modelType: 'video',
@@ -167,6 +182,7 @@ export const FAL_API_CONFIG_CATALOG_MODELS = [
   { modelId: 'banana', name: 'Banana Pro', type: 'image', provider: 'fal' },
   { modelId: 'banana-2', name: 'Banana 2', type: 'image', provider: 'fal' },
   { modelId: FAL_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image', provider: 'fal' },
+  { modelId: FAL_LYRIA_3_PRO_MODEL_ID, name: 'Lyria 3 Pro', type: 'music', provider: 'fal' },
   { modelId: 'fal-wan25', name: 'Wan 2.6', type: 'video', provider: 'fal' },
   { modelId: 'fal-veo31', name: 'Veo 3.1', type: 'video', provider: 'fal' },
   { modelId: 'fal-sora2', name: 'Sora 2', type: 'video', provider: 'fal' },
@@ -212,6 +228,7 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
       ],
     },
   },
+  { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, pricing: falFlatPricing(0.576) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-wan25', pricing: falFlatPricing(1.8) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-veo31', pricing: falFlatPricing(2.88) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-kling25', pricing: falFlatPricing(2.16) },
@@ -313,6 +330,21 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
         outputFormat: enumValidator(OPENAI_IMAGE_OUTPUT_FORMATS),
       },
     })
+  }
+  if (modality === 'music') {
+    if (modelId === FAL_LYRIA_3_PRO_MODEL_ID) {
+      return buildMediaOptionSchema('music', {
+        validators: {
+          durationSeconds: integerRangeValidator({ min: 1, max: 180 }),
+          vocalMode: enumValidator(['instrumental', 'vocal']),
+          genre: nonEmptyStringValidator(),
+          mood: nonEmptyStringValidator(),
+          bpm: integerRangeValidator({ min: 20, max: 300 }),
+          outputFormat: enumValidator(['mp3']),
+        },
+      })
+    }
+    return buildMediaOptionSchema('music')
   }
   if (modality === 'video') {
     if (modelId === FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID) {

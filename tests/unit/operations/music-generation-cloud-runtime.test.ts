@@ -9,7 +9,7 @@ const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
   deduped: false,
 })))
 
-const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => 'google::lyria-3-pro-preview'))
+const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => 'fal::fal-ai/lyria3/pro'))
 
 vi.mock('@/lib/operations/submit-operation-task', () => ({ submitOperationTask: submitOperationTaskMock }))
 vi.mock('@/lib/model-access/system-model-resolver', () => ({
@@ -59,7 +59,7 @@ describe('cloud music generation runtime options', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
-    process.env.PLATFORM_MUSIC_OUTPUT_FORMAT = 'wav'
+    process.env.PLATFORM_MUSIC_OUTPUT_FORMAT = 'mp3'
   })
 
   afterEach(() => restoreEnv())
@@ -73,14 +73,14 @@ describe('cloud music generation runtime options', () => {
 
     expect(result).toMatchObject({
       taskId: 'task-1',
-      musicModel: 'google::lyria-3-pro-preview',
+      musicModel: 'fal::fal-ai/lyria3/pro',
     })
     expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
         prompt: 'quiet tension cue',
         durationSeconds: 30,
-        musicModel: 'google::lyria-3-pro-preview',
-        outputFormat: 'wav',
+        musicModel: 'fal::fal-ai/lyria3/pro',
+        outputFormat: 'mp3',
       }),
     }))
   })
@@ -90,7 +90,7 @@ describe('cloud music generation runtime options', () => {
       confirmed: true,
       prompt: 'quiet tension cue',
       durationSeconds: 30,
-      musicModel: 'google::other-model',
+      musicModel: 'fal::other-model',
     })).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({

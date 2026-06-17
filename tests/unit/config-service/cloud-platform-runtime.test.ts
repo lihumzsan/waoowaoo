@@ -75,18 +75,18 @@ describe('cloud platform runtime project config', () => {
     const config = await getProjectModelConfig('project-1', 'user-1')
 
     expect(config).toEqual({
-      analysisModel: 'google::gemini-3-flash-preview',
-      characterModel: 'fal::banana-2',
-      locationModel: 'fal::banana-2',
-      storyboardModel: 'fal::banana-2',
-      editModel: 'fal::banana-2',
-      videoModel: 'ark::doubao-seedance-2-0-260128',
-      singleShotVideoModel: 'ark::doubao-seedance-2-0-260128',
-      sequenceVideoModel: 'ark::doubao-seedance-2-0-260128',
-      musicModel: 'google::lyria-3-pro-preview',
+      analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+      characterModel: 'fal::gpt-image-2',
+      locationModel: 'fal::gpt-image-2',
+      storyboardModel: 'fal::gpt-image-2',
+      editModel: 'fal::gpt-image-2',
+      videoModel: 'openrouter::bytedance/seedance-2.0-fast',
+      singleShotVideoModel: 'openrouter::bytedance/seedance-2.0-fast',
+      sequenceVideoModel: 'openrouter::bytedance/seedance-2.0-fast',
+      musicModel: 'fal::fal-ai/lyria3/pro',
       videoRatio: '21:9',
       capabilityDefaults: {
-        'ark::doubao-seedance-2-0-260128': {
+        'openrouter::bytedance/seedance-2.0-fast': {
           resolution: '480p',
           generateAudio: false,
         },

@@ -53,7 +53,7 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.BGM_SCORE_GENERATE, {})).toBeNull()
   })
 
-  it('builds music billing info for built-in Google Lyria models', () => {
+  it('builds music billing info for built-in Lyria models', () => {
     const clipInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
       musicModel: 'google::lyria-3-clip-preview',
       durationSeconds: 30,
@@ -71,6 +71,15 @@ describe('billing/task-policy', () => {
     expect(proInfo.model).toBe('google::lyria-3-pro-preview')
     expect(proInfo.quantity).toBe(60)
     expect(proInfo.maxFrozenCost).toBeGreaterThan(0)
+
+    const falInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'fal::fal-ai/lyria3/pro',
+      durationSeconds: 60,
+    }))
+    expect(falInfo.apiType).toBe('music')
+    expect(falInfo.model).toBe('fal::fal-ai/lyria3/pro')
+    expect(falInfo.quantity).toBe(60)
+    expect(falInfo.maxFrozenCost).toBeGreaterThan(0)
   })
 
   it('uses product credit pricing for uncatalogued music models', () => {
