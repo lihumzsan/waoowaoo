@@ -156,6 +156,11 @@ function buildWaitScope(input: ProjectAgentWaitScopeInput): {
   }
 }
 
+function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode {
+  if (value === 'resume_agent' || value === 'await_user_choice' || value === 'complete') return value
+  throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_MODE_INVALID:${value}`)
+}
+
 export async function createProjectAgentWait(input: CreateProjectAgentWaitInput): Promise<string | null> {
   const taskIds = normalizeTaskIds(input.taskIds)
   if (taskIds.length === 0) return null
@@ -432,9 +437,56 @@ export async function safelyResolveProjectAgentWaitsForTaskEvent(input: {
   }
 }
 
+async function reconcilePendingProjectAgentWaitsForScope(input: ProjectAgentWaitScopeInput): Promise<void> {
+  const { assistantId, scopeRef } = buildWaitScope(input)
+  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
+    SELECT
+      id,
+      runId,
+      projectId,
+      userId,
+      assistantId,
+      scopeRef,
+      episodeId,
+      operationId,
+      taskIds,
+      followUpMode,
+      status,
+      terminalStatus,
+      terminalTaskIds,
+      failedTaskIds,
+      followUpKey,
+      claimId,
+      claimedAt,
+      claimExpiresAt,
+      followedAt,
+      createdAt,
+      resolvedAt
+    FROM project_agent_waits
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${assistantId}
+      AND scopeRef = ${scopeRef}
+      AND status = 'pending'
+    ORDER BY createdAt ASC
+  `
+
+  for (const row of rows) {
+    await resolveNewProjectAgentWaitFromCurrentTasks({
+      waitId: row.id,
+      runId: row.runId,
+      projectId: row.projectId,
+      userId: row.userId,
+      taskIds: parseStringArray(row.taskIds),
+      followUpMode: normalizeWaitFollowUpMode(row.followUpMode),
+    })
+  }
+}
+
 export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentWaitScopeInput & {
   limit?: number
 }): Promise<ProjectAgentWaitFollowUp[]> {
+  await reconcilePendingProjectAgentWaitsForScope(input)
   const { assistantId, scopeRef } = buildWaitScope(input)
   const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50)
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>(Prisma.sql`
@@ -493,6 +545,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
   limit?: number
   claimTtlMs?: number
 }): Promise<ProjectAgentWaitFollowUp[]> {
+  await reconcilePendingProjectAgentWaitsForScope(input)
   const { assistantId, scopeRef } = buildWaitScope(input)
   const limit = Math.min(Math.max(Math.floor(input.limit ?? 1), 1), 10)
   const claimTtlMs = Math.min(Math.max(Math.floor(input.claimTtlMs ?? WAIT_CLAIM_TTL_MS), 30_000), 10 * 60 * 1000)

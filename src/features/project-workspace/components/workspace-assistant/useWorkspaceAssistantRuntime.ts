@@ -25,7 +25,6 @@ import {
 } from '@/lib/project-agent/ui-message-validation'
 import {
   collectResolvedInterruptionApprovalIds,
-  findPendingToolApprovalId,
   findPendingWorkspaceAssistantInterruption,
 } from './interruption-parts'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
@@ -230,13 +229,58 @@ function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTracked
   }
 }
 
+function readRunScopedOperation(part: unknown, runId: string, allowUnscopedOperation: boolean): string | null {
+  if (!isRecord(part)) return null
+  const data = isRecord(part.data) ? part.data : null
+  if (!data) return null
+
+  if (part.type === 'data-agent-interruption') {
+    return readNonEmptyString(data.runId) === runId
+      ? readNonEmptyString(data.operationId)
+      : null
+  }
+
+  if (part.type === 'data-task-submitted' || part.type === 'data-task-batch-submitted') {
+    const partRunId = readNonEmptyString(data.runId)
+    return partRunId === runId || (!partRunId && allowUnscopedOperation)
+      ? readNonEmptyString(data.operationId)
+      : null
+  }
+
+  if (part.type === 'data-agent-stop' && allowUnscopedOperation) {
+    const operationIds = Array.isArray(data.operationIds)
+      ? data.operationIds.map(readNonEmptyString).filter((item): item is string => Boolean(item))
+      : []
+    return operationIds[0] ?? null
+  }
+
+  return null
+}
+
+function findLatestRunOperationId(messages: readonly UIMessage[], runId: string, runMessageIndex: number): string | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex]
+    if (!message || message.role !== 'assistant') continue
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const operationId = readRunScopedOperation(message.parts[partIndex], runId, messageIndex >= runMessageIndex)
+      if (operationId) return operationId
+    }
+  }
+  return null
+}
+
 export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]): WorkspaceAssistantTrackedRun | null {
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex]
     if (!message || message.role !== 'assistant') continue
     for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
       const run = readWorkspaceAssistantRunPart(message.parts[partIndex])
-      if (run) return run
+      if (run) {
+        return {
+          ...run,
+          operationId: findLatestRunOperationId(messages, run.runId, messageIndex),
+        }
+      }
     }
   }
   return null
@@ -616,6 +660,8 @@ export function useWorkspaceAssistantRuntime({
     let cancelled = false
     let timer: number | null = null
 
+    void refreshTrackedRunStatus(activeControlRun.runId).catch(() => undefined)
+
     const poll = () => {
       timer = window.setTimeout(() => {
         void refreshTrackedRunStatus(activeControlRun.runId)
@@ -676,7 +722,7 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: Boolean(activeControlRun) || chat.status === 'submitted' || chat.status === 'streaming',
-    pendingApprovalId: findPendingToolApprovalId(chat.messages) ?? pendingRunApproval?.approvalId ?? null,
+    pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
     error: chat.error,
     syncError,

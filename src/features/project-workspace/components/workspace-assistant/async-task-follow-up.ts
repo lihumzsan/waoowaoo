@@ -28,6 +28,11 @@ export type AssistantAsyncTaskTerminalEvent = {
   lifecycleType: typeof TASK_EVENT_TYPE.COMPLETED | typeof TASK_EVENT_TYPE.FAILED
 }
 
+export type AssistantExternalTaskWait = {
+  operationId: string
+  taskIds: string[]
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -145,6 +150,37 @@ export function collectAssistantAsyncTaskSubmissions(messages: readonly UIMessag
     }
   }
   return submissions
+}
+
+function readAgentStopExternalTaskWait(value: unknown): AssistantExternalTaskWait | null {
+  if (!isRecord(value)) return null
+  if (value.reason !== 'awaiting_external_task') return null
+  const operationIds = Array.isArray(value.operationIds)
+    ? value.operationIds.map(readNonEmptyString).filter((item): item is string => Boolean(item))
+    : []
+  const taskIds = Array.isArray(value.taskIds)
+    ? value.taskIds.map(readNonEmptyString).filter((item): item is string => Boolean(item))
+    : []
+  const operationId = operationIds[0]
+  if (!operationId || taskIds.length === 0) return null
+  return {
+    operationId,
+    taskIds,
+  }
+}
+
+export function findLatestAssistantExternalTaskWait(messages: readonly UIMessage[]): AssistantExternalTaskWait | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex]
+    if (!message || message.role !== 'assistant') continue
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = message.parts[partIndex]
+      if (!isRecord(part) || part.type !== 'data-agent-stop') continue
+      const wait = readAgentStopExternalTaskWait(part.data)
+      if (wait) return wait
+    }
+  }
+  return null
 }
 
 function readOperationResult(payload: unknown): UnknownRecord | null {

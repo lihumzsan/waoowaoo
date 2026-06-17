@@ -84,6 +84,45 @@ describe('workspace assistant runtime chat id', () => {
     })
   })
 
+  it('restores the approved operation title from the matching persisted interruption after refresh', () => {
+    const run = findLatestWorkspaceAssistantRun([
+      {
+        id: 'assistant-approval',
+        role: 'assistant',
+        parts: [{
+          type: 'data-agent-interruption',
+          data: {
+            runId: 'run-1',
+            requestId: 'request-1',
+            interruptionId: 'interruption-1',
+            approvalId: 'approval-1',
+            operationId: 'generate_edit_script',
+          },
+        } as never],
+      },
+      {
+        id: 'assistant-control',
+        role: 'assistant',
+        parts: [{
+          type: 'data-agent-run',
+          data: {
+            runId: 'run-1',
+            requestId: 'request-2',
+            status: 'running',
+            controlKind: 'approval_response',
+          },
+        } as never],
+      },
+    ])
+
+    expect(run).toEqual({
+      runId: 'run-1',
+      status: 'running',
+      operationId: 'generate_edit_script',
+      intent: null,
+    })
+  })
+
   it('never reports a pending operation while a denial is being delivered', () => {
     expect(resolveWorkspaceAssistantPendingOperationId({
       operationId: 'generate_edit_script',

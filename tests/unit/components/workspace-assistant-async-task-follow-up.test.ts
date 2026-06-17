@@ -4,6 +4,7 @@ import {
   collectAssistantAsyncTaskSubmissions,
   createTaskBatchSubmittedDataFromOperationPayload,
   createTaskSubmittedDataFromOperationPayload,
+  findLatestAssistantExternalTaskWait,
   resolveAssistantAsyncTaskTerminalEvent,
 } from '@/features/project-workspace/components/workspace-assistant/async-task-follow-up'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, type SSEEvent } from '@/lib/task/types'
@@ -55,6 +56,38 @@ describe('workspace assistant async task follow-up', () => {
       kind: 'batch',
       operationId: 'generate_videos',
       taskId: 'task-3',
+    })
+  })
+
+  it('finds the latest external task wait stop from persisted assistant messages', () => {
+    const wait = findLatestAssistantExternalTaskWait([
+      assistantMessage([{
+        type: 'data-agent-stop',
+        data: {
+          reason: 'awaiting_external_task',
+          operationIds: ['generate_edit_script'],
+          taskIds: ['task-1'],
+          phases: [],
+        },
+      } as unknown as UIMessage['parts'][number]]),
+      {
+        id: 'message-2',
+        role: 'assistant',
+        parts: [{
+          type: 'data-agent-stop',
+          data: {
+            reason: 'awaiting_external_task',
+            operationIds: ['generate_edit_director_decoupage'],
+            taskIds: ['task-2'],
+            phases: ['processing'],
+          },
+        } as unknown as UIMessage['parts'][number]],
+      },
+    ])
+
+    expect(wait).toEqual({
+      operationId: 'generate_edit_director_decoupage',
+      taskIds: ['task-2'],
     })
   })
 

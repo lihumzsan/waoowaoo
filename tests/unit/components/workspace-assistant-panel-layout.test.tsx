@@ -195,6 +195,16 @@ describe('workspace assistant panel layout', () => {
     expect(rendererSource).toContain('ConfirmationActionCard')
   })
 
+  it('uses server-side pending approval state instead of reviving persisted approval cards', () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts'),
+      'utf8',
+    )
+
+    expect(runtimeSource).not.toContain('pendingApprovalId: findPendingToolApprovalId')
+    expect(runtimeSource).toContain('pendingApprovalId: pendingRunApproval?.approvalId ?? null')
+  })
+
   it('resolves progress stage labels without crashing on missing translations', () => {
     const progressT = createProgressTranslator({
       stage: {
@@ -307,6 +317,33 @@ describe('workspace assistant panel layout', () => {
       hasCard: false,
       stylePreviewConfirmed: false,
     })).toBe(false)
+  })
+
+  it('renders external task waits through the unified active-run loading card', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+    const rendererSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain('findLatestAssistantExternalTaskWait')
+    expect(panelSource).toContain('showExternalTaskRunCard')
+    expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard operationId={activeExternalTaskWait.operationId} />')
+    expect(rendererSource).toContain("data.reason === 'awaiting_external_task'")
+  })
+
+  it('periodically claims resolved assistant waits to recover missed task events', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain('WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS')
+    expect(panelSource).toContain('window.setInterval')
+    expect(panelSource).toContain('flushResolvedWaitFollowUps')
   })
 
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {

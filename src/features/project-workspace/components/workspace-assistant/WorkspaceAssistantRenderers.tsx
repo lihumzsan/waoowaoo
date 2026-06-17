@@ -134,7 +134,7 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
 
 export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
   const t = useTranslations('assistantAgent')
-  if (data.reason === 'awaiting_user_confirmation') return null
+  if (data.reason === 'awaiting_user_confirmation' || data.reason === 'awaiting_external_task') return null
   const title = data.reason === 'awaiting_external_task'
       ? t('cards.awaitingExternalTask')
       : t('cards.toolErrorBoundary')

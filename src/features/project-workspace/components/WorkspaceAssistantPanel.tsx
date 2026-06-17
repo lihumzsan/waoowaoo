@@ -41,6 +41,8 @@ import {
   findActiveStylePreviewGenerationCard,
 } from './workspace-assistant/active-style-preview-generation'
 import {
+  collectAssistantAsyncTaskSubmissions,
+  findLatestAssistantExternalTaskWait,
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
 import { findPendingWorkspaceAssistantInterruption } from './workspace-assistant/interruption-parts'
@@ -49,6 +51,7 @@ import {
   syncWorkspaceResourceChanges,
 } from '@/lib/query/resource-change-sync'
 import { useConfirmProjectEditStylePreview, useProjectEditScreenplay } from '@/lib/query/hooks'
+import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -59,6 +62,8 @@ import {
 } from '@/lib/project-agent/permission-mode'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+
+const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
 interface ProjectAgentWaitFollowUp {
   runId: string | null
@@ -238,7 +243,7 @@ export default function WorkspaceAssistantPanel({
   }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.pendingApprovalId, assistantRuntime.storageLoading])
   const flushResolvedWaitFollowUps = useCallback(async () => {
     const runtime = assistantRuntimeRef.current
-    if (runtime.pending || runtime.storageLoading) return
+    if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) return
     const response = await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -266,6 +271,15 @@ export default function WorkspaceAssistantPanel({
   useEffect(() => {
     if (assistantRuntime.storageLoading) return
     void flushResolvedWaitFollowUps()
+  }, [assistantRuntime.storageLoading, flushResolvedWaitFollowUps])
+  useEffect(() => {
+    if (assistantRuntime.storageLoading) return
+    const timer = window.setInterval(() => {
+      void flushResolvedWaitFollowUps()
+    }, WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS)
+    return () => {
+      window.clearInterval(timer)
+    }
   }, [assistantRuntime.storageLoading, flushResolvedWaitFollowUps])
   useEffect(() => {
     return subscribeTaskEvents((event) => {
@@ -423,6 +437,43 @@ export default function WorkspaceAssistantPanel({
   const activeChoiceCard = useMemo(() => {
     return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
   }, [assistantRuntime.messages, dismissedChoiceCardKeys])
+  const asyncTaskSubmissions = useMemo(() => {
+    return collectAssistantAsyncTaskSubmissions(assistantRuntime.messages)
+  }, [assistantRuntime.messages])
+  const activeExternalTaskWait = useMemo(() => {
+    return findLatestAssistantExternalTaskWait(assistantRuntime.messages)
+  }, [assistantRuntime.messages])
+  const activeExternalTaskTargets = useMemo(() => {
+    if (!activeExternalTaskWait) return []
+    const targets = activeExternalTaskWait.taskIds.flatMap((taskId) => {
+      const submission = asyncTaskSubmissions.get(taskId)
+      if (!submission || submission.kind !== 'single') return []
+      const { targetType, targetId, taskType } = submission.data
+      if (!targetType || !targetId) return []
+      return [{
+        targetType,
+        targetId,
+        ...(taskType ? { types: [taskType] } : {}),
+      }]
+    })
+    const deduped = new Map<string, (typeof targets)[number]>()
+    for (const target of targets) {
+      deduped.set(`${target.targetType}:${target.targetId}:${target.types?.join(',') ?? ''}`, target)
+    }
+    return Array.from(deduped.values())
+  }, [activeExternalTaskWait, asyncTaskSubmissions])
+  const activeExternalTaskStateQuery = useTaskTargetStateMap(projectId, activeExternalTaskTargets, {
+    enabled: activeExternalTaskTargets.length > 0,
+    staleTime: 0,
+  })
+  const activeExternalTaskRunning = Boolean(
+    activeExternalTaskWait
+      && activeExternalTaskTargets.length > 0
+      && (
+        activeExternalTaskStateQuery.isLoading
+        || activeExternalTaskStateQuery.data.some((state) => state.phase === 'queued' || state.phase === 'processing')
+      ),
+  )
   const activeStylePreviewGenerationCard = useMemo(() => {
     return findActiveStylePreviewGenerationCard(assistantRuntime.messages)
   }, [assistantRuntime.messages])
@@ -482,6 +533,12 @@ export default function WorkspaceAssistantPanel({
     assistantRuntime.pending
       && !assistantRuntime.storageLoading
       && assistantRuntime.pendingOperationId,
+  )
+  const showExternalTaskRunCard = Boolean(
+    !showActiveRunCard
+      && !assistantRuntime.storageLoading
+      && activeExternalTaskRunning
+      && activeExternalTaskWait,
   )
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
@@ -589,6 +646,9 @@ export default function WorkspaceAssistantPanel({
                     ) : null}
                     {showActiveRunCard ? (
                       <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />
+                    ) : null}
+                    {showExternalTaskRunCard && activeExternalTaskWait ? (
+                      <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskWait.operationId} />
                     ) : null}
                     {shouldRenderServerApprovalCard && serverPendingApproval ? (
                       <ConfirmationActionCard
