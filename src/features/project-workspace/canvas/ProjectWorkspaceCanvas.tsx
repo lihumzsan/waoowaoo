@@ -97,6 +97,7 @@ export interface WorkspaceAssistantSelectionContext {
 interface ProjectWorkspaceCanvasContentProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
+  activeAssistantOperationId?: string | null
 }
 
 interface CanvasViewportControlsProps {
@@ -168,7 +169,11 @@ function CanvasViewportControls({
   )
 }
 
-function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptPending = false }: ProjectWorkspaceCanvasContentProps) {
+function ProjectWorkspaceCanvasContent({
+  onAssistantSelectionChange,
+  editScriptPending = false,
+  activeAssistantOperationId = null,
+}: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
@@ -233,7 +238,9 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
         }
       : editScript
   ), [editScript, editScriptGenerationActive])
-  const effectiveEditScriptPending = editScriptPending || (editScriptGenerationActive && !editScript)
+  const effectiveEditScriptPending = editScriptPending
+    || activeAssistantOperationId === 'generate_edit_script'
+    || (editScriptGenerationActive && !editScript)
   const nodeRunningStatusLabel = useCallback((node: WorkspaceCanvasFlowNode): string => (
     node.data.kind === 'finalTimeline'
       ? t('status.aiEditing')
@@ -471,6 +478,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     editDirectorDecoupage,
     editScript: projectedEditScript,
     editCinematographyShotPlan,
+    activeAssistantOperationId,
     editScriptPending: effectiveEditScriptPending,
     finalVideo,
     videoGroups,
@@ -681,6 +689,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       editDirectorDecoupage,
       editScript: projectedEditScript,
       editCinematographyShotPlan,
+      activeAssistantOperationId,
       editScriptPending: effectiveEditScriptPending,
       finalVideo,
       videoGroups,
@@ -694,7 +703,7 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [attachNodeUiState, clips, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, clips, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     void reactFlow.fitView({ padding: 0.14, duration: 180 })
@@ -810,14 +819,20 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
 interface ProjectWorkspaceCanvasProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
+  activeAssistantOperationId?: string | null
 }
 
-export default function ProjectWorkspaceCanvas({ onAssistantSelectionChange, editScriptPending = false }: ProjectWorkspaceCanvasProps) {
+export default function ProjectWorkspaceCanvas({
+  onAssistantSelectionChange,
+  editScriptPending = false,
+  activeAssistantOperationId = null,
+}: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
       <ProjectWorkspaceCanvasContent
         onAssistantSelectionChange={onAssistantSelectionChange}
         editScriptPending={editScriptPending}
+        activeAssistantOperationId={activeAssistantOperationId}
       />
     </ReactFlowProvider>
   )

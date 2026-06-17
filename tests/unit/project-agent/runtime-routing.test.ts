@@ -364,6 +364,7 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'generate_edit_script',
     'generate_edit_script_assets',
     'generate_edit_cinematography_shot_plan',
+    'generate_edit_script_storyboard_spatial_blocking',
     'generate_edit_script_storyboard',
     'generate_edit_script_storyboard_images',
     'generate_episode_videos',
@@ -572,6 +573,17 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_storyboard_images')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_episode_videos')
+  })
+
+  it('enables spatial blocking but not storyboard panels immediately after cinematography', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_storyboard_spatial_blocking', [
+      'generate_edit_script_storyboard_spatial_blocking',
+    ])
+
+    await runAssistant({ text: '继续生成下一步' })
+
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_storyboard_spatial_blocking')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_storyboard')
   })
 
   it('enables video generation only after storyboard images are ready', async () => {

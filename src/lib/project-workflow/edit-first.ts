@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
+  isStoryboardSpatialProfileStageReady,
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
@@ -17,6 +18,8 @@ export type EditFirstWorkflowStage =
   | 'ready_to_generate_assets'
   | 'assets_generating'
   | 'ready_to_generate_cinematography'
+  | 'ready_to_generate_storyboard_spatial_blocking'
+  | 'storyboard_spatial_blocking_generating'
   | 'ready_to_generate_storyboard'
   | 'storyboard_generating'
   | 'ready_to_generate_storyboard_images'
@@ -49,6 +52,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'generate_edit_script',
   'generate_edit_script_assets',
   'generate_edit_cinematography_shot_plan',
+  'generate_edit_script_storyboard_spatial_blocking',
   'generate_edit_script_storyboard',
   'generate_edit_script_storyboard_images',
   'generate_episode_videos',
@@ -94,6 +98,8 @@ export interface EditFirstWorkflowSnapshot {
   hasCinematographyShotPlan: boolean
   cinematographyShotPlanStatus: string | null
   storyboardCount: number
+  spatialBlockingReady: boolean
+  activeSpatialBlockingTaskCount: number
   panelCount: number
   storyboardPanelImageReadyCount: number
   storyboardPanelImageMissingCount: number
@@ -142,6 +148,42 @@ function state(params: {
     nextAction,
     allowedOperationIds: params.allowedOperationIds ? [...params.allowedOperationIds] : nextAction ? [nextAction.operationId] : [],
   }
+}
+
+type StoryboardSpatialCandidate = {
+  readonly photographyPlan: string | null
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
+function readString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function parseJsonRecord(value: string | null): Record<string, unknown> {
+  if (!value) return {}
+  try {
+    return readRecord(JSON.parse(value))
+  } catch {
+    return {}
+  }
+}
+
+function resolveStoryboardSpatialBlockingReady(input: {
+  readonly editScriptId: string | null
+  readonly storyboards: readonly StoryboardSpatialCandidate[]
+}): boolean {
+  if (!input.editScriptId) return false
+  return input.storyboards.some((storyboard) => {
+    const plan = parseJsonRecord(storyboard.photographyPlan)
+    return readString(plan.sourceEditScriptId) === input.editScriptId
+      && isStoryboardSpatialProfileStageReady(readString(plan.currentStage))
+  })
 }
 
 export function resolveEditFirstWorkflowStateFromSnapshot(
@@ -303,10 +345,23 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
+  if (!snapshot.spatialBlockingReady) {
+    if (snapshot.activeSpatialBlockingTaskCount > 0) {
+      return state({
+        stage: 'storyboard_spatial_blocking_generating',
+        blocking: { kind: 'processing', reason: 'storyboard spatial blocking is still generating' },
+      })
+    }
+    return state({
+      stage: 'ready_to_generate_storyboard_spatial_blocking',
+      nextAction: confirmationAction('generate_edit_script_storyboard_spatial_blocking', 'Generate spatial blocking'),
+    })
+  }
+
   if (snapshot.panelCount === 0) {
     return state({
       stage: 'ready_to_generate_storyboard',
-      nextAction: confirmationAction('generate_edit_script_storyboard', 'Generate storyboard'),
+      nextAction: confirmationAction('generate_edit_script_storyboard', 'Generate storyboard panels'),
     })
   }
 
@@ -369,6 +424,10 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return []
     case 'ready_to_generate_cinematography':
       return ['generate_edit_cinematography_shot_plan']
+    case 'ready_to_generate_storyboard_spatial_blocking':
+      return ['generate_edit_script_storyboard_spatial_blocking']
+    case 'storyboard_spatial_blocking_generating':
+      return []
     case 'ready_to_generate_storyboard':
       return ['generate_edit_script_storyboard']
     case 'storyboard_generating':
@@ -415,7 +474,7 @@ export async function resolveEditFirstWorkflowState(params: {
     directorDecoupage,
     editScript,
     cinematographyShotPlan,
-    storyboardCount,
+    storyboards,
     panels,
   ] = await Promise.all([
     prisma.projectEditScreenplay.findFirst({
@@ -470,9 +529,16 @@ export async function resolveEditFirstWorkflowState(params: {
         status: true,
       },
     }),
-    prisma.projectStoryboard.count({
+    prisma.projectStoryboard.findMany({
       where: {
         episodeId: params.episodeId,
+        episode: {
+          projectId: params.projectId,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        photographyPlan: true,
       },
     }),
     prisma.projectPanel.findMany({
@@ -525,6 +591,22 @@ export async function resolveEditFirstWorkflowState(params: {
       }),
   )
   const storyboardImageReadiness = resolveStoryboardImageReadiness(panels)
+  const spatialBlockingReady = resolveStoryboardSpatialBlockingReady({
+    editScriptId: editScript?.id ?? null,
+    storyboards,
+  })
+  const activeSpatialBlockingTaskCount = editScript?.id
+    ? await prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEditScript',
+        targetId: editScript.id,
+        type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+        status: { in: ['queued', 'processing'] },
+      },
+    })
+    : 0
   const panelIds = panels.map((panel) => panel.id)
   const activeStoryboardImageTaskCount = panelIds.length > 0
     ? await prisma.task.count({
@@ -569,7 +651,9 @@ export async function resolveEditFirstWorkflowState(params: {
     readyLocationSpatialProfileCount: locationSpatialProfileReadiness.readyCount,
     hasCinematographyShotPlan: Boolean(cinematographyShotPlan),
     cinematographyShotPlanStatus: cinematographyShotPlan?.status ?? null,
-    storyboardCount,
+    storyboardCount: storyboards.length,
+    spatialBlockingReady,
+    activeSpatialBlockingTaskCount,
     panelCount: storyboardImageReadiness.panelCount,
     storyboardPanelImageReadyCount: storyboardImageReadiness.readyCount,
     storyboardPanelImageMissingCount: storyboardImageReadiness.missingCount,

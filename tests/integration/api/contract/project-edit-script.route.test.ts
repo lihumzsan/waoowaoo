@@ -220,6 +220,7 @@ const storyboardConsistencyServiceMock = vi.hoisted(() => ({
     runId: null,
     status: 'queued',
     deduped: false,
+    editScriptId: 'edit-1',
   })),
   submitEditScriptStoryboardPanels: vi.fn(async () => ({
     success: true,
@@ -487,6 +488,7 @@ describe('project edit script route', () => {
       runId: null,
       status: 'queued',
       deduped: false,
+      editScriptId: 'edit-1',
     })
     expect(storyboardConsistencyServiceMock.submitEditScriptSpatialBlockingStoryboard).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',

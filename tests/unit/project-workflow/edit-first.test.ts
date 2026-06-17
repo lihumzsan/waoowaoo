@@ -25,6 +25,8 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     hasCinematographyShotPlan: false,
     cinematographyShotPlanStatus: null,
     storyboardCount: 0,
+    spatialBlockingReady: false,
+    activeSpatialBlockingTaskCount: 0,
     panelCount: 0,
     storyboardPanelImageReadyCount: 0,
     storyboardPanelImageMissingCount: 0,
@@ -201,6 +203,65 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_cinematography_shot_plan'])
   })
 
+  it('requires spatial blocking after cinematography before storyboard panel generation', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: false,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_storyboard_spatial_blocking')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_spatial_blocking')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard_spatial_blocking'])
+  })
+
+  it('does not expose storyboard panel generation while spatial blocking is still running', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: false,
+      activeSpatialBlockingTaskCount: 1,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('storyboard_spatial_blocking_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(state.nextAction).toBeNull()
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('allows storyboard panel generation only after spatial blocking is ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: true,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_storyboard')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
+  })
+
   it('does not expose video generation when storyboard panels exist but images are missing', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
@@ -212,6 +273,7 @@ describe('edit-first workflow state', () => {
       hasCinematographyShotPlan: true,
       cinematographyShotPlanStatus: 'ready',
       storyboardCount: 1,
+      spatialBlockingReady: true,
       panelCount: 17,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 14,
@@ -233,6 +295,7 @@ describe('edit-first workflow state', () => {
       hasCinematographyShotPlan: true,
       cinematographyShotPlanStatus: 'ready',
       storyboardCount: 1,
+      spatialBlockingReady: true,
       panelCount: 17,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 14,
@@ -255,6 +318,7 @@ describe('edit-first workflow state', () => {
       hasCinematographyShotPlan: true,
       cinematographyShotPlanStatus: 'ready',
       storyboardCount: 1,
+      spatialBlockingReady: true,
       panelCount: 17,
       storyboardPanelImageReadyCount: 17,
       storyboardPanelImageMissingCount: 0,

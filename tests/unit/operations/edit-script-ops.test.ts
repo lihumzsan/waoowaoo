@@ -129,6 +129,7 @@ const storyboardConsistencyServiceMock = vi.hoisted(() => ({
     runId: null,
     status: 'queued',
     deduped: false,
+    editScriptId: 'edit-1',
     storyboardId: 'storyboard-1',
   })),
   submitEditScriptStoryboardPanels: vi.fn(async () => ({
@@ -253,6 +254,7 @@ describe('edit-script operations', () => {
       'generate_edit_script',
       'generate_edit_script_assets',
       'generate_edit_script_storyboard',
+      'generate_edit_script_storyboard_spatial_blocking',
       'generate_edit_style_previews',
       'request_edit_first_choice',
       'revise_edit_screenplay',
@@ -718,6 +720,31 @@ describe('edit-script operations', () => {
       targetId: 'storyboard-1',
     }))
     expect(storyboardConsistencyServiceMock.submitEditScriptStoryboardPanels).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      locale: 'zh',
+    }))
+  })
+
+  it('submits storyboard spatial blocking as the prerequisite async production task', async () => {
+    const operations = createEditScriptOperations()
+    const result = await operations.generate_edit_script_storyboard_spatial_blocking.execute(buildContext(), {
+      editScriptId: 'edit-1',
+      confirmed: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskId: 'task-storyboard-1',
+      episodeId: 'episode-1',
+      taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
+    }))
+    expect(storyboardConsistencyServiceMock.submitEditScriptSpatialBlockingStoryboard).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',

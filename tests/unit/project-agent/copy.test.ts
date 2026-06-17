@@ -15,7 +15,7 @@ describe('project agent prompt copy', () => {
     })
 
     expect(prompt).toContain('只能使用当前注入的 tool 定义和当前项目上下文')
-    expect(prompt).toContain('时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜面板/图片 -> 视频片段 -> 最终成片')
+    expect(prompt).toContain('时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜空间定位/空间一致性准备 -> 分镜面板/图片 -> 视频片段 -> 最终成片')
     expect(prompt).toContain('必须把上述产物依赖顺序当作产物依赖约束')
     expect(prompt).toContain('或修复/重生成用户正在反馈的当前阶段产物')
     expect(prompt).toContain('剪辑先行表/剪辑核心表 ready 后，停止开放式创意讨论')
@@ -47,6 +47,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('只有当用户明确询问技能、可复用计划或 skill catalog 文档时，才使用 Agent Skill 工具')
     expect(prompt).toContain('批量处理全部 requirements 时不要传 requirementId')
     expect(prompt).toContain('禁止传 "*" 或任何通配值')
+    expect(prompt).toContain('没有 ready 摄影 shot plan 和 ready 分镜空间定位/空间一致性准备时调用 generate_edit_script_storyboard')
     expect(prompt).not.toContain('只能通过固定 workflow package 执行')
     expect(prompt).not.toContain('workflow package 内部 skills 顺序不可更改')
     expect(prompt).not.toContain('先调用 search_skills')
@@ -91,6 +92,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('Never skip ahead, batch multiple future stages, run a later-stage operation')
     expect(prompt).toContain('Omit requirementId to process all requirements')
     expect(prompt).toContain('Never pass "*" or wildcard values')
+    expect(prompt).toContain('ready storyboard spatial blocking/space-consistency preparation')
   })
 
   it('describes screenplay generation as requiring structured duration and aspect ratio fields', () => {
@@ -106,6 +108,8 @@ describe('project agent prompt copy', () => {
   it('localizes user-facing operation titles without exposing internal ids', () => {
     expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'zh')).toBe('生成剧本')
     expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'en')).toBe('Generate screenplay')
+    expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard_spatial_blocking', 'zh')).toBe('生成空间定位')
+    expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard', 'zh')).toBe('生成分镜面板')
     expect(localizeProjectAgentOperationTitle('unknown_internal_tool', 'zh')).toBe('项目操作')
   })
 

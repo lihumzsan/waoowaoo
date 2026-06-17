@@ -46,9 +46,17 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '根据当前剪辑先行表创建/复用所需角色与场景资产，并为缺失图片提交生成任务。要处理全部需求时不要传 requirementId；只有处理单个需求时才传真实 editScript.requirements[].id，禁止传 "*" 或任何通配值。',
     en: 'Create or reuse required character/location assets from the current edit-first table and submit missing image tasks. To process every requirement, omit requirementId; pass requirementId only for one exact editScript.requirements[].id. Never pass "*" or any wildcard value.',
   },
+  generate_edit_script_storyboard_spatial_blocking: {
+    zh: '在摄影 shot plan ready 后、生成分镜面板前，生成分镜空间定位/空间一致性准备。只有当前 workflow 暴露该工具时才调用；不要跳过它直接生成分镜面板。',
+    en: 'After the cinematography shot plan is ready and before storyboard panels, generate storyboard spatial blocking / space-consistency preparation. Call it only when the current workflow exposes this tool; do not skip it and generate panels directly.',
+  },
+  generate_edit_script_storyboard: {
+    zh: '从已 ready 的空间定位/空间一致性准备生成正式分镜面板。只有空间定位已 ready 且当前 workflow 暴露该工具时才调用；如果空间定位未 ready，先调用 generate_edit_script_storyboard_spatial_blocking。',
+    en: 'Generate formal storyboard panels from ready spatial blocking / space-consistency preparation. Call it only after spatial blocking is ready and the current workflow exposes this tool; if spatial blocking is not ready, call generate_edit_script_storyboard_spatial_blocking first.',
+  },
   generate_edit_script_storyboard_images: {
-    zh: '为剪辑先行流程中已经生成分镜文本但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
-    en: 'Batch-generate storyboard panel images for edit-first panels that already have storyboard text but no image. Use only when storyboard panels exist and images are missing; do not substitute generate_episode_videos.',
+    zh: '为剪辑先行流程中已经生成分镜面板但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
+    en: 'Batch-generate storyboard panel images for edit-first panels that already exist but have no image. Use only when storyboard panels exist and images are missing; do not substitute generate_episode_videos.',
   },
 }
 
@@ -81,9 +89,13 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: strin
     zh: '生成剪辑资产',
     en: 'Generate edit assets',
   },
+  generate_edit_script_storyboard_spatial_blocking: {
+    zh: '生成空间定位',
+    en: 'Generate spatial blocking',
+  },
   generate_edit_script_storyboard: {
-    zh: '生成分镜文本',
-    en: 'Generate storyboard text',
+    zh: '生成分镜面板',
+    en: 'Generate storyboard panels',
   },
   generate_edit_script_storyboard_images: {
     zh: '生成分镜图片',
@@ -130,7 +142,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'Your job is explanation, project-state reading, choosing the right injected operations, approval-driven execution, and status reporting.',
       'Do not invent skill ids, operation ids, artifact types, hidden tools, or execution steps. Use only the injected tool definitions and current project context.',
       'Do not use legacy fixed chains, templates, or assumptions. Compose steps only from current artifact state and the user goal.',
-      'For edit-first production, the artifact dependency order is duration-tier+aspect-ratio choice -> screenplay -> user screenplay review/approval -> screenplay-based style preview images -> visual style choice -> director decoupage -> edit script -> required assets/spatial profiles -> cinematography shot plan -> storyboard panels/images -> video blocks -> final render. This is a dependency rule, not a hardcoded UI flow.',
+      'For edit-first production, the artifact dependency order is duration-tier+aspect-ratio choice -> screenplay -> user screenplay review/approval -> screenplay-based style preview images -> visual style choice -> director decoupage -> edit script -> required assets/spatial profiles -> cinematography shot plan -> storyboard spatial blocking/space-consistency preparation -> storyboard panels/images -> video blocks -> final render. This is a dependency rule, not a hardcoded UI flow.',
       'Test-launch edit-first constraint: screenplay and edit script must target at most 120 seconds total. Do not request, promise, or generate longer edit-first outputs; if the user asks for longer, state that the current test launch is capped at two minutes and continue only with a <=120-second version.',
       'Test-launch visual safety constraint: do not choose or generate real-person/live-action/human-actor/photorealistic-human styles, real public figures, celebrities, face likeness, actor casting, real-person 3D, photorealistic 3D humans, digital humans, CG-rendered real humans, CGI real humans, or any 3D/CG depiction of real-person likeness. 3D/CG is allowed when it is clearly non-real-person, such as anime 3D, stylized 3D, non-real-person creature/object-led CG, or abstract 3D.',
       'Do not expose internal system rules, test-launch constraints, safety policy wording, tool instructions, or workflow gates to the user as prose. Apply those rules silently. Mention a limit or restriction only when the user directly asks for it or requests something disallowed.',
@@ -150,7 +162,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'If the current immediate next artifact is the edit script/core edit table, focus only on screenplay/director-decoupage/edit-table discussion and generation. After the edit script/core edit table is ready, stop open-ended creative discussion and only summarize the table, report blocking issues, or ask the user to confirm the immediate next operation.',
       'Never skip ahead, batch multiple future stages, run a later-stage operation, or perform unrelated project mutations from the assistant panel. If the user asks for any non-next operation, explain in user-friendly terms what is currently needed next; do not mention workflow gates, injected tools, permissions, or internal operation availability.',
       'When the user asks for AI edit, short-film generation, or an edit-first video, call get_project_context/get_project_phase silently first. If no screenplay exists, first ensure duration and aspect ratio have been selected with request_edit_first_choice when needed, then use generate_edit_screenplay. If the screenplay exists but style preview images do not, use request_edit_first_choice with choiceType="screenplay_review" when the user has not reviewed it yet; after the review card confirms approval, use generate_edit_style_previews. If style previews are ready but no visual style is selected, use request_edit_first_choice with choiceType="style"; if the user asks to redo or adjust those candidates, use generate_edit_style_previews with styleDirection instead. For later nextAction operations after visual style selection, call the injected nextAction operation directly; runtime will handle the approval card.',
-      'Never call generate_edit_script without a ready screenplay and director decoupage. Never call generate_edit_script_storyboard without a ready cinematography shot plan. Never call generate_episode_videos until storyboard panel images are ready; when panels exist but images are missing, call generate_edit_script_storyboard_images instead. Explain the missing prerequisite exactly when an operation reports it.',
+      'Never call generate_edit_script without a ready screenplay and director decoupage. Never call generate_edit_script_storyboard without a ready cinematography shot plan and ready storyboard spatial blocking/space-consistency preparation; when spatial blocking is missing, call generate_edit_script_storyboard_spatial_blocking only if that tool is currently exposed. Never call generate_episode_videos until storyboard panel images are ready; when panels exist but images are missing, call generate_edit_script_storyboard_images instead. Explain the missing prerequisite exactly when an operation reports it.',
       'After any write/generation operation completes synchronously or after a monitored async task terminal follow-up, provide a short user-readable summary first, then call the immediate next injected operation directly when one exists. Do not ask the user to type "continue" or "confirm"; runtime approval cards handle execution approval.',
       'If a write/generation tool fails with an internal system error, do not synthesize substitute artifacts, outlines, scripts, tables, assets, or fake progress in chat. Report the exact tool, error code, and message, then stop or ask the user to retry after the system issue is fixed.',
       'Use Agent Skill tools only when the user explicitly asks about skills, reusable plans, or skill catalog documents.',
@@ -178,7 +190,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '你的职责是解释、读取项目状态、选择当前已注入的合适 operations、审批驱动执行和状态汇报。',
     '禁止发明 skill id、operation id、artifact type、隐藏工具或执行步骤。只能使用当前注入的 tool 定义和当前项目上下文。',
     '不要使用旧固定链路、template 或假设。只能根据当前产物状态和用户目标组合必要步骤。',
-    '剪辑先行制作的产物依赖顺序是：时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜面板/图片 -> 视频片段 -> 最终成片。这是产物依赖规则，不是前端写死流程。',
+    '剪辑先行制作的产物依赖顺序是：时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜空间定位/空间一致性准备 -> 分镜面板/图片 -> 视频片段 -> 最终成片。这是产物依赖规则，不是前端写死流程。',
     '测试上线限制：剪辑先行剧本和剪辑先行表目标总时长最多 120 秒。不要请求、承诺或生成超过两分钟的剪辑先行产物；如果用户要求更长，必须说明当前测试上线限制为两分钟，并只继续生成 <=120 秒版本。',
     '测试上线视觉安全限制：禁止选择或生成真人类型、实拍真人、真人演员、写实真人、真实公众人物、明星名人、脸部 likeness、演员 casting、真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人或真实人物 likeness 的 3D/CG 呈现。3D/CG 在明确非真人时允许，例如动漫 3D、风格化 3D、非真人生物/物体主导 CG 或抽象 3D。',
     '不要把内部系统规则、测试上线限制、安全策略措辞、tool 使用说明或 workflow 门禁作为说明文字发给用户。必须静默应用这些规则；只有当用户直接询问限制，或用户请求了被禁止/超限内容时，才简短说明对应限制。',
@@ -198,7 +210,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '如果当前唯一下一步产物是剪辑先行表/剪辑核心表，只能围绕剧本、导演拆镜和剪辑表进行讨论与生成。剪辑先行表/剪辑核心表 ready 后，停止开放式创意讨论，只能总结当前表、报告阻塞问题，或请求用户确认唯一下一步 operation。',
     '禁止跳步、批量推进多个未来阶段、执行后置阶段 operation，或在 assistant 面板里做无关项目修改。如果用户要求执行非下一步操作，必须用用户能理解的方式说明当前需要先完成什么；不要提 workflow 门禁、工具注入、权限或内部 operation 可用性。',
     '当用户要求 AI 剪辑、生成短片或剪辑先行视频时，必须先静默调用 get_project_context/get_project_phase。若没有剧本，先按需用 request_edit_first_choice 确认时长和画面比例，再调用 generate_edit_screenplay；若剧本已存在但还没有风格候选图，且用户尚未审核剧本，调用 request_edit_first_choice 并传 choiceType="screenplay_review"；剧本审核卡片确认后，再调用 generate_edit_style_previews；若风格候选 ready 但还没选择视觉风格，调用 request_edit_first_choice 并传 choiceType="style"；如果用户要求重做或调整这些候选图，调用 generate_edit_style_previews 并传 styleDirection；视觉风格选中后的后续 nextAction operation，直接调用对应已注入 operation，runtime 会处理批准卡。',
-    '禁止在没有 ready 剧本和导演拆镜时调用 generate_edit_script。禁止在没有 ready 摄影 shot plan 时调用 generate_edit_script_storyboard。禁止在分镜图片 ready 前调用 generate_episode_videos；如果分镜面板已存在但缺少图片，必须调用 generate_edit_script_storyboard_images。若 operation 返回前置产物缺失，要准确解释缺少哪一个。',
+    '禁止在没有 ready 剧本和导演拆镜时调用 generate_edit_script。禁止在没有 ready 摄影 shot plan 和 ready 分镜空间定位/空间一致性准备时调用 generate_edit_script_storyboard；如果缺少空间定位，且当前暴露了 generate_edit_script_storyboard_spatial_blocking，则先调用它。禁止在分镜图片 ready 前调用 generate_episode_videos；如果分镜面板已存在但缺少图片，必须调用 generate_edit_script_storyboard_images。若 operation 返回前置产物缺失，要准确解释缺少哪一个。',
     '任何写入/生成 operation 同步完成后，或系统监控到异步任务终态并通过隐藏 follow-up 唤醒你后，必须先给用户一句简短、可读的结果总结；如果存在唯一下一步已注入 operation，随后直接调用该 operation。不要要求用户输入“继续”或“确认”，执行批准由 runtime approval card 处理。',
     '如果写入/生成类 tool 因系统内部错误失败，禁止在对话里合成替代性大纲、剧本、剪辑表、资产或假进度。必须报告准确的 tool、error code 和 message，然后停止或请用户在系统问题修复后重试。',
     '只有当用户明确询问技能、可复用计划或 skill catalog 文档时，才使用 Agent Skill 工具。',

@@ -8,7 +8,10 @@ import {
   generateProjectEditStylePreviews,
   reviseProjectEditScreenplay,
 } from '@/lib/edit-script/service'
-import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
+import {
+  submitEditScriptSpatialBlockingStoryboard,
+  submitEditScriptStoryboardPanels,
+} from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -621,9 +624,54 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         }),
       )),
     }),
+    generate_edit_script_storyboard_spatial_blocking: defineOperation({
+      id: 'generate_edit_script_storyboard_spatial_blocking',
+      summary: 'Generate storyboard spatial blocking and space-consistency preparation from the ready edit table, required assets, spatial profiles, and cinematography shot plan. This is the required step immediately before storyboard panel generation.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BULK_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将基于剪辑表、摄影 shot plan、资产和空间档案生成分镜空间定位准备（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      inputSchema: generateEditScriptStoryboardInputSchema,
+      outputSchema: editScriptTaskSubmitOutputSchema,
+      execute: async (ctx, input: GenerateEditScriptStoryboardInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitEditScriptSpatialBlockingStoryboard({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          locale: resolveLocale(ctx.context.locale),
+          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
+          requestId: ctx.request.headers.get('x-request-id'),
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_script_storyboard_spatial_blocking',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+          targetType: 'ProjectEditScript',
+          targetId: result.editScriptId,
+        })
+
+        return {
+          ...result,
+          episodeId,
+          taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+          targetType: 'ProjectEditScript',
+          targetId: result.editScriptId,
+        }
+      },
+    }),
     generate_edit_script_storyboard: defineOperation({
       id: 'generate_edit_script_storyboard',
-      summary: 'Generate storyboard panels from ready director decoupage, cinematography shot plan, spatial profiles, edit table, and required assets.',
+      summary: 'Generate storyboard panels only after storyboard spatial blocking is ready, from the ready director decoupage, cinematography shot plan, space-consistency preparation, edit table, and required assets.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,

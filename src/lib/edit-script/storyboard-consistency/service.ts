@@ -64,7 +64,7 @@ export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpa
     userId: input.userId,
   })
   assertRequiredLocationPreviews({ sourceSnapshot })
-  return await submitTask({
+  const submitted = await submitTask({
     userId: input.userId,
     locale: input.locale,
     projectId: input.projectId,
@@ -83,6 +83,10 @@ export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpa
     },
     dedupeKey: `edit_script_storyboard_prepare:${input.projectId}:${input.episodeId}:${editScriptId}`,
   })
+  return {
+    ...submitted,
+    editScriptId,
+  }
 }
 
 export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlockingStoryboardInput) {

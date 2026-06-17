@@ -84,7 +84,7 @@ interface WorkspaceAssistantPanelProps {
   onAutoStartConsumed?: () => void
   isCollapsed: boolean
   onToggleCollapsed: () => void
-  onEditScriptPendingChange?: (pending: boolean) => void
+  onActiveOperationChange?: (operationId: string | null) => void
 }
 
 const WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY = 'workspace-assistant-panel-width'
@@ -147,7 +147,7 @@ export default function WorkspaceAssistantPanel({
   onAutoStartConsumed,
   isCollapsed,
   onToggleCollapsed,
-  onEditScriptPendingChange,
+  onActiveOperationChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -302,10 +302,6 @@ export default function WorkspaceAssistantPanel({
     await assistantRuntime.sendMessage(normalizedText)
   }, [assistantRuntime, composerText])
   useEffect(() => {
-    onEditScriptPendingChange?.(false)
-    return () => onEditScriptPendingChange?.(false)
-  }, [onEditScriptPendingChange])
-  useEffect(() => {
     if (!autoStartMessage || !autoStartKey) return
     if (assistantRuntime.storageLoading || assistantRuntime.pending) return
     onAutoStartConsumed?.()
@@ -436,6 +432,15 @@ export default function WorkspaceAssistantPanel({
   const activeExternalTaskOperationId = assistantRuntime.sessionState?.activeWaits.find((wait) => wait.status === 'pending')?.operationId
     ?? assistantRuntime.sessionState?.activeTasks.find((task) => task.operationId)?.operationId
     ?? null
+  const activeAssistantOperationId = assistantRuntime.pendingOperationId ?? activeExternalTaskOperationId
+  useEffect(() => {
+    onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantOperationId)
+    return () => onActiveOperationChange?.(null)
+  }, [
+    activeAssistantOperationId,
+    assistantRuntime.storageLoading,
+    onActiveOperationChange,
+  ])
   const shouldDockStylePreviewGenerationCard = shouldDockWorkspaceStylePreviewGenerationCard({
     hasCard: Boolean(displayedStylePreviewGenerationCard),
     stylePreviewConfirmed: false,

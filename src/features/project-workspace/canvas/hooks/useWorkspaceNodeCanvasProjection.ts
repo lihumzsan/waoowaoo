@@ -138,6 +138,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly editDirectorDecoupage?: ProjectEditDirectorDecoupage | null
   readonly editScript?: ProjectEditScript | null
   readonly editCinematographyShotPlan?: ProjectEditCinematographyShotPlan | null
+  readonly activeAssistantOperationId?: string | null
   readonly editScriptPending?: boolean
   readonly finalVideo?: ProjectFinalVideo | null
   readonly videoGroups?: readonly ProjectVideoGroup[]
@@ -1151,6 +1152,7 @@ export function buildWorkspaceNodeCanvasProjection({
   editDirectorDecoupage,
   editScript,
   editCinematographyShotPlan,
+  activeAssistantOperationId = null,
   editScriptPending = false,
   finalVideo,
   videoGroups = [],
@@ -1177,6 +1179,9 @@ export function buildWorkspaceNodeCanvasProjection({
     sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
   ))
   const hasStoryboardPanels = panelsWithStoryboard.length > 0
+  const cinematographyShotPlanRunning = activeAssistantOperationId === 'generate_edit_cinematography_shot_plan'
+  const spatialBlockingRunning = activeAssistantOperationId === 'generate_edit_script_storyboard_spatial_blocking'
+  const storyboardPanelGenerationRunning = activeAssistantOperationId === 'generate_edit_script_storyboard'
   const panelByShotNumberForVideoPlan = new Map<number, ProjectPanel>()
   panelsWithStoryboard.forEach(({ panel }) => {
     const shotNumber = panel.panelNumber ?? panel.panelIndex + 1
@@ -1418,14 +1423,20 @@ export function buildWorkspaceNodeCanvasProjection({
       ? { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
       : hasStoryboardPanels
         ? null
-        : !cinematographyShotPlanReady && locationReferenceReady
+        : cinematographyShotPlanRunning
+          ? null
+          : !cinematographyShotPlanReady && locationReferenceReady
           ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
           : !cinematographyShotPlanReady
             ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
         : spatialBlockingReady
-          ? { label: translate('actions.generateStoryboard'), action: { type: 'generate_edit_storyboard', editScriptId: editScript.id } as const, disabled: false }
+          ? storyboardPanelGenerationRunning
+            ? null
+            : { label: translate('actions.generateStoryboard'), action: { type: 'generate_edit_storyboard', editScriptId: editScript.id } as const, disabled: false }
           : locationReferenceReady
-            ? { label: translate('actions.generateSpatialBlockingFirst'), action: { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id } as const, disabled: true }
+            ? spatialBlockingRunning
+              ? null
+              : { label: translate('actions.generateSpatialBlockingFirst'), action: { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id } as const, disabled: true }
             : { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
     const pipelineStepDefinitions = [
       { key: 'timeline', title: translate('nodeFields.editStepTimeline') },
@@ -1656,9 +1667,13 @@ export function buildWorkspaceNodeCanvasProjection({
         : []
       const statusLabel = matchingShotPlan
         ? matchingShotPlan.status === 'ready' ? translate('status.ready') : translate('status.processing')
+        : cinematographyShotPlanRunning
+          ? translate('status.processing')
         : translate('status.pending')
       const canGenerateShotPlan = !matchingShotPlan && locationReferenceReady
-      const action = canGenerateShotPlan
+      const action = cinematographyShotPlanRunning
+        ? null
+        : canGenerateShotPlan
         ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
         : !matchingShotPlan
           ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
@@ -1691,7 +1706,7 @@ export function buildWorkspaceNodeCanvasProjection({
             shots: matchingShotPlan?.shots.length ?? editScript.shotCount,
           }),
           statusLabel,
-          isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready'),
+          isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready') || cinematographyShotPlanRunning,
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
           width: SPACE_CONSISTENCY_NODE_WIDTH,
           height: SPACE_CONSISTENCY_NODE_HEIGHT,
@@ -1860,8 +1875,10 @@ export function buildWorkspaceNodeCanvasProjection({
         }),
         statusLabel: storyboard.lastError
           ? translate('status.failed')
-          : translate('status.ready'),
-        isRunning: false,
+          : storyboardPanelGenerationRunning
+            ? translate('status.processing')
+            : translate('status.ready'),
+        isRunning: storyboardPanelGenerationRunning,
         runtimeTargets: runtimeTargets(
           TASK_RUNTIME_TARGETS.projectStoryboardConsistency(storyboard.id),
           TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript?.id),
@@ -1872,12 +1889,12 @@ export function buildWorkspaceNodeCanvasProjection({
         previewImageUrl,
         previewAspectRatio: 16 / 9,
         spaceConsistencyDetails: details,
-        actionLabel: editScript?.status === 'ready' && hasReadyCinematographyShotPlan ? translate('actions.regenerateSpatialBlocking') : undefined,
-        action: editScript?.status === 'ready' && hasReadyCinematographyShotPlan
+        actionLabel: editScript?.status === 'ready' && hasReadyCinematographyShotPlan && !storyboardPanelGenerationRunning ? translate('actions.regenerateSpatialBlocking') : undefined,
+        action: editScript?.status === 'ready' && hasReadyCinematographyShotPlan && !storyboardPanelGenerationRunning
           ? { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id }
           : undefined,
-        secondaryActionLabel: canGeneratePanelsFromSpatialBlocking ? translate('actions.generateStoryboard') : undefined,
-        secondaryAction: canGeneratePanelsFromSpatialBlocking && editScript
+        secondaryActionLabel: canGeneratePanelsFromSpatialBlocking && !storyboardPanelGenerationRunning ? translate('actions.generateStoryboard') : undefined,
+        secondaryAction: canGeneratePanelsFromSpatialBlocking && !storyboardPanelGenerationRunning && editScript
           ? { type: 'generate_edit_storyboard', editScriptId: editScript.id }
           : undefined,
         onAction,
@@ -1901,7 +1918,9 @@ export function buildWorkspaceNodeCanvasProjection({
       : missingLocationNames.length > 0
         ? translate('nodes.spaceConsistency.locationImageRequired', { assets: missingLocationNames.join(', ') })
         : translate('nodes.spaceConsistency.body')
-    const action = assetsReady && locationReferenceReady
+    const action = spatialBlockingRunning
+      ? null
+      : assetsReady && locationReferenceReady
       ? { label: translate('actions.generateSpatialBlocking'), action: { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id } as const }
       : locationReferenceBlocked
         ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
@@ -1928,8 +1947,8 @@ export function buildWorkspaceNodeCanvasProjection({
           profiles: 0,
           cameraPlans: 0,
         }),
-        statusLabel: translate('status.pending'),
-        isRunning: false,
+        statusLabel: spatialBlockingRunning ? translate('status.processing') : translate('status.pending'),
+        isRunning: spatialBlockingRunning,
         runtimeTargets: runtimeTargets(
           TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript.id),
         ),
@@ -1938,9 +1957,9 @@ export function buildWorkspaceNodeCanvasProjection({
         indexLabel: 'G',
         previewImageUrl: null,
         previewAspectRatio: 16 / 9,
-        actionLabel: action.label,
-        action: action.action,
-        actionDisabled: locationReferenceBlocked,
+        actionLabel: action?.label,
+        action: action?.action,
+        actionDisabled: action ? locationReferenceBlocked : false,
         onAction,
       },
     }))
@@ -2404,6 +2423,7 @@ export function useWorkspaceNodeCanvasProjection({
   editDirectorDecoupage,
   editScript,
   editCinematographyShotPlan,
+  activeAssistantOperationId,
   editScriptPending,
   finalVideo,
   videoGroups,
@@ -2426,6 +2446,7 @@ export function useWorkspaceNodeCanvasProjection({
       editDirectorDecoupage,
       editScript,
       editCinematographyShotPlan,
+      activeAssistantOperationId,
       editScriptPending,
       finalVideo,
       videoGroups,
@@ -2447,6 +2468,7 @@ export function useWorkspaceNodeCanvasProjection({
       savedLayouts,
       shots,
       editCinematographyShotPlan,
+      activeAssistantOperationId,
       editDirectorDecoupage,
       editScreenplay,
       editScript,

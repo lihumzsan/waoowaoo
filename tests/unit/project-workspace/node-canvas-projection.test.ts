@@ -2192,6 +2192,41 @@ describe('workspace node canvas projection', () => {
     expect(consistencyNode).toBeUndefined()
   })
 
+  it('marks the cinematography node running from the active assistant operation', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      savedLayouts: [],
+      translate: t,
+      activeAssistantOperationId: 'generate_edit_cinematography_shot_plan',
+      editScript: createSingleVideoEditScript({
+        id: 'edit-cinematography-running',
+        requirements: [
+          {
+            id: 'req-location',
+            kind: 'location',
+            name: 'Station',
+            description: 'A rotating station observation deck.',
+            shotNumbers: [1],
+            status: 'completed',
+            targetId: 'location-1',
+            errorMessage: null,
+            previewImageUrl: 'https://example.com/station.png',
+          },
+        ],
+      }),
+    })
+
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:pending:edit-cinematography-running')
+    const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-cinematography-running')
+    expect(cinematographyNode?.data.statusLabel).toBe('status.processing')
+    expect(cinematographyNode?.data.isRunning).toBe(true)
+    expect(cinematographyNode?.data.action).toBeUndefined()
+    expect(editNode?.data.action).toBeUndefined()
+  })
+
   it('blocks spatial blocking generation until a scene asset image is ready', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
@@ -2236,6 +2271,43 @@ describe('workspace node canvas projection', () => {
     })
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-missing-location-image')
     expect(consistencyNode).toBeUndefined()
+  })
+
+  it('marks the pending space consistency node running from the active assistant operation', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      savedLayouts: [],
+      translate: t,
+      activeAssistantOperationId: 'generate_edit_script_storyboard_spatial_blocking',
+      editScript: createSingleVideoEditScript({
+        id: 'edit-spatial-running',
+        requirements: [
+          {
+            id: 'req-location',
+            kind: 'location',
+            name: 'Station',
+            description: 'A rotating station observation deck.',
+            shotNumbers: [1],
+            status: 'completed',
+            targetId: 'location-1',
+            errorMessage: null,
+            previewImageUrl: 'https://example.com/station.png',
+          },
+        ],
+      }),
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-spatial-running',
+        editScriptId: 'edit-spatial-running',
+      }),
+    })
+
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-spatial-running')
+    expect(spaceNode?.data.statusLabel).toBe('status.processing')
+    expect(spaceNode?.data.isRunning).toBe(true)
+    expect(spaceNode?.data.action).toBeUndefined()
   })
 
   it('projects spatial blocking details as a space consistency node before panels', () => {

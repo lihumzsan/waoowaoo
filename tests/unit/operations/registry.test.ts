@@ -51,6 +51,7 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_script?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_assets?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_cinematography_shot_plan?.channels).toEqual({ tool: true, api: true })
+    expect(registry.generate_edit_script_storyboard_spatial_blocking?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_storyboard?.channels).toEqual({ tool: true, api: true })
     expect(registry.request_edit_first_choice?.channels).toEqual({ tool: true, api: true })
     expect(registry.request_edit_first_choice?.intent).toBe('query')
@@ -64,6 +65,7 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_script?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_cinematography_shot_plan?.groupPath).toEqual(['edit-script'])
+    expect(registry.generate_edit_script_storyboard_spatial_blocking?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_storyboard?.groupPath).toEqual(['edit-script'])
     expect(registry.request_edit_first_choice?.groupPath).toEqual(['edit-script'])
 
