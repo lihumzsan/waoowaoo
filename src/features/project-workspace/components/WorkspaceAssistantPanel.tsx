@@ -623,7 +623,7 @@ export default function WorkspaceAssistantPanel({
                     />
                   </div>
                 ) : null}
-                <div className="rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/92 p-2.5 backdrop-blur-xl">
+                <div>
                   <WorkspaceAssistantComposer
                     value={composerText}
                     error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
