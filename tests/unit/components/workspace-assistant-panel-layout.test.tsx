@@ -319,7 +319,7 @@ describe('workspace assistant panel layout', () => {
     })).toBe(false)
   })
 
-  it('renders external task waits through the unified active-run loading card', () => {
+  it('renders external task waits from session-state through the unified active-run loading card', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
       'utf8',
@@ -329,9 +329,10 @@ describe('workspace assistant panel layout', () => {
       'utf8',
     )
 
-    expect(panelSource).toContain('findLatestAssistantExternalTaskWait')
+    expect(panelSource).toContain('assistantRuntime.sessionState?.activeWaits')
+    expect(panelSource).toContain('assistantRuntime.sessionState?.activeTasks')
     expect(panelSource).toContain('showExternalTaskRunCard')
-    expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard operationId={activeExternalTaskWait.operationId} />')
+    expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />')
     expect(rendererSource).toContain("data.reason === 'awaiting_external_task'")
   })
 

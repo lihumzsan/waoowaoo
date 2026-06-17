@@ -47,10 +47,12 @@ interface LocationWithImages {
 interface LocationImageTaskDb {
   locationImage: {
     findUnique(args: Record<string, unknown>): Promise<LocationImageRecord | null>
+    updateMany(args: Record<string, unknown>): Promise<unknown>
     update(args: Record<string, unknown>): Promise<unknown>
   }
   projectLocation: {
     findUnique(args: Record<string, unknown>): Promise<LocationWithImages | null>
+    update(args: Record<string, unknown>): Promise<unknown>
   }
 }
 
@@ -145,6 +147,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
 
   const locationIds = Array.from(new Set(locationImages.map((it) => it.locationId)))
   const completedLocationIds = new Set<string>()
+  const selectedLocationImageIds = new Map<string, string>()
   const groupedLocationDescription = assetType === 'location'
     ? locationImages.find((it) => typeof it.description === 'string' && it.description.trim())?.description?.trim() || ''
     : ''
@@ -248,8 +251,26 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
         model: profileModel,
         locale: job.data.locale === 'en' ? 'en' : 'zh',
       })
+      if (!selectedLocationImageIds.has(item.locationId)) {
+        selectedLocationImageIds.set(item.locationId, item.id)
+      }
     }
     completedLocationIds.add(item.locationId)
+  }
+  for (const [locationId, imageId] of selectedLocationImageIds) {
+    await assertTaskActive(job, 'select_location_image')
+    await db.locationImage.updateMany({
+      where: { locationId },
+      data: { isSelected: false },
+    })
+    await db.locationImage.update({
+      where: { id: imageId },
+      data: { isSelected: true },
+    })
+    await db.projectLocation.update({
+      where: { id: locationId },
+      data: { selectedImageId: imageId },
+    })
   }
   await markEditAssetRequirementsCompletedForTargets({
     projectId,

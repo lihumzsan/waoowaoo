@@ -129,6 +129,7 @@ const storyboardConsistencyServiceMock = vi.hoisted(() => ({
     runId: null,
     status: 'queued',
     deduped: false,
+    storyboardId: 'storyboard-1',
   })),
   submitEditScriptStoryboardPanels: vi.fn(async () => ({
     success: true,
@@ -137,6 +138,7 @@ const storyboardConsistencyServiceMock = vi.hoisted(() => ({
     runId: null,
     status: 'queued',
     deduped: false,
+    storyboardId: 'storyboard-1',
   })),
 }))
 
@@ -417,10 +419,14 @@ describe('edit-script operations', () => {
       runId: 'run-1',
       operationId: 'request_edit_first_choice',
       toolCallId: 'tool-call-choice',
-      payload: {
+      payload: expect.objectContaining({
         choiceType: 'duration_and_aspect_ratio',
         cardId: 'edit-first-duration-aspect-ratio',
-      },
+        card: expect.objectContaining({
+          cardId: 'edit-first-duration-aspect-ratio',
+          runId: 'run-1',
+        }),
+      }),
     }))
     expect(writerEvents).toEqual([
       expect.objectContaining({
@@ -689,6 +695,8 @@ describe('edit-script operations', () => {
       taskId: 'task-panels-1',
       episodeId: 'episode-1',
       taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
+      targetType: 'ProjectStoryboard',
+      targetId: 'storyboard-1',
     }))
     expect(storyboardConsistencyServiceMock.submitEditScriptStoryboardPanels).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',

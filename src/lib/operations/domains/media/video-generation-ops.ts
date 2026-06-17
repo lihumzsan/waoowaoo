@@ -463,7 +463,13 @@ async function executeGenerateEpisodeVideosOperation(params: {
     operationId: params.operationId,
     total: tasks.length,
     taskIds,
-    results: panels.map((panel, index) => ({ refId: panel.id, taskId: taskIds[index] || '' })),
+    results: panels.map((panel, index) => ({
+      refId: panel.id,
+      taskId: taskIds[index] || '',
+      taskType: TASK_TYPE.VIDEO_PANEL,
+      targetType: 'ProjectPanel',
+      targetId: panel.id,
+    })),
     mutationBatchId: mutationBatch.id,
   })
 
@@ -473,7 +479,13 @@ async function executeGenerateEpisodeVideosOperation(params: {
     tasks,
     total: tasks.length,
     taskIds,
-    results: panels.map((panel, index) => ({ refId: panel.id, taskId: taskIds[index] || '' })),
+    results: panels.map((panel, index) => ({
+      refId: panel.id,
+      taskId: taskIds[index] || '',
+      taskType: TASK_TYPE.VIDEO_PANEL,
+      targetType: 'ProjectPanel',
+      targetId: panel.id,
+    })),
     mutationBatchId: mutationBatch.id,
   }
 }
@@ -940,10 +952,18 @@ async function executeGenerateVideoGroupOperation(params: {
     status: submitted.result.status,
     runId: submitted.result.runId || null,
     deduped: submitted.result.deduped,
+    projectId: params.ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: submitted.groupId,
   })
   return {
     ...submitted.result,
     groupId: submitted.groupId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: submitted.groupId,
     episodeId,
     gridMode,
     shotNumbers: submitted.shotNumbers,
@@ -998,7 +1018,13 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
-    results: submitted.map((item) => ({ refId: item.groupId, taskId: item.result.taskId })),
+    results: submitted.map((item) => ({
+      refId: item.groupId,
+      taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.groupId,
+    })),
   })
   return {
     success: true,
@@ -1008,6 +1034,9 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
     results: submitted.map((item) => ({
       refId: item.groupId,
       taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.groupId,
       shotNumbers: item.shotNumbers,
       durationSec: item.durationSec,
     })),
@@ -1034,8 +1063,11 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
   const submitted: Array<{
     readonly refId: string
     readonly taskId: string
+    readonly taskType: string
+    readonly targetType: string
+    readonly targetId: string
     readonly kind: VideoBlockPlanItem['kind']
-    readonly shotNumbers: readonly number[]
+    readonly shotNumbers: number[]
     readonly durationSec?: number
   }> = []
   const taskIds: string[] = []
@@ -1062,8 +1094,11 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
       submitted.push({
         refId: panelId,
         taskId,
+        taskType: TASK_TYPE.VIDEO_PANEL,
+        targetType: 'ProjectPanel',
+        targetId: panelId,
         kind: 'single',
-        shotNumbers: item.shotNumbers,
+        shotNumbers: [...item.shotNumbers],
       })
       continue
     }
@@ -1085,8 +1120,11 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     submitted.push({
       refId: groupResult.groupId,
       taskId: groupResult.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: groupResult.groupId,
       kind: 'group',
-      shotNumbers: groupResult.shotNumbers,
+      shotNumbers: [...groupResult.shotNumbers],
       durationSec: groupResult.durationSec,
     })
   }
@@ -1095,7 +1133,13 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
-    results: submitted.map((item) => ({ refId: item.refId, taskId: item.taskId })),
+    results: submitted.map((item) => ({
+      refId: item.refId,
+      taskId: item.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.refId,
+    })),
   })
 
   return {
@@ -1104,7 +1148,12 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     total: submitted.length,
     taskIds,
     results: submitted,
-    plan: planned.plan,
+    plan: {
+      items: planned.plan.items.map((item) => ({
+        ...item,
+        shotNumbers: [...item.shotNumbers],
+      })),
+    },
     singleVideoModel,
     groupVideoModel,
   }
@@ -1142,10 +1191,18 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
     status: submitted.result.status,
     runId: submitted.result.runId || null,
     deduped: submitted.result.deduped,
+    projectId: params.ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: submitted.groupId,
   })
   return {
     ...submitted.result,
     groupId: submitted.groupId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: submitted.groupId,
     episodeId,
     sourceMode: 'asset_reference' as const,
     blockIndex,
@@ -1182,7 +1239,13 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
-    results: submitted.map((item) => ({ refId: item.groupId, taskId: item.result.taskId })),
+    results: submitted.map((item) => ({
+      refId: item.groupId,
+      taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.groupId,
+    })),
   })
 
   return {
@@ -1193,6 +1256,9 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
     results: submitted.map((item) => ({
       refId: item.groupId,
       taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.groupId,
       shotNumbers: item.shotNumbers,
       durationSec: item.durationSec,
     })),
@@ -1296,11 +1362,19 @@ async function executeGeneratePanelVideoOperation(params: {
     runId: result.runId || null,
     deduped: result.deduped,
     mutationBatchId: mutationBatch.id,
+    projectId: params.ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.VIDEO_PANEL,
+    targetType: 'ProjectPanel',
+    targetId: panelId,
   })
 
   return {
     ...result,
     panelId,
+    taskType: TASK_TYPE.VIDEO_PANEL,
+    targetType: 'ProjectPanel',
+    targetId: panelId,
     mutationBatchId: mutationBatch.id,
   }
 }
@@ -1382,7 +1456,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       results: z.array(z.object({
         refId: z.string().min(1),
         taskId: z.string().min(1),
-      })),
+      }).passthrough()),
     }).passthrough(),
   )
 
@@ -1403,7 +1477,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         taskId: z.string().min(1),
         shotNumbers: z.array(z.number().int().positive()),
         durationSec: z.number().int().positive(),
-      })),
+      }).passthrough()),
       gridMode: z.enum(VIDEO_GRID_MODES),
     }).passthrough(),
   )
@@ -1416,7 +1490,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         kind: z.enum(['single', 'group']),
         shotNumbers: z.array(z.number().int().positive()),
         durationSec: z.number().int().positive().optional(),
-      })),
+      }).passthrough()),
       singleVideoModel: z.string().min(1),
       groupVideoModel: z.string().min(1),
       plan: z.object({
@@ -1449,7 +1523,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         taskId: z.string().min(1),
         shotNumbers: z.array(z.number().int().positive()),
         durationSec: z.number().int().positive(),
-      })),
+      }).passthrough()),
       sourceMode: z.literal('asset_reference'),
     }).passthrough(),
   )

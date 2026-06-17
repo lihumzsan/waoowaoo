@@ -373,6 +373,9 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         const resultRefs = taskResults.flatMap((item) => item.group.panels.map((panel) => ({
           refId: panel.id,
           taskId: item.result.taskId,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: panel.id,
         })))
 
         writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
@@ -511,6 +514,8 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           projectId: ctx.projectId,
           storyboardId: orderedPanels[0]?.storyboardId || null,
         })
+        const primaryGridPanelId = orderedPanels[0]?.id || panelIds[0]
+        if (!primaryGridPanelId) throw new Error('PROJECT_AGENT_GRID_IMAGE_PANEL_ID_REQUIRED')
         const taskLocale = resolveRequiredTaskLocale(ctx.request, body)
         const result = await submitOperationTask({
           request: ctx.request,
@@ -520,7 +525,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           episodeId,
           type: TASK_TYPE.IMAGE_PANEL,
           targetType: 'ProjectPanel',
-          targetId: orderedPanels[0]?.id || panelIds[0],
+          targetId: primaryGridPanelId,
           operationId: 'generate_storyboard_grid_images',
           source: ctx.source,
           confirmed: input.confirmed === true,
@@ -558,6 +563,11 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           runId: result.runId || null,
           deduped: result.deduped,
           mutationBatchId: mutationBatch.id,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: primaryGridPanelId,
         })
 
         return {
@@ -565,6 +575,9 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           episodeId,
           sourceVideoBlockId,
           panelIds,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: primaryGridPanelId,
           mutationBatchId: mutationBatch.id,
         }
       },
@@ -772,11 +785,19 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           runId: result.runId || null,
           deduped: result.deduped,
           mutationBatchId: mutationBatch.id,
+          projectId: ctx.projectId,
+          episodeId: null,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: panelId,
         })
 
         return {
           ...result,
           panelId,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: panelId,
           mutationBatchId: mutationBatch.id,
         }
       },
@@ -976,9 +997,21 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           runId: result.runId || null,
           deduped: result.deduped,
           mutationBatchId: mutationBatch.id,
+          projectId: ctx.projectId,
+          episodeId: storyboard.episodeId,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: createdPanel.id,
         })
 
-        return { ...result, panelId: createdPanel.id, mutationBatchId: mutationBatch.id }
+        return {
+          ...result,
+          panelId: createdPanel.id,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'ProjectPanel',
+          targetId: createdPanel.id,
+          mutationBatchId: mutationBatch.id,
+        }
       },
     }),
   }

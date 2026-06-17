@@ -36,7 +36,7 @@ export const taskBatchSubmitOperationOutputSchemaBase = z.object({
   results: z.array(z.object({
     refId: z.string().min(1),
     taskId: z.string().min(1),
-  })).optional(),
+  }).passthrough()).optional(),
   mutationBatchId: z.string().min(1).optional(),
 }).passthrough()
 

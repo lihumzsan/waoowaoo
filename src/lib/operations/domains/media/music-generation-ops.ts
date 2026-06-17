@@ -197,6 +197,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: taskSubmitOutput,
       execute: async (ctx, input) => {
         const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
+        const episodeId = normalizeString(input.episodeId) || null
         const durationSeconds = isCloudDeployment()
           ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
           : input.durationSeconds
@@ -234,12 +235,20 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
           status: result.status,
           runId: result.runId || null,
           deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.MUSIC_GENERATE,
+          targetType: 'Project',
+          targetId: ctx.projectId,
         })
 
         return {
           ...result,
-          episodeId: input.episodeId,
+          episodeId,
           musicModel,
+          taskType: TASK_TYPE.MUSIC_GENERATE,
+          targetType: 'Project',
+          targetId: ctx.projectId,
         }
       },
     }),
@@ -297,11 +306,19 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
           status: result.status,
           runId: result.runId || null,
           deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: input.episodeId,
+          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+          targetType: 'ProjectEpisode',
+          targetId: input.episodeId,
         })
 
         return {
           ...result,
           musicModel,
+          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+          targetType: 'ProjectEpisode',
+          targetId: input.episodeId,
         }
       },
     }),

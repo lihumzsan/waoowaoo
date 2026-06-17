@@ -1084,7 +1084,19 @@ export async function executeStoryboardMutationOperation(
     runId: result.runId || null,
     deduped: result.deduped,
     mutationBatchId: mutationBatch.id,
+    projectId: ctx.projectId,
+    episodeId: storyboard.episodeId,
+    taskType: TASK_TYPE.INSERT_PANEL,
+    targetType: 'ProjectStoryboard',
+    targetId: storyboardId,
   })
 
-  return { ...result, storyboardId, mutationBatchId: mutationBatch.id }
+  return {
+    ...result,
+    storyboardId,
+    taskType: TASK_TYPE.INSERT_PANEL,
+    targetType: 'ProjectStoryboard',
+    targetId: storyboardId,
+    mutationBatchId: mutationBatch.id,
+  }
 }

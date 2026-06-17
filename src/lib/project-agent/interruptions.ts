@@ -35,6 +35,17 @@ export interface ProjectAgentChoiceInterruptionRecord {
   payload: Prisma.JsonValue
 }
 
+export interface ProjectAgentInterruptionSnapshot {
+  id: string
+  runId: string | null
+  type: ProjectAgentInterruptionType
+  status: ProjectAgentInterruptionStatus
+  operationId: string
+  approvalId: string
+  toolCallId: string | null
+  payload: Prisma.JsonValue
+}
+
 const projectAgentInterruptionLogger = createScopedLogger({
   module: 'project-agent.interruptions',
 })
@@ -50,6 +61,38 @@ function buildScope(scope: ProjectAgentInterruptionScope): {
       projectId: scope.projectId,
       episodeId: scope.episodeId ?? null,
     }),
+  }
+}
+
+function normalizeInterruptionType(value: string): ProjectAgentInterruptionType {
+  if (value === 'approval' || value === 'choice' || value === 'task_wait') return value
+  throw new Error(`PROJECT_AGENT_INTERRUPTION_TYPE_INVALID:${value}`)
+}
+
+function normalizeInterruptionStatus(value: string): ProjectAgentInterruptionStatus {
+  if (value === 'pending' || value === 'consumed' || value === 'superseded') return value
+  throw new Error(`PROJECT_AGENT_INTERRUPTION_STATUS_INVALID:${value}`)
+}
+
+function toInterruptionSnapshot(record: {
+  id: string
+  runId: string | null
+  type: string
+  status: string
+  operationId: string
+  approvalId: string
+  toolCallId: string | null
+  payload: Prisma.JsonValue
+}): ProjectAgentInterruptionSnapshot {
+  return {
+    id: record.id,
+    runId: record.runId,
+    type: normalizeInterruptionType(record.type),
+    status: normalizeInterruptionStatus(record.status),
+    operationId: record.operationId,
+    approvalId: record.approvalId,
+    toolCallId: record.toolCallId,
+    payload: record.payload,
   }
 }
 
@@ -220,6 +263,60 @@ export async function getPendingProjectAgentApprovalInterruption(params: Project
     approvalId: record.approvalId,
     toolCallId: record.toolCallId,
   }
+}
+
+export async function getPendingProjectAgentInterruptionForScope(
+  params: ProjectAgentInterruptionScope,
+): Promise<ProjectAgentInterruptionSnapshot | null> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const record = await prisma.projectAgentInterruption.findFirst({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      status: 'pending',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      runId: true,
+      type: true,
+      status: true,
+      operationId: true,
+      approvalId: true,
+      toolCallId: true,
+      payload: true,
+    },
+  })
+  return record ? toInterruptionSnapshot(record) : null
+}
+
+export async function getLatestProjectAgentInterruptionForRun(params: ProjectAgentInterruptionScope & {
+  runId: string
+}): Promise<ProjectAgentInterruptionSnapshot | null> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const record = await prisma.projectAgentInterruption.findFirst({
+    where: {
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      runId: true,
+      type: true,
+      status: true,
+      operationId: true,
+      approvalId: true,
+      toolCallId: true,
+      payload: true,
+    },
+  })
+  return record ? toInterruptionSnapshot(record) : null
 }
 
 export async function consumeProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {

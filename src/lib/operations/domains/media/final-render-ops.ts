@@ -102,11 +102,19 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
           status: result.status,
           runId: result.runId || null,
           deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.FINAL_VIDEO_RENDER,
+          targetType: 'ProjectEpisode',
+          targetId: episodeId,
         })
 
         return {
           ...result,
           episodeId,
+          taskType: TASK_TYPE.FINAL_VIDEO_RENDER,
+          targetType: 'ProjectEpisode',
+          targetId: episodeId,
         }
       },
     }),

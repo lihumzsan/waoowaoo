@@ -119,7 +119,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     editScriptId,
     userId: input.userId,
   })
-  return await submitTask({
+  const submitted = await submitTask({
     userId: input.userId,
     locale: input.locale,
     projectId: input.projectId,
@@ -138,4 +138,8 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     },
     dedupeKey: `edit_script_storyboard_camera_plan:${ready.storyboardId}`,
   })
+  return {
+    ...submitted,
+    storyboardId: ready.storyboardId,
+  }
 }

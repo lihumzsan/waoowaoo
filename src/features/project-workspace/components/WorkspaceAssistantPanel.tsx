@@ -35,24 +35,14 @@ import {
   reserveWorkspaceAssistantMessageKey,
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
-import { findActiveChoiceCard } from './workspace-assistant/active-choice-card'
 import {
-  buildStylePreviewGenerationCardFromScreenplay,
-  findActiveStylePreviewGenerationCard,
-} from './workspace-assistant/active-style-preview-generation'
-import {
-  buildAssistantExternalTaskWaitTargets,
-  collectAssistantAsyncTaskSubmissions,
-  findLatestAssistantExternalTaskWait,
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
-import { findPendingWorkspaceAssistantInterruption } from './workspace-assistant/interruption-parts'
 import {
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
 } from '@/lib/query/resource-change-sync'
-import { useConfirmProjectEditStylePreview, useProjectEditScreenplay } from '@/lib/query/hooks'
-import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
+import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { queryKeys } from '@/lib/query/keys'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -192,7 +182,6 @@ export default function WorkspaceAssistantPanel({
   const assistantRuntimeRef = useRef(assistantRuntime)
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
   const queuedTaskFollowUpsRef = useRef<Array<{ runId: string; waitId: string; claimId: string }>>([])
-  const [dismissedChoiceCardKeys, setDismissedChoiceCardKeys] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     assistantRuntimeRef.current = assistantRuntime
   }, [assistantRuntime])
@@ -435,69 +424,28 @@ export default function WorkspaceAssistantPanel({
       await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
     }
   }
-  const activeChoiceCard = useMemo(() => {
-    return findActiveChoiceCard(assistantRuntime.messages, dismissedChoiceCardKeys)
-  }, [assistantRuntime.messages, dismissedChoiceCardKeys])
-  const asyncTaskSubmissions = useMemo(() => {
-    return collectAssistantAsyncTaskSubmissions(assistantRuntime.messages)
-  }, [assistantRuntime.messages])
-  const activeExternalTaskWait = useMemo(() => {
-    return findLatestAssistantExternalTaskWait(assistantRuntime.messages)
-  }, [assistantRuntime.messages])
-  const activeExternalTaskTargets = useMemo(() => {
-    return buildAssistantExternalTaskWaitTargets(activeExternalTaskWait, asyncTaskSubmissions)
-  }, [activeExternalTaskWait, asyncTaskSubmissions])
-  const activeExternalTaskStateQuery = useTaskTargetStateMap(projectId, activeExternalTaskTargets, {
-    enabled: activeExternalTaskTargets.length > 0,
-    staleTime: 0,
-  })
-  const activeExternalTaskRunning = Boolean(
-    activeExternalTaskWait
-      && activeExternalTaskTargets.length > 0
-      && (
-        activeExternalTaskStateQuery.isLoading
-        || activeExternalTaskStateQuery.data.some((state) => state.phase === 'queued' || state.phase === 'processing')
-      ),
-  )
-  const activeStylePreviewGenerationCard = useMemo(() => {
-    return findActiveStylePreviewGenerationCard(assistantRuntime.messages)
-  }, [assistantRuntime.messages])
-  const activeStylePreviewEpisodeId = activeStylePreviewGenerationCard?.data.episodeId ?? episodeId ?? null
-  const activeStylePreviewScreenplay = useProjectEditScreenplay(
-    projectId,
-    activeStylePreviewEpisodeId,
-  )
-  const recoveredStylePreviewGenerationCard = useMemo(() => {
-    return buildStylePreviewGenerationCardFromScreenplay(activeStylePreviewScreenplay.data ?? null)
-  }, [activeStylePreviewScreenplay.data])
-  const displayedStylePreviewGenerationCard = activeStylePreviewGenerationCard ?? recoveredStylePreviewGenerationCard
-  const activeStylePreviewConfirmed = (activeStylePreviewScreenplay.data?.stylePreviews ?? [])
-    .some((preview) => preview.status === 'confirmed')
-  const messagePendingInterruption = useMemo(() => {
-    return findPendingWorkspaceAssistantInterruption(assistantRuntime.messages)
-  }, [assistantRuntime.messages])
-  const serverPendingApproval = assistantRuntime.pendingRunApproval
+  const pendingInteraction = assistantRuntime.pendingInteraction
+  const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
+  const activeChoiceCard = pendingInteraction?.kind === 'choice'
+    ? {
+      key: pendingInteraction.interruptionId,
+      data: pendingInteraction.choiceCard,
+    }
+    : null
+  const displayedStylePreviewGenerationCard = assistantRuntime.sessionState?.activeStylePreviewGeneration ?? null
+  const activeExternalTaskOperationId = assistantRuntime.sessionState?.activeWaits.find((wait) => wait.status === 'pending')?.operationId
+    ?? assistantRuntime.sessionState?.activeTasks.find((task) => task.operationId)?.operationId
+    ?? null
   const shouldDockStylePreviewGenerationCard = shouldDockWorkspaceStylePreviewGenerationCard({
     hasCard: Boolean(displayedStylePreviewGenerationCard),
-    stylePreviewConfirmed: activeStylePreviewConfirmed,
+    stylePreviewConfirmed: false,
   })
-  const shouldRenderServerApprovalCard = Boolean(
-    serverPendingApproval
-      && messagePendingInterruption?.approvalId !== serverPendingApproval.approvalId,
-  )
   const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
-  const handleChoiceCardSubmitted = useCallback((choiceCardKey: string) => {
-    setDismissedChoiceCardKeys((current) => {
-      const next = new Set(current)
-      next.add(choiceCardKey)
-      return next
-    })
-  }, [])
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     onRespondToolApproval: handleRespondToolApproval,
     confirmationSubmittingKey,
     approvalRespondedIds: assistantRuntime.approvalRespondedIds,
-    pendingApprovalId: assistantRuntime.pendingApprovalId,
+    pendingApprovalId: null,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,
@@ -522,8 +470,7 @@ export default function WorkspaceAssistantPanel({
   const showExternalTaskRunCard = Boolean(
     !showActiveRunCard
       && !assistantRuntime.storageLoading
-      && activeExternalTaskRunning
-      && activeExternalTaskWait,
+      && activeExternalTaskOperationId,
   )
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
@@ -632,10 +579,10 @@ export default function WorkspaceAssistantPanel({
                     {showActiveRunCard ? (
                       <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />
                     ) : null}
-                    {showExternalTaskRunCard && activeExternalTaskWait ? (
-                      <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskWait.operationId} />
+                    {showExternalTaskRunCard && activeExternalTaskOperationId ? (
+                      <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />
                     ) : null}
-                    {shouldRenderServerApprovalCard && serverPendingApproval ? (
+                    {serverPendingApproval ? (
                       <ConfirmationActionCard
                         operationId={serverPendingApproval.operationId}
                         title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
@@ -673,7 +620,6 @@ export default function WorkspaceAssistantPanel({
                       onSubmitChoiceResponse={handleSubmitChoiceResponse}
                       onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
-                      onSubmitted={() => handleChoiceCardSubmitted(displayedActiveChoiceCard.key)}
                     />
                   </div>
                 ) : null}

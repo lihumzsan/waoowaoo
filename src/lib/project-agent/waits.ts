@@ -78,6 +78,19 @@ export interface ProjectAgentWaitFollowUp {
   claimId: string
 }
 
+export interface ProjectAgentSessionWait {
+  runId: string | null
+  waitId: string
+  operationId: string
+  taskIds: string[]
+  failedTaskIds: string[]
+  status: ProjectAgentWaitStatus
+  followUpMode: ProjectAgentWaitFollowUpMode
+  terminalStatus: ProjectAgentWaitTerminalStatus | null
+  total: number
+  claimId: string | null
+}
+
 const WAIT_CLAIM_TTL_MS = 2 * 60 * 1000
 
 const projectAgentWaitLogger = createScopedLogger({
@@ -159,6 +172,17 @@ function buildWaitScope(input: ProjectAgentWaitScopeInput): {
 function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode {
   if (value === 'resume_agent' || value === 'await_user_choice' || value === 'complete') return value
   throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_MODE_INVALID:${value}`)
+}
+
+function normalizeWaitStatus(value: string): ProjectAgentWaitStatus {
+  if (value === 'pending' || value === 'resolved' || value === 'claimed' || value === 'followed') return value
+  throw new Error(`PROJECT_AGENT_WAIT_STATUS_INVALID:${value}`)
+}
+
+function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerminalStatus | null {
+  if (value === null) return null
+  if (value === 'completed' || value === 'failed') return value
+  throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_STATUS_INVALID:${value}`)
 }
 
 export async function createProjectAgentWait(input: CreateProjectAgentWaitInput): Promise<string | null> {
@@ -538,6 +562,63 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
       failedCount: failedTaskIds.length,
       claimId: row.claimId ?? '',
     }]
+  })
+}
+
+export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeInput & {
+  limit?: number
+}): Promise<ProjectAgentSessionWait[]> {
+  await reconcilePendingProjectAgentWaitsForScope(input)
+  const { assistantId, scopeRef } = buildWaitScope(input)
+  const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50)
+  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>(Prisma.sql`
+    SELECT
+      id,
+      runId,
+      projectId,
+      userId,
+      assistantId,
+      scopeRef,
+      episodeId,
+      operationId,
+      taskIds,
+      followUpMode,
+      status,
+      terminalStatus,
+      terminalTaskIds,
+      failedTaskIds,
+      followUpKey,
+      claimId,
+      claimedAt,
+      claimExpiresAt,
+      followedAt,
+      createdAt,
+      resolvedAt
+    FROM project_agent_waits
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${assistantId}
+      AND scopeRef = ${scopeRef}
+      AND status IN ('pending', 'resolved', 'claimed')
+    ORDER BY createdAt DESC
+    LIMIT ${limit}
+  `)
+
+  return rows.map((row) => {
+    const taskIds = parseStringArray(row.taskIds)
+    const failedTaskIds = parseStringArray(row.failedTaskIds)
+    return {
+      runId: row.runId,
+      waitId: row.id,
+      operationId: row.operationId,
+      taskIds,
+      failedTaskIds,
+      status: normalizeWaitStatus(row.status),
+      followUpMode: normalizeWaitFollowUpMode(row.followUpMode),
+      terminalStatus: normalizeWaitTerminalStatus(row.terminalStatus),
+      total: taskIds.length,
+      claimId: row.claimId,
+    }
   })
 }
 

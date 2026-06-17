@@ -18,15 +18,15 @@ import {
   useProjectAssistantThreadSync,
 } from '@/lib/query/hooks'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
+import type {
+  ProjectAgentSessionPendingInteraction,
+  ProjectAgentSessionState,
+} from '@/lib/project-agent/session-state'
 import {
   ensureUniqueUIMessages,
   validatePersistableUIMessages,
   type UIMessagesPersistabilityError,
 } from '@/lib/project-agent/ui-message-validation'
-import {
-  collectResolvedInterruptionApprovalIds,
-  findPendingWorkspaceAssistantInterruption,
-} from './interruption-parts'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
@@ -48,17 +48,7 @@ interface WorkspaceAssistantTrackedRun {
   intent: WorkspaceAssistantControlIntent | null
 }
 
-interface WorkspaceAssistantPendingApproval {
-  runId: string
-  interruptionId: string
-  approvalId: string
-  operationId: string
-}
-
-interface WorkspaceAssistantRunSnapshot {
-  status: WorkspaceAssistantRunStatus
-  pendingApproval: WorkspaceAssistantPendingApproval | null
-}
+type WorkspaceAssistantPendingApproval = Extract<ProjectAgentSessionPendingInteraction, { kind: 'approval' }>
 
 class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
   public toUIMessageChunkStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
@@ -84,8 +74,11 @@ interface UseWorkspaceAssistantRuntimeResult {
   pending: boolean
   pendingApprovalId: string | null
   approvalRespondedIds: ReadonlySet<string>
+  sessionState: ProjectAgentSessionState | null
+  pendingInteraction: ProjectAgentSessionPendingInteraction | null
   error: Error | undefined
   syncError: string | null
+  sessionStateError: string | null
   storageError: string | null
   storageLoading: boolean
   pendingOperationId: string | null
@@ -216,6 +209,13 @@ export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAss
   return !isWorkspaceAssistantRunBusyStatus(status)
 }
 
+function isActiveWorkspaceAssistantSessionRunStatus(status: WorkspaceAssistantRunStatus): boolean {
+  return status === 'running'
+    || status === 'awaiting_approval'
+    || status === 'awaiting_choice'
+    || status === 'awaiting_task'
+}
+
 function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTrackedRun | null {
   if (!isRecord(part) || part.type !== 'data-agent-run') return null
   const data = isRecord(part.data) ? part.data : null
@@ -286,41 +286,23 @@ export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]):
   return null
 }
 
-function readPendingApproval(payload: unknown, runId: string): WorkspaceAssistantPendingApproval | null {
-  if (!isRecord(payload)) return null
-  const interruptionId = readNonEmptyString(payload.interruptionId)
-  const approvalId = readNonEmptyString(payload.approvalId)
-  const operationId = readNonEmptyString(payload.operationId)
-  if (!interruptionId || !approvalId || !operationId) return null
-  return {
-    runId,
-    interruptionId,
-    approvalId,
-    operationId,
-  }
-}
-
-async function fetchWorkspaceAssistantRunSnapshot(params: {
+async function fetchWorkspaceAssistantSessionState(params: {
   projectId: string
   episodeId?: string | null
-  runId: string
-}): Promise<WorkspaceAssistantRunSnapshot> {
-  const query = params.episodeId ? `?episodeId=${encodeURIComponent(params.episodeId)}` : ''
+  locale: string
+}): Promise<ProjectAgentSessionState> {
+  const query = new URLSearchParams()
+  if (params.episodeId) query.set('episodeId', params.episodeId)
+  query.set('locale', params.locale)
   const response = await apiFetch(
-    `/api/projects/${params.projectId}/assistant/runs/${encodeURIComponent(params.runId)}${query}`,
+    `/api/projects/${params.projectId}/assistant/session-state?${query.toString()}`,
   )
   const payload: unknown = await response.json().catch(() => null)
   if (!response.ok || !isRecord(payload)) {
-    throw new Error('PROJECT_AGENT_RUN_STATUS_FETCH_FAILED')
+    throw new Error('PROJECT_AGENT_SESSION_STATE_FETCH_FAILED')
   }
-  const run = isRecord(payload.run) ? payload.run : null
-  if (!isWorkspaceAssistantRunStatus(run?.status)) {
-    throw new Error('PROJECT_AGENT_RUN_STATUS_INVALID')
-  }
-  return {
-    status: run.status,
-    pendingApproval: readPendingApproval(payload.pendingApproval, params.runId),
-  }
+  if (!isRecord(payload.sessionState)) throw new Error('PROJECT_AGENT_SESSION_STATE_INVALID')
+  return payload.sessionState as unknown as ProjectAgentSessionState
 }
 
 export function useWorkspaceAssistantRuntime({
@@ -364,17 +346,22 @@ export function useWorkspaceAssistantRuntime({
   const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
+  const latestSessionStateRef = useRef<ProjectAgentSessionState | null>(null)
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
-  const settledRunIdsRef = useRef<Set<string>>(new Set())
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
-  const [pendingRunApproval, setPendingRunApproval] = useState<WorkspaceAssistantPendingApproval | null>(null)
+  const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
 
   useEffect(() => {
     latestMessagesRef.current = chat.messages
   }, [chat.messages])
+
+  useEffect(() => {
+    latestSessionStateRef.current = sessionState
+  }, [sessionState])
 
   const persistMessagesNow = useCallback(async (messages: UIMessage[]): Promise<boolean> => {
     const validation = validatePersistableUIMessages(messages)
@@ -447,39 +434,37 @@ export function useWorkspaceAssistantRuntime({
     return nextMessages
   }, [chat])
 
-  const applyTrackedRunStatus = useCallback((params: {
-    runId: string
-    status: WorkspaceAssistantRunStatus
-    operationId?: string | null
-    intent?: WorkspaceAssistantControlIntent | null
-    pendingApproval?: WorkspaceAssistantPendingApproval | null
-  }) => {
-    const { runId, status } = params
-    if (status === 'awaiting_approval' && params.pendingApproval) {
-      settledRunIdsRef.current.add(runId)
-      setActiveControlRun((current) => current?.runId === runId ? null : current)
-      setPendingRunApproval(params.pendingApproval)
+  const applySessionState = useCallback((nextState: ProjectAgentSessionState) => {
+    latestSessionStateRef.current = nextState
+    setSessionState(nextState)
+    const currentRun = nextState.currentRun
+    if (!currentRun || shouldClearWorkspaceAssistantControlPending(currentRun.status)) {
+      setActiveControlRun((current) => {
+        if (!currentRun) return null
+        return current?.runId === currentRun.runId ? null : current
+      })
       return
     }
-    setPendingRunApproval((current) => current?.runId === runId ? null : current)
-    if (shouldClearWorkspaceAssistantControlPending(status)) {
-      settledRunIdsRef.current.add(runId)
-      setActiveControlRun((current) => current?.runId === runId ? null : current)
-      return
-    }
+    if (!isWorkspaceAssistantRunBusyStatus(currentRun.status)) return
     setActiveControlRun((current) => ({
-      runId,
-      status,
-      operationId: params.operationId ?? (current?.runId === runId ? current.operationId : null),
-      intent: params.intent ?? (current?.runId === runId ? current.intent : null),
+      runId: currentRun.runId,
+      status: currentRun.status,
+      operationId: currentRun.operationId ?? (current?.runId === currentRun.runId ? current.operationId : null),
+      intent: current?.runId === currentRun.runId ? current.intent : null,
     }))
   }, [])
 
-  const refreshTrackedRunStatus = useCallback(async (runId: string): Promise<WorkspaceAssistantRunStatus> => {
-    const snapshot = await fetchWorkspaceAssistantRunSnapshot({ projectId, episodeId, runId })
-    applyTrackedRunStatus({ runId, status: snapshot.status, pendingApproval: snapshot.pendingApproval })
-    return snapshot.status
-  }, [applyTrackedRunStatus, episodeId, projectId])
+  const refreshSessionState = useCallback(async (): Promise<ProjectAgentSessionState | null> => {
+    try {
+      const nextState = await fetchWorkspaceAssistantSessionState({ projectId, episodeId, locale })
+      applySessionState(nextState)
+      setSessionStateError(null)
+      return nextState
+    } catch (error) {
+      setSessionStateError(error instanceof Error ? error.message : String(error))
+      return null
+    }
+  }, [applySessionState, episodeId, locale, projectId])
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
@@ -489,8 +474,6 @@ export function useWorkspaceAssistantRuntime({
     payload: Record<string, unknown>
   }) => {
     chat.clearError()
-    settledRunIdsRef.current.delete(params.runId)
-    setPendingRunApproval((current) => current?.runId === params.runId ? null : current)
     setActiveControlRun({
       runId: params.runId,
       status: 'running',
@@ -533,7 +516,7 @@ export function useWorkspaceAssistantRuntime({
       }
       await persistMessagesNow(latestMessagesRef.current)
     } finally {
-      await refreshTrackedRunStatus(params.runId).catch(() => undefined)
+      await refreshSessionState().catch(() => undefined)
     }
   }, [
     assistantPermissionMode,
@@ -543,7 +526,7 @@ export function useWorkspaceAssistantRuntime({
     mergeStreamedAssistantMessage,
     persistMessagesNow,
     projectId,
-    refreshTrackedRunStatus,
+    refreshSessionState,
   ])
 
   const submitChoiceResponse = useCallback(async (params: {
@@ -589,17 +572,17 @@ export function useWorkspaceAssistantRuntime({
     reason?: string
   }) => {
     chat.clearError()
-    const interruption = findPendingWorkspaceAssistantInterruption(chat.messages)
-    if (!interruption || interruption.approvalId !== params.approvalId) {
+    const interaction = latestSessionStateRef.current?.pendingInteraction ?? null
+    if (!interaction || interaction.kind !== 'approval' || interaction.approvalId !== params.approvalId) {
       throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
     }
     await sendControlRequest({
-      runId: interruption.runId,
+      runId: interaction.runId,
       endpoint: 'approval',
       intent: params.approved ? 'approve' : 'deny',
-      operationId: interruption.operationId,
+      operationId: interaction.operationId,
       payload: {
-        interruptionId: interruption.interruptionId,
+        interruptionId: interaction.interruptionId,
         approved: params.approved,
         ...(params.reason ? { reason: params.reason } : {}),
       },
@@ -642,29 +625,26 @@ export function useWorkspaceAssistantRuntime({
   }, [assistantThread.data, assistantThread.isLoading, chat.messages, chatId, replaceMessages])
 
   useEffect(() => {
-    const latestRun = findLatestWorkspaceAssistantRun(chat.messages)
-    if (!latestRun) return
-    if (!isWorkspaceAssistantRunBusyStatus(latestRun.status)) {
-      applyTrackedRunStatus(latestRun)
-      return
-    }
-    if (settledRunIdsRef.current.has(latestRun.runId)) return
-    if (chat.status === 'submitted' || chat.status === 'streaming') return
-    setActiveControlRun((current) => current?.runId === latestRun.runId
-      ? current
-      : latestRun)
-  }, [applyTrackedRunStatus, chat.messages, chat.status])
+    void refreshSessionState()
+  }, [chatId, refreshSessionState])
 
   useEffect(() => {
-    if (!activeControlRun || !isWorkspaceAssistantRunBusyStatus(activeControlRun.status)) return
+    const hasActiveSessionState = Boolean(
+      sessionState?.currentRun && isActiveWorkspaceAssistantSessionRunStatus(sessionState.currentRun.status),
+    ) || Boolean(sessionState?.pendingInteraction) || Boolean(sessionState?.activeWaits.some((wait) => wait.status === 'pending'))
+    const shouldPoll = chat.status === 'submitted'
+      || chat.status === 'streaming'
+      || Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
+      || hasActiveSessionState
+    if (!shouldPoll) return
     let cancelled = false
     let timer: number | null = null
 
-    void refreshTrackedRunStatus(activeControlRun.runId).catch(() => undefined)
+    void refreshSessionState().catch(() => undefined)
 
     const poll = () => {
       timer = window.setTimeout(() => {
-        void refreshTrackedRunStatus(activeControlRun.runId)
+        void refreshSessionState()
           .catch(() => undefined)
           .finally(() => {
             if (cancelled) return
@@ -680,7 +660,7 @@ export function useWorkspaceAssistantRuntime({
         window.clearTimeout(timer)
       }
     }
-  }, [activeControlRun, refreshTrackedRunStatus])
+  }, [activeControlRun, chat.status, refreshSessionState, sessionState])
 
   useEffect(() => {
     if (hydratedSessionKeyRef.current !== chatId) return
@@ -716,19 +696,35 @@ export function useWorkspaceAssistantRuntime({
     }
   }, [])
 
+  const emptyApprovalRespondedIds = useMemo<ReadonlySet<string>>(() => new Set<string>(), [])
+  const pendingInteraction = sessionState?.pendingInteraction ?? null
+  const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
+  const serverRunningRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun?.status === 'running'
+    ? {
+      runId: sessionState.currentRun.runId,
+      status: sessionState.currentRun.status,
+      operationId: sessionState.currentRun.operationId,
+      intent: null,
+    }
+    : null
+  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(activeControlRun ?? serverRunningRun)
+
   return {
     runtime,
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: Boolean(activeControlRun) || chat.status === 'submitted' || chat.status === 'streaming',
+    pending: Boolean(activeControlRun ?? serverRunningRun) || chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
-    approvalRespondedIds: collectResolvedInterruptionApprovalIds(chat.messages),
+    approvalRespondedIds: emptyApprovalRespondedIds,
+    sessionState,
+    pendingInteraction,
     error: chat.error,
     syncError,
+    sessionStateError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
-    pendingOperationId: resolveWorkspaceAssistantPendingOperationId(activeControlRun),
+    pendingOperationId,
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,

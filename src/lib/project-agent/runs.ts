@@ -145,6 +145,39 @@ export async function getProjectAgentRun(params: ProjectAgentRunScope & {
   }
 }
 
+export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRunScope & {
+  limit?: number
+}): Promise<ProjectAgentRunRecord[]> {
+  const { assistantId, scopeRef } = buildRunScope(params)
+  const limit = Math.min(Math.max(Math.floor(params.limit ?? 10), 1), 50)
+  const runs = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      projectId: true,
+      userId: true,
+      assistantId: true,
+      scopeRef: true,
+      episodeId: true,
+      requestId: true,
+      status: true,
+      controlKind: true,
+    },
+  })
+  return runs.map((run) => ({
+    ...run,
+    status: normalizeRunStatus(run.status),
+    controlKind: normalizeControlKind(run.controlKind),
+  }))
+}
+
 export async function updateProjectAgentRunStatus(params: {
   runId: string
   status: ProjectAgentRunStatus

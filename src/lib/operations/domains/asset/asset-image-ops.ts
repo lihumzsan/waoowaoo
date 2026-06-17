@@ -7,6 +7,7 @@ import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
@@ -101,11 +102,19 @@ async function executeAssetImageModificationOperation(params: {
     runId: result.runId || null,
     deduped: result.deduped,
     mutationBatchId: mutationBatch.id,
+    projectId: params.ctx.projectId,
+    episodeId: null,
+    taskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
+    targetType: params.kind === 'character' ? 'ProjectCharacter' : 'ProjectLocation',
+    targetId: assetId,
   })
 
   return {
     ...result,
     assetId,
+    taskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
+    targetType: params.kind === 'character' ? 'ProjectCharacter' : 'ProjectLocation',
+    targetId: assetId,
     mutationBatchId: mutationBatch.id,
   }
 }
@@ -249,12 +258,20 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
           runId: result.runId || null,
           deduped: result.deduped,
           mutationBatchId: mutationBatch.id,
+          projectId: ctx.projectId,
+          episodeId: null,
+          taskType: TASK_TYPE.IMAGE_CHARACTER,
+          targetType: 'ProjectCharacter',
+          targetId: characterId,
         })
 
         return {
           ...result,
           characterId,
           appearanceId: appearanceId || null,
+          taskType: TASK_TYPE.IMAGE_CHARACTER,
+          targetType: 'ProjectCharacter',
+          targetId: characterId,
           mutationBatchId: mutationBatch.id,
         }
       },
@@ -373,11 +390,19 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
           runId: result.runId || null,
           deduped: result.deduped,
           mutationBatchId: mutationBatch.id,
+          projectId: ctx.projectId,
+          episodeId: null,
+          taskType: TASK_TYPE.IMAGE_LOCATION,
+          targetType: 'ProjectLocation',
+          targetId: locationId,
         })
 
         return {
           ...result,
           locationId,
+          taskType: TASK_TYPE.IMAGE_LOCATION,
+          targetType: 'ProjectLocation',
+          targetId: locationId,
           mutationBatchId: mutationBatch.id,
         }
       },

@@ -15,10 +15,12 @@ const prismaMock = vi.hoisted(() => ({
   },
   locationImage: {
     findUnique: vi.fn(),
+    updateMany: vi.fn(async () => ({ count: 1 })),
     update: vi.fn(async () => ({})),
   },
   projectLocation: {
     findUnique: vi.fn(),
+    update: vi.fn(async () => ({})),
   },
   projectEditScript: {
     findFirst: vi.fn(),
@@ -188,6 +190,18 @@ describe('worker location-image-task-handler behavior', () => {
         spatialProfileError: null,
       },
     })
+    expect(prismaMock.locationImage.updateMany).toHaveBeenCalledWith({
+      where: { locationId: 'location-1' },
+      data: { isSelected: false },
+    })
+    expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
+      where: { id: 'location-image-1' },
+      data: { isSelected: true },
+    })
+    expect(prismaMock.projectLocation.update).toHaveBeenCalledWith({
+      where: { id: 'location-1' },
+      data: { selectedImageId: 'location-image-1' },
+    })
     expect(spatialProfileServiceMock.analyzeAndPersistProjectLocationImageSpatialProfile).toHaveBeenCalledWith({
       imageId: 'location-image-1',
       userId: 'user-1',
@@ -258,7 +272,7 @@ describe('worker location-image-task-handler behavior', () => {
     })
     expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledTimes(1)
     expect(textEngineMock.executeAiTextStep).toHaveBeenCalledTimes(1)
-    expect(prismaMock.locationImage.update).toHaveBeenCalledTimes(1)
+    expect(prismaMock.locationImage.update).toHaveBeenCalledTimes(2)
     expect(prismaMock.locationImage.update).toHaveBeenCalledWith({
       where: { id: 'location-image-1' },
       data: {
@@ -266,6 +280,10 @@ describe('worker location-image-task-handler behavior', () => {
         spatialProfileStatus: 'stale',
         spatialProfileError: null,
       },
+    })
+    expect(prismaMock.projectLocation.update).toHaveBeenCalledWith({
+      where: { id: 'location-1' },
+      data: { selectedImageId: 'location-image-1' },
     })
   })
 

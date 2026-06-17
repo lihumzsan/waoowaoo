@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import {
   generateProjectEditCinematographyShotPlan,
   generateProjectEditDirectorDecoupage,
@@ -36,6 +37,10 @@ import {
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 const editFirstDurationTierSchema = z.enum(EDIT_FIRST_DURATION_TIERS)
+
+function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
 
 const confirmedInputFields = {
   confirmed: z.boolean().optional(),
@@ -448,10 +453,14 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           assistantId: 'workspace-command',
           operationId: 'request_edit_first_choice',
           toolCallId,
-          payload: {
+          payload: toInputJsonValue({
             choiceType,
             cardId: card.cardId,
-          },
+            card: {
+              ...card,
+              runId,
+            },
+          }),
         })
         writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', {
           ...card,
@@ -642,12 +651,15 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
           targetType: 'ProjectStoryboard',
+          targetId: result.storyboardId,
         })
 
         return {
           ...result,
           episodeId,
           taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
+          targetType: 'ProjectStoryboard',
+          targetId: result.storyboardId,
         }
       },
     }),
