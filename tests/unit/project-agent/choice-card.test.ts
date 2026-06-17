@@ -233,7 +233,7 @@ describe('edit-first assistant choice cards', () => {
         {
           id: 'style-a',
           styleKey: 'A',
-          title: '暗黑风格化 CG',
+          title: '暗黑手绘插画',
           summary: '更黑暗。',
           imageKey: 'a.png',
         },

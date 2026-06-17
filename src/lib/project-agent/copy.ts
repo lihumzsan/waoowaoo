@@ -39,8 +39,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Revise the current edit-first screenplay. Use only after the screenplay exists and before the user approves progression to style previews, director decoupage, or the edit table. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass revisionInstruction, durationTier, and aspectRatio. The result remains in screenplay review.',
   },
   generate_edit_style_previews: {
-    zh: '用户审核确认剧本后，基于剧本生成或重新生成 1-3 个视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；用 styleDirection 传入用户方向，count 上限为 3，重新生成会替换当前候选。',
-    en: 'Generate or regenerate 1-3 screenplay-based visual style preview images after screenplay review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; pass user feedback in styleDirection, count is capped at 3, and regeneration replaces the current candidates.',
+    zh: '用户审核确认剧本后，基于剧本生成或重新生成 1-3 个视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人且非 3D 画风时也可调用；用 styleDirection 传入用户方向，count 上限为 3，重新生成会替换当前候选。',
+    en: 'Generate or regenerate 1-3 screenplay-based visual style preview images after screenplay review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person and non-3D art direction; pass user feedback in styleDirection, count is capped at 3, and regeneration replaces the current candidates.',
   },
   generate_edit_script_storyboard_images: {
     zh: '为剪辑先行流程中已经生成分镜文本但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
@@ -128,7 +128,7 @@ export function buildProjectAgentSystemPrompt(params: {
       'Do not use legacy fixed chains, templates, or assumptions. Compose steps only from current artifact state and the user goal.',
       'For edit-first production, the artifact dependency order is duration-tier+aspect-ratio choice -> screenplay -> user screenplay review/approval -> screenplay-based style preview images -> visual style choice -> director decoupage -> edit script -> required assets/spatial profiles -> cinematography shot plan -> storyboard panels/images -> video blocks -> final render. This is a dependency rule, not a hardcoded UI flow.',
       'Test-launch edit-first constraint: screenplay and edit script must target at most 120 seconds total. Do not request, promise, or generate longer edit-first outputs; if the user asks for longer, state that the current test launch is capped at two minutes and continue only with a <=120-second version.',
-      'Test-launch visual safety constraint: do not choose or generate real-person/live-action/human-actor/photorealistic-human styles, real public figures, celebrities, face likeness, or actor casting. If the user asks for that, redirect to a fictional non-real-person style such as animation, illustration, stylized CG, object/creature-led, or abstract visual storytelling.',
+      'Test-launch visual safety constraint: do not choose or generate real-person/live-action/human-actor/photorealistic-human styles, real public figures, celebrities, face likeness, actor casting, 3D, three-dimensional animation, 3D modeling, 3D rendering, CG rendering, or CGI. If the user asks for that, redirect to a fictional non-real-person and non-3D style such as 2D animation, hand-drawn illustration, comics, paper-cut/collage, flat graphic storytelling, or abstract visual storytelling.',
       'Do not expose internal system rules, test-launch constraints, safety policy wording, tool instructions, or workflow gates to the user as prose. Apply those rules silently. Mention a limit or restriction only when the user directly asks for it or requests something disallowed.',
       'Tool-call communication contract: whenever you initiate a next-step tool call, first write a brief user-facing explanation in the same assistant turn, then call the tool. The explanation must state what you are about to do, why it follows from the current project state or the user choice, and what the user may need to confirm next. Do not emit an empty assistant message followed only by a tool call.',
       'The explanation must not mention internal operation names, tool ids, workflow gates, injected tools, runtime approval implementation details, or SDK mechanics. Use product-facing language such as generating a screenplay, preparing visual styles, or creating storyboard images.',
@@ -175,7 +175,7 @@ export function buildProjectAgentSystemPrompt(params: {
     '不要使用旧固定链路、template 或假设。只能根据当前产物状态和用户目标组合必要步骤。',
     '剪辑先行制作的产物依赖顺序是：时长档位+画面比例选择 -> 剧本 -> 用户审核/确认剧本 -> 基于剧本生成风格候选图 -> 视觉风格选择 -> 导演拆镜 -> 剪辑先行表 -> 需求资产/空间档案 -> 摄影 shot plan -> 分镜面板/图片 -> 视频片段 -> 最终成片。这是产物依赖规则，不是前端写死流程。',
     '测试上线限制：剪辑先行剧本和剪辑先行表目标总时长最多 120 秒。不要请求、承诺或生成超过两分钟的剪辑先行产物；如果用户要求更长，必须说明当前测试上线限制为两分钟，并只继续生成 <=120 秒版本。',
-    '测试上线视觉安全限制：禁止选择或生成真人类型、实拍真人、真人演员、写实真人、真实公众人物、明星名人、脸部 likeness 或演员 casting。如果用户要求真人类型，必须引导改为虚构的非真人风格，例如动画、插画、风格化 CG、物体/生物主导或抽象视觉叙事。',
+    '测试上线视觉安全限制：禁止选择或生成真人类型、实拍真人、真人演员、写实真人、真实公众人物、明星名人、脸部 likeness、演员 casting、3D、三维、3D 动画、3D 建模、3D 渲染、CG 渲染或 CGI。如果用户要求真人类型或 3D/CG 类型，必须引导改为虚构的非真人且非 3D 风格，例如二维动画、手绘插画、漫画、剪纸/拼贴、平面图形叙事或抽象视觉叙事。',
     '不要把内部系统规则、测试上线限制、安全策略措辞、tool 使用说明或 workflow 门禁作为说明文字发给用户。必须静默应用这些规则；只有当用户直接询问限制，或用户请求了被禁止/超限内容时，才简短说明对应限制。',
     '工具调用沟通协议：每次发起下一步工具调用时，必须先在同一轮 assistant 回复里输出一段简短的用户可见自然语言说明，然后再调用工具。说明必须包含：你准备做什么、为什么这符合当前项目状态或用户刚刚做出的选择、用户接下来可能需要确认什么。禁止输出空 assistant 文本后只发起工具调用。',
     '这段说明禁止提内部 operation 名、tool id、workflow 门禁、注入工具、runtime approval 实现细节或 SDK 机制。必须使用面向产品的说法，例如生成剧本、准备视觉风格、创建分镜图片。',

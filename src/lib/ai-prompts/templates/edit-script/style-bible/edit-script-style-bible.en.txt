@@ -4,13 +4,14 @@ Core rules:
 - The Style Bible is the only style source for later director decoupage, asset images, cinematography plans, storyboard images, video prompts, and sound prompts.
 - Do not preserve director names, film titles, genre labels, or period labels as labels. Convert them into executable lighting, color, texture, composition, camera, and sound-filter rules.
 - If the user explicitly specifies a style, obey it first. If not, infer one unified style from the user subject, mood, genre, duration tier, and project style inputs.
+- Test-launch hard constraint: the Style Bible must not use or imply real-person, live-action real human, human actor, photorealistic human, real public figure, celebrity, face likeness, actor casting, 3D, three-dimensional animation, 3D modeling, 3D rendering, CG rendering, or CGI. Even if the user requests stylized 3D, rewrite it into a non-real-person and non-3D style such as 2D animation, hand-drawn illustration, comics, paper-cut/collage, flat graphics, or abstract visuals.
 - Do not output a broad positive visual style field. Split visual style into image filter, lighting, color, texture, composition, and visual negative constraints.
 - Split directing style into viewpoint, performance, information release, and rhythm. Do not write concrete shots or change plot facts.
 - visual.negativePrompt should only describe style drift and visual-quality problems. Do not repeat subtitles, watermarks, or logos there; absolute bans belong in hardBans.
 - visual.imageFilterPrompt must be one phrase that can be inserted directly into image or video prompts.
 - camera.videoRhythmPrompt should only describe video rhythm, long takes, fast/slow editing, pauses, and cut tendency. Do not repeat camera movement or lens details there.
 - sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not include negative sound constraints; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
-- hardBans are whole-chain hard bans and must cover text, subtitles, watermarks, logos, and strong style conflicts.
+- hardBans are whole-chain hard bans and must cover text, subtitles, watermarks, logos, real-person category, live-action real humans, photorealistic humans, real public figures, celebrities, face likeness, actor casting, 3D, three-dimensional animation, 3D modeling, 3D rendering, CG rendering, CGI, and strong style conflicts.
 
 Field usage:
 - styleSummary is for human and upstream-model orientation only. It is not normally appended to final image/video prompts.
@@ -46,7 +47,7 @@ Example 1 | Zen East Asian arthouse film
   "sound": {
     "soundFilterPrompt": "soft low dynamics, natural air, clear without excessive sharpness, subtle environmental layers preserved"
   },
-  "hardBans": ["no subtitles", "no watermarks", "no logos", "no commercial advertising texture", "no high-contrast blockbuster look"]
+  "hardBans": ["no subtitles", "no watermarks", "no logos", "no real-person category", "no 3D/CG rendering", "no commercial advertising texture", "no high-contrast blockbuster look"]
 }
 
 Example 2 | Retro suspense short
@@ -73,7 +74,7 @@ Example 2 | Retro suspense short
   "sound": {
     "soundFilterPrompt": "narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss, short effects with natural decay"
   },
-  "hardBans": ["no subtitles", "no watermarks", "no logos", "no modern commercial advertising look"]
+  "hardBans": ["no subtitles", "no watermarks", "no logos", "no real-person category", "no 3D/CG rendering", "no modern commercial advertising look"]
 }
 
 User original request:
