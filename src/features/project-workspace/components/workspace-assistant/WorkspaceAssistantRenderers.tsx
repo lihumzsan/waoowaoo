@@ -11,7 +11,7 @@ import {
 } from '@assistant-ui/react'
 import type { ChatStatus, UIMessage } from 'ai'
 import type { ComponentProps } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -76,6 +76,20 @@ type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]'
+const workspaceAssistantToolDetailsOpenIds = new Set<string>()
+
+export function isWorkspaceAssistantToolDetailsOpen(toolCallId: string): boolean {
+  return workspaceAssistantToolDetailsOpenIds.has(toolCallId)
+}
+
+export function setWorkspaceAssistantToolDetailsOpen(toolCallId: string, open: boolean): void {
+  if (!toolCallId.trim()) return
+  if (open) {
+    workspaceAssistantToolDetailsOpenIds.add(toolCallId)
+    return
+  }
+  workspaceAssistantToolDetailsOpenIds.delete(toolCallId)
+}
 
 export function findLatestAssistantMessageIdAfterLatestUser(
   messages: readonly Pick<UIMessage, 'id' | 'role'>[],
@@ -1074,8 +1088,12 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
   const toolStatus = props.status.type
+  const [detailsOpen, setDetailsOpen] = useState(() => isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
   const inputText = JSON.stringify(props.args ?? {}, null, 2)
   const outputText = props.result === undefined ? '' : JSON.stringify(props.result, null, 2)
+  useEffect(() => {
+    setDetailsOpen(isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
+  }, [props.toolCallId])
   const rawApprovalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
     ? readToolApprovalId(props.interrupt.payload)
     : null
@@ -1104,7 +1122,15 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
       : t('toolCall.running')
 
   return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+    <details
+      className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]"
+      open={detailsOpen}
+      onToggle={(event) => {
+        const nextOpen = event.currentTarget.open
+        setWorkspaceAssistantToolDetailsOpen(props.toolCallId, nextOpen)
+        setDetailsOpen(nextOpen)
+      }}
+    >
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name={toolStatus === 'incomplete' ? 'loader' : 'settingsHex'} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
         <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>

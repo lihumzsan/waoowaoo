@@ -2135,7 +2135,6 @@ export function buildWorkspaceNodeCanvasProjection({
         : !blockHasPanelImages && storyboardSingleImageAction
           ? translate('actions.generateStoryboardSingleImages')
           : undefined
-      const imageRuntimeTargets = blockPanelIds.map((panelId) => TASK_RUNTIME_TARGETS.projectPanelImage(panelId))
       const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
       const nodeId = `video-plan:${editScript.id}:${index + 1}`
       const validationMessage = validationKey ? translate(`errors.${validationKey}`) : null
@@ -2183,7 +2182,6 @@ export function buildWorkspaceNodeCanvasProjection({
           statusLabel,
           isRunning,
           runtimeTargets: runtimeTargets(
-            ...imageRuntimeTargets,
             block.kind === 'single'
               ? TASK_RUNTIME_TARGETS.projectPanelVideo(singlePanel?.id)
               : TASK_RUNTIME_TARGETS.projectVideoGroup(matchingGroup?.id),

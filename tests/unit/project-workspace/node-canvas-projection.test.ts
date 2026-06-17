@@ -2094,6 +2094,71 @@ describe('workspace node canvas projection', () => {
     expect(projection.nodes.some((node) => node.id.startsWith('video:'))).toBe(false)
   })
 
+  it('does not mark video segment nodes as running from storyboard image tasks', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-1',
+          clipId: 'clip-1',
+          panels: [
+            createPanel({ id: 'panel-image-pending', panelIndex: 0, panelNumber: 1 }),
+          ],
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+      defaultVideoModel: 'google::default-panel-model',
+      defaultSequenceVideoModel: 'google::veo-test',
+      editScript: {
+        id: 'edit-image-pending',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        userPrompt: 'single beat',
+        title: 'Quiet Door',
+        logline: null,
+        durationSec: 4,
+        shotCount: 1,
+        status: 'ready',
+        shots: [
+          {
+            shotNumber: 1,
+            durationSec: 4,
+            dramaticPurpose: 'test dramatic purpose',
+            visibleAction: 'A door opens slowly.',
+            audienceFocus: 'test audience focus',
+            viewpoint: 'test viewpoint',
+            revealPlan: 'test reveal plan',
+            performanceBeat: 'test performance beat',
+            continuityIn: 'test continuity in',
+            continuityOut: 'test continuity out',
+            charactersAndScene: 'Empty corridor',
+            sound: 'soft hinge',
+          },
+        ],
+        videoBlocks: [
+          {
+            kind: 'single',
+            shotNumbers: [1],
+            reason: 'This beat should stay isolated.',
+            prompt: 'Edit-first single shot prompt.',
+          },
+        ],
+        requirements: [],
+      },
+    })
+
+    const videoPlanNode = projection.nodes.find((node) => node.id === 'video-plan:edit-image-pending:1')
+    expect(videoPlanNode?.data.runtimeTargets).toEqual([
+      TASK_RUNTIME_TARGETS.projectPanelVideo('panel-image-pending'),
+    ])
+    expect(videoPlanNode?.data.runtimeTargets).not.toContainEqual(
+      TASK_RUNTIME_TARGETS.projectPanelImage('panel-image-pending'),
+    )
+  })
+
   it('offers edit-first storyboard generation after all required assets are ready', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
