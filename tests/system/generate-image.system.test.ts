@@ -105,13 +105,9 @@ describe('system - generate image', () => {
       select: { descriptions: true, imageUrl: true, imageUrls: true, selectedIndex: true },
     })
     expect(appearance).toEqual({
-      descriptions: JSON.stringify([
-        'identity-focused character asset prompt',
-        'wardrobe-focused character asset prompt',
-        'storyboard-energy character asset prompt',
-      ]),
+      descriptions: null,
       imageUrl: imageState.cosKey,
-      imageUrls: JSON.stringify([imageState.cosKey, imageState.cosKey, imageState.cosKey]),
+      imageUrls: JSON.stringify([imageState.cosKey]),
       selectedIndex: 0,
     })
 
