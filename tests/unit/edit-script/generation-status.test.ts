@@ -287,7 +287,14 @@ describe('edit script generation status persistence', () => {
     prismaMock.projectLocation.findFirst.mockResolvedValue(null)
     prismaMock.projectLocation.create.mockResolvedValue({ id: 'created-location-1' })
     prismaMock.projectEditAssetRequirement.update.mockResolvedValue({})
-    assetActionsMock.submitAssetGenerateTask.mockResolvedValue({ taskId: 'asset-task-1', status: 'queued' })
+    assetActionsMock.submitAssetGenerateTask.mockResolvedValue({
+      success: true,
+      async: true,
+      taskId: 'asset-task-1',
+      runId: null,
+      status: 'queued',
+      deduped: false,
+    })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue({
       id: 'screenplay-1',
       projectId: 'project-1',
@@ -1086,7 +1093,7 @@ describe('edit script generation status persistence', () => {
       ],
     })
 
-    await generateProjectEditScriptAssets({
+    const result = await generateProjectEditScriptAssets({
       request: createRequest(),
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -1096,6 +1103,22 @@ describe('edit script generation status persistence', () => {
       requirementId: 'requirement-1',
     })
 
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskIds: ['asset-task-1'],
+      results: [{
+        refId: 'requirement-1',
+        taskId: 'asset-task-1',
+        taskType: 'image_location',
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+      }],
+    }))
+    expect(result.editScript.requirements[0]).toEqual(expect.objectContaining({
+      id: 'requirement-1',
+      targetId: 'location-1',
+    }))
     expect(prismaMock.projectLocation.create).not.toHaveBeenCalled()
     expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'requirement-1' },

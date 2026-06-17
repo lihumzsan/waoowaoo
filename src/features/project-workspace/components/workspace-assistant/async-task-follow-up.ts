@@ -33,6 +33,12 @@ export type AssistantExternalTaskWait = {
   taskIds: string[]
 }
 
+export type AssistantExternalTaskTargetQuery = {
+  targetType: string
+  targetId: string
+  types?: string[]
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -105,7 +111,18 @@ function readTaskBatchSubmittedPartData(value: unknown): TaskBatchSubmittedPartD
       if (!isRecord(item)) return []
       const refId = readNonEmptyString(item.refId)
       const taskId = readNonEmptyString(item.taskId)
-      return refId && taskId ? [{ refId, taskId }] : []
+      const taskType = readNonEmptyString(item.taskType)
+      const targetType = readNonEmptyString(item.targetType)
+      const targetId = readNonEmptyString(item.targetId)
+      return refId && taskId
+        ? [{
+            refId,
+            taskId,
+            ...(taskType ? { taskType } : {}),
+            ...(targetType ? { targetType } : {}),
+            ...(targetId ? { targetId } : {}),
+          }]
+        : []
     })
     : undefined
   return {
@@ -183,6 +200,39 @@ export function findLatestAssistantExternalTaskWait(messages: readonly UIMessage
   return null
 }
 
+export function buildAssistantExternalTaskWaitTargets(
+  wait: AssistantExternalTaskWait | null,
+  submissions: ReadonlyMap<string, AssistantAsyncTaskSubmission>,
+): AssistantExternalTaskTargetQuery[] {
+  if (!wait) return []
+  const targets = wait.taskIds.flatMap((taskId) => {
+    const submission = submissions.get(taskId)
+    if (!submission) return []
+    if (submission.kind === 'single') {
+      const { targetType, targetId, taskType } = submission.data
+      if (!targetType || !targetId) return []
+      return [{
+        targetType,
+        targetId,
+        ...(taskType ? { types: [taskType] } : {}),
+      }]
+    }
+
+    const result = submission.data.results?.find((item) => item.taskId === taskId)
+    if (!result?.targetType || !result.targetId) return []
+    return [{
+      targetType: result.targetType,
+      targetId: result.targetId,
+      ...(result.taskType ? { types: [result.taskType] } : {}),
+    }]
+  })
+  const deduped = new Map<string, AssistantExternalTaskTargetQuery>()
+  for (const target of targets) {
+    deduped.set(`${target.targetType}:${target.targetId}:${target.types?.join(',') ?? ''}`, target)
+  }
+  return Array.from(deduped.values())
+}
+
 function readOperationResult(payload: unknown): UnknownRecord | null {
   if (!isRecord(payload)) return null
   if (payload.ok === true && isRecord(payload.data)) return payload.data
@@ -251,7 +301,18 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
       if (!isRecord(item)) return []
       const refId = readNonEmptyString(item.refId)
       const taskId = readNonEmptyString(item.taskId)
-      return refId && taskId ? [{ refId, taskId }] : []
+      const taskType = readNonEmptyString(item.taskType)
+      const targetType = readNonEmptyString(item.targetType)
+      const targetId = readNonEmptyString(item.targetId)
+      return refId && taskId
+        ? [{
+            refId,
+            taskId,
+            ...(taskType ? { taskType } : {}),
+            ...(targetType ? { targetType } : {}),
+            ...(targetId ? { targetId } : {}),
+          }]
+        : []
     })
     : undefined
   return {

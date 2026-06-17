@@ -25,6 +25,8 @@ import {
 import type {
   EditCinematographyShotPlanPayload,
   EditDirectorDecoupagePayload,
+  EditScriptAssetGenerationPayload,
+  EditScriptAssetGenerationTask,
   EditAssetKind,
   EditAssetRequirement,
   EditAssetStatus,
@@ -2178,7 +2180,7 @@ async function submitRequirementImageTask(input: {
   readonly locale: Locale
   readonly kind: EditAssetKind
   readonly assetId: string
-}): Promise<void> {
+}): Promise<Omit<EditScriptAssetGenerationTask, 'requirementId' | 'kind' | 'name'>> {
   const characterAppearance = input.kind === 'character'
     ? await prisma.characterAppearance.findFirst({
         where: { characterId: input.assetId },
@@ -2190,7 +2192,7 @@ async function submitRequirementImageTask(input: {
     throw new Error('EDIT_SCRIPT_CHARACTER_APPEARANCE_NOT_FOUND')
   }
 
-  await submitAssetGenerateTask({
+  const result = await submitAssetGenerateTask({
     request: input.request,
     kind: input.kind,
     assetId: input.assetId,
@@ -2213,9 +2215,35 @@ async function submitRequirementImageTask(input: {
       projectId: input.projectId,
     },
   })
+
+  if (input.kind === 'character') {
+    const appearance = characterAppearance
+    if (!appearance) {
+      throw new Error('EDIT_SCRIPT_CHARACTER_APPEARANCE_NOT_FOUND')
+    }
+    return {
+      taskId: result.taskId,
+      status: result.status,
+      runId: result.runId,
+      deduped: result.deduped,
+      taskType: TASK_TYPE.IMAGE_CHARACTER,
+      targetType: 'CharacterAppearance',
+      targetId: appearance.id,
+    }
+  }
+
+  return {
+    taskId: result.taskId,
+    status: result.status,
+    runId: result.runId,
+    deduped: result.deduped,
+    taskType: TASK_TYPE.IMAGE_LOCATION,
+    targetType: 'LocationImage',
+    targetId: input.assetId,
+  }
 }
 
-export async function generateProjectEditScriptAssets(input: GenerateEditScriptAssetsInput): Promise<EditScriptPayload> {
+export async function generateProjectEditScriptAssets(input: GenerateEditScriptAssetsInput): Promise<EditScriptAssetGenerationPayload> {
   const script = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId)
   if (!script) throw new ApiError('NOT_FOUND')
 
@@ -2223,6 +2251,8 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
     ? script.requirements.filter((requirement) => requirement.id === input.requirementId)
     : script.requirements
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
+
+  const submittedTasks: EditScriptAssetGenerationTask[] = []
 
   for (const requirement of requirements) {
     if (!isEditAssetKind(requirement.kind)) {
@@ -2265,7 +2295,7 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
     })
 
     try {
-      await submitRequirementImageTask({
+      const submittedTask = await submitRequirementImageTask({
         request: input.request,
         projectId: input.projectId,
         episodeId: input.episodeId,
@@ -2273,6 +2303,12 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         locale: input.locale,
         kind: requirement.kind,
         assetId: asset.id,
+      })
+      submittedTasks.push({
+        requirementId: requirement.id,
+        kind: requirement.kind,
+        name: requirement.name,
+        ...submittedTask,
       })
     } catch (error) {
       if (createdAssetId) {
@@ -2291,5 +2327,20 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
 
   const updated = await getPersistedEditScript(input.projectId, input.episodeId, script.id)
   if (!updated) throw new ApiError('NOT_FOUND')
-  return await mapPersistedEditScript(updated)
+  const editScript = await mapPersistedEditScript(updated)
+  return {
+    success: true,
+    async: submittedTasks.length > 0,
+    total: submittedTasks.length,
+    taskIds: submittedTasks.map((task) => task.taskId),
+    results: submittedTasks.map((task) => ({
+      refId: task.requirementId,
+      taskId: task.taskId,
+      taskType: task.taskType,
+      targetType: task.targetType,
+      targetId: task.targetId,
+    })),
+    submittedTasks,
+    editScript,
+  }
 }

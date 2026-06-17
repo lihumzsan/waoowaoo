@@ -55,28 +55,53 @@ const serviceMock = vi.hoisted(() => ({
     ],
   })),
   generateProjectEditScriptAssets: vi.fn(async () => ({
-    id: 'edit-1',
-    projectId: 'project-1',
-    episodeId: 'episode-1',
-    userPrompt: 'one minute sci-fi',
-    title: 'Orbital Silence',
-    logline: 'A pilot meets a machine intelligence.',
-    durationSec: 60,
-    shotCount: 8,
-    status: 'ready',
-    shots: [],
-    requirements: [
-      {
-        id: 'req-1',
-        kind: 'character',
-        name: 'Pilot',
-        description: 'A quiet astronaut.',
-        shotNumbers: [1, 2],
-        status: 'generating',
-        targetId: 'character-1',
-        errorMessage: null,
-      },
-    ],
+    success: true,
+    async: true,
+    total: 1,
+    taskIds: ['task-asset-1'],
+    results: [{
+      refId: 'req-1',
+      taskId: 'task-asset-1',
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    submittedTasks: [{
+      requirementId: 'req-1',
+      kind: 'character',
+      name: 'Pilot',
+      taskId: 'task-asset-1',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    editScript: {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: 'one minute sci-fi',
+      title: 'Orbital Silence',
+      logline: 'A pilot meets a machine intelligence.',
+      durationSec: 60,
+      shotCount: 8,
+      status: 'ready',
+      shots: [],
+      requirements: [
+        {
+          id: 'req-1',
+          kind: 'character',
+          name: 'Pilot',
+          description: 'A quiet astronaut.',
+          shotNumbers: [1, 2],
+          status: 'generating',
+          targetId: 'character-1',
+          errorMessage: null,
+        },
+      ],
+    },
   })),
   updateProjectEditScriptVideoBlockPrompt: vi.fn(async () => ({
     id: 'edit-1',
@@ -424,6 +449,12 @@ describe('project edit script route', () => {
 
     expect(response.status).toBe(200)
     expect(payload.editScript.requirements[0].status).toBe('generating')
+    expect(payload.submittedTasks).toEqual([expect.objectContaining({
+      requirementId: 'req-1',
+      taskId: 'task-asset-1',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    })])
     expect(serviceMock.generateProjectEditScriptAssets).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',

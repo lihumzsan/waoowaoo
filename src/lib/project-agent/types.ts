@@ -220,6 +220,9 @@ export interface TaskBatchSubmittedPartData {
   results?: Array<{
     refId: string
     taskId: string
+    taskType?: string
+    targetType?: string
+    targetId?: string
   }>
   mutationBatchId?: string | null
 }

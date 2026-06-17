@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
 import {
+  buildAssistantExternalTaskWaitTargets,
   collectAssistantAsyncTaskSubmissions,
   createTaskBatchSubmittedDataFromOperationPayload,
   createTaskSubmittedDataFromOperationPayload,
@@ -34,6 +35,22 @@ describe('workspace assistant async task follow-up', () => {
         operationId: 'generate_videos',
         total: 2,
         taskIds: ['task-2', 'task-3'],
+        results: [
+          {
+            refId: 'req-1',
+            taskId: 'task-2',
+            taskType: TASK_TYPE.IMAGE_CHARACTER,
+            targetType: 'CharacterAppearance',
+            targetId: 'appearance-1',
+          },
+          {
+            refId: 'req-2',
+            taskId: 'task-3',
+            taskType: TASK_TYPE.IMAGE_LOCATION,
+            targetType: 'LocationImage',
+            targetId: 'location-1',
+          },
+        ],
       },
     } as unknown as UIMessage['parts'][number]
 
@@ -56,6 +73,16 @@ describe('workspace assistant async task follow-up', () => {
       kind: 'batch',
       operationId: 'generate_videos',
       taskId: 'task-3',
+    })
+    expect(submissions.get('task-2')).toMatchObject({
+      data: {
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            targetType: 'CharacterAppearance',
+            targetId: 'appearance-1',
+          }),
+        ]),
+      },
     })
   })
 
@@ -135,8 +162,20 @@ describe('workspace assistant async task follow-up', () => {
           total: 2,
           taskIds: ['task-1', 'task-2'],
           results: [
-            { refId: 'shot-1', taskId: 'task-1' },
-            { refId: 'shot-2', taskId: 'task-2' },
+            {
+              refId: 'shot-1',
+              taskId: 'task-1',
+              taskType: TASK_TYPE.IMAGE_CHARACTER,
+              targetType: 'CharacterAppearance',
+              targetId: 'appearance-1',
+            },
+            {
+              refId: 'shot-2',
+              taskId: 'task-2',
+              taskType: TASK_TYPE.IMAGE_LOCATION,
+              targetType: 'LocationImage',
+              targetId: 'location-1',
+            },
           ],
           mutationBatchId: 'batch-1',
         },
@@ -148,11 +187,69 @@ describe('workspace assistant async task follow-up', () => {
       total: 2,
       taskIds: ['task-1', 'task-2'],
       results: [
-        { refId: 'shot-1', taskId: 'task-1' },
-        { refId: 'shot-2', taskId: 'task-2' },
+        {
+          refId: 'shot-1',
+          taskId: 'task-1',
+          taskType: TASK_TYPE.IMAGE_CHARACTER,
+          targetType: 'CharacterAppearance',
+          targetId: 'appearance-1',
+        },
+        {
+          refId: 'shot-2',
+          taskId: 'task-2',
+          taskType: TASK_TYPE.IMAGE_LOCATION,
+          targetType: 'LocationImage',
+          targetId: 'location-1',
+        },
       ],
       mutationBatchId: 'batch-1',
     })
+  })
+
+  it('builds loading target queries for batch task waits', () => {
+    const batchPart = {
+      type: 'data-task-batch-submitted',
+      data: {
+        operationId: 'generate_edit_script_assets',
+        total: 2,
+        taskIds: ['task-character', 'task-location'],
+        results: [
+          {
+            refId: 'req-character',
+            taskId: 'task-character',
+            taskType: TASK_TYPE.IMAGE_CHARACTER,
+            targetType: 'CharacterAppearance',
+            targetId: 'appearance-1',
+          },
+          {
+            refId: 'req-location',
+            taskId: 'task-location',
+            taskType: TASK_TYPE.IMAGE_LOCATION,
+            targetType: 'LocationImage',
+            targetId: 'location-1',
+          },
+        ],
+      },
+    } as unknown as UIMessage['parts'][number]
+    const submissions = collectAssistantAsyncTaskSubmissions([
+      assistantMessage([batchPart]),
+    ])
+
+    expect(buildAssistantExternalTaskWaitTargets({
+      operationId: 'generate_edit_script_assets',
+      taskIds: ['task-character', 'task-location'],
+    }, submissions)).toEqual([
+      {
+        targetType: 'CharacterAppearance',
+        targetId: 'appearance-1',
+        types: [TASK_TYPE.IMAGE_CHARACTER],
+      },
+      {
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+        types: [TASK_TYPE.IMAGE_LOCATION],
+      },
+    ])
   })
 
   it('resolves only terminal lifecycle task events', () => {

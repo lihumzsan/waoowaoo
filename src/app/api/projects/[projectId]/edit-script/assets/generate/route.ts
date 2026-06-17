@@ -19,7 +19,7 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const editScript = await generateProjectEditScriptAssets({
+  const result = await generateProjectEditScriptAssets({
     request,
     projectId,
     episodeId: parsed.data.episodeId,
@@ -29,5 +29,8 @@ export const POST = apiHandler(async (
     requirementId: parsed.data.requirementId,
   })
 
-  return NextResponse.json({ editScript })
+  return NextResponse.json({
+    editScript: result.editScript,
+    submittedTasks: result.submittedTasks,
+  })
 })

@@ -10,7 +10,7 @@ import {
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
-import type { EditStylePreviewGenerationPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
+import type { EditStylePreviewGenerationPartData, TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -167,6 +167,33 @@ const editScriptSummaryOutputSchema = z.object({
 }).passthrough()
 
 type EditScriptSummaryOutput = z.infer<typeof editScriptSummaryOutputSchema>
+
+const editScriptAssetGenerationOutputSchema = z.object({
+  success: z.literal(true),
+  async: z.boolean(),
+  total: z.number().int().min(0),
+  taskIds: z.array(z.string().min(1)),
+  results: z.array(z.object({
+    refId: z.string().min(1),
+    taskId: z.string().min(1),
+    taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
+    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+    targetId: z.string().min(1),
+  })),
+  submittedTasks: z.array(z.object({
+    requirementId: z.string().min(1),
+    kind: z.enum(['character', 'location']),
+    name: z.string().min(1),
+    taskId: z.string().min(1),
+    status: z.string().min(1),
+    runId: z.string().nullable(),
+    deduped: z.boolean(),
+    taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
+    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+    targetId: z.string().min(1),
+  })),
+  editScript: editScriptSummaryOutputSchema,
+}).passthrough()
 
 const editDirectorDecoupageOutputSchema = z.object({
   id: z.string().min(1),
@@ -528,9 +555,9 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将根据剪辑先行表创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEditScriptAssetsInputSchema,
-      outputSchema: editScriptSummaryOutputSchema,
-      execute: async (ctx, input: GenerateEditScriptAssetsInput) => summarizeEditScriptPayload(
-        await generateProjectEditScriptAssets({
+      outputSchema: editScriptAssetGenerationOutputSchema,
+      execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
+        const result = await generateProjectEditScriptAssets({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
@@ -538,8 +565,26 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           ...(input.requirementId ? { requirementId: input.requirementId } : {}),
-        }),
-      ),
+        })
+        const output = editScriptAssetGenerationOutputSchema.parse({
+          success: result.success,
+          async: result.async,
+          total: result.total,
+          taskIds: [...result.taskIds],
+          results: result.results.map((item) => ({ ...item })),
+          submittedTasks: result.submittedTasks.map((item) => ({ ...item })),
+          editScript: summarizeEditScriptPayload(result.editScript),
+        })
+        if (output.taskIds.length > 0) {
+          writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
+            operationId: 'generate_edit_script_assets',
+            total: output.total,
+            taskIds: output.taskIds,
+            results: output.results,
+          })
+        }
+        return output
+      },
     }),
     generate_edit_cinematography_shot_plan: defineOperation({
       id: 'generate_edit_cinematography_shot_plan',

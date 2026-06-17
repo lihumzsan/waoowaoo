@@ -80,17 +80,42 @@ const serviceMock = vi.hoisted(() => ({
     ],
   })),
   generateProjectEditScriptAssets: vi.fn(async () => ({
-    id: 'edit-1',
-    projectId: 'project-1',
-    episodeId: 'episode-1',
-    title: 'Orbital Dock',
-    durationSec: 30,
-    shotCount: 6,
-    status: 'ready',
-    requirements: [
-      { id: 'req-1', kind: 'character', name: 'Pilot', status: 'generating', targetId: 'character-1' },
-    ],
-    videoBlocks: [],
+    success: true,
+    async: true,
+    total: 1,
+    taskIds: ['task-asset-1'],
+    results: [{
+      refId: 'req-1',
+      taskId: 'task-asset-1',
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    submittedTasks: [{
+      requirementId: 'req-1',
+      kind: 'character',
+      name: 'Pilot',
+      taskId: 'task-asset-1',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    editScript: {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      title: 'Orbital Dock',
+      durationSec: 30,
+      shotCount: 6,
+      status: 'ready',
+      requirements: [
+        { id: 'req-1', kind: 'character', name: 'Pilot', status: 'generating', targetId: 'character-1' },
+      ],
+      videoBlocks: [],
+    },
   })),
 }))
 
@@ -492,6 +517,67 @@ describe('edit-script operations', () => {
       count: 4,
       confirmed: true,
     }).success).toBe(false)
+  })
+
+  it('returns edit asset generation as a batch async task signal for assistant waits', async () => {
+    const operations = createEditScriptOperations()
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.generate_edit_script_assets.execute(buildContext(createTestWriter(writerEvents)), {
+      editScriptId: 'edit-1',
+      confirmed: true,
+    }) as {
+      results: Array<{
+        refId: string
+        taskId: string
+        taskType: string
+        targetType: string
+        targetId: string
+      }>
+    }
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      total: 1,
+      taskIds: ['task-asset-1'],
+      editScript: expect.objectContaining({
+        id: 'edit-1',
+        requirements: [expect.objectContaining({
+          id: 'req-1',
+          status: 'generating',
+        })],
+      }),
+    }))
+    expect(result.results).toEqual([{
+      refId: 'req-1',
+      taskId: 'task-asset-1',
+      taskType: TASK_TYPE.IMAGE_CHARACTER,
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }])
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-task-batch-submitted',
+        data: expect.objectContaining({
+          operationId: 'generate_edit_script_assets',
+          taskIds: ['task-asset-1'],
+          results: [{
+            refId: 'req-1',
+            taskId: 'task-asset-1',
+            taskType: TASK_TYPE.IMAGE_CHARACTER,
+            targetType: 'CharacterAppearance',
+            targetId: 'appearance-1',
+          }],
+        }),
+      }),
+    ])
+    expect(serviceMock.generateProjectEditScriptAssets).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
+    }))
   })
 
   it('passes screenplay id into director decoupage generation', async () => {

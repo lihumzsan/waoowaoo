@@ -142,6 +142,19 @@ export interface EditAssetRequirement {
   readonly spatialProfileModel?: string | null
 }
 
+export interface EditScriptAssetGenerationTask {
+  readonly requirementId: string
+  readonly kind: EditAssetKind
+  readonly name: string
+  readonly taskId: string
+  readonly status: string
+  readonly runId: string | null
+  readonly deduped: boolean
+  readonly taskType: 'image_character' | 'image_location'
+  readonly targetType: 'CharacterAppearance' | 'LocationImage'
+  readonly targetId: string
+}
+
 export interface EditScriptPayload {
   readonly id?: string
   readonly projectId?: string
@@ -157,6 +170,22 @@ export interface EditScriptPayload {
   readonly shots: readonly EditScriptShot[]
   readonly videoBlocks: readonly EditScriptVideoBlock[]
   readonly requirements: readonly EditAssetRequirement[]
+}
+
+export interface EditScriptAssetGenerationPayload {
+  readonly success: true
+  readonly async: boolean
+  readonly total: number
+  readonly taskIds: readonly string[]
+  readonly results: ReadonlyArray<{
+    readonly refId: string
+    readonly taskId: string
+    readonly taskType: 'image_character' | 'image_location'
+    readonly targetType: 'CharacterAppearance' | 'LocationImage'
+    readonly targetId: string
+  }>
+  readonly submittedTasks: readonly EditScriptAssetGenerationTask[]
+  readonly editScript: EditScriptPayload
 }
 
 export interface EditCinematographyShot {

@@ -41,6 +41,7 @@ import {
   findActiveStylePreviewGenerationCard,
 } from './workspace-assistant/active-style-preview-generation'
 import {
+  buildAssistantExternalTaskWaitTargets,
   collectAssistantAsyncTaskSubmissions,
   findLatestAssistantExternalTaskWait,
   resolveAssistantAsyncTaskTerminalEvent,
@@ -444,23 +445,7 @@ export default function WorkspaceAssistantPanel({
     return findLatestAssistantExternalTaskWait(assistantRuntime.messages)
   }, [assistantRuntime.messages])
   const activeExternalTaskTargets = useMemo(() => {
-    if (!activeExternalTaskWait) return []
-    const targets = activeExternalTaskWait.taskIds.flatMap((taskId) => {
-      const submission = asyncTaskSubmissions.get(taskId)
-      if (!submission || submission.kind !== 'single') return []
-      const { targetType, targetId, taskType } = submission.data
-      if (!targetType || !targetId) return []
-      return [{
-        targetType,
-        targetId,
-        ...(taskType ? { types: [taskType] } : {}),
-      }]
-    })
-    const deduped = new Map<string, (typeof targets)[number]>()
-    for (const target of targets) {
-      deduped.set(`${target.targetType}:${target.targetId}:${target.types?.join(',') ?? ''}`, target)
-    }
-    return Array.from(deduped.values())
+    return buildAssistantExternalTaskWaitTargets(activeExternalTaskWait, asyncTaskSubmissions)
   }, [activeExternalTaskWait, asyncTaskSubmissions])
   const activeExternalTaskStateQuery = useTaskTargetStateMap(projectId, activeExternalTaskTargets, {
     enabled: activeExternalTaskTargets.length > 0,
