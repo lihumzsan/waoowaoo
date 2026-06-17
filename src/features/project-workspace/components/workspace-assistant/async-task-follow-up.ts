@@ -108,7 +108,7 @@ function readTaskBatchSubmittedPartData(value: unknown): TaskBatchSubmittedPartD
   const taskTotal = typeof value.taskTotal === 'number' && Number.isFinite(value.taskTotal)
     ? value.taskTotal
     : undefined
-  const targetTotal = typeof value.targetTotal === 'number' && Number.isFinite(value.targetTotal)
+  const explicitTargetTotal = typeof value.targetTotal === 'number' && Number.isFinite(value.targetTotal)
     ? value.targetTotal
     : undefined
   const mutationBatchId = readOptionalString(value.mutationBatchId)
@@ -131,6 +131,7 @@ function readTaskBatchSubmittedPartData(value: unknown): TaskBatchSubmittedPartD
         : []
     })
     : undefined
+  const targetTotal = explicitTargetTotal ?? results?.length
   return {
     operationId,
     total,
@@ -306,7 +307,7 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
   const taskTotal = typeof result.taskTotal === 'number' && Number.isFinite(result.taskTotal)
     ? result.taskTotal
     : undefined
-  const targetTotal = typeof result.targetTotal === 'number' && Number.isFinite(result.targetTotal)
+  const explicitTargetTotal = typeof result.targetTotal === 'number' && Number.isFinite(result.targetTotal)
     ? result.targetTotal
     : undefined
   const mutationBatchId = readOptionalString(result.mutationBatchId)
@@ -329,6 +330,7 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
         : []
     })
     : undefined
+  const targetTotal = explicitTargetTotal ?? results?.length
   return {
     operationId: params.operationId,
     total,

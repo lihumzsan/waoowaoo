@@ -210,6 +210,33 @@ describe('workspace assistant async task follow-up', () => {
     })
   })
 
+  it('infers batch target total from result references when explicit target total is absent', () => {
+    const data = createTaskBatchSubmittedDataFromOperationPayload({
+      operationId: 'generate_edit_script_storyboard_images',
+      payload: {
+        result: {
+          success: true,
+          async: true,
+          total: 1,
+          taskTotal: 1,
+          taskIds: ['task-grid-1'],
+          results: [
+            { refId: 'panel-1', taskId: 'task-grid-1', taskType: TASK_TYPE.IMAGE_PANEL, targetType: 'ProjectPanel', targetId: 'panel-1' },
+            { refId: 'panel-2', taskId: 'task-grid-1', taskType: TASK_TYPE.IMAGE_PANEL, targetType: 'ProjectPanel', targetId: 'panel-2' },
+          ],
+        },
+      },
+    })
+
+    expect(data).toMatchObject({
+      operationId: 'generate_edit_script_storyboard_images',
+      total: 1,
+      taskTotal: 1,
+      targetTotal: 2,
+      taskIds: ['task-grid-1'],
+    })
+  })
+
   it('builds loading target queries for batch task waits', () => {
     const batchPart = {
       type: 'data-task-batch-submitted',
