@@ -17,6 +17,13 @@ export type EditStylePreviewKey = (typeof EDIT_STYLE_PREVIEW_KEYS)[number]
 
 export type EditStylePreviewStatus = 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
 
+export const editScriptAssetRequirementIdSchema = z.string()
+  .trim()
+  .min(1)
+  .refine((value) => !value.includes('*'), {
+    message: 'requirementId must be an exact editScript.requirements[].id; omit it to process all requirements.',
+  })
+
 export interface EditStylePreviewPayload {
   readonly id: string
   readonly projectId: string
@@ -492,7 +499,7 @@ export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object
 export const generateEditAssetsRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   editScriptId: z.string().trim().min(1).optional(),
-  requirementId: z.string().trim().min(1).optional(),
+  requirementId: editScriptAssetRequirementIdSchema.optional(),
 })
 
 export const generateEditStoryboardRequestSchema = z.object({

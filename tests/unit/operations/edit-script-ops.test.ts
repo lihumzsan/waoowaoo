@@ -586,6 +586,25 @@ describe('edit-script operations', () => {
     }))
   })
 
+  it('rejects wildcard edit asset requirement ids so all-assets generation omits the field', () => {
+    const operations = createEditScriptOperations()
+
+    expect(operations.generate_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      requirementId: '*',
+      confirmed: true,
+    }).success).toBe(false)
+    expect(operations.generate_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      confirmed: true,
+    }).success).toBe(true)
+    expect(operations.generate_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      requirementId: 'req-1',
+      confirmed: true,
+    }).success).toBe(true)
+  })
+
   it('passes screenplay id into director decoupage generation', async () => {
     const operations = createEditScriptOperations()
     const result = await operations.generate_edit_director_decoupage.execute(buildContext(), {

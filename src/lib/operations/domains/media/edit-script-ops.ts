@@ -10,6 +10,7 @@ import {
 } from '@/lib/edit-script/service'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
+import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { EditStylePreviewGenerationPartData, TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -90,7 +91,9 @@ const generateEditDirectorDecoupageInputSchema = z.object({
 const generateEditScriptAssetsInputSchema = z.object({
   ...confirmedInputFields,
   editScriptId: z.string().trim().min(1).optional(),
-  requirementId: z.string().trim().min(1).optional(),
+  requirementId: editScriptAssetRequirementIdSchema
+    .describe('Optional exact editScript.requirements[].id. Omit requirementId to process every requirement. Never pass "*" or any wildcard.')
+    .optional(),
 }).passthrough()
 
 const generateEditCinematographyShotPlanInputSchema = z.object({
