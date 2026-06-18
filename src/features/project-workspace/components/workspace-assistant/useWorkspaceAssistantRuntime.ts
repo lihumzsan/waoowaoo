@@ -193,15 +193,20 @@ export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunS
   return status === 'running'
 }
 
+export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
+  return status === 'running' || status === 'awaiting_task'
+}
+
 /**
  * The operation-running affordance is only meaningful when the tracked control
  * action actually executes the operation. Denying an approval merely delivers
  * the rejection to the agent, so no operation is pending.
  */
 export function resolveWorkspaceAssistantPendingOperationId(
-  trackedRun: Pick<WorkspaceAssistantTrackedRun, 'operationId' | 'intent'> | null,
+  trackedRun: (Pick<WorkspaceAssistantTrackedRun, 'operationId' | 'intent'> & Partial<Pick<WorkspaceAssistantTrackedRun, 'status'>>) | null,
 ): string | null {
   if (!trackedRun || trackedRun.intent === 'deny') return null
+  if (trackedRun.status && !isWorkspaceAssistantOperationPendingStatus(trackedRun.status)) return null
   return trackedRun.operationId
 }
 
@@ -699,7 +704,8 @@ export function useWorkspaceAssistantRuntime({
   const emptyApprovalRespondedIds = useMemo<ReadonlySet<string>>(() => new Set<string>(), [])
   const pendingInteraction = sessionState?.pendingInteraction ?? null
   const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
-  const serverRunningRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun?.status === 'running'
+  const serverOperationRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun
+    && isWorkspaceAssistantOperationPendingStatus(sessionState.currentRun.status)
     ? {
       runId: sessionState.currentRun.runId,
       status: sessionState.currentRun.status,
@@ -707,14 +713,14 @@ export function useWorkspaceAssistantRuntime({
       intent: null,
     }
     : null
-  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(activeControlRun ?? serverRunningRun)
+  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(activeControlRun ?? serverOperationRun)
 
   return {
     runtime,
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: Boolean(activeControlRun ?? serverRunningRun) || chat.status === 'submitted' || chat.status === 'streaming',
+    pending: Boolean(activeControlRun ?? serverOperationRun) || chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,

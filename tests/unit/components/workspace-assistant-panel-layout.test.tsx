@@ -7,6 +7,7 @@ import { createTranslator } from 'use-intl/core'
 import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import {
+  shouldSuppressWorkspaceAssistantOperationRunCard,
   shouldDockWorkspaceStylePreviewGenerationCard,
   WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
@@ -316,6 +317,21 @@ describe('workspace assistant panel layout', () => {
     expect(shouldDockWorkspaceStylePreviewGenerationCard({
       hasCard: false,
       stylePreviewConfirmed: false,
+    })).toBe(false)
+  })
+
+  it('suppresses only the generic style preview operation card once the docked generation card exists', () => {
+    expect(shouldSuppressWorkspaceAssistantOperationRunCard({
+      operationId: 'generate_edit_style_previews',
+      stylePreviewGenerationDocked: true,
+    })).toBe(true)
+    expect(shouldSuppressWorkspaceAssistantOperationRunCard({
+      operationId: 'generate_edit_script',
+      stylePreviewGenerationDocked: true,
+    })).toBe(false)
+    expect(shouldSuppressWorkspaceAssistantOperationRunCard({
+      operationId: 'generate_edit_style_previews',
+      stylePreviewGenerationDocked: false,
     })).toBe(false)
   })
 

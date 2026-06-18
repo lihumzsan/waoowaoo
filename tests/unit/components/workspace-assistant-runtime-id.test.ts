@@ -3,6 +3,7 @@ import {
   buildWorkspaceAssistantChatId,
   createWorkspaceAssistantControlMessageId,
   findLatestWorkspaceAssistantRun,
+  isWorkspaceAssistantOperationPendingStatus,
   isWorkspaceAssistantRunBusyStatus,
   mergeWorkspaceAssistantStreamedMessage,
   resolveWorkspaceAssistantPendingOperationId,
@@ -44,6 +45,14 @@ describe('workspace assistant runtime chat id', () => {
       expect(isWorkspaceAssistantRunBusyStatus(status)).toBe(false)
       expect(shouldClearWorkspaceAssistantControlPending(status)).toBe(true)
     }
+  })
+
+  it('uses running and awaiting-task runs as operation pending signals', () => {
+    expect(isWorkspaceAssistantOperationPendingStatus('running')).toBe(true)
+    expect(isWorkspaceAssistantOperationPendingStatus('awaiting_task')).toBe(true)
+    expect(isWorkspaceAssistantOperationPendingStatus('awaiting_choice')).toBe(false)
+    expect(isWorkspaceAssistantOperationPendingStatus('awaiting_approval')).toBe(false)
+    expect(isWorkspaceAssistantOperationPendingStatus('completed')).toBe(false)
   })
 
   it('finds the latest streamed project agent run marker', () => {
@@ -127,11 +136,23 @@ describe('workspace assistant runtime chat id', () => {
     expect(resolveWorkspaceAssistantPendingOperationId({
       operationId: 'generate_edit_script',
       intent: 'deny',
+      status: 'running',
     })).toBeNull()
     expect(resolveWorkspaceAssistantPendingOperationId({
       operationId: 'generate_edit_script',
       intent: 'approve',
+      status: 'running',
     })).toBe('generate_edit_script')
+    expect(resolveWorkspaceAssistantPendingOperationId({
+      operationId: 'generate_edit_style_previews',
+      intent: null,
+      status: 'awaiting_task',
+    })).toBe('generate_edit_style_previews')
+    expect(resolveWorkspaceAssistantPendingOperationId({
+      operationId: 'generate_edit_style_previews',
+      intent: null,
+      status: 'awaiting_choice',
+    })).toBeNull()
     expect(resolveWorkspaceAssistantPendingOperationId(null)).toBeNull()
   })
 

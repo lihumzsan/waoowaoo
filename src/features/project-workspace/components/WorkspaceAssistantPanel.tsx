@@ -104,6 +104,13 @@ export function shouldDockWorkspaceStylePreviewGenerationCard(params: {
   return params.hasCard && !params.stylePreviewConfirmed
 }
 
+export function shouldSuppressWorkspaceAssistantOperationRunCard(params: {
+  operationId: string | null | undefined
+  stylePreviewGenerationDocked: boolean
+}): boolean {
+  return params.stylePreviewGenerationDocked && params.operationId === 'generate_edit_style_previews'
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -486,15 +493,25 @@ export default function WorkspaceAssistantPanel({
     activeAssistantMessageId: activeThinkingAssistantMessageId,
     hasVisibleAssistantText: assistantTurnHasVisibleText,
   })
+  const suppressActiveRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
+    operationId: assistantRuntime.pendingOperationId,
+    stylePreviewGenerationDocked: shouldDockStylePreviewGenerationCard,
+  })
+  const suppressExternalTaskRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
+    operationId: activeExternalTaskOperationId,
+    stylePreviewGenerationDocked: shouldDockStylePreviewGenerationCard,
+  })
   const showActiveRunCard = Boolean(
     assistantRuntime.pending
       && !assistantRuntime.storageLoading
-      && assistantRuntime.pendingOperationId,
+      && assistantRuntime.pendingOperationId
+      && !suppressActiveRunCard,
   )
   const showExternalTaskRunCard = Boolean(
     !showActiveRunCard
       && !assistantRuntime.storageLoading
-      && activeExternalTaskOperationId,
+      && activeExternalTaskOperationId
+      && !suppressExternalTaskRunCard,
   )
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return

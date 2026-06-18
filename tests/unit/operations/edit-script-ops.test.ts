@@ -306,6 +306,7 @@ describe('edit-script operations', () => {
     ])
     expect(operations.generate_edit_script?.summary).toContain('director decoupage')
     expect(operations.generate_edit_script?.confirmation?.required).toBe(true)
+    expect(operations.generate_edit_style_previews?.confirmation?.required).toBe(false)
     expect(operations.request_edit_first_choice?.intent).toBe('query')
   })
 

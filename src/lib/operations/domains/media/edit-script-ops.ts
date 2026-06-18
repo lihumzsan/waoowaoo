@@ -400,8 +400,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        required: true,
-        summary: '将基于已审核剧本生成 3 个视觉风格候选图（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        required: false,
       },
       agentFlow: {
         onTaskComplete: 'await_user_choice',
