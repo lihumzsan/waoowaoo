@@ -39,6 +39,16 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
 }
 
 describe('edit-first workflow state', () => {
+  it('exposes initial screenplay generation without an execution approval block', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot())
+
+    expect(state.stage).toBe('ready_to_generate_screenplay')
+    expect(state.blocking.kind).toBe('none')
+    expect(state.nextAction?.operationId).toBe('generate_edit_screenplay')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.allowedOperationIds).toEqual(['generate_edit_screenplay'])
+  })
+
   it('requires screenplay review before style preview generation', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
@@ -46,8 +56,9 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.stage).toBe('screenplay_ready_for_review')
-    expect(state.blocking.kind).toBe('needs_confirmation')
+    expect(state.blocking.kind).toBe('needs_user_choice')
     expect(state.nextAction?.operationId).toBe('generate_edit_style_previews')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
     expect(state.allowedOperationIds).toEqual(['generate_edit_style_previews', 'revise_edit_screenplay'])
   })
 
@@ -120,6 +131,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_director_decoupage')
     expect(state.nextAction?.operationId).toBe('generate_edit_director_decoupage')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(state.allowedOperationIds).toEqual(['generate_edit_director_decoupage'])
     expect(state.allowedOperationIds).not.toContain('revise_edit_screenplay')
   })
@@ -148,6 +161,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_edit_script')
     expect(state.nextAction?.operationId).toBe('generate_edit_script')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(state.allowedOperationIds).toEqual(['generate_edit_script'])
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script'])
   })
@@ -165,6 +180,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_assets')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_assets')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_assets'])
   })
 
@@ -225,6 +242,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_cinematography')
     expect(state.nextAction?.operationId).toBe('generate_edit_cinematography_shot_plan')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_cinematography_shot_plan'])
   })
 
@@ -261,6 +280,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard_spatial_blocking')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_spatial_blocking')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard_spatial_blocking'])
   })
 
@@ -301,6 +322,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.blocking.kind).toBe('none')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
   })
 
@@ -323,6 +346,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard_images')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_images')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(state.blocking.kind).toBe('needs_confirmation')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard_images'])
   })
 
@@ -368,6 +393,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('generate_episode_videos')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(state.blocking.kind).toBe('needs_confirmation')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
   })
 })

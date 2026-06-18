@@ -5,6 +5,15 @@ import {
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
+import {
+  isEditFirstAutoApprovedOperationId,
+  type EditFirstWorkflowOperationId,
+} from './edit-first-operation-policy'
+export {
+  EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS,
+  EDIT_FIRST_WORKFLOW_OPERATION_IDS,
+  type EditFirstWorkflowOperationId,
+} from './edit-first-operation-policy'
 
 export type EditFirstWorkflowStage =
   | 'not_started'
@@ -37,30 +46,6 @@ export type EditFirstWorkflowBlockingKind =
   | 'needs_user_choice'
   | 'needs_confirmation'
   | 'failed'
-
-/**
- * Canonical surface of every operation the edit-first workflow can ever
- * require. The project agent registers all of them up front and gates
- * availability live per turn, so this list must stay in sync with the stages
- * above — the derived union type enforces that any stage referencing a new
- * operation also adds it here.
- */
-export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
-  'generate_edit_screenplay',
-  'revise_edit_screenplay',
-  'generate_edit_style_previews',
-  'generate_edit_director_decoupage',
-  'generate_edit_script',
-  'generate_edit_script_assets',
-  'generate_edit_cinematography_shot_plan',
-  'generate_edit_script_storyboard_spatial_blocking',
-  'generate_edit_script_storyboard',
-  'generate_edit_script_storyboard_images',
-  'generate_episode_videos',
-  'render_final_video',
-] as const
-
-export type EditFirstWorkflowOperationId = (typeof EDIT_FIRST_WORKFLOW_OPERATION_IDS)[number]
 
 export interface EditFirstWorkflowAction {
   id: string
@@ -121,7 +106,7 @@ export const EDIT_FIRST_WORKFLOW_EMPTY_STATE: EditFirstWorkflowState = {
   allowedOperationIds: [],
 }
 
-function confirmationAction(
+function workflowAction(
   operationId: EditFirstWorkflowOperationId,
   title: string,
 ): EditFirstWorkflowAction {
@@ -129,7 +114,7 @@ function confirmationAction(
     id: operationId,
     operationId,
     title,
-    requiresUserConfirmation: true,
+    requiresUserConfirmation: !isEditFirstAutoApprovedOperationId(operationId),
   }
 }
 
@@ -145,7 +130,7 @@ function state(params: {
     active: params.active ?? true,
     stage: params.stage,
     blocking: params.blocking ?? {
-      kind: nextAction ? 'needs_confirmation' : 'none',
+      kind: nextAction && nextAction.requiresUserConfirmation ? 'needs_confirmation' : 'none',
       reason: null,
     },
     nextAction,
@@ -205,8 +190,8 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
       stage: hasAnyEditFirstArtifact ? 'failed' : 'ready_to_generate_screenplay',
       blocking: hasAnyEditFirstArtifact
         ? { kind: 'failed', reason: 'edit-first artifacts exist but screenplay is missing' }
-        : { kind: 'needs_confirmation', reason: 'screenplay is the first required edit-first artifact' },
-      nextAction: confirmationAction('generate_edit_screenplay', 'Generate screenplay'),
+        : { kind: 'none', reason: null },
+      nextAction: workflowAction('generate_edit_screenplay', 'Generate screenplay'),
     })
   }
 
@@ -214,12 +199,12 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'screenplay generation failed' },
-      nextAction: confirmationAction('generate_edit_screenplay', 'Regenerate screenplay'),
+      nextAction: workflowAction('generate_edit_screenplay', 'Regenerate screenplay'),
     })
   }
 
   if (snapshot.failedStylePreviewCount > 0 && snapshot.confirmedStylePreviewCount === 0 && snapshot.completedStylePreviewCount === 0) {
-    const nextAction = confirmationAction('generate_edit_style_previews', 'Regenerate style previews')
+    const nextAction = workflowAction('generate_edit_style_previews', 'Regenerate style previews')
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'all style preview generation tasks failed' },
@@ -244,10 +229,10 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.screenplayStatus === 'screenplay_ready') {
-    const nextAction = confirmationAction('generate_edit_style_previews', 'Generate style previews')
+    const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
     return state({
       stage: 'screenplay_ready_for_review',
-      blocking: { kind: 'needs_confirmation', reason: 'review and approve screenplay before style preview generation' },
+      blocking: { kind: 'needs_user_choice', reason: 'review screenplay and choose approval or revision before style preview generation' },
       nextAction,
       allowedOperationIds: [nextAction.operationId, 'revise_edit_screenplay'],
     })
@@ -271,7 +256,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (!snapshot.hasDirectorDecoupage) {
     return state({
       stage: 'ready_to_generate_director_decoupage',
-      nextAction: confirmationAction('generate_edit_director_decoupage', 'Generate director decoupage'),
+      nextAction: workflowAction('generate_edit_director_decoupage', 'Generate director decoupage'),
     })
   }
 
@@ -279,7 +264,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'director decoupage generation failed' },
-      nextAction: confirmationAction('generate_edit_director_decoupage', 'Regenerate director decoupage'),
+      nextAction: workflowAction('generate_edit_director_decoupage', 'Regenerate director decoupage'),
     })
   }
 
@@ -293,7 +278,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (!snapshot.hasEditScript) {
     return state({
       stage: 'ready_to_generate_edit_script',
-      nextAction: confirmationAction('generate_edit_script', 'Generate edit core table'),
+      nextAction: workflowAction('generate_edit_script', 'Generate edit core table'),
     })
   }
 
@@ -301,7 +286,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'edit core table generation failed' },
-      nextAction: confirmationAction('generate_edit_script', 'Regenerate edit core table'),
+      nextAction: workflowAction('generate_edit_script', 'Regenerate edit core table'),
     })
   }
 
@@ -322,7 +307,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     }
     return state({
       stage: 'ready_to_generate_assets',
-      nextAction: confirmationAction('generate_edit_script_assets', 'Generate required assets'),
+      nextAction: workflowAction('generate_edit_script_assets', 'Generate required assets'),
     })
   }
 
@@ -335,7 +320,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     }
     return state({
       stage: 'ready_to_generate_cinematography',
-      nextAction: confirmationAction('generate_edit_cinematography_shot_plan', 'Generate cinematography shot plan'),
+      nextAction: workflowAction('generate_edit_cinematography_shot_plan', 'Generate cinematography shot plan'),
     })
   }
 
@@ -343,7 +328,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'cinematography shot plan generation failed' },
-      nextAction: confirmationAction('generate_edit_cinematography_shot_plan', 'Regenerate cinematography shot plan'),
+      nextAction: workflowAction('generate_edit_cinematography_shot_plan', 'Regenerate cinematography shot plan'),
     })
   }
 
@@ -363,19 +348,19 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     }
     return state({
       stage: 'ready_to_generate_storyboard_spatial_blocking',
-      nextAction: confirmationAction('generate_edit_script_storyboard_spatial_blocking', 'Generate spatial blocking'),
+      nextAction: workflowAction('generate_edit_script_storyboard_spatial_blocking', 'Generate spatial blocking'),
     })
   }
 
   if (snapshot.panelCount === 0) {
     return state({
       stage: 'ready_to_generate_storyboard',
-      nextAction: confirmationAction('generate_edit_script_storyboard', 'Generate storyboard panels'),
+      nextAction: workflowAction('generate_edit_script_storyboard', 'Generate storyboard panels'),
     })
   }
 
   if (snapshot.storyboardPanelImageMissingCount > 0) {
-    const nextAction = confirmationAction('generate_edit_script_storyboard_images', 'Generate storyboard images')
+    const nextAction = workflowAction('generate_edit_script_storyboard_images', 'Generate storyboard images')
     if (snapshot.activeStoryboardImageTaskCount > 0) {
       return state({
         stage: 'storyboard_images_generating',
@@ -403,7 +388,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
       kind: 'needs_confirmation',
       reason: null,
     },
-    nextAction: confirmationAction('generate_episode_videos', 'Generate videos'),
+    nextAction: workflowAction('generate_episode_videos', 'Generate videos'),
     allowedOperationIds: ['generate_episode_videos'],
   }
 }

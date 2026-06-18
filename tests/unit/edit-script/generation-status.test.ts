@@ -1145,6 +1145,112 @@ describe('edit script generation status persistence', () => {
     }))
   })
 
+  it('fails edit script asset generation when every requirement task submission fails', async () => {
+    const persistedScript = {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: structuredUserPrompt,
+      styleBibleJson: mockStyleBible,
+      screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
+      title: 'Sci-Fi Short',
+      logline: 'A quiet signal wakes a station.',
+      durationSec: 4,
+      shotCount: 1,
+      status: 'ready',
+      assetReviewStatus: 'pending',
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 4,
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A station corridor flickers awake.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
+          charactersAndScene: 'Station corridor',
+          sound: 'low electrical hum',
+        },
+      ],
+      videoBlocksJson: [],
+      requirements: [
+        {
+          id: 'requirement-1',
+          kind: 'location',
+          name: 'Station Corridor',
+          description: 'A cold sci-fi corridor.',
+          shotIndexes: [1],
+          status: 'pending',
+          targetId: 'location-1',
+          errorMessage: null,
+        },
+      ],
+    }
+    prismaMock.projectEditScript.findFirst
+      .mockResolvedValueOnce(persistedScript)
+      .mockResolvedValueOnce(persistedScript)
+    prismaMock.projectLocation.findFirst.mockResolvedValue({
+      id: 'location-1',
+      selectedImageId: null,
+      images: [
+        {
+          id: 'location-image-1',
+          imageUrl: null,
+          imageMediaId: null,
+          isSelected: false,
+          spatialProfileJson: null,
+          spatialProfileStatus: null,
+          spatialProfileError: null,
+          spatialProfileAnalyzedAt: null,
+          spatialProfileModel: null,
+        },
+      ],
+    })
+    assetActionsMock.submitAssetGenerateTask.mockRejectedValueOnce(new Error('BILLING_CAPABILITY_PRICE_NOT_FOUND:image fal::gpt-image-2'))
+
+    await expect(generateProjectEditScriptAssets({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
+      requirementId: 'requirement-1',
+    })).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      message: 'No edit script asset generation tasks were submitted.',
+      details: expect.objectContaining({
+        code: 'EDIT_SCRIPT_ASSET_GENERATION_FAILED',
+        failedRequirements: [
+          {
+            requirementId: 'requirement-1',
+            kind: 'location',
+            name: 'Station Corridor',
+            errorMessage: 'BILLING_CAPABILITY_PRICE_NOT_FOUND:image fal::gpt-image-2',
+          },
+        ],
+      }),
+    })
+    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'requirement-1' },
+      data: expect.objectContaining({
+        targetId: 'location-1',
+        status: 'generating',
+      }),
+    }))
+    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'requirement-1' },
+      data: expect.objectContaining({
+        targetId: 'location-1',
+        status: 'failed',
+        errorMessage: 'BILLING_CAPABILITY_PRICE_NOT_FOUND:image fal::gpt-image-2',
+      }),
+    }))
+  })
+
   it('persists a generating edit script before running the AI chain', async () => {
     mockSuccessfulAiSteps()
 

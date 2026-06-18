@@ -2369,12 +2369,25 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
+  const failedRequirements: Array<{
+    readonly requirementId: string
+    readonly kind: string
+    readonly name: string
+    readonly errorMessage: string
+  }> = []
 
   for (const requirement of requirements) {
     if (!isEditAssetKind(requirement.kind)) {
+      const errorMessage = `Unsupported asset kind: ${requirement.kind}`
       await prisma.projectEditAssetRequirement.update({
         where: { id: requirement.id },
-        data: { status: 'failed', errorMessage: `Unsupported asset kind: ${requirement.kind}` },
+        data: { status: 'failed', errorMessage },
+      })
+      failedRequirements.push({
+        requirementId: requirement.id,
+        kind: requirement.kind,
+        name: requirement.name,
+        errorMessage,
       })
       continue
     }
@@ -2427,6 +2440,7 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         ...submittedTask,
       })
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       if (createdAssetId) {
         await deleteCreatedAsset({ kind: requirement.kind, id: createdAssetId })
       }
@@ -2435,8 +2449,14 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         data: {
           targetId: existing?.id ?? null,
           status: 'failed',
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage,
         },
+      })
+      failedRequirements.push({
+        requirementId: requirement.id,
+        kind: requirement.kind,
+        name: requirement.name,
+        errorMessage,
       })
     }
   }
@@ -2444,6 +2464,13 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
   const updated = await getPersistedEditScript(input.projectId, input.episodeId, script.id)
   if (!updated) throw new ApiError('NOT_FOUND')
   const editScript = await mapPersistedEditScript(updated)
+  if (submittedTasks.length === 0 && failedRequirements.length > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSET_GENERATION_FAILED',
+      message: 'No edit script asset generation tasks were submitted.',
+      failedRequirements,
+    })
+  }
   return {
     success: true,
     async: submittedTasks.length > 0,

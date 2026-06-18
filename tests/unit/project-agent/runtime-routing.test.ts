@@ -434,7 +434,7 @@ describe('project agent runtime deterministic tool injection', () => {
     ]))
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
-    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBe(true)
+    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
