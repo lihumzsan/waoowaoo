@@ -213,9 +213,6 @@ function buildScreenplayReviewChoiceCard(params: {
     choiceType: 'screenplay_review',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Review Screenplay' : '审核剧本',
-    description: isEnglish
-      ? 'Confirm to continue to visual style candidates, or send notes for a screenplay revision.'
-      : '确认后继续生成视觉风格候选；也可以提交其他想法来修改剧本。',
     groups: [],
     submitLabel: isEnglish ? 'Confirm' : '确认',
     submit: {
