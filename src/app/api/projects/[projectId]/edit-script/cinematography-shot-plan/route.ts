@@ -3,9 +3,9 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import {
-  generateProjectEditCinematographyShotPlan,
   readProjectEditCinematographyShotPlan,
 } from '@/lib/edit-script/service'
+import { submitProjectEditCinematographyShotPlanTask } from '@/lib/edit-script/task-submission'
 import {
   createEditCinematographyShotPlanRequestSchema,
   getEditCinematographyShotPlanRequestSchema,
@@ -44,14 +44,16 @@ export const POST = apiHandler(async (
   const parsed = createEditCinematographyShotPlanRequestSchema.safeParse(body)
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const cinematographyShotPlan = await generateProjectEditCinematographyShotPlan({
+  const result = await submitProjectEditCinematographyShotPlanTask({
     request,
     projectId,
     episodeId: parsed.data.episodeId,
     userId: authResult.session.user.id,
+    source: 'project-ui',
+    confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
     ...(parsed.data.editScriptId ? { editScriptId: parsed.data.editScriptId } : {}),
   })
 
-  return NextResponse.json({ cinematographyShotPlan })
+  return NextResponse.json(result)
 })

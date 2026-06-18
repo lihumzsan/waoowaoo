@@ -29,6 +29,10 @@ import {
   type StructuredStreamItem,
   type StructuredStreamParsedItem,
 } from './structured-stream-adapters'
+import {
+  workspaceEditCinematographyShotPlanNodeId,
+  workspaceEditDirectorDecoupageNodeId,
+} from '../workspace-canvas-node-ids'
 
 type TranslateValues = Readonly<Record<string, string | number>>
 type Translate = (key: string, values?: TranslateValues) => string
@@ -243,6 +247,18 @@ function itemsOfKind<K extends StructuredStreamParsedItem['kind']>(
     .flatMap((item) => (item.value.kind === kind ? [item.value as Extract<StructuredStreamParsedItem, { readonly kind: K }>] : []))
 }
 
+function findSnapshotTargetId(
+  snapshots: readonly StructuredStreamSnapshot[],
+  adapterKey: StructuredStreamAdapterKey,
+  targetType: string,
+): string | null {
+  return snapshots.find((snapshot) => (
+    snapshot.adapterKey === adapterKey
+    && snapshot.targetType === targetType
+    && snapshot.targetId
+  ))?.targetId ?? null
+}
+
 function pipelineItemsFromDirectorShots(
   items: Array<Extract<StructuredStreamParsedItem, { readonly kind: 'directorDecoupageShot' }>>,
   translate: Translate,
@@ -365,7 +381,6 @@ function buildEditScriptOverlay(
 
 function buildDirectorOverlay(
   snapshots: readonly StructuredStreamSnapshot[],
-  episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasFlowNode | null {
   const shotItems = itemsOfKind(snapshots, 'directorDecoupage.shots', 'directorDecoupageShot')
@@ -373,15 +388,17 @@ function buildDirectorOverlay(
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey === 'directorDecoupage.shots')
     .flatMap((snapshot) => snapshot.items)
+  const screenplayId = findSnapshotTargetId(snapshots, 'directorDecoupage.shots', 'ProjectEditScreenplay')
+  if (!screenplayId) return null
   return createOverlayNode({
-    id: `edit-director-decoupage:stream:${episodeId}`,
+    id: workspaceEditDirectorDecoupageNodeId(screenplayId),
     x: 260,
     y: 430,
     data: {
       kind: 'editDirectorDecoupage',
       layoutNodeType: 'editDirectorDecoupage',
-      targetType: 'episode',
-      targetId: episodeId,
+      targetType: 'editScreenplay',
+      targetId: screenplayId,
       title: translate('nodes.editDirectorDecoupage.title'),
       eyebrow: translate('nodes.editDirectorDecoupage.eyebrow'),
       body: translate('nodes.editDirectorDecoupage.body'),
@@ -405,7 +422,6 @@ function buildDirectorOverlay(
 
 function buildCinematographyOverlay(
   snapshots: readonly StructuredStreamSnapshot[],
-  episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasFlowNode | null {
   const shotItems = itemsOfKind(snapshots, 'cinematography.shots', 'cinematographyShot')
@@ -413,15 +429,17 @@ function buildCinematographyOverlay(
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey === 'cinematography.shots')
     .flatMap((snapshot) => snapshot.items)
+  const editScriptId = findSnapshotTargetId(snapshots, 'cinematography.shots', 'ProjectEditScript')
+  if (!editScriptId) return null
   return createOverlayNode({
-    id: `edit-cinematography-shot-plan:stream:${episodeId}`,
+    id: workspaceEditCinematographyShotPlanNodeId(editScriptId),
     x: 1092,
     y: 430,
     data: {
       kind: 'editCinematographyShotPlan',
       layoutNodeType: 'editCinematographyShotPlan',
-      targetType: 'episode',
-      targetId: episodeId,
+      targetType: 'editScript',
+      targetId: editScriptId,
       title: translate('nodes.editCinematographyShotPlan.title'),
       eyebrow: translate('nodes.editCinematographyShotPlan.eyebrow'),
       body: translate('nodes.editCinematographyShotPlan.pendingBody'),
@@ -567,9 +585,9 @@ function buildOverlayNodes(
   translate: Translate,
 ): readonly WorkspaceCanvasFlowNode[] {
   return [
-    buildDirectorOverlay(snapshots, episodeId, translate),
+    buildDirectorOverlay(snapshots, translate),
     buildEditScriptOverlay(snapshots, episodeId, translate),
-    buildCinematographyOverlay(snapshots, episodeId, translate),
+    buildCinematographyOverlay(snapshots, translate),
     ...buildSpaceConsistencyOverlays(snapshots, translate),
     buildBgmOverlay(snapshots, episodeId, translate),
   ].filter((node): node is WorkspaceCanvasFlowNode => node !== null)
@@ -586,6 +604,12 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
     if (node.data.kind === 'editScript' && node.data.targetType === 'editScript' && node.data.editScriptDetails) {
       finalDataKinds.add('editScript')
     }
+    if (node.data.kind === 'editDirectorDecoupage' && node.data.editPipelineStepDetails && node.data.isRunning !== true) {
+      finalDataKinds.add('editDirectorDecoupage')
+    }
+    if (node.data.kind === 'editCinematographyShotPlan' && node.data.editPipelineStepDetails && node.data.isRunning !== true) {
+      finalDataKinds.add('editCinematographyShotPlan')
+    }
     if (node.data.kind === 'bgmScore' && node.data.bgmScoreDetails?.hasPromptDesign === true && node.data.isRunning !== true) {
       finalDataKinds.add('bgmScore')
     }
@@ -596,6 +620,8 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
 
   const usableOverlays = overlayNodes.filter((node) => {
     if (node.data.kind === 'editScript' && finalDataKinds.has('editScript')) return false
+    if (node.data.kind === 'editDirectorDecoupage' && finalDataKinds.has('editDirectorDecoupage')) return false
+    if (node.data.kind === 'editCinematographyShotPlan' && finalDataKinds.has('editCinematographyShotPlan')) return false
     if (node.data.kind === 'bgmScore' && finalDataKinds.has('bgmScore')) return false
     if (node.data.kind === 'spaceConsistency' && finalDataKinds.has(`spaceConsistency:${node.data.targetId}`)) return false
     return true

@@ -388,12 +388,12 @@ describe('workspace node canvas projection', () => {
       'edit-screenplay:screenplay-1',
       'edit-process:edit-video',
       'edit-script:edit-video',
-      'edit-cinematography-shot-plan:pending:edit-video',
+      'edit-cinematography-shot-plan:edit-script:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-process:edit-video',
       'edit-process:edit-video->edit-script:edit-video',
-      'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
+      'edit-script:edit-video->edit-cinematography-shot-plan:edit-script:edit-video',
     ])
 
     const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
@@ -429,7 +429,7 @@ describe('workspace node canvas projection', () => {
     })
   })
 
-  it('adds a direct edit table action when a ready screenplay has no edit script yet', () => {
+  it('adds a stable director decoupage pending node when a ready screenplay has no edit script yet', () => {
     const editScreenplay = createEditScreenplay()
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
@@ -448,6 +448,18 @@ describe('workspace node canvas projection', () => {
       type: 'generate_edit_director_decoupage',
       screenplayId: 'screenplay-1',
     })
+    const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:screenplay:screenplay-1')
+    expect(directorNode?.data.targetType).toBe('editScreenplay')
+    expect(directorNode?.data.targetId).toBe('screenplay-1')
+    expect(directorNode?.data.statusLabel).toBe('status.pending')
+    expect(directorNode?.data.action).toEqual({
+      type: 'generate_edit_director_decoupage',
+      screenplayId: 'screenplay-1',
+    })
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      source: 'edit-screenplay:screenplay-1',
+      target: 'edit-director-decoupage:screenplay:screenplay-1',
+    }))
   })
 
   it('projects legacy edit screenplay rows without a user prompt', () => {
@@ -492,11 +504,11 @@ describe('workspace node canvas projection', () => {
       translate: t,
     })
 
-    const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:director-ready')
+    const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:screenplay:screenplay-1')
     const processNode = projection.nodes.find((node) => node.id === 'edit-process:edit-after-director')
     expect(directorNode?.data.kind).toBe('editDirectorDecoupage')
     expect(directorNode?.data.layoutNodeType).toBe('editDirectorDecoupage')
-    expect(directorNode?.data.targetType).toBe('editDirectorDecoupage')
+    expect(directorNode?.data.targetType).toBe('editScreenplay')
     expect(directorNode?.data.editPipelineStepDetails?.items[0]).toMatchObject({
       title: 'nodeFields.shotIndex:{"index":1}',
       fields: expect.arrayContaining([
@@ -512,7 +524,7 @@ describe('workspace node canvas projection', () => {
     )
     expect(projection.edges).toContainEqual(expect.objectContaining({
       id: 'edge:director-decoupage-edit-process:edit-after-director',
-      source: 'edit-director-decoupage:director-ready',
+      source: 'edit-director-decoupage:screenplay:screenplay-1',
       target: 'edit-process:edit-after-director',
     }))
   })
@@ -558,13 +570,13 @@ describe('workspace node canvas projection', () => {
       'edit-style-bible:screenplay-1',
       'edit-process:edit-video',
       'edit-script:edit-video',
-      'edit-cinematography-shot-plan:pending:edit-video',
+      'edit-cinematography-shot-plan:edit-script:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-style-bible:screenplay-1',
       'edit-style-bible:screenplay-1->edit-process:edit-video',
       'edit-process:edit-video->edit-script:edit-video',
-      'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
+      'edit-script:edit-video->edit-cinematography-shot-plan:edit-script:edit-video',
     ])
 
     const styleNode = projection.nodes.find((node) => node.id === 'edit-style-bible:screenplay-1')
@@ -1607,7 +1619,7 @@ describe('workspace node canvas projection', () => {
       'edit-process:edit-1',
       'edit-script:edit-1',
       'edit-asset-group:edit-1',
-      'edit-cinematography-shot-plan:pending:edit-1',
+      'edit-cinematography-shot-plan:edit-script:edit-1',
     ])
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-1')
     expect(editNode?.data.kind).toBe('editScript')
@@ -2209,7 +2221,7 @@ describe('workspace node canvas projection', () => {
       editScriptId: 'edit-ready',
     })
     expect(editNode?.data.actionDisabled).toBe(false)
-    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:pending:edit-ready')
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:edit-script:edit-ready')
     expect(cinematographyNode?.data.kind).toBe('editCinematographyShotPlan')
     expect(cinematographyNode?.data.layoutNodeType).toBe('editCinematographyShotPlan')
     expect(cinematographyNode?.data.action).toEqual({
@@ -2220,12 +2232,12 @@ describe('workspace node canvas projection', () => {
     expect(projection.edges).toContainEqual(expect.objectContaining({
       id: 'edge:edit-script-cinematography-shot-plan:edit-ready',
       source: 'edit-script:edit-ready',
-      target: 'edit-cinematography-shot-plan:pending:edit-ready',
+      target: 'edit-cinematography-shot-plan:edit-script:edit-ready',
     }))
     expect(projection.edges).toContainEqual(expect.objectContaining({
       id: 'edge:edit-asset-cinematography-shot-plan:edit-asset-group:edit-ready',
       source: 'edit-asset-group:edit-ready',
-      target: 'edit-cinematography-shot-plan:pending:edit-ready',
+      target: 'edit-cinematography-shot-plan:edit-script:edit-ready',
     }))
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-ready:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-ready')
@@ -2259,7 +2271,7 @@ describe('workspace node canvas projection', () => {
       }),
     })
 
-    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:pending:edit-cinematography-running')
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:edit-script:edit-cinematography-running')
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-cinematography-running')
     expect(cinematographyNode?.data.statusLabel).toBe('status.processing')
     expect(cinematographyNode?.data.isRunning).toBe(true)
@@ -2473,7 +2485,7 @@ describe('workspace node canvas projection', () => {
 
     const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial')
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-spatial')
-    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:cinematography-spatial')
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:edit-script:edit-spatial')
     const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-spatial-1')
     expect(spaceNode?.data.kind).toBe('spaceConsistency')
     expect(spaceNode?.data.previewImageUrl).toBeNull()
@@ -2539,7 +2551,7 @@ describe('workspace node canvas projection', () => {
     })
     expect(projection.edges).toContainEqual(expect.objectContaining({
       id: 'edge:space-consistency-source:storyboard-spatial',
-      source: 'edit-cinematography-shot-plan:cinematography-spatial',
+      source: 'edit-cinematography-shot-plan:edit-script:edit-spatial',
       target: 'space-consistency:storyboard-spatial',
     }))
     expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-shot:storyboard-spatial')).toBe(true)

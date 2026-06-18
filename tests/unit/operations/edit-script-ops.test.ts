@@ -6,6 +6,14 @@ import { createEditScriptOperations } from '@/lib/operations/domains/media/edit-
 import { TASK_TYPE } from '@/lib/task/types'
 
 const serviceMock = vi.hoisted(() => ({
+  resolveEditDirectorDecoupageTaskTarget: vi.fn(async () => ({
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+  })),
+  resolveEditCinematographyShotPlanTaskTarget: vi.fn(async () => ({
+    episodeId: 'episode-1',
+    editScriptId: 'edit-1',
+  })),
   generateProjectEditScreenplay: vi.fn(async () => ({
     id: 'screenplay-1',
     projectId: 'project-1',
@@ -607,24 +615,60 @@ describe('edit-script operations', () => {
     }).success).toBe(true)
   })
 
-  it('passes screenplay id into director decoupage generation', async () => {
+  it('submits director decoupage generation as an async screenplay task', async () => {
     const operations = createEditScriptOperations()
-    const result = await operations.generate_edit_director_decoupage.execute(buildContext(), {
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.generate_edit_director_decoupage.execute(buildContext(createTestWriter(writerEvents)), {
       screenplayId: 'screenplay-1',
       confirmed: true,
     })
 
     expect(result).toEqual(expect.objectContaining({
-      id: 'decoupage-1',
-      shotCount: 2,
+      success: true,
+      async: true,
+      taskId: 'task-edit-script-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
     }))
-    expect(serviceMock.generateProjectEditDirectorDecoupage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(serviceMock.generateProjectEditDirectorDecoupage).not.toHaveBeenCalled()
+    expect(serviceMock.resolveEditDirectorDecoupageTaskTarget).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+    })
+    expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+      operationId: 'generate_edit_director_decoupage',
+      source: 'assistant-panel',
+      confirmed: true,
       locale: 'zh',
-      screenplayId: 'screenplay-1',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+        displayMode: 'detail',
+      }),
+      dedupeKey: 'edit_director_decoupage_generate:project-1:screenplay-1',
     }))
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-task-submitted',
+        data: expect.objectContaining({
+          operationId: 'generate_edit_director_decoupage',
+          taskId: 'task-edit-script-1',
+          taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: 'screenplay-1',
+        }),
+      }),
+    ])
   })
 
   it('submits edit script generation as an async episode task', async () => {
@@ -683,24 +727,60 @@ describe('edit-script operations', () => {
     }))
   })
 
-  it('passes edit script id into cinematography shot plan generation', async () => {
+  it('submits cinematography shot plan generation as an async edit-script task', async () => {
     const operations = createEditScriptOperations()
-    const result = await operations.generate_edit_cinematography_shot_plan.execute(buildContext(), {
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.generate_edit_cinematography_shot_plan.execute(buildContext(createTestWriter(writerEvents)), {
       editScriptId: 'edit-1',
       confirmed: true,
     })
 
     expect(result).toEqual(expect.objectContaining({
-      id: 'cinematography-1',
-      shotCount: 2,
+      success: true,
+      async: true,
+      taskId: 'task-edit-script-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
     }))
-    expect(serviceMock.generateProjectEditCinematographyShotPlan).toHaveBeenCalledWith(expect.objectContaining({
+    expect(serviceMock.generateProjectEditCinematographyShotPlan).not.toHaveBeenCalled()
+    expect(serviceMock.resolveEditCinematographyShotPlanTaskTarget).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+    })
+    expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
+      operationId: 'generate_edit_cinematography_shot_plan',
+      source: 'assistant-panel',
+      confirmed: true,
       locale: 'zh',
-      editScriptId: 'edit-1',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+        displayMode: 'detail',
+      }),
+      dedupeKey: 'edit_cinematography_shot_plan_generate:project-1:edit-1',
     }))
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-task-submitted',
+        data: expect.objectContaining({
+          operationId: 'generate_edit_cinematography_shot_plan',
+          taskId: 'task-edit-script-1',
+          taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+          targetType: 'ProjectEditScript',
+          targetId: 'edit-1',
+        }),
+      }),
+    ])
   })
 
   it('submits storyboard panel generation as an async production task', async () => {

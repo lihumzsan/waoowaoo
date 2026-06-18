@@ -33,6 +33,10 @@ import { handleReferenceToCharacterTask } from './handlers/reference-to-characte
 import { handleShotAITask } from './handlers/shot-ai-tasks'
 import { handleEditScriptGenerateTask } from './handlers/edit-script-generate'
 import {
+  handleEditCinematographyShotPlanGenerateTask,
+  handleEditDirectorDecoupageGenerateTask,
+} from './handlers/edit-script-structured-generate'
+import {
   handleEditScriptStoryboardCameraPlanTask,
   handleEditScriptStoryboardPrepareTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
@@ -669,8 +673,12 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEpisodeSplitTask(job)
     case TASK_TYPE.ANALYZE_GLOBAL:
       return await handleAnalyzeGlobalTask(job)
+    case TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE:
+      return await handleEditDirectorDecoupageGenerateTask(job)
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:
       return await handleEditScriptGenerateTask(job)
+    case TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE:
+      return await handleEditCinematographyShotPlanGenerateTask(job)
     case TASK_TYPE.AI_CREATE_CHARACTER:
     case TASK_TYPE.AI_CREATE_LOCATION:
     case TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER:

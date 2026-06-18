@@ -3,9 +3,9 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import {
-  generateProjectEditDirectorDecoupage,
   readProjectEditDirectorDecoupage,
 } from '@/lib/edit-script/service'
+import { submitProjectEditDirectorDecoupageTask } from '@/lib/edit-script/task-submission'
 import {
   createEditDirectorDecoupageRequestSchema,
   getEditDirectorDecoupageRequestSchema,
@@ -44,14 +44,16 @@ export const POST = apiHandler(async (
   const parsed = createEditDirectorDecoupageRequestSchema.safeParse(body)
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const directorDecoupage = await generateProjectEditDirectorDecoupage({
+  const result = await submitProjectEditDirectorDecoupageTask({
     request,
     projectId,
     episodeId: parsed.data.episodeId,
     userId: authResult.session.user.id,
+    source: 'project-ui',
+    confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
     ...(parsed.data.screenplayId ? { screenplayId: parsed.data.screenplayId } : {}),
   })
 
-  return NextResponse.json({ directorDecoupage })
+  return NextResponse.json(result)
 })

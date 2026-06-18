@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { mergeWorkspaceStructuredStreamOverlayNodes } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamOverlay'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
+import {
+  workspaceEditCinematographyShotPlanNodeId,
+  workspaceEditDirectorDecoupageNodeId,
+} from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 
 function node(id: string, targetType: WorkspaceCanvasFlowNode['data']['targetType']): WorkspaceCanvasFlowNode {
   return {
@@ -46,6 +50,41 @@ function node(id: string, targetType: WorkspaceCanvasFlowNode['data']['targetTyp
   }
 }
 
+function pipelineNode(input: {
+  readonly id: string
+  readonly kind: 'editDirectorDecoupage' | 'editCinematographyShotPlan'
+  readonly targetType: WorkspaceCanvasFlowNode['data']['targetType']
+  readonly targetId: string
+  readonly isRunning: boolean
+}): WorkspaceCanvasFlowNode {
+  return {
+    id: input.id,
+    type: 'workspaceNode',
+    position: { x: 10, y: 20 },
+    data: {
+      nodeId: input.id,
+      kind: input.kind,
+      layoutNodeType: input.kind,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      title: input.id,
+      eyebrow: 'eyebrow',
+      body: 'body',
+      meta: 'meta',
+      statusLabel: input.isRunning ? 'processing' : 'ready',
+      isRunning: input.isRunning,
+      width: 520,
+      height: 360,
+      editPipelineStepDetails: {
+        items: [{
+          title: 'Shot 1',
+          fields: [{ label: 'Field', value: 'Value' }],
+        }],
+      },
+    },
+  }
+}
+
 describe('structured stream overlay merge', () => {
   it('replaces the pending node while preserving its canvas position', () => {
     const base = node('edit-script:pending:episode-1', 'episode')
@@ -72,5 +111,74 @@ describe('structured stream overlay merge', () => {
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
     expect(merged.map((item) => item.id)).toEqual(['edit-script:edit-script-1'])
+  })
+
+  it('drops director decoupage pending overlay after official director decoupage exists', () => {
+    const nodeId = workspaceEditDirectorDecoupageNodeId('screenplay-1')
+    const official = pipelineNode({
+      id: nodeId,
+      kind: 'editDirectorDecoupage',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      isRunning: false,
+    })
+    const overlay = pipelineNode({
+      id: nodeId,
+      kind: 'editDirectorDecoupage',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      isRunning: true,
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged.map((item) => item.id)).toEqual([nodeId])
+  })
+
+  it('drops cinematography pending overlay after official shot plan exists', () => {
+    const nodeId = workspaceEditCinematographyShotPlanNodeId('edit-script-1')
+    const official = pipelineNode({
+      id: nodeId,
+      kind: 'editCinematographyShotPlan',
+      targetType: 'editScript',
+      targetId: 'edit-script-1',
+      isRunning: false,
+    })
+    const overlay = pipelineNode({
+      id: nodeId,
+      kind: 'editCinematographyShotPlan',
+      targetType: 'editScript',
+      targetId: 'edit-script-1',
+      isRunning: true,
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged.map((item) => item.id)).toEqual([nodeId])
+  })
+
+  it('replaces stable director decoupage pending node while preserving position', () => {
+    const nodeId = workspaceEditDirectorDecoupageNodeId('screenplay-1')
+    const base = pipelineNode({
+      id: nodeId,
+      kind: 'editDirectorDecoupage',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      isRunning: true,
+    })
+    const overlay = {
+      ...base,
+      position: { x: 999, y: 999 },
+      data: {
+        ...base.data,
+        title: 'stream director overlay',
+      },
+    }
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([base], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.data.title).toBe('stream director overlay')
+    expect(merged[0]?.position).toEqual({ x: 10, y: 20 })
   })
 })

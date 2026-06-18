@@ -927,6 +927,34 @@ async function resolveReadyEditDirectorDecoupage(input: {
   return decoupage
 }
 
+export async function resolveEditDirectorDecoupageTaskTarget(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly screenplayId?: string
+}): Promise<{ readonly episodeId: string; readonly screenplayId: string }> {
+  const screenplay = await resolveReadyEditScreenplay(input)
+  return {
+    episodeId: screenplay.episodeId,
+    screenplayId: screenplay.id,
+  }
+}
+
+export async function resolveEditCinematographyShotPlanTaskTarget(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScriptId?: string
+}): Promise<{ readonly episodeId: string; readonly editScriptId: string }> {
+  const editScript = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId)
+  if (!editScript) throw new ApiError('NOT_FOUND')
+  if (editScript.status !== 'ready') {
+    throw new Error(`EDIT_SCRIPT_NOT_READY:${editScript.id}`)
+  }
+  return {
+    episodeId: editScript.episodeId,
+    editScriptId: editScript.id,
+  }
+}
+
 async function markEditScriptGenerating(input: {
   readonly projectId: string
   readonly episodeId: string

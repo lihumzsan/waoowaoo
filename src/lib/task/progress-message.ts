@@ -23,7 +23,9 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.CLIPS_BUILD]: 'progress.taskType.clipsBuild',
   [TASK_TYPE.SCREENPLAY_CONVERT]: 'progress.taskType.screenplayConvert',
   [TASK_TYPE.ANALYZE_GLOBAL]: 'progress.taskType.analyzeGlobal',
+  [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE]: 'progress.taskType.editScriptGenerate',
   [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'progress.taskType.editScriptGenerate',
+  [TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE]: 'progress.taskType.editScriptGenerate',
   [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'progress.taskType.aiModifyAppearance',
   [TASK_TYPE.AI_MODIFY_LOCATION]: 'progress.taskType.aiModifyLocation',
   [TASK_TYPE.AI_MODIFY_PROP]: 'progress.taskType.aiModifyProp',
@@ -81,11 +83,17 @@ const STAGE_LABELS: Record<string, string> = {
   llm_proxy_execute: 'progress.stage.llmProxyExecute',
   llm_proxy_persist: 'progress.stage.llmProxyPersist',
   edit_script_prepare: 'progress.stage.editScriptPrepare',
+  edit_director_decoupage_prepare: 'progress.stage.editScriptPrepare',
+  edit_director_decoupage_generate: 'progress.stage.editScriptGenerate',
+  edit_director_decoupage_persist: 'progress.stage.editScriptPersist',
   edit_script_generate: 'progress.stage.editScriptGenerate',
   edit_script_primary: 'progress.stage.editScriptPrimary',
   edit_script_asset_extract: 'progress.stage.editScriptAssetExtract',
   edit_script_video_prompt: 'progress.stage.editScriptVideoPrompt',
   edit_script_persist: 'progress.stage.editScriptPersist',
+  edit_cinematography_shot_plan_prepare: 'progress.stage.editScriptPrepare',
+  edit_cinematography_shot_plan_generate: 'progress.stage.editScriptGenerate',
+  edit_cinematography_shot_plan_persist: 'progress.stage.editScriptPersist',
 }
 
 function asString(value: unknown): string | null {

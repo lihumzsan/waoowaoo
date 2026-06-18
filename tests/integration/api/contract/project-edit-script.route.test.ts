@@ -7,6 +7,16 @@ const authState = vi.hoisted(() => ({
 
 const serviceMock = vi.hoisted(() => ({
   readProjectEditScreenplay: vi.fn(async () => null),
+  readProjectEditDirectorDecoupage: vi.fn(async () => null),
+  readProjectEditCinematographyShotPlan: vi.fn(async () => null),
+  resolveEditDirectorDecoupageTaskTarget: vi.fn(async () => ({
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+  })),
+  resolveEditCinematographyShotPlanTaskTarget: vi.fn(async () => ({
+    episodeId: 'episode-1',
+    editScriptId: 'edit-1',
+  })),
   generateProjectEditScreenplay: vi.fn(async () => ({
     id: 'screenplay-1',
     projectId: 'project-1',
@@ -53,6 +63,22 @@ const serviceMock = vi.hoisted(() => ({
         errorMessage: null,
       },
     ],
+  })),
+  generateProjectEditDirectorDecoupage: vi.fn(async () => ({
+    id: 'director-decoupage-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    status: 'ready',
+    shots: [],
+  })),
+  generateProjectEditCinematographyShotPlan: vi.fn(async () => ({
+    id: 'cinematography-shot-plan-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    editScriptId: 'edit-1',
+    status: 'ready',
+    shots: [],
   })),
   generateProjectEditScriptAssets: vi.fn(async () => ({
     success: true,
@@ -279,6 +305,12 @@ import {
   PATCH as editScreenplayPatch,
   POST as editScreenplayPost,
 } from '@/app/api/projects/[projectId]/edit-script/screenplay/route'
+import {
+  POST as editDirectorDecoupagePost,
+} from '@/app/api/projects/[projectId]/edit-script/director-decoupage/route'
+import {
+  POST as editCinematographyShotPlanPost,
+} from '@/app/api/projects/[projectId]/edit-script/cinematography-shot-plan/route'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   POST as editScriptAssetsGeneratePost,
@@ -413,6 +445,114 @@ describe('project edit script route', () => {
         displayMode: 'detail',
       }),
       dedupeKey: 'edit_script_generate:project-1:episode-1',
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/director-decoupage -> submits async director decoupage task with a stable screenplay target', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script/director-decoupage',
+      method: 'POST',
+      headers: { 'accept-language': 'zh' },
+      body: {
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+      },
+    })
+
+    const response = await editDirectorDecoupagePost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      success: true,
+      async: true,
+      taskId: 'task-edit-script-1',
+      runId: null,
+      status: 'queued',
+      deduped: false,
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+    })
+    expect(serviceMock.generateProjectEditDirectorDecoupage).not.toHaveBeenCalled()
+    expect(serviceMock.resolveEditDirectorDecoupageTaskTarget).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+    })
+    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+      operationId: 'generate_edit_director_decoupage',
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+        displayMode: 'detail',
+      }),
+      dedupeKey: 'edit_director_decoupage_generate:project-1:screenplay-1',
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/cinematography-shot-plan -> submits async cinematography task with a stable edit-script target', async () => {
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script/cinematography-shot-plan',
+      method: 'POST',
+      headers: { 'accept-language': 'zh' },
+      body: {
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+      },
+    })
+
+    const response = await editCinematographyShotPlanPost(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      success: true,
+      async: true,
+      taskId: 'task-edit-script-1',
+      runId: null,
+      status: 'queued',
+      deduped: false,
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+      taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
+    })
+    expect(serviceMock.generateProjectEditCinematographyShotPlan).not.toHaveBeenCalled()
+    expect(serviceMock.resolveEditCinematographyShotPlanTaskTarget).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-1',
+    })
+    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
+      operationId: 'generate_edit_cinematography_shot_plan',
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+        displayMode: 'detail',
+      }),
+      dedupeKey: 'edit_cinematography_shot_plan_generate:project-1:edit-1',
     }))
   })
 

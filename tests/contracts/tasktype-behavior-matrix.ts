@@ -21,6 +21,8 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
     || taskType === 'clips_build'
     || taskType === 'screenplay_convert'
     || taskType === 'analyze_global'
+    || taskType === 'edit_director_decoupage_generate'
+    || taskType === 'edit_cinematography_shot_plan_generate'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
     || taskType === 'ai_modify_shot_prompt'
@@ -41,6 +43,12 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
 }
 
 function resolveApiContractByTaskType(taskType: TaskType): string {
+  if (
+    taskType === 'edit_director_decoupage_generate'
+    || taskType === 'edit_cinematography_shot_plan_generate'
+  ) {
+    return 'tests/integration/api/contract/project-edit-script.route.test.ts'
+  }
   if (
     taskType === 'analyze_novel'
     || taskType === 'clips_build'

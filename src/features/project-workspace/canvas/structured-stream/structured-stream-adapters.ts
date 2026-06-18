@@ -134,7 +134,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'directorDecoupage.shots',
-    taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
+    taskTypes: [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE],
     mode: 'array',
     path: ['shots'],
@@ -148,7 +148,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'cinematography.shots',
-    taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
+    taskTypes: [TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN],
     mode: 'array',
     path: ['shots'],

@@ -1,18 +1,20 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import {
-  generateProjectEditCinematographyShotPlan,
-  generateProjectEditDirectorDecoupage,
   generateProjectEditScreenplay,
   generateProjectEditScriptAssets,
   generateProjectEditStylePreviews,
   reviseProjectEditScreenplay,
 } from '@/lib/edit-script/service'
 import {
+  submitProjectEditCinematographyShotPlanTask,
+  submitProjectEditDirectorDecoupageTask,
+} from '@/lib/edit-script/task-submission'
+import {
   submitEditScriptSpatialBlockingStoryboard,
   submitEditScriptStoryboardPanels,
 } from '@/lib/edit-script/storyboard-consistency/service'
-import type { EditCinematographyShotPlanPayload, EditDirectorDecoupagePayload, EditScriptPayload } from '@/lib/edit-script/types'
+import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { EditStylePreviewGenerationPartData, TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
@@ -210,24 +212,6 @@ const editScriptAssetGenerationOutputSchema = z.object({
   editScript: editScriptSummaryOutputSchema,
 }).passthrough()
 
-const editDirectorDecoupageOutputSchema = z.object({
-  id: z.string().min(1),
-  projectId: z.string().min(1),
-  episodeId: z.string().min(1),
-  screenplayId: z.string().min(1),
-  status: z.string().min(1),
-  shotCount: z.number().int().positive(),
-}).passthrough()
-
-const editCinematographyShotPlanOutputSchema = z.object({
-  id: z.string().min(1),
-  projectId: z.string().min(1),
-  episodeId: z.string().min(1),
-  editScriptId: z.string().min(1),
-  status: z.string().min(1),
-  shotCount: z.number().int().positive(),
-}).passthrough()
-
 const EFFECTS_SYNC_AI_WRITE = {
   writes: true,
   billable: true,
@@ -295,32 +279,28 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
   }
 }
 
-function summarizeDirectorDecoupagePayload(payload: EditDirectorDecoupagePayload) {
-  return {
-    id: payload.id,
-    projectId: payload.projectId,
-    episodeId: payload.episodeId,
-    screenplayId: payload.screenplayId,
-    status: payload.status,
-    shotCount: payload.shots.length,
-  }
-}
-
-function summarizeCinematographyShotPlanPayload(payload: EditCinematographyShotPlanPayload) {
-  return {
-    id: payload.id,
-    projectId: payload.projectId,
-    episodeId: payload.episodeId,
-    editScriptId: payload.editScriptId,
-    status: payload.status,
-    shotCount: payload.shots.length,
-  }
-}
-
 export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft {
   const editScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
       episodeId: z.string().min(1),
+    }).passthrough(),
+  )
+  const editDirectorDecoupageTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+    taskSubmitOperationOutputSchemaBase.extend({
+      episodeId: z.string().min(1),
+      screenplayId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE),
+      targetType: z.literal('ProjectEditScreenplay'),
+      targetId: z.string().min(1),
+    }).passthrough(),
+  )
+  const editCinematographyShotPlanTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+    taskSubmitOperationOutputSchemaBase.extend({
+      episodeId: z.string().min(1),
+      editScriptId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE),
+      targetType: z.literal('ProjectEditScript'),
+      targetId: z.string().min(1),
     }).passthrough(),
   )
 
@@ -497,17 +477,35 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将基于 ready 剧本生成并覆盖本集导演拆镜（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEditDirectorDecoupageInputSchema,
-      outputSchema: editDirectorDecoupageOutputSchema,
-      execute: async (ctx, input: GenerateEditDirectorDecoupageInput) => editDirectorDecoupageOutputSchema.parse(summarizeDirectorDecoupagePayload(
-        await generateProjectEditDirectorDecoupage({
+      outputSchema: editDirectorDecoupageTaskSubmitOutputSchema,
+      execute: async (ctx, input: GenerateEditDirectorDecoupageInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitProjectEditDirectorDecoupageTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
+          source: ctx.source,
+          confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-        }),
-      )),
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_director_decoupage',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: result.screenplayId,
+        })
+
+        return editDirectorDecoupageTaskSubmitOutputSchema.parse(result)
+      },
     }),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
@@ -617,17 +615,35 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将基于剪辑表、导演拆镜、资产和空间档案生成并覆盖本集摄影 shot plan（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEditCinematographyShotPlanInputSchema,
-      outputSchema: editCinematographyShotPlanOutputSchema,
-      execute: async (ctx, input: GenerateEditCinematographyShotPlanInput) => editCinematographyShotPlanOutputSchema.parse(summarizeCinematographyShotPlanPayload(
-        await generateProjectEditCinematographyShotPlan({
+      outputSchema: editCinematographyShotPlanTaskSubmitOutputSchema,
+      execute: async (ctx, input: GenerateEditCinematographyShotPlanInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitProjectEditCinematographyShotPlanTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
+          source: ctx.source,
+          confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
-        }),
-      )),
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_cinematography_shot_plan',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+          targetType: 'ProjectEditScript',
+          targetId: result.editScriptId,
+        })
+
+        return editCinematographyShotPlanTaskSubmitOutputSchema.parse(result)
+      },
     }),
     generate_edit_script_storyboard_spatial_blocking: defineOperation({
       id: 'generate_edit_script_storyboard_spatial_blocking',

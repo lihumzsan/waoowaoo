@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
+import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   findStructuredStreamAdapters,
@@ -44,6 +44,12 @@ describe('structured stream adapters', () => {
   })
 
   it('validates director decoupage shot items', () => {
+    const adapters = findStructuredStreamAdapters({
+      taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE,
+    })
+    expect(adapters.map((adapter) => adapter.key)).toContain('directorDecoupage.shots')
+
     const adapter = adapterByKey('directorDecoupage.shots')
     const item = adapter.parseItem({
       shotNumber: 2,
@@ -65,6 +71,12 @@ describe('structured stream adapters', () => {
   })
 
   it('validates cinematography shot plan items', () => {
+    const adapters = findStructuredStreamAdapters({
+      taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
+    })
+    expect(adapters.map((adapter) => adapter.key)).toContain('cinematography.shots')
+
     const adapter = adapterByKey('cinematography.shots')
     const item = adapter.parseItem({
       shotNumber: 3,

@@ -284,16 +284,18 @@ export function useCreateProjectEditDirectorDecoupage(projectId: string | null) 
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate director decoupage')
       }
-      const data = await response.json() as EditDirectorDecoupageResponse
-      if (!data.directorDecoupage) throw new Error('EDIT_DIRECTOR_DECOUPAGE_RESPONSE_EMPTY')
-      return data.directorDecoupage
+      const data = await response.json() as GenerateEditScriptTaskResponse
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_DIRECTOR_DECOUPAGE_TASK_RESPONSE_EMPTY')
+      return data
     },
-    onSuccess: async (directorDecoupage) => {
+    onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, directorDecoupage.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, directorDecoupage.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
   })
@@ -312,16 +314,18 @@ export function useCreateProjectEditCinematographyShotPlan(projectId: string | n
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate cinematography shot plan')
       }
-      const data = await response.json() as EditCinematographyShotPlanResponse
-      if (!data.cinematographyShotPlan) throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_RESPONSE_EMPTY')
-      return data.cinematographyShotPlan
+      const data = await response.json() as GenerateEditScriptTaskResponse
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_TASK_RESPONSE_EMPTY')
+      return data
     },
-    onSuccess: async (shotPlan) => {
+    onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editCinematographyShotPlan(projectId, shotPlan.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, shotPlan.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editCinematographyShotPlan(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
   })

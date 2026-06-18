@@ -56,6 +56,10 @@ import {
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
 import { alignFinalTimelineNodesToBgmScore, repairWorkspaceNodeOverlaps } from '../layout/workspace-node-auto-layout'
+import {
+  workspaceEditCinematographyShotPlanNodeId,
+  workspaceEditDirectorDecoupageNodeId,
+} from '../workspace-canvas-node-ids'
 
 const DEFAULT_NODE_WIDTH = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width
 const DEFAULT_NODE_HEIGHT = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height
@@ -1176,6 +1180,7 @@ export function buildWorkspaceNodeCanvasProjection({
     sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
   ))
   const hasStoryboardPanels = panelsWithStoryboard.length > 0
+  const directorDecoupageRunning = activeAssistantOperationId === 'generate_edit_director_decoupage'
   const cinematographyShotPlanRunning = activeAssistantOperationId === 'generate_edit_cinematography_shot_plan'
   const spatialBlockingRunning = activeAssistantOperationId === 'generate_edit_script_storyboard_spatial_blocking'
   const storyboardPanelGenerationRunning = activeAssistantOperationId === 'generate_edit_script_storyboard'
@@ -1331,15 +1336,42 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
-  const editDirectorDecoupageNodeId = editDirectorDecoupage ? `edit-director-decoupage:${editDirectorDecoupage.id}` : null
+  const editDirectorDecoupageSourceScreenplayId = editDirectorDecoupage?.screenplayId
+    ?? (editScreenplay?.status === 'ready' ? editScreenplay.id : null)
+  const shouldShowEditDirectorDecoupageNode = Boolean(
+    editDirectorDecoupageSourceScreenplayId
+    && (
+      editDirectorDecoupage
+      || (
+        editScreenplay?.status === 'ready'
+        && !editScript
+        && !editScriptPending
+      )
+    ),
+  )
+  const editDirectorDecoupageNodeId = shouldShowEditDirectorDecoupageNode && editDirectorDecoupageSourceScreenplayId
+    ? workspaceEditDirectorDecoupageNodeId(editDirectorDecoupageSourceScreenplayId)
+    : null
   const editDirectorDecoupageFallbackY = editStyleSourceBottomY !== null
     ? editStyleSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
     : hasStory ? 430 : 180
   const editDirectorSourceBottomY = editDirectorDecoupageNodeId
     ? editDirectorDecoupageFallbackY + EDIT_PIPELINE_STEP_NODE_HEIGHT
     : editStyleSourceBottomY
-  if (editDirectorDecoupage && editDirectorDecoupageNodeId) {
-    const decoupageItems = createDirectorDecoupageItems(editDirectorDecoupage, translate)
+  if (editDirectorDecoupageNodeId && editDirectorDecoupageSourceScreenplayId) {
+    const decoupageItems = editDirectorDecoupage
+      ? createDirectorDecoupageItems(editDirectorDecoupage, translate)
+      : []
+    const decoupageStatusLabel = editDirectorDecoupage
+      ? editDirectorDecoupage.status === 'ready'
+        ? translate('status.ready')
+        : editDirectorDecoupage.status === 'failed'
+          ? translate('status.failed')
+          : translate('status.processing')
+      : directorDecoupageRunning
+        ? translate('status.processing')
+        : translate('status.pending')
+    const canGenerateDirectorDecoupage = !editDirectorDecoupage && editScreenplay?.status === 'ready'
     nodes.push(createNode({
       id: editDirectorDecoupageNodeId,
       fallbackX: STORY_COLUMN_X,
@@ -1350,42 +1382,48 @@ export function buildWorkspaceNodeCanvasProjection({
       data: {
         kind: 'editDirectorDecoupage',
         layoutNodeType: 'editDirectorDecoupage',
-        targetType: 'editDirectorDecoupage',
-        targetId: editDirectorDecoupage.id,
+        targetType: 'editScreenplay',
+        targetId: editDirectorDecoupageSourceScreenplayId,
         title: translate('nodes.editDirectorDecoupage.title'),
         eyebrow: translate('nodes.editDirectorDecoupage.eyebrow'),
-        body: compactText(
-          editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
-          translate('nodes.editDirectorDecoupage.body'),
-        ),
+        body: editDirectorDecoupage
+          ? compactText(
+              editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
+              translate('nodes.editDirectorDecoupage.body'),
+            )
+          : translate('nodes.editDirectorDecoupage.body'),
         meta: translate('nodes.editDirectorDecoupage.meta', {
-          shots: editDirectorDecoupage.shots.length,
-          duration: editDirectorDecoupage.shots.reduce((total, shot) => total + shot.durationSec, 0),
+          shots: editDirectorDecoupage?.shots.length ?? 0,
+          duration: editDirectorDecoupage?.shots.reduce((total, shot) => total + shot.durationSec, 0) ?? 0,
         }),
-        statusLabel: editDirectorDecoupage.status === 'ready' ? translate('status.ready') : translate('status.processing'),
-        isRunning: editDirectorDecoupage.status !== 'ready',
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+        statusLabel: decoupageStatusLabel,
+        isRunning: Boolean(editDirectorDecoupage && editDirectorDecoupage.status !== 'ready') || directorDecoupageRunning,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditDirectorDecoupage(editDirectorDecoupageSourceScreenplayId)),
         width: EDIT_PIPELINE_STEP_NODE_WIDTH,
         height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
         indexLabel: 'D',
         editPipelineStepDetails: {
           items: decoupageItems,
         },
-        actionLabel: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+        actionLabel: editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
           ? translate('actions.generateEditScript')
-          : undefined,
-        action: editDirectorDecoupage.status === 'ready' && !editScript && !editScriptPending
+          : canGenerateDirectorDecoupage && !directorDecoupageRunning
+            ? translate('actions.generateEditDirectorDecoupage')
+            : undefined,
+        action: editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
           ? { type: 'generate_edit_script', screenplayId: editDirectorDecoupage.screenplayId }
-          : undefined,
+          : canGenerateDirectorDecoupage && !directorDecoupageRunning
+            ? { type: 'generate_edit_director_decoupage', screenplayId: editDirectorDecoupageSourceScreenplayId }
+            : undefined,
         onAction,
       },
     }))
     if (editStyleBibleNodeId) {
-      edges.push(createEdge(`edge:edit-style-bible-director-decoupage:${editDirectorDecoupage.id}`, editStyleBibleNodeId, editDirectorDecoupageNodeId))
+      edges.push(createEdge(`edge:edit-style-bible-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, editStyleBibleNodeId, editDirectorDecoupageNodeId))
     } else if (editScreenplayNodeId) {
-      edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupage.id}`, editScreenplayNodeId, editDirectorDecoupageNodeId))
+      edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, editScreenplayNodeId, editDirectorDecoupageNodeId))
     } else if (hasStory) {
-      edges.push(createEdge(`edge:analysis-director-decoupage:${editDirectorDecoupage.id}`, analysisNodeId, editDirectorDecoupageNodeId))
+      edges.push(createEdge(`edge:analysis-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, analysisNodeId, editDirectorDecoupageNodeId))
     }
   }
 
@@ -1641,9 +1679,7 @@ export function buildWorkspaceNodeCanvasProjection({
       const matchingShotPlan = editCinematographyShotPlan?.editScriptId === editScript.id
         ? editCinematographyShotPlan
         : null
-      const nodeId = matchingShotPlan
-        ? `edit-cinematography-shot-plan:${matchingShotPlan.id}`
-        : `edit-cinematography-shot-plan:pending:${editScript.id}`
+      const nodeId = workspaceEditCinematographyShotPlanNodeId(editScript.id)
       const items = matchingShotPlan?.status === 'ready'
         ? createCinematographyShotPlanItems(matchingShotPlan, translate)
         : []
@@ -1675,8 +1711,8 @@ export function buildWorkspaceNodeCanvasProjection({
         data: {
           kind: 'editCinematographyShotPlan',
           layoutNodeType: 'editCinematographyShotPlan',
-          targetType: matchingShotPlan ? 'editCinematographyShotPlan' : 'editScript',
-          targetId: matchingShotPlan?.id ?? editScript.id,
+          targetType: 'editScript',
+          targetId: editScript.id,
           title: translate('nodes.editCinematographyShotPlan.title'),
           eyebrow: translate('nodes.editCinematographyShotPlan.eyebrow'),
           body: matchingShotPlan?.status === 'ready'
@@ -1689,7 +1725,7 @@ export function buildWorkspaceNodeCanvasProjection({
           }),
           statusLabel,
           isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready') || cinematographyShotPlanRunning,
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditCinematographyShotPlan(editScript.id)),
           width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
           height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
           indexLabel: 'C',
