@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
+import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
   editScriptShotSchema,
   editScriptStyleBibleSchema,
