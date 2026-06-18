@@ -77,6 +77,7 @@ export function createProjectAgentUiMessageStream(params: {
   toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
+  onError?: (error: unknown) => Promise<void>
   onCancel?: () => Promise<void>
   onSettled: () => Promise<void>
 }): ReadableStream<ProjectAgentUiChunk> {
@@ -146,7 +147,13 @@ export function createProjectAgentUiMessageStream(params: {
         }
         controller.close()
       } catch (error) {
-        if (!cancelled) controller.error(error)
+        if (!cancelled) {
+          try {
+            await params.onError?.(error)
+          } finally {
+            controller.error(error)
+          }
+        }
       } finally {
         await settleOnce()
       }

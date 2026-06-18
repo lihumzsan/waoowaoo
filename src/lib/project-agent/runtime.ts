@@ -708,6 +708,7 @@ export async function createProjectAgentChatResponse(input: {
       context: runContext,
       toolNotFoundBehavior: 'raise_error',
     })
+    let runStatusFinalized = false
     const stream = createProjectAgentUiMessageStream({
       source: result,
       initialChunks,
@@ -754,6 +755,7 @@ export async function createProjectAgentChatResponse(input: {
             status: 'awaiting_approval',
             stopReason: 'awaiting_approval',
           })
+          runStatusFinalized = true
         }
 
         if (approvalInterruption) {
@@ -780,6 +782,7 @@ export async function createProjectAgentChatResponse(input: {
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
             errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
           })
+          runStatusFinalized = true
           throw completionError
         }
         if (!approvalItem) {
@@ -789,12 +792,14 @@ export async function createProjectAgentChatResponse(input: {
               status: 'awaiting_task',
               stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
             })
+            runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             await safelyUpdateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'awaiting_choice',
               stopReason: 'awaiting_user_choice',
             })
+            runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             await safelyUpdateProjectAgentRunStatus({
               runId: input.run.id,
@@ -803,15 +808,44 @@ export async function createProjectAgentChatResponse(input: {
               errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
               errorMessage: latestStopPart.operationIds.join(','),
             })
+            runStatusFinalized = true
           } else {
             await safelyUpdateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'completed',
               stopReason: 'completed',
             })
+            runStatusFinalized = true
           }
         }
         return chunks
+      },
+      onError: async (error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        projectAgentLogger.error({
+          action: 'assistant.agents.stream.failed',
+          message: 'Project agent UI message stream failed',
+          requestId,
+          projectId: input.projectId,
+          userId: input.userId,
+          details: {
+            runId: input.run.id,
+            episodeId: context.episodeId || null,
+            error: errorMessage,
+            workflowStage: phase.editFirstWorkflow.stage,
+            stopReason: latestStopPart?.reason ?? null,
+            runStatusFinalized,
+          },
+        })
+        if (runStatusFinalized) return
+        await safelyUpdateProjectAgentRunStatus({
+          runId: input.run.id,
+          status: 'failed',
+          stopReason: 'stream_error',
+          errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+          errorMessage,
+        })
+        runStatusFinalized = true
       },
       onCancel: async () => {
         await safelyCancelRunningProjectAgentRun({

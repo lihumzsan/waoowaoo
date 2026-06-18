@@ -4,12 +4,17 @@ import type { UIMessageChunk } from 'ai'
 const streamState = vi.hoisted(() => ({
   chunks: [] as UIMessageChunk[],
   keepOpen: false,
+  error: null as Error | null,
   cancel: vi.fn(),
 }))
 
 vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
   createAiSdkUiMessageStream: vi.fn(() => new ReadableStream<UIMessageChunk>({
     start(controller) {
+      if (streamState.error) {
+        controller.error(streamState.error)
+        return
+      }
       for (const chunk of streamState.chunks) {
         controller.enqueue(chunk)
       }
@@ -37,6 +42,7 @@ describe('createProjectAgentUiMessageStream', () => {
   beforeEach(() => {
     streamState.chunks = []
     streamState.keepOpen = false
+    streamState.error = null
     streamState.cancel.mockClear()
   })
 
@@ -164,6 +170,27 @@ describe('createProjectAgentUiMessageStream', () => {
 
     expect(streamState.cancel).toHaveBeenCalledTimes(1)
     expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onSettled).toHaveBeenCalledTimes(1)
+    expect(beforeFinish).not.toHaveBeenCalled()
+  })
+
+  it('reports source stream errors and settles once', async () => {
+    const sourceError = new Error('STREAM_SOURCE_FAILED')
+    streamState.error = sourceError
+    const beforeFinish = vi.fn(async () => [])
+    const onError = vi.fn(async () => undefined)
+    const onSettled = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish,
+      onError,
+      onSettled,
+    })
+
+    await expect(readChunks(stream)).rejects.toThrow('STREAM_SOURCE_FAILED')
+    expect(onError).toHaveBeenCalledWith(sourceError)
     expect(onSettled).toHaveBeenCalledTimes(1)
     expect(beforeFinish).not.toHaveBeenCalled()
   })

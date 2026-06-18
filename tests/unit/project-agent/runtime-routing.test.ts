@@ -14,6 +14,8 @@ const streamState = vi.hoisted(() => ({
   capturedSystem: '',
   capturedModelSettings: {} as Record<string, unknown>,
   capturedRunInput: null as unknown,
+  capturedResponseStream: null as ReadableStream<unknown> | null,
+  streamError: null as Error | null,
   simulateSecondTurnAfterFirstWorkflowTool: false,
   executedToolNames: [] as string[],
 }))
@@ -24,6 +26,7 @@ const registryState = vi.hoisted(() => ({
 
 const loggerState = vi.hoisted(() => ({
   info: vi.fn(),
+  error: vi.fn(),
 }))
 
 const runState = vi.hoisted(() => ({
@@ -49,10 +52,16 @@ const workflowRefreshState = vi.hoisted(() => ({
 
 vi.mock('ai', async () => {
   const actual = await vi.importActual<typeof import('ai')>('ai')
+  type CreateUIMessageStreamResponseInput = {
+    stream: ReadableStream<unknown>
+  }
   return {
     ...actual,
     safeValidateUIMessages: vi.fn(async ({ messages }) => ({ success: true, data: messages })),
-    createUIMessageStreamResponse: vi.fn(() => new Response('ok', { status: 200 })),
+    createUIMessageStreamResponse: vi.fn((input: CreateUIMessageStreamResponseInput) => {
+      streamState.capturedResponseStream = input.stream
+      return new Response('ok', { status: 200 })
+    }),
   }
 })
 
@@ -61,8 +70,12 @@ vi.mock('@openai/agents-extensions/ai-sdk', () => ({
 }))
 
 vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
-  createAiSdkUiMessageStream: vi.fn(() => new ReadableStream({
+  createAiSdkUiMessageStream: vi.fn(() => new ReadableStream<unknown>({
     start(controller) {
+      if (streamState.streamError) {
+        controller.error(streamState.streamError)
+        return
+      }
       controller.enqueue({ type: 'finish' })
       controller.close()
     },
@@ -246,7 +259,7 @@ vi.mock('@/lib/logging/core', () => ({
   createScopedLogger: vi.fn(() => ({
     info: (...args: unknown[]) => loggerState.info(...args),
     warn: vi.fn(),
-    error: vi.fn(),
+    error: (...args: unknown[]) => loggerState.error(...args),
     debug: vi.fn(),
     event: vi.fn(),
     child: vi.fn(),
@@ -381,6 +394,16 @@ async function flushAsyncWork() {
   await Promise.resolve()
 }
 
+async function drainCapturedResponseStream(): Promise<void> {
+  const stream = streamState.capturedResponseStream
+  if (!stream) throw new Error('TEST_RESPONSE_STREAM_MISSING')
+  const reader = stream.getReader()
+  while (true) {
+    const read = await reader.read()
+    if (read.done) return
+  }
+}
+
 async function runAssistant(params: {
   context?: Record<string, unknown>
   text?: string
@@ -412,9 +435,12 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedSystem = ''
     streamState.capturedModelSettings = {}
     streamState.capturedRunInput = null
+    streamState.capturedResponseStream = null
+    streamState.streamError = null
     streamState.simulateSecondTurnAfterFirstWorkflowTool = false
     streamState.executedToolNames = []
     loggerState.info.mockReset()
+    loggerState.error.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
@@ -644,6 +670,35 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toContain('get_project_phase')
     expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
     expect(streamState.capturedToolNames).toContain('generate_edit_script')
+  })
+
+  it('logs and marks the run failed when the UI stream fails before finish', async () => {
+    streamState.streamError = new Error('BROKEN_STREAM')
+
+    const response = await runAssistant({ text: '生成剧本' })
+
+    expect(response.status).toBe(200)
+    await expect(drainCapturedResponseStream()).rejects.toThrow('BROKEN_STREAM')
+    expect(loggerState.error).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'assistant.agents.stream.failed',
+      requestId: 'req-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      details: expect.objectContaining({
+        runId: 'run-user_turn',
+        episodeId: 'episode-1',
+        error: 'BROKEN_STREAM',
+        workflowStage: 'ready_to_generate_screenplay',
+        runStatusFinalized: false,
+      }),
+    }))
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-user_turn',
+      status: 'failed',
+      stopReason: 'stream_error',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      errorMessage: 'BROKEN_STREAM',
+    }))
   })
 
   it('fails loudly when live workflow refresh fails after a tool mutates state', async () => {
