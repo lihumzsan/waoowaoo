@@ -76,6 +76,20 @@ describe('edit-first workflow state', () => {
     expect(state.allowedOperationIds).toEqual([])
   })
 
+  it('keeps generating when one style preview failed but other candidates are still pending', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'style_preview_generating',
+      stylePreviewCount: 3,
+      failedStylePreviewCount: 1,
+    }))
+
+    expect(state.stage).toBe('style_preview_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(state.nextAction).toBeNull()
+    expect(state.allowedOperationIds).toEqual([])
+  })
+
   it('requires user style choice before director decoupage', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,

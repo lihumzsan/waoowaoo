@@ -27,6 +27,20 @@ export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<v
     return
   }
 
+  if (input.type === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE && input.targetType === 'ProjectEditStylePreview') {
+    await prisma.projectEditStylePreview.updateMany({
+      where: {
+        id: input.targetId,
+        status: { in: ['pending', 'generating'] },
+      },
+      data: {
+        status: 'failed',
+        errorMessage: truncate(input.errorMessage, 2000),
+      },
+    })
+    return
+  }
+
   if (input.type !== TASK_TYPE.VIDEO_GROUP || input.targetType !== 'ProjectVideoGroup') return
 
   await prisma.projectVideoGroup.updateMany({

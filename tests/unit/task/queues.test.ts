@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TaskJobData } from '@/lib/task/types'
 
 const queueInstances: Array<{
   add: ReturnType<typeof vi.fn>
@@ -68,5 +69,44 @@ describe('task queues', () => {
     const queue = queuesModule.getQueueByType('video')
     expect(queue).toBeDefined()
     expect(QueueMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes a terminal job with the same task id before enqueueing replacement work', async () => {
+    const queuesModule = await import('@/lib/task/queues')
+    const taskTypes = await import('@/lib/task/types')
+    const queue = queuesModule.getQueueByType('image')
+    const queueMock = queue as unknown as typeof queueInstances[number]
+    const remove = vi.fn(async () => undefined)
+    const getState = vi.fn(async () => 'failed')
+    queueMock.getJob.mockResolvedValue({ getState, remove })
+
+    const jobData = {
+      taskId: 'task-1',
+      type: taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectEditStylePreview',
+      targetId: 'style-preview-1',
+      payload: { meta: { locale: 'zh' } },
+      billingInfo: null,
+      userId: 'user-1',
+      trace: null,
+    } satisfies TaskJobData
+
+    await queuesModule.addTaskJob(jobData)
+
+    expect(queueMock.getJob).toHaveBeenCalledWith('task-1')
+    expect(getState).toHaveBeenCalled()
+    expect(remove).toHaveBeenCalled()
+    expect(queueMock.add).toHaveBeenCalledWith(
+      taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+      jobData,
+      expect.objectContaining({
+        jobId: 'task-1',
+        priority: 0,
+      }),
+    )
+    expect(remove.mock.invocationCallOrder[0]).toBeLessThan(queueMock.add.mock.invocationCallOrder[0])
   })
 })

@@ -203,7 +203,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.failedStylePreviewCount > 0 && snapshot.confirmedStylePreviewCount === 0 && snapshot.completedStylePreviewCount === 0) {
+  const terminalStylePreviewCount = snapshot.completedStylePreviewCount
+    + snapshot.confirmedStylePreviewCount
+    + snapshot.failedStylePreviewCount
+  const allStylePreviewsFailed = snapshot.stylePreviewCount > 0
+    && snapshot.failedStylePreviewCount === snapshot.stylePreviewCount
+    && terminalStylePreviewCount === snapshot.stylePreviewCount
+
+  if (allStylePreviewsFailed) {
     const nextAction = workflowAction('generate_edit_style_previews', 'Regenerate style previews')
     return state({
       stage: 'failed',

@@ -13,6 +13,9 @@ const prismaMock = vi.hoisted(() => ({
   projectVideoGroup: {
     updateMany: vi.fn(),
   },
+  projectEditStylePreview: {
+    updateMany: vi.fn(),
+  },
 }))
 
 const publisherMock = vi.hoisted(() => ({
@@ -51,6 +54,7 @@ describe('task reconcile target sync', () => {
     ])
     prismaMock.task.updateMany.mockResolvedValue({ count: 1 })
     prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.projectEditStylePreview.updateMany.mockResolvedValue({ count: 1 })
     queueMock.getJob.mockResolvedValue({
       getState: async () => 'failed',
     })
@@ -78,6 +82,48 @@ describe('task reconcile target sync', () => {
         status: 'failed',
         taskId: null,
         errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job already terminated but DB was not updated',
+      },
+    })
+  })
+
+  it('marks edit style preview failed when orphan reconciliation fails its image task', async () => {
+    prismaMock.task.findMany.mockResolvedValue([
+      {
+        id: 'task-style-1',
+        userId: 'user-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'style-preview-1',
+        billingInfo: null,
+        updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+      },
+    ])
+
+    const reconciled = await reconcileActiveTasks()
+
+    expect(reconciled).toEqual(['task-style-1'])
+    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: 'task-style-1',
+        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+      },
+      data: expect.objectContaining({
+        status: TASK_STATUS.FAILED,
+        errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job already terminated but DB was not updated',
+        dedupeKey: null,
+      }),
+    }))
+    expect(prismaMock.projectEditStylePreview.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'style-preview-1',
+        status: { in: ['pending', 'generating'] },
+      },
+      data: {
+        status: 'failed',
         errorMessage: 'Queue job already terminated but DB was not updated',
       },
     })

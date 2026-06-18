@@ -101,11 +101,20 @@ export function getQueueByType(type: QueueType) {
   }
 }
 
+async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, taskId: string) {
+  const existing = await queue.getJob(taskId)
+  if (!existing) return
+  const state = await existing.getState()
+  if (state !== 'completed' && state !== 'failed') return
+  await existing.remove()
+}
+
 export async function addTaskJob(data: TaskJobData, opts?: JobsOptions) {
   const queueType = getQueueTypeByTaskType(data.type)
   const queue = getQueueByType(queueType)
   const priority = typeof opts?.priority === 'number' ? opts.priority : 0
   const attempts = typeof opts?.attempts === 'number' ? opts.attempts : undefined
+  await removeTerminalJobWithSameId(queue, data.taskId)
   return await queue.add(data.type, data, {
     jobId: data.taskId,
     priority,
