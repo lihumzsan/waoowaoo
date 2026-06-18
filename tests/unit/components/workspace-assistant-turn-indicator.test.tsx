@@ -4,12 +4,22 @@ import type { UIMessage } from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
   findLatestAssistantMessageIdAfterLatestUser,
+  hasWorkspaceAssistantVisibleTextAfterLatestUser,
+  resolveWorkspaceAssistantActiveThinkingMessageId,
   shouldShowPendingAssistantTurnPlaceholder,
   WorkspaceAssistantPendingTurnPlaceholder,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 
 function message(id: string, role: UIMessage['role']): Pick<UIMessage, 'id' | 'role'> {
   return { id, role }
+}
+
+function turnMessage(
+  id: string,
+  role: UIMessage['role'],
+  parts: UIMessage['parts'],
+): Pick<UIMessage, 'id' | 'role' | 'parts'> {
+  return { id, role, parts }
 }
 
 describe('workspace assistant turn indicator', () => {
@@ -37,40 +47,109 @@ describe('workspace assistant turn indicator', () => {
 
     expect(activeAssistantMessageId).toBeNull()
     expect(shouldShowPendingAssistantTurnPlaceholder({
-      status: 'streaming',
+      pending: true,
       activeAssistantMessageId,
+      hasVisibleAssistantText: false,
     })).toBe(true)
   })
 
-  it('shows a stable pending assistant placeholder only before the current assistant message exists', () => {
+  it('shows a stable pending assistant placeholder only before the current assistant message exists and before visible text', () => {
     expect(shouldShowPendingAssistantTurnPlaceholder({
-      status: 'submitted',
-      activeAssistantMessageId: null,
-    })).toBe(true)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      status: 'streaming',
-      activeAssistantMessageId: 'assistant-current',
-    })).toBe(false)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      status: 'ready',
-      activeAssistantMessageId: null,
-    })).toBe(false)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      status: 'ready',
-      activeAssistantMessageId: null,
       pending: true,
+      activeAssistantMessageId: null,
+      hasVisibleAssistantText: false,
     })).toBe(true)
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      pending: true,
+      activeAssistantMessageId: 'assistant-current',
+      hasVisibleAssistantText: false,
+    })).toBe(false)
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      pending: false,
+      activeAssistantMessageId: null,
+      hasVisibleAssistantText: false,
+    })).toBe(false)
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      pending: true,
+      activeAssistantMessageId: null,
+      hasVisibleAssistantText: true,
+    })).toBe(false)
 
-    const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder status="submitted" />)
+    const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder />)
     expect(html).toContain('assistant-thinking-minimal')
     expect(html).toContain('flex flex-col gap-3 px-1 py-1')
   })
 
   it('renders the thinking placeholder while a server run remains pending after the chat stream is ready', () => {
-    const html = renderToStaticMarkup(
-      <WorkspaceAssistantPendingTurnPlaceholder status="ready" pending />,
-    )
+    const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder />)
 
     expect(html).toContain('assistant-thinking-minimal')
+  })
+
+  it('keeps the inline thinking target through tool-only assistant updates until visible text starts', () => {
+    const toolOnlyMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
+      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
+      turnMessage('assistant-current', 'assistant', [
+        {
+          type: 'data-agent-run',
+          data: {
+            runId: 'run-1',
+            requestId: 'request-1',
+            status: 'running',
+            controlKind: 'user_turn',
+          },
+        } as never,
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'tool-call-1',
+          state: 'output-available',
+          output: { ok: true },
+        } as never,
+      ]),
+    ]
+
+    const toolOnlyHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(toolOnlyMessages)
+
+    expect(toolOnlyHasText).toBe(false)
+    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: true,
+      hasVisibleAssistantText: toolOnlyHasText,
+      messages: toolOnlyMessages,
+    })).toBe('assistant-current')
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      pending: true,
+      activeAssistantMessageId: 'assistant-current',
+      hasVisibleAssistantText: toolOnlyHasText,
+    })).toBe(false)
+
+    const textStartedMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
+      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
+      turnMessage('assistant-current', 'assistant', [
+        {
+          type: 'data-agent-run',
+          data: {
+            runId: 'run-1',
+            requestId: 'request-1',
+            status: 'running',
+            controlKind: 'user_turn',
+          },
+        } as never,
+        { type: 'text', text: '这里是开场。' },
+      ]),
+    ]
+
+    const textStartedHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(textStartedMessages)
+
+    expect(textStartedHasText).toBe(true)
+    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: true,
+      hasVisibleAssistantText: textStartedHasText,
+      messages: textStartedMessages,
+    })).toBeNull()
+    expect(shouldShowPendingAssistantTurnPlaceholder({
+      pending: true,
+      activeAssistantMessageId: null,
+      hasVisibleAssistantText: textStartedHasText,
+    })).toBe(false)
   })
 })

@@ -12,7 +12,8 @@ import {
   ConfirmationActionCard,
   WorkspaceAssistantActiveRunCard,
   EditStylePreviewGenerationDataCard,
-  findLatestAssistantMessageIdAfterLatestUser,
+  hasWorkspaceAssistantVisibleTextAfterLatestUser,
+  resolveWorkspaceAssistantActiveThinkingMessageId,
   shouldShowPendingAssistantTurnPlaceholder,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantPendingTurnPlaceholder,
@@ -461,14 +462,23 @@ export default function WorkspaceAssistantPanel({
     onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
   })
+  const assistantTurnHasVisibleText = useMemo(
+    () => hasWorkspaceAssistantVisibleTextAfterLatestUser(assistantRuntime.messages),
+    [assistantRuntime.messages],
+  )
+  const assistantTurnPending = assistantRuntime.pending && !assistantRuntime.storageLoading
+  const isAwaitingAssistantText = assistantTurnPending && !assistantTurnHasVisibleText
   const activeThinkingAssistantMessageId = useMemo(() => {
-    if (assistantRuntime.status !== 'streaming') return null
-    return findLatestAssistantMessageIdAfterLatestUser(assistantRuntime.messages)
-  }, [assistantRuntime.messages, assistantRuntime.status])
+    return resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: assistantTurnPending,
+      hasVisibleAssistantText: assistantTurnHasVisibleText,
+      messages: assistantRuntime.messages,
+    })
+  }, [assistantRuntime.messages, assistantTurnHasVisibleText, assistantTurnPending])
   const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
-    status: assistantRuntime.status,
+    pending: isAwaitingAssistantText,
     activeAssistantMessageId: activeThinkingAssistantMessageId,
-    pending: assistantRuntime.pending && !assistantRuntime.storageLoading && !assistantRuntime.pendingOperationId,
+    hasVisibleAssistantText: assistantTurnHasVisibleText,
   })
   const showActiveRunCard = Boolean(
     assistantRuntime.pending
@@ -579,10 +589,7 @@ export default function WorkspaceAssistantPanel({
                       )}
                     </ThreadPrimitive.Messages>
                     {showPendingAssistantTurnPlaceholder ? (
-                      <WorkspaceAssistantPendingTurnPlaceholder
-                        status={assistantRuntime.status}
-                        pending={assistantRuntime.pending && !assistantRuntime.storageLoading && !assistantRuntime.pendingOperationId}
-                      />
+                      <WorkspaceAssistantPendingTurnPlaceholder />
                     ) : null}
                     {showActiveRunCard ? (
                       <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />

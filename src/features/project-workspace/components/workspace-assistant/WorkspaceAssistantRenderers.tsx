@@ -9,7 +9,7 @@ import {
   type ReasoningMessagePartProps,
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
-import type { ChatStatus, UIMessage } from 'ai'
+import type { UIMessage } from 'ai'
 import type { ComponentProps } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -113,14 +113,49 @@ export function findLatestAssistantMessageIdAfterLatestUser(
   return null
 }
 
+export function hasWorkspaceAssistantVisibleTextAfterLatestUser(
+  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
+): boolean {
+  let latestUserMessageIndex = -1
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    if (messages[messageIndex]?.role === 'user') {
+      latestUserMessageIndex = messageIndex
+      break
+    }
+  }
+
+  for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
+    const message = messages[messageIndex]
+    if (!message || message.role !== 'assistant') continue
+    const hasVisibleText = message.parts.some((part) => (
+      isRecord(part)
+        && part.type === 'text'
+        && typeof part.text === 'string'
+        && part.text.trim().length > 0
+    ))
+    if (hasVisibleText) return true
+  }
+
+  return false
+}
+
+export function resolveWorkspaceAssistantActiveThinkingMessageId(params: {
+  readonly pending: boolean
+  readonly hasVisibleAssistantText: boolean
+  readonly messages: readonly Pick<UIMessage, 'id' | 'role'>[]
+}): string | null {
+  if (!params.pending || params.hasVisibleAssistantText) return null
+  return findLatestAssistantMessageIdAfterLatestUser(params.messages)
+}
+
 export function shouldShowPendingAssistantTurnPlaceholder(params: {
-  readonly status: ChatStatus
+  readonly pending: boolean
   readonly activeAssistantMessageId: string | null
-  readonly pending?: boolean
+  readonly hasVisibleAssistantText: boolean
 }): boolean {
-  return params.status === 'submitted'
-    || (params.status === 'streaming' && !params.activeAssistantMessageId)
-    || (params.pending === true && params.status !== 'streaming')
+  return params.pending
+    && !params.activeAssistantMessageId
+    && !params.hasVisibleAssistantText
 }
 
 export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {
@@ -1277,14 +1312,11 @@ export function WorkspaceAssistantThreadMessage(props: {
   )
 }
 
-export function WorkspaceAssistantPendingTurnPlaceholder(props: {
-  status: ChatStatus
-  pending?: boolean
-}) {
+export function WorkspaceAssistantPendingTurnPlaceholder() {
   return (
     <div className="space-y-1">
       <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-        <WorkspaceAssistantThinkingIndicator status={props.pending ? 'streaming' : props.status} />
+        <WorkspaceAssistantThinkingIndicator status="streaming" />
       </div>
     </div>
   )
