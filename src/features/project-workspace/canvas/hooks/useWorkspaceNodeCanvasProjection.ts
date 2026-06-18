@@ -1158,6 +1158,7 @@ export function buildWorkspaceNodeCanvasProjection({
   ))
   const hasStoryboardPanels = panelsWithStoryboard.length > 0
   const directorDecoupageRunning = activeAssistantOperationId === 'generate_edit_director_decoupage'
+  const editScreenplayPending = activeAssistantOperationId === 'generate_edit_screenplay' && !editScreenplay
   const cinematographyShotPlanRunning = activeAssistantOperationId === 'generate_edit_cinematography_shot_plan'
   const spatialBlockingRunning = activeAssistantOperationId === 'generate_edit_script_storyboard_spatial_blocking'
   const storyboardPanelGenerationRunning = activeAssistantOperationId === 'generate_edit_script_storyboard'
@@ -1252,6 +1253,36 @@ export function buildWorkspaceNodeCanvasProjection({
     }))
     if (hasStory) {
       edges.push(createEdge(`edge:analysis-edit-screenplay:${editScreenplay.id}`, analysisNodeId, `edit-screenplay:${editScreenplay.id}`))
+    }
+  } else if (editScreenplayPending) {
+    const pendingEditScreenplayNodeId = `edit-screenplay:pending:${episodeId}`
+    nodes.push(createNode({
+      id: pendingEditScreenplayNodeId,
+      fallbackX: STORY_COLUMN_X,
+      fallbackY: editScreenplayFallbackY,
+      zIndex: zIndex++,
+      savedLayoutByKey,
+      ignoreSavedLayout: true,
+      data: {
+        kind: 'editScreenplay',
+        layoutNodeType: 'editScreenplay',
+        targetType: 'episode',
+        targetId: episodeId,
+        title: translate('nodes.editScreenplay.pendingTitle'),
+        eyebrow: translate('nodes.editScreenplay.eyebrow'),
+        body: translate('nodes.editScreenplay.pendingBody'),
+        meta: translate('nodes.editScreenplay.pendingMeta'),
+        statusLabel: translate('status.processing'),
+        isRunning: true,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+        width: EDIT_SCREENPLAY_NODE_WIDTH,
+        height: editScreenplayHeight,
+        indexLabel: 'S',
+        onAction,
+      },
+    }))
+    if (hasStory) {
+      edges.push(createEdge(`edge:analysis-edit-screenplay-pending:${episodeId}`, analysisNodeId, pendingEditScreenplayNodeId))
     }
   }
 

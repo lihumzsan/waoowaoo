@@ -190,32 +190,6 @@
       "focusFollow": {
         "jumpToActive": "查看当前生成"
       },
-      "streamLab": {
-        "eyebrow": "真实数据流式测试",
-        "title": "核心剪辑表生成测试",
-        "backToWorkspace": "返回工作区",
-        "pause": "暂停",
-        "play": "继续",
-        "replay": "重播",
-        "paused": "已暂停",
-        "emptyTitle": "暂无核心剪辑表",
-        "emptyBody": "当前项目剧集没有可用于测试的真实核心剪辑表数据。",
-        "manualFocus": "手动查看",
-        "shotProgress": "{current}/{total} 个镜头",
-        "fieldProgress": "{current}/{total} 个字段",
-        "fieldProgressIdle": "等待字段写入",
-        "effects": {
-          "soft": "柔光",
-          "scan": "扫描",
-          "hologram": "全息",
-          "cascade": "级联"
-        },
-        "groups": {
-          "narrative": "叙事与动作",
-          "sound": "声音与时长",
-          "continuity": "衔接"
-        }
-      },
       "actions": {
         "generateScript": "生成剧本",
         "generateEditDirectorDecoupage": "生成导演拆镜",
@@ -770,7 +744,10 @@
         "editScreenplay": {
           "title": "剧本",
           "eyebrow": "编剧模块",
-          "meta": "作为剪辑先行表的剧情输入"
+          "meta": "作为剪辑先行表的剧情输入",
+          "pendingTitle": "剧本生成中",
+          "pendingBody": "AI 正在根据当前短片需求生成剧本、叙事方向和风格输入。",
+          "pendingMeta": "生成完成后会替换为可编辑剧本"
         },
         "editStylePreview": {
           "eyebrow": "风格候选",

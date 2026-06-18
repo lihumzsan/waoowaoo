@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { ReactFlowInstance } from '@xyflow/react'
-import type {
-  WorkspaceCanvasFlowEdge,
-  WorkspaceCanvasFlowNode,
-} from '../node-canvas-types'
+import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 
 const FOCUS_FOLLOW_DEBOUNCE_MS = 240
 const FOCUS_FIT_PADDING = 0.3
@@ -25,7 +22,7 @@ export interface UseCanvasFocusFollowParams {
   readonly reactFlow: ReactFlowInstance<WorkspaceCanvasFlowNode>
   readonly containerRef: RefObject<HTMLDivElement | null>
   readonly enabled: boolean
-  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+  readonly focusNodeIds: readonly string[]
 }
 
 export interface CanvasFocusFollowResult {
@@ -34,16 +31,82 @@ export interface CanvasFocusFollowResult {
   readonly notifyUserInteraction: () => void
 }
 
-export function getWorkspaceCanvasRunningNodeIds(
-  nodes: readonly WorkspaceCanvasFlowNode[],
-): string[] {
-  return nodes
-    .filter((node) => node.data.isRunning === true)
-    .map((node) => node.id)
-}
-
 export function buildWorkspaceCanvasFocusKey(nodeIds: readonly string[]): string {
   return [...nodeIds].sort().join('|')
+}
+
+type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
+
+const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceCanvasFocusNodeKind[]>> = {
+  generate_edit_screenplay: ['editScreenplay'],
+  revise_edit_screenplay: ['editScreenplay'],
+  generate_edit_style_previews: ['editScreenplay', 'editStyleBible'],
+  generate_edit_director_decoupage: ['editDirectorDecoupage'],
+  generate_edit_script: ['editScript'],
+  generate_edit_script_assets: ['editAssetGroup'],
+  generate_edit_cinematography_shot_plan: ['editCinematographyShotPlan'],
+  generate_edit_script_storyboard_spatial_blocking: ['spaceConsistency'],
+  generate_edit_script_storyboard: ['spaceConsistency'],
+  generate_edit_script_storyboard_images: ['shot'],
+  generate_storyboard_grid_images: ['shot'],
+  generate_episode_videos: ['videoPlan'],
+  generate_episode_videos_auto: ['videoPlan'],
+  generate_panel_video: ['videoPlan'],
+  generate_video_group: ['videoPlan'],
+  generate_episode_bgm_score: ['bgmScore'],
+  generate_project_music: ['bgmScore'],
+  render_final_video: ['finalTimeline'],
+}
+
+const RUNNING_FOCUS_KIND_PRIORITY: readonly WorkspaceCanvasFocusNodeKind[] = [
+  'editScreenplay',
+  'editDirectorDecoupage',
+  'editScript',
+  'editAssetGroup',
+  'editCinematographyShotPlan',
+  'spaceConsistency',
+  'shot',
+  'videoPlan',
+  'bgmScore',
+  'finalTimeline',
+  'editProcessGroup',
+]
+
+function firstNodeIdByKind(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  kinds: readonly WorkspaceCanvasFocusNodeKind[],
+  runningOnly: boolean,
+): string | null {
+  for (const kind of kinds) {
+    const node = nodes.find((candidate) => (
+      candidate.data.kind === kind
+      && (!runningOnly || candidate.data.isRunning === true)
+    ))
+    if (node) return node.id
+  }
+  return null
+}
+
+export function resolveWorkspaceCanvasFocusNodeIds(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  activeAssistantOperationId: string | null | undefined,
+): string[] {
+  const operationKindPriority = activeAssistantOperationId
+    ? OPERATION_FOCUS_KIND_PRIORITY[activeAssistantOperationId]
+    : undefined
+  if (operationKindPriority) {
+    const runningOperationNodeId = firstNodeIdByKind(nodes, operationKindPriority, true)
+    if (runningOperationNodeId) return [runningOperationNodeId]
+
+    const operationNodeId = firstNodeIdByKind(nodes, operationKindPriority, false)
+    return operationNodeId ? [operationNodeId] : []
+  }
+
+  const runningPriorityNodeId = firstNodeIdByKind(nodes, RUNNING_FOCUS_KIND_PRIORITY, true)
+  if (runningPriorityNodeId) return [runningPriorityNodeId]
+
+  const runningNodeId = nodes.find((node) => node.data.isRunning === true)?.id
+  return runningNodeId ? [runningNodeId] : []
 }
 
 export function resolveCanvasFocusFollowDecision({
@@ -58,22 +121,11 @@ export function resolveCanvasFocusFollowDecision({
   return 'focus'
 }
 
-export function applyWorkspaceCanvasRunningEdgeAnimation(
-  edges: readonly WorkspaceCanvasFlowEdge[],
-  runningNodeIds: readonly string[],
-): WorkspaceCanvasFlowEdge[] {
-  const runningNodeIdSet = new Set(runningNodeIds)
-  return edges.map((edge) => ({
-    ...edge,
-    animated: runningNodeIdSet.has(edge.target),
-  }))
-}
-
 export function useCanvasFocusFollow({
   reactFlow,
   containerRef,
   enabled,
-  nodes,
+  focusNodeIds,
 }: UseCanvasFocusFollowParams): CanvasFocusFollowResult {
   const debounceTimerRef = useRef<number | null>(null)
   const focusNodeIdsRef = useRef<readonly string[]>([])
@@ -82,7 +134,6 @@ export function useCanvasFocusFollow({
   const lastFocusedKeyRef = useRef<string | null>(null)
   const [pendingFocusNodeIds, setPendingFocusNodeIds] = useState<readonly string[]>([])
 
-  const focusNodeIds = useMemo(() => getWorkspaceCanvasRunningNodeIds(nodes), [nodes])
   const focusKey = useMemo(() => buildWorkspaceCanvasFocusKey(focusNodeIds), [focusNodeIds])
   focusNodeIdsRef.current = focusNodeIds
   currentFocusKeyRef.current = focusKey
@@ -126,6 +177,8 @@ export function useCanvasFocusFollow({
     }
 
     if (!focusKey) {
+      suppressedFocusKeyRef.current = null
+      lastFocusedKeyRef.current = null
       setPendingFocusNodeIds([])
       return undefined
     }

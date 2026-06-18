@@ -40,8 +40,7 @@ import {
 } from './hooks/useWorkspaceNodeCanvasProjection'
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
 import {
-  applyWorkspaceCanvasRunningEdgeAnimation,
-  getWorkspaceCanvasRunningNodeIds,
+  resolveWorkspaceCanvasFocusNodeIds,
   useCanvasFocusFollow,
 } from './hooks/useCanvasFocusFollow'
 import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
@@ -569,9 +568,9 @@ function ProjectWorkspaceCanvasContent({
     }
   }
   const flowEdges = stableEdgesRef.current.edges
-  const runningNodeIds = useMemo(
-    () => getWorkspaceCanvasRunningNodeIds(sourceNodes),
-    [sourceNodes],
+  const focusNodeIds = useMemo(
+    () => resolveWorkspaceCanvasFocusNodeIds(sourceNodes, activeAssistantOperationId),
+    [activeAssistantOperationId, sourceNodes],
   )
   const {
     pendingFocusNodeIds,
@@ -581,12 +580,8 @@ function ProjectWorkspaceCanvasContent({
     reactFlow,
     containerRef: canvasRef,
     enabled: autoFollowEnabled,
-    nodes: sourceNodes,
+    focusNodeIds,
   })
-  const animatedFlowEdges = useMemo(
-    () => applyWorkspaceCanvasRunningEdgeAnimation(flowEdges, runningNodeIds),
-    [flowEdges, runningNodeIds],
-  )
 
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
@@ -813,7 +808,7 @@ function ProjectWorkspaceCanvasContent({
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
           nodes={sourceNodes}
-          edges={animatedFlowEdges}
+          edges={flowEdges}
           nodeTypes={workspaceNodeTypes}
           onNodesChange={handleNodesChange}
           onNodeClick={handleNodeClick}

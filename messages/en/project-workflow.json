@@ -190,32 +190,6 @@
       "focusFollow": {
         "jumpToActive": "View Current Generation"
       },
-      "streamLab": {
-        "eyebrow": "Real Data Streaming Test",
-        "title": "Core Edit Table Generation Test",
-        "backToWorkspace": "Back to Workspace",
-        "pause": "Pause",
-        "play": "Resume",
-        "replay": "Replay",
-        "paused": "Paused",
-        "emptyTitle": "No Core Edit Table",
-        "emptyBody": "This project episode has no real core edit table data available for the test.",
-        "manualFocus": "Manual View",
-        "shotProgress": "{current}/{total} shots",
-        "fieldProgress": "{current}/{total} fields",
-        "fieldProgressIdle": "Waiting for fields",
-        "effects": {
-          "soft": "Soft",
-          "scan": "Scan",
-          "hologram": "Hologram",
-          "cascade": "Cascade"
-        },
-        "groups": {
-          "narrative": "Narrative And Action",
-          "sound": "Sound And Duration",
-          "continuity": "Continuity"
-        }
-      },
       "actions": {
         "generateScript": "Generate Screenplay",
         "generateEditDirectorDecoupage": "Generate Director Decoupage",
@@ -770,7 +744,10 @@
         "editScreenplay": {
           "title": "Screenplay",
           "eyebrow": "Screenwriting Module",
-          "meta": "Story input for the edit-first table"
+          "meta": "Story input for the edit-first table",
+          "pendingTitle": "Generating Screenplay",
+          "pendingBody": "AI is generating the screenplay, narrative direction, and style input from the current video brief.",
+          "pendingMeta": "This will become an editable screenplay when generation completes"
         },
         "editStylePreview": {
           "eyebrow": "Style Candidate",

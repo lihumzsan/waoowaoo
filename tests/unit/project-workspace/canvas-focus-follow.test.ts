@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyWorkspaceCanvasRunningEdgeAnimation,
   buildWorkspaceCanvasFocusKey,
-  getWorkspaceCanvasRunningNodeIds,
   resolveCanvasFocusFollowDecision,
+  resolveWorkspaceCanvasFocusNodeIds,
 } from '@/features/project-workspace/canvas/hooks/useCanvasFocusFollow'
-import type {
-  WorkspaceCanvasFlowEdge,
-  WorkspaceCanvasFlowNode,
-} from '@/features/project-workspace/canvas/node-canvas-types'
+import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 
-function workspaceNode(id: string, isRunning: boolean): WorkspaceCanvasFlowNode {
+function workspaceNode(
+  id: string,
+  kind: WorkspaceCanvasFlowNode['data']['kind'],
+  isRunning: boolean,
+): WorkspaceCanvasFlowNode {
   return {
     id,
     type: 'workspaceNode',
     position: { x: 0, y: 0 },
     data: {
-      kind: 'shot',
-      layoutNodeType: 'shot',
+      kind,
+      layoutNodeType: kind,
       targetType: 'panel',
       targetId: id,
       title: id,
@@ -33,17 +33,37 @@ function workspaceNode(id: string, isRunning: boolean): WorkspaceCanvasFlowNode 
 }
 
 describe('workspace canvas focus follow', () => {
-  it('uses currently running nodes as the only focus source', () => {
+  it('focuses only the operation primary card instead of every running node', () => {
     const nodes = [
-      workspaceNode('shot:panel-2', true),
-      workspaceNode('shot:panel-1', true),
-      workspaceNode('shot:panel-3', false),
+      workspaceNode('edit-process:script-1', 'editProcessGroup', true),
+      workspaceNode('edit-script:script-1', 'editScript', true),
+      workspaceNode('shot:panel-1', 'shot', true),
     ]
 
-    const runningNodeIds = getWorkspaceCanvasRunningNodeIds(nodes)
+    const focusNodeIds = resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script')
 
-    expect(runningNodeIds).toEqual(['shot:panel-2', 'shot:panel-1'])
-    expect(buildWorkspaceCanvasFocusKey(runningNodeIds)).toBe('shot:panel-1|shot:panel-2')
+    expect(focusNodeIds).toEqual(['edit-script:script-1'])
+    expect(buildWorkspaceCanvasFocusKey(focusNodeIds)).toBe('edit-script:script-1')
+  })
+
+  it('falls back to one prioritized running card when there is no active operation', () => {
+    const nodes = [
+      workspaceNode('edit-process:script-1', 'editProcessGroup', true),
+      workspaceNode('shot:panel-1', 'shot', true),
+      workspaceNode('edit-script:script-1', 'editScript', true),
+    ]
+
+    expect(resolveWorkspaceCanvasFocusNodeIds(nodes, null)).toEqual(['edit-script:script-1'])
+  })
+
+  it('keeps bulk storyboard image generation focused to a single card', () => {
+    const nodes = [
+      workspaceNode('shot:panel-2', 'shot', true),
+      workspaceNode('shot:panel-1', 'shot', true),
+      workspaceNode('shot:panel-3', 'shot', false),
+    ]
+
+    expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script_storyboard_images')).toEqual(['shot:panel-2'])
   })
 
   it('does not refocus the same running group after it has already focused', () => {
@@ -78,19 +98,5 @@ describe('workspace canvas focus follow', () => {
       suppressedFocusKey: null,
       lastFocusedKey: null,
     })).toBe('pending')
-  })
-
-  it('animates only edges that point to running nodes', () => {
-    const edges: WorkspaceCanvasFlowEdge[] = [
-      { id: 'edge:a-b', source: 'a', target: 'b' },
-      { id: 'edge:b-c', source: 'b', target: 'c', animated: true },
-      { id: 'edge:c-d', source: 'c', target: 'd' },
-    ]
-
-    expect(applyWorkspaceCanvasRunningEdgeAnimation(edges, ['b'])).toEqual([
-      { id: 'edge:a-b', source: 'a', target: 'b', animated: true },
-      { id: 'edge:b-c', source: 'b', target: 'c', animated: false },
-      { id: 'edge:c-d', source: 'c', target: 'd', animated: false },
-    ])
   })
 })

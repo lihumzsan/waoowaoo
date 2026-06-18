@@ -207,6 +207,66 @@
   animation: workspaceNodeLightSweep 1.8s cubic-bezier(0.35, 0, 0.2, 1) infinite;
 }
 
+.workspace-node-running-breathing {
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.08),
+    0 0 22px rgba(56, 189, 248, 0.14);
+  animation: workspaceNodeRunningBreath 2.8s ease-in-out infinite;
+}
+
+.workspace-node-running-breathing::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgba(125, 211, 252, 0.58);
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.1),
+    0 0 34px rgba(56, 189, 248, 0.22);
+  opacity: 0.58;
+  pointer-events: none;
+  animation: workspaceNodeRunningHalo 2.8s ease-in-out infinite;
+}
+
+@keyframes workspaceNodeRunningBreath {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 48px rgba(15, 23, 42, 0.08),
+      0 0 18px rgba(56, 189, 248, 0.12);
+  }
+
+  50% {
+    box-shadow:
+      0 22px 58px rgba(15, 23, 42, 0.1),
+      0 0 42px rgba(56, 189, 248, 0.26);
+  }
+}
+
+@keyframes workspaceNodeRunningHalo {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.86;
+    transform: scale(1.006);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-node-running-breathing {
+    animation: none;
+  }
+
+  .workspace-node-running-breathing::after {
+    animation: none;
+    opacity: 0.62;
+  }
+}
+
 @keyframes workspaceNodeStreamSoftEnter {
   0% {
     opacity: 0;
