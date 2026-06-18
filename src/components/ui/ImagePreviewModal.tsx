@@ -47,12 +47,18 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-[var(--glass-overlay)] backdrop-blur-sm"
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       style={{ margin: 0, padding: 0 }}
     >
-      <div className="relative max-w-7xl max-h-[90vh] p-4">
+      <div
+        className="relative max-w-7xl max-h-[90vh] p-4"
+        onClick={(event) => event.stopPropagation()}
+      >
         {/* 关闭按钮 */}
         <button
+          type="button"
           onClick={onClose}
           className="absolute top-6 right-6 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay)] text-white transition-colors"
         >

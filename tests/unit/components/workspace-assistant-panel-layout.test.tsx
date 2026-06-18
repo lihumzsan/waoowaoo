@@ -412,4 +412,23 @@ describe('workspace assistant panel layout', () => {
     expect(zhProgressSource).toContain('"editScriptVideoPrompt"')
     expect(enProgressSource).toContain('"editScriptVideoPrompt"')
   })
+
+  it('keeps style preview image modal state outside the volatile generation card', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+    const rendererSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain('const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)')
+    expect(panelSource).toContain('onPreviewImage: setPreviewImageUrl')
+    expect(panelSource).toContain('onPreviewImage={setPreviewImageUrl}')
+    expect(panelSource).toContain('<ImagePreviewModal imageUrl={previewImageUrl}')
+    expect(rendererSource).toContain('onPreviewImage?: (imageUrl: string) => void')
+    expect(rendererSource).toContain('props.onPreviewImage(imageUrl)')
+    expect(rendererSource).not.toContain('onClick={() => setPreviewImageUrl(preview.imageUrl)}')
+  })
 })

@@ -20,6 +20,7 @@ import {
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { apiFetch } from '@/lib/api-fetch'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantCollapseHandle } from './workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from './workspace-assistant/WorkspaceAssistantPanelRail'
@@ -163,6 +164,7 @@ export default function WorkspaceAssistantPanel({
   } | null>(null)
   const layout = buildWorkspaceAssistantPanelLayout(isCollapsed, assistantPanelWidth)
   const [composerText, setComposerText] = useState('')
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [assistantPermissionMode, setAssistantPermissionModeState] = useState<AssistantPermissionMode>(
     readStoredAssistantPermissionMode,
   )
@@ -457,6 +459,7 @@ export default function WorkspaceAssistantPanel({
     onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
     onStylePreviewSelected: handleStylePreviewSelected,
+    onPreviewImage: setPreviewImageUrl,
   })
   const activeThinkingAssistantMessageId = useMemo(() => {
     if (assistantRuntime.status !== 'streaming') return null
@@ -611,6 +614,7 @@ export default function WorkspaceAssistantPanel({
                         status={{ type: 'complete' }}
                         data={displayedStylePreviewGenerationCard.data}
                         onStyleSelected={handleStylePreviewSelected}
+                        onPreviewImage={setPreviewImageUrl}
                       />
                     ) : null}
                   </div>
@@ -653,6 +657,9 @@ export default function WorkspaceAssistantPanel({
           />
         </div>
       </div>
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
     </aside>
   )
 }

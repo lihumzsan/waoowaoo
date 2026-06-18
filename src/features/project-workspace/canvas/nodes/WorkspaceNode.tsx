@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
@@ -70,6 +71,54 @@ export function videoElementAspectRatio(video: Pick<HTMLVideoElement, 'videoWidt
 }
 
 const SELECTABLE_TEXT_CLASS = 'select-none'
+
+type ImagePreviewHandler = (imageUrl: string) => void
+
+const WorkspaceNodeImagePreviewContext = React.createContext<ImagePreviewHandler | null>(null)
+
+function PreviewableImage({
+  sourceImageUrl,
+  displayImageUrl,
+  alt,
+  buttonClassName,
+  imageClassName,
+  imageStyle,
+}: {
+  readonly sourceImageUrl: string
+  readonly displayImageUrl?: string
+  readonly alt: string
+  readonly buttonClassName: string
+  readonly imageClassName: string
+  readonly imageStyle?: React.CSSProperties
+}) {
+  const onPreviewImage = useContext(WorkspaceNodeImagePreviewContext)
+  const resolvedDisplayImageUrl = displayImageUrl ?? toDisplayImageUrl(sourceImageUrl) ?? sourceImageUrl
+
+  if (!onPreviewImage) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={resolvedDisplayImageUrl} alt={alt} style={imageStyle} className={imageClassName} />
+  }
+
+  return (
+    <button
+      type="button"
+      className={`nodrag nowheel border-0 bg-transparent p-0 ${buttonClassName}`}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        onPreviewImage(sourceImageUrl)
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={resolvedDisplayImageUrl}
+        alt={alt}
+        style={imageStyle}
+        className={imageClassName}
+      />
+    </button>
+  )
+}
 
 function renderSection(title: string, children: ReactNode) {
   return (
@@ -603,11 +652,12 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
     return (
       <div className="space-y-2">
         <div className={`relative overflow-hidden bg-transparent ${running ? 'workspace-node-loading-surface' : ''}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={displayImageUrl}
+          <PreviewableImage
+            sourceImageUrl={data.previewImageUrl ?? displayImageUrl}
+            displayImageUrl={displayImageUrl}
             alt={data.title}
-            className="block h-auto w-full object-contain"
+            buttonClassName="block w-full cursor-zoom-in overflow-hidden"
+            imageClassName="block h-auto w-full object-contain"
           />
         </div>
         {!running && panelId && candidateUrls.length > 0 && canUseCandidateActions ? (
@@ -632,21 +682,13 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
                 const candidateImageUrl = toDisplayImageUrl(url) ?? url
                 return (
                   <div key={url} className="overflow-hidden rounded-[12px] bg-white ring-1 ring-slate-200">
-                    <button
-                      type="button"
-                      className="block w-full"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void dispatchNodeAction(data, { type: 'select_candidate', panelId, imageUrl: url })
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={candidateImageUrl}
-                        alt={labels('candidateImageAlt', { index: index + 1 })}
-                        className="h-24 w-full object-cover"
-                      />
-                    </button>
+                    <PreviewableImage
+                      sourceImageUrl={url}
+                      displayImageUrl={candidateImageUrl}
+                      alt={labels('candidateImageAlt', { index: index + 1 })}
+                      buttonClassName="block w-full cursor-zoom-in overflow-hidden"
+                      imageClassName="h-24 w-full object-cover"
+                    />
                     <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5">
                       <span className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>
                         {labels('candidateImageAlt', { index: index + 1 })}
@@ -692,12 +734,13 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
           className={`${aspectRatio ? mediaClassName : 'h-full w-full object-contain'} bg-black`}
         />
       ) : displayImageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={displayImageUrl}
+        <PreviewableImage
+          sourceImageUrl={data.previewImageUrl ?? displayImageUrl}
+          displayImageUrl={displayImageUrl}
           alt={data.title}
-          style={mediaStyle}
-          className={isEditAsset ? 'h-full w-full object-contain' : mediaClassName}
+          imageStyle={mediaStyle}
+          buttonClassName="flex h-full w-full cursor-zoom-in items-center justify-center overflow-hidden"
+          imageClassName={isEditAsset ? 'h-full w-full object-contain' : mediaClassName}
         />
       ) : isEditAsset ? (
         <div className="flex h-full w-full items-center justify-center text-slate-300">
@@ -745,8 +788,13 @@ function ImageContent({
                 <div className="grid grid-cols-3 gap-1.5">
                   {details.candidateImages.map((url, index) => (
                     <div key={url} className="overflow-hidden rounded-[10px] bg-white ring-1 ring-slate-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={toDisplayImageUrl(url) ?? url} alt={labels('candidateImageAlt', { index: index + 1 })} className="h-12 w-full object-cover" />
+                      <PreviewableImage
+                        sourceImageUrl={url}
+                        displayImageUrl={toDisplayImageUrl(url) ?? url}
+                        alt={labels('candidateImageAlt', { index: index + 1 })}
+                        buttonClassName="block w-full cursor-zoom-in overflow-hidden"
+                        imageClassName="h-12 w-full object-cover"
+                      />
                     </div>
                   ))}
                 </div>
@@ -1410,8 +1458,13 @@ function VideoPlanContent({
                 const displayImageUrl = toDisplayImageUrl(imageUrl) ?? imageUrl
                 return (
                   <div key={key} className="overflow-hidden rounded-[10px] bg-slate-50 ring-1 ring-slate-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={displayImageUrl} alt={alt} className="h-28 w-full object-contain" />
+                    <PreviewableImage
+                      sourceImageUrl={imageUrl}
+                      displayImageUrl={displayImageUrl}
+                      alt={alt}
+                      buttonClassName="block h-28 w-full cursor-zoom-in overflow-hidden"
+                      imageClassName="h-full w-full object-contain"
+                    />
                   </div>
                 )
               })}
@@ -1667,6 +1720,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     nodeShowsMetaFooter(data.kind)
   )
   const runningData = isRunning ? { ...data, __running: true } : data
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!nodeId || !onMeasureNodeSize || !nodeNeedsActualHeightMeasurement(data.kind)) return undefined
@@ -1689,11 +1743,12 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   }, [data.kind, data.expanded, data.isRunning, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
 
   return (
-    <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>
-      <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" />
-      {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
+    <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
+      <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>
+        <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" />
+        {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 
-      <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-300 ring-4 ring-sky-200/80 shadow-[0_22px_70px_rgba(14,165,233,0.18)]' : 'border-slate-200'}`}>
+        <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-300 ring-4 ring-sky-200/80 shadow-[0_22px_70px_rgba(14,165,233,0.18)]' : 'border-slate-200'}`}>
         <div ref={measuredContentRef}>
           <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
             <div className="min-w-0">
@@ -1801,7 +1856,11 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
             ) : null}
           </div>
         </div>
-      </article>
-    </div>
+        </article>
+      </div>
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
+    </WorkspaceNodeImagePreviewContext.Provider>
   )
 }

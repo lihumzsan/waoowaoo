@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { readProjectEditScriptRequestErrorCode } from '@/lib/query/project-edit-script-error'
@@ -170,6 +171,7 @@ export default function VideoBlockArrangementModal({
   const [draftBlocks, setDraftBlocks] = useState<readonly ArrangementBlockDraft[]>(() => buildInitialDraftBlocks(editScript))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     setDraftBlocks(buildInitialDraftBlocks(editScript))
@@ -272,9 +274,7 @@ export default function VideoBlockArrangementModal({
     }
   }, [canSubmit, draftBlocks, onSubmit, t])
 
-  if (typeof document === 'undefined') return null
-
-  return createPortal(
+  const modal = (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 cursor-default" aria-label={t('close')} onClick={onClose} />
       <section className="relative flex h-[min(820px,92vh)] w-[min(1100px,96vw)] flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.28)]">
@@ -341,8 +341,14 @@ export default function VideoBlockArrangementModal({
                         <div key={`${block.id}:${shotNumber}`} className="relative overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
                           <div className="relative aspect-video bg-slate-100">
                             {shot?.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={shot.imageUrl} alt={shot.title} className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                className="h-full w-full cursor-zoom-in border-0 bg-transparent p-0"
+                                onClick={() => setPreviewImageUrl(shot.imageUrl)}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={shot.imageUrl} alt={shot.title} className="h-full w-full object-cover" />
+                              </button>
                             ) : (
                               <div className="flex h-full w-full items-center justify-center px-2 text-center text-xs font-semibold text-slate-400">
                                 {t('shotFallback', { shot: shotNumber })}
@@ -420,7 +426,17 @@ export default function VideoBlockArrangementModal({
           </div>
         </footer>
       </section>
-    </div>,
-    document.body,
+    </div>
+  )
+
+  if (typeof document === 'undefined') return null
+
+  return (
+    <>
+      {createPortal(modal, document.body)}
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
+    </>
   )
 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import type { WorkspaceCanvasEditScriptDetails } from '../node-canvas-types'
@@ -109,6 +110,7 @@ export default function EditScriptPreviewDetail({
   const [elapsedSec, setElapsedSec] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [detailsExpanded, setDetailsExpanded] = useState(initialPreviewDetailsExpanded)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const activeShot = findActiveShot(shots, elapsedSec)
   const activeShotMediaKind = previewShotMediaKind(activeShot)
   const progressPercent = totalDurationSec > 0 ? Math.min(100, Math.max(0, (elapsedSec / totalDurationSec) * 100)) : 0
@@ -192,12 +194,22 @@ export default function EditScriptPreviewDetail({
                         className="h-full w-full object-contain"
                       />
                     ) : activeShotMediaKind === 'image' && activeShot?.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={toDisplayImageUrl(activeShot.imageUrl) ?? activeShot.imageUrl}
-                        alt={t('labels.previewShotAlt', { number: activeShot.shotNumber })}
-                        className="h-full w-full object-contain"
-                      />
+                      <button
+                        type="button"
+                        className="h-full w-full cursor-zoom-in border-0 bg-transparent p-0"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setPreviewImageUrl(activeShot.imageUrl)
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={toDisplayImageUrl(activeShot.imageUrl) ?? activeShot.imageUrl}
+                          alt={t('labels.previewShotAlt', { number: activeShot.shotNumber })}
+                          className="h-full w-full object-contain"
+                        />
+                      </button>
                     ) : activeShotMediaKind === 'text' && activeShot ? (
                       <div className="flex h-full w-full items-center justify-center px-8 text-center">
                         <div className="max-w-2xl space-y-3">
@@ -332,7 +344,14 @@ export default function EditScriptPreviewDetail({
   )
 
   if (typeof document === 'undefined') return null
-  return createPortal(modal, document.body)
+  return (
+    <>
+      {createPortal(modal, document.body)}
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
+    </>
+  )
 }
 
 function PromptBlock({

@@ -285,6 +285,7 @@ describe('workspace node rendering', () => {
     expect(html).toContain('/api/storage/sign?key=images%2Fcharacter-1.jpg')
     expect(html).toContain('object-contain')
     expect(html).toContain('style="height:240px"')
+    expect(html).toContain('cursor-zoom-in')
     expect(html).toContain('aria-label="editPrompt"')
     expect(html).not.toContain('Asset ID')
     expect(html).not.toContain('asset-target-id')
@@ -818,6 +819,7 @@ describe('workspace node rendering', () => {
     expect(html).toContain('candidateImages')
     expect(html).toContain('selectCandidate')
     expect(html).toContain('cancelCandidate')
+    expect(html.match(/cursor-zoom-in/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
   })
 
   it('keeps shot node text non-selectable and removes the redundant large shot title', () => {
@@ -934,10 +936,12 @@ describe('workspace node rendering', () => {
     expect(videoPlanHtml).toContain('videoPlanModelMissing')
     expect(videoPlanHtml).toContain('https://example.com/shot-1.png')
     expect(videoPlanHtml).toContain('https://example.com/shot-2.png')
+    expect(videoPlanHtml.match(/cursor-zoom-in/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(videoPlanHtml).not.toContain('videoPlanPendingVideo')
     expect(videoPlanHtml).not.toContain('linkedShots')
     expect(videoPlanHtml).toContain('grid grid-cols-2')
-    expect(videoPlanHtml).toContain('h-28 w-full object-contain')
+    expect(videoPlanHtml).toContain('block h-28 w-full cursor-zoom-in overflow-hidden')
+    expect(videoPlanHtml).toContain('h-full w-full object-contain')
     expect(videoPlanHtml).not.toContain('overflow-x-auto')
   })
 

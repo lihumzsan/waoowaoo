@@ -736,13 +736,14 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
+  onPreviewImage?: (imageUrl: string) => void
 }) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
   const data: EditStylePreviewGenerationPartData = props.data
   const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [localPreviewImageUrl, setLocalPreviewImageUrl] = useState<string | null>(null)
   const [expandedSummaryIds, setExpandedSummaryIds] = useState<ReadonlySet<string>>(() => new Set())
   const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
     targetType: 'ProjectEditStylePreview',
@@ -826,6 +827,13 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       return next
     })
   }
+  const openPreviewImage = (imageUrl: string) => {
+    if (props.onPreviewImage) {
+      props.onPreviewImage(imageUrl)
+      return
+    }
+    setLocalPreviewImageUrl(imageUrl)
+  }
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
@@ -864,6 +872,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           const selecting = selectingPreviewId === item.id
           const summaryExpanded = expandedSummaryIds.has(item.id)
           const confirmed = preview?.status === 'confirmed'
+          const imageUrl = preview?.imageUrl ?? null
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
           return (
             <div
@@ -874,15 +883,15 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                 <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
                   {item.title}
                 </div>
-                {preview?.imageUrl ? (
+                {imageUrl ? (
                   <button
                     type="button"
                     aria-label={t('cards.stylePreviewOpenPreview')}
                     className="block h-44 w-full cursor-zoom-in overflow-hidden text-left"
-                    onClick={() => setPreviewImageUrl(preview.imageUrl)}
+                    onClick={() => openPreviewImage(imageUrl)}
                   >
                     <Image
-                      src={preview.imageUrl}
+                      src={imageUrl}
                       alt={item.title}
                       width={768}
                       height={432}
@@ -956,8 +965,8 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           )
         })}
       </div>
-      {previewImageUrl ? (
-        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      {localPreviewImageUrl ? (
+        <ImagePreviewModal imageUrl={localPreviewImageUrl} onClose={() => setLocalPreviewImageUrl(null)} />
       ) : null}
     </div>
   )
@@ -1115,6 +1124,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
+  onPreviewImage?: (imageUrl: string) => void
 }
 
 export function useWorkspaceAssistantMessagePartComponents({
@@ -1128,6 +1138,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
   onStylePreviewSelected,
+  onPreviewImage,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
@@ -1164,6 +1175,7 @@ export function useWorkspaceAssistantMessagePartComponents({
               <EditStylePreviewGenerationDataCard
                 {...props}
                 onStyleSelected={onStylePreviewSelected}
+                onPreviewImage={onPreviewImage}
               />
             ),
         'agent-interruption-resolved': HiddenRuntimeContextDataCard,
@@ -1182,6 +1194,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     hideChoiceCards,
     hideStylePreviewGenerationCards,
     onConfirmEditStylePreviewChoice,
+    onPreviewImage,
     onRespondToolApproval,
     onSetProjectVideoRatioChoice,
     onStylePreviewSelected,
