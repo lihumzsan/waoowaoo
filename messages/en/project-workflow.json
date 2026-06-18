@@ -190,6 +190,32 @@
       "focusFollow": {
         "jumpToActive": "View Current Generation"
       },
+      "streamLab": {
+        "eyebrow": "Real Data Streaming Test",
+        "title": "Core Edit Table Generation Test",
+        "backToWorkspace": "Back to Workspace",
+        "pause": "Pause",
+        "play": "Resume",
+        "replay": "Replay",
+        "paused": "Paused",
+        "emptyTitle": "No Core Edit Table",
+        "emptyBody": "This project episode has no real core edit table data available for the test.",
+        "manualFocus": "Manual View",
+        "shotProgress": "{current}/{total} shots",
+        "fieldProgress": "{current}/{total} fields",
+        "fieldProgressIdle": "Waiting for fields",
+        "effects": {
+          "soft": "Soft",
+          "scan": "Scan",
+          "hologram": "Hologram",
+          "cascade": "Cascade"
+        },
+        "groups": {
+          "narrative": "Narrative And Action",
+          "sound": "Sound And Duration",
+          "continuity": "Continuity"
+        }
+      },
       "actions": {
         "generateScript": "Generate Screenplay",
         "generateEditDirectorDecoupage": "Generate Director Decoupage",
@@ -320,6 +346,7 @@
         "originalClip": "Original Clip",
         "scene": "Scene {index}",
         "characters": "Characters",
+        "scenes": "Scenes",
         "locations": "Locations",
         "location": "Location",
         "props": "Props",
@@ -768,6 +795,12 @@
           "pendingBody": "Waiting for the previous step to persist",
           "meta": "{count} new field(s)"
         },
+        "editProcessGroup": {
+          "title": "Generation Process",
+          "eyebrow": "Generation Process",
+          "body": "Intermediate steps the AI uses to build the core edit table; usually no need to review. Expand to trace each step.",
+          "meta": "{count} step(s) completed"
+        },
         "editScript": {
           "eyebrow": "Core Edit Table",
           "meta": "{shots} shots · {duration}s · assets {completed}/{assets}",
@@ -793,6 +826,12 @@
         },
         "editAsset": {
           "meta": "Linked shots: {shots}"
+        },
+        "editAssetGroup": {
+          "title": "Asset Requirements",
+          "eyebrow": "Character / Scene Assets",
+          "body": "Characters and scenes to pre-generate for this video. Click any asset to view details and regenerate it individually.",
+          "meta": "{characters} character(s) · {locations} scene(s)"
         }
       }
     }

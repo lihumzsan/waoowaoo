@@ -1,0 +1,371 @@
+.card {
+  position: relative;
+  isolation: isolate;
+}
+
+.card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+
+.cardSoft::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(56, 189, 248, 0.16), transparent 34%),
+    radial-gradient(circle at 88% 10%, rgba(16, 185, 129, 0.12), transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.98));
+}
+
+.cardScan::before {
+  opacity: 1;
+  background:
+    linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.22), transparent),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 34%, rgba(34, 211, 238, 0.04) 35%, transparent 36%);
+  background-size: 220% 100%, 100% 12px;
+  animation: scanCardGlow 2.9s linear infinite;
+}
+
+.cardHologram::before {
+  opacity: 1;
+  background:
+    linear-gradient(120deg, rgba(99, 102, 241, 0.12), rgba(34, 211, 238, 0.16), rgba(16, 185, 129, 0.1), transparent),
+    repeating-linear-gradient(180deg, transparent 0, transparent 9px, rgba(14, 165, 233, 0.07) 10px);
+  background-size: 240% 100%, 100% 100%;
+  animation: holoSweep 3.4s ease-in-out infinite;
+}
+
+.cardCascade::before {
+  opacity: 1;
+  background:
+    linear-gradient(140deg, rgba(15, 23, 42, 0.04), rgba(56, 189, 248, 0.13), rgba(255, 255, 255, 0.92)),
+    linear-gradient(180deg, transparent, rgba(15, 23, 42, 0.04));
+}
+
+.shotCard {
+  position: relative;
+  animation: shotSoftEnter 540ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity, filter;
+}
+
+.shotCardSoft {
+  animation-name: shotSoftEnter;
+}
+
+.shotCardScan {
+  overflow: hidden;
+  animation-name: shotScanEnter;
+}
+
+.shotCardScan::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.28), transparent);
+  transform: translateX(-120%);
+  animation: scanPass 720ms ease-out 120ms both;
+}
+
+.shotCardHologram {
+  animation-name: shotHologramEnter;
+}
+
+.shotCardCascade {
+  animation-name: shotCascadeEnter;
+}
+
+.activeShot {
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+
+.activeShotTech {
+  box-shadow: 0 18px 48px rgba(14, 165, 233, 0.18), 0 0 0 1px rgba(34, 211, 238, 0.3);
+}
+
+.detailPanel {
+  animation: detailReveal 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity, filter;
+}
+
+.detailPanelScan {
+  animation-name: detailScanReveal;
+}
+
+.detailPanelHologram {
+  animation-name: detailHologramReveal;
+}
+
+.detailPanelCascade {
+  animation-name: detailCascadeReveal;
+}
+
+.fieldCell {
+  animation: fieldFade 360ms ease-out both;
+  will-change: transform, opacity, filter;
+}
+
+.fieldCellSoft {
+  animation-name: fieldFade;
+}
+
+.fieldCellScan {
+  animation-name: fieldScanIn;
+}
+
+.fieldCellHologram {
+  animation-name: fieldHologramIn;
+}
+
+.fieldCellCascade {
+  animation-name: fieldCascadeIn;
+}
+
+.loadingCell {
+  position: relative;
+  overflow: hidden;
+}
+
+.loadingCell::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  transform: translateX(-120%);
+  animation: loadingSweep 1.3s ease-in-out infinite;
+}
+
+.modeButton {
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+.modeButton:hover {
+  transform: translateY(-1px);
+}
+
+.backgroundSoft {
+  background-image:
+    radial-gradient(circle at 18% 16%, rgba(14, 165, 233, 0.14), transparent 30%),
+    linear-gradient(#e2e8f0 1px, transparent 1px),
+    linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+
+.backgroundScan {
+  background-image:
+    linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.22), transparent),
+    linear-gradient(#dbeafe 1px, transparent 1px),
+    linear-gradient(90deg, #dbeafe 1px, transparent 1px);
+  background-size: 260% 100%, 32px 32px, 32px 32px;
+  animation: scanCardGlow 4.6s linear infinite;
+}
+
+.backgroundHologram {
+  background-image:
+    radial-gradient(circle at 82% 12%, rgba(99, 102, 241, 0.18), transparent 30%),
+    radial-gradient(circle at 18% 78%, rgba(20, 184, 166, 0.16), transparent 34%),
+    linear-gradient(#e2e8f0 1px, transparent 1px),
+    linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+}
+
+.backgroundCascade {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.04), rgba(14, 165, 233, 0.12), transparent),
+    linear-gradient(#e2e8f0 1px, transparent 1px),
+    linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+
+@keyframes shotSoftEnter {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shotScanEnter {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    filter: saturate(1.3) brightness(1.08);
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    filter: saturate(1) brightness(1);
+    transform: translateY(0);
+  }
+}
+
+@keyframes shotHologramEnter {
+  0% {
+    opacity: 0;
+    filter: blur(8px) hue-rotate(18deg);
+    transform: translateY(10px) scale(0.97);
+  }
+  55% {
+    opacity: 0.86;
+    filter: blur(1px) hue-rotate(-10deg);
+    transform: translateY(-2px) scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) hue-rotate(0deg);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shotCascadeEnter {
+  from {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translate3d(-10px, 18px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes detailReveal {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(-8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes detailScanReveal {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes detailHologramReveal {
+  0% {
+    opacity: 0;
+    filter: blur(8px) saturate(1.25);
+    transform: perspective(800px) rotateX(-6deg) translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) saturate(1);
+    transform: perspective(800px) rotateX(0deg) translateY(0);
+  }
+}
+
+@keyframes detailCascadeReveal {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes fieldFade {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes fieldScanIn {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes fieldHologramIn {
+  0% {
+    opacity: 0;
+    filter: blur(7px) brightness(1.18);
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) brightness(1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fieldCascadeIn {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(0);
+  }
+}
+
+@keyframes scanPass {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes loadingSweep {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes scanCardGlow {
+  to {
+    background-position: -220% 0, 0 0;
+  }
+}
+
+@keyframes holoSweep {
+  0%,
+  100% {
+    background-position: 0% 0, 0 0;
+  }
+  50% {
+    background-position: 100% 0, 0 0;
+  }
+}

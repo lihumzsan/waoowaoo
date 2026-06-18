@@ -42,9 +42,6 @@ import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS,
-  WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y,
-  WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
@@ -633,12 +630,6 @@ function extractEditScreenplayTitle(screenplayText: string): string {
     .trim()
 }
 
-function estimateEditAssetNodeHeight(asset: ProjectEditAssetRequirement): number {
-  return asset.status === 'pending' || asset.status === 'failed'
-    ? EDIT_ASSET_NODE_HEIGHT + 64
-    : EDIT_ASSET_NODE_HEIGHT
-}
-
 function editScriptShotDurationByNumber(editScript: ProjectEditScript | null | undefined): Map<number, number> {
   const durations = new Map<number, number>()
   editScript?.shots.forEach((shot) => {
@@ -804,19 +795,6 @@ function spatialProfileStrategyOutputFromArtifacts(
     strategy: 'spatial_text_blocking',
     locations,
   }
-}
-
-function selectedLocationImage(
-  locations: readonly Location[],
-  locationId: string | null | undefined,
-): Location['images'][number] | null {
-  if (!locationId) return null
-  const location = locations.find((item) => item.id === locationId)
-  if (!location) return null
-  return location.images.find((image) => image.id === location.selectedImageId)
-    ?? location.images.find((image) => image.isSelected)
-    ?? location.images.find((image) => Boolean(stringValue(image.imageUrl)))
-    ?? null
 }
 
 function cameraPlansFromValue(cameraPlanOutput: unknown): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>['cameraPlans'] {
@@ -1146,7 +1124,6 @@ export function buildWorkspaceNodeCanvasProjection({
   episodeId,
   storyText,
   clips,
-  locations = [],
   storyboards,
   shots = [],
   editScreenplay,

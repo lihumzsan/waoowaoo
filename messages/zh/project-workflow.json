@@ -190,6 +190,32 @@
       "focusFollow": {
         "jumpToActive": "查看当前生成"
       },
+      "streamLab": {
+        "eyebrow": "真实数据流式测试",
+        "title": "核心剪辑表生成测试",
+        "backToWorkspace": "返回工作区",
+        "pause": "暂停",
+        "play": "继续",
+        "replay": "重播",
+        "paused": "已暂停",
+        "emptyTitle": "暂无核心剪辑表",
+        "emptyBody": "当前项目剧集没有可用于测试的真实核心剪辑表数据。",
+        "manualFocus": "手动查看",
+        "shotProgress": "{current}/{total} 个镜头",
+        "fieldProgress": "{current}/{total} 个字段",
+        "fieldProgressIdle": "等待字段写入",
+        "effects": {
+          "soft": "柔光",
+          "scan": "扫描",
+          "hologram": "全息",
+          "cascade": "级联"
+        },
+        "groups": {
+          "narrative": "叙事与动作",
+          "sound": "声音与时长",
+          "continuity": "衔接"
+        }
+      },
       "actions": {
         "generateScript": "生成剧本",
         "generateEditDirectorDecoupage": "生成导演拆镜",
@@ -320,6 +346,7 @@
         "originalClip": "原始片段",
         "scene": "场景 {index}",
         "characters": "出场角色",
+        "scenes": "场景",
         "locations": "场景",
         "location": "场景",
         "props": "道具",
@@ -768,6 +795,12 @@
           "pendingBody": "等待上一步完成后实时写入",
           "meta": "{count} 项新增字段"
         },
+        "editProcessGroup": {
+          "title": "生成过程",
+          "eyebrow": "生成过程",
+          "body": "AI 逐步搭建核心剪辑表的中间步骤，通常无需查看；点击展开可追溯每一步。",
+          "meta": "{count} 步已完成"
+        },
         "editScript": {
           "eyebrow": "核心剪辑表",
           "meta": "{shots} 个镜头 · {duration} 秒 · 资产 {completed}/{assets}",
@@ -793,6 +826,12 @@
         },
         "editAsset": {
           "meta": "关联镜头：{shots}"
+        },
+        "editAssetGroup": {
+          "title": "资产需求",
+          "eyebrow": "角色 / 场景资产",
+          "body": "本片需要预生成的角色与场景资产。点击任一资产可查看详情并单独重新生成。",
+          "meta": "{characters} 个人物 · {locations} 个场景"
         }
       }
     }
