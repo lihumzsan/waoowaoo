@@ -44,6 +44,7 @@ function buildDurationAndAspectRatioChoiceCard(params: {
     cardId: 'edit-first-duration-aspect-ratio',
     toolCallId,
     choiceType: 'duration_and_aspect_ratio',
+    autoSubmitOnReady: true,
     title: isEnglish ? 'Choose Duration and Aspect Ratio' : '选择短片时长和画面比例',
     description: isEnglish
       ? 'Choose both before screenplay generation. The current test launch supports edit-first videos up to 120 seconds.'

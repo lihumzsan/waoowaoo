@@ -77,6 +77,7 @@ describe('edit-first assistant choice cards', () => {
       cardId: 'edit-first-duration-aspect-ratio',
       toolCallId: 'tool-call-1',
       choiceType: 'duration_and_aspect_ratio',
+      autoSubmitOnReady: true,
       title: '选择短片时长和画面比例',
       groups: [
         {

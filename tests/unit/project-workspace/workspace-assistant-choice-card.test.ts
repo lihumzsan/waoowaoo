@@ -4,6 +4,7 @@ import type { ProjectAgentChoiceCardGroup } from '@/lib/project-agent/types'
 import {
   isChoiceCardSubmitReady,
   resolveChoiceCardSelectionLabels,
+  shouldShowChoiceCardManualSubmit,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
 import {
   buildStylePreviewGenerationCardFromScreenplay,
@@ -46,6 +47,12 @@ describe('workspace assistant choice card actions', () => {
       stylePreviewIdLabel: 'A · 硬核写实科幻风格',
       aspectRatioLabel: '16:9',
     })
+  })
+
+  it('hides the manual submit button for auto-submit choice cards', () => {
+    expect(shouldShowChoiceCardManualSubmit({ autoSubmitOnReady: true })).toBe(false)
+    expect(shouldShowChoiceCardManualSubmit({ autoSubmitOnReady: false })).toBe(true)
+    expect(shouldShowChoiceCardManualSubmit({ variant: 'confirm_or_reply' })).toBe(false)
   })
 
   it('keeps the latest style preview generation card active after newer messages', () => {

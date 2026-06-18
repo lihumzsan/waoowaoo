@@ -188,6 +188,7 @@ export interface ProjectAgentChoiceCardPartData {
   toolCallId: string
   choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
   variant?: ProjectAgentChoiceCardVariant
+  autoSubmitOnReady?: boolean
   title: string
   description?: string | null
   groups: ProjectAgentChoiceCardGroup[]

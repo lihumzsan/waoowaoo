@@ -33,6 +33,7 @@ import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   isChoiceCardSubmitReady,
   resolveChoiceCardSelectionLabels,
+  shouldShowChoiceCardManualSubmit,
   type ChoiceCardSelections,
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
@@ -358,6 +359,8 @@ export function AssistantChoiceCardView(props: {
   const [error, setError] = useState<string | null>(null)
   const isConfirmOnly = card.variant === 'confirm'
   const isConfirmOrReply = card.variant === 'confirm_or_reply'
+  const shouldAutoSubmitOnReady = card.autoSubmitOnReady === true
+  const showManualSubmit = shouldShowChoiceCardManualSubmit(card)
   const ready = isChoiceCardSubmitReady(card.groups, selections)
   const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
   const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
@@ -399,12 +402,12 @@ export function AssistantChoiceCardView(props: {
     }
   }
 
-  const handleSubmit = async () => {
-    if (!ready || submitting) return
+  const handleSubmit = async (submitSelections: ChoiceCardSelections = selections) => {
+    if (!isChoiceCardSubmitReady(card.groups, submitSelections) || submitting) return
     setSubmitting(true)
     setError(null)
     try {
-      const labels = resolveChoiceCardSelectionLabels(card.groups, selections)
+      const labels = resolveChoiceCardSelectionLabels(card.groups, submitSelections)
       if (card.submit.kind === 'submit_tool_output') {
         await props.onSubmitChoiceResponse({
           runId: readChoiceRunId(),
@@ -416,14 +419,14 @@ export function AssistantChoiceCardView(props: {
             choiceType: card.choiceType,
             cardId: card.cardId,
             decision: 'approve',
-            selections,
+            selections: submitSelections,
             labels,
           },
         })
         props.onSubmitted?.(card.cardId)
       } else if (card.submit.kind === 'set_project_video_ratio') {
-        const aspectRatio = selections.aspectRatio
-        const durationTier = selections.durationTier
+        const aspectRatio = submitSelections.aspectRatio
+        const durationTier = submitSelections.durationTier
         if (!isEditFirstDurationTier(durationTier)) {
           throw new Error('ASSISTANT_CHOICE_CARD_INVALID_DURATION_TIER')
         }
@@ -445,14 +448,14 @@ export function AssistantChoiceCardView(props: {
             cardId: card.cardId,
             durationTier,
             aspectRatio,
-            selections,
+            selections: submitSelections,
             labels,
           },
         })
         props.onSubmitted?.(card.cardId)
       } else {
-        const stylePreviewId = selections.stylePreviewId
-        const aspectRatio = card.submit.aspectRatio ?? selections.aspectRatio
+        const stylePreviewId = submitSelections.stylePreviewId
+        const aspectRatio = card.submit.aspectRatio ?? submitSelections.aspectRatio
         if (!stylePreviewId || !isEditScriptVideoRatio(aspectRatio)) {
           throw new Error('ASSISTANT_CHOICE_CARD_INVALID_STYLE_SELECTION')
         }
@@ -473,7 +476,7 @@ export function AssistantChoiceCardView(props: {
             cardId: card.cardId,
             stylePreviewId,
             aspectRatio,
-            selections,
+            selections: submitSelections,
             labels,
           },
         })
@@ -571,12 +574,17 @@ export function AssistantChoiceCardView(props: {
                   type="button"
                   className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-[var(--glass-accent-from)] bg-[var(--glass-accent-from)]/5 ring-1 ring-[var(--glass-accent-from)]/30' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
                   onClick={() => {
-                    setSelections((current) => ({
-                      ...current,
+                    const nextSelections = {
+                      ...selections,
                       [activeGroup.key]: option.value,
-                    }))
+                    }
+                    setSelections(nextSelections)
+                    setError(null)
                     if (activeGroupIndex < card.groups.length - 1) {
                       setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
+                    }
+                    if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(card.groups, nextSelections)) {
+                      void handleSubmit(nextSelections)
                     }
                   }}
                   disabled={submitting}
@@ -611,7 +619,7 @@ export function AssistantChoiceCardView(props: {
         </div>
       ) : null}
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
-      {!isConfirmOrReply ? (
+      {showManualSubmit ? (
         <>
           <button
             type="button"

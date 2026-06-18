@@ -1,4 +1,4 @@
-import type { ProjectAgentChoiceCardGroup } from '@/lib/project-agent/types'
+import type { ProjectAgentChoiceCardGroup, ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 
 export type ChoiceCardSelections = Record<string, string>
 
@@ -26,4 +26,10 @@ export function resolveChoiceCardSelectionLabels(
     labels[`${group.key}Label`] = selectedOption.label
   })
   return labels
+}
+
+export function shouldShowChoiceCardManualSubmit(
+  card: Pick<ProjectAgentChoiceCardPartData, 'autoSubmitOnReady' | 'variant'>,
+): boolean {
+  return card.autoSubmitOnReady !== true && card.variant !== 'confirm_or_reply'
 }
