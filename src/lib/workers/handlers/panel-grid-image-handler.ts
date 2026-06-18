@@ -12,6 +12,7 @@ import {
 } from '../utils'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   collectPanelReferenceImageItemsWithDiagnostics,
   normalizeReferenceImageItemsForGeneration,
   parsePanelCharacterReferences,
@@ -415,7 +416,6 @@ export async function handlePanelGridImageTask(
     ? parseStoryboardPromptFieldOmissions(payload.promptFieldOmissions)
     : []
   const projectData = await resolveNovelData(job.data.projectId, job.data.userId)
-  if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
   const modelConfig = await getProjectModels(job.data.projectId, job.data.userId)
   const modelKey = modelConfig.storyboardModel
   if (!modelKey) throw new Error('Storyboard model not configured')
@@ -452,9 +452,13 @@ export async function handlePanelGridImageTask(
   const sourceText = promptFieldOmissions.includes('panel.source_text')
     ? ''
     : panels.map((panel) => panel.srtSegment || panel.description || '').filter(Boolean).join('\n')
+  const imageRuntimeOptions = buildImageProviderRuntimeOptions({
+    generationOptions: payload.generationOptions,
+    context: 'panel_grid_image',
+  })
   const promptBase = buildPanelGridPrompt({
     locale: job.data.locale,
-    aspectRatio: projectData.videoRatio,
+    aspectRatio: imageRuntimeOptions.aspectRatio,
     sourceText,
     contextJson,
     styleText: '',
@@ -498,8 +502,8 @@ export async function handlePanelGridImageTask(
     modelId: modelKey,
     prompt,
     options: {
+      ...imageRuntimeOptions,
       referenceImages: effectiveReferenceImages,
-      aspectRatio: projectData.videoRatio,
     },
     allowTaskExternalIdResume: true,
     pollProgress: { start: 30, end: 78 },

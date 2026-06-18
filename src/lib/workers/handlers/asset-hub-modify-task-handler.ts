@@ -1,6 +1,5 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import {
   assertTaskActive,
@@ -14,6 +13,7 @@ import {
 } from '@/lib/media/outbound-image'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   parseImageUrls,
 } from './image-task-handler-shared'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
@@ -88,13 +88,6 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
   const editModel = userModels.editModel
   if (!editModel) throw new Error('User edit model not configured')
 
-  const generationOptions = payload.generationOptions as Record<string, unknown> | undefined
-  const resolution = typeof generationOptions?.resolution === 'string'
-    ? generationOptions.resolution
-    : undefined
-  const quality = typeof generationOptions?.quality === 'string'
-    ? generationOptions.quality
-    : undefined
   const modifyInstruction = readModifyInstruction(payload.modifyPrompt)
 
   if (payload.type === 'character') {
@@ -137,12 +130,11 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
       userId,
       modelId: editModel,
       prompt,
-      options: {
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: 'global_character_modify',
         referenceImages,
-        aspectRatio: '3:2',
-        ...(resolution ? { resolution } : {}),
-        ...(quality ? { quality } : {}),
-      },
+      }),
     })
 
     const imageKey = await uploadImageSourceToCos(source, 'global-character-modify', appearance.id)
@@ -226,17 +218,15 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     const prompt = isProp
       ? `请根据以下指令修改道具图片，保持道具主体、结构和关键材质一致：\n${modifyInstruction}`
       : `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
-    const aspectRatio = isProp ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     const source = await resolveImageSourceFromGeneration(job, {
       userId,
       modelId: editModel,
       prompt,
-      options: {
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: isProp ? 'global_prop_modify' : 'global_location_modify',
         referenceImages,
-        aspectRatio,
-        ...(resolution ? { resolution } : {}),
-        ...(quality ? { quality } : {}),
-      },
+      }),
     })
 
     const imageKey = await uploadImageSourceToCos(source, isProp ? 'global-prop-modify' : 'global-location-modify', locationImage.id)

@@ -1,6 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, addCharacterPromptSuffix, addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
+import { addCharacterPromptSuffix, addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -26,6 +26,7 @@ import {
 } from '../utils'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   generateCleanImageToStorage,
   parseJsonStringArray,
 } from './image-task-handler-shared'
@@ -173,9 +174,10 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         prompt,
         targetId: `${appearance.id}-${i}`,
         keyPrefix: 'global-character',
-        options: {
-          aspectRatio: CHARACTER_ASSET_IMAGE_RATIO,
-        },
+        options: buildImageProviderRuntimeOptions({
+          generationOptions: payload.generationOptions,
+          context: 'global_character_image',
+        }),
       })
       imageUrls.push(imageKey)
     }
@@ -253,8 +255,6 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         ? addPropPromptSuffix(promptCore)
         : addLocationPromptSuffix(promptCore)
       const prompt = promptWithSuffix
-      const aspectRatio = payload.type === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
-
       const imageKey = await generateCleanImageToStorage({
         job,
         userId,
@@ -262,9 +262,10 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         prompt,
         targetId: image.id,
         keyPrefix: 'global-location',
-        options: {
-          aspectRatio,
-        },
+        options: buildImageProviderRuntimeOptions({
+          generationOptions: payload.generationOptions,
+          context: payload.type === 'prop' ? 'global_prop_image' : 'global_location_image',
+        }),
       })
 
       await assertTaskActive(job, 'persist_global_location_image')

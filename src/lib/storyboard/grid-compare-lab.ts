@@ -9,8 +9,8 @@ import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import {
+  buildImageBillingPayload,
   getProjectModelConfig,
-  resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { locales, type Locale } from '@/i18n/routing'
@@ -235,17 +235,13 @@ async function buildCompareBillingPayload(input: {
     })
   }
   await resolveModelSelection(input.userId, modelConfig.storyboardModel, 'image')
-  const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
+  return buildImageBillingPayload({
     projectId: input.projectId,
     userId: input.userId,
-    modelType: 'image',
-    modelKey: modelConfig.storyboardModel,
-  })
-  return {
-    ...input.body,
     imageModel: modelConfig.storyboardModel,
-    ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
-  }
+    basePayload: input.body,
+    aspectRatio: modelConfig.videoRatio,
+  })
 }
 
 function serialReferenceNote(locale: Locale): string {

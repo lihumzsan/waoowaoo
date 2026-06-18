@@ -14,7 +14,14 @@ import { CHARACTER_CANDIDATE_PROMPT_COUNT } from '@/lib/asset-generation/charact
 import { LOCATION_CANDIDATE_PROMPT_COUNT } from '@/lib/asset-generation/location-candidate-prompts'
 import { hasCharacterAppearanceOutput, hasGlobalCharacterAppearanceOutput, hasGlobalLocationImageOutput, hasGlobalLocationOutput, hasLocationImageOutput } from '@/lib/task/has-output'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
-import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix, removePropPromptSuffix } from '@/lib/constants'
+import {
+  CHARACTER_ASSET_IMAGE_RATIO,
+  LOCATION_IMAGE_RATIO,
+  PRIMARY_APPEARANCE_INDEX,
+  PROP_IMAGE_RATIO,
+  removeLocationPromptSuffix,
+  removePropPromptSuffix,
+} from '@/lib/constants'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { deleteObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
@@ -137,6 +144,19 @@ function normalizeLocationBackedKind(kind: AssetKind): 'character' | 'location' 
   return kind === 'character' ? 'character' : 'location'
 }
 
+function resolveAssetGenerationAspectRatio(kind: AssetKind): string {
+  if (kind === 'character') return CHARACTER_ASSET_IMAGE_RATIO
+  if (kind === 'prop') return PROP_IMAGE_RATIO
+  return LOCATION_IMAGE_RATIO
+}
+
+function resolveAssetModifyAspectRatio(kind: AssetKind): string {
+  if (kind === 'character') return CHARACTER_ASSET_IMAGE_RATIO
+  if (kind === 'prop') return PROP_IMAGE_RATIO
+  if (kind === 'location') return LOCATION_IMAGE_RATIO
+  return CHARACTER_ASSET_IMAGE_RATIO
+}
+
 function requireLocationBackedKind(kind: AssetKind): LocationBackedAssetKind {
   if (kind !== 'location' && kind !== 'prop') {
     throw new ApiError('INVALID_PARAMS')
@@ -248,6 +268,7 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
       userModelConfig,
       imageModel,
       basePayload: payloadBase,
+      aspectRatio: resolveAssetGenerationAspectRatio(input.kind),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -344,6 +365,7 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
       userId: input.access.userId,
       imageModel,
       basePayload: payloadBase,
+      aspectRatio: resolveAssetGenerationAspectRatio(input.kind),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -422,6 +444,7 @@ async function submitGlobalAssetModifyTask(input: AssetModifyInput) {
       userModelConfig,
       imageModel,
       basePayload: payload,
+      aspectRatio: resolveAssetModifyAspectRatio(input.kind),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -494,6 +517,7 @@ async function submitProjectAssetModifyTask(input: AssetModifyInput) {
       userId: input.access.userId,
       imageModel: projectModelConfig.editModel,
       basePayload: payload,
+      aspectRatio: resolveAssetModifyAspectRatio(input.kind),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'

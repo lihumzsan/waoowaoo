@@ -87,7 +87,10 @@ function buildJob(
       episodeId,
       targetType: 'CharacterAppearance',
       targetId,
-      payload,
+      payload: {
+        generationOptions: { aspectRatio: CHARACTER_ASSET_IMAGE_RATIO },
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>

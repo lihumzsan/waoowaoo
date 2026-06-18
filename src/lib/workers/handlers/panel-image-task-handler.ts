@@ -12,6 +12,7 @@ import {
 } from '../utils'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   clampCount,
   collectPanelReferenceImageItemsWithDiagnostics,
   normalizeReferenceImageItemsForGeneration,
@@ -143,8 +144,11 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     },
   })
 
-  if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
-  const aspectRatio = projectData.videoRatio
+  const imageRuntimeOptions = buildImageProviderRuntimeOptions({
+    generationOptions: payload.generationOptions,
+    context: 'panel_image',
+  })
+  const aspectRatio = imageRuntimeOptions.aspectRatio
   const promptContext = buildPanelPromptContext({
     panel: {
       id: panel.id,
@@ -209,8 +213,8 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
       modelId: modelKey,
       prompt,
       options: {
+        ...imageRuntimeOptions,
         referenceImages: effectiveReferenceImages,
-        aspectRatio,
       },
       // 单个任务内会串行生成多候选，若允许按 task.externalId 续接会复用上一候选外部任务结果。
       allowTaskExternalIdResume: candidateCount === 1,

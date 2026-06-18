@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import '@/lib/ai-providers'
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing/task-policy'
-import type { TaskBillingInfo } from '@/lib/task/types'
+import type { TaskBillingInfo, TaskType } from '@/lib/task/types'
 
 function expectBillableInfo(info: TaskBillingInfo | null): Extract<TaskBillingInfo, { billable: true }> {
   expect(info).toBeTruthy()
@@ -14,19 +14,55 @@ function expectBillableInfo(info: TaskBillingInfo | null): Extract<TaskBillingIn
 }
 
 describe('billing/task-policy', () => {
+  const imageTaskTypes = new Set<TaskType>([
+    TASK_TYPE.IMAGE_PANEL,
+    TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+    TASK_TYPE.IMAGE_CHARACTER,
+    TASK_TYPE.IMAGE_LOCATION,
+    TASK_TYPE.MODIFY_ASSET_IMAGE,
+    TASK_TYPE.REGENERATE_GROUP,
+    TASK_TYPE.ASSET_HUB_IMAGE,
+    TASK_TYPE.ASSET_HUB_MODIFY,
+    TASK_TYPE.PANEL_VARIANT,
+  ])
+  const videoTaskTypes = new Set<TaskType>([
+    TASK_TYPE.VIDEO_PANEL,
+    TASK_TYPE.VIDEO_GROUP,
+  ])
   const billingPayload = {
     analysisModel: 'anthropic/claude-sonnet-4',
-    imageModel: 'ark::doubao-seedream-4-5-251128',
+    imageModel: 'fal::gpt-image-2',
     videoModel: 'openrouter::bytedance/seedance-2.0-fast',
     duration: 4,
     resolution: '720p',
+  } as const
+  const imageBillingPayload = {
+    ...billingPayload,
+    generationOptions: {
+      resolution: '1K',
+      aspectRatio: '16:9',
+      quality: 'medium',
+    },
+  } as const
+  const videoBillingPayload = {
+    ...billingPayload,
+    generationOptions: {
+      resolution: '720p',
+      aspectRatio: '16:9',
+      duration: 4,
+    },
   } as const
 
   it('builds TaskBillingInfo for every billable task type', () => {
     for (const taskType of Object.values(TASK_TYPE)) {
       if (!isBillableTaskType(taskType)) continue
       if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.BGM_SCORE_GENERATE) continue
-      const info = expectBillableInfo(buildDefaultTaskBillingInfo(taskType, billingPayload))
+      const payload = imageTaskTypes.has(taskType)
+        ? imageBillingPayload
+        : videoTaskTypes.has(taskType)
+          ? videoBillingPayload
+          : billingPayload
+      const info = expectBillableInfo(buildDefaultTaskBillingInfo(taskType, payload))
       expect(info.taskType).toBe(taskType)
       expect(info.maxFrozenCost).toBeGreaterThanOrEqual(0)
     }
@@ -97,11 +133,32 @@ describe('billing/task-policy', () => {
   it('honors candidateCount/count for image tasks', () => {
     const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {
       candidateCount: 4,
-      imageModel: 'ark::doubao-seedream-4-0-250828',
+      imageModel: 'fal::gpt-image-2',
+      generationOptions: {
+        resolution: '1K',
+        aspectRatio: '16:9',
+        quality: 'medium',
+      },
     }))
     expect(info.apiType).toBe('image')
     expect(info.quantity).toBe(4)
-    expect(info.model).toBe('ark::doubao-seedream-4-0-250828')
+    expect(info.model).toBe('fal::gpt-image-2')
+    expect(info.maxFrozenCost).toBeCloseTo(1.152, 8)
+    expect(info.metadata).toEqual({
+      resolution: '1K',
+      quality: 'medium',
+      aspectRatio: '16:9',
+    })
+  })
+
+  it('does not use top-level image sizing fields as billing metadata', () => {
+    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {
+      candidateCount: 1,
+      imageModel: 'fal::gpt-image-2',
+      resolution: '1K',
+      aspectRatio: '16:9',
+      quality: 'medium',
+    })).toThrow(/BILLING_CAPABILITY_PRICE_NOT_FOUND/)
   })
 
   it('builds video billing info from firstLastFrame.flModel', () => {

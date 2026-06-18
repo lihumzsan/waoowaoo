@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PROP_IMAGE_RATIO } from '@/lib/constants'
+import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData, type TaskType } from '@/lib/task/types'
 
 const utilsMock = vi.hoisted(() => ({
@@ -117,6 +117,15 @@ import { handleModifyAssetImageTask } from '@/lib/workers/handlers/image-task-ha
 import { handleAssetHubModifyTask } from '@/lib/workers/handlers/asset-hub-modify-task-handler'
 
 function buildJob(type: TaskType, payload: Record<string, unknown>): Job<TaskJobData> {
+  const assetType = typeof payload.type === 'string' ? payload.type : 'prop'
+  const aspectRatio = assetType === 'character'
+    ? CHARACTER_ASSET_IMAGE_RATIO
+    : assetType === 'location'
+      ? LOCATION_IMAGE_RATIO
+      : PROP_IMAGE_RATIO
+  const generationOptions = payload.generationOptions && typeof payload.generationOptions === 'object'
+    ? payload.generationOptions
+    : { aspectRatio }
   return {
     data: {
       taskId: 'task-1',
@@ -125,7 +134,10 @@ function buildJob(type: TaskType, payload: Record<string, unknown>): Job<TaskJob
       projectId: 'project-1',
       targetType: 'GlobalCharacter',
       targetId: 'target-1',
-      payload,
+      payload: {
+        generationOptions,
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>
@@ -245,6 +257,7 @@ describe('modify image syncs descriptions after edit', () => {
       expect.objectContaining({
         options: expect.objectContaining({
           referenceImages: ['https://signed/current-image.png', 'https://ref.example/b.png'],
+          aspectRatio: CHARACTER_ASSET_IMAGE_RATIO,
         }),
       }),
     )

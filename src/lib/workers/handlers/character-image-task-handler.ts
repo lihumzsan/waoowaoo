@@ -1,6 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { CHARACTER_ASSET_IMAGE_RATIO, addCharacterPromptSuffix, PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
+import { addCharacterPromptSuffix, PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -26,6 +26,7 @@ import {
 import { markEditAssetRequirementsCompletedForTargets } from '@/lib/edit-script/asset-requirement-status'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   generateCleanImageToStorage,
   parseImageUrls,
   parseJsonStringArray,
@@ -218,15 +219,11 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
       index,
     })
 
-    const options: {
-      referenceImages?: string[]
-      aspectRatio: string
-    } = {
-      aspectRatio: CHARACTER_ASSET_IMAGE_RATIO,
-    }
-    if (primaryReferenceImages.length > 0) {
-      options.referenceImages = primaryReferenceImages
-    }
+    const options = buildImageProviderRuntimeOptions({
+      generationOptions: payload.generationOptions,
+      context: 'character_image',
+      referenceImages: primaryReferenceImages,
+    })
 
     const imageKey = await generateCleanImageToStorage({
       job,

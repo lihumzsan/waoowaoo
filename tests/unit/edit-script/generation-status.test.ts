@@ -94,9 +94,14 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({ analysisModel: 'analysis-model-1', storyboardModel: 'image-model-1' })),
   getUserModelConfig: vi.fn(async () => ({ capabilityDefaults: {} })),
-  buildImageBillingPayloadFromUserConfig: vi.fn((input: { basePayload: Record<string, unknown>; imageModel: string | null }) => ({
+  buildImageBillingPayloadFromUserConfig: vi.fn((input: {
+    basePayload: Record<string, unknown>
+    imageModel: string | null
+    aspectRatio?: string | null
+  }) => ({
     ...input.basePayload,
     imageModel: input.imageModel,
+    ...(input.aspectRatio ? { generationOptions: { aspectRatio: input.aspectRatio } } : {}),
   })),
 }))
 vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
@@ -619,7 +624,9 @@ describe('edit script generation status persistence', () => {
       targetType: 'ProjectEditStylePreview',
       targetId: 'style-preview-style_a',
       payload: expect.objectContaining({
-        aspectRatio: '16:9',
+        generationOptions: {
+          aspectRatio: '16:9',
+        },
       }),
     }))
     expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()

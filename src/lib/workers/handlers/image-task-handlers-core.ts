@@ -1,6 +1,5 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import {
@@ -17,9 +16,9 @@ import {
 } from '@/lib/media/outbound-image'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   parseImageUrls,
   pickFirstString,
-  resolveNovelData,
 } from './image-task-handler-shared'
 import { createScopedLogger } from '@/lib/logging/core'
 import {
@@ -55,15 +54,6 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
   const editModel = projectModels.editModel
   if (!editModel) throw new Error('Edit model not configured')
 
-  // 从 payload.generationOptions 读取图片能力参数（由 route 层 buildImageBillingPayload 注入）
-  // 与老版本 getModelResolution 等价，但数据来源改为 capabilityDefaults/capabilityOverrides 体系
-  const generationOptions = payload.generationOptions as Record<string, unknown> | undefined
-  const resolution = typeof generationOptions?.resolution === 'string'
-    ? generationOptions.resolution
-    : undefined
-  const quality = typeof generationOptions?.quality === 'string'
-    ? generationOptions.quality
-    : undefined
   const modifyInstruction = typeof modifyPrompt === 'string' ? modifyPrompt.trim() : ''
 
   if (type === 'character') {
@@ -105,12 +95,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
       userId: job.data.userId,
       modelId: editModel,
       prompt,
-      options: {
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: 'character_modify',
         referenceImages,
-        aspectRatio: '3:2',
-        ...(resolution ? { resolution } : {}),
-        ...(quality ? { quality } : {}),
-      },
+      }),
     })
 
     const cosKey = await uploadImageSourceToCos(source, 'character-modify', appearance.id)
@@ -210,17 +199,15 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     const prompt = isProp
       ? `请根据以下指令修改道具图片，保持道具主体、结构和关键材质一致：\n${modifyInstruction}`
       : `请根据以下指令修改场景图片，保持整体风格一致：\n${modifyInstruction}`
-    const aspectRatio = isProp ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     const source = await resolveImageSourceFromGeneration(job, {
       userId: job.data.userId,
       modelId: editModel,
       prompt,
-      options: {
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: isProp ? 'prop_modify' : 'location_modify',
         referenceImages,
-        aspectRatio,
-        ...(resolution ? { resolution } : {}),
-        ...(quality ? { quality } : {}),
-      },
+      }),
     })
 
     const cosKey = await uploadImageSourceToCos(source, isProp ? 'prop-modify' : 'location-modify', locationImage.id)
@@ -324,9 +311,6 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     const currentUrl = toSignedUrlIfCos(panel.imageUrl, 3600)
     if (!currentUrl) throw new Error('No storyboard panel image url')
 
-    const projectData = await resolveNovelData(job.data.projectId)
-    if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
-    const aspectRatio = projectData.videoRatio
     const requiredReference = await normalizeToBase64ForGeneration(currentUrl)
     const extraReferenceInputs: string[] = []
 
@@ -358,12 +342,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
       userId: job.data.userId,
       modelId: editModel,
       prompt,
-      options: {
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: 'storyboard_modify_image',
         referenceImages: uniqueReferences,
-        aspectRatio,
-        ...(resolution ? { resolution } : {}),
-        ...(quality ? { quality } : {}),
-      },
+      }),
     })
 
     const cosKey = await uploadImageSourceToCos(source, 'panel-modify', panel.id)

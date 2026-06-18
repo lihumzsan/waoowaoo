@@ -8,6 +8,7 @@ import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type { TaskBillingInfo } from './types'
+import { readImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
 
 type AnyPayload = Record<string, unknown> | null | undefined
 
@@ -109,11 +110,11 @@ function buildImageTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   const model = pickFirstString([payload?.imageModel, payload?.modelId, payload?.model])
   if (!model) return null
   const quantity = Math.max(1, Math.floor(toNumber(payload?.candidateCount ?? payload?.count, 1)))
-  const generationOptions = toRecord(payload?.generationOptions)
-  const resolution = readString(generationOptions.resolution) || readString(payload?.resolution)
-  const quality = readString(generationOptions.quality) || readString(payload?.quality)
-  const size = readString(generationOptions.size) || readString(payload?.size)
-  const aspectRatio = readString(generationOptions.aspectRatio) || readString(payload?.aspectRatio)
+  const generationOptions = readImageRuntimeGenerationOptions(payload?.generationOptions)
+  const resolution = generationOptions.resolution
+  const quality = generationOptions.quality
+  const size = generationOptions.size
+  const aspectRatio = generationOptions.aspectRatio
   const metadata = {
     ...(resolution ? { resolution } : {}),
     ...(quality ? { quality } : {}),

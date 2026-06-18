@@ -94,7 +94,12 @@ function buildJob(
       episodeId,
       targetType: 'LocationImage',
       targetId,
-      payload,
+      payload: {
+        generationOptions: {
+          aspectRatio: payload.type === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO,
+        },
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>

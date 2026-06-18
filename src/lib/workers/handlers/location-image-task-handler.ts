@@ -1,6 +1,6 @@
 import { type Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { LOCATION_IMAGE_RATIO, PROP_IMAGE_RATIO, addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
+import { addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { type TaskJobData } from '@/lib/task/types'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
@@ -18,6 +18,7 @@ import {
 } from '../utils'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   generateCleanImageToStorage,
   pickFirstString,
 } from './image-task-handler-shared'
@@ -205,7 +206,6 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
       usage: 'assetImage',
       locale: job.data.locale,
     })
-    const aspectRatio = assetType === 'prop' ? PROP_IMAGE_RATIO : LOCATION_IMAGE_RATIO
     await reportTaskProgress(job, 20 + Math.floor((i / Math.max(locationImages.length, 1)) * 55), {
       stage: 'generate_location_image',
       imageId: item.id,
@@ -218,9 +218,10 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
       prompt,
       targetId: item.id,
       keyPrefix: 'location',
-      options: {
-        aspectRatio,
-      },
+      options: buildImageProviderRuntimeOptions({
+        generationOptions: payload.generationOptions,
+        context: assetType === 'prop' ? 'prop_image' : 'location_image',
+      }),
     })
 
     await assertTaskActive(job, 'persist_location_image')

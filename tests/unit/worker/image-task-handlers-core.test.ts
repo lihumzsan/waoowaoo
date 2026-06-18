@@ -119,7 +119,7 @@ describe('worker image-task-handlers-core', () => {
       locationImageId: 'location-image-1',
       modifyPrompt: 'add heavy rain',
       extraImageUrls: [' https://example.com/location-ref.png '],
-      generationOptions: { resolution: '1536x1024', quality: 'medium' },
+      generationOptions: { aspectRatio: LOCATION_IMAGE_RATIO, resolution: '1536x1024', quality: 'medium' },
     })
 
     const result = await handleModifyAssetImageTask(job)
@@ -162,7 +162,7 @@ describe('worker image-task-handlers-core', () => {
       type: 'prop',
       locationImageId: 'prop-image-1',
       modifyPrompt: 'make it brushed silver',
-      generationOptions: { resolution: '1536x1024' },
+      generationOptions: { aspectRatio: PROP_IMAGE_RATIO, resolution: '1536x1024' },
     }))
 
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
@@ -191,7 +191,7 @@ describe('worker image-task-handlers-core', () => {
       modifyPrompt: 'cinematic backlight',
       selectedAssets: [{ imageUrl: 'https://example.com/asset-ref.png' }],
       extraImageUrls: ['https://example.com/extra-ref.png'],
-      generationOptions: { resolution: '2048x1152' },
+      generationOptions: { aspectRatio: '16:9', resolution: '2048x1152' },
     })
 
     const result = await handleModifyAssetImageTask(job)

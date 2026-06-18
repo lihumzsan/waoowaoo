@@ -1321,7 +1321,6 @@ async function submitEditStylePreviewImageTask(input: {
     styleKey: input.styleKey,
     prompt: input.imagePrompt,
     count: 1,
-    aspectRatio: EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO,
   }
   let billingPayload: Record<string, unknown>
   try {
@@ -1330,6 +1329,7 @@ async function submitEditStylePreviewImageTask(input: {
       userModelConfig,
       imageModel: input.imageModel,
       basePayload,
+      aspectRatio: EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'

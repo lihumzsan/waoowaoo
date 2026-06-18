@@ -1,6 +1,12 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHARACTER_ASSET_IMAGE_RATIO, CHARACTER_PROMPT_SUFFIX, PROP_IMAGE_RATIO, PROP_PROMPT_SUFFIX } from '@/lib/constants'
+import {
+  CHARACTER_ASSET_IMAGE_RATIO,
+  CHARACTER_PROMPT_SUFFIX,
+  LOCATION_IMAGE_RATIO,
+  PROP_IMAGE_RATIO,
+  PROP_PROMPT_SUFFIX,
+} from '@/lib/constants'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const workersUtilsMock = vi.hoisted(() => ({
@@ -86,6 +92,15 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
 import { handleAssetHubImageTask } from '@/lib/workers/handlers/asset-hub-image-task-handler'
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
+  const imageType = typeof payload.type === 'string' ? payload.type : 'character'
+  const aspectRatio = imageType === 'character'
+    ? CHARACTER_ASSET_IMAGE_RATIO
+    : imageType === 'prop'
+      ? PROP_IMAGE_RATIO
+      : LOCATION_IMAGE_RATIO
+  const generationOptions = payload.generationOptions && typeof payload.generationOptions === 'object'
+    ? payload.generationOptions
+    : { aspectRatio }
   return {
     data: {
       taskId: 'task-asset-hub-image-1',
@@ -94,7 +109,10 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
       projectId: 'project-1',
       targetType: 'GlobalCharacterAppearance',
       targetId: 'appearance-1',
-      payload,
+      payload: {
+        generationOptions,
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>

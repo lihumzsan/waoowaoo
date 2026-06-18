@@ -96,6 +96,9 @@ function buildJob(
   payload: Record<string, unknown>,
   locale: TaskJobData['locale'] = 'zh',
 ): Job<TaskJobData> {
+  const generationOptions = payload.generationOptions && typeof payload.generationOptions === 'object'
+    ? payload.generationOptions
+    : { aspectRatio: '16:9' }
   return {
     data: {
       taskId: 'task-panel-variant-1',
@@ -105,7 +108,10 @@ function buildJob(
       episodeId: 'episode-1',
       targetType: 'ProjectPanel',
       targetId: 'panel-new',
-      payload,
+      payload: {
+        generationOptions,
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>

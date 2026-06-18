@@ -4,14 +4,13 @@ import {
   type PricingResolution,
 } from '@/lib/ai-registry/pricing-resolution'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
+import { resolveImageSizeFromGenerationOptions } from '@/lib/image-generation/runtime-options'
 import { BillingOperationError } from './errors'
 
 export type ApiType = 'text' | 'image' | 'video' | 'music'
 export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
 
 type BillingMetadata = { [field: string]: unknown }
-
-const IMAGE_SIZE_PATTERN = /^\d+x\d+$/
 
 function normalizePositiveInteger(value: number): number {
   if (!Number.isFinite(value)) return 0
@@ -30,12 +29,6 @@ function readNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed
   }
   return null
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
 }
 
 function resolveDurationSeconds(metadata?: BillingMetadata): number | null {
@@ -132,29 +125,6 @@ function resolveCatalogPricing(input: {
   return throwPricingResolutionError(input.apiType, input.model, resolution)
 }
 
-function resolveImageSize(metadata?: BillingMetadata): string | null {
-  const explicitSize = readString(metadata?.imageSize) || readString(metadata?.size)
-  if (explicitSize && IMAGE_SIZE_PATTERN.test(explicitSize)) return explicitSize
-
-  const resolution = readString(metadata?.resolution)
-  if (resolution && IMAGE_SIZE_PATTERN.test(resolution)) return resolution
-
-  const aspectRatio = readString(metadata?.aspectRatio)
-  if (!resolution || !aspectRatio) return null
-
-  if (resolution === '1K') {
-    if (aspectRatio === '1:1') return '1024x1024'
-    if (aspectRatio === '4:3' || aspectRatio === '3:4') return '1024x768'
-    if (aspectRatio === '3:2' || aspectRatio === '2:3' || aspectRatio === '9:16') return '1024x1536'
-    if (aspectRatio === '16:9') return '1920x1080'
-  }
-
-  if (resolution === '2K' && aspectRatio === '16:9') return '2560x1440'
-  if (resolution === '4K' && aspectRatio === '16:9') return '3840x2160'
-
-  return null
-}
-
 export function calcText(
   model: string,
   inputTokens: number,
@@ -193,7 +163,7 @@ export function calcImage(
 ): number {
   const units = Math.max(1, normalizePositiveInteger(quantity))
   const selections = toCapabilitySelections(metadata)
-  const imageSize = resolveImageSize(metadata)
+  const imageSize = resolveImageSizeFromGenerationOptions(metadata)
   if (imageSize) selections.imageSize = imageSize
   if (!selections.quality) selections.quality = 'high'
 

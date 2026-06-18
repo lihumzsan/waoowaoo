@@ -9,7 +9,6 @@ import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import {
   buildImageBillingPayload,
   getProjectModelConfig,
-  resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
@@ -270,12 +269,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           throw new Error('STORYBOARD_MODEL_NOT_CONFIGURED')
         }
         await resolveModelSelection(ctx.userId, projectModelConfig.storyboardModel, 'image')
-        const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          modelType: 'image',
-          modelKey: projectModelConfig.storyboardModel,
-        })
         const locale = resolveLocaleFromContext(ctx.context.locale)
         const taskLocale = resolveRequiredTaskLocale(ctx.request, {
           count: 1,
@@ -320,11 +313,13 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
               locale,
             },
           }
-          const billingPayload = {
-            ...body,
+          const billingPayload = await buildImageBillingPayload({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
             imageModel: projectModelConfig.storyboardModel,
-            ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
-          }
+            basePayload: body,
+            aspectRatio: projectModelConfig.videoRatio,
+          })
           const result = await submitOperationTask({
             request: ctx.request,
             userId: ctx.userId,
@@ -487,12 +482,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           throw new Error('STORYBOARD_MODEL_NOT_CONFIGURED')
         }
         await resolveModelSelection(ctx.userId, projectModelConfig.storyboardModel, 'image')
-        const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          modelType: 'image',
-          modelKey: projectModelConfig.storyboardModel,
-        })
         const locale = resolveLocaleFromContext(ctx.context.locale)
         const body = {
           panelId: orderedPanels[0]?.id,
@@ -508,11 +497,13 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
             locale,
           },
         }
-        const billingPayload = {
-          ...body,
+        const billingPayload = await buildImageBillingPayload({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
           imageModel: projectModelConfig.storyboardModel,
-          ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
-        }
+          basePayload: body,
+          aspectRatio: projectModelConfig.videoRatio,
+        })
         const hasOutputAtStart = orderedPanels.some((panel) => normalizeString(panel.imageUrl) || normalizeString(panel.imageMediaId))
         const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
           projectId: ctx.projectId,
@@ -725,18 +716,14 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           throw new Error('STORYBOARD_MODEL_NOT_CONFIGURED')
         }
         await resolveModelSelection(ctx.userId, projectModelConfig.storyboardModel, 'image')
-        const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
+
+        const billingPayload = await buildImageBillingPayload({
           projectId: ctx.projectId,
           userId: ctx.userId,
-          modelType: 'image',
-          modelKey: projectModelConfig.storyboardModel,
-        })
-
-        const billingPayload = {
-          ...body,
           imageModel: projectModelConfig.storyboardModel,
-          ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
-        }
+          basePayload: body,
+          aspectRatio: projectModelConfig.videoRatio,
+        })
 
         const hasOutputAtStart = await hasPanelImageOutput(panelId)
 
@@ -885,6 +872,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
             userId: ctx.userId,
             imageModel,
             basePayload: { ...(isRecord(input) ? input : {}), newPanelId: createdPanelId, meta: { locale } },
+            aspectRatio: projectModelConfig.videoRatio,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Image model capability not configured'

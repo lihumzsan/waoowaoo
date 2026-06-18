@@ -11,6 +11,7 @@ import {
 } from '../utils'
 import {
   AnyObj,
+  buildImageProviderRuntimeOptions,
   formatReferenceImagesMapForPrompt,
   normalizeReferenceImageItemsForGeneration,
   parseImageUrls,
@@ -244,8 +245,11 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
   if (!sourcePanel) throw new Error('Source panel not found')
 
   const projectData = await resolveNovelData(job.data.projectId, job.data.userId)
-  if (!projectData.videoRatio) throw new Error('Project videoRatio not configured')
-  const aspectRatio = projectData.videoRatio
+  const imageRuntimeOptions = buildImageProviderRuntimeOptions({
+    generationOptions: payload.generationOptions,
+    context: 'panel_variant',
+  })
+  const aspectRatio = imageRuntimeOptions.aspectRatio
 
   const modelConfig = await getProjectModels(job.data.projectId, job.data.userId)
   const storyboardModel = modelConfig.storyboardModel
@@ -302,8 +306,8 @@ export async function handlePanelVariantTask(job: Job<TaskJobData>) {
     modelId: storyboardModel,
     prompt,
     options: {
+      ...imageRuntimeOptions,
       referenceImages,
-      aspectRatio,
     },
   })
 

@@ -17,8 +17,20 @@ import {
   toSignedUrlIfCos,
   uploadImageSourceToCos,
 } from '../utils'
+import {
+  readImageRuntimeGenerationOptions,
+  requireImageRuntimeAspectRatio,
+} from '@/lib/image-generation/runtime-options'
 
 export type AnyObj = Record<string, unknown>
+
+export interface ImageProviderRuntimeOptions {
+  readonly referenceImages?: string[]
+  readonly aspectRatio: string
+  readonly resolution?: string
+  readonly quality?: string
+  readonly size?: string
+}
 
 interface CharacterAppearanceLike {
   id?: string
@@ -159,6 +171,24 @@ export function pickFirstString(...values: unknown[]) {
   return null
 }
 
+export function buildImageProviderRuntimeOptions(input: {
+  readonly generationOptions: unknown
+  readonly context: string
+  readonly referenceImages?: readonly string[]
+}): ImageProviderRuntimeOptions {
+  const options = readImageRuntimeGenerationOptions(input.generationOptions)
+  const aspectRatio = requireImageRuntimeAspectRatio(input.generationOptions, input.context)
+  return {
+    ...(input.referenceImages && input.referenceImages.length > 0
+      ? { referenceImages: [...input.referenceImages] }
+      : {}),
+    aspectRatio,
+    ...(options.resolution ? { resolution: options.resolution } : {}),
+    ...(options.quality ? { quality: options.quality } : {}),
+    ...(options.size ? { size: options.size } : {}),
+  }
+}
+
 async function generateImageToStorage(params: {
   job: Job<TaskJobData>
   userId: string
@@ -207,6 +237,7 @@ export async function generateCleanImageToStorage(params: {
 }
 
 export async function resolveNovelData(projectId: string, _userId?: string) {
+  void _userId
   const db = prisma as unknown as ProjectDataDb
   const data = await db.project.findUnique({
     where: { id: projectId },

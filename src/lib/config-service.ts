@@ -25,6 +25,7 @@ import {
   type WorkflowConcurrencyConfig,
   normalizeWorkflowConcurrencyConfig,
 } from '@/lib/workflow-concurrency'
+import { buildImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
 
 export type ParsedModelKey = { provider: string, modelId: string }
 
@@ -329,15 +330,15 @@ export function getMissingConfigError(missingFields: string[]): string {
 /**
  * 为图片类任务统一构建 billingPayload（项目级，async）
  *
- * 生图和修图统一使用严格模式：用户必须已在项目设置中配置好 resolution。
- * 图片能力参数会同时注入到 billingPayload.generationOptions（计费用）
- * 和 task payload（worker 读取后传给 API 的 imageSize / quality 参数）。
+ * 生图和修图统一使用严格模式：调用方必须传入业务画幅，用户必须已在项目设置中配置好图片能力参数。
+ * 图片运行参数只注入到 billingPayload.generationOptions；计费和 worker 共用这一份参数。
  */
 export async function buildImageBillingPayload(input: {
   projectId: string
   userId: string
   imageModel: string | null
   basePayload: Record<string, unknown>
+  aspectRatio?: string | null
 }): Promise<Record<string, unknown>> {
   const { projectId, userId, imageModel, basePayload } = input
   if (!imageModel) return basePayload
@@ -355,10 +356,15 @@ export async function buildImageBillingPayload(input: {
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
+  const generationOptions = buildImageRuntimeGenerationOptions({
+    capabilityOptions,
+    aspectRatio: input.aspectRatio,
+  })
+
   return {
     ...basePayload,
     imageModel,
-    ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
+    ...(Object.keys(generationOptions).length > 0 ? { generationOptions } : {}),
   }
 }
 
@@ -371,6 +377,7 @@ export function buildImageBillingPayloadFromUserConfig(input: {
   userModelConfig: UserModelConfig
   imageModel: string | null
   basePayload: Record<string, unknown>
+  aspectRatio?: string | null
 }): Record<string, unknown> {
   const { userModelConfig, imageModel, basePayload } = input
   if (!imageModel) return basePayload
@@ -387,10 +394,15 @@ export function buildImageBillingPayloadFromUserConfig(input: {
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
+  const generationOptions = buildImageRuntimeGenerationOptions({
+    capabilityOptions,
+    aspectRatio: input.aspectRatio,
+  })
+
   return {
     ...basePayload,
     imageModel,
-    ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
+    ...(Object.keys(generationOptions).length > 0 ? { generationOptions } : {}),
   }
 }
 ensureAiCatalogsRegistered()

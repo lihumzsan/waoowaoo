@@ -158,6 +158,9 @@ vi.mock('@/lib/ai-prompts', () => ({
 import { handlePanelImageTask } from '@/lib/workers/handlers/panel-image-task-handler'
 
 function buildJob(payload: Record<string, unknown>, targetId = 'panel-1'): Job<TaskJobData> {
+  const generationOptions = payload.generationOptions && typeof payload.generationOptions === 'object'
+    ? payload.generationOptions
+    : { aspectRatio: '16:9' }
   return {
     data: {
       taskId: 'task-panel-image-1',
@@ -167,7 +170,10 @@ function buildJob(payload: Record<string, unknown>, targetId = 'panel-1'): Job<T
       episodeId: 'episode-1',
       targetType: 'ProjectPanel',
       targetId,
-      payload,
+      payload: {
+        generationOptions,
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>

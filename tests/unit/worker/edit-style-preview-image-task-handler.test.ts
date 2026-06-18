@@ -42,12 +42,23 @@ const storageMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/shared', () => sharedMock)
-vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => handlerSharedMock)
+vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
+    '@/lib/workers/handlers/image-task-handler-shared',
+  )
+  return {
+    ...actual,
+    generateCleanImageToStorage: handlerSharedMock.generateCleanImageToStorage,
+  }
+})
 vi.mock('@/lib/storage', () => storageMock)
 
 import { handleEditStylePreviewImageTask } from '@/lib/workers/handlers/edit-style-preview-image-task-handler'
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
+  const generationOptions = payload.generationOptions && typeof payload.generationOptions === 'object'
+    ? payload.generationOptions
+    : { aspectRatio: '16:9', resolution: '1K', quality: 'high' }
   return {
     data: {
       taskId: 'task-style-preview-1',
@@ -57,7 +68,10 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
       episodeId: 'episode-1',
       targetType: 'ProjectEditStylePreview',
       targetId: 'preview-1',
-      payload,
+      payload: {
+        generationOptions,
+        ...payload,
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>
@@ -82,7 +96,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
       stylePreviewId: 'preview-1',
       imageModel: 'storyboard-image-model',
       prompt: 'single image, 3x3 grid, nine cinematic frames',
-      generationOptions: { resolution: '1K', quality: 'high', size: '1024x1024' },
+      generationOptions: { aspectRatio: '16:9', resolution: '1K', quality: 'high' },
     })
 
     const result = await handleEditStylePreviewImageTask(job)

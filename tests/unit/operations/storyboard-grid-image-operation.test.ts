@@ -37,9 +37,20 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/operations/submit-operation-task', () => ({ submitOperationTask: submitOperationTaskMock }))
 vi.mock('@/lib/mutation-batch/service', () => ({ createMutationBatch: createMutationBatchMock }))
 vi.mock('@/lib/config-service', () => ({
-  getProjectModelConfig: vi.fn(async () => ({ storyboardModel: 'storyboard-model-1' })),
+  getProjectModelConfig: vi.fn(async () => ({ storyboardModel: 'storyboard-model-1', videoRatio: '16:9' })),
   resolveProjectModelCapabilityGenerationOptions: vi.fn(async () => ({ quality: 'high' })),
-  buildImageBillingPayload: vi.fn((input: unknown) => input),
+  buildImageBillingPayload: vi.fn((input: {
+    imageModel: string | null
+    basePayload: Record<string, unknown>
+    aspectRatio?: string | null
+  }) => ({
+    ...input.basePayload,
+    imageModel: input.imageModel,
+    generationOptions: {
+      quality: 'high',
+      ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
+    },
+  })),
 }))
 vi.mock('@/lib/user-api/runtime-config', () => ({
   resolveModelSelection: vi.fn(async () => ({ model: 'storyboard-model-1' })),
@@ -124,7 +135,7 @@ describe('generate_storyboard_grid_images operation', () => {
           panelIds: ['panel-1', 'panel-2'],
         },
         imageModel: 'storyboard-model-1',
-        generationOptions: { quality: 'high' },
+        generationOptions: { quality: 'high', aspectRatio: '16:9' },
         ui: expect.objectContaining({
           intent: 'regenerate',
           hasOutputAtStart: true,

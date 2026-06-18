@@ -11,6 +11,7 @@ import { ensureProjectLocationImageSlots } from '@/lib/image-generation/location
 import { hasCharacterAppearanceOutput, hasLocationImageOutput, hasPanelImageOutput } from '@/lib/task/has-output'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
+import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO } from '@/lib/constants'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
@@ -122,6 +123,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
               ...(toObject(input)),
               count,
             },
+            aspectRatio: input.type === 'character' ? CHARACTER_ASSET_IMAGE_RATIO : LOCATION_IMAGE_RATIO,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -219,6 +221,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
               ...(toObject(input)),
               imageIndex: parsedImageIndex,
             },
+            aspectRatio: input.type === 'character' ? CHARACTER_ASSET_IMAGE_RATIO : LOCATION_IMAGE_RATIO,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -405,6 +408,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
             userId: ctx.userId,
             imageModel,
             basePayload: payload,
+            aspectRatio: projectModelConfig.videoRatio,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Image model capability not configured'
