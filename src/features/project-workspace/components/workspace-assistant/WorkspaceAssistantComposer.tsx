@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -136,9 +137,7 @@ export function WorkspaceAssistantComposer({
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('panel.composerPlaceholder')}
           onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.shiftKey) return
-            event.preventDefault()
-            void onSubmit()
+            submitFromEnterKey(event, () => { void onSubmit() })
           }}
           className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-sm leading-5 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         />

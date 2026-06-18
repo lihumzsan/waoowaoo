@@ -43,6 +43,7 @@ import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkin
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { isEditFirstDurationTier } from '@/lib/edit-script/duration-tier'
+import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 
 const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
   'creative-direction': 'creativeDirection',
@@ -527,6 +528,9 @@ export function AssistantChoiceCardView(props: {
               onChange={(event) => {
                 setReplyText(event.target.value)
                 setError(null)
+              }}
+              onKeyDown={(event) => {
+                submitFromEnterKey(event, () => { void handleReplySubmit() })
               }}
               placeholder={card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
               className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-[var(--glass-accent-from)] focus:bg-white"

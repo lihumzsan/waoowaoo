@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, type CompositionEvent, type ReactNode } from 'react'
 import { resolveTextareaTargetHeight } from '@/lib/ui/textarea-height'
+import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 
 interface StoryInputComposerProps {
   variant?: 'surface' | 'plain'
@@ -15,6 +16,7 @@ interface StoryInputComposerProps {
   footer?: ReactNode
   secondaryActions?: ReactNode
   primaryAction: ReactNode
+  onSubmit?: () => void | Promise<void>
   onCompositionStart?: () => void
   onCompositionEnd?: (event: CompositionEvent<HTMLTextAreaElement>) => void
   textareaClassName?: string
@@ -35,6 +37,7 @@ export default function StoryInputComposer({
   footer,
   secondaryActions,
   primaryAction,
+  onSubmit,
   onCompositionStart,
   onCompositionEnd,
   textareaClassName,
@@ -115,6 +118,10 @@ export default function StoryInputComposer({
           ref={textareaRef}
           value={value}
           onChange={(event) => onValueChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (!onSubmit) return
+            submitFromEnterKey(event, () => { void onSubmit() })
+          }}
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
           placeholder={placeholder}

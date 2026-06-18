@@ -318,6 +318,7 @@ export default function HomePage() {
                   setCreateError(null)
                 }
               }}
+              onSubmit={handleCreate}
               placeholder={t('inputPlaceholder')}
               minRows={HOME_QUICK_START_MIN_ROWS}
               textareaClassName="px-0 pt-0 pb-3 align-top"
