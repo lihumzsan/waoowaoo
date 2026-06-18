@@ -133,6 +133,67 @@ describe('workspace node rendering', () => {
     expect(initialPreviewDetailsExpanded()).toBe(true)
   })
 
+  it('auto-expands the active streaming edit script shot detail', () => {
+    const html = renderNode({
+      kind: 'editScript',
+      layoutNodeType: 'editScript',
+      targetType: 'episode',
+      targetId: 'episode-1',
+      title: 'Generating edit script',
+      eyebrow: 'Edit script',
+      body: 'Streaming',
+      meta: '2 shots',
+      statusLabel: 'Processing',
+      isRunning: true,
+      width: 760,
+      height: 520,
+      streamPresentation: {
+        isStreaming: true,
+        activeItemKey: '2',
+        displayedItemKeys: ['1', '2'],
+        pinnedItemKeys: [],
+        revealedFieldCountByKey: { '1': 12, '2': 12 },
+      },
+      editScriptDetails: {
+        durationSec: 6,
+        shotCount: 2,
+        shots: [
+          {
+            shotNumber: 1,
+            durationSec: 3,
+            dramaticPurpose: 'first dramatic purpose',
+            visibleAction: 'first visible action',
+            audienceFocus: 'first audience focus',
+            viewpoint: 'first viewpoint',
+            revealPlan: 'first reveal plan',
+            performanceBeat: 'first beat',
+            continuityIn: 'first continuity in',
+            continuityOut: 'first continuity out',
+            charactersAndScene: 'first characters',
+            sound: 'first sound',
+          },
+          {
+            shotNumber: 2,
+            durationSec: 3,
+            dramaticPurpose: 'second dramatic purpose',
+            visibleAction: 'second visible action',
+            audienceFocus: 'second audience focus',
+            viewpoint: 'second viewpoint',
+            revealPlan: 'second reveal plan',
+            performanceBeat: 'second beat',
+            continuityIn: 'second continuity in',
+            continuityOut: 'second continuity detail unique',
+            charactersAndScene: 'second characters',
+            sound: 'second sound',
+          },
+        ],
+      },
+    })
+
+    expect(html).toContain('second continuity detail unique')
+    expect(html).toContain('workspace-node-stream-soft-detail')
+  })
+
   it('shows space consistency profile stats while generation is running', () => {
     const html = renderNode({
       kind: 'spaceConsistency',
@@ -174,6 +235,7 @@ describe('workspace node rendering', () => {
       meta: 'meta',
       statusLabel: 'Ready',
       isRunning: false,
+      expanded: true,
       width: 460,
       height: 620,
       spaceConsistencyDetails: {
@@ -403,10 +465,9 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('data-icon="image"')
     expect(html).toContain('Cinematography Shot Plan')
+    // 网格卡面展示景别/运镜/焦段；机位等完整字段在点开镜头后的三级详情中（交互态，静态渲染不展开）
     expect(html).toContain('close-up')
     expect(html).toContain('50mm')
-    expect(html).toContain('right front of actor')
-    expect(html).toContain('Hand in foreground')
   })
 
   it('renders an edit script video preview entry from the core edit table node', () => {

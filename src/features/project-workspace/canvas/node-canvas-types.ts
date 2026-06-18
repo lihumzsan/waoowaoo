@@ -18,12 +18,14 @@ export type WorkspaceCanvasNodeKind =
   | 'editStyleBible'
   | 'editDirectorDecoupage'
   | 'editPipelineStep'
+  | 'editProcessGroup'
   | 'editScript'
   | 'editCinematographyShotPlan'
   | 'spaceConsistency'
   | 'videoPlan'
   | 'bgmScore'
   | 'editRequiredAsset'
+  | 'editAssetGroup'
 
 export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
@@ -317,6 +319,18 @@ export interface WorkspaceCanvasEditPipelineStepDetails {
   readonly items: readonly WorkspaceCanvasEditPipelineStepItem[]
 }
 
+export interface WorkspaceCanvasEditProcessStep {
+  readonly key: string
+  readonly badge: string
+  readonly title: string
+  readonly statusLabel: string
+  readonly items: readonly WorkspaceCanvasEditPipelineStepItem[]
+}
+
+export interface WorkspaceCanvasEditProcessGroupDetails {
+  readonly steps: readonly WorkspaceCanvasEditProcessStep[]
+}
+
 export interface WorkspaceCanvasEditScreenplayDetails {
   readonly screenplayText: string
   readonly userPrompt: string
@@ -399,6 +413,25 @@ export interface WorkspaceCanvasEditAssetDetails {
   readonly spatialProfileModel?: string | null
 }
 
+export interface WorkspaceCanvasEditAssetGroupItem {
+  readonly requirementId: string
+  readonly kind: 'character' | 'location'
+  readonly name: string
+  readonly eyebrow: string
+  readonly description: string
+  readonly shotNumbers: readonly number[]
+  readonly statusLabel: string
+  readonly isRunning: boolean
+  readonly previewImageUrl?: string | null
+  readonly action?: WorkspaceCanvasNodeAction
+  readonly actionLabel?: string
+}
+
+export interface WorkspaceCanvasEditAssetGroupDetails {
+  readonly editScriptId: string
+  readonly assets: readonly WorkspaceCanvasEditAssetGroupItem[]
+}
+
 export interface WorkspaceCanvasSpaceConsistencyDetails {
   readonly storyboardId: string
   readonly stage?: string | null
@@ -443,6 +476,14 @@ export interface WorkspaceCanvasSpaceConsistencyDetails {
   }[]
 }
 
+export interface WorkspaceCanvasStreamPresentation {
+  readonly isStreaming: boolean
+  readonly activeItemKey?: string | null
+  readonly displayedItemKeys: readonly string[]
+  readonly pinnedItemKeys: readonly string[]
+  readonly revealedFieldCountByKey: Readonly<Record<string, number>>
+}
+
 export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly nodeId?: string
   readonly projectId?: string
@@ -459,6 +500,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly meta: string
   readonly statusLabel: string
   readonly isRunning?: boolean
+  readonly streamPresentation?: WorkspaceCanvasStreamPresentation
   readonly taskProgress?: TaskRuntimeStateLike | null
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
@@ -493,10 +535,12 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly editScreenplayDetails?: WorkspaceCanvasEditScreenplayDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails
   readonly editPipelineStepDetails?: WorkspaceCanvasEditPipelineStepDetails
+  readonly editProcessGroupDetails?: WorkspaceCanvasEditProcessGroupDetails
   readonly editScriptDetails?: WorkspaceCanvasEditScriptDetails
   readonly spaceConsistencyDetails?: WorkspaceCanvasSpaceConsistencyDetails
   readonly videoPlanDetails?: WorkspaceCanvasVideoPlanDetails
   readonly editAssetDetails?: WorkspaceCanvasEditAssetDetails
+  readonly editAssetGroupDetails?: WorkspaceCanvasEditAssetGroupDetails
 }
 
 export type WorkspaceCanvasFlowNode = Node<WorkspaceCanvasNodeData, 'workspaceNode'>

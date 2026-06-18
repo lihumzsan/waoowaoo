@@ -84,10 +84,12 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'editDirectorDecoupage':
       return 'story'
     case 'editPipelineStep':
+    case 'editProcessGroup':
       return 'editPipeline'
     case 'editScript':
       return 'editScript'
     case 'editRequiredAsset':
+    case 'editAssetGroup':
     case 'imageAsset':
       return 'assets'
     case 'spaceConsistency':

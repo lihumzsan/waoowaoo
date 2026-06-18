@@ -15,12 +15,14 @@ export const projectCanvasNodeTypeSchema = z.enum([
   'editStyleBible',
   'editDirectorDecoupage',
   'editPipelineStep',
+  'editProcessGroup',
   'editScript',
   'editCinematographyShotPlan',
   'spaceConsistency',
   'videoPlan',
   'bgmScore',
   'editRequiredAsset',
+  'editAssetGroup',
 ])
 
 export type CanvasLayoutNodeType = z.infer<typeof projectCanvasNodeTypeSchema>

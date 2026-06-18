@@ -86,6 +86,10 @@ import {
   collectWorkspaceNodeRuntimeTargets,
   resolveWorkspaceNodeRuntimePatch,
 } from './workspace-node-runtime'
+import {
+  mergeWorkspaceStructuredStreamOverlayNodes,
+  useWorkspaceStructuredStreamOverlay,
+} from './structured-stream/useWorkspaceStructuredStreamOverlay'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
@@ -513,11 +517,19 @@ function ProjectWorkspaceCanvasContent({
     translate: t,
     onAction: onNodeAction,
   })
+  const structuredStreamOverlay = useWorkspaceStructuredStreamOverlay({
+    episodeId: episodeId ?? 'pending-episode',
+    translate: t,
+  })
+  const projectedNodes = useMemo(
+    () => mergeWorkspaceStructuredStreamOverlayNodes(projection.nodes, structuredStreamOverlay.nodes),
+    [projection.nodes, structuredStreamOverlay.nodes],
+  )
   const projectionEdges = projection.edges
-  projectedNodeByIdRef.current = new Map(projection.nodes.map((node) => [node.id, node]))
+  projectedNodeByIdRef.current = new Map(projectedNodes.map((node) => [node.id, node]))
   const workspaceRuntimeTargets = useMemo(
-    () => collectWorkspaceNodeRuntimeTargets(projection.nodes),
-    [projection.nodes],
+    () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
+    [projectedNodes],
   )
   const workspaceTaskStateMap = useTaskTargetStateMap(projectId, workspaceRuntimeTargets, {
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
@@ -543,8 +555,8 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const projectionNodeSignature = useMemo(
-    () => buildWorkspaceCanvasNodeSignature(projection.nodes),
-    [projection.nodes],
+    () => buildWorkspaceCanvasNodeSignature(projectedNodes),
+    [projectedNodes],
   )
   const projectionEdgeSignature = useMemo(
     () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
@@ -579,10 +591,10 @@ function ProjectWorkspaceCanvasContent({
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
     appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(attachNodeUiState(projection.nodes, {
+    setSourceNodes(attachNodeUiState(projectedNodes, {
       preservedNodePositions: readExpansionAnchorNodePositions(),
     }))
-  }, [attachNodeUiState, projection.nodes, projectionNodeSignature, readExpansionAnchorNodePositions])
+  }, [attachNodeUiState, projectedNodes, projectionNodeSignature, readExpansionAnchorNodePositions])
 
   useEffect(() => {
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
@@ -595,7 +607,7 @@ function ProjectWorkspaceCanvasContent({
   ])
 
   useEffect(() => {
-    const projectionByNodeId = new Map(projection.nodes.map((node) => [node.id, node]))
+    const projectionByNodeId = new Map(projectedNodes.map((node) => [node.id, node]))
     let changed = false
     const nextIds = new Set<string>()
     optimisticRunningNodeIdsRef.current.forEach((nodeId) => {
@@ -612,7 +624,7 @@ function ProjectWorkspaceCanvasContent({
       nextIds.add(nodeId)
     })
     if (changed) optimisticRunningNodeIdsRef.current = nextIds
-  }, [projection.nodes, projectionNodeSignature])
+  }, [projectedNodes, projectionNodeSignature])
 
   useEffect(() => () => {
     optimisticRunningClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -626,7 +638,7 @@ function ProjectWorkspaceCanvasContent({
   }, [attachNodeUiState, readExpansionAnchorNodePositions])
 
   useEffect(() => {
-    const projectedNodeIds = new Set(projection.nodes.map((node) => node.id))
+    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
     const nextAnchorPositions = new Map<string, { readonly x: number; readonly y: number }>()
     expansionAnchorNodePositionsRef.current.forEach((position, nodeId) => {
       if (projectedNodeIds.has(nodeId)) nextAnchorPositions.set(nodeId, position)
@@ -646,7 +658,7 @@ function ProjectWorkspaceCanvasContent({
       })
       return changed ? next : current
     })
-  }, [projection.nodes, projectionNodeSignature])
+  }, [projectedNodes, projectionNodeSignature])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return

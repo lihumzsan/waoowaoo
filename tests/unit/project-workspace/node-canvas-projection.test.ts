@@ -386,23 +386,13 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'edit-screenplay:screenplay-1',
-      'edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:visibleAction',
-      'edit-pipeline:edit-video:camera',
-      'edit-pipeline:edit-video:audio',
-      'edit-pipeline:edit-video:primaryTable',
-      'edit-pipeline:edit-video:assetExtract',
+      'edit-process:edit-video',
       'edit-script:edit-video',
       'edit-cinematography-shot-plan:pending:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
-      'edit-screenplay:screenplay-1->edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visibleAction',
-      'edit-pipeline:edit-video:visibleAction->edit-pipeline:edit-video:camera',
-      'edit-pipeline:edit-video:camera->edit-pipeline:edit-video:audio',
-      'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
-      'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
-      'edit-pipeline:edit-video:assetExtract->edit-script:edit-video',
+      'edit-screenplay:screenplay-1->edit-process:edit-video',
+      'edit-process:edit-video->edit-script:edit-video',
       'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
     ])
 
@@ -420,16 +410,23 @@ describe('workspace node canvas projection', () => {
 
     const editScriptNode = projection.nodes.find((node) => node.id === 'edit-script:edit-video')
     expect(editScriptNode?.position.y).toBeGreaterThan(screenplayNode?.position.y ?? 0)
-    const timelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-video:timeline')
-    expect(timelineNode?.data.kind).toBe('editPipelineStep')
-    expect(timelineNode?.data.layoutNodeType).toBe('editPipelineStep')
-    expect(timelineNode?.data.targetType).toBe('editPipelineStep')
-    expect(timelineNode?.data.editPipelineStepDetails?.items).toEqual([
-      {
-        title: 'nodeFields.shotIndex:{"index":1}',
-        fields: [{ label: 'nodeFields.duration', value: '2s' }],
-      },
+    const processNode = projection.nodes.find((node) => node.id === 'edit-process:edit-video')
+    expect(processNode?.data.kind).toBe('editProcessGroup')
+    expect(processNode?.data.layoutNodeType).toBe('editPipelineStep')
+    expect(processNode?.data.targetType).toBe('editPipelineStep')
+    expect(processNode?.data.editProcessGroupDetails?.steps.map((step) => step.key)).toEqual([
+      'timeline', 'visibleAction', 'camera', 'audio', 'primaryTable', 'assetExtract',
     ])
+    expect(processNode?.data.editProcessGroupDetails?.steps[0]).toMatchObject({
+      key: 'timeline',
+      badge: 'P1',
+      items: [
+        {
+          title: 'nodeFields.shotIndex:{"index":1}',
+          fields: [{ label: 'nodeFields.duration', value: '2s' }],
+        },
+      ],
+    })
   })
 
   it('adds a direct edit table action when a ready screenplay has no edit script yet', () => {
@@ -496,7 +493,7 @@ describe('workspace node canvas projection', () => {
     })
 
     const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:director-ready')
-    const pipelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-after-director:timeline')
+    const processNode = projection.nodes.find((node) => node.id === 'edit-process:edit-after-director')
     expect(directorNode?.data.kind).toBe('editDirectorDecoupage')
     expect(directorNode?.data.layoutNodeType).toBe('editDirectorDecoupage')
     expect(directorNode?.data.targetType).toBe('editDirectorDecoupage')
@@ -509,13 +506,14 @@ describe('workspace node canvas projection', () => {
       ]),
       body: 'Pilot stops before the sealed door.',
     })
-    expect(pipelineNode && directorNode ? pipelineNode.position.y : 0).toBeGreaterThan(
+    expect(processNode?.data.kind).toBe('editProcessGroup')
+    expect(processNode && directorNode ? processNode.position.y : 0).toBeGreaterThan(
       directorNode ? directorNode.position.y + directorNode.data.height : 0,
     )
     expect(projection.edges).toContainEqual(expect.objectContaining({
-      id: 'edge:director-decoupage-edit-pipeline:edit-after-director',
+      id: 'edge:director-decoupage-edit-process:edit-after-director',
       source: 'edit-director-decoupage:director-ready',
-      target: 'edit-pipeline:edit-after-director:timeline',
+      target: 'edit-process:edit-after-director',
     }))
   })
 
@@ -558,29 +556,19 @@ describe('workspace node canvas projection', () => {
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'edit-screenplay:screenplay-1',
       'edit-style-bible:screenplay-1',
-      'edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:visibleAction',
-      'edit-pipeline:edit-video:camera',
-      'edit-pipeline:edit-video:audio',
-      'edit-pipeline:edit-video:primaryTable',
-      'edit-pipeline:edit-video:assetExtract',
+      'edit-process:edit-video',
       'edit-script:edit-video',
       'edit-cinematography-shot-plan:pending:edit-video',
     ])
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual([
       'edit-screenplay:screenplay-1->edit-style-bible:screenplay-1',
-      'edit-style-bible:screenplay-1->edit-pipeline:edit-video:timeline',
-      'edit-pipeline:edit-video:timeline->edit-pipeline:edit-video:visibleAction',
-      'edit-pipeline:edit-video:visibleAction->edit-pipeline:edit-video:camera',
-      'edit-pipeline:edit-video:camera->edit-pipeline:edit-video:audio',
-      'edit-pipeline:edit-video:audio->edit-pipeline:edit-video:primaryTable',
-      'edit-pipeline:edit-video:primaryTable->edit-pipeline:edit-video:assetExtract',
-      'edit-pipeline:edit-video:assetExtract->edit-script:edit-video',
+      'edit-style-bible:screenplay-1->edit-process:edit-video',
+      'edit-process:edit-video->edit-script:edit-video',
       'edit-script:edit-video->edit-cinematography-shot-plan:pending:edit-video',
     ])
 
     const styleNode = projection.nodes.find((node) => node.id === 'edit-style-bible:screenplay-1')
-    const timelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-video:timeline')
+    const timelineNode = projection.nodes.find((node) => node.id === 'edit-process:edit-video')
     expect(styleNode?.data.kind).toBe('editStyleBible')
     expect(styleNode?.data.layoutNodeType).toBe('editStyleBible')
     expect(styleNode?.data.targetType).toBe('editStyleBible')
@@ -699,7 +687,7 @@ describe('workspace node canvas projection', () => {
     })
 
     const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-1')
-    const timelineNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-video:timeline')
+    const timelineNode = projection.nodes.find((node) => node.id === 'edit-process:edit-video')
 
     expect(screenplayNode?.data.height).toBeGreaterThan(380)
     expect(timelineNode?.position.y ?? 0).toBeGreaterThanOrEqual(
@@ -812,17 +800,13 @@ describe('workspace node canvas projection', () => {
     const node = projection.nodes.find((item) => item.id === 'edit-script:edit-generating')
 
     expect(projection.nodes.map((item) => item.id)).toEqual([
-      'edit-pipeline:edit-generating:timeline',
-      'edit-pipeline:edit-generating:visibleAction',
-      'edit-pipeline:edit-generating:camera',
-      'edit-pipeline:edit-generating:audio',
-      'edit-pipeline:edit-generating:primaryTable',
-      'edit-pipeline:edit-generating:assetExtract',
+      'edit-process:edit-generating',
       'edit-script:edit-generating',
     ])
-    const timelineStep = projection.nodes.find((item) => item.id === 'edit-pipeline:edit-generating:timeline')
-    expect(timelineStep?.data.statusLabel).toBe('status.processing')
-    expect(timelineStep?.data.isRunning).toBe(true)
+    const processNode = projection.nodes.find((item) => item.id === 'edit-process:edit-generating')
+    const timelineStep = processNode?.data.editProcessGroupDetails?.steps.find((step) => step.key === 'timeline')
+    expect(timelineStep?.statusLabel).toBe('status.processing')
+    expect(processNode?.data.isRunning).toBe(true)
     expect(node?.data.kind).toBe('editScript')
     expect(node?.data.title).toBe('nodes.editScript.pendingTitle')
     expect(node?.data.body).toBe('nodes.editScript.pendingBody')
@@ -873,15 +857,16 @@ describe('workspace node canvas projection', () => {
       },
     })
 
-    const timelineStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:timeline')
-    const visualStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:visibleAction')
-    const cameraStep = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-partial:camera')
+    const processNode = projection.nodes.find((node) => node.id === 'edit-process:edit-partial')
+    const steps = processNode?.data.editProcessGroupDetails?.steps ?? []
+    const timelineStep = steps.find((step) => step.key === 'timeline')
+    const visualStep = steps.find((step) => step.key === 'visibleAction')
+    const cameraStep = steps.find((step) => step.key === 'camera')
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-partial')
 
-    expect(timelineStep?.data.statusLabel).toBe('status.ready')
-    expect(visualStep?.data.statusLabel).toBe('status.ready')
-    expect(cameraStep?.data.statusLabel).toBe('status.ready')
-    expect(cameraStep?.data.isRunning).toBe(false)
+    expect(timelineStep?.statusLabel).toBe('status.ready')
+    expect(visualStep?.statusLabel).toBe('status.ready')
+    expect(cameraStep?.statusLabel).toBe('status.ready')
     expect(editNode?.data.title).toBe('Sci-Fi Short')
     expect(editNode?.data.editScriptDetails?.shots).toHaveLength(1)
     expect(editNode?.data.editScriptDetails?.shots[0]?.visibleAction).toBe('A station corridor flickers awake.')
@@ -1619,101 +1604,60 @@ describe('workspace node canvas projection', () => {
     })
 
     expect(projection.nodes.map((node) => node.id)).toEqual([
-      'edit-pipeline:edit-1:timeline',
-      'edit-pipeline:edit-1:visibleAction',
-      'edit-pipeline:edit-1:camera',
-      'edit-pipeline:edit-1:audio',
-      'edit-pipeline:edit-1:primaryTable',
-      'edit-pipeline:edit-1:assetExtract',
+      'edit-process:edit-1',
       'edit-script:edit-1',
-      'edit-asset:req-character',
-      'edit-asset:req-location',
+      'edit-asset-group:edit-1',
       'edit-cinematography-shot-plan:pending:edit-1',
     ])
     const editNode = projection.nodes.find((node) => node.id === 'edit-script:edit-1')
     expect(editNode?.data.kind).toBe('editScript')
     expect(editNode?.data.action).toEqual({ type: 'generate_edit_assets', editScriptId: 'edit-1' })
     expect(editNode?.data.editScriptDetails?.shots).toHaveLength(2)
-    expect(editNode?.data.width).toBeGreaterThan(1000)
+    expect(editNode?.data.width).toBeGreaterThan(700)
     expect(editNode?.data.height).toBeGreaterThan(400)
 
-    const visualStepNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-1:visibleAction')
-    expect(visualStepNode?.data.editPipelineStepDetails?.items[0]).toMatchObject({
+    const processNode = projection.nodes.find((node) => node.id === 'edit-process:edit-1')
+    const processSteps = processNode?.data.editProcessGroupDetails?.steps ?? []
+    const visualStep = processSteps.find((step) => step.key === 'visibleAction')
+    expect(visualStep?.items[0]).toMatchObject({
       title: 'nodeFields.shotIndex:{"index":1}',
       fields: [{ label: 'nodeFields.charactersAndScene', value: 'Pilot / Docking Bay' }],
       body: 'Pilot crosses the docking bay.',
     })
-    const assetStepNode = projection.nodes.find((node) => node.id === 'edit-pipeline:edit-1:assetExtract')
-    expect(assetStepNode?.data.editPipelineStepDetails?.items).toHaveLength(2)
+    const assetStep = processSteps.find((step) => step.key === 'assetExtract')
+    expect(assetStep?.items).toHaveLength(2)
 
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-1:1')).toBe(false)
     const consistencyNode = projection.nodes.find((node) => node.id === 'space-consistency:edit-script:edit-1')
     expect(consistencyNode).toBeUndefined()
 
-    const pendingAssetNode = projection.nodes.find((node) => node.id === 'edit-asset:req-character')
-    expect(pendingAssetNode?.data.action).toEqual({
+    // 资产合并为单张 editAssetGroup 卡，卡内逐资产保留缩略图与单独操作
+    const assetGroupNode = projection.nodes.find((node) => node.id === 'edit-asset-group:edit-1')
+    expect(assetGroupNode?.data.kind).toBe('editAssetGroup')
+    const groupAssets = assetGroupNode?.data.editAssetGroupDetails?.assets ?? []
+    expect(groupAssets).toHaveLength(2)
+
+    const characterAsset = groupAssets.find((asset) => asset.requirementId === 'req-character')
+    expect(characterAsset?.action).toEqual({
       type: 'generate_edit_asset',
       editScriptId: 'edit-1',
       requirementId: 'req-character',
     })
 
-    const assetNode = projection.nodes.find((node) => node.id === 'edit-asset:req-location')
-    expect(assetNode?.data.kind).toBe('editRequiredAsset')
-    expect(assetNode?.data.width).toBeGreaterThan(300)
-    expect(assetNode?.data.height).toBe(520)
-    expect(assetNode?.position.y).toBe(pendingAssetNode?.position.y)
-    expect(assetNode?.position.x ?? 0).toBeGreaterThan(pendingAssetNode?.position.x ?? 0)
-    expect(Math.abs(
-      (assetNode?.position.y ?? 0)
-      - ((editNode?.position.y ?? 0) + (editNode?.data.height ?? 0) + WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y),
-    )).toBeLessThanOrEqual(16)
-    expect(assetNode?.data.action).toEqual({
+    const locationAsset = groupAssets.find((asset) => asset.requirementId === 'req-location')
+    expect(locationAsset?.kind).toBe('location')
+    expect(locationAsset?.action).toEqual({
       type: 'regenerate_edit_asset_image',
       assetId: 'location-1',
       kind: 'location',
     })
-    expect(assetNode?.data.previewImageUrl).toBe('https://example.com/location.png')
-    expect(assetNode?.data.editAssetDetails).toMatchObject({
-      kind: 'location',
-      targetId: 'location-1',
-      taskTargetType: 'LocationImage',
-      taskTargetId: 'location-1',
-      shotNumbers: [1],
-      spatialProfileStatus: 'ready',
-      spatialProfileModel: 'vision-model',
-      spatialProfileJson: {
-        sceneSummary: 'Docking bay left airlock and central platform.',
-      },
-    })
-    expect(assetNode?.data.runtimeTargets).toEqual([
-      {
-        targetType: 'LocationImage',
-        targetId: 'location-1',
-        types: ['image_location', 'modify_asset_image'],
-      },
-    ])
-    if (!assetNode?.data.runtimeTargets?.[0]) throw new Error('EDIT_ASSET_RUNTIME_TARGET_MISSING')
-    const runningPatch = resolveWorkspaceNodeRuntimePatch({
-      node: assetNode,
-      statesByQueryKey: new Map([[
-        taskRuntimeTargetQueryKey(assetNode.data.runtimeTargets[0]),
-        {
-          phase: 'processing',
-          runningTaskId: 'task-location',
-          runningTaskType: 'image_location',
-          lastError: null,
-        },
-      ]]),
-      isOptimisticallyRunning: false,
-      labels: {
-        running: 'status.processing',
-        failed: 'status.failed',
-      },
-    })
-    expect(runningPatch).toMatchObject({
-      isRunning: true,
-      statusLabel: 'status.processing',
-    })
+    expect(locationAsset?.previewImageUrl).toBe('https://example.com/location.png')
+    expect(locationAsset?.shotNumbers).toEqual([1])
+
+    expect(Math.abs(
+      (assetGroupNode?.position.y ?? 0)
+      - ((editNode?.position.y ?? 0) + (editNode?.data.height ?? 0) + WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y),
+    )).toBeLessThanOrEqual(16)
   })
 
   it('enriches edit script preview shots with storyboard image prompts and media urls', () => {
@@ -2279,8 +2223,8 @@ describe('workspace node canvas projection', () => {
       target: 'edit-cinematography-shot-plan:pending:edit-ready',
     }))
     expect(projection.edges).toContainEqual(expect.objectContaining({
-      id: 'edge:edit-asset-cinematography-shot-plan:edit-asset:req-location',
-      source: 'edit-asset:req-location',
+      id: 'edge:edit-asset-cinematography-shot-plan:edit-asset-group:edit-ready',
+      source: 'edit-asset-group:edit-ready',
       target: 'edit-cinematography-shot-plan:pending:edit-ready',
     }))
     expect(projection.nodes.some((node) => node.id === 'video-plan:edit-ready:1')).toBe(false)

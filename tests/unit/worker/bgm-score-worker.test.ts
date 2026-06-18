@@ -27,6 +27,9 @@ const prismaMock = vi.hoisted(() => ({
 const executeAiTextStepMock = vi.hoisted(() => vi.fn())
 const generateMusicMock = vi.hoisted(() => vi.fn())
 const reportTaskProgressMock = vi.hoisted(() => vi.fn())
+const streamMock = vi.hoisted(() => ({
+  flush: vi.fn(async () => undefined),
+}))
 const mediaServiceMock = vi.hoisted(() => ({
   ensureMediaObjectFromStorageKey: vi.fn(),
 }))
@@ -47,6 +50,15 @@ vi.mock('@/lib/ai-exec/engine', () => ({
 
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: reportTaskProgressMock,
+}))
+
+vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
+  withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),
+}))
+
+vi.mock('@/lib/workers/handlers/llm-stream', () => ({
+  createWorkerLLMStreamContext: vi.fn(() => ({ streamRunId: 'run-1', nextSeqByStepLane: {} })),
+  createWorkerLLMStreamCallbacks: vi.fn(() => streamMock),
 }))
 
 vi.mock('@/lib/media/service', () => ({
@@ -255,6 +267,7 @@ describe('bgm score worker', () => {
     expect(planPrompt).toContain('"groupId": "group-1"')
     expect(planPrompt).toContain('所有会显示在画布上的字段值必须使用中文自然语言')
     expect(generateMusicMock).toHaveBeenCalledTimes(1)
+    expect(streamMock.flush).toHaveBeenCalled()
   })
 
   it('fails explicitly when no schedulable video timeline exists', async () => {

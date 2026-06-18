@@ -56,7 +56,9 @@ export const WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE: WorkspaceCanvasNodeS
   height: 360,
 }
 
-export const WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH = 1480
+// 核心剪辑表 / 摄影指导改为「网格卡片 · 整行展开」后，宽度从早期的全表 1480 收窄到常规卡片宽度
+export const WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH = 760
+export const WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH = 760
 export const WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y = 80
 export const WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS = 4
 export const WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y = 120
@@ -133,21 +135,31 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     expandedLayout: 'stack',
     defaultExpanded: false,
   },
+  editProcessGroup: {
+    collapsed: { width: 420, height: 200 },
+    expanded: { width: 720, height: 560 },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
+  editAssetGroup: {
+    collapsed: { width: 720, height: 360 },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
   editScript: {
     collapsed: {
       width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-      height: 420,
+      height: 360,
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
   },
   editCinematographyShotPlan: {
-    collapsed: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
-    expanded: {
-      width: 760,
-      height: 820,
+    collapsed: {
+      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+      height: 360,
     },
-    expandedLayout: 'wide',
+    expandedLayout: 'stack',
     defaultExpanded: false,
   },
   spaceConsistency: {

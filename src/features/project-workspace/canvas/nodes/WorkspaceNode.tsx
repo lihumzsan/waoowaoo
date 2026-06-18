@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -8,11 +8,13 @@ import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import EstimatedTaskProgressOverlay, { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
+import { FieldGlyph, glyphForField } from './field-glyphs'
 import type {
   WorkspaceCanvasAssetRef,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
   WorkspaceCanvasScriptScene,
+  WorkspaceCanvasStreamPresentation,
   WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
@@ -41,6 +43,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'clapperboard'
     case 'editPipelineStep':
       return 'chart'
+    case 'editProcessGroup':
+      return 'grid'
     case 'editScript':
       return 'clipboardCheck'
     case 'editCinematographyShotPlan':
@@ -52,6 +56,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
     case 'bgmScore':
       return 'audioWave'
     case 'editRequiredAsset':
+      return 'package'
+    case 'editAssetGroup':
       return 'package'
   }
 }
@@ -341,7 +347,7 @@ function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
 }
 
 function nodeCanToggleDetails(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind !== 'analysis' && kind !== 'editScript'
+  return kind !== 'analysis' && kind !== 'editScript' && kind !== 'editCinematographyShotPlan' && kind !== 'editAssetGroup'
 }
 
 function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -349,7 +355,7 @@ function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boo
 }
 
 export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'videoPlan' || kind === 'bgmScore'
+  return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'editCinematographyShotPlan' || kind === 'editProcessGroup' || kind === 'editAssetGroup' || kind === 'videoPlan' || kind === 'bgmScore'
 }
 
 export function nodeFreezesMeasurementWhileRunning(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -898,14 +904,12 @@ function FinalContent({
           />
         </div>
       ) : null}
-      {renderSection(labels('finalStats'), (
-        <div className="space-y-1">
-          {renderValue(labels('totalShots'), details.totalShots)}
-          {renderValue(labels('totalImages'), details.totalImages)}
-          {renderValue(labels('totalVideos'), details.totalVideos)}
-          {renderValue(labels('totalDuration'), details.totalDuration)}
-        </div>
-      ))}
+      {renderSection(labels('finalStats'), shotDetailIconGrid([
+        { label: labels('totalShots'), value: details.totalShots != null ? String(details.totalShots) : '' },
+        { label: labels('totalImages'), value: details.totalImages != null ? String(details.totalImages) : '' },
+        { label: labels('totalVideos'), value: details.totalVideos != null ? String(details.totalVideos) : '' },
+        { label: labels('totalDuration'), value: details.totalDuration != null ? String(details.totalDuration) : '' },
+      ]))}
       {expanded ? renderChips(labels('videoOrder'), details.orderedVideoLabels) : null}
     </div>
   )
@@ -934,8 +938,9 @@ function BgmScoreContent({
         const timeRange = typeof section.startSec === 'number' || typeof section.endSec === 'number'
           ? `${section.startSec ?? 0}s - ${section.endSec ?? details.durationSeconds ?? ''}s`
           : null
+        const streamClassName = data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''
         return (
-          <section key={`${section.title}-${index}`} className="space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
+          <section key={`${section.title}-${index}`} className={`space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${streamClassName}`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 {section.category ? (
@@ -982,7 +987,7 @@ function BgmScoreContent({
     <div className="space-y-2">
       <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('virtualLayers')}</p>
       {details.virtualLayers.map((layer, index) => (
-        <section key={`${layer.name}-${index}`} className="space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
+        <section key={`${layer.name}-${index}`} className={`space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
           <p className={`${SELECTABLE_TEXT_CLASS} break-words text-xs font-semibold text-[var(--glass-text-primary)]`}>{layer.name}</p>
           {renderSummaryText(layer.purpose, 2)}
           {renderSummaryText(layer.content, 4)}
@@ -1036,14 +1041,6 @@ function BgmScoreContent({
   )
 }
 
-function renderEditScriptCell(label: string, children: ReactNode, className = '') {
-  return (
-    <td aria-label={label} className={`border-l border-slate-100 px-3 py-3 align-top text-xs leading-5 text-[var(--glass-text-secondary)] first:border-l-0 ${className}`}>
-      <div className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words`}>{children}</div>
-    </td>
-  )
-}
-
 function EditPipelineStepContent({
   data,
   labels,
@@ -1062,7 +1059,7 @@ function EditPipelineStepContent({
   return (
     <div className="space-y-2">
       {visibleItems.map((item, index) => (
-        <section key={`${item.title}-${index}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
+        <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
           <div className="flex items-center justify-between gap-2">
             <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
             {item.chips && item.chips.length > 0 ? (
@@ -1101,6 +1098,221 @@ function EditPipelineStepContent({
   )
 }
 
+const PROCESS_STEP_GLYPHS: Record<string, string> = {
+  timeline: 'clock', visibleAction: 'motion', camera: 'target', audio: 'sound', primaryTable: 'film', assetExtract: 'people',
+}
+
+// 生成过程：步骤网格（点步骤看其逐镜内容）。把 P1–P6 收纳进一张卡，默认折叠。
+function ProcessGroupContent({
+  data,
+  labels,
+  expanded,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
+}) {
+  const details = data.editProcessGroupDetails
+  if (!details || details.steps.length === 0) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+  if (!expanded) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+  return <ProcessStepGrid steps={details.steps} labels={labels} />
+}
+
+function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<WorkspaceCanvasFlowNode['data']['editProcessGroupDetails']>['steps']; readonly labels: ReturnType<typeof useTranslations> }) {
+  const [active, setActive] = useState<string | null>(null)
+  const current = steps.find((s) => s.key === active) ?? null
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-3 gap-2.5">
+        {steps.map((step) => {
+          const on = active === step.key
+          return (
+            <button
+              key={step.key}
+              type="button"
+              className={`nodrag flex flex-col items-start rounded-[14px] border bg-white p-3 text-left transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+              onClick={(event) => { event.stopPropagation(); setActive(on ? null : step.key) }}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-[7px] bg-slate-900 px-1.5 text-[10px] font-bold text-white">{step.badge}</span>
+                <FieldGlyph name={PROCESS_STEP_GLYPHS[step.key] ?? 'dot'} className="h-3.5 w-3.5 text-[var(--glass-text-tertiary)]" />
+              </span>
+              <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 text-xs font-semibold text-[var(--glass-text-primary)]`}>{step.title}</p>
+              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>{step.items.length} 项 · {step.statusLabel}</p>
+            </button>
+          )
+        })}
+      </div>
+      {current ? (
+        <section className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
+          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
+            <FieldGlyph name={PROCESS_STEP_GLYPHS[current.key] ?? 'dot'} className="h-3 w-3" />{current.title}
+          </p>
+          <div className="space-y-2">
+            {current.items.map((item, index) => (
+              <div key={`${item.title}-${index}`} className="space-y-1 rounded-[10px] bg-white p-2.5 ring-1 ring-slate-100">
+                <p className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
+                {item.fields.length > 0 ? item.fields.map((field) => (
+                  <React.Fragment key={`${field.label}:${field.value}`}>{renderValue(field.label, field.value)}</React.Fragment>
+                )) : null}
+                {renderSummaryText(item.body, 3)}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{labels('expandDetails')}</p>
+      )}
+    </div>
+  )
+}
+
+interface ShotGridCard {
+  readonly key: string
+  readonly badge: ReactNode
+  readonly duration?: string
+  readonly title: string
+  readonly subtitle?: string
+  readonly subtitle2?: string
+  readonly detail: ReactNode
+}
+
+const SHOT_GRID_COLUMNS = 3
+
+function chunkShotCards(cards: readonly ShotGridCard[], size: number): ShotGridCard[][] {
+  const rows: ShotGridCard[][] = []
+  for (let index = 0; index < cards.length; index += size) {
+    rows.push(cards.slice(index, index + size))
+  }
+  return rows
+}
+
+type ShotField = { readonly label: string; readonly value: string | null | undefined }
+
+// 图标字段卡：图标 + 标签 + 值（可读性强的三级排版）
+function shotIconField(field: ShotField) {
+  if (!hasText(field.value)) return null
+  const span = (field.value ?? '').length > 40
+  return (
+    <div
+      key={field.label}
+      data-stream-field="true"
+      className={`rounded-[12px] border border-slate-200 bg-white p-2.5 ${span ? 'sm:col-span-2' : ''}`}
+    >
+      <p className={`${SELECTABLE_TEXT_CLASS} mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
+        <FieldGlyph name={glyphForField(field.label)} className="h-3 w-3" />{field.label}
+      </p>
+      <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{field.value}</p>
+    </div>
+  )
+}
+
+// 三级：图标字段网格（摄影指导）
+function shotDetailIconGrid(fields: readonly ShotField[]) {
+  const cells = fields.map(shotIconField).filter(Boolean)
+  if (cells.length === 0) return null
+  return <div className="grid gap-2 sm:grid-cols-2">{cells}</div>
+}
+
+// 三级：分区面板（核心剪辑表）
+function shotDetailSections(groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[]) {
+  return (
+    <div className="space-y-2">
+      {groups.map((g) => {
+        const cells = g.fields.map(shotIconField).filter(Boolean)
+        if (cells.length === 0) return null
+        return (
+          <section key={g.name} className="space-y-1.5 rounded-[14px] bg-white p-3 ring-1 ring-slate-100">
+            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name={g.glyph} className="h-3 w-3" />{g.name}</p>
+            <div className="grid gap-2 sm:grid-cols-2">{cells}</div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+// 网格卡片 + 整行展开：点击任意镜头卡片，在其所在整行下方就地插入满宽详情，网格始终对齐
+function ShotGrid({
+  cards,
+  accent,
+  streamPresentation,
+}: {
+  readonly cards: readonly ShotGridCard[]
+  readonly accent: 'slate' | 'cyan'
+  readonly streamPresentation?: WorkspaceCanvasStreamPresentation
+}) {
+  const [pinnedKey, setPinnedKey] = useState<string | null>(null)
+  const streamActiveKey = streamPresentation?.activeItemKey ?? null
+  const activeKey = pinnedKey ?? streamActiveKey
+  const displayedStreamKeys = useMemo(
+    () => new Set(streamPresentation?.displayedItemKeys ?? []),
+    [streamPresentation?.displayedItemKeys],
+  )
+  useEffect(() => {
+    if (!pinnedKey) return
+    if (cards.some((card) => card.key === pinnedKey)) return
+    setPinnedKey(null)
+  }, [cards, pinnedKey])
+  const badgeClass = accent === 'cyan' ? 'bg-cyan-600' : 'bg-slate-900'
+  const activeRingClass = accent === 'cyan'
+    ? 'border-cyan-500 ring-1 ring-cyan-500'
+    : 'border-slate-900 ring-1 ring-slate-900'
+  return (
+    <div className="space-y-2.5">
+      {chunkShotCards(cards, SHOT_GRID_COLUMNS).map((row, rowIndex) => {
+        const activeCard = row.find((card) => card.key === activeKey) ?? null
+        return (
+          <div key={rowIndex} className="space-y-2.5">
+            <div className="grid grid-cols-3 gap-2.5">
+              {row.map((card) => {
+                const isActive = activeKey === card.key
+                const isStreamDisplayed = streamPresentation?.isStreaming === true && displayedStreamKeys.has(card.key)
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    className={`nodrag flex flex-col rounded-[14px] border bg-white p-3 text-left transition ${isActive ? activeRingClass : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'} ${isStreamDisplayed ? 'workspace-node-stream-soft-enter' : ''}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setPinnedKey((current) => current === card.key ? null : card.key)
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{card.badge}</span>
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
+                        {card.duration}
+                        <AppIcon name={isActive ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                    <p className={`${SELECTABLE_TEXT_CLASS} mt-2 line-clamp-2 text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{card.title}</p>
+                    {card.subtitle ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 line-clamp-3 text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{card.subtitle}</p> : null}
+                    {card.subtitle2 ? <p className={`${SELECTABLE_TEXT_CLASS} mt-0.5 line-clamp-1 text-[11px] leading-4 text-[var(--glass-text-tertiary)]`}>{card.subtitle2}</p> : null}
+                  </button>
+                )
+              })}
+            </div>
+            {activeCard ? (
+              <div className={`space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
+                  <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.title}</span>
+                  {activeCard.duration ? <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.duration}</span> : null}
+                </div>
+                {activeCard.detail}
+              </div>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function EditScriptContent({
   data,
   labels,
@@ -1119,6 +1331,44 @@ function EditScriptContent({
     )
   }
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const cards: ShotGridCard[] = details.shots.map((shot) => ({
+    key: String(shot.shotNumber),
+    badge: shot.shotNumber,
+    duration: `${shot.durationSec}s`,
+    title: shot.dramaticPurpose,
+    subtitle: shot.visibleAction,
+    detail: shotDetailSections([
+      {
+        name: labels('dramaticPurpose'),
+        glyph: 'target',
+        fields: [
+          { label: labels('dramaticPurpose'), value: shot.dramaticPurpose },
+          { label: labels('visibleAction'), value: shot.visibleAction },
+          { label: labels('audienceFocus'), value: shot.audienceFocus },
+          { label: labels('viewpoint'), value: shot.viewpoint },
+          { label: labels('revealPlan'), value: shot.revealPlan },
+          { label: labels('performanceBeat'), value: shot.performanceBeat },
+          { label: labels('charactersAndScene'), value: shot.charactersAndScene },
+        ],
+      },
+      {
+        name: labels('sound'),
+        glyph: 'sound',
+        fields: [
+          { label: labels('duration'), value: `${shot.durationSec}s` },
+          { label: labels('sound'), value: shot.sound },
+        ],
+      },
+      {
+        name: labels('continuityIn'),
+        glyph: 'link',
+        fields: [
+          { label: labels('continuityIn'), value: shot.continuityIn },
+          { label: labels('continuityOut'), value: shot.continuityOut },
+        ],
+      },
+    ]),
+  }))
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       <div className="grid grid-cols-2 gap-2">
@@ -1150,56 +1400,175 @@ function EditScriptContent({
       {details.screenplayText
         ? renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 8))
         : null}
-      <div className="overflow-hidden rounded-[16px] border border-slate-200 bg-white">
-        <table className="w-full border-collapse text-left">
-          <thead className="bg-slate-50">
-            <tr className="text-[10px] font-semibold uppercase tracking-normal text-[var(--glass-text-tertiary)]">
-              <th className="w-16 px-3 py-2">{labels('shotIndexHeader')}</th>
-              <th className="w-16 border-l border-slate-100 px-3 py-2">{labels('duration')}</th>
-              <th className="w-[20%] border-l border-slate-100 px-3 py-2">{labels('dramaticPurpose')}</th>
-              <th className="w-[24%] border-l border-slate-100 px-3 py-2">{labels('visibleAction')}</th>
-              <th className="w-[16%] border-l border-slate-100 px-3 py-2">{labels('audienceFocus')}</th>
-              <th className="w-[14%] border-l border-slate-100 px-3 py-2">{labels('viewpoint')}</th>
-              <th className="w-[18%] border-l border-slate-100 px-3 py-2">{labels('revealPlan')}</th>
-              <th className="w-[14%] border-l border-slate-100 px-3 py-2">{labels('sound')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {details.shots.map((shot) => (
-              <tr key={shot.shotNumber} className="border-t border-slate-100">
-                {renderEditScriptCell(labels('shotIndexHeader'), shot.shotNumber, 'font-semibold text-[var(--glass-text-primary)]')}
-                {renderEditScriptCell(labels('duration'), `${shot.durationSec}s`)}
-                {renderEditScriptCell(labels('dramaticPurpose'), shot.dramaticPurpose)}
-                {renderEditScriptCell(labels('visibleAction'), shot.visibleAction)}
-                {renderEditScriptCell(labels('audienceFocus'), shot.audienceFocus)}
-                {renderEditScriptCell(labels('viewpoint'), shot.viewpoint)}
-                {renderEditScriptCell(labels('revealPlan'), shot.revealPlan)}
-                {renderEditScriptCell(labels('sound'), shot.sound)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
     </div>
   )
 }
 
-function renderStylePolicySection(
-  title: string,
-  items: readonly { readonly label: string; readonly value?: string | null }[],
-) {
-  const visibleItems = items.filter((item) => hasText(item.value))
-  if (visibleItems.length === 0) return null
-  return renderSection(title, (
-    <div className="space-y-2">
-      {visibleItems.map((item) => (
-        <div key={item.label} className="space-y-1">
-          <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>{item.label}</p>
-          {renderTextBlock(item.value)}
-        </div>
-      ))}
+function EditCinematographyContent({
+  data,
+  labels,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+}) {
+  const details = data.editPipelineStepDetails
+  if (data.__running === true && !details) {
+    return (
+      <div className="space-y-4">
+        <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+        <div className="workspace-node-loading-surface h-[280px] rounded-[18px] border border-slate-200 bg-slate-100" />
+      </div>
+    )
+  }
+  if (!details || details.items.length === 0) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+  const cards: ShotGridCard[] = details.items.map((item, index) => {
+    const movement = item.fields[6]?.value ?? item.fields[1]?.value
+    return {
+      key: item.chips?.[0] ?? String(index + 1),
+      badge: item.chips?.[0] ?? index + 1,
+      title: item.fields[0]?.value ?? item.title,
+      subtitle: movement,
+      subtitle2: item.fields[1]?.value,
+      detail: (
+        <>
+          {shotDetailIconGrid(item.fields)}
+          {hasText(item.body) ? (
+            <div className="mt-2">{shotIconField({ label: '构图', value: item.body })}</div>
+          ) : null}
+        </>
+      ),
+    }
+  })
+  return (
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {renderSection(labels('description'), renderTextBlock(data.body))}
+      <ShotGrid cards={cards} accent="cyan" streamPresentation={data.streamPresentation} />
     </div>
-  ))
+  )
+}
+
+// 资产需求：合并为一张卡，网格展示各资产缩略图，点开看详情并可单独重新生成
+function EditAssetGroupContent({
+  data,
+  labels,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+}) {
+  const [open, setOpen] = useState<string | null>(null)
+  const details = data.editAssetGroupDetails
+  if (!details || details.assets.length === 0) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+  const current = details.assets.find((asset) => asset.requirementId === open) ?? null
+  return (
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {renderSection(labels('description'), renderTextBlock(data.body))}
+      <div className="grid grid-cols-3 gap-2.5">
+        {details.assets.map((asset) => {
+          const on = open === asset.requirementId
+          const imageUrl = toDisplayImageUrl(asset.previewImageUrl ?? null)
+          return (
+            <button
+              key={asset.requirementId}
+              type="button"
+              className={`nodrag overflow-hidden rounded-[14px] border bg-white text-left transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+              onClick={(event) => { event.stopPropagation(); setOpen(on ? null : asset.requirementId) }}
+            >
+              <div className="relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)]">
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt={asset.name} className="h-full w-full object-cover" />
+                ) : (
+                  <FieldGlyph name={asset.kind === 'character' ? 'people' : 'pin'} className="h-6 w-6" />
+                )}
+                {asset.isRunning ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-white/70"><LoadingSpinner /></span>
+                ) : null}
+              </div>
+              <div className="px-2.5 py-1.5">
+                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
+                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {current ? (
+        <section className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
+          <div className="flex items-center gap-2">
+            <FieldGlyph name={current.kind === 'character' ? 'people' : 'pin'} className="h-4 w-4 text-[var(--glass-text-secondary)]" />
+            <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{current.name}</span>
+            <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{current.statusLabel}</span>
+          </div>
+          {shotDetailIconGrid([
+            { label: current.eyebrow, value: current.kind === 'character' ? labels('characters') : labels('locations') },
+            { label: labels('shotCount'), value: current.shotNumbers.join(', ') },
+          ])}
+          {renderTextBlock(current.description)}
+          {current.action && current.actionLabel ? (
+            <button
+              type="button"
+              className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={current.isRunning}
+              onClick={(event) => {
+                event.stopPropagation()
+                if (current.action && !current.isRunning) data.onAction?.(current.action, data.nodeId)
+              }}
+            >
+              <AppIcon name="refresh" className="h-3.5 w-3.5" />
+              {current.actionLabel}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
+// 导演拆镜：镜头网格 + 整行展开（与核心剪辑表一致的设计语言）。collapsed 仅显示摘要。
+function EditDirectorDecoupageContent({
+  data,
+  labels,
+  expanded,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
+}) {
+  const details = data.editPipelineStepDetails
+  if (!details || details.items.length === 0) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+  if (!expanded) {
+    return (
+      <div className="space-y-2">
+        {renderSection(labels('description'), renderSummaryText(data.body, 3))}
+      </div>
+    )
+  }
+  const cards: ShotGridCard[] = details.items.map((item, index) => ({
+    key: String(index + 1),
+    badge: index + 1,
+    title: item.fields[1]?.value ?? item.fields[0]?.value ?? item.title,
+    subtitle: item.body ?? undefined,
+    subtitle2: item.fields[0]?.value,
+    detail: (
+      <>
+        {shotDetailIconGrid(item.fields)}
+        {hasText(item.body) ? <div className="mt-2">{shotIconField({ label: labels('visibleAction'), value: item.body })}</div> : null}
+      </>
+    ),
+  }))
+  return (
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {renderSection(labels('description'), renderTextBlock(data.body))}
+      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
+    </div>
+  )
 }
 
 function StyleBibleContent({
@@ -1215,39 +1584,73 @@ function StyleBibleContent({
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const shouldShowPreview = (data.kind === 'editStylePreview' || data.kind === 'editStyleBible') && hasText(data.previewImageUrl)
 
+  // 一级（折叠）：预览图 + 完整风格总结
   if (!expanded) {
     return (
       <div className="space-y-2">
         {shouldShowPreview ? <MediaPreview data={data} /> : null}
-        {details.styleSummary ? renderSection(labels('styleSummary'), renderSummaryText(details.styleSummary, 3)) : null}
-        {details.visual.imageFilterPrompt ? renderSection(labels('imageFilterPrompt'), renderSummaryText(details.visual.imageFilterPrompt, 3)) : null}
-        {details.visual.negativePrompt ? renderSection(labels('negativePrompt'), renderSummaryText(details.visual.negativePrompt, 3)) : null}
+        {details.styleSummary ? renderSection(labels('styleSummary'), renderTextBlock(details.styleSummary)) : null}
       </div>
     )
   }
 
-  return (
-    <div className="space-y-2">
-      {shouldShowPreview ? <MediaPreview data={data} /> : null}
-      {renderTextSection(labels('styleSummary'), details.styleSummary)}
-      {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
-      {renderStylePolicySection(labels('visualPolicy'), [
-        { label: labels('negativePrompt'), value: details.visual.negativePrompt },
-        { label: labels('imageFilterPrompt'), value: details.visual.imageFilterPrompt },
-        { label: labels('lightingPrompt'), value: details.visual.lightingPrompt },
+  // 二级（展开）：预览图 + 总结 + 分组属性网格 + 硬禁用
+  const groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] = [
+    {
+      name: labels('visualPolicy'), glyph: 'eye', fields: [
         { label: labels('colorPrompt'), value: details.visual.colorPrompt },
+        { label: labels('lightingPrompt'), value: details.visual.lightingPrompt },
         { label: labels('texturePrompt'), value: details.visual.texturePrompt },
         { label: labels('compositionPrompt'), value: details.visual.compositionPrompt },
-      ])}
-      {renderStylePolicySection(labels('cameraPolicy'), [
+        { label: labels('imageFilterPrompt'), value: details.visual.imageFilterPrompt },
+        { label: labels('negativePrompt'), value: details.visual.negativePrompt },
+      ],
+    },
+    {
+      name: labels('cameraPolicy'), glyph: 'camera', fields: [
         { label: labels('movementPrompt'), value: details.camera.movementPrompt },
         { label: labels('lensAndDepthPrompt'), value: details.camera.lensAndDepthPrompt },
         { label: labels('videoRhythmPrompt'), value: details.camera.videoRhythmPrompt },
-      ])}
-      {renderStylePolicySection(labels('soundPolicy'), [
+      ],
+    },
+    {
+      name: labels('soundPolicy'), glyph: 'sound', fields: [
         { label: labels('soundFilterPrompt'), value: details.sound.soundFilterPrompt },
-      ])}
+      ],
+    },
+  ]
+  return (
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {shouldShowPreview ? <MediaPreview data={data} /> : null}
+      {renderTextSection(labels('styleSummary'), details.styleSummary)}
+      {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
+      <StyleBibleGroups groups={groups} />
       {renderChips(labels('hardBans'), details.hardBans)}
+    </div>
+  )
+}
+
+// 风格圣经：分组属性网格（点组看字段）
+function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] }) {
+  const visibleGroups = groups.filter((g) => g.fields.some((f) => hasText(f.value)))
+  const [active, setActive] = useState<string | null>(visibleGroups[0]?.name ?? null)
+  const current = visibleGroups.find((g) => g.name === active)
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-3 gap-2.5">
+        {visibleGroups.map((g) => {
+          const on = active === g.name
+          const count = g.fields.filter((f) => hasText(f.value)).length
+          return (
+            <button key={g.name} type="button" className={`nodrag flex flex-col items-start rounded-[14px] border bg-white p-3 text-left transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`} onClick={(e) => { e.stopPropagation(); setActive(on ? null : g.name) }}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-slate-100 text-[var(--glass-text-secondary)]"><FieldGlyph name={g.glyph} className="h-4 w-4" /></span>
+              <p className={`${SELECTABLE_TEXT_CLASS} mt-2 text-xs font-semibold text-[var(--glass-text-primary)]`}>{g.name}</p>
+              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>{count} 项</p>
+            </button>
+          )
+        })}
+      </div>
+      {current ? shotDetailIconGrid(current.fields) : null}
     </div>
   )
 }
@@ -1263,13 +1666,83 @@ function EditScreenplayContent({
 }) {
   const details = data.editScreenplayDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const parsed = parseScreenplayOutline(details.screenplayText)
+
+  if (!expanded) {
+    return (
+      <div className="space-y-2">
+        {parsed.summary
+          ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
+          : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-2">
-      {renderSection(labels('screenplay'), expanded
-        ? renderTextBlock(details.screenplayText)
-        : renderSummaryText(details.screenplayText, 8))}
-      {expanded ? renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt)) : null}
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
+      {parsed.characters.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="people" className="h-3 w-3" />{labels('characters')}</p>
+          <ScreenplayAccordion items={parsed.characters.map((c) => ({ key: c.name, title: c.name, body: c.desc }))} />
+        </div>
+      ) : null}
+      {parsed.scenes.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="frame" className="h-3 w-3" />{labels('scenes')}</p>
+          <ScreenplayAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
+        </div>
+      ) : (
+        renderSection(labels('screenplay'), renderTextBlock(details.screenplayText))
+      )}
+      {renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt))}
+    </div>
+  )
+}
+
+interface ScreenplayOutline {
+  readonly summary: string
+  readonly characters: readonly { readonly name: string; readonly desc: string }[]
+  readonly scenes: readonly { readonly header: string; readonly actions: readonly string[] }[]
+}
+function parseScreenplayOutline(text: string): ScreenplayOutline {
+  const lines = (text ?? '').split('\n')
+  let summary = ''
+  const characters: { name: string; desc: string }[] = []
+  const scenes: { header: string; actions: string[] }[] = []
+  let mode: 'none' | 'summary' | 'characters' | 'scene' = 'none'
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) continue
+    if (line.startsWith('标题')) continue
+    if (line.startsWith('故事梗概')) { mode = 'summary'; continue }
+    if (line.startsWith('角色表')) { mode = 'characters'; continue }
+    if (/^场景\s*\d+/.test(line)) { scenes.push({ header: line.replace(/^场景\s*\d+[｜|]?\s*/, '') || line, actions: [] }); mode = 'scene'; continue }
+    if (line.startsWith('动作')) continue
+    if (mode === 'summary') summary += line
+    else if (mode === 'characters') { const m = line.split(/[：:]/); if (m.length >= 2) characters.push({ name: m[0].trim(), desc: m.slice(1).join('：').trim() }) }
+    else if (mode === 'scene' && scenes.length > 0) scenes[scenes.length - 1].actions.push(line)
+  }
+  return { summary, characters, scenes }
+}
+
+function ScreenplayAccordion({ items }: { readonly items: readonly { readonly key: string; readonly badge?: string; readonly title: string; readonly body: string }[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  return (
+    <div className="divide-y divide-slate-100 overflow-hidden rounded-[14px] border border-slate-200 bg-white">
+      {items.map((it) => {
+        const on = open === it.key
+        return (
+          <div key={it.key}>
+            <button type="button" className={`nodrag flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50 ${on ? 'bg-slate-50' : ''}`} onClick={(e) => { e.stopPropagation(); setOpen(on ? null : it.key) }}>
+              {it.badge ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-[7px] bg-slate-900 px-1.5 text-[11px] font-bold text-white">{it.badge}</span> : null}
+              <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{it.title}</span>
+              <AppIcon name={on ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
+            </button>
+            {on ? <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{it.body}</p> : null}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1561,7 +2034,22 @@ function SpaceConsistencyContent({
 }) {
   const details = data.spaceConsistencyDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const visibleProfiles = expanded ? details.spatialProfiles : details.spatialProfiles.slice(0, 2)
+
+  if (!expanded) {
+    return (
+      <div className="space-y-3">
+        <MediaPreview data={data} />
+        {renderSection(labels('spaceConsistencyStats'), (
+          <div className="space-y-1">
+            {renderValue(labels('status'), details.stage ?? data.statusLabel)}
+            {renderValue(labels('spatialProfileCount'), details.spatialProfileCount)}
+            {renderValue(labels('cameraPlanCount'), details.cameraPlanCount)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       <MediaPreview data={data} />
@@ -1572,20 +2060,23 @@ function SpaceConsistencyContent({
           {renderValue(labels('cameraPlanCount'), details.cameraPlanCount)}
         </div>
       ))}
-      {visibleProfiles.length > 0 ? renderSection(labels('spatialProfiles'), (
-        <div className="space-y-2">
-          {visibleProfiles.map((profile, index) => (
-            <section key={`${profile.targetId ?? profile.requirementId ?? 'profile'}:${index}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
+      {details.cameraPlans.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="pin" className="h-3 w-3" />{labels('cameraPlans')}</p>
+          <SpaceCameraGrid details={details} />
+        </div>
+      ) : renderTextSection(labels('reason'), data.body)}
+      {details.spatialProfiles.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="grid" className="h-3 w-3" />{labels('spatialProfiles')}</p>
+          {details.spatialProfiles.map((profile, index) => (
+            <section key={`${profile.targetId ?? profile.requirementId ?? 'profile'}:${index}`} className="space-y-1.5 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
               <div className="flex items-center justify-between gap-2">
-                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>
-                  {profile.name ?? labels('location')}
-                </p>
-                <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200`}>
-                  {profile.shotNumbers.length > 0 ? profile.shotNumbers.join(', ') : labels('unknown')}
-                </span>
+                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{profile.name ?? labels('location')}</p>
+                <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200`}>{profile.shotNumbers.length > 0 ? profile.shotNumbers.join(', ') : labels('unknown')}</span>
               </div>
               {profile.sceneSummary ? renderTextBlock(profile.sceneSummary) : null}
-              {expanded && profile.anchors.length > 0 ? renderSubsection(labels('anchors'), (
+              {profile.anchors.length > 0 ? renderSubsection(labels('anchors'), (
                 <div className="space-y-1.5">
                   {profile.anchors.map((anchor, anchorIndex) => (
                     <div key={`${profile.targetId ?? profile.name ?? 'anchor'}:${anchor.label ?? anchorIndex}`} className="space-y-1 rounded-[10px] bg-white p-2 ring-1 ring-slate-100">
@@ -1597,50 +2088,51 @@ function SpaceConsistencyContent({
                   ))}
                 </div>
               )) : null}
-              {expanded && profile.depthLayout ? renderSubsection(labels('depthLayout'), (
+              {profile.depthLayout ? renderSubsection(labels('depthLayout'), (
                 <div className="space-y-1">
                   {renderValue(labels('foreground'), profile.depthLayout.foreground)}
                   {renderValue(labels('midground'), profile.depthLayout.midground)}
                   {renderValue(labels('background'), profile.depthLayout.background)}
                 </div>
               )) : null}
-              {expanded && profile.lightingDirection ? renderSubsection(labels('lightingDirection'), renderTextBlock(profile.lightingDirection)) : null}
-              {expanded && profile.rawProfile ? renderSubsection(labels('spatialProfileJson'), renderJsonBlock(profile.rawProfile)) : null}
+              {profile.lightingDirection ? renderSubsection(labels('lightingDirection'), renderTextBlock(profile.lightingDirection)) : null}
             </section>
           ))}
-          {!expanded && details.spatialProfiles.length > visibleProfiles.length ? (
-            <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-              {labels('moreItems', { count: details.spatialProfiles.length - visibleProfiles.length })}
-            </p>
-          ) : null}
         </div>
-      )) : renderTextSection(labels('reason'), data.body)}
-      {details.cameraPlans.length > 0 ? renderSection(labels('cameraPlans'), (
-        <div className="space-y-2">
-          {details.cameraPlans.slice(0, expanded ? details.cameraPlans.length : 2).map((plan, index) => (
-            <section key={`${plan.sourceShotNumber ?? index}:${plan.sourceVideoBlockId ?? 'camera'}`} className="space-y-1.5 rounded-[16px] bg-white p-3 ring-1 ring-slate-100">
-              <p className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>
-                {labels('cameraPlan')} #{plan.sourceShotNumber ?? index + 1}
-              </p>
-              {renderValue(labels('cameraMove'), plan.cameraMovement)}
-              {plan.shotScale || plan.cameraAngle || plan.cameraHeight ? renderTextBlock([
-                plan.shotScale,
-                plan.cameraHeight,
-                plan.cameraAngle,
-              ].filter(Boolean).join(' · ')) : null}
-              {plan.composition ? renderTextBlock(plan.composition) : null}
-              {expanded && plan.shotBlocking ? renderSection(labels('shotBlocking'), renderTextBlock(JSON.stringify(plan.shotBlocking, null, 2))) : null}
-              {expanded && plan.lensAndDepth ? renderTextBlock(plan.lensAndDepth) : null}
-              {expanded && plan.aestheticIntent ? renderTextBlock(plan.aestheticIntent) : null}
-            </section>
-          ))}
-          {!expanded && details.cameraPlans.length > 2 ? (
-            <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-              {labels('moreItems', { count: details.cameraPlans.length - 2 })}
-            </p>
-          ) : null}
-        </div>
-      )) : null}
+      ) : null}
+    </div>
+  )
+}
+
+// 空间一致性：机位状态网格（每镜一格，点开看机位详情）
+function SpaceCameraGrid({ details }: { readonly details: NonNullable<WorkspaceCanvasFlowNode['data']['spaceConsistencyDetails']> }) {
+  const plans = details.cameraPlans
+  const [open, setOpen] = useState<number | null>(null)
+  const cur = open === null ? null : plans[open]
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-4 gap-2">
+        {plans.map((plan, index) => {
+          const on = open === index
+          return (
+            <button key={`${plan.sourceShotNumber ?? index}:${plan.sourceVideoBlockId ?? 'c'}`} type="button" className={`nodrag flex flex-col items-center rounded-[12px] border p-2 transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`} onClick={(e) => { e.stopPropagation(); setOpen(on ? null : index) }}>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">{plan.sourceShotNumber ?? index + 1}</span>
+              <FieldGlyph name="pin" className="mt-1 h-4 w-4 text-[var(--glass-text-tertiary)]" />
+              <span className="mt-1 inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-600"><AppIcon name="check" className="h-2.5 w-2.5" />OK</span>
+            </button>
+          )
+        })}
+      </div>
+      {cur ? shotDetailIconGrid([
+        { label: '运镜', value: cur.cameraMovement },
+        { label: '景别', value: cur.shotScale },
+        { label: '机位', value: cur.cameraPosition },
+        { label: '机位高度', value: cur.cameraHeight },
+        { label: '拍摄角度', value: cur.cameraAngle },
+        { label: '镜头景深', value: cur.lensAndDepth },
+        { label: '构图', value: cur.composition },
+        { label: '美学意图', value: cur.aestheticIntent },
+      ]) : null}
     </div>
   )
 }
@@ -1687,19 +2179,23 @@ function NodeContent({
     case 'editStyleBible':
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editDirectorDecoupage':
-      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
+      return <EditDirectorDecoupageContent data={data} labels={labels} expanded={expanded} />
     case 'editPipelineStep':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
+    case 'editProcessGroup':
+      return <ProcessGroupContent data={data} labels={labels} expanded={expanded} />
     case 'editScript':
       return <EditScriptContent data={data} labels={labels} />
     case 'editCinematographyShotPlan':
-      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
+      return <EditCinematographyContent data={data} labels={labels} />
     case 'spaceConsistency':
       return <SpaceConsistencyContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':
       return <VideoPlanContent data={data} labels={labels} expanded={expanded} />
     case 'editRequiredAsset':
       return <EditAssetContent data={data} labels={labels} expanded={expanded} />
+    case 'editAssetGroup':
+      return <EditAssetGroupContent data={data} labels={labels} />
   }
 }
 
@@ -1752,7 +2248,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [data.kind, data.expanded, data.isRunning, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>

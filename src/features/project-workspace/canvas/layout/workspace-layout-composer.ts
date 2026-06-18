@@ -99,6 +99,13 @@ export function relayoutEditAssetsBelowScript(
   const editScriptNode = nodes.find((node) => node.data.kind === 'editScript')
   if (!editScriptNode) return [...nodes]
 
+  // 资产合并为单张「editAssetGroup」卡后，仅需把它放到（测高后的）剪辑表正下方
+  const assetGroupNode = nodes.find((node) => node.data.kind === 'editAssetGroup')
+  if (assetGroupNode) {
+    const y = editScriptNode.position.y + editScriptNode.data.height + WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
+    return nodes.map((node) => (node.id === assetGroupNode.id ? { ...node, position: { x: node.position.x, y } } : node))
+  }
+
   const assetNodes = nodes.filter((node) => node.data.kind === 'editRequiredAsset')
   if (assetNodes.length === 0) return [...nodes]
 

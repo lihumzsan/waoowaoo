@@ -38,9 +38,10 @@ describe('workspace canvas node presentation profiles', () => {
 
     expect(directorProfile.collapsed).toEqual({ width: 420, height: 360 })
     expect(directorProfile.expanded).toEqual({ width: 620, height: 720 })
-    expect(cinematographyProfile.collapsed).toEqual({ width: 460, height: 620 })
-    expect(cinematographyProfile.expanded).toEqual({ width: 760, height: 820 })
-    expect(cinematographyProfile.expandedLayout).toBe('wide')
+    // 摄影指导改为「网格 · 整行展开」后，采用固定宽度 + 自适应高度（不再有独立 expanded 尺寸）
+    expect(cinematographyProfile.collapsed).toEqual({ width: 760, height: 360 })
+    expect(cinematographyProfile.expanded).toBeUndefined()
+    expect(cinematographyProfile.expandedLayout).toBe('stack')
   })
 
   it('allows measured video plan nodes to shrink to actual content height', () => {

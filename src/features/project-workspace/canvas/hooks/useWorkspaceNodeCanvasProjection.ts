@@ -49,6 +49,7 @@ import {
   WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
   WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
   WORKSPACE_CANVAS_FINAL_NODE_SIZE,
@@ -72,8 +73,8 @@ const EDIT_STYLE_BIBLE_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE
 const EDIT_STYLE_BIBLE_LAYER_GAP_Y = 120
 const EDIT_PIPELINE_STEP_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width
 const EDIT_PIPELINE_STEP_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height
-const EDIT_PIPELINE_STEP_GRID_COLUMNS = 3
-const EDIT_PIPELINE_STEP_GRID_GAP_X = 44
+const EDIT_CINEMATOGRAPHY_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH
+const EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT = 360
 const EDIT_PIPELINE_STEP_GRID_GAP_Y = 96
 const EDIT_PIPELINE_STEP_LAYER_GAP_Y = 150
 const EDIT_PIPELINE_TO_SCRIPT_GAP_Y = 180
@@ -84,16 +85,11 @@ const EDIT_SCREENPLAY_NODE_FOOTER_HEIGHT = 66
 const EDIT_SCREENPLAY_SECTION_BASE_HEIGHT = 42
 const EDIT_SCREENPLAY_SECTION_GAP = 8
 const EDIT_SCREENPLAY_TEXT_LINE_HEIGHT = 20
-const EDIT_ASSET_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE.height
 const STORY_COLUMN_X = 260
 const COLUMN_GAP = 940
 const ROW_GAP = 248
 const EDIT_SCRIPT_TABLE_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH
 const EDIT_SCRIPT_NODE_BASE_HEIGHT = 300
-const EDIT_ASSET_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE.width
-const EDIT_ASSET_GRID_COLUMNS = WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS
-const EDIT_ASSET_GRID_GAP_X = 44
-const EDIT_ASSET_GRID_GAP_Y = WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y
 const EDIT_SCRIPT_ASSET_LAYER_GAP_Y = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
 const PANEL_GRID_COLUMNS = 5
 const PANEL_GRID_GAP_X = 44
@@ -198,12 +194,6 @@ function uniqueStrings(values: readonly string[]): string[] {
 function readStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return uniqueStrings(value.flatMap((item) => (typeof item === 'string' ? [item] : [])))
-}
-
-function dateLikeToString(value: string | Date | null | undefined): string | null {
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  if (value instanceof Date) return value.toISOString()
-  return null
 }
 
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
@@ -1405,7 +1395,7 @@ export function buildWorkspaceNodeCanvasProjection({
     const editScriptIsFailed = editScript.status === 'failed'
     const editScriptIsReady = !editScriptIsGenerating && !editScriptIsFailed
     const shouldShowPipelineSteps = editScriptIsReady || editScriptIsGenerating || editScriptIsFailed
-    const pipelineStepRows = shouldShowPipelineSteps ? 2 : 0
+    const pipelineStepRows = shouldShowPipelineSteps ? 1 : 0
     const pipelineStepLayerHeight = pipelineStepRows > 0
       ? pipelineStepRows * EDIT_PIPELINE_STEP_NODE_HEIGHT + (pipelineStepRows - 1) * EDIT_PIPELINE_STEP_GRID_GAP_Y
       : 0
@@ -1458,53 +1448,55 @@ export function buildWorkspaceNodeCanvasProjection({
       { key: 'primaryTable', title: translate('nodeFields.editStepPrimaryTable') },
       { key: 'assetExtract', title: translate('nodeFields.editStepAssetExtract') },
     ] as const
-    const pipelineNodeIds: string[] = []
     const firstIncompleteStep = pipelineStepDefinitions.find((step) => !editPipelineStepReady(editScript, step.key))?.key ?? null
+    // 「生成过程」：把 P1–P6 收纳进一张可折叠卡（步骤网格），替代原来的 6 个独立节点
+    const processGroupNodeId = shouldShowPipelineSteps ? `edit-process:${editScript.id}` : null
 
-    if (shouldShowPipelineSteps) {
-      pipelineStepDefinitions.forEach((step, index) => {
-        const nodeId = `edit-pipeline:${editScript.id}:${step.key}`
-        const column = index % EDIT_PIPELINE_STEP_GRID_COLUMNS
-        const row = Math.floor(index / EDIT_PIPELINE_STEP_GRID_COLUMNS)
-        const items = createEditPipelineStepItems(editScript, step.key, translate)
+    if (shouldShowPipelineSteps && processGroupNodeId) {
+      const processSteps = pipelineStepDefinitions.map((step, index) => {
         const stepState = editPipelineStepState(editScript, step.key, firstIncompleteStep)
-        pipelineNodeIds.push(nodeId)
-        nodes.push(createNode({
-          id: nodeId,
-          fallbackX: STORY_COLUMN_X + column * (EDIT_PIPELINE_STEP_NODE_WIDTH + EDIT_PIPELINE_STEP_GRID_GAP_X),
-          fallbackY: editPipelineBaseY + row * (EDIT_PIPELINE_STEP_NODE_HEIGHT + EDIT_PIPELINE_STEP_GRID_GAP_Y),
-          zIndex: zIndex++,
-          savedLayoutByKey,
-          ignoreSavedLayout: true,
-          data: {
-            kind: 'editPipelineStep',
-            layoutNodeType: 'editPipelineStep',
-            targetType: 'editPipelineStep',
-            targetId: `${editScript.id}:${step.key}`,
-            title: step.title,
-            eyebrow: translate('nodes.editPipelineStep.eyebrow'),
-            body: stepState === 'pending'
-              ? translate('nodes.editPipelineStep.pendingBody')
-              : translate('nodes.editPipelineStep.body'),
-            meta: translate('nodes.editPipelineStep.meta', { count: items.length }),
-            statusLabel: stepState === 'ready'
-              ? translate('status.ready')
-              : stepState === 'processing'
-                ? translate('status.processing')
-                : stepState === 'failed'
-                  ? translate('status.failed')
-                  : translate('status.pending'),
-            isRunning: stepState === 'processing',
-            width: EDIT_PIPELINE_STEP_NODE_WIDTH,
-            height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
-            indexLabel: `P${index + 1}`,
-            editPipelineStepDetails: {
-              items,
-            },
-            onAction,
-          },
-        }))
+        return {
+          key: step.key,
+          badge: `P${index + 1}`,
+          title: step.title,
+          statusLabel: stepState === 'ready'
+            ? translate('status.ready')
+            : stepState === 'processing'
+              ? translate('status.processing')
+              : stepState === 'failed'
+                ? translate('status.failed')
+                : translate('status.pending'),
+          items: createEditPipelineStepItems(editScript, step.key, translate),
+        }
       })
+      const processRunning = processSteps.some((step) => editPipelineStepState(editScript, step.key as EditPipelineStepKey, firstIncompleteStep) === 'processing')
+      nodes.push(createNode({
+        id: processGroupNodeId,
+        fallbackX: STORY_COLUMN_X,
+        fallbackY: editPipelineBaseY,
+        zIndex: zIndex++,
+        savedLayoutByKey,
+        ignoreSavedLayout: true,
+        data: {
+          kind: 'editProcessGroup',
+          layoutNodeType: 'editPipelineStep',
+          targetType: 'editPipelineStep',
+          targetId: editScript.id,
+          title: translate('nodes.editProcessGroup.title'),
+          eyebrow: translate('nodes.editProcessGroup.eyebrow'),
+          body: translate('nodes.editProcessGroup.body'),
+          meta: translate('nodes.editProcessGroup.meta', { count: processSteps.length }),
+          statusLabel: processRunning ? translate('status.processing') : translate('status.ready'),
+          isRunning: processRunning,
+          width: EDIT_PIPELINE_STEP_NODE_WIDTH,
+          height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
+          indexLabel: 'P',
+          editProcessGroupDetails: {
+            steps: processSteps,
+          },
+          onAction,
+        },
+      }))
     }
 
     nodes.push(createNode({
@@ -1562,22 +1554,17 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    if (pipelineNodeIds.length > 0) {
-      const firstPipelineNodeId = pipelineNodeIds[0]
+    if (processGroupNodeId) {
       if (editDirectorDecoupageNodeId) {
-        edges.push(createEdge(`edge:director-decoupage-edit-pipeline:${editScript.id}`, editDirectorDecoupageNodeId, firstPipelineNodeId))
+        edges.push(createEdge(`edge:director-decoupage-edit-process:${editScript.id}`, editDirectorDecoupageNodeId, processGroupNodeId))
       } else if (editStyleBibleNodeId) {
-        edges.push(createEdge(`edge:edit-style-bible-edit-pipeline:${editScript.id}`, editStyleBibleNodeId, firstPipelineNodeId))
+        edges.push(createEdge(`edge:edit-style-bible-edit-process:${editScript.id}`, editStyleBibleNodeId, processGroupNodeId))
       } else if (editScreenplayNodeId) {
-        edges.push(createEdge(`edge:edit-screenplay-edit-pipeline:${editScript.id}`, editScreenplayNodeId, firstPipelineNodeId))
+        edges.push(createEdge(`edge:edit-screenplay-edit-process:${editScript.id}`, editScreenplayNodeId, processGroupNodeId))
       } else if (hasStory) {
-        edges.push(createEdge(`edge:analysis-edit-pipeline:${editScript.id}`, analysisNodeId, firstPipelineNodeId))
+        edges.push(createEdge(`edge:analysis-edit-process:${editScript.id}`, analysisNodeId, processGroupNodeId))
       }
-      pipelineNodeIds.forEach((nodeId, index) => {
-        const nextNodeId = pipelineNodeIds[index + 1]
-        if (nextNodeId) edges.push(createEdge(`edge:edit-pipeline:${editScript.id}:${index + 1}`, nodeId, nextNodeId))
-      })
-      edges.push(createEdge(`edge:edit-pipeline-edit-script:${editScript.id}`, pipelineNodeIds[pipelineNodeIds.length - 1], editScriptNodeId))
+      edges.push(createEdge(`edge:edit-process-edit-script:${editScript.id}`, processGroupNodeId, editScriptNodeId))
     } else if (editDirectorDecoupageNodeId) {
       edges.push(createEdge(`edge:director-decoupage-edit-script:${editScript.id}`, editDirectorDecoupageNodeId, editScriptNodeId))
     } else if (editStyleBibleNodeId) {
@@ -1590,83 +1577,66 @@ export function buildWorkspaceNodeCanvasProjection({
 
     const assetBaseY = editScriptFallbackY + editScriptHeight + EDIT_SCRIPT_ASSET_LAYER_GAP_Y
     const editAssetNodeIds: string[] = []
-    let assetRowY = assetBaseY
-    let assetRowMaxHeight = 0
-    if (editScriptIsReady) editScript.requirements.forEach((asset, index) => {
-      const nodeId = `edit-asset:${asset.id}`
-      editAssetNodeIds.push(nodeId)
-      const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
-      const canRegenerateAsset = asset.status === 'completed' && Boolean(asset.targetId)
-      const assetAction: WorkspaceCanvasNodeAction | undefined = canGenerateAsset
-        ? { type: 'generate_edit_asset', editScriptId: editScript.id, requirementId: asset.id }
-        : canRegenerateAsset && asset.targetId
-          ? { type: 'regenerate_edit_asset_image', assetId: asset.targetId, kind: asset.kind }
-          : undefined
-      const nodeHeight = estimateEditAssetNodeHeight(asset)
-      const selectedImage = asset.kind === 'location'
-        ? selectedLocationImage(locations, asset.targetId)
-        : null
-      const spatialProfileJson = asset.spatialProfileJson ?? selectedImage?.spatialProfileJson ?? null
-      const spatialProfileStatus = asset.spatialProfileStatus ?? selectedImage?.spatialProfileStatus ?? null
-      const spatialProfileError = asset.spatialProfileError ?? selectedImage?.spatialProfileError ?? null
-      const spatialProfileAnalyzedAt = asset.spatialProfileAnalyzedAt ?? selectedImage?.spatialProfileAnalyzedAt ?? null
-      const spatialProfileModel = asset.spatialProfileModel ?? selectedImage?.spatialProfileModel ?? null
-      const column = index % EDIT_ASSET_GRID_COLUMNS
-      if (column === 0 && index > 0) {
-        assetRowY += assetRowMaxHeight + EDIT_ASSET_GRID_GAP_Y
-        assetRowMaxHeight = 0
-      }
-      assetRowMaxHeight = Math.max(assetRowMaxHeight, nodeHeight)
+    // 资产合并为单张「editAssetGroup」卡：卡内网格展示各资产缩略图，并保留逐个生成/重新生成操作
+    if (editScriptIsReady && editScript.requirements.length > 0) {
+      const assetGroupNodeId = `edit-asset-group:${editScript.id}`
+      editAssetNodeIds.push(assetGroupNodeId)
+      const assetItems = editScript.requirements.map((asset) => {
+        const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
+        const canRegenerateAsset = asset.status === 'completed' && Boolean(asset.targetId)
+        const assetAction: WorkspaceCanvasNodeAction | undefined = canGenerateAsset
+          ? { type: 'generate_edit_asset', editScriptId: editScript.id, requirementId: asset.id }
+          : canRegenerateAsset && asset.targetId
+            ? { type: 'regenerate_edit_asset_image', assetId: asset.targetId, kind: asset.kind }
+            : undefined
+        return {
+          requirementId: asset.id,
+          kind: asset.kind,
+          name: asset.name,
+          eyebrow: assetKindLabel(asset.kind, translate),
+          description: asset.description,
+          shotNumbers: asset.shotNumbers,
+          statusLabel: assetStatusLabel(asset.status, translate),
+          isRunning: asset.status === 'generating',
+          previewImageUrl: asset.previewImageUrl,
+          action: assetAction,
+          actionLabel: assetAction
+            ? canGenerateAsset ? translate('actions.generateEditAsset') : translate('actions.regenerateImage')
+            : undefined,
+        }
+      })
+      const charCount = assetItems.filter((asset) => asset.kind === 'character').length
+      const locationCount = assetItems.length - charCount
       nodes.push(createNode({
-        id: nodeId,
-        fallbackX: STORY_COLUMN_X + column * (EDIT_ASSET_NODE_WIDTH + EDIT_ASSET_GRID_GAP_X),
-        fallbackY: assetRowY,
+        id: assetGroupNodeId,
+        fallbackX: STORY_COLUMN_X,
+        fallbackY: assetBaseY,
         zIndex: zIndex++,
         savedLayoutByKey,
         ignoreSavedLayout: true,
         data: {
-          kind: 'editRequiredAsset',
-          layoutNodeType: 'editRequiredAsset',
-          targetType: asset.kind === 'character' ? 'projectCharacter' : 'projectLocation',
-          targetId: asset.targetId || asset.id,
-          title: asset.name,
-          eyebrow: assetKindLabel(asset.kind, translate),
-          body: compactText(asset.description, translate('empty.editAsset')),
-          meta: translate('nodes.editAsset.meta', { shots: asset.shotNumbers.join(', ') }),
-          statusLabel: assetStatusLabel(asset.status, translate),
-          isRunning: asset.status === 'generating',
-          runtimeTargets: runtimeTargets(
-            TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType, asset.taskTargetId),
-          ),
-          width: EDIT_ASSET_NODE_WIDTH,
-          height: nodeHeight,
-          indexLabel: asset.kind === 'character' ? 'C' : 'L',
-          previewImageUrl: asset.previewImageUrl,
-          editAssetDetails: {
+          kind: 'editAssetGroup',
+          layoutNodeType: 'editAssetGroup',
+          targetType: 'editAssetRequirement',
+          targetId: editScript.id,
+          title: translate('nodes.editAssetGroup.title'),
+          eyebrow: translate('nodes.editAssetGroup.eyebrow'),
+          body: translate('nodes.editAssetGroup.body'),
+          meta: translate('nodes.editAssetGroup.meta', { characters: charCount, locations: locationCount }),
+          statusLabel: assetItems.some((asset) => asset.isRunning) ? translate('status.processing') : translate('status.ready'),
+          isRunning: assetItems.some((asset) => asset.isRunning),
+          width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+          height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
+          indexLabel: 'A',
+          editAssetGroupDetails: {
             editScriptId: editScript.id,
-            requirementId: asset.id,
-            kind: asset.kind,
-            description: asset.description,
-            shotNumbers: asset.shotNumbers,
-            targetId: asset.targetId,
-            taskTargetType: asset.taskTargetType ?? null,
-            taskTargetId: asset.taskTargetId ?? null,
-            errorMessage: asset.errorMessage,
-            spatialProfileJson,
-            spatialProfileStatus,
-            spatialProfileError,
-            spatialProfileAnalyzedAt: dateLikeToString(spatialProfileAnalyzedAt),
-            spatialProfileModel,
+            assets: assetItems,
           },
-          actionLabel: assetAction
-            ? canGenerateAsset ? translate('actions.generateEditAsset') : translate('actions.regenerateImage')
-            : undefined,
-          action: assetAction,
           onAction,
         },
       }))
-      edges.push(createEdge(`edge:edit-script-asset:${asset.id}`, editScriptNodeId, nodeId))
-    })
+      edges.push(createEdge(`edge:edit-script-asset-group:${editScript.id}`, editScriptNodeId, assetGroupNodeId))
+    }
     if (editScriptIsReady) {
       const matchingShotPlan = editCinematographyShotPlan?.editScriptId === editScript.id
         ? editCinematographyShotPlan
@@ -1691,13 +1661,13 @@ export function buildWorkspaceNodeCanvasProjection({
           ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
           : null
       editCinematographyShotPlanNodeId = nodeId
-      editCinematographyCanvasRightX = (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72 + SPACE_CONSISTENCY_NODE_WIDTH
+      editCinematographyCanvasRightX = (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72 + EDIT_CINEMATOGRAPHY_NODE_WIDTH
       editCinematographyCanvasCenterY = editScriptCanvasCenterY
       nodes.push(createNode({
         id: nodeId,
         fallbackX: (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72,
         fallbackY: editScriptCanvasCenterY !== null
-          ? editScriptCanvasCenterY - SPACE_CONSISTENCY_NODE_HEIGHT / 2
+          ? editScriptCanvasCenterY - EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT / 2
           : editScriptFallbackY,
         zIndex: zIndex++,
         savedLayoutByKey,
@@ -1720,8 +1690,8 @@ export function buildWorkspaceNodeCanvasProjection({
           statusLabel,
           isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready') || cinematographyShotPlanRunning,
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
-          width: SPACE_CONSISTENCY_NODE_WIDTH,
-          height: SPACE_CONSISTENCY_NODE_HEIGHT,
+          width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+          height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
           indexLabel: 'C',
           editPipelineStepDetails: {
             items,

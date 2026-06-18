@@ -1,10 +1,12 @@
 import { type Job } from 'bullmq'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '../shared'
 import { generateStoryboardPanelFinalPrompts } from '@/lib/edit-script/storyboard-consistency/model-generation'
+import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
 import {
   storyboardConsistencySourceSnapshotSchema,
   type StoryboardConsistencyModelConfigSnapshot,
@@ -300,15 +302,20 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
   const plan = readRecord(parseJson(storyboard.photographyPlan))
   const strategyOutput = buildSpatialProfileStrategyOutput(snapshot)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_camera_plan' })
+  const streamContext = createWorkerLLMStreamContext(job, 'edit_script_storyboard_camera_plan')
+  const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
   try {
-    const generated = await generateStoryboardPanelFinalPrompts({
-      userId: job.data.userId,
-      projectId: job.data.projectId,
-      model: modelConfig.analysisModel,
-      locale: job.data.locale,
-      snapshot,
-      spatialProfileStrategyOutput: strategyOutput,
-    })
+    const generated = await withInternalLLMStreamCallbacks(
+      streamCallbacks,
+      async () => await generateStoryboardPanelFinalPrompts({
+        userId: job.data.userId,
+        projectId: job.data.projectId,
+        model: modelConfig.analysisModel,
+        locale: job.data.locale,
+        snapshot,
+        spatialProfileStrategyOutput: strategyOutput,
+      }),
+    )
     const panels = await persistGeneratedPanels({
       locale: job.data.locale,
       storyboardId: storyboard.id,
@@ -342,5 +349,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
       },
     }).catch(() => undefined)
     throw error
+  } finally {
+    await streamCallbacks.flush()
   }
 }

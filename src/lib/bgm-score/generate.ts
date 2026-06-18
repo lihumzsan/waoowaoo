@@ -4,9 +4,11 @@ import { executeAiTextStep, generateMusic } from '@/lib/ai-exec/engine'
 import { prisma } from '@/lib/prisma'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
+import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
+import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/lib/workers/handlers/llm-stream'
 import {
   buildFinalRenderClips,
   parseFinalRenderEditScriptShots,
@@ -286,31 +288,42 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     })
 
     await reportTaskProgress(job, 18, { stage: 'bgm_score_plan' })
-    const completion = await executeAiTextStep({
-      userId: job.data.userId,
-      model: analysisModel,
-      messages: [{
-        role: 'user',
-        content: buildBgmScorePlanPrompt({
-          editScript,
-          projectContext: {
-            videoRatio: project.videoRatio,
-          },
-          clips,
-          totalDurationSeconds: durationSeconds,
-          locale: job.data.locale,
-        }),
-      }],
-      temperature: 0.35,
-      projectId: job.data.projectId,
-      action: 'bgm_score_plan',
-      meta: {
-        stepId: 'bgm_score_plan',
-        stepTitle: 'bgm_score_plan',
-        stepIndex: 1,
-        stepTotal: 1,
+    const streamContext = createWorkerLLMStreamContext(job, 'bgm_score_generate')
+    const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
+    const completion = await withInternalLLMStreamCallbacks(
+      streamCallbacks,
+      async () => {
+        try {
+          return await executeAiTextStep({
+            userId: job.data.userId,
+            model: analysisModel,
+            messages: [{
+              role: 'user',
+              content: buildBgmScorePlanPrompt({
+                editScript,
+                projectContext: {
+                  videoRatio: project.videoRatio,
+                },
+                clips,
+                totalDurationSeconds: durationSeconds,
+                locale: job.data.locale,
+              }),
+            }],
+            temperature: 0.35,
+            projectId: job.data.projectId,
+            action: 'bgm_score_plan',
+            meta: {
+              stepId: 'bgm_score_plan',
+              stepTitle: 'bgm_score_plan',
+              stepIndex: 1,
+              stepTotal: 1,
+            },
+          })
+        } finally {
+          await streamCallbacks.flush()
+        }
       },
-    })
+    )
     const plan = parseBgmScorePlan(completion.text, durationSeconds)
 
     const outputFormat = readOutputFormat(payload.outputFormat)
