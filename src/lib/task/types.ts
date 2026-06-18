@@ -66,6 +66,8 @@ export const TASK_TYPE = {
   CLIPS_BUILD: 'clips_build',
   SCREENPLAY_CONVERT: 'screenplay_convert',
   ANALYZE_GLOBAL: 'analyze_global',
+  EDIT_SCREENPLAY_GENERATE: 'edit_screenplay_generate',
+  EDIT_SCREENPLAY_REVISE: 'edit_screenplay_revise',
   EDIT_DIRECTOR_DECOUPAGE_GENERATE: 'edit_director_decoupage_generate',
   EDIT_SCRIPT_GENERATE: 'edit_script_generate',
   EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE: 'edit_cinematography_shot_plan_generate',

@@ -14,6 +14,19 @@ function truncate(value: string, maxLength: number): string {
 }
 
 export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
+  if (input.type === TASK_TYPE.EDIT_SCREENPLAY_GENERATE && input.targetType === 'ProjectEditScreenplay') {
+    await prisma.projectEditScreenplay.updateMany({
+      where: {
+        id: input.targetId,
+        status: 'generating',
+      },
+      data: {
+        status: 'failed',
+      },
+    })
+    return
+  }
+
   if (input.type !== TASK_TYPE.VIDEO_GROUP || input.targetType !== 'ProjectVideoGroup') return
 
   await prisma.projectVideoGroup.updateMany({

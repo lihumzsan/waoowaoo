@@ -1,14 +1,14 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import {
-  generateProjectEditScreenplay,
   generateProjectEditScriptAssets,
   generateProjectEditStylePreviews,
-  reviseProjectEditScreenplay,
 } from '@/lib/edit-script/service'
 import {
   submitProjectEditCinematographyShotPlanTask,
   submitProjectEditDirectorDecoupageTask,
+  submitProjectEditScreenplayGenerationTask,
+  submitProjectEditScreenplayRevisionTask,
 } from '@/lib/edit-script/task-submission'
 import {
   submitEditScriptSpatialBlockingStoryboard,
@@ -124,14 +124,15 @@ type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInpu
 type GenerateEditCinematographyShotPlanInput = z.infer<typeof generateEditCinematographyShotPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
-const editScreenplayOutputSchema = z.object({
-  id: z.string().min(1),
-  projectId: z.string().min(1),
-  episodeId: z.string().min(1),
-  userPrompt: z.string(),
-  screenplayText: z.string().min(1),
-  status: z.string().min(1),
-}).passthrough()
+const editScreenplayTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+  taskSubmitOperationOutputSchemaBase.extend({
+    episodeId: z.string().min(1),
+    screenplayId: z.string().min(1),
+    taskType: z.enum([TASK_TYPE.EDIT_SCREENPLAY_GENERATE, TASK_TYPE.EDIT_SCREENPLAY_REVISE]),
+    targetType: z.literal('ProjectEditScreenplay'),
+    targetId: z.string().min(1),
+  }).passthrough(),
+)
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
@@ -316,18 +317,36 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将调用文本模型生成并覆盖本集剪辑先行剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEditScreenplayInputSchema,
-      outputSchema: editScreenplayOutputSchema,
+      outputSchema: editScreenplayTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScreenplayInput) => {
-        return editScreenplayOutputSchema.parse(await generateProjectEditScreenplay({
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitProjectEditScreenplayGenerationTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
           locale: resolveLocale(ctx.context.locale),
           prompt: input.prompt,
           durationTier: input.durationTier,
           aspectRatio: input.aspectRatio,
-        }))
+          source: ctx.source,
+          confirmed: input.confirmed === true,
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_screenplay',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: result.screenplayId,
+        })
+
+        return editScreenplayTaskSubmitOutputSchema.parse(result)
       },
     }),
     revise_edit_screenplay: defineOperation({
@@ -341,19 +360,37 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将根据用户修改要求重新生成并覆盖当前剪辑先行剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: reviseEditScreenplayInputSchema,
-      outputSchema: editScreenplayOutputSchema,
+      outputSchema: editScreenplayTaskSubmitOutputSchema,
       execute: async (ctx, input: ReviseEditScreenplayInput) => {
-        return editScreenplayOutputSchema.parse(await reviseProjectEditScreenplay({
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitProjectEditScreenplayRevisionTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
           locale: resolveLocale(ctx.context.locale),
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
           revisionInstruction: input.revisionInstruction,
           durationTier: input.durationTier,
           aspectRatio: input.aspectRatio,
-        }))
+          source: ctx.source,
+          confirmed: input.confirmed === true,
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'revise_edit_screenplay',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: result.screenplayId,
+        })
+
+        return editScreenplayTaskSubmitOutputSchema.parse(result)
       },
     }),
     generate_edit_style_previews: defineOperation({

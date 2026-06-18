@@ -76,6 +76,10 @@ interface GenerateEditScriptTaskResponse {
   taskId: string
   status?: string
   deduped?: boolean
+  episodeId?: string
+  screenplayId?: string
+  targetType?: string
+  targetId?: string
 }
 
 interface UpdateEditScriptVideoBlockPromptInput {
@@ -225,16 +229,18 @@ export function useCreateProjectEditScreenplay(projectId: string | null) {
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate edit screenplay')
       }
-      const data = await response.json() as EditScreenplayResponse
-      if (!data.screenplay) throw new Error('EDIT_SCREENPLAY_RESPONSE_EMPTY')
-      return data.screenplay
+      const data = await response.json() as GenerateEditScriptTaskResponse
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_SCREENPLAY_TASK_RESPONSE_EMPTY')
+      return data
     },
-    onSuccess: async (screenplay) => {
+    onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
   })

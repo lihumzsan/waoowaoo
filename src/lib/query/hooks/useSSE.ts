@@ -248,6 +248,20 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
         }
 
         if (
+          (
+            normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
+            normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
+          ) &&
+          (
+            payload.taskType === TASK_TYPE.EDIT_SCREENPLAY_GENERATE ||
+            payload.taskType === TASK_TYPE.EDIT_SCREENPLAY_REVISE
+          ) &&
+          resolvedEpisodeId
+        ) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, resolvedEpisodeId) })
+        }
+
+        if (
           normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
           normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
         ) {

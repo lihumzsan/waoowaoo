@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
+  findTextStreamAdapters,
   findStructuredStreamAdapters,
   STRUCTURED_STREAM_ADAPTERS,
 } from '@/features/project-workspace/canvas/structured-stream/structured-stream-adapters'
@@ -20,6 +21,24 @@ describe('structured stream adapters', () => {
     })
 
     expect(adapters.map((adapter) => adapter.key)).toContain('editScript.shots')
+  })
+
+  it('maps edit screenplay text streams separately from JSON item adapters', () => {
+    const generateAdapters = findTextStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+    })
+    const reviseAdapters = findTextStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+    })
+
+    expect(generateAdapters.map((adapter) => adapter.key)).toEqual(['editScreenplay.text'])
+    expect(reviseAdapters.map((adapter) => adapter.key)).toEqual(['editScreenplay.text'])
+    expect(findStructuredStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+    })).toEqual([])
   })
 
   it('validates core edit script shot items', () => {

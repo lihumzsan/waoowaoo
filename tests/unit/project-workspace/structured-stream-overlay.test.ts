@@ -85,6 +85,38 @@ function pipelineNode(input: {
   }
 }
 
+function screenplayNode(input: {
+  readonly id: string
+  readonly targetId: string
+  readonly isRunning: boolean
+  readonly screenplayText: string
+}): WorkspaceCanvasFlowNode {
+  return {
+    id: input.id,
+    type: 'workspaceNode',
+    position: { x: 10, y: 20 },
+    data: {
+      nodeId: input.id,
+      kind: 'editScreenplay',
+      layoutNodeType: 'editScreenplay',
+      targetType: 'editScreenplay',
+      targetId: input.targetId,
+      title: input.id,
+      eyebrow: 'eyebrow',
+      body: input.screenplayText,
+      meta: 'meta',
+      statusLabel: input.isRunning ? 'processing' : 'ready',
+      isRunning: input.isRunning,
+      width: 520,
+      height: 360,
+      editScreenplayDetails: {
+        screenplayText: input.screenplayText,
+        userPrompt: 'prompt',
+      },
+    },
+  }
+}
+
 describe('structured stream overlay merge', () => {
   it('replaces the pending node while preserving its canvas position', () => {
     const base = node('edit-script:pending:episode-1', 'episode')
@@ -111,6 +143,50 @@ describe('structured stream overlay merge', () => {
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
     expect(merged.map((item) => item.id)).toEqual(['edit-script:edit-script-1'])
+  })
+
+  it('replaces the persisted running screenplay node with text stream overlay while preserving position', () => {
+    const base = screenplayNode({
+      id: 'edit-screenplay:screenplay-1',
+      targetId: 'screenplay-1',
+      isRunning: true,
+      screenplayText: '',
+    })
+    const overlay = {
+      ...screenplayNode({
+        id: 'edit-screenplay:screenplay-1',
+        targetId: 'screenplay-1',
+        isRunning: true,
+        screenplayText: 'streamed screenplay',
+      }),
+      position: { x: 999, y: 999 },
+    }
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([base], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.data.body).toBe('streamed screenplay')
+    expect(merged[0]?.position).toEqual({ x: 10, y: 20 })
+  })
+
+  it('drops screenplay text overlay after official screenplay details are ready', () => {
+    const official = screenplayNode({
+      id: 'edit-screenplay:screenplay-1',
+      targetId: 'screenplay-1',
+      isRunning: false,
+      screenplayText: 'official screenplay',
+    })
+    const overlay = screenplayNode({
+      id: 'edit-screenplay:screenplay-1',
+      targetId: 'screenplay-1',
+      isRunning: true,
+      screenplayText: 'streamed screenplay',
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.data.body).toBe('official screenplay')
   })
 
   it('drops director decoupage pending overlay after official director decoupage exists', () => {

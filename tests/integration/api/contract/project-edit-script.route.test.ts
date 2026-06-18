@@ -267,6 +267,22 @@ const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
   deduped: false,
 })))
 
+const taskSubmissionMock = vi.hoisted(() => ({
+  submitProjectEditScreenplayGenerationTask: vi.fn(async () => ({
+    success: true,
+    async: true,
+    taskId: 'task-screenplay-1',
+    runId: null,
+    status: 'queued',
+    deduped: false,
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    taskType: 'edit_screenplay_generate',
+    targetType: 'ProjectEditScreenplay',
+    targetId: 'screenplay-1',
+  })),
+}))
+
 vi.mock('@/lib/api-auth', () => {
   const unauthorized = () => new Response(
     JSON.stringify({ error: { code: 'UNAUTHORIZED' } }),
@@ -292,6 +308,13 @@ vi.mock('@/lib/edit-script/service', () => serviceMock)
 vi.mock('@/lib/edit-script/video-block-arrangement', () => videoBlockArrangementMock)
 vi.mock('@/lib/edit-script/video-block-merge', () => videoBlockMergeMock)
 vi.mock('@/lib/edit-script/storyboard-consistency/service', () => storyboardConsistencyServiceMock)
+vi.mock('@/lib/edit-script/task-submission', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/edit-script/task-submission')>('@/lib/edit-script/task-submission')
+  return {
+    ...actual,
+    submitProjectEditScreenplayGenerationTask: taskSubmissionMock.submitProjectEditScreenplayGenerationTask,
+  }
+})
 vi.mock('@/lib/operations/submit-operation-task', () => ({
   submitOperationTask: submitOperationTaskMock,
 }))
@@ -370,8 +393,18 @@ describe('project edit script route', () => {
     const payload = await response.json()
 
     expect(response.status).toBe(200)
-    expect(payload.screenplay?.status).toBe('screenplay_ready')
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+    expect(payload).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskId: 'task-screenplay-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+    }))
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       request,
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -399,6 +432,7 @@ describe('project edit script route', () => {
 
     expect(response.status).toBe(400)
     expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).not.toHaveBeenCalled()
   })
 
   it('POST /api/projects/[projectId]/edit-script -> submits async edit-script task so canvas can render progress states', async () => {

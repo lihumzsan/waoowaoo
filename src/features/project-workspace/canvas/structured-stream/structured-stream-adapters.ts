@@ -60,6 +60,9 @@ export type StructuredStreamAdapterKey =
   | 'bgm.virtualLayers'
   | 'styleBible.sections'
 
+export type TextStreamAdapterKey =
+  | 'editScreenplay.text'
+
 export type StructuredStreamParsedItem =
   | {
     readonly kind: 'editScriptShot'
@@ -109,6 +112,12 @@ export interface StructuredStreamAdapter {
   readonly path: readonly string[]
   readonly parseItem: (value: unknown) => StructuredStreamParsedItem
   readonly itemKey: (item: StructuredStreamParsedItem, fallbackIndex: number) => string
+}
+
+export interface TextStreamAdapter {
+  readonly key: TextStreamAdapterKey
+  readonly taskTypes: readonly TaskType[]
+  readonly stepIds: readonly string[]
 }
 
 function numberKey(value: number | null | undefined, fallbackIndex: number): string {
@@ -230,11 +239,34 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
 ]
 
+export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = [
+  {
+    key: 'editScreenplay.text',
+    taskTypes: [TASK_TYPE.EDIT_SCREENPLAY_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY],
+  },
+  {
+    key: 'editScreenplay.text',
+    taskTypes: [TASK_TYPE.EDIT_SCREENPLAY_REVISE],
+    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION],
+  },
+]
+
 export function findStructuredStreamAdapters(meta: StructuredStreamTaskEventMeta): readonly StructuredStreamAdapter[] {
   if (!meta.taskType || !meta.stepId) return []
   const taskType = meta.taskType as TaskType
   const stepId = meta.stepId
   return STRUCTURED_STREAM_ADAPTERS.filter((adapter) => (
+    adapter.taskTypes.includes(taskType)
+    && adapter.stepIds.includes(stepId)
+  ))
+}
+
+export function findTextStreamAdapters(meta: StructuredStreamTaskEventMeta): readonly TextStreamAdapter[] {
+  if (!meta.taskType || !meta.stepId) return []
+  const taskType = meta.taskType as TaskType
+  const stepId = meta.stepId
+  return TEXT_STREAM_ADAPTERS.filter((adapter) => (
     adapter.taskTypes.includes(taskType)
     && adapter.stepIds.includes(stepId)
   ))

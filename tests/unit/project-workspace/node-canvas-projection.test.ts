@@ -784,7 +784,7 @@ describe('workspace node canvas projection', () => {
     )
   })
 
-  it('shows a running screenplay placeholder while the assistant is generating it before persistence', () => {
+  it('does not invent a screenplay placeholder before a stable ProjectEditScreenplay target exists', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
@@ -797,17 +797,8 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'analysis:episode-1',
-      'edit-screenplay:pending:episode-1',
     ])
-
-    const pendingNode = projection.nodes.find((node) => node.id === 'edit-screenplay:pending:episode-1')
-    expect(pendingNode?.data.kind).toBe('editScreenplay')
-    expect(pendingNode?.data.targetType).toBe('episode')
-    expect(pendingNode?.data.targetId).toBe('episode-1')
-    expect(pendingNode?.data.statusLabel).toBe('status.processing')
-    expect(pendingNode?.data.isRunning).toBe(true)
-    expect(pendingNode?.data.title).toBe('nodes.editScreenplay.pendingTitle')
-    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain(
+    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).not.toContain(
       'analysis:episode-1->edit-screenplay:pending:episode-1',
     )
   })

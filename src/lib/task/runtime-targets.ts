@@ -85,6 +85,12 @@ export const TASK_RUNTIME_TARGETS = {
   projectEpisodeEditScriptGeneration(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
   },
+  projectEditScreenplay(screenplayId: string | null | undefined) {
+    return target('ProjectEditScreenplay', screenplayId, [
+      TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+    ])
+  },
   projectEditDirectorDecoupage(screenplayId: string | null | undefined) {
     return target('ProjectEditScreenplay', screenplayId, [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE])
   },

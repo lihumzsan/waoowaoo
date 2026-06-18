@@ -1667,10 +1667,11 @@ function EditScreenplayContent({
   const details = data.editScreenplayDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const parsed = parseScreenplayOutline(details.screenplayText)
+  const streamClassName = data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''
 
   if (!expanded) {
     return (
-      <div className="space-y-2">
+      <div className={`space-y-2 ${streamClassName}`}>
         {parsed.summary
           ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
           : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
@@ -1679,7 +1680,7 @@ function EditScreenplayContent({
   }
 
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+    <div className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
       {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
       {parsed.characters.length > 0 ? (
         <div className="space-y-1.5">

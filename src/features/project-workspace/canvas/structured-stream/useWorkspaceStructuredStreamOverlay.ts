@@ -12,6 +12,7 @@ import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
   WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
   WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
 } from '../node-presentation-profiles'
@@ -23,11 +24,14 @@ import type {
 } from '../node-canvas-types'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import {
+  findTextStreamAdapters,
   findStructuredStreamAdapters,
   type StructuredStreamAdapter,
   type StructuredStreamAdapterKey,
   type StructuredStreamItem,
   type StructuredStreamParsedItem,
+  type TextStreamAdapter,
+  type TextStreamAdapterKey,
 } from './structured-stream-adapters'
 import {
   workspaceEditCinematographyShotPlanNodeId,
@@ -72,6 +76,29 @@ interface StructuredStreamSnapshot {
   readonly errorMessage: string | null
 }
 
+interface TextStreamAccumulator {
+  readonly taskId: string
+  readonly taskType: string | null
+  readonly targetType: string | null
+  readonly targetId: string | null
+  readonly episodeId: string | null
+  readonly stepId: string | null
+  readonly streamRunId: string
+  readonly lane: string
+  readonly adapter: TextStreamAdapter
+  readonly text: string
+}
+
+interface TextStreamSnapshot {
+  readonly taskId: string
+  readonly taskType: string | null
+  readonly targetType: string | null
+  readonly targetId: string | null
+  readonly episodeId: string | null
+  readonly adapterKey: TextStreamAdapterKey
+  readonly text: string
+}
+
 const STREAM_OVERLAY_RETIRE_MS = 8000
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -80,6 +107,10 @@ function readRecord(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readRawString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 function durationLabel(seconds: number): string {
@@ -92,6 +123,22 @@ function createAccumulatorKey(input: {
   readonly stepId: string | null
   readonly lane: string
   readonly adapterKey: StructuredStreamAdapterKey
+}): string {
+  return [
+    input.taskId,
+    input.streamRunId,
+    input.stepId ?? '__step',
+    input.lane,
+    input.adapterKey,
+  ].join('|')
+}
+
+function createTextAccumulatorKey(input: {
+  readonly taskId: string
+  readonly streamRunId: string
+  readonly stepId: string | null
+  readonly lane: string
+  readonly adapterKey: TextStreamAdapterKey
 }): string {
   return [
     input.taskId,
@@ -208,6 +255,55 @@ function processStreamEvent(
   return next
 }
 
+function processTextStreamEvent(
+  current: ReadonlyMap<string, TextStreamAccumulator>,
+  event: SSEEvent,
+): ReadonlyMap<string, TextStreamAccumulator> {
+  if (event.type !== TASK_SSE_EVENT_TYPE.STREAM) return current
+  const payload = readRecord(event.payload)
+  const stream = readRecord(payload.stream)
+  const delta = readRawString(stream.delta)
+  const kind = readString(stream.kind)
+  if (!delta || kind !== 'text') return current
+
+  const stepId = readString(payload.stepId)
+  const streamRunId = readString(payload.streamRunId) ?? `run:${event.taskId}`
+  const lane = readString(stream.lane) ?? 'main'
+  if (lane !== 'main') return current
+
+  const adapters = findTextStreamAdapters({
+    taskType: event.taskType ?? null,
+    stepId,
+  })
+  if (adapters.length === 0) return current
+
+  const next = new Map(current)
+  adapters.forEach((adapter) => {
+    const key = createTextAccumulatorKey({
+      taskId: event.taskId,
+      streamRunId,
+      stepId,
+      lane,
+      adapterKey: adapter.key,
+    })
+    const previous = next.get(key)
+    next.set(key, {
+      taskId: event.taskId,
+      taskType: event.taskType ?? null,
+      targetType: event.targetType ?? null,
+      targetId: event.targetId ?? null,
+      episodeId: event.episodeId ?? null,
+      stepId,
+      streamRunId,
+      lane,
+      adapter,
+      text: `${previous?.text ?? ''}${delta}`,
+    })
+  })
+
+  return next
+}
+
 function snapshotsFromAccumulators(
   accumulators: ReadonlyMap<string, StreamAccumulator>,
 ): readonly StructuredStreamSnapshot[] {
@@ -225,6 +321,22 @@ function snapshotsFromAccumulators(
     }))
 }
 
+function textSnapshotsFromAccumulators(
+  accumulators: ReadonlyMap<string, TextStreamAccumulator>,
+): readonly TextStreamSnapshot[] {
+  return [...accumulators.values()]
+    .filter((accumulator) => accumulator.text.trim().length > 0)
+    .map((accumulator) => ({
+      taskId: accumulator.taskId,
+      taskType: accumulator.taskType,
+      targetType: accumulator.targetType,
+      targetId: accumulator.targetId,
+      episodeId: accumulator.episodeId,
+      adapterKey: accumulator.adapter.key,
+      text: accumulator.text,
+    }))
+}
+
 function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCanvasStreamPresentation {
   const activeItemKey = items.at(-1)?.itemKey ?? null
   return {
@@ -233,6 +345,16 @@ function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCa
     displayedItemKeys: items.map((item) => item.itemKey),
     pinnedItemKeys: [],
     revealedFieldCountByKey: Object.fromEntries(items.map((item) => [item.itemKey, Number.MAX_SAFE_INTEGER])),
+  }
+}
+
+function textStreamPresentation(): WorkspaceCanvasStreamPresentation {
+  return {
+    isStreaming: true,
+    activeItemKey: 'screenplay',
+    displayedItemKeys: ['screenplay'],
+    pinnedItemKeys: [],
+    revealedFieldCountByKey: { screenplay: Number.MAX_SAFE_INTEGER },
   }
 }
 
@@ -324,6 +446,58 @@ function createOverlayNode(params: {
       height: params.data.height,
     },
   }
+}
+
+function extractScreenplayTitle(screenplayText: string): string {
+  const firstLine = screenplayText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  if (!firstLine) return ''
+  return firstLine
+    .replace(/^#+\s*/, '')
+    .replace(/^标题[:：]\s*/, '')
+    .replace(/^《(.+)》$/, '$1')
+    .trim()
+}
+
+function buildEditScreenplayOverlays(
+  snapshots: readonly TextStreamSnapshot[],
+  translate: Translate,
+): readonly WorkspaceCanvasFlowNode[] {
+  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editScreenplay.text')
+  return matchingSnapshots.flatMap((snapshot) => {
+    if (snapshot.targetType !== 'ProjectEditScreenplay' || !snapshot.targetId) return []
+    const screenplayText = snapshot.text.trim()
+    if (!screenplayText) return []
+    const screenplayTitle = extractScreenplayTitle(screenplayText)
+    return [createOverlayNode({
+      id: `edit-screenplay:${snapshot.targetId}`,
+      x: 260,
+      y: 430,
+      data: {
+        kind: 'editScreenplay',
+        layoutNodeType: 'editScreenplay',
+        targetType: 'editScreenplay',
+        targetId: snapshot.targetId,
+        title: screenplayTitle || translate('nodes.editScreenplay.pendingTitle'),
+        eyebrow: translate('nodes.editScreenplay.eyebrow'),
+        body: screenplayText,
+        meta: translate('nodes.editScreenplay.pendingMeta'),
+        statusLabel: translate('status.processing'),
+        isRunning: true,
+        width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
+        indexLabel: 'S',
+        defaultExpanded: true,
+        streamPresentation: textStreamPresentation(),
+        editScreenplayDetails: {
+          screenplayText,
+          userPrompt: '',
+        },
+      },
+    })]
+  })
 }
 
 function buildEditScriptOverlay(
@@ -581,10 +755,12 @@ function buildBgmOverlay(
 
 function buildOverlayNodes(
   snapshots: readonly StructuredStreamSnapshot[],
+  textSnapshots: readonly TextStreamSnapshot[],
   episodeId: string,
   translate: Translate,
 ): readonly WorkspaceCanvasFlowNode[] {
   return [
+    ...buildEditScreenplayOverlays(textSnapshots, translate),
     buildDirectorOverlay(snapshots, translate),
     buildEditScriptOverlay(snapshots, episodeId, translate),
     buildCinematographyOverlay(snapshots, translate),
@@ -601,6 +777,9 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
 
   const finalDataKinds = new Set<string>()
   baseNodes.forEach((node) => {
+    if (node.data.kind === 'editScreenplay' && node.data.editScreenplayDetails && node.data.isRunning !== true) {
+      finalDataKinds.add(`editScreenplay:${node.data.targetId}`)
+    }
     if (node.data.kind === 'editScript' && node.data.targetType === 'editScript' && node.data.editScriptDetails) {
       finalDataKinds.add('editScript')
     }
@@ -619,6 +798,7 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
   })
 
   const usableOverlays = overlayNodes.filter((node) => {
+    if (node.data.kind === 'editScreenplay' && finalDataKinds.has(`editScreenplay:${node.data.targetId}`)) return false
     if (node.data.kind === 'editScript' && finalDataKinds.has('editScript')) return false
     if (node.data.kind === 'editDirectorDecoupage' && finalDataKinds.has('editDirectorDecoupage')) return false
     if (node.data.kind === 'editCinematographyShotPlan' && finalDataKinds.has('editCinematographyShotPlan')) return false
@@ -654,6 +834,7 @@ export function useWorkspaceStructuredStreamOverlay({
 }: UseWorkspaceStructuredStreamOverlayInput): UseWorkspaceStructuredStreamOverlayResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
+  const [textAccumulators, setTextAccumulators] = useState<ReadonlyMap<string, TextStreamAccumulator>>(() => new Map())
   const retireTimersRef = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
@@ -661,6 +842,7 @@ export function useWorkspaceStructuredStreamOverlay({
       if ('episodeId' in event && event.episodeId && event.episodeId !== episodeId) return
       if (event.type === TASK_SSE_EVENT_TYPE.STREAM) {
         setAccumulators((current) => processStreamEvent(current, event))
+        setTextAccumulators((current) => processTextStreamEvent(current, event))
         return
       }
       if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return
@@ -683,6 +865,13 @@ export function useWorkspaceStructuredStreamOverlay({
           })
           return next
         })
+        setTextAccumulators((current) => {
+          const next = new Map(current)
+          next.forEach((accumulator, key) => {
+            if (accumulator.taskId === event.taskId) next.delete(key)
+          })
+          return next
+        })
       }, STREAM_OVERLAY_RETIRE_MS)
       retireTimersRef.current.set(event.taskId, timer)
     })
@@ -694,8 +883,13 @@ export function useWorkspaceStructuredStreamOverlay({
   }, [])
 
   const nodes = useMemo(
-    () => buildOverlayNodes(snapshotsFromAccumulators(accumulators), episodeId, translate),
-    [accumulators, episodeId, translate],
+    () => buildOverlayNodes(
+      snapshotsFromAccumulators(accumulators),
+      textSnapshotsFromAccumulators(textAccumulators),
+      episodeId,
+      translate,
+    ),
+    [accumulators, textAccumulators, episodeId, translate],
   )
 
   return { nodes }

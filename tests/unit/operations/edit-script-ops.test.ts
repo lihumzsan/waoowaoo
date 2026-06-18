@@ -127,7 +127,44 @@ const serviceMock = vi.hoisted(() => ({
   })),
 }))
 
+const taskSubmissionMock = vi.hoisted(() => ({
+  submitProjectEditScreenplayGenerationTask: vi.fn(async () => ({
+    success: true,
+    async: true,
+    taskId: 'task-screenplay-1',
+    runId: 'run-screenplay-1',
+    status: 'queued',
+    deduped: false,
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    taskType: 'edit_screenplay_generate',
+    targetType: 'ProjectEditScreenplay',
+    targetId: 'screenplay-1',
+  })),
+  submitProjectEditScreenplayRevisionTask: vi.fn(async () => ({
+    success: true,
+    async: true,
+    taskId: 'task-screenplay-revise-1',
+    runId: 'run-screenplay-revise-1',
+    status: 'queued',
+    deduped: false,
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    taskType: 'edit_screenplay_revise',
+    targetType: 'ProjectEditScreenplay',
+    targetId: 'screenplay-1',
+  })),
+}))
+
 vi.mock('@/lib/edit-script/service', () => serviceMock)
+vi.mock('@/lib/edit-script/task-submission', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/edit-script/task-submission')>('@/lib/edit-script/task-submission')
+  return {
+    ...actual,
+    submitProjectEditScreenplayGenerationTask: taskSubmissionMock.submitProjectEditScreenplayGenerationTask,
+    submitProjectEditScreenplayRevisionTask: taskSubmissionMock.submitProjectEditScreenplayRevisionTask,
+  }
+})
 
 const storyboardConsistencyServiceMock = vi.hoisted(() => ({
   submitEditScriptSpatialBlockingStoryboard: vi.fn(async () => ({
@@ -272,18 +309,28 @@ describe('edit-script operations', () => {
     expect(operations.request_edit_first_choice?.intent).toBe('query')
   })
 
-  it('passes context episode and locale into screenplay generation', async () => {
+  it('submits screenplay generation as an async screenplay task', async () => {
     const operations = createEditScriptOperations()
-    const result = await operations.generate_edit_screenplay.execute(buildContext(), {
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.generate_edit_screenplay.execute(buildContext(createTestWriter(writerEvents)), {
       prompt: 'make a short film',
       durationTier: 'medium',
       aspectRatio: '16:9',
       confirmed: true,
     })
 
-    const screenplay = result as { readonly id: string }
-    expect(screenplay.id).toBe('screenplay-1')
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskId: 'task-screenplay-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+    }))
+    expect(serviceMock.generateProjectEditScreenplay).not.toHaveBeenCalled()
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -291,7 +338,21 @@ describe('edit-script operations', () => {
       prompt: 'make a short film',
       durationTier: 'medium',
       aspectRatio: '16:9',
+      source: 'assistant-panel',
+      confirmed: true,
     }))
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-task-submitted',
+        data: expect.objectContaining({
+          operationId: 'generate_edit_screenplay',
+          taskId: 'task-screenplay-1',
+          taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: 'screenplay-1',
+        }),
+      }),
+    ])
   })
 
   it('does not forward free-form artStyle from agent screenplay generation into project style config', async () => {
@@ -304,14 +365,14 @@ describe('edit-script operations', () => {
       artStyle: 'cyberpunk',
     })
 
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
       prompt: 'make a cyberpunk short film',
       durationTier: 'medium',
       aspectRatio: '16:9',
     }))
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.not.objectContaining({
       artStyle: expect.anything(),
     }))
   })
@@ -326,14 +387,14 @@ describe('edit-script operations', () => {
       videoRatio: '9:16',
     })
 
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       episodeId: 'episode-1',
       prompt: 'make a vertical short film',
       durationTier: 'long',
       aspectRatio: '9:16',
     }))
-    expect(serviceMock.generateProjectEditScreenplay).toHaveBeenCalledWith(expect.not.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith(expect.not.objectContaining({
       videoRatio: expect.anything(),
     }))
   })
@@ -375,10 +436,18 @@ describe('edit-script operations', () => {
       confirmed: true,
     })
 
-    const screenplay = result as { readonly screenplayText: string; readonly status: string }
-    expect(screenplay.status).toBe('screenplay_ready')
-    expect(screenplay.screenplayText).toContain('Cthulhu')
-    expect(serviceMock.reviseProjectEditScreenplay).toHaveBeenCalledWith(expect.objectContaining({
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskId: 'task-screenplay-revise-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+    }))
+    expect(serviceMock.reviseProjectEditScreenplay).not.toHaveBeenCalled()
+    expect(taskSubmissionMock.submitProjectEditScreenplayRevisionTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',

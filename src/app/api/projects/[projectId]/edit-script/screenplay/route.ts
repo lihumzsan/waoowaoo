@@ -4,9 +4,9 @@ import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import {
   confirmProjectEditStylePreview,
-  generateProjectEditScreenplay,
   readProjectEditScreenplay,
 } from '@/lib/edit-script/service'
+import { submitProjectEditScreenplayGenerationTask } from '@/lib/edit-script/task-submission'
 import {
   confirmEditStylePreviewRequestSchema,
   createEditScreenplayRequestSchema,
@@ -50,7 +50,7 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const screenplay = await generateProjectEditScreenplay({
+  const result = await submitProjectEditScreenplayGenerationTask({
     request,
     projectId,
     episodeId: parsed.data.episodeId,
@@ -59,9 +59,11 @@ export const POST = apiHandler(async (
     prompt: parsed.data.prompt,
     durationTier: parsed.data.durationTier,
     aspectRatio: parsed.data.aspectRatio,
+    source: 'project-ui',
+    confirmed: true,
   })
 
-  return NextResponse.json({ screenplay })
+  return NextResponse.json(result)
 })
 
 export const PATCH = apiHandler(async (
