@@ -365,6 +365,7 @@ export interface ProjectEditScript {
   durationSec: number
   shotCount: number
   status: string
+  assetReviewStatus: 'pending' | 'approved'
   shots: ProjectEditScriptShot[]
   videoBlocks: ProjectEditScriptVideoBlock[]
   requirements: ProjectEditAssetRequirement[]

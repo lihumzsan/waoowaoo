@@ -17,6 +17,13 @@ const apiAdapterMock = vi.hoisted(() => ({
   })),
 }))
 
+const editScriptServiceMock = vi.hoisted(() => ({
+  approveProjectEditScriptAssets: vi.fn(async (): Promise<unknown> => ({
+    id: 'edit-script-1',
+    assetReviewStatus: 'approved',
+  })),
+}))
+
 const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
   listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
@@ -136,6 +143,7 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
+vi.mock('@/lib/edit-script/service', () => editScriptServiceMock)
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
 vi.mock('@/lib/project-agent/waits', () => waitMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionMock)
@@ -469,6 +477,49 @@ describe('project assistant chat route', () => {
         choiceType: 'style',
         continuation: expect.objectContaining({
           operationId: 'generate_edit_director_decoupage',
+        }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> approves assets before continuing an asset review choice', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        headers: { 'x-project-agent-run-control': '1' },
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '资产满意' }] }],
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          control: {
+            type: 'choice_response',
+            runId: 'run-1',
+            interruptionId: null,
+            choiceType: 'asset_review',
+            toolCallId: 'tool-choice-asset',
+            output: {
+              ok: true,
+              decision: 'approve',
+            },
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(editScriptServiceMock.approveProjectEditScriptAssets).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      control: expect.objectContaining({
+        kind: 'choice',
+        choiceType: 'asset_review',
+        continuation: expect.objectContaining({
+          operationId: 'generate_edit_cinematography_shot_plan',
         }),
       }),
     }))

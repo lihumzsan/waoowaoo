@@ -110,6 +110,25 @@ describe('resolveEditFirstChoiceContinuation', () => {
     expect(parsed.nextOperationId).toBe('generate_edit_director_decoupage')
   })
 
+  it('continues to cinematography shot plan after asset review approval', () => {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '继续',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })
+
+    expect(continuation).toEqual(expect.objectContaining({
+      operationId: 'generate_edit_cinematography_shot_plan',
+    }))
+    const { parsed } = readSyntheticToolResult(continuation)
+    expect(parsed.decision).toBe('approve')
+    expect(parsed.nextOperationId).toBe('generate_edit_cinematography_shot_plan')
+  })
+
   it('rejects an incomplete duration/aspect-ratio selection', () => {
     expect(resolveEditFirstChoiceContinuation({
       choiceType: 'duration_and_aspect_ratio',
@@ -141,6 +160,18 @@ describe('resolveEditFirstChoiceContinuation', () => {
       output: {
         ok: true,
         aspectRatio: '9:16',
+      },
+    })).toBeNull()
+  })
+
+  it('rejects asset review without approval', () => {
+    expect(resolveEditFirstChoiceContinuation({
+      choiceType: 'asset_review',
+      toolCallId: null,
+      latestUserText: '继续',
+      output: {
+        ok: true,
+        decision: 'revise',
       },
     })).toBeNull()
   })

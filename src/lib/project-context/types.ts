@@ -54,6 +54,7 @@ export interface ProjectContextEditScreenplaySnapshot {
 export interface ProjectContextEditScriptSnapshot {
   id: string
   status: string
+  assetReviewStatus: 'pending' | 'approved'
   title: string
   logline: string | null
   durationSec: number

@@ -355,7 +355,7 @@ export default function WorkspaceAssistantPanel({
   const handleSubmitChoiceResponse = async (params: {
     runId: string
     interruptionId: string | null
-    choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+    choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
     toolCallId: string | null
     output: Record<string, unknown>
   }) => {

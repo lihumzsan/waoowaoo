@@ -89,6 +89,7 @@ function editScript(): ProjectEditScript {
     durationSec: 12,
     shotCount: 4,
     status: 'ready',
+    assetReviewStatus: 'pending',
     shots: [1, 2, 3, 4].map((shotNumber) => ({
       shotNumber,
       durationSec: 3,

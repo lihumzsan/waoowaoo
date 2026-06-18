@@ -29,7 +29,7 @@ import {
 } from '@/lib/project-agent/ui-message-validation'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
-export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
 type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 

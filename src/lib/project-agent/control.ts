@@ -40,7 +40,10 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 function isEditFirstChoiceType(value: unknown): value is EditFirstChoiceType {
-  return value === 'duration_and_aspect_ratio' || value === 'screenplay_review' || value === 'style'
+  return value === 'duration_and_aspect_ratio'
+    || value === 'screenplay_review'
+    || value === 'style'
+    || value === 'asset_review'
 }
 
 export function parseProjectAgentControlAction(value: unknown): ProjectAgentControlAction | null {

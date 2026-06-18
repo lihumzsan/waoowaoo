@@ -33,7 +33,22 @@ describe('assistant permission mode', () => {
     })).toBe(false)
   })
 
-  it('requires approval for confirmation-marked operations in ask mode', () => {
+  it('requires approval for confirmation-marked non-edit-first operations in ask mode', () => {
+    expect(shouldRequireAssistantToolApproval({
+      mode: 'ask',
+      operation: makeTestOperation({
+        id: 'generate_episode_videos',
+        intent: 'act',
+        effects: EFFECTS_BILLABLE,
+        confirmation: { required: true },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async () => ({ ok: true }),
+      }),
+    })).toBe(true)
+  })
+
+  it('does not require generic execution approval for auto-approved edit-first main operations in ask mode', () => {
     expect(shouldRequireAssistantToolApproval({
       mode: 'ask',
       operation: makeTestOperation({
@@ -45,7 +60,7 @@ describe('assistant permission mode', () => {
         outputSchema: z.object({ ok: z.boolean() }),
         execute: async () => ({ ok: true }),
       }),
-    })).toBe(true)
+    })).toBe(false)
   })
 
   it('exempts human input operations from ask approval', () => {

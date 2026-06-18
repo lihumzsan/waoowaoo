@@ -85,7 +85,7 @@ export interface ProjectAgentInterruptionResolvedPartData {
 export interface ProjectAgentChoiceResolvedPartData {
   runId?: string | null
   interruptionId?: string | null
-  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
   toolCallId?: string | null
   cardId?: string | null
 }
@@ -164,7 +164,7 @@ export type ProjectAgentChoiceCardSubmit =
     aspectRatio?: '9:16' | '16:9' | '21:9'
   }
 
-export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm_or_reply'
+export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm' | 'confirm_or_reply'
 
 export interface ProjectAgentChoiceCardOption {
   value: string
@@ -186,7 +186,7 @@ export interface ProjectAgentChoiceCardPartData {
   runId?: string | null
   interruptionId?: string | null
   toolCallId: string
-  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
   variant?: ProjectAgentChoiceCardVariant
   title: string
   description?: string | null

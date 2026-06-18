@@ -36,7 +36,7 @@ function workflow(
     active: true,
     stage,
     blocking: {
-      kind: stage === 'needs_style_choice' ? 'needs_user_choice' : 'needs_confirmation',
+      kind: stage === 'needs_style_choice' || stage === 'assets_ready_for_review' ? 'needs_user_choice' : 'needs_confirmation',
       reason: null,
     },
     nextAction,
@@ -271,6 +271,43 @@ describe('edit-first assistant choice cards', () => {
       choiceType: 'style',
       toolCallId: 'tool-call-1',
     })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
+  })
+
+  it('builds an asset review confirmation card after required assets are ready', async () => {
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('assets_ready_for_review'),
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-1',
+    })
+
+    expect(card).toMatchObject({
+      cardId: 'edit-first-asset-review',
+      toolCallId: 'tool-call-1',
+      choiceType: 'asset_review',
+      variant: 'confirm',
+      title: '审核分镜资产',
+      groups: [],
+      submitLabel: '资产满意，继续',
+      submit: {
+        kind: 'submit_tool_output',
+      },
+    })
+  })
+
+  it('rejects asset review cards outside the asset review stage', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('ready_to_generate_cinematography'),
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-1',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=ready_to_generate_cinematography')
   })
 
 })

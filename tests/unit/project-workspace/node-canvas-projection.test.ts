@@ -212,6 +212,7 @@ function createSingleVideoEditScript(input?: Partial<ProjectEditScript>): Projec
     durationSec: input?.durationSec ?? 2,
     shotCount: input?.shotCount ?? 1,
     status: input?.status ?? 'ready',
+    assetReviewStatus: input?.assetReviewStatus ?? 'pending',
     shots: input?.shots ?? [
       {
         shotNumber: 1,
@@ -801,6 +802,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 60,
         shotCount: 0,
         status: 'generating',
+        assetReviewStatus: 'pending',
         shots: [],
         videoBlocks: [],
         requirements: [],
@@ -849,6 +851,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 3,
         shotCount: 1,
         status: 'generating',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -1528,6 +1531,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 60,
         shotCount: 2,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -1867,6 +1871,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 9,
         shotCount: 2,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -1997,6 +2002,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 9,
         shotCount: 2,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -2075,6 +2081,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 4,
         shotCount: 1,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -2144,6 +2151,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 4,
         shotCount: 1,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -2199,6 +2207,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 60,
         shotCount: 1,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,
@@ -2485,6 +2494,7 @@ describe('workspace node canvas projection', () => {
         durationSec: 8,
         shotCount: 1,
         status: 'ready',
+        assetReviewStatus: 'pending',
         shots: [
           {
             shotNumber: 1,

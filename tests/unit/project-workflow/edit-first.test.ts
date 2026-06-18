@@ -18,6 +18,8 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     directorDecoupageStatus: null,
     hasEditScript: false,
     editScriptStatus: null,
+    editScriptAssetReviewStatus: null,
+    editAssetRequirementCount: 0,
     pendingAssetRequirementCount: 0,
     generatingAssetRequirementCount: 0,
     requiredLocationSpatialProfileCount: 0,
@@ -185,7 +187,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
-  it('moves to cinematography after edit core table assets and spatial profiles are ready', () => {
+  it('requires user asset review after edit core table assets and spatial profiles are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
       screenplayStatus: 'ready',
@@ -193,6 +195,29 @@ describe('edit-first workflow state', () => {
       directorDecoupageStatus: 'ready',
       hasEditScript: true,
       editScriptStatus: 'ready',
+      editScriptAssetReviewStatus: 'pending',
+      editAssetRequirementCount: 2,
+      pendingAssetRequirementCount: 0,
+      requiredLocationSpatialProfileCount: 2,
+      readyLocationSpatialProfileCount: 2,
+    }))
+
+    expect(state.stage).toBe('assets_ready_for_review')
+    expect(state.blocking.kind).toBe('needs_user_choice')
+    expect(state.nextAction).toBeNull()
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('moves to cinematography after required assets are approved by the user', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      editScriptAssetReviewStatus: 'approved',
+      editAssetRequirementCount: 2,
       pendingAssetRequirementCount: 0,
       requiredLocationSpatialProfileCount: 2,
       readyLocationSpatialProfileCount: 2,
@@ -201,6 +226,23 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('ready_to_generate_cinematography')
     expect(state.nextAction?.operationId).toBe('generate_edit_cinematography_shot_plan')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_cinematography_shot_plan'])
+  })
+
+  it('does not require asset review when the edit script has no reusable asset requirements', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      editScriptAssetReviewStatus: 'pending',
+      editAssetRequirementCount: 0,
+      pendingAssetRequirementCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_cinematography')
+    expect(state.nextAction?.operationId).toBe('generate_edit_cinematography_shot_plan')
   })
 
   it('requires spatial blocking after cinematography before storyboard panel generation', () => {

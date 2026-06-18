@@ -230,6 +230,7 @@ model ProjectEditScript {
   durationSec    Int
   shotCount      Int
   status         String                         @default("ready")
+  assetReviewStatus String                      @default("pending")
   shotsJson      Json
   videoBlocksJson Json?
   createdAt      DateTime                       @default(now())

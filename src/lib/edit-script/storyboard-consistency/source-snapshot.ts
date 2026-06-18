@@ -37,6 +37,7 @@ interface PersistedEditScript {
   readonly durationSec: number
   readonly shotCount: number
   readonly status: string
+  readonly assetReviewStatus: string
   readonly shotsJson: Prisma.JsonValue
   readonly videoBlocksJson: Prisma.JsonValue | null
   readonly requirements: readonly PersistedRequirement[]
@@ -101,6 +102,7 @@ function mapEditScript(script: PersistedEditScript): EditScriptPayload {
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
     shots,
     videoBlocks: normalizeVideoBlockPlanResponse({
       response: { items: Array.isArray(script.videoBlocksJson) ? script.videoBlocksJson : [] },

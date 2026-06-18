@@ -13,6 +13,18 @@ const HUMAN_INPUT_OPERATION_IDS: ReadonlySet<string> = new Set([
   'request_edit_first_choice',
 ])
 
+const AUTO_APPROVED_EDIT_FIRST_OPERATION_IDS: ReadonlySet<string> = new Set([
+  'generate_edit_screenplay',
+  'revise_edit_screenplay',
+  'generate_edit_style_previews',
+  'generate_edit_director_decoupage',
+  'generate_edit_script',
+  'generate_edit_script_assets',
+  'generate_edit_cinematography_shot_plan',
+  'generate_edit_script_storyboard_spatial_blocking',
+  'generate_edit_script_storyboard',
+])
+
 export function isAssistantPermissionMode(value: unknown): value is AssistantPermissionMode {
   return typeof value === 'string' && ASSISTANT_PERMISSION_MODES.includes(value as AssistantPermissionMode)
 }
@@ -36,6 +48,7 @@ export function shouldRequireAssistantToolApproval(params: {
   operation: ProjectAgentOperationDefinition
 }): boolean {
   if (isHumanInputOperation(params.operation.id)) return false
+  if (AUTO_APPROVED_EDIT_FIRST_OPERATION_IDS.has(params.operation.id)) return false
   if (params.mode === 'auto') return false
   return params.operation.confirmation.required === true
 }

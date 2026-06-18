@@ -101,6 +101,7 @@ describe('project agent presentation', () => {
         editScript: {
           id: 'edit-1',
           status: 'ready',
+          assetReviewStatus: 'pending',
           title: 'Dock',
           logline: 'A pilot waits.',
           durationSec: 30,

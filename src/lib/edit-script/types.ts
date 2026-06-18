@@ -8,6 +8,9 @@ export type EditAssetKind = (typeof EDIT_ASSET_KINDS)[number]
 export const EDIT_ASSET_STATUSES = ['pending', 'generating', 'completed', 'failed'] as const
 export type EditAssetStatus = (typeof EDIT_ASSET_STATUSES)[number]
 
+export const EDIT_SCRIPT_ASSET_REVIEW_STATUSES = ['pending', 'approved'] as const
+export type EditScriptAssetReviewStatus = (typeof EDIT_SCRIPT_ASSET_REVIEW_STATUSES)[number]
+
 export const EDIT_SCRIPT_VIDEO_RATIOS = ['9:16', '16:9', '21:9'] as const
 export type EditScriptVideoRatio = (typeof EDIT_SCRIPT_VIDEO_RATIOS)[number]
 
@@ -175,6 +178,7 @@ export interface EditScriptPayload {
   readonly durationSec: number
   readonly shotCount: number
   readonly status?: string
+  readonly assetReviewStatus: EditScriptAssetReviewStatus
   readonly shots: readonly EditScriptShot[]
   readonly videoBlocks: readonly EditScriptVideoBlock[]
   readonly requirements: readonly EditAssetRequirement[]

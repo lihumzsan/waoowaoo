@@ -104,7 +104,12 @@ function readRecord(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
 }
 
 function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
-  if (value === 'duration_and_aspect_ratio' || value === 'screenplay_review' || value === 'style') return value
+  if (
+    value === 'duration_and_aspect_ratio'
+    || value === 'screenplay_review'
+    || value === 'style'
+    || value === 'asset_review'
+  ) return value
   throw new Error('PROJECT_AGENT_PENDING_CHOICE_TYPE_INVALID')
 }
 

@@ -181,6 +181,7 @@ export async function assembleProjectContext(params: {
           select: {
             id: true,
             status: true,
+            assetReviewStatus: true,
             title: true,
             logline: true,
             durationSec: true,
@@ -330,6 +331,7 @@ export async function assembleProjectContext(params: {
         ? {
             id: editScript.id,
             status: editScript.status,
+            assetReviewStatus: editScript.assetReviewStatus === 'approved' ? 'approved' : 'pending',
             title: editScript.title,
             logline: editScript.logline,
             durationSec: editScript.durationSec,

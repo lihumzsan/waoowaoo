@@ -355,6 +355,7 @@ export function AssistantChoiceCardView(props: {
   const [replyText, setReplyText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isConfirmOnly = card.variant === 'confirm'
   const isConfirmOrReply = card.variant === 'confirm_or_reply'
   const ready = isChoiceCardSubmitReady(card.groups, selections)
   const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
@@ -509,7 +510,18 @@ export function AssistantChoiceCardView(props: {
         ) : null}
       </div>
       {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
-      {isConfirmOrReply ? (
+      {isConfirmOnly ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            onClick={() => { void handleSubmit() }}
+            disabled={!ready || submitting}
+          >
+            {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
+          </button>
+        </div>
+      ) : isConfirmOrReply ? (
         <div className="mt-3 space-y-2">
           <button
             type="button"

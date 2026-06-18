@@ -53,6 +53,7 @@ interface PersistedEditScript {
   readonly durationSec: number
   readonly shotCount: number
   readonly status: string
+  readonly assetReviewStatus: string
   readonly shotsJson: Prisma.JsonValue
   readonly videoBlocksJson: Prisma.JsonValue | null
   readonly styleBibleJson: Prisma.JsonValue | null
@@ -150,6 +151,7 @@ function buildStructureFromPersistedScript(script: PersistedEditScript): Omit<Ed
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
     styleBible: parseStyleBibleJson(script.styleBibleJson),
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),
@@ -275,6 +277,7 @@ function mapPersistedEditScript(script: PersistedEditScript): EditScriptPayload 
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
     styleBible: parseStyleBibleJson(script.styleBibleJson),
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),

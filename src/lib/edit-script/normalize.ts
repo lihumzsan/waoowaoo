@@ -23,7 +23,7 @@ function uniquePositiveNumbers(values: readonly number[]): number[] {
   return output.sort((left, right) => left - right)
 }
 
-export function normalizeEditScriptCore(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible'> {
+export function normalizeEditScriptCore(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
   const parsed = editScriptCoreSchema.parse(raw)
 
   const shots: EditScriptShot[] = parsed.shots
@@ -66,7 +66,7 @@ export function normalizeEditScriptCore(raw: unknown): Omit<EditScriptPayload, '
   }
 }
 
-export function normalizeEditScriptStructure(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible'> {
+export function normalizeEditScriptStructure(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
   const parsed = editScriptStructureSchema.parse(raw)
 
   const shots: EditScriptShot[] = parsed.shots
@@ -121,9 +121,9 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
 }
 
 export function applyEditScriptVideoPrompts(
-  structure: Omit<EditScriptPayload, 'requirements' | 'styleBible'>,
+  structure: Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'>,
   raw: unknown,
-): Omit<EditScriptPayload, 'requirements' | 'styleBible'> {
+): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
   const parsed = editScriptVideoPromptSchema.parse(raw)
   const expectedShotNumbers = structure.shots.map((shot) => shot.shotNumber)
   const providedShotNumbers = parsed.shots.map((shot) => shot.shotNumber).sort((left, right) => left - right)

@@ -12,6 +12,7 @@ type ChoiceContinuationOperationId =
   | 'generate_edit_style_previews'
   | 'revise_edit_screenplay'
   | 'generate_edit_director_decoupage'
+  | 'generate_edit_cinematography_shot_plan'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -136,6 +137,20 @@ export function resolveEditFirstChoiceContinuation(params: {
       }
     }
     return null
+  }
+
+  if (params.choiceType === 'asset_review') {
+    const decision = readString(params.output.decision)
+    if (decision !== 'approve') return null
+    return {
+      operationId: 'generate_edit_cinematography_shot_plan',
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        nextOperationId: 'generate_edit_cinematography_shot_plan',
+        result: { decision: 'approve' },
+      }),
+    }
   }
 
   const stylePreviewId = readString(params.output.stylePreviewId)

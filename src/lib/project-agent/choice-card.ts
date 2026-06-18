@@ -17,7 +17,7 @@ import {
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
 
-export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style'
+export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
 
 export function readEditFirstDurationTier(text: string): EditFirstDurationTier | null {
   return readEditFirstDurationTierFromText(text)
@@ -227,6 +227,32 @@ function buildScreenplayReviewChoiceCard(params: {
   }
 }
 
+function buildAssetReviewChoiceCard(params: {
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+  toolCallId: string
+}): ProjectAgentChoiceCardPartData {
+  if (params.workflow.stage !== 'assets_ready_for_review') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=${params.workflow.stage}`)
+  }
+  const isEnglish = params.locale === 'en'
+  return {
+    cardId: 'edit-first-asset-review',
+    toolCallId: params.toolCallId,
+    choiceType: 'asset_review',
+    variant: 'confirm',
+    title: isEnglish ? 'Review Required Assets' : '审核分镜资产',
+    description: isEnglish
+      ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
+      : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成摄影 shot plan。',
+    groups: [],
+    submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
+    submit: {
+      kind: 'submit_tool_output',
+    },
+  }
+}
+
 export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
@@ -249,6 +275,14 @@ export async function buildEditFirstAssistantChoiceCard(params: {
 
   if (params.choiceType === 'screenplay_review') {
     return buildScreenplayReviewChoiceCard({
+      locale: params.locale,
+      workflow: params.workflow,
+      toolCallId: params.toolCallId,
+    })
+  }
+
+  if (params.choiceType === 'asset_review') {
+    return buildAssetReviewChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

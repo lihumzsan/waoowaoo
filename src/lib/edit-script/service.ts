@@ -213,6 +213,7 @@ interface PersistedEditScript {
   readonly durationSec: number
   readonly shotCount: number
   readonly status: string
+  readonly assetReviewStatus: string
   readonly shotsJson: Prisma.JsonValue
   readonly videoBlocksJson: Prisma.JsonValue | null
   readonly requirements: readonly PersistedEditScriptRequirement[]
@@ -283,6 +284,8 @@ const EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY = 'screenplay_ready'
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_GENERATING = 'style_preview_generating'
 const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY = 'style_preview_ready'
 const EDIT_SCREENPLAY_STATUS_FAILED = 'failed'
+const EDIT_SCRIPT_ASSET_REVIEW_PENDING = 'pending'
+const EDIT_SCRIPT_ASSET_REVIEW_APPROVED = 'approved'
 
 function resolveStylePreviewCount(value: number | undefined): number {
   if (value === undefined) return EDIT_STYLE_PREVIEW_MAX_COUNT
@@ -298,6 +301,10 @@ function resolveStylePreviewCount(value: number | undefined): number {
 function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
   if (value === 'generating' || value === 'completed' || value === 'confirmed' || value === 'failed') return value
   return 'pending'
+}
+
+function normalizeAssetReviewStatus(value: string): 'pending' | 'approved' {
+  return value === EDIT_SCRIPT_ASSET_REVIEW_APPROVED ? 'approved' : 'pending'
 }
 
 function normalizeStylePreviewKey(value: string): EditStylePreviewKey {
@@ -786,6 +793,7 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     durationSec: script.durationSec,
     shotCount: script.shotCount,
     status: script.status,
+    assetReviewStatus: normalizeAssetReviewStatus(script.assetReviewStatus),
     shots,
     videoBlocks: parseVideoBlocksJson(script.videoBlocksJson, shots),
     requirements,
@@ -1057,6 +1065,54 @@ export async function readProjectEditScreenplay(input: {
 }): Promise<EditScreenplayPayload | null> {
   const screenplay = await getPersistedEditScreenplay(input.projectId, input.episodeId)
   return screenplay ? mapPersistedEditScreenplay(screenplay) : null
+}
+
+export async function approveProjectEditScriptAssets(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}): Promise<EditScriptPayload> {
+  const script = await prisma.projectEditScript.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      project: {
+        userId: input.userId,
+      },
+    },
+    include: {
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+  })
+  if (!script) throw new ApiError('NOT_FOUND')
+  const mapped = await mapPersistedEditScript(script)
+  const notReady = mapped.requirements.filter((requirement) => requirement.status !== 'completed')
+  if (notReady.length > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
+      message: `Edit script assets are not ready: ${notReady.map((requirement) => requirement.name).join(', ')}`,
+    })
+  }
+  const updated = await prisma.projectEditScript.update({
+    where: { id: script.id },
+    data: {
+      assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_APPROVED,
+    },
+    include: {
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+  })
+  return await mapPersistedEditScript(updated)
 }
 
 export async function confirmProjectEditStylePreview(input: ConfirmEditStylePreviewInput): Promise<EditScreenplayPayload> {
@@ -1809,6 +1865,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
           durationSec: core.durationSec,
           shotCount: core.shotCount,
           status: 'ready',
+          assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_PENDING,
           shotsJson: core.shots as unknown as Prisma.InputJsonValue,
           videoBlocksJson: core.videoBlocks as unknown as Prisma.InputJsonValue,
         },
@@ -1821,6 +1878,7 @@ export async function generateProjectEditScript(input: GenerateEditScriptInput):
           durationSec: core.durationSec,
           shotCount: core.shotCount,
           status: 'ready',
+          assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_PENDING,
           shotsJson: core.shots as unknown as Prisma.InputJsonValue,
           videoBlocksJson: core.videoBlocks as unknown as Prisma.InputJsonValue,
         },

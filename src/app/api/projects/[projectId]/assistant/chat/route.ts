@@ -32,6 +32,7 @@ import {
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 import {
   createProjectAgentRun,
   getProjectAgentRun,
@@ -254,6 +255,16 @@ async function resolveProjectAgentControl(params: {
           message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
         })
       }
+    }
+    if (controlAction.choiceType === 'asset_review' && readNonEmptyString(controlAction.output.decision) === 'approve') {
+      if (!scope.episodeId) {
+        throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')
+      }
+      await approveProjectEditScriptAssets({
+        projectId: scope.projectId,
+        userId: scope.userId,
+        episodeId: scope.episodeId,
+      })
     }
     const continuation = resolveEditFirstChoiceContinuation({
       choiceType: controlAction.choiceType,

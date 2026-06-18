@@ -17,6 +17,7 @@ export type EditFirstWorkflowStage =
   | 'edit_script_generating'
   | 'ready_to_generate_assets'
   | 'assets_generating'
+  | 'assets_ready_for_review'
   | 'ready_to_generate_cinematography'
   | 'ready_to_generate_storyboard_spatial_blocking'
   | 'storyboard_spatial_blocking_generating'
@@ -91,6 +92,8 @@ export interface EditFirstWorkflowSnapshot {
   directorDecoupageStatus: string | null
   hasEditScript: boolean
   editScriptStatus: string | null
+  editScriptAssetReviewStatus: string | null
+  editAssetRequirementCount: number
   pendingAssetRequirementCount: number
   generatingAssetRequirementCount: number
   requiredLocationSpatialProfileCount: number
@@ -324,6 +327,12 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (!snapshot.hasCinematographyShotPlan) {
+    if (snapshot.editAssetRequirementCount > 0 && snapshot.editScriptAssetReviewStatus !== 'approved') {
+      return state({
+        stage: 'assets_ready_for_review',
+        blocking: { kind: 'needs_user_choice', reason: 'review and approve required edit-first assets before cinematography planning' },
+      })
+    }
     return state({
       stage: 'ready_to_generate_cinematography',
       nextAction: confirmationAction('generate_edit_cinematography_shot_plan', 'Generate cinematography shot plan'),
@@ -422,6 +431,8 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return ['generate_edit_script_assets']
     case 'assets_generating':
       return []
+    case 'assets_ready_for_review':
+      return []
     case 'ready_to_generate_cinematography':
       return ['generate_edit_cinematography_shot_plan']
     case 'ready_to_generate_storyboard_spatial_blocking':
@@ -510,6 +521,7 @@ export async function resolveEditFirstWorkflowState(params: {
       select: {
         id: true,
         status: true,
+        assetReviewStatus: true,
         requirements: {
           select: {
             kind: true,
@@ -645,6 +657,8 @@ export async function resolveEditFirstWorkflowState(params: {
     directorDecoupageStatus: directorDecoupage?.status ?? null,
     hasEditScript: Boolean(editScript),
     editScriptStatus: editScript?.status ?? null,
+    editScriptAssetReviewStatus: editScript?.assetReviewStatus ?? null,
+    editAssetRequirementCount: editScript?.requirements.length ?? 0,
     pendingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status !== 'completed').length ?? 0,
     generatingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status === 'generating').length ?? 0,
     requiredLocationSpatialProfileCount: locationSpatialProfileReadiness.requiredCount,
