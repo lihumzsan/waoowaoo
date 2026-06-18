@@ -27,7 +27,7 @@ import type {
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
-import { useConfirmProjectEditStylePreview, useRevertMutationBatch } from '@/lib/query/hooks'
+import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   isChoiceCardSubmitReady,
@@ -614,8 +614,6 @@ export function AssistantChoiceCardView(props: {
 function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartData>) {
   const t = useTranslations('assistantAgent')
   const progressT = useTranslations('progress')
-  const revertMutationBatch = useRevertMutationBatch()
-  const [undoResult, setUndoResult] = useState<{ ok: boolean; message?: string } | null>(null)
   const taskTargets = useMemo(() => (
     data.targetType && data.targetId
       ? [{
@@ -634,22 +632,6 @@ function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartD
     const raw = taskState?.stageLabel || taskState?.stage || null
     return resolveProgressStageLabel(raw, progressT)
   }, [progressT, taskState?.stage, taskState?.stageLabel])
-
-  const handleUndo = async () => {
-    if (!data.mutationBatchId) return
-    if (!window.confirm(t('cards.undoConfirmSingle'))) return
-    setUndoResult(null)
-    try {
-      const result = await revertMutationBatch.mutateAsync(data.mutationBatchId)
-      if (result.ok) {
-        setUndoResult({ ok: true, message: t('cards.undoSucceeded', { count: result.reverted }) })
-      } else {
-        setUndoResult({ ok: false, message: result.error || t('cards.undoFailed') })
-      }
-    } catch (error) {
-      setUndoResult({ ok: false, message: error instanceof Error ? error.message : String(error) })
-    }
-  }
 
   return (
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
@@ -673,54 +655,18 @@ function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartD
         ) : null}
         {data.runId ? <div>{t('cards.runIdLabel')}: {data.runId}</div> : null}
         {typeof data.deduped === 'boolean' ? <div>{t('cards.dedupedLabel')}: {String(data.deduped)}</div> : null}
-        {data.mutationBatchId ? <div>{t('cards.undoBatchIdLabel')}: {data.mutationBatchId}</div> : null}
       </div>
-      {data.mutationBatchId ? (
-        <div className="ml-5 mt-2 flex items-center gap-2 text-[11px]">
-          <button
-            type="button"
-            className="rounded-md border border-[var(--glass-stroke-base)] bg-white/70 px-2 py-1 text-[11px] text-[var(--glass-text-secondary)] disabled:opacity-60"
-            onClick={() => { void handleUndo() }}
-            disabled={revertMutationBatch.isPending}
-          >
-            {revertMutationBatch.isPending ? t('cards.undoRunning') : t('cards.undoCurrentChange')}
-          </button>
-          {undoResult ? (
-            <div className={undoResult.ok ? 'text-[var(--glass-tone-success-fg)]' : 'text-[var(--glass-tone-warn-fg)]'}>
-              {undoResult.message}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </details>
   )
 }
 
 function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubmittedPartData>) {
   const t = useTranslations('assistantAgent')
-  const revertMutationBatch = useRevertMutationBatch()
-  const [undoResult, setUndoResult] = useState<{ ok: boolean; message?: string } | null>(null)
   const taskTotal = data.taskTotal ?? data.taskIds.length
   const targetTotal = data.targetTotal
   const countLabel = typeof targetTotal === 'number' && targetTotal !== taskTotal
     ? t('cards.batchTaskAndTargetTotals', { tasks: taskTotal, targets: targetTotal })
     : t('cards.totalLabelWithCount', { count: data.total })
-
-  const handleUndo = async () => {
-    if (!data.mutationBatchId) return
-    if (!window.confirm(t('cards.undoConfirmBatch'))) return
-    setUndoResult(null)
-    try {
-      const result = await revertMutationBatch.mutateAsync(data.mutationBatchId)
-      if (result.ok) {
-        setUndoResult({ ok: true, message: t('cards.undoSucceeded', { count: result.reverted }) })
-      } else {
-        setUndoResult({ ok: false, message: result.error || t('cards.undoFailed') })
-      }
-    } catch (error) {
-      setUndoResult({ ok: false, message: error instanceof Error ? error.message : String(error) })
-    }
-  }
 
   return (
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
@@ -735,24 +681,6 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
         ))}
         {(data.taskIds || []).length > 8 ? <div>…</div> : null}
       </div>
-      {data.mutationBatchId ? <div className="ml-5 mt-1 text-[11px]">{t('cards.undoBatchIdLabel')}: {data.mutationBatchId}</div> : null}
-      {data.mutationBatchId ? (
-        <div className="ml-5 mt-2 flex items-center gap-2 text-[11px]">
-          <button
-            type="button"
-            className="rounded-md border border-[var(--glass-stroke-base)] bg-white/70 px-2 py-1 text-[11px] text-[var(--glass-text-secondary)] disabled:opacity-60"
-            onClick={() => { void handleUndo() }}
-            disabled={revertMutationBatch.isPending}
-          >
-            {revertMutationBatch.isPending ? t('cards.undoRunning') : t('cards.undoCurrentBatch')}
-          </button>
-          {undoResult ? (
-            <div className={undoResult.ok ? 'text-[var(--glass-tone-success-fg)]' : 'text-[var(--glass-tone-warn-fg)]'}>
-              {undoResult.message}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </details>
   )
 }
