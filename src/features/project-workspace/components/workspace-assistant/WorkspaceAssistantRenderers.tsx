@@ -14,6 +14,7 @@ import type { ComponentProps } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import EstimatedTaskProgressOverlay from '@/components/task/EstimatedTaskProgressOverlay'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
@@ -751,7 +752,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   onPreviewImage?: (imageUrl: string) => void
 }) {
   const t = useTranslations('assistantAgent')
-  const progressT = useTranslations('progress')
   const data: EditStylePreviewGenerationPartData = props.data
   const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
@@ -871,8 +871,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
         {displayedItems.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
           const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
           const preview = previewsById.get(item.id) ?? null
-          const rawStage = taskState?.stageLabel || taskState?.stage || null
-          const stageLabel = resolveProgressStageLabel(rawStage, progressT)
           const cardStatus = resolveEditStylePreviewCardStatus({
             preview,
             taskState,
@@ -886,6 +884,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           const confirmed = preview?.status === 'confirmed'
           const imageUrl = preview?.imageUrl ?? null
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
+          const showInlineStatus = !confirmed && (ready || loading)
           return (
             <div
               key={item.id}
@@ -918,6 +917,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                 ) : (
                   <div className="workspace-node-loading-surface h-36 bg-slate-100" />
                 )}
+                <EstimatedTaskProgressOverlay taskState={taskState} />
               </div>
               <div className="space-y-1 p-2">
                 <button
@@ -934,7 +934,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                     className={`mt-1 h-3 w-3 shrink-0 text-[var(--glass-text-tertiary)] transition-transform group-hover:text-[var(--glass-text-secondary)] ${summaryExpanded ? 'rotate-180' : ''}`}
                   />
                 </button>
-                {!confirmed ? (
+                {showInlineStatus ? (
                   <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
                     <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
                     <span>
@@ -942,9 +942,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                         ? t('cards.stylePreviewGenerationFailed')
                         : ready
                           ? t('cards.stylePreviewReady')
-                          : loading
-                            ? t('cards.stylePreviewLoading')
-                            : stageLabel ?? t('cards.stylePreviewGenerationStatus', { status: cardStatus })}
+                          : t('cards.stylePreviewLoading')}
                     </span>
                   </div>
                 ) : null}

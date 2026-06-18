@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import EstimatedTaskProgressOverlay, { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import type {
@@ -61,6 +62,10 @@ function hasText(value: string | null | undefined): value is string {
 
 function nodeContentInteractionClass(data: WorkspaceCanvasFlowNode['data'], className: string): string {
   return data.readOnly === true ? className : `nodrag nowheel ${className}`
+}
+
+function nodeUsesInlineTaskProgress(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
+  return kind === 'videoPlan' || kind === 'bgmScore' || kind === 'finalTimeline'
 }
 
 export function videoElementAspectRatio(video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>): number | null {
@@ -646,7 +651,12 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
       : 118
   const running = data.__running === true
   if (running && !displayVideoUrl && !displayImageUrl) {
-    return <MediaSkeleton height={previewHeight} />
+    return (
+      <div className="relative">
+        <MediaSkeleton height={previewHeight} />
+        <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
+      </div>
+    )
   }
   if (isShotPreview && displayImageUrl) {
     return (
@@ -659,6 +669,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
             buttonClassName="block w-full cursor-zoom-in overflow-hidden"
             imageClassName="block h-auto w-full object-contain"
           />
+          <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
         </div>
         {!running && panelId && candidateUrls.length > 0 && canUseCandidateActions ? (
           <div className="nodrag nowheel rounded-[16px] border border-sky-100 bg-sky-50/80 p-2">
@@ -753,6 +764,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
           </span>
         </div>
       )}
+      <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
     </div>
   )
 }
@@ -1792,6 +1804,9 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
           <div className={`space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}>
             <NodeContent data={runningData} labels={labels} expanded={expanded} />
+            {nodeUsesInlineTaskProgress(data.kind) ? (
+              <EstimatedTaskProgressInline taskState={data.taskProgress} />
+            ) : null}
 
             {shouldShowFooter ? (
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">

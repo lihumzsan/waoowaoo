@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
-import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import type { TaskRuntimeStateLike, TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
@@ -459,6 +459,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly meta: string
   readonly statusLabel: string
   readonly isRunning?: boolean
+  readonly taskProgress?: TaskRuntimeStateLike | null
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
   readonly height: number

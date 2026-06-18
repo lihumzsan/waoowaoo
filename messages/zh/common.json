@@ -83,6 +83,8 @@
         "switchConfirmAction": "确认切换"
     },
     "taskStatus": {
+        "progressLabel": "生成进度",
+        "overtime": "仍在生成中，请稍候",
         "intent": {
             "generate": {
                 "running": {
@@ -142,6 +144,7 @@
             }
         },
         "failed": {
+            "generic": "生成失败",
             "image": "处理失败",
             "video": "处理失败",
             "audio": "处理失败",

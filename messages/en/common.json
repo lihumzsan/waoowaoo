@@ -83,6 +83,8 @@
         "switchConfirmAction": "Switch now"
     },
     "taskStatus": {
+        "progressLabel": "Generation progress",
+        "overtime": "Still generating, please wait",
         "intent": {
             "generate": {
                 "running": {
@@ -142,6 +144,7 @@
             }
         },
         "failed": {
+            "generic": "Generation failed",
             "image": "Failed",
             "video": "Failed",
             "audio": "Failed",

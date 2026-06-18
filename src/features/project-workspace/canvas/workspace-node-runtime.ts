@@ -53,6 +53,21 @@ function readErrorMessage(state: TaskRuntimeStateLike | null): string | null {
   return typeof message === 'string' && message.trim() ? message.trim() : null
 }
 
+function optimisticTaskProgress(node: WorkspaceCanvasFlowNode): TaskRuntimeStateLike | null {
+  const target = node.data.runtimeTargets?.[0]
+  const taskType = target?.types?.[0]
+  if (!target || !taskType) return null
+  return {
+    targetType: target.targetType,
+    targetId: target.targetId,
+    phase: 'processing',
+    runningTaskId: `optimistic:${node.id}:${taskType}`,
+    runningTaskType: taskType,
+    updatedAt: null,
+    lastError: null,
+  }
+}
+
 function withRuntimeErrorMessage(
   node: WorkspaceCanvasFlowNode,
   patch: Partial<WorkspaceCanvasNodeData>,
@@ -103,6 +118,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
     return {
       isRunning: true,
       statusLabel: input.labels.running,
+      taskProgress: runningState ?? optimisticTaskProgress(input.node),
     }
   }
 
@@ -111,6 +127,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
     return withRuntimeErrorMessage(input.node, {
       isRunning: false,
       statusLabel: input.labels.failed,
+      taskProgress: failedState,
     }, readErrorMessage(failedState))
   }
 
@@ -118,9 +135,11 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
     return {
       isRunning: input.node.data.isRunning,
       statusLabel: input.node.data.statusLabel,
+      taskProgress: input.node.data.isRunning ? input.node.data.taskProgress ?? optimisticTaskProgress(input.node) : null,
     }
   }
   return {
     statusLabel: input.node.data.statusLabel,
+    taskProgress: null,
   }
 }

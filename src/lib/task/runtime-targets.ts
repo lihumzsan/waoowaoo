@@ -9,9 +9,15 @@ export type TaskRuntimeTarget = {
 }
 
 export type TaskRuntimeStateLike = {
+  readonly targetType?: string | null
+  readonly targetId?: string | null
   readonly phase: TaskRuntimePhase | string | null | undefined
   readonly runningTaskId?: string | null
   readonly runningTaskType?: string | null
+  readonly progress?: number | null
+  readonly stage?: string | null
+  readonly stageLabel?: string | null
+  readonly updatedAt?: string | null
   readonly lastError?: {
     readonly code?: string | null
     readonly message?: string | null
