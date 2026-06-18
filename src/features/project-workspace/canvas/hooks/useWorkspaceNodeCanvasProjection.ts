@@ -2431,7 +2431,30 @@ export function buildWorkspaceNodeCanvasProjection({
     edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmScoreNodeId, finalNodeId))
   }
 
-  return { nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodes)), edges }
+  // 指向「生产中」节点的连线点亮：流动 + 系统天蓝色描边与微弱发光，
+  // 与卡片聚焦效果（workspace-node-running-breathing）保持同一套视觉语言。
+  const runningNodeIds = new Set(
+    nodes.filter((node) => node.data?.isRunning === true).map((node) => node.id),
+  )
+  const decoratedEdges = edges.map((edge) =>
+    runningNodeIds.has(edge.target)
+      ? {
+          ...edge,
+          animated: true,
+          style: {
+            ...edge.style,
+            stroke: '#38bdf8',
+            strokeWidth: 2,
+            filter: 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.65))',
+          },
+        }
+      : edge,
+  )
+
+  return {
+    nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodes)),
+    edges: decoratedEdges,
+  }
 }
 
 export function useWorkspaceNodeCanvasProjection({
