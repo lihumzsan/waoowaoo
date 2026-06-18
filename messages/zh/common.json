@@ -84,7 +84,7 @@
     },
     "taskStatus": {
         "progressLabel": "生成进度",
-        "overtime": "仍在生成中，请稍候",
+        "overtime": "仍在生成中，请稍等",
         "intent": {
             "generate": {
                 "running": {

@@ -78,8 +78,21 @@ describe('estimated task progress', () => {
       taskType: TASK_TYPE.VIDEO_PANEL,
       elapsedMs: 226_000,
     })
-    expect(overtime?.percent).toBe(100)
+    expect(overtime?.percent).toBe(99)
     expect(overtime?.isOvertime).toBe(true)
+  })
+
+  it('never reaches 100 percent while the task is still running', () => {
+    const running = calculateEstimatedTaskProgress({
+      phase: 'processing',
+      taskType: TASK_TYPE.IMAGE_PANEL,
+      elapsedMs: 1_000_000,
+    })
+
+    expect(running?.percent).toBe(99)
+    expect(running?.isRunning).toBe(true)
+    expect(running?.isCompleted).toBe(false)
+    expect(running?.isOvertime).toBe(true)
   })
 
   it('marks terminal states without showing running progress', () => {

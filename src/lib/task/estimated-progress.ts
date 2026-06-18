@@ -29,6 +29,7 @@ const MUSIC_EXPECTED_SECONDS = 60
 const FINAL_RENDER_EXPECTED_SECONDS = 60
 const TAIL_RATIO = 0.5
 const MAIN_PROGRESS_CAP = 90
+const RUNNING_PROGRESS_CAP = 99
 
 const IMAGE_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.IMAGE_PANEL,
@@ -148,11 +149,11 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
   }
 
   const tailElapsedSeconds = elapsedSeconds - timing.expectedSeconds
-  if (tailElapsedSeconds <= timing.tailSeconds) {
+  if (tailElapsedSeconds < timing.tailSeconds) {
     return {
       ...timing,
       phase,
-      percent: clampPercent(MAIN_PROGRESS_CAP + tailEaseOut(tailElapsedSeconds / timing.tailSeconds) * (100 - MAIN_PROGRESS_CAP)),
+      percent: clampPercent(MAIN_PROGRESS_CAP + tailEaseOut(tailElapsedSeconds / timing.tailSeconds) * (RUNNING_PROGRESS_CAP - MAIN_PROGRESS_CAP)),
       isRunning: true,
       isFailed: false,
       isCompleted: false,
@@ -163,7 +164,7 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
   return {
     ...timing,
     phase,
-    percent: 100,
+    percent: RUNNING_PROGRESS_CAP,
     isRunning: true,
     isFailed: false,
     isCompleted: false,

@@ -63,6 +63,16 @@ describe('estimated task progress storage cache', () => {
     })).toBe('group:operation:generate_edit_script_storyboard_images:request-1')
   })
 
+  it('uses the stable target key before task id so optimistic task replacement does not restart progress', () => {
+    expect(taskProgressKey({
+      phase: 'processing',
+      runningTaskId: 'task-1',
+      runningTaskType: 'image_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+    })).toBe('target:ProjectPanel:panel-1:image_panel')
+  })
+
   it('does not throw when localStorage quota is exceeded while caching task progress start time', () => {
     const storage = new QuotaExceededStorage()
 

@@ -15,7 +15,7 @@ interface EstimatedTaskProgressOverlayProps {
 }
 
 function formatPercent(percent: number): string {
-  return `${Math.round(percent)}%`
+  return `${Math.floor(Math.max(0, Math.min(99, percent)))}%`
 }
 
 export default function EstimatedTaskProgressOverlay({

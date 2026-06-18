@@ -48,11 +48,11 @@ export function taskProgressKey(source: EstimatedTaskProgressSource | null | und
   if (!taskType) return null
   const progressGroupId = source.progressGroupId?.trim()
   if (progressGroupId) return `group:${progressGroupId}`
-  const taskId = source.runningTaskId?.trim()
-  if (taskId) return `task:${taskId}`
   const targetType = source.targetType?.trim()
   const targetId = source.targetId?.trim()
   if (targetType && targetId) return `target:${targetType}:${targetId}:${taskType}`
+  const taskId = source.runningTaskId?.trim()
+  if (taskId) return `task:${taskId}`
   return `type:${taskType}`
 }
 
