@@ -127,16 +127,52 @@ export function hasWorkspaceAssistantVisibleTextAfterLatestUser(
   for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
     const message = messages[messageIndex]
     if (!message || message.role !== 'assistant') continue
-    const hasVisibleText = message.parts.some((part) => (
-      isRecord(part)
-        && part.type === 'text'
-        && typeof part.text === 'string'
-        && part.text.trim().length > 0
-    ))
+    const hasVisibleText = message.parts.some(isWorkspaceAssistantVisibleTextPart)
     if (hasVisibleText) return true
   }
 
   return false
+}
+
+function isWorkspaceAssistantVisibleTextPart(part: unknown): boolean {
+  return isRecord(part)
+    && part.type === 'text'
+    && typeof part.text === 'string'
+    && part.text.trim().length > 0
+}
+
+function isWorkspaceAssistantTerminalPausePart(part: unknown): boolean {
+  if (!isRecord(part) || typeof part.type !== 'string') return false
+  return part.type === 'data-agent-stop'
+    || part.type === 'data-agent-interruption'
+    || part.type === 'data-assistant-choice-card'
+}
+
+export function hasWorkspaceAssistantPendingActivityAfterLatestUser(
+  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
+): boolean {
+  let latestUserMessageIndex = -1
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    if (messages[messageIndex]?.role === 'user') {
+      latestUserMessageIndex = messageIndex
+      break
+    }
+  }
+
+  let hasAssistantActivity = false
+  for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
+    const message = messages[messageIndex]
+    if (!message || message.role !== 'assistant') continue
+    for (const part of message.parts) {
+      if (isWorkspaceAssistantVisibleTextPart(part)) return false
+      if (isWorkspaceAssistantTerminalPausePart(part)) return false
+      if (isRecord(part) && typeof part.type === 'string') {
+        hasAssistantActivity = true
+      }
+    }
+  }
+
+  return hasAssistantActivity
 }
 
 export function resolveWorkspaceAssistantActiveThinkingMessageId(params: {

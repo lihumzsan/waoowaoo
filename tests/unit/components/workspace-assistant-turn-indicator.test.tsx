@@ -4,6 +4,7 @@ import type { UIMessage } from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
   findLatestAssistantMessageIdAfterLatestUser,
+  hasWorkspaceAssistantPendingActivityAfterLatestUser,
   hasWorkspaceAssistantVisibleTextAfterLatestUser,
   resolveWorkspaceAssistantActiveThinkingMessageId,
   shouldShowPendingAssistantTurnPlaceholder,
@@ -109,10 +110,12 @@ describe('workspace assistant turn indicator', () => {
     ]
 
     const toolOnlyHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(toolOnlyMessages)
+    const toolOnlyHasPendingActivity = hasWorkspaceAssistantPendingActivityAfterLatestUser(toolOnlyMessages)
 
     expect(toolOnlyHasText).toBe(false)
+    expect(toolOnlyHasPendingActivity).toBe(true)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: true,
+      pending: toolOnlyHasPendingActivity,
       hasVisibleAssistantText: toolOnlyHasText,
       messages: toolOnlyMessages,
     })).toBe('assistant-current')
@@ -139,8 +142,10 @@ describe('workspace assistant turn indicator', () => {
     ]
 
     const textStartedHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(textStartedMessages)
+    const textStartedHasPendingActivity = hasWorkspaceAssistantPendingActivityAfterLatestUser(textStartedMessages)
 
     expect(textStartedHasText).toBe(true)
+    expect(textStartedHasPendingActivity).toBe(false)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
       pending: true,
       hasVisibleAssistantText: textStartedHasText,
@@ -151,5 +156,37 @@ describe('workspace assistant turn indicator', () => {
       activeAssistantMessageId: null,
       hasVisibleAssistantText: textStartedHasText,
     })).toBe(false)
+  })
+
+  it('does not keep thinking after a terminal pause part takes over the turn', () => {
+    const terminalMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
+      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
+      turnMessage('assistant-current', 'assistant', [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'tool-call-1',
+          state: 'output-available',
+          output: { ok: true },
+        } as never,
+        {
+          type: 'data-agent-stop',
+          data: {
+            reason: 'awaiting_external_task',
+            stepCount: 1,
+            operationIds: ['generate_edit_screenplay'],
+            taskIds: ['task-1'],
+            phases: ['edit_script'],
+          },
+        } as never,
+      ]),
+    ]
+
+    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(terminalMessages)).toBe(false)
+    expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages)).toBe(false)
+    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages),
+      hasVisibleAssistantText: false,
+      messages: terminalMessages,
+    })).toBeNull()
   })
 })

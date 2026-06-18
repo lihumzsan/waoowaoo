@@ -12,6 +12,7 @@ import {
   ConfirmationActionCard,
   WorkspaceAssistantActiveRunCard,
   EditStylePreviewGenerationDataCard,
+  hasWorkspaceAssistantPendingActivityAfterLatestUser,
   hasWorkspaceAssistantVisibleTextAfterLatestUser,
   resolveWorkspaceAssistantActiveThinkingMessageId,
   shouldShowPendingAssistantTurnPlaceholder,
@@ -466,7 +467,12 @@ export default function WorkspaceAssistantPanel({
     () => hasWorkspaceAssistantVisibleTextAfterLatestUser(assistantRuntime.messages),
     [assistantRuntime.messages],
   )
-  const assistantTurnPending = assistantRuntime.pending && !assistantRuntime.storageLoading
+  const assistantTurnHasPendingActivity = useMemo(
+    () => hasWorkspaceAssistantPendingActivityAfterLatestUser(assistantRuntime.messages),
+    [assistantRuntime.messages],
+  )
+  const assistantTurnPending = !assistantRuntime.storageLoading
+    && (assistantRuntime.pending || assistantTurnHasPendingActivity)
   const isAwaitingAssistantText = assistantTurnPending && !assistantTurnHasVisibleText
   const activeThinkingAssistantMessageId = useMemo(() => {
     return resolveWorkspaceAssistantActiveThinkingMessageId({
