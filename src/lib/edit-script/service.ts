@@ -33,6 +33,7 @@ import type {
   EditScreenplayPayload,
   EditScriptVideoRatio,
   EditStylePreviewGenerationPayload,
+  EditStylePreviewCanonicalKey,
   EditStylePreviewKey,
   EditStylePreviewOption,
   EditStylePreviewPayload,
@@ -44,6 +45,7 @@ import type {
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import {
   editCinematographyShotPlanSchema,
+  editStylePreviewKeySchema,
   editStylePreviewOptionsSchema,
   EDIT_STYLE_PREVIEW_KEYS,
   EDIT_STYLE_PREVIEW_MAX_COUNT,
@@ -299,13 +301,39 @@ function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
 }
 
 function normalizeStylePreviewKey(value: string): EditStylePreviewKey {
-  if (value === 'style_b' || value === 'style_c') return value
-  return 'style_a'
+  const parsed = editStylePreviewKeySchema.safeParse(value)
+  if (!parsed.success) throw new Error(`EDIT_STYLE_PREVIEW_KEY_INVALID:${value}`)
+  return parsed.data as EditStylePreviewKey
 }
 
 function normalizeStylePreviewAspectRatio(value: string): EditScriptVideoRatio {
   if (value === '9:16' || value === '16:9' || value === '21:9') return value
   throw new Error(`EDIT_STYLE_PREVIEW_ASPECT_RATIO_INVALID:${value}`)
+}
+
+function stylePreviewKeyGeneration(value: string): number | null {
+  const parsed = editStylePreviewKeySchema.safeParse(value)
+  if (!parsed.success) return null
+  const parts = parsed.data.split('_')
+  if (parts.length === 2) return 1
+  const generation = Number(parts[2])
+  return Number.isInteger(generation) && generation > 1 ? generation : null
+}
+
+function resolveNextStylePreviewGeneration(existingKeys: readonly string[]): number {
+  const generations = existingKeys.flatMap((key) => {
+    const generation = stylePreviewKeyGeneration(key)
+    return generation === null ? [] : [generation]
+  })
+  return generations.length > 0 ? Math.max(...generations) + 1 : 1
+}
+
+function buildStylePreviewPersistenceKey(
+  canonicalKey: EditStylePreviewCanonicalKey,
+  generation: number,
+): EditStylePreviewKey {
+  if (generation === 1) return canonicalKey
+  return `${canonicalKey}_${generation}` as EditStylePreviewKey
 }
 
 function resolveStylePreviewImageModel(config: Awaited<ReturnType<typeof getProjectModelConfig>>): string {
@@ -836,7 +864,10 @@ async function getPersistedEditScreenplay(projectId: string, episodeId: string, 
     },
     include: {
       stylePreviews: {
-        orderBy: { styleKey: 'asc' },
+        orderBy: [
+          { createdAt: 'asc' },
+          { styleKey: 'asc' },
+        ],
       },
     },
   })
@@ -1069,7 +1100,6 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
   }
 
   const allPreviewsTerminal = screenplay.stylePreviews.length > 0
-    && screenplay.stylePreviews.length <= EDIT_STYLE_PREVIEW_MAX_COUNT
     && screenplay.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed' || preview.status === 'failed')
   if (!allPreviewsTerminal) {
     throw new ApiError('INVALID_PARAMS', {
@@ -1446,16 +1476,15 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
       userPrompt: true,
       screenplayText: true,
       status: true,
+      stylePreviews: {
+        select: {
+          styleKey: true,
+        },
+      },
     },
   })
   if (!screenplay) throw new ApiError('NOT_FOUND')
   const count = resolveStylePreviewCount(input.count)
-  if (input.replaceExisting === false) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_STYLE_PREVIEW_APPEND_UNSUPPORTED',
-      message: 'Style preview generation currently replaces the existing candidate set; pass replaceExisting=true or omit it.',
-    })
-  }
   if (
     screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY
     && screenplay.status !== EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY
@@ -1482,18 +1511,19 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
       count,
     })
 
+    const nextGeneration = resolveNextStylePreviewGeneration(
+      screenplay.stylePreviews.map((preview) => preview.styleKey),
+    )
     const stylePreviews = await prisma.$transaction(async (tx) => {
-      await tx.projectEditStylePreview.deleteMany({
-        where: { editScreenplayId: screenplay.id },
-      })
       const created: PersistedEditStylePreview[] = []
       for (const option of styleOptions) {
+        const styleKey = buildStylePreviewPersistenceKey(option.styleKey, nextGeneration)
         const preview = await tx.projectEditStylePreview.create({
           data: {
             projectId: input.projectId,
             episodeId: input.episodeId,
             editScreenplayId: screenplay.id,
-            styleKey: option.styleKey,
+            styleKey,
             aspectRatio: option.aspectRatio,
             title: option.title,
             summary: option.summary,

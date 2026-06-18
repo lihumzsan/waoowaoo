@@ -305,7 +305,7 @@ export interface ProjectEditStylePreview {
   projectId: string
   episodeId: string
   screenplayId: string
-  styleKey: 'style_a' | 'style_b' | 'style_c'
+  styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
   aspectRatio: '9:16' | '16:9' | '21:9'
   title: string
   summary: string

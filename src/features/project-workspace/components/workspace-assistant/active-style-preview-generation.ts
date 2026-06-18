@@ -12,7 +12,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStyleKey(value: unknown): value is EditStylePreviewGenerationPartData['items'][number]['styleKey'] {
-  return value === 'style_a' || value === 'style_b' || value === 'style_c'
+  return typeof value === 'string' && /^style_[abc](?:_[2-9]\d*)?$/.test(value)
 }
 
 function isAspectRatio(value: unknown): value is NonNullable<EditStylePreviewGenerationPartData['items'][number]['aspectRatio']> {

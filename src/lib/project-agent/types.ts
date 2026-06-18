@@ -237,7 +237,7 @@ export interface EditStylePreviewGenerationPartData {
   screenplayId: string
   items: Array<{
     id: string
-    styleKey: 'style_a' | 'style_b' | 'style_c'
+    styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
     title: string
     summary: string
     taskId: string

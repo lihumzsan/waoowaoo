@@ -1153,7 +1153,7 @@ function StyleBibleContent({
 }) {
   const details = data.styleBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const shouldShowPreview = data.kind === 'editStylePreview' && hasText(data.previewImageUrl)
+  const shouldShowPreview = (data.kind === 'editStylePreview' || data.kind === 'editStyleBible') && hasText(data.previewImageUrl)
 
   if (!expanded) {
     return (

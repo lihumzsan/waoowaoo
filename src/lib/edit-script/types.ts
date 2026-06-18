@@ -13,7 +13,8 @@ export type EditScriptVideoRatio = (typeof EDIT_SCRIPT_VIDEO_RATIOS)[number]
 
 export const EDIT_STYLE_PREVIEW_KEYS = ['style_a', 'style_b', 'style_c'] as const
 export const EDIT_STYLE_PREVIEW_MAX_COUNT = EDIT_STYLE_PREVIEW_KEYS.length
-export type EditStylePreviewKey = (typeof EDIT_STYLE_PREVIEW_KEYS)[number]
+export type EditStylePreviewCanonicalKey = (typeof EDIT_STYLE_PREVIEW_KEYS)[number]
+export type EditStylePreviewKey = EditStylePreviewCanonicalKey | `${EditStylePreviewCanonicalKey}_${number}`
 
 export type EditStylePreviewStatus = 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
 
@@ -349,6 +350,10 @@ export const editStylePreviewOptionSchema = z.object({
   styleBible: editScriptStyleBibleSchema.shape.styleBible,
   gridImagePrompt: z.string().trim().min(1),
 })
+
+export const editStylePreviewKeySchema = z.string()
+  .trim()
+  .regex(/^style_[abc](?:_[2-9]\d*)?$/)
 
 export const editStylePreviewOptionsSchema = z.object({
   stylePreviews: z.array(editStylePreviewOptionSchema).min(1).max(EDIT_STYLE_PREVIEW_MAX_COUNT),

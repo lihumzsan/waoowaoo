@@ -54,9 +54,11 @@ function readOptionalString(value: unknown): string | null | undefined {
   return readNonEmptyString(value) ?? undefined
 }
 
-function readStylePreviewKey(value: unknown): 'style_a' | 'style_b' | 'style_c' | null {
+function readStylePreviewKey(value: unknown): EditStylePreviewGenerationPartData['items'][number]['styleKey'] | null {
   const key = readNonEmptyString(value)
-  if (key === 'style_a' || key === 'style_b' || key === 'style_c') return key
+  if (key && /^style_[abc](?:_[2-9]\d*)?$/.test(key)) {
+    return key as EditStylePreviewGenerationPartData['items'][number]['styleKey']
+  }
   return null
 }
 

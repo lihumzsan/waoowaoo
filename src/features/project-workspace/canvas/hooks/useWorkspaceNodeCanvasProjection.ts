@@ -249,6 +249,13 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
   return styleBibleHasPolicyText(details) ? details : null
 }
 
+function confirmedStylePreviewImageUrl(screenplay: ProjectEditScreenplay | null | undefined): string | null {
+  const confirmedPreview = screenplay?.stylePreviews?.find((preview) => (
+    preview.status === 'confirmed' && Boolean(stringValue(preview.imageUrl))
+  ))
+  return stringValue(confirmedPreview?.imageUrl)
+}
+
 function parseStringList(value: string | null | undefined): string[] {
   if (!value?.trim()) return []
   const parsed = parseJson(value)
@@ -1283,6 +1290,9 @@ export function buildWorkspaceNodeCanvasProjection({
       ? editScript.id
       : null
   const styleBibleDetails = buildStyleBibleDetails(styleBibleSourceValue)
+  const styleBiblePreviewImageUrl = styleBibleSourceId === editScreenplay?.id
+    ? confirmedStylePreviewImageUrl(editScreenplay)
+    : null
   const editStyleBibleNodeId = styleBibleDetails && styleBibleSourceId ? `edit-style-bible:${styleBibleSourceId}` : null
   const editStyleBibleFallbackY = editScreenplay
     ? editScreenplayFallbackY + editScreenplayHeight + EDIT_STYLE_BIBLE_LAYER_GAP_Y
@@ -1318,6 +1328,8 @@ export function buildWorkspaceNodeCanvasProjection({
         width: EDIT_STYLE_BIBLE_NODE_WIDTH,
         height: EDIT_STYLE_BIBLE_NODE_HEIGHT,
         indexLabel: 'B',
+        previewImageUrl: styleBiblePreviewImageUrl,
+        previewDisplayHeight: styleBiblePreviewImageUrl ? 170 : undefined,
         styleBibleDetails,
         onAction,
       },

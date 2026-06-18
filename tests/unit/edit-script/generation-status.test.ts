@@ -567,6 +567,7 @@ describe('edit script generation status persistence', () => {
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'screenplay_ready',
+      stylePreviews: [],
     })
 
     const result = await generateProjectEditStylePreviews({
@@ -624,7 +625,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
   })
 
-  it('regenerates style previews from user direction during style choice with at most three candidates', async () => {
+  it('appends regenerated style previews from user direction during style choice without replacing existing candidates', async () => {
     aiExecMock.executeAiTextStep.mockResolvedValueOnce({
       text: JSON.stringify({
         stylePreviews: mockStylePreviewOptions.stylePreviews.slice(0, 2),
@@ -638,6 +639,9 @@ describe('edit script generation status persistence', () => {
       styleBibleJson: null,
       screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
       status: 'style_preview_ready',
+      stylePreviews: mockStylePreviewOptions.stylePreviews.map((preview) => ({
+        styleKey: preview.styleKey,
+      })),
     })
 
     const result = await generateProjectEditStylePreviews({
@@ -653,7 +657,7 @@ describe('edit script generation status persistence', () => {
     })
 
     expect(result.total).toBe(2)
-    expect(result.stylePreviews.map((preview) => preview.styleKey)).toEqual(['style_a', 'style_b'])
+    expect(result.stylePreviews.map((preview) => preview.styleKey)).toEqual(['style_a_2', 'style_b_2'])
     expect(aiExecMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
       action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
       messages: expect.arrayContaining([
@@ -669,10 +673,13 @@ describe('edit script generation status persistence', () => {
         }),
       ]),
     }))
-    expect(txMock.projectEditStylePreview.deleteMany).toHaveBeenCalledWith({
-      where: { editScreenplayId: 'screenplay-1' },
-    })
+    expect(txMock.projectEditStylePreview.deleteMany).not.toHaveBeenCalled()
     expect(txMock.projectEditStylePreview.create).toHaveBeenCalledTimes(2)
+    expect(txMock.projectEditStylePreview.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({
+        styleKey: 'style_a_2',
+      }),
+    }))
     expect(submitTask).toHaveBeenCalledTimes(2)
   })
 

@@ -231,7 +231,7 @@ async function listActiveTasksForWaits(params: {
 }
 
 function isStylePreviewKey(value: string): value is EditStylePreviewGenerationPartData['items'][number]['styleKey'] {
-  return value === 'style_a' || value === 'style_b' || value === 'style_c'
+  return /^style_[abc](?:_[2-9]\d*)?$/.test(value)
 }
 
 function isAspectRatio(value: string | null): value is NonNullable<EditStylePreviewGenerationPartData['items'][number]['aspectRatio']> {
@@ -266,7 +266,10 @@ async function buildActiveStylePreviewGeneration(params: {
       projectId: true,
       episodeId: true,
       stylePreviews: {
-        orderBy: { styleKey: 'asc' },
+        orderBy: [
+          { createdAt: 'asc' },
+          { styleKey: 'asc' },
+        ],
         select: {
           id: true,
           styleKey: true,

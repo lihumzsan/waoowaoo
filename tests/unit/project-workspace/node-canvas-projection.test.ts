@@ -520,7 +520,28 @@ describe('workspace node canvas projection', () => {
 
   it('projects the style bible as the style source between screenplay and edit generation', () => {
     const styleBible = createStyleBible()
-    const editScreenplay = createEditScreenplay({ styleBible })
+    const editScreenplay = createEditScreenplay({
+      styleBible,
+      stylePreviews: [
+        {
+          id: 'style-preview-confirmed',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          screenplayId: 'screenplay-1',
+          styleKey: 'style_b',
+          aspectRatio: '16:9',
+          title: '自然光主方案',
+          summary: '低饱和自然光，克制胶片感。',
+          styleBible,
+          gridImagePrompt: 'single image, 3x3 grid, nine cinematic frames, no text',
+          imageKey: 'style-preview/confirmed.png',
+          imageUrl: 'https://cdn.example.com/style-preview-confirmed.png',
+          status: 'confirmed',
+          taskId: 'task-confirmed',
+          errorMessage: null,
+        },
+      ],
+    })
     const editScript = createSingleVideoEditScript({ videoBlocks: [], styleBible })
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
@@ -564,6 +585,7 @@ describe('workspace node canvas projection', () => {
     expect(styleNode?.data.targetType).toBe('editStyleBible')
     expect(styleNode?.data.title).toBe('nodes.editStyleBible.title')
     expect(styleNode?.data.body).toBe('低饱和自然光禅意电影质感。')
+    expect(styleNode?.data.previewImageUrl).toBe('https://cdn.example.com/style-preview-confirmed.png')
     expect(styleNode?.data.styleBibleDetails?.styleSummary).toBe('低饱和自然光禅意电影质感。')
     expect(styleNode?.data.styleBibleDetails?.visual.imageFilterPrompt).toBe('清澈空气感，35mm 镜头，克制高光。')
     expect(styleNode?.data.styleBibleDetails?.hardBans).toEqual(['商业广告感', '高反差大片感', '炫技运镜'])

@@ -41,6 +41,9 @@ import {
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 const editFirstDurationTierSchema = z.enum(EDIT_FIRST_DURATION_TIERS)
+const editStylePreviewKeySchema = z.custom<EditStylePreviewGenerationPartData['items'][number]['styleKey']>(
+  (value) => typeof value === 'string' && /^style_[abc](?:_[2-9]\d*)?$/.test(value),
+)
 
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
@@ -71,7 +74,7 @@ const generateEditStylePreviewsInputSchema = z.object({
   screenplayId: z.string().trim().min(1).optional(),
   styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
   count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
-  replaceExisting: z.literal(true).optional().describe('When regenerating existing visual style candidates, pass true or omit this field. Appending candidates is not supported.'),
+  replaceExisting: z.literal(true).optional().describe('Deprecated compatibility flag. Regeneration now appends a new candidate set instead of replacing existing candidates.'),
 }).passthrough()
 
 const requestEditFirstChoiceInputSchema = z.object({
@@ -143,7 +146,7 @@ const editStylePreviewGenerationOutputSchema = refineTaskBatchSubmitOperationOut
     status: z.literal('queued'),
     stylePreviews: z.array(z.object({
       id: z.string().min(1),
-      styleKey: z.enum(['style_a', 'style_b', 'style_c']),
+      styleKey: editStylePreviewKeySchema,
       aspectRatio: editScriptVideoRatioSchema.optional(),
       title: z.string().min(1),
       summary: z.string().min(1),
@@ -373,7 +376,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
-      summary: 'Generate or regenerate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. Use it again during visual style choice when the user asks to regenerate or adjust the candidates. Optional styleDirection carries the user feedback, count is 1-3 and defaults to 3, and regeneration replaces the existing candidate set.',
+      summary: 'Generate or regenerate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. Use it again during visual style choice when the user asks to regenerate or adjust the candidates. Optional styleDirection carries the user feedback, count is 1-3 and defaults to 3, and regeneration appends a new candidate set.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,

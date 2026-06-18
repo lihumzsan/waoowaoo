@@ -36,7 +36,7 @@ const prismaMock = vi.hoisted(() => ({
     ]),
   },
   projectEditScreenplay: {
-    findFirst: vi.fn(async () => null),
+    findFirst: vi.fn(async (): Promise<unknown | null> => null),
   },
 }))
 

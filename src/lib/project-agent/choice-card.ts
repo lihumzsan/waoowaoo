@@ -6,7 +6,7 @@ import type {
   ProjectAgentChoiceCardGroup,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from '@/lib/edit-script/types'
+import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import {
   EDIT_FIRST_DURATION_TIERS,
   readEditFirstDurationTierFromText,
@@ -135,7 +135,7 @@ async function buildStyleAndRatioChoiceCard(params: {
             },
           },
           orderBy: {
-            styleKey: 'asc',
+            createdAt: 'asc',
           },
           select: {
             id: true,
@@ -161,7 +161,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   if (screenplay.status !== 'style_preview_ready') {
     throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:screenplayStatus=${screenplay.status}`)
   }
-  if (screenplay.stylePreviews.length < 1 || screenplay.stylePreviews.length > EDIT_STYLE_PREVIEW_MAX_COUNT) {
+  if (screenplay.stylePreviews.length < 1) {
     throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:readyStylePreviewCount=${String(screenplay.stylePreviews.length)}`)
   }
 
@@ -181,7 +181,7 @@ async function buildStyleAndRatioChoiceCard(params: {
         required: true,
         options: screenplay.stylePreviews.map((preview, index) => ({
           value: preview.id,
-          label: `${String.fromCharCode(65 + index)} · ${preview.title}`,
+          label: `${isEnglish ? 'Candidate' : '候选'} ${String(index + 1)} · ${preview.title}`,
           description: preview.summary,
           imageUrl: preview.imageKey ? getSignedUrl(preview.imageKey, STYLE_PREVIEW_SIGNED_URL_SECONDS) : null,
           meta: preview.styleKey,
