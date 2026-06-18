@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PRODUCT_CREDIT_PRICING,
   calcImage,
   calcMusic,
   calcText,
@@ -8,27 +7,54 @@ import {
   calcVideoByTokens,
 } from '@/lib/billing/cost'
 
-describe('billing/cost product credits', () => {
-  it('charges text by product token credits without provider price mapping', () => {
-    const cost = calcText('unknown-provider::unknown-model', 1500, 500)
+describe('billing/cost provider catalog pricing', () => {
+  it('charges text from provider input and output token tiers', () => {
+    const cost = calcText('openrouter::anthropic/claude-sonnet-4.6', 1_000_000, 1_000_000)
 
-    expect(cost).toBeCloseTo(0.02, 8)
+    expect(cost).toBeCloseTo(129.6, 8)
   })
 
-  it('charges images by generated unit count', () => {
-    expect(calcImage('any-image-model', 3)).toBe(PRODUCT_CREDIT_PRICING.imagePerUnit * 3)
+  it('charges images from provider size and quality tiers', () => {
+    const cost = calcImage('fal::gpt-image-2', 2, {
+      imageSize: '1024x1024',
+      quality: 'high',
+    })
+
+    expect(cost).toBeCloseTo(3.0384, 8)
   })
 
-  it('charges videos by duration with a minimum per clip', () => {
-    expect(calcVideo('any-video-model', '720p', 1, { duration: 2 })).toBe(PRODUCT_CREDIT_PRICING.videoMinimumPerClip)
-    expect(calcVideo('any-video-model', '1080p', 2, { duration: 8 })).toBe(16)
+  it('derives GPT Image 2 image size from product resolution and aspect ratio', () => {
+    const cost = calcImage('fal::gpt-image-2', 1, {
+      resolution: '1K',
+      aspectRatio: '16:9',
+      quality: 'medium',
+    })
+
+    expect(cost).toBeCloseTo(0.288, 8)
   })
 
-  it('settles token-based video providers back to product video credits', () => {
-    expect(calcVideoByTokens('any-video-model', 120_000, { duration: 6, resolution: '720p' })).toBe(6)
+  it('charges OpenRouter Seedance video by provider per-second tiers', () => {
+    const cost = calcVideo('openrouter::bytedance/seedance-2.0-fast', '720p', 1, {
+      duration: 4,
+    })
+
+    expect(cost).toBeCloseTo(3.48624, 8)
   })
 
-  it('charges music from product credits', () => {
-    expect(calcMusic('any-music-model', 30)).toBe(6)
+  it('settles token-based video calls through the same provider video catalog', () => {
+    const cost = calcVideoByTokens('openrouter::bytedance/seedance-2.0-fast', 120_000, {
+      duration: 6,
+      resolution: '720p',
+    })
+
+    expect(cost).toBeCloseTo(5.22936, 8)
+  })
+
+  it('charges Lyria 3 Pro music as a provider-priced audio call', () => {
+    const cost = calcMusic('fal::fal-ai/lyria3/pro', 1, {
+      durationSeconds: 180,
+    })
+
+    expect(cost).toBeCloseTo(0.576, 8)
   })
 })

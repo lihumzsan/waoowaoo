@@ -4,7 +4,6 @@ import {
   calcText,
   calcVideo,
 } from './cost'
-import { BillingOperationError } from './errors'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
@@ -86,13 +85,7 @@ function buildTextTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBilling
   const model = pickFirstString([payload?.analysisModel, payload?.model])
   if (!model) return null
 
-  // calcText may throw if model has no built-in pricing (user custom pricing resolved later)
-  let maxFrozenCost = 0
-  try {
-    maxFrozenCost = calcText(model, inputTokens, 0)
-  } catch {
-    // Custom-priced or uncatalogued model: actual cost resolved in prepareTaskBilling with user context
-  }
+  const maxFrozenCost = calcText(model, inputTokens, 0)
 
   return {
     billable: true,
@@ -116,17 +109,16 @@ function buildImageTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   const quantity = Math.max(1, Math.floor(toNumber(payload?.candidateCount ?? payload?.count, 1)))
   const generationOptions = toRecord(payload?.generationOptions)
   const resolution = readString(generationOptions.resolution) || readString(payload?.resolution)
-  const metadata = resolution ? { resolution } : undefined
-  let maxFrozenCost = 0
-  try {
-    maxFrozenCost = calcImage(model, quantity, metadata)
-  } catch (error) {
-    if (error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      // Uncatalogued model: allow task to proceed without billing estimate
-    } else {
-      throw error
-    }
+  const quality = readString(generationOptions.quality) || readString(payload?.quality)
+  const size = readString(generationOptions.size) || readString(payload?.size)
+  const aspectRatio = readString(generationOptions.aspectRatio) || readString(payload?.aspectRatio)
+  const metadata = {
+    ...(resolution ? { resolution } : {}),
+    ...(quality ? { quality } : {}),
+    ...(size ? { size } : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
   }
+  const maxFrozenCost = calcImage(model, quantity, metadata)
   return {
     billable: true,
     source: 'task',
@@ -138,7 +130,7 @@ function buildImageTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     maxFrozenCost,
     pricingVersion: BUILTIN_PRICING_VERSION,
     action: String(taskType),
-    ...(metadata ? { metadata } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     status: 'quoted',
   }
 }
@@ -169,16 +161,7 @@ function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     ...(typeof generateAudio === 'boolean' ? { generateAudio } : {}),
     containsVideoInput: false,
   }
-  let maxFrozenCost = 0
-  try {
-    maxFrozenCost = calcVideo(model, resolution || '720p', quantity, metadata)
-  } catch (error) {
-    if (error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      // Uncatalogued model: allow task to proceed without billing estimate
-    } else {
-      throw error
-    }
-  }
+  const maxFrozenCost = calcVideo(model, resolution || '720p', quantity, metadata)
   return {
     billable: true,
     source: 'task',
@@ -219,9 +202,9 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     taskType,
     apiType: 'music',
     model,
-    quantity: durationSeconds,
-    unit: 'second',
-    maxFrozenCost: calcMusic(model, durationSeconds, metadata),
+    quantity: 1,
+    unit: 'call',
+    maxFrozenCost: calcMusic(model, 1, metadata),
     pricingVersion: BUILTIN_PRICING_VERSION,
     action: String(taskType),
     metadata,

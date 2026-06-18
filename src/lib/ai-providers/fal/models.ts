@@ -13,6 +13,7 @@ import {
   OPENAI_IMAGE_OUTPUT_FORMATS,
   OPENAI_OFFICIAL_IMAGE_QUALITIES,
 } from '@/lib/ai-providers/shared/openai-image'
+import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
 export const FAL_LYRIA_3_PRO_MODEL_ID = 'fal-ai/lyria3/pro'
@@ -200,9 +201,29 @@ function falFlatPricing(flatAmount: number) {
   return { mode: 'flat' as const, flatAmount }
 }
 
+function falGptImage2Pricing() {
+  const rows = [
+    ['1024x768', { low: 0.005, medium: 0.037, high: 0.145 }],
+    ['1024x1024', { low: 0.006, medium: 0.053, high: 0.211 }],
+    ['1024x1536', { low: 0.005, medium: 0.042, high: 0.165 }],
+    ['1920x1080', { low: 0.005, medium: 0.040, high: 0.158 }],
+    ['2560x1440', { low: 0.007, medium: 0.056, high: 0.222 }],
+    ['3840x2160', { low: 0.012, medium: 0.101, high: 0.401 }],
+  ] as const
+  return {
+    mode: 'capability' as const,
+    tiers: rows.flatMap(([imageSize, prices]) => [
+      { when: { imageSize, quality: 'low' }, amount: usdToCredits(prices.low) },
+      { when: { imageSize, quality: 'medium' }, amount: usdToCredits(prices.medium) },
+      { when: { imageSize, quality: 'high' }, amount: usdToCredits(prices.high) },
+    ]),
+  }
+}
+
 function falDurationPricing(tiers: ReadonlyArray<readonly [duration: number, amount: number]>) {
   return {
     mode: 'capability' as const,
+    unit: 'per_call' as const,
     tiers: tiers.map(([duration, amount]) => ({ when: { duration }, amount })),
   }
 }
@@ -228,7 +249,8 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
       ],
     },
   },
-  { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, pricing: falFlatPricing(0.576) },
+  { apiType: 'image', provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, pricing: falGptImage2Pricing() },
+  { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, pricing: falFlatPricing(usdToCredits(0.08)) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-wan25', pricing: falFlatPricing(1.8) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-veo31', pricing: falFlatPricing(2.88) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-kling25', pricing: falFlatPricing(2.16) },
@@ -238,6 +260,7 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
     pricing: {
       mode: 'capability',
+      unit: 'per_second',
       tiers: [
         { when: { resolution: '720p' }, amount: 0.7 },
         { when: { resolution: '1080p' }, amount: 1.4 },
@@ -250,6 +273,7 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     pricing: {
       mode: 'capability',
+      unit: 'per_second',
       tiers: [
         { when: { resolution: '480p' }, amount: 0.1346 },
         { when: { resolution: '720p' }, amount: 0.3024 },
@@ -263,6 +287,7 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     pricing: {
       mode: 'capability',
+      unit: 'per_second',
       tiers: [
         { when: { resolution: '480p' }, amount: 0.1077 },
         { when: { resolution: '720p' }, amount: 0.2419 },

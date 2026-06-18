@@ -16,23 +16,6 @@ export interface StoredProvider {
   hidden?: boolean
 }
 
-export interface StoredModelLlmCustomPricing {
-  inputPerMillion?: number
-  outputPerMillion?: number
-}
-
-export interface StoredModelMediaCustomPricing {
-  basePrice?: number
-  optionPrices?: Record<string, Record<string, number>>
-}
-
-export interface StoredModelCustomPricing {
-  llm?: StoredModelLlmCustomPricing
-  image?: StoredModelMediaCustomPricing
-  video?: StoredModelMediaCustomPricing
-  music?: StoredModelMediaCustomPricing
-}
-
 export interface StoredModel {
   modelId: string
   modelKey: string
@@ -47,7 +30,6 @@ export interface StoredModel {
   priceInput?: number
   priceOutput?: number
   capabilities?: ModelCapabilities
-  customPricing?: StoredModelCustomPricing
 }
 
 export interface PricingDisplayItem {

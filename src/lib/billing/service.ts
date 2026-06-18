@@ -2,8 +2,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
-import { prisma } from '@/lib/prisma'
-import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
   calcImage,
@@ -11,7 +9,6 @@ import {
   calcText,
   calcVideo,
   calcVideoByTokens,
-  type ModelCustomPricing,
 } from './cost'
 import {
   confirmChargeWithRecord,
@@ -42,7 +39,6 @@ type CostInput = {
   metadata?: Record<string, unknown>
   quotedCost?: number
   maxCost?: number
-  customPricing?: ModelCustomPricing | null
 }
 
 type SyncBillingParams<T> = {
@@ -56,7 +52,6 @@ type SyncBillingParams<T> = {
   metadata?: Record<string, unknown>
   quotedCost?: number
   maxCost?: number
-  customPricing?: ModelCustomPricing | null
   extractActualQuantity?: (result: T) => number | null | undefined
 }
 
@@ -83,6 +78,18 @@ function asNumber(value: unknown): number | null {
   return n
 }
 
+function readPayloadNumber(
+  payload: Record<string, unknown> | null,
+  fields: readonly string[],
+): number | null {
+  if (!payload) return null
+  for (const field of fields) {
+    const value = asNumber(payload[field])
+    if (value !== null) return value
+  }
+  return null
+}
+
 function resolveCost(input: CostInput) {
   const asMoney = (value: number) => normalizeMoney(value)
 
@@ -98,16 +105,16 @@ function resolveCost(input: CostInput) {
     case 'text': {
       const inputTokens = Number(input.metadata?.inputTokens ?? Math.floor(input.quantity * 0.7))
       const outputTokens = Number(input.metadata?.outputTokens ?? Math.max(input.quantity - inputTokens, 0))
-      return asMoney(calcText(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0), input.customPricing))
+      return asMoney(calcText(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0)))
     }
     case 'image':
-      return asMoney(calcImage(input.model, input.quantity, input.metadata, input.customPricing))
+      return asMoney(calcImage(input.model, input.quantity, input.metadata))
     case 'video': {
       const resolution = typeof input.metadata?.resolution === 'string' ? input.metadata.resolution : '720p'
-      return asMoney(calcVideo(input.model, resolution, input.quantity, input.metadata, input.customPricing))
+      return asMoney(calcVideo(input.model, resolution, input.quantity, input.metadata))
     }
     case 'music':
-      return asMoney(calcMusic(input.model, input.quantity, input.metadata, input.customPricing))
+      return asMoney(calcMusic(input.model, input.quantity, input.metadata))
     default:
       throw new BillingOperationError('BILLING_INVALID_API_TYPE', `Unsupported billing apiType: ${String(input.apiType)}`, {
         apiType: input.apiType,
@@ -118,7 +125,6 @@ function resolveCost(input: CostInput) {
 
 function resolveTextCostFromUsage(
   usage: TextUsageEntry[],
-  customPricing?: ModelCustomPricing | null,
 ): ResolvedActual | null {
   if (!Array.isArray(usage) || usage.length === 0) return null
 
@@ -132,7 +138,7 @@ function resolveTextCostFromUsage(
     const outTokens = Math.max(0, Math.floor(Number(item.outputTokens || 0)))
     const model = item.model || 'unknown'
     const hasBillableTokens = inTokens > 0 || outTokens > 0
-    const itemCost = hasBillableTokens ? normalizeMoney(calcText(model, inTokens, outTokens, customPricing)) : 0
+    const itemCost = hasBillableTokens ? normalizeMoney(calcText(model, inTokens, outTokens)) : 0
 
     inputTokens += inTokens
     outputTokens += outTokens
@@ -243,7 +249,7 @@ function resolveActualForSync<T>(
   textUsage: TextUsageEntry[],
   quotedCost: number,
 ): ResolvedActual {
-  const textResolved = resolveTextCostFromUsage(textUsage, params.customPricing)
+  const textResolved = resolveTextCostFromUsage(textUsage)
   if (params.apiType === 'text' && textResolved) {
     if (textResolved.actualQuantity > 0) {
       return textResolved
@@ -267,7 +273,6 @@ function resolveActualForSync<T>(
           quantity: actualQuantity,
           unit: params.unit,
           metadata: params.metadata,
-          customPricing: params.customPricing,
         }),
         actualQuantity,
       }
@@ -315,14 +320,7 @@ function resolveTaskActual(
       },
     }
   }
-  const actualQuantity = payload
-    ? asNumber(
-      (payload as Record<string, unknown>).actualQuantity
-      ?? (payload as Record<string, unknown>).actualSeconds
-      ?? (payload as Record<string, unknown>).actualDurationSeconds
-      ?? (payload as Record<string, unknown>).actualCharacters
-    )
-    : null
+  const actualQuantity = readPayloadNumber(payload, ['actualQuantity', 'actualCharacters'])
 
   if (actualQuantity !== null && actualQuantity >= 0) {
     return {
@@ -334,6 +332,42 @@ function resolveTaskActual(
         metadata: info.metadata,
       }),
       actualQuantity,
+    }
+  }
+
+  const actualDurationSeconds = readPayloadNumber(payload, ['actualSeconds', 'actualDurationSeconds'])
+  if (actualDurationSeconds !== null && actualDurationSeconds >= 0) {
+    if (info.apiType === 'video') {
+      const metadata = {
+        ...(info.metadata || {}),
+        duration: actualDurationSeconds,
+        actualDurationSeconds,
+      }
+      return {
+        actualCost: resolveCost({
+          apiType: info.apiType,
+          model: info.model,
+          quantity: info.quantity,
+          unit: info.unit,
+          metadata,
+        }),
+        actualQuantity: info.quantity,
+        metadata,
+      }
+    }
+
+    if (info.apiType === 'music') {
+      return {
+        actualCost: resolveCost({
+          apiType: info.apiType,
+          model: info.model,
+          quantity: info.quantity,
+          unit: info.unit,
+          metadata: info.metadata,
+        }),
+        actualQuantity: info.quantity,
+        metadata: { actualDurationSeconds },
+      }
     }
   }
 
@@ -393,7 +427,6 @@ async function withSyncBillingCore<T>(
     metadata: params.metadata,
     quotedCost: params.quotedCost,
     maxCost: params.maxCost,
-    customPricing: params.customPricing,
   })
 
   if (quotedCost <= 0) {
@@ -531,97 +564,6 @@ async function withSyncBillingCore<T>(
   }
 }
 
-/**
- * Load user custom pricing for a specific model from their stored config.
- */
-async function loadUserCustomPricing(
-  userId: string,
-  model: string,
-): Promise<ModelCustomPricing | null> {
-  const parsed = parseModelKeyStrict(model)
-  if (!parsed) return null
-
-  const pref = await prisma.userPreference.findUnique({
-    where: { userId },
-    select: { customModels: true },
-  })
-  if (!pref?.customModels) return null
-
-  let models: Array<{ modelKey: string; customPricing?: unknown }>
-  try {
-    models = JSON.parse(pref.customModels) as typeof models
-  } catch {
-    return null
-  }
-  if (!Array.isArray(models)) return null
-
-  const target = models.find((m) => m.modelKey === parsed.modelKey)
-  const raw = target?.customPricing
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const pricing = raw as Record<string, unknown>
-
-  const llmRaw = (pricing.llm && typeof pricing.llm === 'object' && !Array.isArray(pricing.llm))
-    ? (pricing.llm as Record<string, unknown>)
-    : pricing
-
-  const inputPerMillion = typeof llmRaw.inputPerMillion === 'number'
-    ? llmRaw.inputPerMillion
-    : typeof pricing.input === 'number'
-      ? pricing.input
-      : undefined
-  const outputPerMillion = typeof llmRaw.outputPerMillion === 'number'
-    ? llmRaw.outputPerMillion
-    : typeof pricing.output === 'number'
-      ? pricing.output
-      : undefined
-
-  const normalizeMedia = (value: unknown): ModelCustomPricing['image'] | undefined => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-    const record = value as Record<string, unknown>
-    const basePrice = typeof record.basePrice === 'number' ? record.basePrice : undefined
-    const rawOptions = record.optionPrices
-    let optionPrices: Record<string, Record<string, number>> | undefined
-    if (rawOptions && typeof rawOptions === 'object' && !Array.isArray(rawOptions)) {
-      optionPrices = {}
-      for (const [field, rawFieldOptions] of Object.entries(rawOptions as Record<string, unknown>)) {
-        if (!rawFieldOptions || typeof rawFieldOptions !== 'object' || Array.isArray(rawFieldOptions)) continue
-        const normalizedField: Record<string, number> = {}
-        for (const [optionKey, rawAmount] of Object.entries(rawFieldOptions as Record<string, unknown>)) {
-          if (typeof rawAmount !== 'number' || !Number.isFinite(rawAmount) || rawAmount < 0) continue
-          normalizedField[optionKey] = rawAmount
-        }
-        if (Object.keys(normalizedField).length > 0) {
-          optionPrices[field] = normalizedField
-        }
-      }
-      if (Object.keys(optionPrices).length === 0) {
-        optionPrices = undefined
-      }
-    }
-    if (basePrice === undefined && optionPrices === undefined) return undefined
-    return {
-      ...(basePrice !== undefined ? { basePrice } : {}),
-      ...(optionPrices ? { optionPrices } : {}),
-    }
-  }
-
-  const image = normalizeMedia(pricing.image)
-  const video = normalizeMedia(pricing.video)
-  const llm = (typeof inputPerMillion === 'number' || typeof outputPerMillion === 'number')
-    ? {
-      ...(typeof inputPerMillion === 'number' ? { inputPerMillion } : {}),
-      ...(typeof outputPerMillion === 'number' ? { outputPerMillion } : {}),
-    }
-    : undefined
-
-  if (!llm && !image && !video) return null
-  return {
-    ...(llm ? { llm } : {}),
-    ...(image ? { image } : {}),
-    ...(video ? { video } : {}),
-  }
-}
-
 export async function withTextBilling<T>(
   userId: string,
   model: string,
@@ -634,8 +576,7 @@ export async function withTextBilling<T>(
     return await generateFn()
   }
 
-  const customPricing = await loadUserCustomPricing(userId, model)
-  const quotedCost = calcText(model, maxInputTokens, 0, customPricing)
+  const quotedCost = calcText(model, maxInputTokens, 0)
   return await withSyncBillingCore(
     {
       userId,
@@ -650,7 +591,6 @@ export async function withTextBilling<T>(
         maxInputTokens,
       },
       maxCost: quotedCost,
-      customPricing,
     },
     recordParams,
     generateFn,
@@ -664,7 +604,6 @@ export async function withImageBilling<T>(
   recordParams: BillingRecordParams,
   generateFn: () => Promise<T>,
 ): Promise<T> {
-  const customPricing = await loadUserCustomPricing(userId, model)
   return await withSyncBillingCore(
     {
       userId,
@@ -675,7 +614,6 @@ export async function withImageBilling<T>(
       quantity: count,
       unit: 'image',
       metadata: recordParams.metadata,
-      customPricing,
     },
     recordParams,
     generateFn,
@@ -690,7 +628,6 @@ export async function withVideoBilling<T>(
   recordParams: BillingRecordParams,
   generateFn: () => Promise<T>,
 ): Promise<T> {
-  const customPricing = await loadUserCustomPricing(userId, model)
   return await withSyncBillingCore(
     {
       userId,
@@ -701,7 +638,6 @@ export async function withVideoBilling<T>(
       quantity: maxCount,
       unit: 'video',
       metadata: { ...recordParams.metadata, resolution },
-      customPricing,
     },
     recordParams,
     generateFn,
@@ -745,26 +681,14 @@ export async function prepareTaskBilling(task: {
     return next
   }
 
-  const customPricing = await loadUserCustomPricing(task.userId, info.model)
-  let quotedCost: number
-  try {
-    quotedCost = resolveCost({
-      apiType: info.apiType,
-      model: info.model,
-      quantity: info.quantity,
-      unit: info.unit,
-      metadata: info.metadata,
-      quotedCost: info.maxFrozenCost,
-      customPricing,
-    })
-  } catch (error) {
-    if (mode !== 'ENFORCE' && error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      next.status = mode === 'SHADOW' ? 'quoted' : 'skipped'
-      next.maxFrozenCost = 0
-      return next
-    }
-    throw error
-  }
+  const quotedCost = resolveCost({
+    apiType: info.apiType,
+    model: info.model,
+    quantity: info.quantity,
+    unit: info.unit,
+    metadata: info.metadata,
+    quotedCost: info.maxFrozenCost,
+  })
 
   if (quotedCost <= 0) {
     assertPositiveChargeForBillingMode(mode, quotedCost, next)
@@ -830,29 +754,14 @@ export async function settleTaskBilling(task: {
     } satisfies TaskBillingInfo
   }
 
-  const customPricing = await loadUserCustomPricing(task.userId, info.model)
-  let quotedCost: number
-  try {
-    quotedCost = resolveCost({
-      apiType: info.apiType,
-      model: info.model,
-      quantity: info.quantity,
-      unit: info.unit,
-      metadata: info.metadata,
-      quotedCost: info.maxFrozenCost,
-      customPricing,
-    })
-  } catch (error) {
-    if (mode === 'SHADOW' && error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      return {
-        ...info,
-        modeSnapshot: mode,
-        status: noChargeStatus,
-        chargedCost: 0,
-      } satisfies TaskBillingInfo
-    }
-    throw error
-  }
+  const quotedCost = resolveCost({
+    apiType: info.apiType,
+    model: info.model,
+    quantity: info.quantity,
+    unit: info.unit,
+    metadata: info.metadata,
+    quotedCost: info.maxFrozenCost,
+  })
 
   if (mode === 'SHADOW' && quotedCost <= 0) {
     return {
@@ -863,20 +772,7 @@ export async function settleTaskBilling(task: {
     } satisfies TaskBillingInfo
   }
 
-  let actual: ResolvedActual
-  try {
-    actual = resolveTaskActual(info, quotedCost, options)
-  } catch (error) {
-    if (mode === 'SHADOW' && error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      return {
-        ...info,
-        modeSnapshot: mode,
-        status: noChargeStatus,
-        chargedCost: 0,
-      } satisfies TaskBillingInfo
-    }
-    throw error
-  }
+  const actual = resolveTaskActual(info, quotedCost, options)
 
   if (mode === 'SHADOW') {
     await recordShadowUsage(task.userId, {

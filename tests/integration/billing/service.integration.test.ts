@@ -112,10 +112,10 @@ describe('billing/service integration', () => {
     }))
 
     expect(settled.status).toBe('settled')
-    expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 2), 8)
+    expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 1), 8)
 
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
-    expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 2), 8)
+    expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 1), 8)
     expect(balance?.frozenAmount).toBeCloseTo(0, 8)
   })
 
@@ -132,7 +132,7 @@ describe('billing/service integration', () => {
       apiType: 'music',
       model: 'google::lyria-3-clip-preview',
       quantity: 0,
-      unit: 'second',
+      unit: 'call',
       maxFrozenCost: 0,
       action: TASK_TYPE.MUSIC_GENERATE,
       status: 'quoted',

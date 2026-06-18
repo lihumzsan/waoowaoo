@@ -171,6 +171,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: 'veo-3.1-generate-preview',
     pricing: {
       mode: 'capability',
+      unit: 'per_call',
       tiers: [
         { when: { generationMode: 'normal', resolution: '720p', duration: 4 }, amount: 11.52 },
         { when: { generationMode: 'normal', resolution: '720p', duration: 6 }, amount: 17.28 },
@@ -189,6 +190,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: 'veo-3.1-fast-generate-preview',
     pricing: {
       mode: 'capability',
+      unit: 'per_call',
       tiers: [
         { when: { generationMode: 'normal', resolution: '720p', duration: 4 }, amount: 4.32 },
         { when: { generationMode: 'normal', resolution: '720p', duration: 6 }, amount: 6.48 },
@@ -207,6 +209,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: 'veo-3.0-generate-001',
     pricing: {
       mode: 'capability',
+      unit: 'per_call',
       tiers: [
         { when: { resolution: '720p', duration: 4 }, amount: 11.52 },
         { when: { resolution: '720p', duration: 6 }, amount: 17.28 },
@@ -222,6 +225,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: 'veo-3.0-fast-generate-001',
     pricing: {
       mode: 'capability',
+      unit: 'per_call',
       tiers: [
         { when: { resolution: '720p', duration: 4 }, amount: 4.32 },
         { when: { resolution: '720p', duration: 6 }, amount: 6.48 },
@@ -237,6 +241,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: 'veo-2.0-generate-001',
     pricing: {
       mode: 'capability',
+      unit: 'per_call',
       tiers: [
         { when: { duration: 5 }, amount: 12.6 },
         { when: { duration: 6 }, amount: 15.12 },

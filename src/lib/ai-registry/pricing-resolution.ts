@@ -4,6 +4,7 @@ import {
   findBuiltinPricingCatalogEntriesByModelId,
   findBuiltinPricingCatalogEntry,
   type BuiltinPricingCatalogEntry,
+  type BuiltinPricingTier,
   type PricingApiType,
 } from './pricing-catalog'
 
@@ -12,6 +13,7 @@ export interface PricingResolutionResolved {
   entry: BuiltinPricingCatalogEntry
   amount: number
   mode: 'flat' | 'capability'
+  tier?: BuiltinPricingTier
 }
 
 export interface PricingResolutionNotConfigured {
@@ -48,11 +50,11 @@ function cloneSelections(raw: Record<string, CapabilityValue> | undefined): Reco
   return next
 }
 
-function matchTier(entry: BuiltinPricingCatalogEntry, selections: Record<string, CapabilityValue>): number | null {
+function matchTier(entry: BuiltinPricingCatalogEntry, selections: Record<string, CapabilityValue>): BuiltinPricingTier | null {
   const tiers = entry.pricing.tiers || []
   for (const tier of tiers) {
     const matched = Object.entries(tier.when).every(([field, expectedValue]) => selections[field] === expectedValue)
-    if (matched) return tier.amount
+    if (matched) return tier
   }
   return null
 }
@@ -91,15 +93,15 @@ export function resolveBuiltinPricing(input: {
   }
 
   const selections = cloneSelections(input.selections)
-  const amount = matchTier(entry, selections)
-  if (amount === null) {
+  const tier = matchTier(entry, selections)
+  if (tier === null) {
     return { status: 'missing_capability_match', entry, selections }
   }
-  return { status: 'resolved', entry, amount, mode: 'capability' }
+  return { status: 'resolved', entry, amount: tier.amount, mode: 'capability', tier }
 }
 
 /**
  * Built-in pricing catalog version used for billing traceability.
  * Bump this value whenever standards/pricing catalog changes semantically.
  */
-export const BUILTIN_PRICING_VERSION = '2026-05-15'
+export const BUILTIN_PRICING_VERSION = '2026-06-18'

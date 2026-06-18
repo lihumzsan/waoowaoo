@@ -105,7 +105,6 @@
     "verify:push": "npm run lint:all && npm run typecheck && npm run test:all && npm run build:verify",
     "migrate:image-urls-contract": "tsx scripts/migrate-image-urls-contract.ts",
     "migrate:capability-selections": "tsx scripts/migrations/migrate-capability-selections.ts",
-    "migrate:custom-pricing-v2": "tsx scripts/migrations/migrate-custom-pricing-v2.ts",
     "migrate:graph-artifacts-unique-index": "tsx scripts/migrations/migrate-graph-artifacts-unique-index.ts",
     "backup:media-safety": "tsx scripts/media-safety-backup.ts",
     "backup:media-restore-dry-run": "tsx scripts/media-restore-dry-run.ts",

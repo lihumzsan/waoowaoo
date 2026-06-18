@@ -7,6 +7,7 @@ import {
   integerRangeValidator,
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
+import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 
 export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0-fast'
@@ -25,115 +26,88 @@ const OPENROUTER_SEEDANCE_2_RESOLUTION_OPTIONS = ['480p', '720p', '1080p'] as co
 const OPENROUTER_SEEDANCE_2_FAST_RESOLUTION_OPTIONS = ['480p', '720p'] as const
 export const OPENROUTER_SEEDANCE_2_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '9:16', '4:3', '16:9', '21:9', '9:21'] as const
 
+function openrouterTokenPricing(inputUsdPerMillion: number, outputUsdPerMillion: number) {
+  return {
+    mode: 'capability' as const,
+    tiers: [
+      { when: { tokenType: 'input' }, amount: usdToCredits(inputUsdPerMillion) },
+      { when: { tokenType: 'output' }, amount: usdToCredits(outputUsdPerMillion) },
+    ],
+  }
+}
+
+function openrouterVideoSecondPricing(tiers: ReadonlyArray<readonly [resolution: string, amountUsdPerSecond: number]>) {
+  return {
+    mode: 'capability' as const,
+    unit: 'per_second' as const,
+    tiers: tiers.map(([resolution, amountUsdPerSecond]) => ({
+      when: { resolution },
+      amount: usdToCredits(amountUsdPerSecond),
+    })),
+  }
+}
+
 export const OPENROUTER_BUILTIN_PRICING_CATALOG_ENTRIES = [
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: 'google/gemini-3.1-pro-preview',
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 9 },
-        { when: { tokenType: 'output' }, amount: 72 },
-      ],
-    },
+    pricing: openrouterTokenPricing(1.25, 10),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: 'google/gemini-3-pro-preview',
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 9 },
-        { when: { tokenType: 'output' }, amount: 72 },
-      ],
-    },
+    pricing: openrouterTokenPricing(1.25, 10),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: 'google/gemini-3-flash-preview',
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 0.54 },
-        { when: { tokenType: 'output' }, amount: 2.16 },
-      ],
-    },
+    pricing: openrouterTokenPricing(0.075, 0.3),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID,
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 21.6 },
-        { when: { tokenType: 'output' }, amount: 108 },
-      ],
-    },
+    pricing: openrouterTokenPricing(3, 15),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4.5',
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 21.6 },
-        { when: { tokenType: 'output' }, amount: 108 },
-      ],
-    },
+    pricing: openrouterTokenPricing(3, 15),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4',
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 21.6 },
-        { when: { tokenType: 'output' }, amount: 108 },
-      ],
-    },
+    pricing: openrouterTokenPricing(3, 15),
   },
   {
     apiType: 'text',
     provider: 'openrouter',
     modelId: OPENROUTER_GPT_5_5_MODEL_ID,
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { tokenType: 'input' }, amount: 36 },
-        { when: { tokenType: 'output' }, amount: 216 },
-      ],
-    },
+    pricing: openrouterTokenPricing(5, 30),
   },
   {
     apiType: 'video',
     provider: 'openrouter',
     modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { resolution: '480p' }, amount: 0.3329 },
-        { when: { resolution: '720p' }, amount: 0.7489 },
-        { when: { resolution: '1080p' }, amount: 1.684 },
-      ],
-    },
+    pricing: openrouterVideoSecondPricing([
+      ['480p', 0.06726],
+      ['720p', 0.151335],
+      ['1080p', 0.3405386],
+    ]),
   },
   {
     apiType: 'video',
     provider: 'openrouter',
     modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-    pricing: {
-      mode: 'capability',
-      tiers: [
-        { when: { resolution: '480p' }, amount: 0.2663 },
-        { when: { resolution: '720p' }, amount: 0.5991 },
-      ],
-    },
+    pricing: openrouterVideoSecondPricing([
+      ['480p', 0.0538],
+      ['720p', 0.12105],
+    ]),
   },
 ] as const
 

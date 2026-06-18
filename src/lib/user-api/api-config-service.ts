@@ -13,14 +13,13 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
 import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
-import type { ApiConfigPutBody, DefaultModelsPayload, StoredModel } from './api-config-types'
-import { getProviderKey, isRecord } from './api-config-shared'
+import type { ApiConfigPutBody, DefaultModelsPayload } from './api-config-types'
+import { isRecord } from './api-config-shared'
 import { parseStoredProviders, normalizeProvidersInput } from './api-config-provider-normalization'
 import {
   normalizeModelList,
   parseStoredModels,
   validateBillableModelPricing,
-  validateCustomPricingCapabilityMappings,
   validateModelProviderConsistency,
   validateModelProviderTypeSupport,
 } from './api-config-model-normalization'
@@ -164,7 +163,6 @@ export async function putUserApiConfig(userId: string, body: unknown) {
   if (normalizedModels !== undefined) {
     validateModelProviderConsistency(normalizedModels, providerSourceForValidation)
     validateModelProviderTypeSupport(normalizedModels, providerSourceForValidation)
-    validateCustomPricingCapabilityMappings(normalizedModels)
     if (billingMode !== 'OFF') {
       validateBillableModelPricing(normalizedModels)
     }

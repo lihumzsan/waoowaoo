@@ -52,22 +52,16 @@ function applyVideoDurationRangeIfNeeded(input: {
   modelId: string
   min: number
   max: number
-  hasDurationTier: boolean
+  unit?: 'per_call' | 'per_second'
 }): { min: number; max: number } {
   if (input.apiType !== 'video') return { min: input.min, max: input.max }
-  if (input.hasDurationTier) return { min: input.min, max: input.max }
+  if (input.unit !== 'per_second') return { min: input.min, max: input.max }
 
   const durationRange = resolveVideoDurationRangeFromCapabilities(input.provider, input.modelId)
   if (!durationRange) return { min: input.min, max: input.max }
 
-  // Ark/视频展示口径：未显式按秒建 tier 时，现有金额按 5 秒基准估算，区间扩展为 [最短秒, 最长秒]。
-  const BASE_DURATION_SECONDS = durationRange.min <= 5 && durationRange.max >= 5
-    ? 5
-    : durationRange.min
-  if (BASE_DURATION_SECONDS <= 0) return { min: input.min, max: input.max }
-
-  const scaledMin = input.min * (durationRange.min / BASE_DURATION_SECONDS)
-  const scaledMax = input.max * (durationRange.max / BASE_DURATION_SECONDS)
+  const scaledMin = input.min * durationRange.min
+  const scaledMax = input.max * durationRange.max
   return {
     min: scaledMin,
     max: scaledMax,
@@ -94,7 +88,6 @@ export function buildPricingDisplayMap(): PricingDisplayMap {
       const tiers = entry.pricing.tiers || []
       const amounts = tiers.map((tier) => tier.amount)
       if (amounts.length === 0) continue
-      const hasDurationTier = tiers.some((tier) => typeof tier.when.duration === 'number')
 
       const durationExpanded = applyVideoDurationRangeIfNeeded({
         apiType: entry.apiType,
@@ -102,7 +95,7 @@ export function buildPricingDisplayMap(): PricingDisplayMap {
         modelId: entry.modelId,
         min: Math.min(...amounts),
         max: Math.max(...amounts),
-        hasDurationTier,
+        unit: entry.pricing.unit,
       })
       min = durationExpanded.min
       max = durationExpanded.max
@@ -151,55 +144,6 @@ function resolvePricingDisplayItem(
 export function withDisplayPricing(model: StoredModel, map: PricingDisplayMap): StoredModel {
   const display = resolvePricingDisplayItem(map, model.type, model.provider, model.modelId)
   if (!display) {
-    // Derive display from user custom pricing if available
-    if (model.customPricing) {
-      const llmPricing = model.customPricing.llm
-      if (typeof llmPricing?.inputPerMillion === 'number' && typeof llmPricing.outputPerMillion === 'number') {
-        const minPrice = Math.min(llmPricing.inputPerMillion, llmPricing.outputPerMillion)
-        const maxPrice = Math.max(llmPricing.inputPerMillion, llmPricing.outputPerMillion)
-        return {
-          ...model,
-          price: minPrice,
-          priceMin: minPrice,
-          priceMax: maxPrice,
-          priceLabel: `${formatPriceAmount(minPrice)}~${formatPriceAmount(maxPrice)}`,
-          priceInput: llmPricing.inputPerMillion,
-          priceOutput: llmPricing.outputPerMillion,
-        }
-      }
-
-      const mediaPricing = model.type === 'image'
-        ? model.customPricing.image
-        : model.type === 'video'
-          ? model.customPricing.video
-          : model.type === 'music'
-            ? model.customPricing.music
-            : undefined
-      if (mediaPricing) {
-        const basePrice = typeof mediaPricing.basePrice === 'number' ? mediaPricing.basePrice : 0
-        let minExtra = 0
-        let maxExtra = 0
-        if (mediaPricing.optionPrices) {
-          for (const optionMap of Object.values(mediaPricing.optionPrices)) {
-            const values = Object.values(optionMap).filter((value) => Number.isFinite(value))
-            if (values.length === 0) continue
-            minExtra += Math.min(...values)
-            maxExtra += Math.max(...values)
-          }
-        }
-        const minPrice = basePrice + minExtra
-        const maxPrice = basePrice + maxExtra
-        return {
-          ...model,
-          price: minPrice,
-          priceMin: minPrice,
-          priceMax: maxPrice,
-          priceLabel: minPrice === maxPrice
-            ? formatPriceAmount(minPrice)
-            : `${formatPriceAmount(minPrice)}~${formatPriceAmount(maxPrice)}`,
-        }
-      }
-    }
     return {
       ...model,
       price: 0,

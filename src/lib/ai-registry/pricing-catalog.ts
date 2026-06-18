@@ -29,8 +29,11 @@ export interface BuiltinPricingTier {
   amount: number
 }
 
+export type BuiltinPricingUnit = 'per_call' | 'per_second'
+
 export interface BuiltinPricingDefinition {
   mode: 'flat' | 'capability'
+  unit?: BuiltinPricingUnit
   flatAmount?: number
   tiers?: BuiltinPricingTier[]
 }
@@ -59,6 +62,12 @@ function isPricingApiType(value: unknown): value is PricingApiType {
 
 function readFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function normalizePricingUnit(raw: unknown, filePath: string, index: number): BuiltinPricingUnit | undefined {
+  if (raw === undefined) return undefined
+  if (raw === 'per_call' || raw === 'per_second') return raw
+  throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.pricing.unit must be per_call or per_second`)
 }
 
 function normalizePricingTier(raw: unknown, filePath: string, index: number, tierIndex: number): BuiltinPricingTier {
@@ -96,13 +105,14 @@ function normalizePricing(raw: unknown, filePath: string, index: number): Builti
   if (modeRaw !== 'flat' && modeRaw !== 'capability') {
     throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.pricing.mode must be flat or capability`)
   }
+  const unit = normalizePricingUnit(Reflect.get(raw, 'unit'), filePath, index)
 
   if (modeRaw === 'flat') {
     const flatAmount = readFiniteNumber(Reflect.get(raw, 'flatAmount'))
     if (flatAmount === null || flatAmount < 0) {
       throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.pricing.flatAmount must be finite number >= 0`)
     }
-    return { mode: 'flat', flatAmount }
+    return { mode: 'flat', ...(unit ? { unit } : {}), flatAmount }
   }
 
   const tiersRaw = Reflect.get(raw, 'tiers')
@@ -111,7 +121,7 @@ function normalizePricing(raw: unknown, filePath: string, index: number): Builti
   }
 
   const tiers = tiersRaw.map((tier, tierIndex) => normalizePricingTier(tier, filePath, index, tierIndex))
-  return { mode: 'capability', tiers }
+  return { mode: 'capability', ...(unit ? { unit } : {}), tiers }
 }
 
 function normalizePricingEntry(raw: unknown, filePath: string, index: number): BuiltinPricingCatalogEntry {
@@ -131,6 +141,9 @@ function normalizePricingEntry(raw: unknown, filePath: string, index: number): B
   }
 
   const pricing = normalizePricing(Reflect.get(raw, 'pricing'), filePath, index)
+  if (apiTypeRaw === 'video' && pricing.mode === 'capability' && !pricing.unit) {
+    throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.pricing.unit is required for video capability pricing`)
+  }
 
   return { apiType: apiTypeRaw, provider, modelId, pricing }
 }

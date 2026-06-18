@@ -33,11 +33,6 @@ export interface ProviderCardProps {
 export interface ModelFormState {
   name: string
   modelId: string
-  enableCustomPricing?: boolean
-  priceInput?: string
-  priceOutput?: string
-  basePrice?: string
-  optionPricesJson?: string
 }
 
 export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music'

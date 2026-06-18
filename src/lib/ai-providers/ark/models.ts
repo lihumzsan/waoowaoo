@@ -227,8 +227,11 @@ function arkFlatPricing(flatAmount: number) {
   return { mode: 'flat' as const, flatAmount }
 }
 
-function arkCapabilityPricing(tiers: ReadonlyArray<{ when: Record<string, string | number | boolean>; amount: number }>) {
-  return { mode: 'capability' as const, tiers }
+function arkCapabilityPricing(
+  tiers: ReadonlyArray<{ when: Record<string, string | number | boolean>; amount: number }>,
+  unit?: 'per_call' | 'per_second',
+) {
+  return { mode: 'capability' as const, ...(unit ? { unit } : {}), tiers }
 }
 
 function arkTokenPricing(input: number, output: number) {
@@ -242,7 +245,7 @@ function arkResolutionPricing(tiers: ReadonlyArray<readonly [resolution: string,
   return arkCapabilityPricing(tiers.map(([resolution, amount]) => ({
     when: { resolution },
     amount,
-  })))
+  })), 'per_second')
 }
 
 function arkResolutionAudioPricing(
@@ -251,7 +254,7 @@ function arkResolutionAudioPricing(
   return arkCapabilityPricing(tiers.map(([resolution, generateAudio, amount]) => ({
     when: { resolution, generateAudio },
     amount,
-  })))
+  })), 'per_second')
 }
 
 export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
@@ -270,7 +273,7 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
     pricing: arkCapabilityPricing([
       { when: { containsVideoInput: false }, amount: 46 },
       { when: { containsVideoInput: true }, amount: 28 },
-    ]),
+    ], 'per_call'),
   },
   {
     apiType: 'video',
@@ -279,7 +282,7 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
     pricing: arkCapabilityPricing([
       { when: { containsVideoInput: false }, amount: 37 },
       { when: { containsVideoInput: true }, amount: 22 },
-    ]),
+    ], 'per_call'),
   },
   { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015', pricing: arkResolutionPricing([['480p', 0.2], ['720p', 0.43], ['1080p', 1.03]]) },
   { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015-batch', pricing: arkResolutionPricing([['480p', 0.1], ['720p', 0.22], ['1080p', 0.51]]) },

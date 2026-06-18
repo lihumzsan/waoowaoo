@@ -17,7 +17,9 @@ describe('billing/task-policy', () => {
   const billingPayload = {
     analysisModel: 'anthropic/claude-sonnet-4',
     imageModel: 'ark::doubao-seedream-4-5-251128',
-    videoModel: 'doubao-seedance-1-5-pro-251215',
+    videoModel: 'openrouter::bytedance/seedance-2.0-fast',
+    duration: 4,
+    resolution: '720p',
   } as const
 
   it('builds TaskBillingInfo for every billable task type', () => {
@@ -60,7 +62,8 @@ describe('billing/task-policy', () => {
     }))
     expect(clipInfo.apiType).toBe('music')
     expect(clipInfo.model).toBe('google::lyria-3-clip-preview')
-    expect(clipInfo.quantity).toBe(30)
+    expect(clipInfo.quantity).toBe(1)
+    expect(clipInfo.unit).toBe('call')
     expect(clipInfo.maxFrozenCost).toBeGreaterThan(0)
 
     const proInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.BGM_SCORE_GENERATE, {
@@ -69,7 +72,8 @@ describe('billing/task-policy', () => {
     }))
     expect(proInfo.apiType).toBe('music')
     expect(proInfo.model).toBe('google::lyria-3-pro-preview')
-    expect(proInfo.quantity).toBe(60)
+    expect(proInfo.quantity).toBe(1)
+    expect(proInfo.unit).toBe('call')
     expect(proInfo.maxFrozenCost).toBeGreaterThan(0)
 
     const falInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
@@ -78,18 +82,16 @@ describe('billing/task-policy', () => {
     }))
     expect(falInfo.apiType).toBe('music')
     expect(falInfo.model).toBe('fal::fal-ai/lyria3/pro')
-    expect(falInfo.quantity).toBe(60)
-    expect(falInfo.maxFrozenCost).toBeGreaterThan(0)
+    expect(falInfo.quantity).toBe(1)
+    expect(falInfo.unit).toBe('call')
+    expect(falInfo.maxFrozenCost).toBeCloseTo(0.576, 8)
   })
 
-  it('uses product credit pricing for uncatalogued music models', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+  it('fails uncatalogued music models instead of falling back to product credits', () => {
+    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
       musicModel: 'google::unknown-music',
       durationSeconds: 30,
-    }))
-
-    expect(info.model).toBe('google::unknown-music')
-    expect(info.maxFrozenCost).toBeGreaterThan(0)
+    })).toThrow(/BILLING_UNKNOWN_MODEL/)
   })
 
   it('honors candidateCount/count for image tasks', () => {
@@ -121,6 +123,7 @@ describe('billing/task-policy', () => {
     }))
     expect(info.apiType).toBe('music')
     expect(info.model).toBe('google::lyria-3-clip-preview')
-    expect(info.quantity).toBe(30)
+    expect(info.quantity).toBe(1)
+    expect(info.unit).toBe('call')
   })
 })

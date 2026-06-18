@@ -37,24 +37,6 @@ export interface Provider {
     hidden?: boolean
 }
 
-export interface LlmCustomPricing {
-    inputPerMillion?: number
-    outputPerMillion?: number
-}
-
-export interface MediaCustomPricing {
-    basePrice?: number
-    optionPrices?: Record<string, Record<string, number>>
-}
-
-// 用户自定义定价 V2（能力参数可定价）
-export interface CustomModelPricing {
-    llm?: LlmCustomPricing
-    image?: MediaCustomPricing
-    video?: MediaCustomPricing
-    music?: MediaCustomPricing
-}
-
 // 模型接口
 export interface CustomModel {
     modelId: string       // 唯一标识符
@@ -70,7 +52,6 @@ export interface CustomModel {
     priceOutput?: number
     enabled: boolean
     capabilities?: ModelCapabilities
-    customPricing?: CustomModelPricing
 }
 
 export interface PricingDisplayItem {
