@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import EstimatedTaskProgressOverlay from '@/components/task/EstimatedTaskProgressOverlay'
+import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProgress'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
@@ -736,6 +737,34 @@ export function resolveDisplayedEditStylePreviewItems(params: {
   return confirmedItem ? [confirmedItem] : params.items
 }
 
+export function buildEditStylePreviewProgressBatchKey(data: Pick<EditStylePreviewGenerationPartData, 'projectId' | 'episodeId' | 'screenplayId' | 'items'>): string {
+  return [
+    'edit-style-preview',
+    data.projectId,
+    data.episodeId,
+    data.screenplayId,
+    data.items.map((item) => item.taskId).join(','),
+  ].join(':')
+}
+
+export function resolveEditStylePreviewBatchProgressSource(params: {
+  readonly items: EditStylePreviewGenerationPartData['items']
+  readonly taskStateMap: ReadonlyMap<string, TaskTargetState>
+  readonly batchKey: string
+}): TaskTargetState | null {
+  const activeItem = params.items.find((item) => {
+    const taskState = params.taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
+    return taskState?.phase === 'queued' || taskState?.phase === 'processing'
+  })
+  if (!activeItem) return null
+  const activeState = params.taskStateMap.get(`ProjectEditStylePreview:${activeItem.id}`)
+  if (!activeState) return null
+  return {
+    ...activeState,
+    runningTaskId: params.batchKey,
+  }
+}
+
 function truncateStylePreviewErrorMessage(message: string | null | undefined): string | null {
   const normalized = message?.trim()
   if (!normalized) return null
@@ -793,6 +822,18 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     items: data.items,
     previewsById,
   }), [data.items, previewsById])
+  const batchProgressKey = useMemo(() => buildEditStylePreviewProgressBatchKey({
+    projectId: data.projectId,
+    episodeId: data.episodeId,
+    screenplayId: data.screenplayId,
+    items: data.items,
+  }), [data.episodeId, data.items, data.projectId, data.screenplayId])
+  const batchProgressSource = useMemo(() => resolveEditStylePreviewBatchProgressSource({
+    items: displayedItems,
+    taskStateMap,
+    batchKey: batchProgressKey,
+  }), [batchProgressKey, displayedItems, taskStateMap])
+  const batchProgress = useEstimatedTaskProgress(batchProgressSource)
   const cardStatuses = useMemo(() => displayedItems.map((item) => {
     const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
     const preview = previewsById.get(item.id) ?? null
@@ -917,7 +958,10 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                 ) : (
                   <div className="workspace-node-loading-surface h-36 bg-slate-100" />
                 )}
-                <EstimatedTaskProgressOverlay taskState={taskState} />
+                <EstimatedTaskProgressOverlay
+                  taskState={cardStatus === 'generating' ? null : taskState}
+                  progress={cardStatus === 'generating' ? batchProgress : undefined}
+                />
               </div>
               <div className="space-y-1 p-2">
                 <button
