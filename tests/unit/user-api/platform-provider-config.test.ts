@@ -5,6 +5,8 @@ import { putUserApiConfig } from '@/lib/user-api/api-config-service'
 const ORIGINAL_ENV = {
   DEPLOYMENT_EDITION: process.env.DEPLOYMENT_EDITION,
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
+  PLATFORM_CODEX_BASE_URL: process.env.PLATFORM_CODEX_BASE_URL,
+  PLATFORM_CODEX_API_KEY: process.env.PLATFORM_CODEX_API_KEY,
   PLATFORM_GOOGLE_API_KEY: process.env.PLATFORM_GOOGLE_API_KEY,
   PLATFORM_OPENROUTER_API_KEY: process.env.PLATFORM_OPENROUTER_API_KEY,
   BILLING_MODE: process.env.BILLING_MODE,
@@ -44,6 +46,22 @@ describe('platform provider config', () => {
     delete process.env.PLATFORM_OPENROUTER_API_KEY
 
     await expect(getProviderConfig('user-1', 'openrouter')).rejects.toThrow('PLATFORM_PROVIDER_API_KEY_MISSING')
+  })
+
+  it('reads Codex local executable path in platform-key mode without requiring an API key', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    process.env.PLATFORM_CODEX_BASE_URL = '/usr/local/bin/codex'
+    delete process.env.PLATFORM_CODEX_API_KEY
+
+    const config = await getProviderConfig('user-1', 'codex')
+
+    expect(config).toEqual({
+      id: 'codex',
+      name: 'codex',
+      apiKey: '',
+      baseUrl: '/usr/local/bin/codex',
+    })
   })
 
   it('uses platform models in platform-key mode without user config', async () => {

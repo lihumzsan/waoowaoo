@@ -47,7 +47,7 @@ type PlatformProviderEnv = {
   baseUrl?: string
 }
 
-const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google'])
+const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'codex', 'openrouter', 'fal', 'google'])
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -77,6 +77,8 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
         return 'PLATFORM_FAL'
       case 'ark':
         return 'PLATFORM_ARK'
+      case 'codex':
+        return 'PLATFORM_CODEX'
       case 'openrouter':
         return 'PLATFORM_OPENROUTER'
       default:
@@ -85,11 +87,17 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   })()
 
   const apiKey = readEnvString(`${envPrefix}_API_KEY`)
+  const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
+  if (providerFamily === 'codex') {
+    return {
+      apiKey,
+      ...(baseUrl ? { baseUrl } : {}),
+    }
+  }
   if (!apiKey) {
     throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
   }
 
-  const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
   return {
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
@@ -306,14 +314,14 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   const { providers } = await readUserConfig(userId)
   const provider = pickProviderStrict(providers, providerId)
 
-  if (!provider.apiKey) {
+  if (!provider.apiKey && getProviderFamily(provider.id) !== 'codex') {
     throw new Error(`PROVIDER_API_KEY_MISSING: ${provider.id}`)
   }
 
   return {
     id: provider.id,
     name: provider.name,
-    apiKey: decryptApiKey(provider.apiKey),
+    apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
     baseUrl: normalizeProviderRuntimeBaseUrl(provider.id, provider.baseUrl),
   }
 }

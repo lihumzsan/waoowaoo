@@ -2,7 +2,7 @@ import { ApiError } from '@/lib/api-errors'
 import type { StoredProvider } from './api-config-types'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 
-const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google'])
+const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'codex', 'openrouter', 'fal', 'google'])
 
 function assertSupportedProvider(providerId: string, field: string) {
   if (SUPPORTED_PROVIDER_KEYS.has(getProviderKey(providerId))) return

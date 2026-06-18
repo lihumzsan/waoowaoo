@@ -47,6 +47,7 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
 
 export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
   { id: 'ark', name: 'Volcengine Ark' },
+  { id: 'codex', name: 'Codex Local', baseUrl: 'codex' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
@@ -155,6 +156,7 @@ export function matchesApiConfigModelKey(key: string | undefined | null, provide
 
 const ZH_PROVIDER_NAME_MAP: Readonly<Record<string, string>> = {
   ark: '火山引擎 Ark',
+  codex: 'Codex 本机',
 }
 
 function isZhLocale(locale?: string): boolean {

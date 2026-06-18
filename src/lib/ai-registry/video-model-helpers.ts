@@ -18,10 +18,13 @@ const FAL_ASSET_REFERENCE_MULTI_REFERENCE_MODEL_IDS = new Set<string>([
   FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
   FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
 ])
+const FULL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS = new Set<string>(['ark'])
+const MODEL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS = new Set<string>(['fal'])
 
 export function supportsAssetReferenceMultiReferenceVideoModel(modelKey: string): boolean {
   const parsedModel = parseModelKeyStrict(modelKey)
   if (!parsedModel) return false
-  if (parsedModel.provider === 'ark') return true
-  return parsedModel.provider === 'fal' && FAL_ASSET_REFERENCE_MULTI_REFERENCE_MODEL_IDS.has(parsedModel.modelId)
+  if (FULL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS.has(parsedModel.provider)) return true
+  return MODEL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS.has(parsedModel.provider)
+    && FAL_ASSET_REFERENCE_MULTI_REFERENCE_MODEL_IDS.has(parsedModel.modelId)
 }

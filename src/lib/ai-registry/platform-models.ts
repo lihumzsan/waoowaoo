@@ -1,4 +1,5 @@
 import { ARK_PLATFORM_MODEL_PRESETS } from '@/lib/ai-providers/ark/models'
+import { CODEX_PLATFORM_MODEL_PRESETS } from '@/lib/ai-providers/codex/models'
 import {
   FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
   FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
@@ -19,6 +20,7 @@ export type PlatformDefaultModelField = keyof Required<DefaultModelsPayload>
 
 export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
   ...GOOGLE_PLATFORM_MODEL_PRESETS,
+  ...CODEX_PLATFORM_MODEL_PRESETS,
   ...FAL_PLATFORM_MODEL_PRESETS,
   ...ARK_PLATFORM_MODEL_PRESETS,
   ...OPENROUTER_PLATFORM_MODEL_PRESETS,

@@ -72,4 +72,29 @@ describe('ai provider language model registry', () => {
       name: 'openrouter',
     })
   })
+
+  it('creates Codex local language models without routing through OpenAI-compatible HTTP', () => {
+    const model = createRegisteredLanguageModel({
+      providerKey: 'codex',
+      selection: {
+        provider: 'codex',
+        modelId: 'gpt-5.5',
+        modelKey: 'codex::gpt-5.5',
+      },
+      providerConfig: {
+        id: 'codex',
+        name: 'Codex Local',
+        apiKey: '',
+        baseUrl: '/usr/local/bin/codex',
+      },
+    })
+
+    expect(model).toMatchObject({
+      provider: 'codex',
+      modelId: 'gpt-5.5',
+    })
+    expect(openAiState.createOpenAI).not.toHaveBeenCalledWith(expect.objectContaining({
+      name: 'codex',
+    }))
+  })
 })

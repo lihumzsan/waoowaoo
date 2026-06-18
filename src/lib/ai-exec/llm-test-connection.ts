@@ -1,11 +1,14 @@
 import OpenAI from 'openai'
 import { ApiError } from '@/lib/api-errors'
 import { ARK_PROVIDER_TEST_LLM_MODEL_ID } from '@/lib/ai-providers/ark/models'
+import { CODEX_DEFAULT_MODEL_ID } from '@/lib/ai-providers/codex/constants'
+import { runCodexSelfCheck } from '@/lib/ai-providers/codex/client'
 
 export type LlmConnectionTestProvider =
   | 'openrouter'
   | 'google'
   | 'ark'
+  | 'codex'
 
 export interface LlmConnectionTestResult {
   provider: LlmConnectionTestProvider
@@ -23,17 +26,28 @@ type TestConnectionPayload = {
 
 type LlmConnectionTestPayload = {
   provider: LlmConnectionTestProvider
-  apiKey: string
+  apiKey?: string
   baseUrl?: string
   model?: string
 }
 
 type LlmConnectionTestPartialResult = Pick<LlmConnectionTestResult, 'model' | 'answer'>
+type LlmConnectionTester = (payload: LlmConnectionTestPayload) => Promise<LlmConnectionTestPartialResult>
 
 const LLM_CONNECTION_TEST_PROVIDERS = new Set<LlmConnectionTestProvider>([
   'openrouter',
   'google',
   'ark',
+  'codex',
+])
+const LLM_CONNECTION_API_KEY_REQUIRED_PROVIDERS = new Set<LlmConnectionTestProvider>([
+  'openrouter',
+  'google',
+  'ark',
+])
+const OPENAI_STYLE_CONNECTION_DEFAULTS = new Map<LlmConnectionTestProvider, { baseURL: string; model: string }>([
+  ['ark', { baseURL: 'https://ark.cn-beijing.volces.com/api/v3', model: ARK_PROVIDER_TEST_LLM_MODEL_ID }],
+  ['openrouter', { baseURL: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' }],
 ])
 
 function isRegisteredLlmConnectionTestProvider(provider: string): provider is LlmConnectionTestProvider {
@@ -50,6 +64,14 @@ async function testGoogleAI(apiKey: string): Promise<LlmConnectionTestPartialRes
     throw new Error(`Google AI probe failed (${response.status}): ${error}`)
   }
   return {}
+}
+
+function requireConnectionApiKey(payload: LlmConnectionTestPayload): string {
+  const apiKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : ''
+  if (!apiKey && LLM_CONNECTION_API_KEY_REQUIRED_PROVIDERS.has(payload.provider)) {
+    throw new ApiError('INVALID_PARAMS', { message: 'Missing apiKey' })
+  }
+  return apiKey
 }
 
 async function testOpenAIStyleConnection(input: {
@@ -76,16 +98,44 @@ async function testOpenAIStyleConnection(input: {
   }
 }
 
+async function testRegisteredOpenAIStyleConnection(payload: LlmConnectionTestPayload): Promise<LlmConnectionTestPartialResult> {
+  const defaults = OPENAI_STYLE_CONNECTION_DEFAULTS.get(payload.provider)
+  if (!defaults) {
+    throw new ApiError('INVALID_PARAMS', { message: `Unsupported provider: ${payload.provider}` })
+  }
+  return await testOpenAIStyleConnection({
+    apiKey: requireConnectionApiKey(payload),
+    baseURL: payload.baseUrl || defaults.baseURL,
+    model: payload.model || defaults.model,
+  })
+}
+
+async function testRegisteredGoogleConnection(payload: LlmConnectionTestPayload): Promise<LlmConnectionTestPartialResult> {
+  return await testGoogleAI(requireConnectionApiKey(payload))
+}
+
+async function testRegisteredCodexConnection(payload: LlmConnectionTestPayload): Promise<LlmConnectionTestPartialResult> {
+  const model = payload.model || CODEX_DEFAULT_MODEL_ID
+  const result = await runCodexSelfCheck({
+    codexPath: payload.baseUrl,
+    model,
+    timeoutMs: 60_000,
+  })
+  return {
+    model,
+    answer: result.text,
+  }
+}
+
+const LLM_CONNECTION_TESTERS: Record<LlmConnectionTestProvider, LlmConnectionTester> = {
+  openrouter: testRegisteredOpenAIStyleConnection,
+  google: testRegisteredGoogleConnection,
+  ark: testRegisteredOpenAIStyleConnection,
+  codex: testRegisteredCodexConnection,
+}
+
 async function testRegisteredLlmConnection(payload: LlmConnectionTestPayload): Promise<LlmConnectionTestResult> {
-  const tested = payload.provider === 'google'
-    ? await testGoogleAI(payload.apiKey)
-    : await testOpenAIStyleConnection({
-      apiKey: payload.apiKey,
-      baseURL: payload.baseUrl || (payload.provider === 'ark'
-        ? 'https://ark.cn-beijing.volces.com/api/v3'
-        : 'https://openrouter.ai/api/v1'),
-      model: payload.model || (payload.provider === 'ark' ? ARK_PROVIDER_TEST_LLM_MODEL_ID : 'openai/gpt-4o-mini'),
-    })
+  const tested = await LLM_CONNECTION_TESTERS[payload.provider](payload)
 
   return {
     provider: payload.provider,
@@ -105,18 +155,11 @@ function normalizeProvider(payload: TestConnectionPayload): LlmConnectionTestPro
   return provider
 }
 
-function requireApiKey(payload: TestConnectionPayload): string {
-  const apiKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : ''
-  if (!apiKey) {
-    throw new ApiError('INVALID_PARAMS', { message: 'Missing apiKey' })
-  }
-  return apiKey
-}
-
 export async function testLlmConnection(payload: TestConnectionPayload): Promise<LlmConnectionTestResult> {
+  const provider = normalizeProvider(payload)
   return await testRegisteredLlmConnection({
-    provider: normalizeProvider(payload),
-    apiKey: requireApiKey(payload),
+    provider,
+    apiKey: typeof payload.apiKey === 'string' ? payload.apiKey.trim() : undefined,
     baseUrl: typeof payload.baseUrl === 'string' ? payload.baseUrl.trim() : undefined,
     model: typeof payload.model === 'string' ? payload.model.trim() : undefined,
   })
