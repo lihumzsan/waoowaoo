@@ -185,6 +185,10 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
           typeof payloadUi?.hasOutputAtStart === 'boolean'
             ? payloadUi.hasOutputAtStart
             : null
+        const progressGroupId =
+          typeof payloadUi?.progressGroupId === 'string' && payloadUi.progressGroupId.trim()
+            ? payloadUi.progressGroupId.trim()
+            : null
         const payloadErrorCode =
           typeof eventPayload?.errorCode === 'string' && eventPayload.errorCode.trim()
             ? eventPayload.errorCode.trim()
@@ -203,6 +207,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
           targetId,
           taskId: typeof payload.taskId === 'string' ? payload.taskId : null,
           taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
+          progressGroupId,
           intent: payloadIntent,
           hasOutputAtStart,
           progress: typeof eventPayload?.progress === 'number' ? Math.floor(eventPayload.progress) : null,
@@ -222,6 +227,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
             phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
             taskId: typeof payload.taskId === 'string' ? payload.taskId : null,
             taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
+            progressGroupId,
             intent: payloadIntent,
             hasOutputAtStart,
             progress: typeof eventPayload?.progress === 'number' ? Math.floor(eventPayload.progress) : null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   pruneStoredStartMillis,
   TASK_PROGRESS_START_STORAGE_PREFIX,
+  taskProgressKey,
   writeStoredStartMillisToStorage,
 } from '@/lib/query/hooks/useEstimatedTaskProgress'
 
@@ -38,7 +39,7 @@ class MemoryStorage implements Storage {
 }
 
 class QuotaExceededStorage extends MemoryStorage {
-  setItem(_key: string, _value: string): void {
+  setItem(): void {
     const error = new Error('quota exceeded') as Error & { name: string; code: number }
     error.name = 'QuotaExceededError'
     error.code = 22
@@ -51,6 +52,17 @@ function progressKey(key: string): string {
 }
 
 describe('estimated task progress storage cache', () => {
+  it('uses progress group id before individual task id so parallel tasks share one estimate', () => {
+    expect(taskProgressKey({
+      phase: 'processing',
+      runningTaskId: 'task-1',
+      runningTaskType: 'image_panel',
+      progressGroupId: 'operation:generate_edit_script_storyboard_images:request-1',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+    })).toBe('group:operation:generate_edit_script_storyboard_images:request-1')
+  })
+
   it('does not throw when localStorage quota is exceeded while caching task progress start time', () => {
     const storage = new QuotaExceededStorage()
 

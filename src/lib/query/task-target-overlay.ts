@@ -13,6 +13,7 @@ export type TaskTargetOverlayState = {
   phase: TaskTargetOverlayPhase
   runningTaskId: string | null
   runningTaskType: string | null
+  progressGroupId?: string | null
   intent: TaskIntent
   hasOutputAtStart: boolean | null
   progress: number | null
@@ -62,6 +63,7 @@ export function upsertTaskTargetOverlay(
     phase?: TaskTargetOverlayPhase
     runningTaskId?: string | null
     runningTaskType?: string | null
+    progressGroupId?: string | null
     intent?: TaskIntent
     hasOutputAtStart?: boolean | null
     progress?: number | null
@@ -82,12 +84,15 @@ export function upsertTaskTargetOverlay(
         || buildOptimisticTaskId(params.targetType, params.targetId, now)
       const runningTaskType = normalizeOptionalString(params.runningTaskType)
         || normalizeOptionalString(existing?.runningTaskType)
+      const progressGroupId = normalizeOptionalString(params.progressGroupId)
+        || normalizeOptionalString(existing?.progressGroupId)
       next[key] = {
         targetType: params.targetType,
         targetId: params.targetId,
         phase: params.phase || 'queued',
         runningTaskId,
         runningTaskType,
+        progressGroupId,
         intent: params.intent || 'process',
         hasOutputAtStart: params.hasOutputAtStart ?? null,
         progress: params.progress ?? null,
@@ -131,6 +136,7 @@ export function applyTaskLifecycleToOverlay(
     targetId: string | null
     taskId: string | null
     taskType: string | null
+    progressGroupId?: string | null
     intent: TaskIntent
     hasOutputAtStart: boolean | null
     progress: number | null
@@ -148,6 +154,7 @@ export function applyTaskLifecycleToOverlay(
       phase: 'queued',
       runningTaskId: params.taskId,
       runningTaskType: params.taskType,
+      progressGroupId: params.progressGroupId,
       intent: params.intent,
       hasOutputAtStart: params.hasOutputAtStart,
       progress: params.progress,
@@ -166,6 +173,7 @@ export function applyTaskLifecycleToOverlay(
       phase: 'processing',
       runningTaskId: params.taskId,
       runningTaskType: params.taskType,
+      progressGroupId: params.progressGroupId,
       intent: params.intent,
       hasOutputAtStart: params.hasOutputAtStart,
       progress: params.progress,

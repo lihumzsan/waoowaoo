@@ -12,6 +12,7 @@ export interface EstimatedTaskProgressSource {
   readonly phase?: string | null
   readonly runningTaskId?: string | null
   readonly runningTaskType?: string | null
+  readonly progressGroupId?: string | null
   readonly updatedAt?: string | null
   readonly lastError?: {
     readonly code?: string | null
@@ -41,10 +42,12 @@ function sanitizeStartMillis(value: number, now: number): number {
   return Math.min(value, now)
 }
 
-function taskProgressKey(source: EstimatedTaskProgressSource | null | undefined): string | null {
+export function taskProgressKey(source: EstimatedTaskProgressSource | null | undefined): string | null {
   if (!source) return null
   const taskType = source.runningTaskType?.trim()
   if (!taskType) return null
+  const progressGroupId = source.progressGroupId?.trim()
+  if (progressGroupId) return `group:${progressGroupId}`
   const taskId = source.runningTaskId?.trim()
   if (taskId) return `task:${taskId}`
   const targetType = source.targetType?.trim()
@@ -205,6 +208,10 @@ function removeStoredStartMillis(key: string) {
   removeStoredStartMillisFromStorage(storage, key)
 }
 
+function shouldRemoveStoredStartMillisOnInactive(key: string): boolean {
+  return !key.startsWith('group:')
+}
+
 function resolveInitialStartMillis(source: EstimatedTaskProgressSource, key: string, now: number): number {
   const stored = readStoredStartMillis(key, now)
   if (stored !== null) return sanitizeStartMillis(stored, now)
@@ -232,7 +239,7 @@ export function useEstimatedTaskProgress(
       return
     }
     if (!active) {
-      removeStoredStartMillis(key)
+      if (shouldRemoveStoredStartMillisOnInactive(key)) removeStoredStartMillis(key)
       setStartState(null)
       return
     }

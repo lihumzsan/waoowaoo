@@ -9,7 +9,7 @@ import {
   rollbackTaskBillingForTask,
   updateTaskBillingInfo,
 } from './service'
-import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskType } from './types'
+import { TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
   getBillingMode,
@@ -20,6 +20,7 @@ import {
 import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
+import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -112,7 +113,15 @@ export async function submitTask(params: {
     userId: params.userId,
   })
 
-  const normalizedPayloadBase = normalizeTaskPayload(params.type, params.payload || null)
+  const operationRequestId = params.operationRequestId || params.requestId || null
+  const progressGroupId = buildTaskProgressGroupId({
+    operationId: params.operationId || null,
+    operationRequestId,
+  })
+  const normalizedPayloadBase = withTaskProgressGroupPayload(
+    normalizeTaskPayload(params.type, params.payload || null),
+    progressGroupId,
+  )
   const normalizedPayloadMeta = toObject(normalizedPayloadBase.meta)
   const normalizedPayload = {
     ...normalizedPayloadBase,
@@ -141,7 +150,7 @@ export async function submitTask(params: {
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
     operationConfirmed: params.operationConfirmed ?? null,
-    operationRequestId: params.operationRequestId || params.requestId || null,
+    operationRequestId,
   })
   const runId: string | null = null
 

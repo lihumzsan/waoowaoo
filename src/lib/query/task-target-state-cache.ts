@@ -15,6 +15,7 @@ interface ApplyTaskTargetTerminalStateInput {
   readonly phase: TerminalPhase
   readonly taskId: string | null
   readonly taskType: string | null
+  readonly progressGroupId?: string | null
   readonly intent: TaskIntent
   readonly hasOutputAtStart: boolean | null
   readonly progress: number | null
@@ -164,6 +165,7 @@ function applyTerminalStateToData(
       phase: input.phase,
       runningTaskId: null,
       runningTaskType: input.taskType || state.runningTaskType,
+      progressGroupId: input.progressGroupId ?? state.progressGroupId ?? null,
       intent: input.intent,
       hasOutputAtStart: input.hasOutputAtStart ?? state.hasOutputAtStart,
       progress: input.phase === 'completed' ? 100 : input.progress,

@@ -14,6 +14,7 @@ export type TaskRuntimeStateLike = {
   readonly phase: TaskRuntimePhase | string | null | undefined
   readonly runningTaskId?: string | null
   readonly runningTaskType?: string | null
+  readonly progressGroupId?: string | null
   readonly progress?: number | null
   readonly stage?: string | null
   readonly stageLabel?: string | null
@@ -58,6 +59,7 @@ export function taskRuntimeStateMapSignature(
       state.phase ?? '',
       state.runningTaskId ?? '',
       state.runningTaskType ?? '',
+      state.progressGroupId ?? '',
       state.lastError?.code ?? '',
       state.lastError?.message ?? '',
     ].join(':'))

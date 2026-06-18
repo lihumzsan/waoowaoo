@@ -25,6 +25,7 @@ export type TaskTargetState = {
   phase: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
   runningTaskId: string | null
   runningTaskType: string | null
+  progressGroupId?: string | null
   intent: TaskIntent
   hasOutputAtStart: boolean | null
   progress: number | null
@@ -90,6 +91,7 @@ function buildIdleState(target: TaskTargetStateQuery): TaskTargetState {
     phase: 'idle',
     runningTaskId: null,
     runningTaskType: null,
+    progressGroupId: null,
     intent: 'process',
     hasOutputAtStart: null,
     progress: null,

@@ -70,6 +70,8 @@ describe('task state service helpers', () => {
           },
           errorCode: null,
           errorMessage: null,
+          operationId: 'generate_character_image',
+          operationRequestId: 'request-1',
           updatedAt: new Date('2026-02-25T00:00:00.000Z'),
         },
       ],
@@ -78,8 +80,36 @@ describe('task state service helpers', () => {
     expect(state.phase).toBe('processing')
     expect(state.runningTaskId).toBe('task-1')
     expect(state.progress).toBe(42)
+    expect(state.progressGroupId).toBe('operation:generate_character_image:request-1')
     expect(state.stage).toBe('image_generating')
     expect(state.stageLabel).toBe('Generating')
+  })
+
+  it('prefers explicit payload progress group over operation metadata', () => {
+    const state = resolveTargetState(
+      { targetType: 'ProjectPanel', targetId: 'panel-1' },
+      [
+        {
+          id: 'task-1',
+          type: TASK_TYPE.IMAGE_PANEL,
+          status: 'processing',
+          progress: 10,
+          payload: {
+            ui: {
+              intent: 'generate',
+              progressGroupId: 'operation:custom-group:request-1',
+            },
+          },
+          errorCode: null,
+          errorMessage: null,
+          operationId: 'generate_edit_script_storyboard_images',
+          operationRequestId: 'request-2',
+          updatedAt: new Date('2026-02-25T00:00:00.000Z'),
+        },
+      ],
+    )
+
+    expect(state.progressGroupId).toBe('operation:custom-group:request-1')
   })
 
   it('resolves failed state and normalizes error', () => {
@@ -149,6 +179,8 @@ describe('task state service helpers', () => {
         errorMessage: null,
         targetType: 'ProjectPanel',
         targetId: 'panel-1',
+        operationId: 'generate_edit_script_storyboard_images',
+        operationRequestId: 'request-grid-1',
         updatedAt: new Date('2026-06-17T08:00:00.000Z'),
       },
     ])
@@ -169,6 +201,7 @@ describe('task state service helpers', () => {
         phase: 'processing',
         runningTaskId: 'task-grid-1',
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
+        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-grid-1',
         progress: 35,
       },
       {
@@ -177,6 +210,7 @@ describe('task state service helpers', () => {
         phase: 'processing',
         runningTaskId: 'task-grid-1',
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
+        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-grid-1',
         progress: 35,
       },
     ])

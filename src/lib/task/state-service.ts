@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { coerceTaskIntent, type TaskIntent } from './intent'
 import { TASK_TYPE } from './types'
+import { buildTaskProgressGroupId, readTaskPayloadProgressGroupId } from './progress-group'
 
 export type TaskTargetQuery = {
   targetType: string
@@ -18,6 +19,7 @@ export type TaskTargetState = {
   phase: TaskTargetPhase
   runningTaskId: string | null
   runningTaskType: string | null
+  progressGroupId: string | null
   intent: TaskIntent
   hasOutputAtStart: boolean | null
   progress: number | null
@@ -42,6 +44,8 @@ type TaskStateRow = {
   errorMessage: string | null
   targetType: string
   targetId: string
+  operationId: string | null
+  operationRequestId: string | null
   updatedAt: Date
 }
 
@@ -99,15 +103,23 @@ export function extractTaskStateFields(task: {
   type: string
   progress: number
   payload: unknown
+  operationId?: string | null
+  operationRequestId?: string | null
 }) {
   const payload = asObject(task.payload)
   const payloadUi = asObject(payload?.ui)
+  const progressGroupId = readTaskPayloadProgressGroupId(task.payload)
+    ?? buildTaskProgressGroupId({
+      operationId: task.operationId ?? null,
+      operationRequestId: task.operationRequestId ?? null,
+    })
   return {
     stage: asNonEmptyString(payload?.stage),
     stageLabel: asNonEmptyString(payload?.stageLabel),
     hasOutputAtStart: asBoolean(payloadUi?.hasOutputAtStart),
     intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, task.type),
     progress: toProgress(task.progress),
+    progressGroupId,
   }
 }
 
@@ -130,6 +142,7 @@ export function buildIdleState(target: TaskTargetQuery): TaskTargetState {
     phase: 'idle',
     runningTaskId: null,
     runningTaskType: null,
+    progressGroupId: null,
     intent: 'process',
     hasOutputAtStart: null,
     progress: null,
@@ -150,6 +163,8 @@ export function resolveTargetState(
     payload: unknown
     errorCode: string | null
     errorMessage: string | null
+    operationId?: string | null
+    operationRequestId?: string | null
     updatedAt: Date
   }>,
 ): TaskTargetState {
@@ -178,6 +193,7 @@ export function resolveTargetState(
       phase: running.status === 'processing' ? 'processing' : 'queued',
       runningTaskId: running.id,
       runningTaskType: running.type,
+      progressGroupId: runningFields.progressGroupId,
       intent: runningFields.intent,
       hasOutputAtStart: runningFields.hasOutputAtStart,
       progress: runningFields.progress,
@@ -195,6 +211,7 @@ export function resolveTargetState(
       phase: 'completed',
       runningTaskId: null,
       runningTaskType: latest.type,
+      progressGroupId: latestFields.progressGroupId,
       intent: latestFields.intent,
       hasOutputAtStart: latestFields.hasOutputAtStart,
       progress: 100,
@@ -211,6 +228,7 @@ export function resolveTargetState(
     phase: 'failed',
     runningTaskId: null,
     runningTaskType: latest.type,
+    progressGroupId: latestFields.progressGroupId,
     intent: latestFields.intent,
     hasOutputAtStart: latestFields.hasOutputAtStart,
     progress: null,
@@ -264,6 +282,8 @@ async function queryStoryboardGridImageRows(params: {
         errorMessage,
         targetType,
         targetId,
+        operationId,
+        operationRequestId,
         updatedAt
       FROM tasks
       WHERE projectId = ${params.projectId}
@@ -335,6 +355,8 @@ export async function queryTaskTargetStates(params: {
         errorMessage: true,
         targetType: true,
         targetId: true,
+        operationId: true,
+        operationRequestId: true,
         updatedAt: true,
       },
     })
