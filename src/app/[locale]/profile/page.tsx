@@ -40,9 +40,31 @@ type TransactionsPayload = {
   transactions?: TransactionItem[]
 }
 
+type RechargeConfig = {
+  enabled: boolean
+  creditValueCurrency: string
+  settlementCurrency: string
+  minCredits: number
+  maxCredits: number
+  cnyToHkdRate: number
+}
+
+type RechargeConfigPayload = {
+  recharge?: RechargeConfig
+}
+
+type CheckoutPayload = {
+  url?: string
+}
+
 function formatAmount(value: number | undefined, currency: string | undefined): string {
   const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
   return `${amount.toFixed(2)} ${currency || 'CREDITS'}`
+}
+
+function formatCurrencyAmount(value: number | undefined, currency: string | undefined): string {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return `${currency || ''} ${amount.toFixed(2)}`.trim()
 }
 
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
@@ -54,6 +76,14 @@ function isBalancePayload(value: unknown): value is BalancePayload {
 }
 
 function isTransactionsPayload(value: unknown): value is TransactionsPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isRechargeConfigPayload(value: unknown): value is RechargeConfigPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isCheckoutPayload(value: unknown): value is CheckoutPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
@@ -76,6 +106,10 @@ export default function ProfilePage() {
   const [inviteCode, setInviteCode] = useState('')
   const [redeemStatus, setRedeemStatus] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
+  const [rechargeConfig, setRechargeConfig] = useState<RechargeConfig | null>(null)
+  const [rechargeAmount, setRechargeAmount] = useState('')
+  const [rechargeStatus, setRechargeStatus] = useState<string | null>(null)
+  const [recharging, setRecharging] = useState(false)
 
   useEffect(() => {
     if (status === 'loading') return
@@ -133,11 +167,30 @@ export default function ProfilePage() {
     }
   }
 
+  const loadRechargeConfig = async () => {
+    const response = await apiFetch('/api/payments/recharge/config')
+    if (!response.ok) return
+    const payload: unknown = await response.json()
+    if (isRechargeConfigPayload(payload) && payload.recharge) {
+      setRechargeConfig(payload.recharge)
+    }
+  }
+
   useEffect(() => {
     if (!session || !isCloud) return
     void loadBalance()
     void loadTransactions()
+    void loadRechargeConfig()
   }, [session, isCloud])
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment')
+    if (paymentStatus === 'success') {
+      setRechargeStatus(t('recharge.successNotice'))
+    } else if (paymentStatus === 'cancel') {
+      setRechargeStatus(t('recharge.cancelNotice'))
+    }
+  }, [searchParams, t])
 
   if (status === 'loading' || !session) {
     return (
@@ -149,6 +202,10 @@ export default function ProfilePage() {
 
   const noBillingText = t('openSourceNoBilling')
   const balanceText = isCloud === true ? formatAmount(balance?.balance, balance?.currency) : noBillingText
+  const parsedRechargeAmount = Number(rechargeAmount)
+  const estimatedSettlementAmount = rechargeConfig?.enabled === true && Number.isFinite(parsedRechargeAmount)
+    ? parsedRechargeAmount * rechargeConfig.cnyToHkdRate
+    : 0
   const sectionItems: Array<{
     section: ProfileSection
     icon: AppIconName
@@ -239,6 +296,91 @@ export default function ProfilePage() {
                 <ApiConfigTab />
               ) : isCloud === true ? (
                 <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
+                  <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('recharge.title')}</h2>
+                        <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('recharge.description')}</p>
+                      </div>
+                    </div>
+                    {rechargeConfig?.enabled === true ? (
+                      <form
+                        className="space-y-3"
+                        onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                          event.preventDefault()
+                          if (!Number.isFinite(parsedRechargeAmount)) {
+                            setRechargeStatus(t('recharge.invalidAmount'))
+                            return
+                          }
+                          if (
+                            parsedRechargeAmount < rechargeConfig.minCredits ||
+                            parsedRechargeAmount > rechargeConfig.maxCredits
+                          ) {
+                            setRechargeStatus(t('recharge.invalidAmount'))
+                            return
+                          }
+                          setRecharging(true)
+                          setRechargeStatus(null)
+                          void apiFetch('/api/payments/stripe/checkout', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ credits: parsedRechargeAmount }),
+                          })
+                            .then(async (response) => {
+                              const payload: unknown = await response.json()
+                              if (!response.ok || !isCheckoutPayload(payload) || !payload.url) {
+                                throw new Error(t('recharge.checkoutFailed'))
+                              }
+                              window.location.assign(payload.url)
+                            })
+                            .catch((error: unknown) => {
+                              setRechargeStatus(error instanceof Error ? error.message : t('recharge.checkoutFailed'))
+                            })
+                            .finally(() => setRecharging(false))
+                        }}
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <label className="flex-1">
+                            <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">
+                              {t('recharge.amountLabel')}
+                            </span>
+                            <input
+                              className="glass-input w-full rounded-xl px-4 py-3 text-sm"
+                              type="number"
+                              min={rechargeConfig.minCredits}
+                              max={rechargeConfig.maxCredits}
+                              step="0.01"
+                              value={rechargeAmount}
+                              onChange={(event) => setRechargeAmount(event.target.value)}
+                              placeholder={t('recharge.placeholder')}
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            disabled={recharging || !rechargeAmount.trim()}
+                            className="glass-btn-primary self-end rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {recharging ? t('recharge.processing') : t('recharge.submit')}
+                          </button>
+                        </div>
+                        <div className="grid gap-2 text-xs text-[var(--glass-text-tertiary)] sm:grid-cols-3">
+                          <div>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</div>
+                          <div>{t('recharge.exchangeRate', { rate: rechargeConfig.cnyToHkdRate })}</div>
+                          <div>
+                            {t('recharge.estimatedCharge', {
+                              amount: formatCurrencyAmount(estimatedSettlementAmount, rechargeConfig.settlementCurrency),
+                            })}
+                          </div>
+                        </div>
+                      </form>
+                    ) : (
+                      <p className="text-sm text-[var(--glass-text-secondary)]">{t('recharge.unavailable')}</p>
+                    )}
+                    {rechargeStatus ? (
+                      <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{rechargeStatus}</p>
+                    ) : null}
+                  </section>
+
                   <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>

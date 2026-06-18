@@ -18,7 +18,9 @@ export const PUBLIC_ROUTE_ALLOWLIST = new Set([
   'src/app/api/auth/[...nextauth]/route.ts',
   'src/app/api/auth/register/route.ts',
   'src/app/api/cos/image/route.ts',
+  'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',
+  'src/app/api/payments/stripe/webhook/route.ts',
   'src/app/api/storage/sign/route.ts',
   'src/app/api/system/boot-id/route.ts',
 ])

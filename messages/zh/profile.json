@@ -49,12 +49,28 @@
   },
   "inviteCode": {
     "title": "邀请码兑换",
-    "description": "官方内测阶段不会开放充值按钮，请使用邀请码兑换额度，或联系管理员发放额度。",
+    "description": "可以使用邀请码兑换额度，或联系管理员发放额度。",
     "placeholder": "输入邀请码",
     "redeem": "兑换",
     "redeeming": "兑换中",
     "redeemSuccess": "兑换成功，额度已入账",
     "redeemFailed": "邀请码兑换失败"
+  },
+  "recharge": {
+    "title": "充值额度",
+    "description": "输入要入账的额度。系统额度按人民币价值计算，Stripe 以港币结算。",
+    "amountLabel": "充值额度",
+    "placeholder": "输入额度",
+    "range": "范围 {min} - {max} 额度",
+    "exchangeRate": "1 额度 = ¥1，按 {rate} HKD 结算",
+    "estimatedCharge": "预计支付 {amount}",
+    "submit": "前往支付",
+    "processing": "创建支付中",
+    "unavailable": "当前未启用在线充值。",
+    "invalidAmount": "请输入有效的充值额度。",
+    "checkoutFailed": "创建支付失败，请稍后重试。",
+    "successNotice": "支付已提交，余额会在 Stripe 确认后入账。可稍后刷新查看。",
+    "cancelNotice": "支付已取消，未产生扣款。"
   },
   "apiTypes": {
     "image": "图片生成",

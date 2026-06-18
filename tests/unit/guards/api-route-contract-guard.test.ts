@@ -9,6 +9,8 @@ describe('api route contract guard', () => {
   it('allows explicit public and framework-managed exceptions', () => {
     expect(API_HANDLER_ALLOWLIST.has('src/app/api/auth/[...nextauth]/route.ts')).toBe(true)
     expect(PUBLIC_ROUTE_ALLOWLIST.has('src/app/api/system/boot-id/route.ts')).toBe(true)
+    expect(PUBLIC_ROUTE_ALLOWLIST.has('src/app/api/deployment/route.ts')).toBe(true)
+    expect(PUBLIC_ROUTE_ALLOWLIST.has('src/app/api/payments/stripe/webhook/route.ts')).toBe(true)
     expect(
       inspectRouteContract(
         'src/app/api/system/boot-id/route.ts',
