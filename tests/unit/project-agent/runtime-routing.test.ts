@@ -477,7 +477,7 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('feeds the choice back as an in-band tool result and narrows the toolset', async () => {
+  it('feeds the choice back as an in-band tool result while keeping later choice tools available', async () => {
     const continuation = resolveEditFirstChoiceContinuation({
       choiceType: 'duration_and_aspect_ratio',
       toolCallId: 'tool-choice-1',
@@ -519,7 +519,56 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
     expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.capturedToolNames).not.toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).toContain('request_edit_first_choice')
+  })
+
+  it('keeps screenplay review choice available after screenplay generation in a choice continuation', async () => {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'duration_and_aspect_ratio',
+      toolCallId: 'tool-choice-1',
+      latestUserText: '恐怖片',
+      output: {
+        ok: true,
+        durationTier: 'short',
+        aspectRatio: '16:9',
+      },
+    })
+    expect(continuation).not.toBeNull()
+
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValueOnce(buildWorkflow('screenplay_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_edit_screenplay',
+    ]))
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
+      control: {
+        kind: 'choice',
+        interruptionId: 'choice-interruption-1',
+        choiceType: 'duration_and_aspect_ratio',
+        toolCallId: 'tool-choice-1',
+        cardId: 'edit-first-duration-aspect-ratio',
+        continuation: continuation!,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '恐怖片' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(response.status).toBe(200)
+    expect(streamState.executedToolNames).toEqual(['generate_edit_screenplay'])
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('request_edit_first_choice')
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('generate_edit_style_previews')
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('revise_edit_screenplay')
   })
 
   it('keeps the interrupted approval operation available when resuming after workflow state changed', async () => {

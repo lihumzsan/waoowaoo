@@ -84,12 +84,11 @@ export function resolveProjectAgentToolset(params: {
   context: ProjectAgentContext
   continuationOperationId?: string | null
   resumeOperationId?: string | null
-  includeChoiceOperation?: boolean
 }): ProjectAgentToolset {
   const operationIds: string[] = []
   const coreOperationIds: string[] = []
   const workflowOperationIds: string[] = []
-  const includeChoiceOperation = params.includeChoiceOperation !== false && Boolean(params.context.episodeId)
+  const includeChoiceOperation = Boolean(params.context.episodeId)
 
   for (const operationId of CORE_OPERATION_IDS) {
     const beforeLength = operationIds.length
@@ -166,8 +165,8 @@ export function resolveProjectAgentToolset(params: {
 
 /**
  * Operations whose availability does not depend on the live workflow state:
- * read/UI core tools, the choice card (its registration already encodes the
- * gating), and the run's resume/continuation operation — a restored approval
+ * read/UI core tools, the choice card (its execution validates choiceType
+ * against the live workflow stage), and the run's resume/continuation operation — a restored approval
  * or choice continuation must stay callable even if the workflow has moved
  * past the stage that originally offered it.
  */

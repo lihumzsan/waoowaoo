@@ -475,7 +475,6 @@ export async function createProjectAgentChatResponse(input: {
     context,
     continuationOperationId: choiceContinuation?.operationId ?? null,
     resumeOperationId: approvalInterruption?.operationId ?? null,
-    includeChoiceOperation: !choiceContinuation,
   })
   const operationIds = toolset.operationIds
   const initialEnabledOperationIds = operationIds.filter((operationId) => isProjectAgentOperationEnabled({

@@ -75,17 +75,16 @@ describe('project agent live toolset registration', () => {
     ]))
   })
 
-  it('can hide the choice tool during a choice continuation run', () => {
+  it('keeps the choice tool during a choice continuation run', () => {
     const result = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
       continuationOperationId: 'generate_edit_screenplay',
-      includeChoiceOperation: false,
     })
 
     expect(result.operationIds).toContain('generate_edit_screenplay')
-    expect(result.operationIds).not.toContain('request_edit_first_choice')
-    expect(result.includeChoiceOperation).toBe(false)
+    expect(result.operationIds).toContain('request_edit_first_choice')
+    expect(result.includeChoiceOperation).toBe(true)
   })
 
   it('fails explicitly when a workflow operation is missing from the registry', () => {
