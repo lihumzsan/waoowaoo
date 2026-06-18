@@ -184,7 +184,11 @@
         "resetLayout": "重置布局",
         "fitView": "适配视图",
         "zoomIn": "放大",
-        "zoomOut": "缩小"
+        "zoomOut": "缩小",
+        "autoFollow": "自动跟随生成"
+      },
+      "focusFollow": {
+        "jumpToActive": "查看当前生成"
       },
       "actions": {
         "generateScript": "生成剧本",

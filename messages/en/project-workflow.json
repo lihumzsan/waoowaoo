@@ -184,7 +184,11 @@
         "resetLayout": "Reset Layout",
         "fitView": "Fit View",
         "zoomIn": "Zoom In",
-        "zoomOut": "Zoom Out"
+        "zoomOut": "Zoom Out",
+        "autoFollow": "Auto-follow generation"
+      },
+      "focusFollow": {
+        "jumpToActive": "View Current Generation"
       },
       "actions": {
         "generateScript": "Generate Screenplay",

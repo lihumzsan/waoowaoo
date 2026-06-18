@@ -1693,7 +1693,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
       <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" />
       {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 
-      <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-200 ring-2 ring-sky-100' : 'border-slate-200'}`}>
+      <article className={`relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isRunning ? 'border-sky-300 ring-4 ring-sky-200/80 shadow-[0_22px_70px_rgba(14,165,233,0.18)]' : 'border-slate-200'}`}>
         <div ref={measuredContentRef}>
           <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
             <div className="min-w-0">

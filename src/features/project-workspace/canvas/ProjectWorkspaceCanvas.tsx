@@ -39,6 +39,11 @@ import {
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
+import {
+  applyWorkspaceCanvasRunningEdgeAnimation,
+  getWorkspaceCanvasRunningNodeIds,
+  useCanvasFocusFollow,
+} from './hooks/useCanvasFocusFollow'
 import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
 import {
   buildWorkspaceCanvasEdgeSignature,
@@ -105,10 +110,13 @@ interface CanvasViewportControlsProps {
   readonly fitViewLabel: string
   readonly zoomInLabel: string
   readonly zoomOutLabel: string
+  readonly autoFollowLabel: string
+  readonly autoFollowEnabled: boolean
   readonly onResetLayout: () => void
   readonly onFitView: () => void
   readonly onZoomIn: () => void
   readonly onZoomOut: () => void
+  readonly onToggleAutoFollow: () => void
 }
 
 function numericStyleDimension(value: unknown): number | null {
@@ -120,12 +128,18 @@ function CanvasViewportControls({
   fitViewLabel,
   zoomInLabel,
   zoomOutLabel,
+  autoFollowLabel,
+  autoFollowEnabled,
   onResetLayout,
   onFitView,
   onZoomIn,
   onZoomOut,
+  onToggleAutoFollow,
 }: CanvasViewportControlsProps) {
   const buttonClassName = 'inline-flex h-10 w-10 items-center justify-center border-r border-[var(--glass-stroke-soft)] text-[var(--glass-text-primary)] transition last:border-r-0 hover:bg-[var(--glass-bg-hover)]'
+  const autoFollowClassName = autoFollowEnabled
+    ? `${buttonClassName} bg-[var(--glass-bg-hover)] text-[var(--glass-tone-info-fg)]`
+    : `${buttonClassName} text-[var(--glass-text-tertiary)]`
 
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/95 shadow-lg backdrop-blur-md">
@@ -155,6 +169,16 @@ function CanvasViewportControls({
         onClick={onFitView}
       >
         <AppIcon name="searchPlus" className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        className={autoFollowClassName}
+        aria-label={autoFollowLabel}
+        aria-pressed={autoFollowEnabled}
+        title={autoFollowLabel}
+        onClick={onToggleAutoFollow}
+      >
+        <AppIcon name="crosshair" className="h-4 w-4" />
       </button>
       <button
         type="button"
@@ -189,6 +213,7 @@ function ProjectWorkspaceCanvasContent({
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [videoBlockArrangementInitialBlockIndex, setVideoBlockArrangementInitialBlockIndex] = useState<number | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -532,6 +557,24 @@ function ProjectWorkspaceCanvasContent({
     }
   }
   const flowEdges = stableEdgesRef.current.edges
+  const runningNodeIds = useMemo(
+    () => getWorkspaceCanvasRunningNodeIds(sourceNodes),
+    [sourceNodes],
+  )
+  const {
+    pendingFocusNodeIds,
+    focusNow: focusCurrentRunningNodes,
+    notifyUserInteraction: notifyCanvasUserInteraction,
+  } = useCanvasFocusFollow({
+    reactFlow,
+    containerRef: canvasRef,
+    enabled: autoFollowEnabled,
+    nodes: sourceNodes,
+  })
+  const animatedFlowEdges = useMemo(
+    () => applyWorkspaceCanvasRunningEdgeAnimation(flowEdges, runningNodeIds),
+    [flowEdges, runningNodeIds],
+  )
 
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
@@ -626,6 +669,10 @@ function ProjectWorkspaceCanvasContent({
     setSourceNodes((currentNodes) => applyNodeChanges(changes, currentNodes))
   }, [])
 
+  const handleNodeDragStart = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>(() => {
+    notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
+
   const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
     const movedNodesById = new Map<string, WorkspaceCanvasFlowNode>(
       [node, ...draggedNodes].map((movedNode) => [movedNode.id, movedNode]),
@@ -660,6 +707,7 @@ function ProjectWorkspaceCanvasContent({
     const viewport = reactFlow.getViewport()
     const nextZoom = getNextWorkspaceCanvasWheelZoom(viewport.zoom, event.deltaY)
     if (nextZoom === viewport.zoom) return
+    notifyCanvasUserInteraction()
 
     const pointerX = event.clientX - bounds.left
     const pointerY = event.clientY - bounds.top
@@ -671,7 +719,7 @@ function ProjectWorkspaceCanvasContent({
     }
 
     void reactFlow.setViewport(nextViewport)
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
 
   const resetLayout = useCallback(() => {
     if (!episodeId) return
@@ -706,14 +754,20 @@ function ProjectWorkspaceCanvasContent({
   }, [activeAssistantOperationId, attachNodeUiState, clips, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.fitView({ padding: 0.14, duration: 180 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
   const zoomIn = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.zoomIn({ duration: 160 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
   const zoomOut = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.zoomOut({ duration: 160 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
+  const toggleAutoFollow = useCallback(() => {
+    setAutoFollowEnabled((current) => !current)
+  }, [])
   const selectedNode = useMemo(
     () => sourceNodes.find((node) => node.id === selectedNodeId) ?? null,
     [sourceNodes, selectedNodeId],
@@ -747,12 +801,16 @@ function ProjectWorkspaceCanvasContent({
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
           nodes={sourceNodes}
-          edges={flowEdges}
+          edges={animatedFlowEdges}
           nodeTypes={workspaceNodeTypes}
           onNodesChange={handleNodesChange}
           onNodeClick={handleNodeClick}
           onPaneClick={() => setSelectedNodeId(null)}
+          onNodeDragStart={handleNodeDragStart}
           onNodeDragStop={handleNodeDragStop}
+          onMoveStart={(event) => {
+            if (event) notifyCanvasUserInteraction()
+          }}
           nodesDraggable
           nodesConnectable={false}
           elementsSelectable
@@ -795,12 +853,31 @@ function ProjectWorkspaceCanvasContent({
               fitViewLabel={t('toolbar.fitView')}
               zoomInLabel={t('toolbar.zoomIn')}
               zoomOutLabel={t('toolbar.zoomOut')}
+              autoFollowLabel={t('toolbar.autoFollow')}
+              autoFollowEnabled={autoFollowEnabled}
               onResetLayout={resetLayout}
               onFitView={fitView}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
+              onToggleAutoFollow={toggleAutoFollow}
             />
           </Panel>
+          {pendingFocusNodeIds.length > 0 ? (
+            <Panel
+              position="bottom-right"
+              className="!z-[70] !m-0"
+              style={{ right: 16, bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 16 }}
+            >
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/95 px-4 py-2 text-sm font-medium text-[var(--glass-text-primary)] shadow-lg backdrop-blur-md transition hover:bg-[var(--glass-bg-hover)]"
+                onClick={focusCurrentRunningNodes}
+              >
+                <AppIcon name="crosshair" className="h-4 w-4" />
+                {t('focusFollow.jumpToActive')}
+              </button>
+            </Panel>
+          ) : null}
         </ReactFlow>
       </div>
       {projectedEditScript && videoBlockArrangementInitialBlockIndex !== null ? (
