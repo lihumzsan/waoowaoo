@@ -129,7 +129,14 @@ export async function waitExternalResult(
     },
   })
 
-  await trySetTaskExternalId(job.data.taskId, externalId)
+  const externalIdPersisted = await trySetTaskExternalId(job.data.taskId, externalId)
+  logger.info({
+    message: 'external id persistence checked',
+    details: {
+      externalId,
+      persisted: externalIdPersisted,
+    },
+  })
 
   while (Date.now() - startAt <= timeoutMs) {
     await assertTaskActive(job, 'polling_external')

@@ -1,5 +1,6 @@
 import { JobsOptions, Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
+import { createScopedLogger } from '@/lib/logging/core'
 import { QueueType, TaskType, TASK_TYPE, type TaskJobData } from './types'
 
 export const QUEUE_NAME = {
@@ -101,11 +102,48 @@ export function getQueueByType(type: QueueType) {
   }
 }
 
-async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, taskId: string) {
-  const existing = await queue.getJob(taskId)
+const queueLogger = createScopedLogger({ module: 'task.queues' })
+
+async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, data: TaskJobData) {
+  const existing = await queue.getJob(data.taskId)
   if (!existing) return
   const state = await existing.getState()
-  if (state !== 'completed' && state !== 'failed') return
+  if (state !== 'completed' && state !== 'failed') {
+    queueLogger.debug({
+      action: 'queue.job.same_id_alive',
+      message: 'same task id job already exists and is not terminal',
+      taskId: data.taskId,
+      projectId: data.projectId,
+      userId: data.userId,
+      details: {
+        queue: queue.name,
+        taskType: data.type,
+        targetType: data.targetType,
+        targetId: data.targetId,
+        jobState: state,
+        attemptsMade: existing.attemptsMade,
+      },
+    })
+    return
+  }
+  queueLogger.warn({
+    action: 'queue.job.terminal_removed_before_enqueue',
+    message: 'removing terminal BullMQ job before enqueueing replacement task',
+    taskId: data.taskId,
+    projectId: data.projectId,
+    userId: data.userId,
+    details: {
+      queue: queue.name,
+      taskType: data.type,
+      targetType: data.targetType,
+      targetId: data.targetId,
+      jobState: state,
+      attemptsMade: existing.attemptsMade,
+      failedReason: existing.failedReason || null,
+      processedOn: existing.processedOn || null,
+      finishedOn: existing.finishedOn || null,
+    },
+  })
   await existing.remove()
 }
 
@@ -114,7 +152,7 @@ export async function addTaskJob(data: TaskJobData, opts?: JobsOptions) {
   const queue = getQueueByType(queueType)
   const priority = typeof opts?.priority === 'number' ? opts.priority : 0
   const attempts = typeof opts?.attempts === 'number' ? opts.attempts : undefined
-  await removeTerminalJobWithSameId(queue, data.taskId)
+  await removeTerminalJobWithSameId(queue, data)
   return await queue.add(data.type, data, {
     jobId: data.taskId,
     priority,
