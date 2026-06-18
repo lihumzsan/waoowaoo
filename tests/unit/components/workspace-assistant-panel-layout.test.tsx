@@ -11,7 +11,9 @@ import {
   WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
+  buildEditStylePreviewProgressBatchKey,
   resolveDisplayedEditStylePreviewItems,
+  resolveEditStylePreviewBatchProgressSource,
   resolveEditStylePreviewCardStatus,
   resolveProgressStageLabel,
   WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS,
@@ -259,6 +261,56 @@ describe('workspace assistant panel layout', () => {
     })).toBe('loading')
   })
 
+  it('uses one shared progress source for parallel style preview candidates', () => {
+    const items = [
+      {
+        id: 'preview-a',
+        styleKey: 'style_a',
+        title: 'Style A',
+        summary: 'A',
+        taskId: 'task-a',
+        aspectRatio: '16:9',
+      },
+      {
+        id: 'preview-b',
+        styleKey: 'style_b',
+        title: 'Style B',
+        summary: 'B',
+        taskId: 'task-b',
+        aspectRatio: '16:9',
+      },
+    ] satisfies Parameters<typeof resolveEditStylePreviewBatchProgressSource>[0]['items']
+    const batchKey = buildEditStylePreviewProgressBatchKey({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      items,
+    })
+    const taskStateMap = new Map<string, TaskTargetState>([
+      ['ProjectEditStylePreview:preview-a', buildTaskState({
+        targetId: 'preview-a',
+        runningTaskId: 'task-a',
+        updatedAt: '2026-06-18T00:00:10.000Z',
+      })],
+      ['ProjectEditStylePreview:preview-b', buildTaskState({
+        targetId: 'preview-b',
+        runningTaskId: 'task-b',
+        updatedAt: '2026-06-18T00:00:30.000Z',
+      })],
+    ])
+
+    const progressSource = resolveEditStylePreviewBatchProgressSource({
+      items,
+      taskStateMap,
+      batchKey,
+    })
+
+    expect(batchKey).toBe('edit-style-preview:project-1:episode-1:screenplay-1:task-a,task-b')
+    expect(progressSource?.targetId).toBe('preview-a')
+    expect(progressSource?.updatedAt).toBe('2026-06-18T00:00:10.000Z')
+    expect(progressSource?.runningTaskId).toBe(batchKey)
+  })
+
   it('shows only the confirmed style preview after a visual style is selected', () => {
     const items = [
       {
@@ -430,5 +482,15 @@ describe('workspace assistant panel layout', () => {
     expect(rendererSource).toContain('onPreviewImage?: (imageUrl: string) => void')
     expect(rendererSource).toContain('props.onPreviewImage(imageUrl)')
     expect(rendererSource).not.toContain('onClick={() => setPreviewImageUrl(preview.imageUrl)}')
+  })
+
+  it('keeps estimated progress overlays from blurring generated card content', () => {
+    const overlaySource = readFileSync(
+      join(process.cwd(), 'src/components/task/EstimatedTaskProgressOverlay.tsx'),
+      'utf8',
+    )
+
+    expect(overlaySource).toContain('pointer-events-none absolute inset-0')
+    expect(overlaySource).not.toContain('backdrop-blur')
   })
 })

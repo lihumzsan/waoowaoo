@@ -19,8 +19,16 @@ export interface EstimatedTaskProgressSource {
   } | null
 }
 
-const TASK_PROGRESS_START_STORAGE_PREFIX = 'waoowaoo:task-progress-start:'
+export const TASK_PROGRESS_START_STORAGE_PREFIX = 'waoowaoo:task-progress-start:'
 const PROGRESS_TICK_MS = 1000
+const TASK_PROGRESS_START_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const MAX_STORED_TASK_PROGRESS_STARTS = 120
+
+interface StoredTaskProgressStartEntry {
+  readonly key: string
+  readonly storageKey: string
+  readonly millis: number
+}
 
 function parseIsoMillis(value: string | null | undefined): number | null {
   if (!value) return null
@@ -45,25 +53,164 @@ function taskProgressKey(source: EstimatedTaskProgressSource | null | undefined)
   return `type:${taskType}`
 }
 
-function readStoredStartMillis(key: string): number | null {
-  if (typeof window === 'undefined') return null
-  const raw = window.localStorage.getItem(`${TASK_PROGRESS_START_STORAGE_PREFIX}${key}`)
-  if (!raw) return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+function taskProgressStorageKey(key: string): string {
+  return `${TASK_PROGRESS_START_STORAGE_PREFIX}${key}`
 }
 
-function writeStoredStartMillis(key: string, value: number) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(`${TASK_PROGRESS_START_STORAGE_PREFIX}${key}`, String(Math.floor(value)))
+function getTaskProgressStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function parseStoredEntry(storageKey: string, raw: string | null): StoredTaskProgressStartEntry | null {
+  if (!raw) return null
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return {
+    key: storageKey.slice(TASK_PROGRESS_START_STORAGE_PREFIX.length),
+    storageKey,
+    millis: parsed,
+  }
+}
+
+function listStoredStartEntries(storage: Storage): {
+  readonly entries: readonly StoredTaskProgressStartEntry[]
+  readonly invalidStorageKeys: readonly string[]
+} {
+  const storageKeys: string[] = []
+  for (let index = 0; index < storage.length; index += 1) {
+    const storageKey = storage.key(index)
+    if (storageKey?.startsWith(TASK_PROGRESS_START_STORAGE_PREFIX)) {
+      storageKeys.push(storageKey)
+    }
+  }
+
+  const entries: StoredTaskProgressStartEntry[] = []
+  const invalidStorageKeys: string[] = []
+  storageKeys.forEach((storageKey) => {
+    const entry = parseStoredEntry(storageKey, storage.getItem(storageKey))
+    if (entry) {
+      entries.push(entry)
+    } else {
+      invalidStorageKeys.push(storageKey)
+    }
+  })
+  return { entries, invalidStorageKeys }
+}
+
+function removeStorageKeys(storage: Storage, storageKeys: readonly string[]) {
+  storageKeys.forEach((storageKey) => {
+    try {
+      storage.removeItem(storageKey)
+    } catch {
+      // Storage is an optional cache for progress timing; removal failure must not break rendering.
+    }
+  })
+}
+
+export function pruneStoredStartMillis(storage: Storage, now: number, preserveStorageKey?: string): void {
+  const { entries, invalidStorageKeys } = listStoredStartEntries(storage)
+  const expiredBefore = now - TASK_PROGRESS_START_TTL_MS
+  const expiredStorageKeys = entries
+    .filter((entry) => entry.storageKey !== preserveStorageKey && entry.millis < expiredBefore)
+    .map((entry) => entry.storageKey)
+
+  const activeEntries = entries
+    .filter((entry) => entry.storageKey === preserveStorageKey || entry.millis >= expiredBefore)
+    .sort((left, right) => left.millis - right.millis)
+  const overflowCount = Math.max(0, activeEntries.length - MAX_STORED_TASK_PROGRESS_STARTS)
+  const overflowStorageKeys = activeEntries
+    .filter((entry) => entry.storageKey !== preserveStorageKey)
+    .slice(0, overflowCount)
+    .map((entry) => entry.storageKey)
+
+  removeStorageKeys(storage, [
+    ...invalidStorageKeys,
+    ...expiredStorageKeys,
+    ...overflowStorageKeys,
+  ])
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'QuotaExceededError'
+      || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      || error.code === 22
+      || error.code === 1014
+  }
+  if (!error || typeof error !== 'object') return false
+  const record = error as { readonly name?: unknown; readonly code?: unknown }
+  return record.name === 'QuotaExceededError'
+    || record.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || record.code === 22
+    || record.code === 1014
+}
+
+export function readStoredStartMillisFromStorage(storage: Storage, key: string, now: number): number | null {
+  try {
+    const entry = parseStoredEntry(taskProgressStorageKey(key), storage.getItem(taskProgressStorageKey(key)))
+    if (!entry) return null
+    return sanitizeStartMillis(entry.millis, now)
+  } catch {
+    return null
+  }
+}
+
+export function writeStoredStartMillisToStorage(storage: Storage, key: string, value: number, now: number): boolean {
+  const storageKey = taskProgressStorageKey(key)
+  const storedValue = String(Math.floor(value))
+  try {
+    pruneStoredStartMillis(storage, now, storageKey)
+    storage.setItem(storageKey, storedValue)
+    return true
+  } catch (error) {
+    if (!isQuotaExceededError(error)) return false
+  }
+
+  try {
+    pruneStoredStartMillis(storage, now, storageKey)
+    storage.setItem(storageKey, storedValue)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function removeStoredStartMillisFromStorage(storage: Storage, key: string): void {
+  try {
+    storage.removeItem(taskProgressStorageKey(key))
+  } catch {
+    // Storage is an optional cache for progress timing; removal failure must not break rendering.
+  }
+}
+
+function readStoredStartMillis(key: string, now: number): number | null {
+  const storage = getTaskProgressStorage()
+  return storage ? readStoredStartMillisFromStorage(storage, key, now) : null
+}
+
+function writeStoredStartMillis(key: string, value: number, now: number) {
+  const storage = getTaskProgressStorage()
+  if (!storage) return
+  writeStoredStartMillisToStorage(storage, key, value, now)
+}
+
+function removeStoredStartMillis(key: string) {
+  const storage = getTaskProgressStorage()
+  if (!storage) return
+  removeStoredStartMillisFromStorage(storage, key)
 }
 
 function resolveInitialStartMillis(source: EstimatedTaskProgressSource, key: string, now: number): number {
-  const stored = readStoredStartMillis(key)
+  const stored = readStoredStartMillis(key, now)
   if (stored !== null) return sanitizeStartMillis(stored, now)
   const updatedAtMillis = parseIsoMillis(source.updatedAt)
   const startMillis = sanitizeStartMillis(updatedAtMillis ?? now, now)
-  writeStoredStartMillis(key, startMillis)
+  writeStoredStartMillis(key, startMillis, now)
   return startMillis
 }
 
@@ -80,7 +227,12 @@ export function useEstimatedTaskProgress(
   const active = source?.phase === 'queued' || source?.phase === 'processing'
 
   useEffect(() => {
-    if (!source || !key || !active) {
+    if (!source || !key) {
+      setStartState(null)
+      return
+    }
+    if (!active) {
+      removeStoredStartMillis(key)
       setStartState(null)
       return
     }
