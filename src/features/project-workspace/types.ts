@@ -28,7 +28,9 @@ export interface ProjectWorkspaceProps {
   episodes?: Episode[]
   assistantAutoStartMessage?: string | null
   assistantAutoStartKey?: string | null
+  workflowLabEnabled?: boolean
   onAssistantAutoStartConsumed?: () => void
+  onWorkflowLabEpisodeForked?: (episodeId: string) => void | Promise<void>
   onEpisodeSelect?: (episodeId: string) => void
   onEpisodeCreate?: () => void
   onEpisodeRename?: (episodeId: string, newName: string) => void

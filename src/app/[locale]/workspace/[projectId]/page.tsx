@@ -57,6 +57,7 @@ export default function ProjectDetailPage() {
   // 从URL读取参数
   const urlEpisodeId = searchParams.get('episode') ?? null
   const shouldAutoStartAssistant = searchParams.get(HOME_ASSISTANT_AUTOSTART_QUERY) === HOME_ASSISTANT_AUTOSTART_VALUE
+  const workflowLabEnabled = searchParams.get('workflowLab') === '1'
 
   // 🔥 React Query 数据获取
   const queryClient = useQueryClient()
@@ -341,6 +342,15 @@ export default function ProjectDetailPage() {
     updateUrlParams({ episode: episodeId })
   }
 
+  const handleWorkflowLabEpisodeForked = useCallback(async (episodeId: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }),
+    ])
+    setIsGlobalAssetsView(false)
+    updateUrlParams({ episode: episodeId })
+  }, [projectId, queryClient, updateUrlParams])
+
   const handleSaveDefaultAnalysisModel = async () => {
     const modelKey = analysisModelDraft.trim()
     if (!modelKey) {
@@ -548,7 +558,9 @@ export default function ProjectDetailPage() {
               episodes={episodes}
               assistantAutoStartMessage={assistantAutoStartMessage}
               assistantAutoStartKey={assistantAutoStartKey}
+              workflowLabEnabled={workflowLabEnabled}
               onAssistantAutoStartConsumed={clearAssistantAutoStart}
+              onWorkflowLabEpisodeForked={handleWorkflowLabEpisodeForked}
               onEpisodeSelect={handleEpisodeSelect}
               onEpisodeCreate={() => handleCreateEpisode(`${t('episode')} ${episodes.length + 1}`)}
               onEpisodeRename={handleRenameEpisode}

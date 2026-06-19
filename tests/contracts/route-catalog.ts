@@ -122,6 +122,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/update-prompt/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
   'src/app/api/projects/[projectId]/video-urls/route.ts',
+  'src/app/api/projects/[projectId]/workflow-lab/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/log/route.ts',
