@@ -1,5 +1,6 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
+import { isEditFirstAutoApprovedOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
 export type {
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
@@ -40,7 +41,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if (op.id !== operationId) {
       throw new Error(`PROJECT_AGENT_OPERATION_ID_MISMATCH:${operationId}:${String(op.id)}`)
     }
-    const summary = mustTrimmedString(op.summary, 'SUMMARY')
+    mustTrimmedString(op.summary, 'SUMMARY')
     const intent = mustTrimmedString(op.intent, 'INTENT')
     if (intent !== 'query' && intent !== 'plan' && intent !== 'act') {
       throw new Error(`PROJECT_AGENT_OPERATION_INTENT_INVALID:${operationId}:${intent}`)
@@ -132,7 +133,12 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       externalSideEffects: boolean
       longRunning: boolean
     })
-    if (needsConfirm && channels.tool === true && confirmation.required !== true) {
+    if (
+      needsConfirm
+      && channels.tool === true
+      && confirmation.required !== true
+      && !isEditFirstAutoApprovedOperationId(operationId)
+    ) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_MISMATCH:${operationId}`)
     }
     const toolInputSchema = op.toolInputSchema as { properties?: unknown; required?: unknown; additionalProperties?: unknown } | undefined

@@ -94,6 +94,16 @@ describe('project agent operation registry', () => {
     })
   })
 
+  it('allows edit-first auto-approved operations to stay assistant-callable without confirmation', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.generate_edit_style_previews
+
+    expect(operation).toBeDefined()
+    expect(operation.channels).toEqual({ tool: true, api: true })
+    expect(operation.effects.bulk).toBe(true)
+    expect(operation.confirmation.required).toBe(false)
+  })
+
   it('registers final video render as a confirmed assistant-callable operation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.render_final_video
