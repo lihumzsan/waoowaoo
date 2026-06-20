@@ -33,11 +33,12 @@ describe('workspace assistant runtime chat id', () => {
   it('uses server run status as the global assistant busy signal', () => {
     expect(isWorkspaceAssistantRunBusyStatus('running')).toBe(true)
     expect(shouldClearWorkspaceAssistantControlPending('running')).toBe(false)
+    expect(isWorkspaceAssistantRunBusyStatus('awaiting_task')).toBe(false)
+    expect(shouldClearWorkspaceAssistantControlPending('awaiting_task')).toBe(false)
 
     for (const status of [
       'awaiting_approval',
       'awaiting_choice',
-      'awaiting_task',
       'completed',
       'failed',
       'cancelled',
@@ -87,6 +88,70 @@ describe('workspace assistant runtime chat id', () => {
 
     expect(run).toEqual({
       runId: 'run-new',
+      status: 'running',
+      operationId: null,
+      intent: null,
+    })
+  })
+
+  it('infers the active generation operation from streamed dynamic tool parts', () => {
+    const run = findLatestWorkspaceAssistantRun([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-run',
+            data: {
+              runId: 'run-1',
+              requestId: 'request-1',
+              status: 'running',
+              controlKind: 'user_turn',
+            },
+          } as never,
+          {
+            type: 'dynamic-tool',
+            toolName: 'generate_edit_style_previews',
+            state: 'input-available',
+          } as never,
+        ],
+      },
+    ])
+
+    expect(run).toEqual({
+      runId: 'run-1',
+      status: 'running',
+      operationId: 'generate_edit_style_previews',
+      intent: null,
+    })
+  })
+
+  it('does not treat streamed read tools as active generation operations', () => {
+    const run = findLatestWorkspaceAssistantRun([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-run',
+            data: {
+              runId: 'run-1',
+              requestId: 'request-1',
+              status: 'running',
+              controlKind: 'user_turn',
+            },
+          } as never,
+          {
+            type: 'dynamic-tool',
+            toolName: 'get_project_phase',
+            state: 'input-available',
+          } as never,
+        ],
+      },
+    ])
+
+    expect(run).toEqual({
+      runId: 'run-1',
       status: 'running',
       operationId: null,
       intent: null,

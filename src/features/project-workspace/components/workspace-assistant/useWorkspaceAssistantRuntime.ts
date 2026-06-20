@@ -211,7 +211,7 @@ export function resolveWorkspaceAssistantPendingOperationId(
 }
 
 export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
-  return !isWorkspaceAssistantRunBusyStatus(status)
+  return !isWorkspaceAssistantOperationPendingStatus(status)
 }
 
 function isActiveWorkspaceAssistantSessionRunStatus(status: WorkspaceAssistantRunStatus): boolean {
@@ -234,9 +234,21 @@ function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTracked
   }
 }
 
+function isWorkspaceAssistantStreamingOperationTool(toolName: string): boolean {
+  return toolName.startsWith('generate_')
+    || toolName.startsWith('revise_')
+    || toolName === 'render_final_video'
+}
+
 function readRunScopedOperation(part: unknown, runId: string, allowUnscopedOperation: boolean): string | null {
   if (!isRecord(part)) return null
   const data = isRecord(part.data) ? part.data : null
+
+  if (part.type === 'dynamic-tool' && allowUnscopedOperation) {
+    const toolName = readNonEmptyString(part.toolName)
+    return toolName && isWorkspaceAssistantStreamingOperationTool(toolName) ? toolName : null
+  }
+
   if (!data) return null
 
   if (part.type === 'data-agent-interruption') {
@@ -443,20 +455,25 @@ export function useWorkspaceAssistantRuntime({
     latestSessionStateRef.current = nextState
     setSessionState(nextState)
     const currentRun = nextState.currentRun
-    if (!currentRun || shouldClearWorkspaceAssistantControlPending(currentRun.status)) {
+    if (!currentRun) {
+      setActiveControlRun(null)
+      return
+    }
+    if (isWorkspaceAssistantOperationPendingStatus(currentRun.status)) {
+      setActiveControlRun((current) => ({
+        runId: currentRun.runId,
+        status: currentRun.status,
+        operationId: currentRun.operationId ?? (current?.runId === currentRun.runId ? current.operationId : null),
+        intent: current?.runId === currentRun.runId ? current.intent : null,
+      }))
+      return
+    }
+    if (shouldClearWorkspaceAssistantControlPending(currentRun.status)) {
       setActiveControlRun((current) => {
-        if (!currentRun) return null
         return current?.runId === currentRun.runId ? null : current
       })
       return
     }
-    if (!isWorkspaceAssistantRunBusyStatus(currentRun.status)) return
-    setActiveControlRun((current) => ({
-      runId: currentRun.runId,
-      status: currentRun.status,
-      operationId: currentRun.operationId ?? (current?.runId === currentRun.runId ? current.operationId : null),
-      intent: current?.runId === currentRun.runId ? current.intent : null,
-    }))
   }, [])
 
   const refreshSessionState = useCallback(async (): Promise<ProjectAgentSessionState | null> => {
@@ -704,6 +721,26 @@ export function useWorkspaceAssistantRuntime({
   const emptyApprovalRespondedIds = useMemo<ReadonlySet<string>>(() => new Set<string>(), [])
   const pendingInteraction = sessionState?.pendingInteraction ?? null
   const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
+  const streamedRun = useMemo(
+    () => findLatestWorkspaceAssistantRun(chat.messages),
+    [chat.messages],
+  )
+  const streamedOperationRun: WorkspaceAssistantTrackedRun | null = streamedRun
+    && isWorkspaceAssistantOperationPendingStatus(streamedRun.status)
+    && (
+      chat.status === 'submitted'
+      || chat.status === 'streaming'
+      || activeControlRun?.runId === streamedRun.runId
+    )
+    ? streamedRun
+    : null
+  const activeControlOperationRun: WorkspaceAssistantTrackedRun | null = activeControlRun
+    ? {
+      ...activeControlRun,
+      operationId: activeControlRun.operationId
+        ?? (streamedOperationRun?.runId === activeControlRun.runId ? streamedOperationRun.operationId : null),
+    }
+    : null
   const serverOperationRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun
     && isWorkspaceAssistantOperationPendingStatus(sessionState.currentRun.status)
     ? {
@@ -713,14 +750,15 @@ export function useWorkspaceAssistantRuntime({
       intent: null,
     }
     : null
-  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(activeControlRun ?? serverOperationRun)
+  const pendingRun = activeControlOperationRun ?? streamedOperationRun ?? serverOperationRun
+  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(pendingRun)
 
   return {
     runtime,
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: Boolean(activeControlRun ?? serverOperationRun) || chat.status === 'submitted' || chat.status === 'streaming',
+    pending: Boolean(pendingRun) || chat.status === 'submitted' || chat.status === 'streaming',
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,
