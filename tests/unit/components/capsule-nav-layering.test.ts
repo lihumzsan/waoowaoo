@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import * as React from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -12,6 +14,8 @@ vi.mock('@/components/ui/icons', () => ({
   AppIcon: ({ name, className }: { name: string; className?: string }) =>
     createElement('span', { 'data-icon': name, className }),
 }))
+
+const capsuleNavSource = readFileSync(resolve(process.cwd(), 'src/components/ui/CapsuleNav.tsx'), 'utf8')
 
 describe('CapsuleNav layering', () => {
   it('keeps fixed workspace navigation below modal overlays', () => {
@@ -42,6 +46,16 @@ describe('CapsuleNav layering', () => {
     expect(html).toContain('fixed top-20 left-6 z-40')
     expect(html).not.toContain('z-50 animate-fadeInDown')
     expect(html).not.toContain('z-[60]')
+  })
+})
+
+describe('EpisodeSelector layout', () => {
+  it('keeps episode edit and delete actions visible after long titles truncate', () => {
+    expect(capsuleNavSource).toContain('className={`w-full min-w-0 flex items-center gap-3 p-3 rounded-xl transition-all')
+    expect(capsuleNavSource).toContain('className="min-w-0 flex-1 flex items-center gap-3 text-left"')
+    expect(capsuleNavSource).toContain('<div className="min-w-0 flex-1">')
+    expect(capsuleNavSource).toContain('className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-bg-surface-strong)]')
+    expect(capsuleNavSource).toContain('className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-tone-danger-bg)]')
   })
 })
 

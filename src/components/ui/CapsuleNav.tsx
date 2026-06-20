@@ -370,8 +370,8 @@ export function EpisodeSelector({
                             // 编辑模式
                             if (editingId === ep.id) {
                                 return (
-                                    <div key={ep.id} className="flex items-center gap-2 p-3 rounded-xl bg-[var(--glass-tone-info-bg)] border border-[var(--glass-stroke-focus)]">
-                                        <div className={`w-2 h-10 rounded-full ${statusColor}`} />
+                                    <div key={ep.id} className="flex min-w-0 items-center gap-2 p-3 rounded-xl bg-[var(--glass-tone-info-bg)] border border-[var(--glass-stroke-focus)]">
+                                        <div className={`w-2 h-10 shrink-0 rounded-full ${statusColor}`} />
                                         <input
                                             type="text"
                                             value={editingName}
@@ -384,7 +384,7 @@ export function EpisodeSelector({
                                                     setEditingId(null)
                                                 }
                                             }}
-                                            className="flex-1 px-2 py-1 text-sm border border-[var(--glass-stroke-focus)] rounded-lg focus:outline-none"
+                                            className="min-w-0 flex-1 px-2 py-1 text-sm border border-[var(--glass-stroke-focus)] rounded-lg focus:outline-none"
                                             autoFocus
                                         />
                                         <button
@@ -394,13 +394,13 @@ export function EpisodeSelector({
                                                 }
                                                 setEditingId(null)
                                             }}
-                                            className="w-7 h-7 rounded-lg bg-[var(--glass-accent-from)] text-white hover:bg-[var(--glass-accent-to)] flex items-center justify-center"
+                                            className="w-7 h-7 shrink-0 rounded-lg bg-[var(--glass-accent-from)] text-white hover:bg-[var(--glass-accent-to)] flex items-center justify-center"
                                         >
                                             <AppIcon name="check" className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={() => setEditingId(null)}
-                                            className="w-7 h-7 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
+                                            className="w-7 h-7 shrink-0 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
                                         >
                                             <AppIcon name="close" className="w-4 h-4" />
                                         </button>
@@ -411,8 +411,8 @@ export function EpisodeSelector({
                             // 删除确认模式
                             if (deletingId === ep.id) {
                                 return (
-                                    <div key={ep.id} className="flex items-center gap-2 p-3 rounded-xl bg-[var(--glass-tone-danger-bg)] border border-[var(--glass-tone-danger-fg)]/30">
-                                        <div className="flex-1 text-sm font-medium text-[var(--glass-tone-danger-fg)] truncate">
+                                    <div key={ep.id} className="flex min-w-0 items-center gap-2 p-3 rounded-xl bg-[var(--glass-tone-danger-bg)] border border-[var(--glass-tone-danger-fg)]/30">
+                                        <div className="min-w-0 flex-1 text-sm font-medium text-[var(--glass-tone-danger-fg)] truncate">
                                             {t('deleteEpisode')}：{ep.title}
                                         </div>
                                         <button
@@ -421,13 +421,13 @@ export function EpisodeSelector({
                                                 setDeletingId(null)
                                                 setIsOpen(false)
                                             }}
-                                            className="px-2 py-1 rounded-lg bg-[var(--glass-tone-danger-fg)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
+                                            className="shrink-0 px-2 py-1 rounded-lg bg-[var(--glass-tone-danger-fg)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
                                         >
                                             {t('deleteEpisodeConfirm')}
                                         </button>
                                         <button
                                             onClick={() => setDeletingId(null)}
-                                            className="w-7 h-7 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
+                                            className="w-7 h-7 shrink-0 rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center"
                                         >
                                             <AppIcon name="close" className="w-4 h-4" />
                                         </button>
@@ -438,24 +438,24 @@ export function EpisodeSelector({
                             return (
                                 <div
                                     key={ep.id}
-                                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${ep.id === currentId
+                                    className={`w-full min-w-0 flex items-center gap-3 p-3 rounded-xl transition-all ${ep.id === currentId
                                         ? 'bg-[var(--glass-tone-info-bg)] border border-[var(--glass-stroke-focus)]'
                                         : 'hover:bg-[var(--glass-bg-muted)] border border-transparent'
                                         }`}
                                 >
                                     <button
                                         onClick={() => { onSelect(ep.id); setIsOpen(false); }}
-                                        className="flex-1 flex items-center gap-3 text-left"
+                                        className="min-w-0 flex-1 flex items-center gap-3 text-left"
                                     >
-                                        <div className={`w-2 h-10 rounded-full ${statusColor}`} />
-                                        <div className="flex-1">
+                                        <div className={`w-2 h-10 shrink-0 rounded-full ${statusColor}`} />
+                                        <div className="min-w-0 flex-1">
                                             <div className="font-bold text-[var(--glass-text-primary)] text-sm truncate">{ep.title}</div>
                                             {ep.summary && (
                                                 <div className="text-xs text-[var(--glass-text-tertiary)] truncate">{ep.summary}</div>
                                             )}
                                         </div>
                                         {ep.id === currentId && (
-                                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)]">
+                                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)]">
                                                 <AppIcon name="checkDot" className="h-2.5 w-2.5" />
                                             </span>
                                         )}
@@ -467,7 +467,7 @@ export function EpisodeSelector({
                                                 setEditingId(ep.id)
                                                 setEditingName(ep.title)
                                             }}
-                                            className="w-7 h-7 rounded-lg hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center text-[var(--glass-text-tertiary)] hover:text-[var(--glass-text-secondary)] transition-colors"
+                                            className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-bg-surface-strong)] flex items-center justify-center text-[var(--glass-text-tertiary)] hover:text-[var(--glass-text-secondary)] transition-colors"
                                             title={t('editEpisodeName')}
                                         >
                                             <AppIcon name="edit" className="w-4 h-4" />
@@ -479,7 +479,7 @@ export function EpisodeSelector({
                                                 e.stopPropagation()
                                                 setDeletingId(ep.id)
                                             }}
-                                            className="w-7 h-7 rounded-lg hover:bg-[var(--glass-tone-danger-bg)] flex items-center justify-center text-[var(--glass-text-tertiary)] hover:text-[var(--glass-tone-danger-fg)] transition-colors"
+                                            className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-tone-danger-bg)] flex items-center justify-center text-[var(--glass-text-tertiary)] hover:text-[var(--glass-tone-danger-fg)] transition-colors"
                                             title={t('deleteEpisode')}
                                         >
                                             <AppIcon name="trash" className="w-4 h-4" />
