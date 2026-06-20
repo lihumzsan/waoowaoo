@@ -8,6 +8,7 @@ import PasswordStrengthIndicator from "@/components/auth/PasswordStrengthIndicat
 import { apiFetch } from '@/lib/api-fetch'
 import { AUTH_REGISTER_RESULT_CODES, type AuthRegisterResultCode } from '@/lib/auth/register-result-codes'
 import { readAuthRegisterResultCode } from '@/lib/auth/register-result-response'
+import { isPublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { Link, useRouter } from '@/i18n/navigation'
 
 function readServerDetailCode(value: unknown): string | null {
@@ -45,12 +46,10 @@ export default function SignUp() {
         && typeof payload === 'object'
         && !Array.isArray(payload)
       ) {
-        const deployment = Reflect.get(payload, 'deployment')
-        const isCloud = !!deployment
-          && typeof deployment === 'object'
-          && !Array.isArray(deployment)
-          && Reflect.get(deployment, 'isCloud') === true
-        setInviteCodeRequired(isCloud)
+        const features = Reflect.get(payload, 'features')
+        if (isPublicDeploymentFeatures(features)) {
+          setInviteCodeRequired(features.requireInviteCodeOnSignup)
+        }
       }
     }
 

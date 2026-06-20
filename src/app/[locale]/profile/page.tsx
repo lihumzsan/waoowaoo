@@ -9,12 +9,13 @@ import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+  isPublicDeploymentFeatures,
+  type PublicDeploymentFeatures,
+} from '@/lib/deployment/public-client'
 
 type DeploymentPayload = {
-  deployment?: {
-    isCloud?: boolean
-    usesPlatformProviderKeys?: boolean
-  }
+  features?: PublicDeploymentFeatures
   billingMode?: string
 }
 
@@ -87,6 +88,15 @@ function isCheckoutPayload(value: unknown): value is CheckoutPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
+  return features.showApiConfig ? 'apiConfig' : 'billing'
+}
+
+function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
+  if (section === 'apiConfig') return features.showApiConfig
+  return features.showBilling
+}
+
 export default function ProfilePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -100,7 +110,8 @@ export default function ProfilePage() {
   const urlSection = readProfileSectionParam(searchParams.get('section'))
 
   const [activeSection, setActiveSection] = useState<ProfileSection>(urlSection)
-  const [isCloud, setIsCloud] = useState<boolean | null>(null)
+  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(null)
+  const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
   const [balance, setBalance] = useState<BalancePayload | null>(null)
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
   const [inviteCode, setInviteCode] = useState('')
@@ -127,12 +138,15 @@ export default function ProfilePage() {
     const loadDeployment = async () => {
       const response = await apiFetch('/api/deployment')
       if (!response.ok) {
-        if (!canceled) setIsCloud(false)
+        if (!canceled) setDeploymentLoadFailed(true)
         return
       }
       const payload: unknown = await response.json()
-      if (!canceled && isDeploymentPayload(payload)) {
-        setIsCloud(payload.deployment?.isCloud === true)
+      if (!canceled && isDeploymentPayload(payload) && isPublicDeploymentFeatures(payload.features)) {
+        setDeploymentFeatures(payload.features)
+        setDeploymentLoadFailed(false)
+      } else if (!canceled) {
+        setDeploymentLoadFailed(true)
       }
     }
 
@@ -143,13 +157,16 @@ export default function ProfilePage() {
   }, [session])
 
   useEffect(() => {
-    if (isCloud !== true || activeSection !== 'apiConfig') return
-    setActiveSection('billing')
+    if (!deploymentFeatures) return
+    if (isProfileSectionEnabled(activeSection, deploymentFeatures)) return
+
+    const nextSection = getDefaultProfileSection(deploymentFeatures)
+    setActiveSection(nextSection)
     router.replace(
-      { pathname: '/profile', query: { section: 'billing' } },
+      { pathname: '/profile', query: { section: nextSection } },
       { scroll: false },
     )
-  }, [activeSection, isCloud, router])
+  }, [activeSection, deploymentFeatures, router])
 
   const loadBalance = async () => {
     const response = await apiFetch('/api/user/balance')
@@ -177,11 +194,13 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
-    if (!session || !isCloud) return
+    if (!session || deploymentFeatures?.showBilling !== true) return
     void loadBalance()
     void loadTransactions()
-    void loadRechargeConfig()
-  }, [session, isCloud])
+    if (deploymentFeatures.showRecharge) {
+      void loadRechargeConfig()
+    }
+  }, [session, deploymentFeatures])
 
   useEffect(() => {
     const paymentStatus = searchParams.get('payment')
@@ -192,6 +211,10 @@ export default function ProfilePage() {
     }
   }, [searchParams, t])
 
+  if (deploymentLoadFailed) {
+    throw new Error('PROFILE_DEPLOYMENT_FEATURES_UNAVAILABLE')
+  }
+
   if (status === 'loading' || !session) {
     return (
       <div className="glass-page flex min-h-screen items-center justify-center">
@@ -201,7 +224,10 @@ export default function ProfilePage() {
   }
 
   const noBillingText = t('openSourceNoBilling')
-  const balanceText = isCloud === true ? formatAmount(balance?.balance, balance?.currency) : noBillingText
+  const showBilling = deploymentFeatures?.showBilling === true
+  const showRecharge = deploymentFeatures?.showRecharge === true
+  const showInviteCode = deploymentFeatures?.showInviteCode === true
+  const balanceText = showBilling ? formatAmount(balance?.balance, balance?.currency) : noBillingText
   const parsedRechargeAmount = Number(rechargeAmount)
   const estimatedSettlementAmount = rechargeConfig?.enabled === true && Number.isFinite(parsedRechargeAmount)
     ? parsedRechargeAmount * rechargeConfig.cnyToHkdRate
@@ -210,14 +236,14 @@ export default function ProfilePage() {
     section: ProfileSection
     icon: AppIconName
     label: string
-  }> = isCloud === true
-    ? [
-      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
-    ]
-    : [
-      { section: 'apiConfig', icon: 'settingsHexAlt', label: t('apiConfig') },
-      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
-    ]
+  }> = [
+    ...(deploymentFeatures?.showApiConfig === true
+      ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
+      : []),
+    ...(deploymentFeatures?.showBilling === true
+      ? [{ section: 'billing' as const, icon: 'receipt' as const, label: t('billingRecords') }]
+      : []),
+  ]
 
   const handleSectionChange = (section: ProfileSection) => {
     setActiveSection(section)
@@ -249,7 +275,7 @@ export default function ProfilePage() {
                 <div className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-4">
                   <div className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('availableBalance')}</div>
                   <div className="mt-2 text-base font-semibold text-[var(--glass-text-primary)]">{balanceText}</div>
-                  {isCloud === true ? (
+                  {showBilling ? (
                     <div className="mt-2 space-y-1 text-xs text-[var(--glass-text-tertiary)]">
                       <div>{t('frozen')}: {formatAmount(balance?.frozenAmount, balance?.currency)}</div>
                       <div>{t('totalSpent')}: {formatAmount(balance?.totalSpent, balance?.currency)}</div>
@@ -288,151 +314,155 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="glass-surface-elevated h-full flex flex-col">
 
-              {isCloud === null ? (
+              {deploymentFeatures === null ? (
                 <div className="flex h-full items-center justify-center text-sm text-[var(--glass-text-secondary)]">
                   {tc('loading')}
                 </div>
-              ) : activeSection === 'apiConfig' && isCloud !== true ? (
+              ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
                 <ApiConfigTab />
-              ) : isCloud === true ? (
+              ) : activeSection === 'billing' && showBilling ? (
                 <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
-                  <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('recharge.title')}</h2>
-                        <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('recharge.description')}</p>
+                  {showRecharge ? (
+                    <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
+                      <div className="mb-4 flex items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('recharge.title')}</h2>
+                          <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('recharge.description')}</p>
+                        </div>
                       </div>
-                    </div>
-                    {rechargeConfig?.enabled === true ? (
+                      {rechargeConfig?.enabled === true ? (
+                        <form
+                          className="space-y-3"
+                          onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                            event.preventDefault()
+                            if (!Number.isFinite(parsedRechargeAmount)) {
+                              setRechargeStatus(t('recharge.invalidAmount'))
+                              return
+                            }
+                            if (
+                              parsedRechargeAmount < rechargeConfig.minCredits ||
+                              parsedRechargeAmount > rechargeConfig.maxCredits
+                            ) {
+                              setRechargeStatus(t('recharge.invalidAmount'))
+                              return
+                            }
+                            setRecharging(true)
+                            setRechargeStatus(null)
+                            void apiFetch('/api/payments/stripe/checkout', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ credits: parsedRechargeAmount }),
+                            })
+                              .then(async (response) => {
+                                const payload: unknown = await response.json()
+                                if (!response.ok || !isCheckoutPayload(payload) || !payload.url) {
+                                  throw new Error(t('recharge.checkoutFailed'))
+                                }
+                                window.location.assign(payload.url)
+                              })
+                              .catch((error: unknown) => {
+                                setRechargeStatus(error instanceof Error ? error.message : t('recharge.checkoutFailed'))
+                              })
+                              .finally(() => setRecharging(false))
+                          }}
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <label className="flex-1">
+                              <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">
+                                {t('recharge.amountLabel')}
+                              </span>
+                              <input
+                                className="glass-input w-full rounded-xl px-4 py-3 text-sm"
+                                type="number"
+                                min={rechargeConfig.minCredits}
+                                max={rechargeConfig.maxCredits}
+                                step="0.01"
+                                value={rechargeAmount}
+                                onChange={(event) => setRechargeAmount(event.target.value)}
+                                placeholder={t('recharge.placeholder')}
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              disabled={recharging || !rechargeAmount.trim()}
+                              className="glass-btn-primary self-end rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {recharging ? t('recharge.processing') : t('recharge.submit')}
+                            </button>
+                          </div>
+                          <div className="grid gap-2 text-xs text-[var(--glass-text-tertiary)] sm:grid-cols-3">
+                            <div>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</div>
+                            <div>{t('recharge.exchangeRate', { rate: rechargeConfig.cnyToHkdRate })}</div>
+                            <div>
+                              {t('recharge.estimatedCharge', {
+                                amount: formatCurrencyAmount(estimatedSettlementAmount, rechargeConfig.settlementCurrency),
+                              })}
+                            </div>
+                          </div>
+                        </form>
+                      ) : (
+                        <p className="text-sm text-[var(--glass-text-secondary)]">{t('recharge.unavailable')}</p>
+                      )}
+                      {rechargeStatus ? (
+                        <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{rechargeStatus}</p>
+                      ) : null}
+                    </section>
+                  ) : null}
+
+                  {showInviteCode ? (
+                    <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
+                      <div className="mb-4 flex items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('inviteCode.title')}</h2>
+                          <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('inviteCode.description')}</p>
+                        </div>
+                      </div>
                       <form
-                        className="space-y-3"
+                        className="flex flex-col gap-3 sm:flex-row"
                         onSubmit={(event: FormEvent<HTMLFormElement>) => {
                           event.preventDefault()
-                          if (!Number.isFinite(parsedRechargeAmount)) {
-                            setRechargeStatus(t('recharge.invalidAmount'))
-                            return
-                          }
-                          if (
-                            parsedRechargeAmount < rechargeConfig.minCredits ||
-                            parsedRechargeAmount > rechargeConfig.maxCredits
-                          ) {
-                            setRechargeStatus(t('recharge.invalidAmount'))
-                            return
-                          }
-                          setRecharging(true)
-                          setRechargeStatus(null)
-                          void apiFetch('/api/payments/stripe/checkout', {
+                          if (!inviteCode.trim()) return
+                          setRedeeming(true)
+                          setRedeemStatus(null)
+                          void apiFetch('/api/user/invite-codes/redeem', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ credits: parsedRechargeAmount }),
+                            body: JSON.stringify({ code: inviteCode }),
                           })
                             .then(async (response) => {
-                              const payload: unknown = await response.json()
-                              if (!response.ok || !isCheckoutPayload(payload) || !payload.url) {
-                                throw new Error(t('recharge.checkoutFailed'))
+                              if (!response.ok) {
+                                throw new Error(t('inviteCode.redeemFailed'))
                               }
-                              window.location.assign(payload.url)
+                              setInviteCode('')
+                              setRedeemStatus(t('inviteCode.redeemSuccess'))
+                              await loadBalance()
+                              await loadTransactions()
                             })
                             .catch((error: unknown) => {
-                              setRechargeStatus(error instanceof Error ? error.message : t('recharge.checkoutFailed'))
+                              setRedeemStatus(error instanceof Error ? error.message : t('inviteCode.redeemFailed'))
                             })
-                            .finally(() => setRecharging(false))
+                            .finally(() => setRedeeming(false))
                         }}
                       >
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <label className="flex-1">
-                            <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">
-                              {t('recharge.amountLabel')}
-                            </span>
-                            <input
-                              className="glass-input w-full rounded-xl px-4 py-3 text-sm"
-                              type="number"
-                              min={rechargeConfig.minCredits}
-                              max={rechargeConfig.maxCredits}
-                              step="0.01"
-                              value={rechargeAmount}
-                              onChange={(event) => setRechargeAmount(event.target.value)}
-                              placeholder={t('recharge.placeholder')}
-                            />
-                          </label>
-                          <button
-                            type="submit"
-                            disabled={recharging || !rechargeAmount.trim()}
-                            className="glass-btn-primary self-end rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {recharging ? t('recharge.processing') : t('recharge.submit')}
-                          </button>
-                        </div>
-                        <div className="grid gap-2 text-xs text-[var(--glass-text-tertiary)] sm:grid-cols-3">
-                          <div>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</div>
-                          <div>{t('recharge.exchangeRate', { rate: rechargeConfig.cnyToHkdRate })}</div>
-                          <div>
-                            {t('recharge.estimatedCharge', {
-                              amount: formatCurrencyAmount(estimatedSettlementAmount, rechargeConfig.settlementCurrency),
-                            })}
-                          </div>
-                        </div>
+                        <input
+                          className="glass-input flex-1 rounded-xl px-4 py-3 text-sm"
+                          value={inviteCode}
+                          onChange={(event) => setInviteCode(event.target.value)}
+                          placeholder={t('inviteCode.placeholder')}
+                        />
+                        <button
+                          type="submit"
+                          disabled={redeeming || !inviteCode.trim()}
+                          className="glass-btn-primary rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {redeeming ? t('inviteCode.redeeming') : t('inviteCode.redeem')}
+                        </button>
                       </form>
-                    ) : (
-                      <p className="text-sm text-[var(--glass-text-secondary)]">{t('recharge.unavailable')}</p>
-                    )}
-                    {rechargeStatus ? (
-                      <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{rechargeStatus}</p>
-                    ) : null}
-                  </section>
-
-                  <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('inviteCode.title')}</h2>
-                        <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('inviteCode.description')}</p>
-                      </div>
-                    </div>
-                    <form
-                      className="flex flex-col gap-3 sm:flex-row"
-                      onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                        event.preventDefault()
-                        if (!inviteCode.trim()) return
-                        setRedeeming(true)
-                        setRedeemStatus(null)
-                        void apiFetch('/api/user/invite-codes/redeem', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ code: inviteCode }),
-                        })
-                          .then(async (response) => {
-                            if (!response.ok) {
-                              throw new Error(t('inviteCode.redeemFailed'))
-                            }
-                            setInviteCode('')
-                            setRedeemStatus(t('inviteCode.redeemSuccess'))
-                            await loadBalance()
-                            await loadTransactions()
-                          })
-                          .catch((error: unknown) => {
-                            setRedeemStatus(error instanceof Error ? error.message : t('inviteCode.redeemFailed'))
-                          })
-                          .finally(() => setRedeeming(false))
-                      }}
-                    >
-                      <input
-                        className="glass-input flex-1 rounded-xl px-4 py-3 text-sm"
-                        value={inviteCode}
-                        onChange={(event) => setInviteCode(event.target.value)}
-                        placeholder={t('inviteCode.placeholder')}
-                      />
-                      <button
-                        type="submit"
-                        disabled={redeeming || !inviteCode.trim()}
-                        className="glass-btn-primary rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {redeeming ? t('inviteCode.redeeming') : t('inviteCode.redeem')}
-                      </button>
-                    </form>
-                    {redeemStatus ? (
-                      <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{redeemStatus}</p>
-                    ) : null}
-                  </section>
+                      {redeemStatus ? (
+                        <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{redeemStatus}</p>
+                      ) : null}
+                    </section>
+                  ) : null}
 
                   <section className="glass-surface-soft min-h-0 flex-1 rounded-2xl border border-[var(--glass-stroke-base)] p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">

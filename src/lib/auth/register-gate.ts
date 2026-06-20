@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { hashInviteCode } from '@/lib/billing/invite-codes'
 import { addBalanceWithTransaction } from '@/lib/billing/ledger'
 import { toMoneyNumber } from '@/lib/billing/money'
@@ -103,8 +104,8 @@ async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, r
 }
 
 export function assertRegistrationInviteInput(input: { inviteCode?: unknown }): string | null {
-  const deployment = getDeploymentConfig()
-  if (deployment.edition !== 'cloud') return null
+  const features = getDeploymentFeatures(getDeploymentConfig())
+  if (!features.requireInviteCodeOnSignup) return null
 
   const inviteCode = readInviteCode(input.inviteCode)
   if (!inviteCode) {

@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
-import Navbar, { shouldCloseNavbarSettingsMenu } from '@/components/Navbar'
+import Navbar, { buildNavbarSettingsMenuItems, shouldCloseNavbarSettingsMenu } from '@/components/Navbar'
+import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 
 const useSessionMock = vi.fn()
 vi.mock('next-auth/react', () => ({
@@ -113,7 +114,7 @@ describe('Navbar compact split navigation', () => {
     expect(html).not.toContain('glass-nav sticky')
   })
 
-  it('renders settings center dropdown targets for signed-in users', () => {
+  it('keeps signed-in profile section targets behind deployment feature hydration', () => {
     Reflect.set(globalThis, 'React', React)
     useSessionMock.mockReturnValue({
       data: { user: { name: 'Earth' } },
@@ -123,12 +124,53 @@ describe('Navbar compact split navigation', () => {
     const html = renderWithIntl(createElement(Navbar))
 
     expect(html).toContain('aria-haspopup="menu"')
-    expect(html).toContain('href="/profile?section=apiConfig"')
+    expect(html).not.toContain('href="/profile?section=apiConfig"')
+    expect(html).not.toContain('href="/profile?section=billing"')
     expect(html).not.toContain('href="/profile?section=stylePresets"')
     expect(html).not.toContain('我的风格')
-    expect(html).toContain('href="/profile?section=billing"')
     expect(html).toContain('检查更新')
-    expect(html.indexOf('API 配置')).toBeLessThan(html.indexOf('扣费记录'))
+  })
+
+  it('builds self-hosted settings with API configuration only', () => {
+    const features: PublicDeploymentFeatures = {
+      showOfficialPublicPages: false,
+      showPricingPage: false,
+      showLegalPages: false,
+      showRecharge: false,
+      showInviteCode: false,
+      showBilling: false,
+      showApiConfig: true,
+      requireInviteCodeOnSignup: false,
+      usePlatformProviderConfig: false,
+    }
+
+    expect(buildNavbarSettingsMenuItems(features, {
+      apiConfig: 'API 配置',
+      billingRecords: '扣费记录',
+    })).toEqual([
+      { section: 'apiConfig', icon: 'settingsHexAlt', label: 'API 配置' },
+    ])
+  })
+
+  it('builds cloud settings with billing only', () => {
+    const features: PublicDeploymentFeatures = {
+      showOfficialPublicPages: true,
+      showPricingPage: true,
+      showLegalPages: true,
+      showRecharge: true,
+      showInviteCode: true,
+      showBilling: true,
+      showApiConfig: false,
+      requireInviteCodeOnSignup: true,
+      usePlatformProviderConfig: true,
+    }
+
+    expect(buildNavbarSettingsMenuItems(features, {
+      apiConfig: 'API 配置',
+      billingRecords: '扣费记录',
+    })).toEqual([
+      { section: 'billing', icon: 'receipt', label: '扣费记录' },
+    ])
   })
 
   it('does not keep a persistent selected state on the current navbar route', () => {

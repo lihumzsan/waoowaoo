@@ -30,9 +30,13 @@ describe('public payment-readiness pages', () => {
 
     for (const page of pages) {
       expect(page).toContain("export const dynamic = 'force-dynamic'")
-      expect(page).toContain('requireOfficialCloudPublicPage()')
     }
 
+    expect(pages[0]).toContain('requireOfficialCloudPricingPage()')
+    expect(pages[1]).toContain('requireOfficialCloudLegalPage()')
+    expect(pages[2]).toContain('requireOfficialCloudLegalPage()')
+    expect(pages[3]).toContain('requireOfficialCloudLegalPage()')
+    expect(pages[4]).toContain('requireOfficialCloudPublicPage()')
     expect(pages[0]).toContain('readOfficialPricingPage')
     expect(pages[1]).toContain("readOfficialLegalPage('terms'")
     expect(pages[2]).toContain("readOfficialLegalPage('privacy'")
@@ -74,8 +78,9 @@ describe('public payment-readiness pages', () => {
     expect(footer).toContain("href: '/privacy'")
     expect(footer).toContain("href: '/refund-policy'")
     expect(footer).toContain("href: '/contact'")
-    expect(footer).toContain('fetchPublicDeploymentIsCloud')
-    expect(navbar).toContain('fetchPublicDeploymentIsCloud')
+    expect(footer).toContain('fetchPublicDeploymentFeatures')
+    expect(navbar).toContain('fetchPublicDeploymentFeatures')
+    expect(navbar).toContain("href={{ pathname: '/pricing' }}")
     expect(legalZh.publicFooter.brand).toBe('waoowaoo')
     expect(contactZh.publicInfo.fields.companyName.value).toContain('待提供')
     expect(contactZh.publicInfo.fields.registrationRegion.value).toBe('Hong Kong')

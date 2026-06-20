@@ -15,12 +15,11 @@ import type { WorkspaceAssistantSelectionContext } from './canvas/ProjectWorkspa
 import { WorkspaceRuntimeProvider } from './WorkspaceRuntimeContext'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
+import { isPublicDeploymentFeatures, type PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import '@/styles/animations.css'
 
 type DeploymentPayload = {
-  deployment?: {
-    isCloud?: boolean
-  }
+  features?: PublicDeploymentFeatures
 }
 
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
@@ -54,8 +53,8 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
       const response = await apiFetch('/api/deployment')
       if (!response.ok) return
       const payload: unknown = await response.json()
-      if (!canceled && isDeploymentPayload(payload)) {
-        setProjectConfigurable(payload.deployment?.isCloud !== true)
+      if (!canceled && isDeploymentPayload(payload) && isPublicDeploymentFeatures(payload.features)) {
+        setProjectConfigurable(payload.features.showApiConfig)
       }
     }
 

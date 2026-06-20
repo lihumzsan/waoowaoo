@@ -1,7 +1,8 @@
 import Navbar from '@/components/Navbar'
 import PublicFooter from '@/components/PublicFooter'
 import { normalizeOfficialLocale, readOfficialPricingPage } from '@/lib/public-site/official-content'
-import { requireOfficialCloudPublicPage } from '@/lib/public-site/visibility'
+import { requireOfficialCloudPricingPage } from '@/lib/public-site/visibility'
+import { readPublicDeploymentFeatures } from '@/lib/deployment/server-features'
 import type { Locale } from '@/i18n/routing'
 
 export const dynamic = 'force-dynamic'
@@ -11,13 +12,14 @@ export default async function PricingPage({
 }: {
   readonly params: Promise<{ readonly locale: Locale }>
 }) {
-  requireOfficialCloudPublicPage()
+  requireOfficialCloudPricingPage()
   const { locale } = await params
   const content = readOfficialPricingPage(normalizeOfficialLocale(locale))
+  const deploymentFeatures = readPublicDeploymentFeatures()
 
   return (
     <div className="glass-page min-h-screen">
-      <Navbar />
+      <Navbar initialDeploymentFeatures={deploymentFeatures} />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-12 sm:px-6 lg:px-8">
         <section className="mb-10 max-w-3xl space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--glass-tone-info-fg)]">
@@ -69,7 +71,7 @@ export default async function PricingPage({
           <p>{content.creditPolicy.body}</p>
         </section>
       </main>
-      <PublicFooter />
+      <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </div>
   )
 }

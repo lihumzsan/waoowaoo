@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentFeatures, toPublicDeploymentFeatures } from '@/lib/deployment/features'
 
 const ORIGINAL_ENV = {
   DEPLOYMENT_EDITION: process.env.DEPLOYMENT_EDITION,
@@ -59,6 +60,44 @@ describe('deployment config', () => {
       providerCredentialMode: 'platform-key',
       isCloud: true,
       usesPlatformProviderKeys: true,
+    })
+  })
+
+  it('keeps self-hosted commercial surfaces disabled while API configuration stays available', () => {
+    const features = getDeploymentFeatures({
+      edition: 'self-hosted',
+      providerCredentialMode: 'user-key',
+    })
+
+    expect(features).toEqual({
+      showOfficialPublicPages: false,
+      showPricingPage: false,
+      showLegalPages: false,
+      showRecharge: false,
+      showInviteCode: false,
+      showBilling: false,
+      showApiConfig: true,
+      requireInviteCodeOnSignup: false,
+      usePlatformProviderConfig: false,
+    })
+  })
+
+  it('enables official cloud public, billing, and invite surfaces without exposing API configuration', () => {
+    const features = getDeploymentFeatures({
+      edition: 'cloud',
+      providerCredentialMode: 'platform-key',
+    })
+
+    expect(toPublicDeploymentFeatures(features)).toEqual({
+      showOfficialPublicPages: true,
+      showPricingPage: true,
+      showLegalPages: true,
+      showRecharge: true,
+      showInviteCode: true,
+      showBilling: true,
+      showApiConfig: false,
+      requireInviteCodeOnSignup: true,
+      usePlatformProviderConfig: true,
     })
   })
 })

@@ -146,6 +146,17 @@ describe('api contract - infra routes (behavior)', () => {
         isCloud: boolean
         usesPlatformProviderKeys: boolean
       }
+      features: {
+        showOfficialPublicPages: boolean
+        showPricingPage: boolean
+        showLegalPages: boolean
+        showRecharge: boolean
+        showInviteCode: boolean
+        showBilling: boolean
+        showApiConfig: boolean
+        requireInviteCodeOnSignup: boolean
+        usePlatformProviderConfig: boolean
+      }
       billingMode: string
     }
 
@@ -157,6 +168,17 @@ describe('api contract - infra routes (behavior)', () => {
         providerCredentialMode: 'platform-key',
         isCloud: true,
         usesPlatformProviderKeys: true,
+      },
+      features: {
+        showOfficialPublicPages: true,
+        showPricingPage: true,
+        showLegalPages: true,
+        showRecharge: true,
+        showInviteCode: true,
+        showBilling: true,
+        showApiConfig: false,
+        requireInviteCodeOnSignup: true,
+        usePlatformProviderConfig: true,
       },
       billingMode: 'ENFORCE',
     })

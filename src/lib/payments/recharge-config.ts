@@ -1,4 +1,5 @@
-import { isCloudDeployment } from '@/lib/deployment/config'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { roundMoney } from '@/lib/billing/money'
 
 export const CREDIT_VALUE_CURRENCY = 'CNY' as const
@@ -46,7 +47,7 @@ function disabledRechargeConfig(): RechargeConfig {
 }
 
 export function getRechargeConfig(): RechargeConfig {
-  if (!isCloudDeployment()) return disabledRechargeConfig()
+  if (!getDeploymentFeatures(getDeploymentConfig()).showRecharge) return disabledRechargeConfig()
 
   const minCredits = readRequiredPositiveNumber('PAYMENT_MIN_CREDITS')
   const maxCredits = readRequiredPositiveNumber('PAYMENT_MAX_CREDITS')

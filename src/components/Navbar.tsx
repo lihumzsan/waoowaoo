@@ -12,7 +12,10 @@ import UpdateNoticeModal from './UpdateNoticeModal'
 import { useGithubReleaseUpdate } from '@/hooks/common/useGithubReleaseUpdate'
 import { Link } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
-import { fetchPublicDeploymentIsCloud } from '@/lib/deployment/public-client'
+import {
+  fetchPublicDeploymentFeatures,
+  type PublicDeploymentFeatures,
+} from '@/lib/deployment/public-client'
 import type { ProfileSection } from '@/lib/profile/sections'
 
 interface NavbarSettingsBoundary {
@@ -21,6 +24,18 @@ interface NavbarSettingsBoundary {
 
 interface NavbarProps {
   reserveLayoutSpace?: boolean
+  initialDeploymentFeatures?: PublicDeploymentFeatures | null
+}
+
+interface NavbarSettingsLabels {
+  apiConfig: string
+  billingRecords: string
+}
+
+export interface NavbarSettingsMenuItem {
+  section: ProfileSection
+  icon: AppIconName
+  label: string
 }
 
 export function shouldCloseNavbarSettingsMenu(
@@ -34,7 +49,21 @@ export function shouldCloseNavbarSettingsMenu(
   return true
 }
 
-export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
+export function buildNavbarSettingsMenuItems(
+  features: PublicDeploymentFeatures | null,
+  labels: NavbarSettingsLabels,
+): NavbarSettingsMenuItem[] {
+  return [
+    ...(features?.showApiConfig === true
+      ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: labels.apiConfig }]
+      : []),
+    ...(features?.showBilling === true
+      ? [{ section: 'billing' as const, icon: 'receipt' as const, label: labels.billingRecords }]
+      : []),
+  ]
+}
+
+export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFeatures = null }: NavbarProps) {
   const { data: session, status } = useSession()
   const t = useTranslations('nav')
   const tc = useTranslations('common')
@@ -43,7 +72,7 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
   const [checkMsgFading, setCheckMsgFading] = useState(false)
   const [manualChecking, setManualChecking] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [showOfficialPublicPages, setShowOfficialPublicPages] = useState(false)
+  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsMenuStyle, setSettingsMenuStyle] = useState<CSSProperties | null>(null)
   const settingsTriggerRef = useRef<HTMLDivElement>(null)
@@ -52,14 +81,11 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
   const settingsMenuId = 'navbar-settings-menu'
   const navControlClass = 'glass-selection-control inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium'
 
-  const settingsMenuItems: Array<{
-    section: ProfileSection
-    icon: AppIconName
-    label: string
-  }> = [
-    { section: 'apiConfig', icon: 'settingsHexAlt', label: t('settingsMenu.apiConfig') },
-    { section: 'billing', icon: 'receipt', label: t('settingsMenu.billingRecords') },
-  ]
+  const showPricingLink = deploymentFeatures?.showPricingPage === true
+  const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
+    apiConfig: t('settingsMenu.apiConfig'),
+    billingRecords: t('settingsMenu.billingRecords'),
+  })
 
   const handleCheckUpdate = async () => {
     setCheckMsg(null)
@@ -81,8 +107,8 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
 
   useEffect(() => {
     let cancelled = false
-    fetchPublicDeploymentIsCloud().then((isCloud) => {
-      if (!cancelled) setShowOfficialPublicPages(isCloud)
+    fetchPublicDeploymentFeatures().then((features) => {
+      if (!cancelled) setDeploymentFeatures(features)
     })
     return () => {
       cancelled = true
@@ -238,6 +264,16 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
                 </div>
               ) : session ? (
                 <>
+                  {showPricingLink ? (
+                    <Link
+                      href={{ pathname: '/pricing' }}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={navControlClass}
+                    >
+                      {t('pricing')}
+                    </Link>
+                  ) : null}
                   <Link
                     href={{ pathname: '/workspace' }}
                     target="_blank"
@@ -291,7 +327,7 @@ export default function Navbar({ reserveLayoutSpace = true }: NavbarProps) {
 
               ) : (
                 <>
-                  {showOfficialPublicPages ? (
+                  {showPricingLink ? (
                     <Link
                       href={{ pathname: '/pricing' }}
                       className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
