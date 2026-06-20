@@ -126,6 +126,41 @@ describe('workspace assistant runtime chat id', () => {
     })
   })
 
+  it('infers the active generation operation from server operation-start data', () => {
+    const run = findLatestWorkspaceAssistantRun([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-run',
+            data: {
+              runId: 'run-1',
+              requestId: 'request-1',
+              status: 'running',
+              controlKind: 'choice_response',
+            },
+          } as never,
+          {
+            type: 'data-agent-operation-start',
+            data: {
+              runId: 'run-1',
+              operationId: 'generate_edit_style_previews',
+              toolCallId: 'tool-generate-style',
+            },
+          } as never,
+        ],
+      },
+    ])
+
+    expect(run).toEqual({
+      runId: 'run-1',
+      status: 'running',
+      operationId: 'generate_edit_style_previews',
+      intent: null,
+    })
+  })
+
   it('does not treat streamed read tools as active generation operations', () => {
     const run = findLatestWorkspaceAssistantRun([
       {

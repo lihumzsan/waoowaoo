@@ -6,6 +6,7 @@ import {
 import type { NextRequest } from 'next/server'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
+import { writeOperationDataPart } from '@/lib/operations/types'
 import type {
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
@@ -14,7 +15,7 @@ import {
   shouldRequireAssistantToolApproval,
   type AssistantPermissionMode,
 } from './permission-mode'
-import type { ProjectAgentContext } from './types'
+import type { ProjectAgentContext, ProjectAgentOperationStartPartData } from './types'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -97,6 +98,12 @@ export function createProjectAgentOperationTool(
     ...(requiresApproval ? { needsApproval: true } : {}),
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
+      const toolCallId = readToolCallId(details)
+      writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
+        runId: params.context.runId ?? null,
+        operationId: params.operation.id,
+        ...(toolCallId ? { toolCallId } : {}),
+      })
       try {
         return await executeProjectAgentOperationFromTool({
           request: params.request,
@@ -108,7 +115,7 @@ export function createProjectAgentOperationTool(
           source: 'assistant-panel',
           writer: params.writer,
           input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
-          toolCallId: readToolCallId(details),
+          toolCallId,
         })
       } finally {
         params.onExecutionSettled?.()

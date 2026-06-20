@@ -251,6 +251,13 @@ function readRunScopedOperation(part: unknown, runId: string, allowUnscopedOpera
 
   if (!data) return null
 
+  if (part.type === 'data-agent-operation-start') {
+    const partRunId = readNonEmptyString(data.runId)
+    return partRunId === runId || (!partRunId && allowUnscopedOperation)
+      ? readNonEmptyString(data.operationId)
+      : null
+  }
+
   if (part.type === 'data-agent-interruption') {
     return readNonEmptyString(data.runId) === runId
       ? readNonEmptyString(data.operationId)

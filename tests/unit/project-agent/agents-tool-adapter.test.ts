@@ -15,16 +15,18 @@ vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
   executeProjectAgentOperationFromTool: executeState.executeProjectAgentOperationFromTool,
 }))
 
-function buildOperation(): ProjectAgentOperationDefinition {
+function buildOperation(
+  operationId: ProjectAgentOperationDefinition['id'] = 'generate_storyboard_grid_images',
+): ProjectAgentOperationDefinition {
   const inputSchema = z.object({
     episodeId: z.string().min(1),
     confirmed: z.boolean().optional(),
   })
   return {
-    id: 'generate_edit_script',
-    summary: 'Generate edit script',
+    id: operationId,
+    summary: 'Generate images',
     intent: 'act',
-    groupPath: ['edit-script'],
+    groupPath: ['storyboard'],
     channels: {
       tool: true,
       api: false,
@@ -38,7 +40,7 @@ function buildOperation(): ProjectAgentOperationDefinition {
       summary: 'Confirm billable generation',
     },
     toolInputSchema: createProjectAgentToolInputSchema({
-      operationId: 'generate_edit_script',
+      operationId,
       inputSchema: inputSchema as RuntimeSchema<unknown>,
     }),
     inputSchema,
@@ -51,21 +53,23 @@ function buildOperation(): ProjectAgentOperationDefinition {
 
 describe('createProjectAgentOperationTool', () => {
   it('maps confirmation requirements to Agents SDK approval and preserves execution path', async () => {
+    const writer = {
+      write: vi.fn(),
+      merge: vi.fn(),
+      onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    }
     const tool = createProjectAgentOperationTool({
       request: new Request('http://localhost') as unknown as NextRequest,
       operation: buildOperation(),
-      description: 'Generate edit script',
+      description: 'Generate images',
       projectId: 'project-1',
       userId: 'user-1',
       context: {
         episodeId: 'episode-1',
+        runId: 'run-1',
       },
       assistantPermissionMode: 'ask',
-      writer: {
-        write: vi.fn(),
-        merge: vi.fn(),
-        onError: (error) => (error instanceof Error ? error.message : String(error)),
-      },
+      writer,
     })
 
     expect(tool.type).toBe('function')
@@ -76,13 +80,21 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_edit_script',
+        name: 'generate_storyboard_grid_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
 
+    expect(writer.write).toHaveBeenCalledWith({
+      type: 'data-agent-operation-start',
+      data: {
+        runId: 'run-1',
+        operationId: 'generate_storyboard_grid_images',
+        toolCallId: 'call-1',
+      },
+    })
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script',
+      operationId: 'generate_storyboard_grid_images',
       projectId: 'project-1',
       userId: 'user-1',
       toolCallId: 'call-1',
@@ -98,7 +110,7 @@ describe('createProjectAgentOperationTool', () => {
     const tool = createProjectAgentOperationTool({
       request: new Request('http://localhost') as unknown as NextRequest,
       operation: buildOperation(),
-      description: 'Generate edit script',
+      description: 'Generate images',
       projectId: 'project-1',
       userId: 'user-1',
       context: {
@@ -120,13 +132,13 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_edit_script',
+        name: 'generate_storyboard_grid_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
 
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script',
+      operationId: 'generate_storyboard_grid_images',
       projectId: 'project-1',
       userId: 'user-1',
       assistantPermissionMode: 'auto',

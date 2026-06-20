@@ -1246,6 +1246,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     data: {
       by_name: {
         'agent-run': HiddenRuntimeContextDataCard,
+        'agent-operation-start': HiddenRuntimeContextDataCard,
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
         'assistant-choice-card': hideChoiceCards

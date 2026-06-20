@@ -31,6 +31,12 @@ export interface ProjectAgentRunPartData {
   stopReason?: string | null
 }
 
+export interface ProjectAgentOperationStartPartData {
+  runId?: string | null
+  operationId: string
+  toolCallId?: string | null
+}
+
 export interface ProjectContextPartData {
   context: ProjectAssistantContextSnapshot
 }
@@ -285,6 +291,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-interruption'
   | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'
+  | 'data-agent-operation-start'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'
