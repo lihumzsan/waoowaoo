@@ -17,6 +17,7 @@ vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
 
 function buildOperation(
   operationId: ProjectAgentOperationDefinition['id'] = 'generate_storyboard_grid_images',
+  intent: ProjectAgentOperationDefinition['intent'] = 'act',
 ): ProjectAgentOperationDefinition {
   const inputSchema = z.object({
     episodeId: z.string().min(1),
@@ -25,7 +26,7 @@ function buildOperation(
   return {
     id: operationId,
     summary: 'Generate images',
-    intent: 'act',
+    intent,
     groupPath: ['storyboard'],
     channels: {
       tool: true,
@@ -146,6 +147,45 @@ describe('createProjectAgentOperationTool', () => {
       input: {
         episodeId: 'episode-1',
       },
+    }))
+  })
+
+  it('does not emit an operation-start card for read-only query tools', async () => {
+    const writer = {
+      write: vi.fn(),
+      merge: vi.fn(),
+      onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    }
+    const tool = createProjectAgentOperationTool({
+      request: new Request('http://localhost') as unknown as NextRequest,
+      operation: buildOperation('get_project_phase', 'query'),
+      description: 'Get project phase',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        episodeId: 'episode-1',
+        runId: 'run-1',
+      },
+      assistantPermissionMode: 'auto',
+      writer,
+    })
+
+    expect(tool.type).toBe('function')
+    if (tool.type !== 'function') throw new Error('EXPECTED_FUNCTION_TOOL')
+    await tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'get_project_phase',
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })
+
+    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'data-agent-operation-start',
+    }))
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
+      operationId: 'get_project_phase',
     }))
   })
 })

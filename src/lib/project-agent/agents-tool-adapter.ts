@@ -99,11 +99,13 @@ export function createProjectAgentOperationTool(
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       const toolCallId = readToolCallId(details)
-      writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
-        runId: params.context.runId ?? null,
-        operationId: params.operation.id,
-        ...(toolCallId ? { toolCallId } : {}),
-      })
+      if (params.operation.intent === 'act') {
+        writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
+          runId: params.context.runId ?? null,
+          operationId: params.operation.id,
+          ...(toolCallId ? { toolCallId } : {}),
+        })
+      }
       try {
         return await executeProjectAgentOperationFromTool({
           request: params.request,
