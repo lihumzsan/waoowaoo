@@ -584,7 +584,6 @@ describe('edit-script operations', () => {
       screenplayId: 'screenplay-1',
       styleDirection: '更黑暗一些',
       count: 2,
-      replaceExisting: true,
       confirmed: true,
     })
 
@@ -596,7 +595,6 @@ describe('edit-script operations', () => {
       screenplayId: 'screenplay-1',
       styleDirection: '更黑暗一些',
       count: 2,
-      replaceExisting: true,
     }))
     expect(operations.generate_edit_style_previews.inputSchema.safeParse({
       screenplayId: 'screenplay-1',

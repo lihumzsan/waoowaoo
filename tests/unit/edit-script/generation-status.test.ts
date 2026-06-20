@@ -660,7 +660,6 @@ describe('edit script generation status persistence', () => {
       screenplayId: 'screenplay-1',
       styleDirection: '更黑暗一些，低照度，强阴影',
       count: 2,
-      replaceExisting: true,
     })
 
     expect(result.total).toBe(2)

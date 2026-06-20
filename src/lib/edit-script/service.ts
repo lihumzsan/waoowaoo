@@ -105,7 +105,6 @@ interface GenerateEditStylePreviewsInput {
   readonly screenplayId?: string
   readonly styleDirection?: string
   readonly count?: number
-  readonly replaceExisting?: boolean
 }
 
 interface ConfirmEditStylePreviewInput {

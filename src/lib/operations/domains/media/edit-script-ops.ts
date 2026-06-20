@@ -76,7 +76,6 @@ const generateEditStylePreviewsInputSchema = z.object({
   screenplayId: z.string().trim().min(1).optional(),
   styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
   count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
-  replaceExisting: z.literal(true).optional().describe('Deprecated compatibility flag. Regeneration now appends a new candidate set instead of replacing existing candidates.'),
 }).passthrough()
 
 const requestEditFirstChoiceInputSchema = z.object({
@@ -418,7 +417,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
           ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
           ...(input.count ? { count: input.count } : {}),
-          ...(input.replaceExisting !== undefined ? { replaceExisting: input.replaceExisting } : {}),
         }))
         writeOperationDataPart<EditStylePreviewGenerationPartData>(ctx.writer, 'data-edit-style-preview-generation', {
           operationId: 'generate_edit_style_previews',
