@@ -1,18 +1,22 @@
 import { Prisma } from '@prisma/client'
-import { toInputJson, type WorkflowLabIdMap } from './clone-json'
+import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import { mapWorkflowLabId, toInputJson, type WorkflowLabCloneMaps } from './clone-json'
 import { cloneWorkflowLabEditFirstArtifacts } from './clone-edit-first'
 import { cloneWorkflowLabStoryboards } from './clone-storyboards'
+import {
+  shouldWorkflowLabCloneStoryboards,
+  shouldWorkflowLabCloneVideos,
+} from './clone-stage'
 
 export async function cloneEpisodeProjectData(params: {
   readonly tx: Prisma.TransactionClient
+  readonly sourceProjectId: string
+  readonly targetProjectId: string
   readonly sourceEpisodeId: string
   readonly targetEpisodeId: string
-  readonly projectId: string
+  readonly stage: EditFirstWorkflowStage
+  readonly maps: WorkflowLabCloneMaps
 }) {
-  const clipIdMap: WorkflowLabIdMap = new Map()
-  const storyboardIdMap: WorkflowLabIdMap = new Map()
-  const panelIdMap: WorkflowLabIdMap = new Map()
-
   const clips = await params.tx.projectClip.findMany({
     where: { episodeId: params.sourceEpisodeId },
     orderBy: { createdAt: 'asc' },
@@ -36,7 +40,12 @@ export async function cloneEpisodeProjectData(params: {
       },
       select: { id: true },
     })
-    clipIdMap.set(clip.id, createdClip.id)
+    mapWorkflowLabId({
+      maps: params.maps,
+      scopedMap: params.maps.clipIds,
+      sourceId: clip.id,
+      targetId: createdClip.id,
+    })
   }
 
   const shots = await params.tx.projectShot.findMany({
@@ -47,7 +56,7 @@ export async function cloneEpisodeProjectData(params: {
     await params.tx.projectShot.create({
       data: {
         episodeId: params.targetEpisodeId,
-        clipId: shot.clipId ? clipIdMap.get(shot.clipId) ?? null : null,
+        clipId: shot.clipId ? params.maps.clipIds.get(shot.clipId) ?? null : null,
         shotId: shot.shotId,
         srtStart: shot.srtStart,
         srtEnd: shot.srtEnd,
@@ -68,59 +77,70 @@ export async function cloneEpisodeProjectData(params: {
     })
   }
 
-  await cloneWorkflowLabStoryboards({
-    tx: params.tx,
-    sourceEpisodeId: params.sourceEpisodeId,
-    targetEpisodeId: params.targetEpisodeId,
-    clipIdMap,
-    storyboardIdMap,
-    panelIdMap,
-  })
-
-  await cloneWorkflowLabEditFirstArtifacts({
-    tx: params.tx,
-    projectId: params.projectId,
-    sourceEpisodeId: params.sourceEpisodeId,
-    targetEpisodeId: params.targetEpisodeId,
-  })
-
-  const editorProject = await params.tx.videoEditorProject.findUnique({
-    where: { episodeId: params.sourceEpisodeId },
-  })
-  if (editorProject) {
-    await params.tx.videoEditorProject.create({
-      data: {
-        episodeId: params.targetEpisodeId,
-        projectData: editorProject.projectData,
-        renderStatus: editorProject.renderStatus,
-        renderTaskId: editorProject.renderTaskId,
-        outputUrl: editorProject.outputUrl,
-      },
+  if (shouldWorkflowLabCloneStoryboards(params.stage)) {
+    await cloneWorkflowLabStoryboards({
+      tx: params.tx,
+      sourceEpisodeId: params.sourceEpisodeId,
+      targetEpisodeId: params.targetEpisodeId,
+      maps: params.maps,
     })
   }
 
-  const videoGroups = await params.tx.projectVideoGroup.findMany({
-    where: { episodeId: params.sourceEpisodeId },
-    orderBy: { createdAt: 'asc' },
+  await cloneWorkflowLabEditFirstArtifacts({
+    tx: params.tx,
+    targetProjectId: params.targetProjectId,
+    sourceEpisodeId: params.sourceEpisodeId,
+    targetEpisodeId: params.targetEpisodeId,
+    stage: params.stage,
+    maps: params.maps,
   })
-  for (const group of videoGroups) {
-    await params.tx.projectVideoGroup.create({
-      data: {
-        projectId: params.projectId,
-        episodeId: params.targetEpisodeId,
-        gridMode: group.gridMode,
-        shotNumbers: toInputJson(group.shotNumbers),
-        durationSec: group.durationSec,
-        prompt: group.prompt,
-        status: group.status,
-        taskId: group.taskId,
-        errorCode: group.errorCode,
-        errorMessage: group.errorMessage,
-        referenceImageUrl: group.referenceImageUrl,
-        referenceImageMediaId: group.referenceImageMediaId,
-        videoUrl: group.videoUrl,
-        videoMediaId: group.videoMediaId,
-      },
+
+  if (shouldWorkflowLabCloneVideos(params.stage)) {
+    const editorProject = await params.tx.videoEditorProject.findUnique({
+      where: { episodeId: params.sourceEpisodeId },
     })
+    if (editorProject) {
+      await params.tx.videoEditorProject.create({
+        data: {
+          episodeId: params.targetEpisodeId,
+          projectData: editorProject.projectData,
+          renderStatus: editorProject.renderStatus,
+          renderTaskId: null,
+          outputUrl: editorProject.outputUrl,
+        },
+      })
+    }
+
+    const videoGroups = await params.tx.projectVideoGroup.findMany({
+      where: { episodeId: params.sourceEpisodeId },
+      orderBy: { createdAt: 'asc' },
+    })
+    for (const group of videoGroups) {
+      const createdGroup = await params.tx.projectVideoGroup.create({
+        data: {
+          projectId: params.targetProjectId,
+          episodeId: params.targetEpisodeId,
+          gridMode: group.gridMode,
+          shotNumbers: toInputJson(group.shotNumbers),
+          durationSec: group.durationSec,
+          prompt: group.prompt,
+          status: group.status,
+          taskId: null,
+          errorCode: group.errorCode,
+          errorMessage: group.errorMessage,
+          referenceImageUrl: group.referenceImageUrl,
+          referenceImageMediaId: group.referenceImageMediaId,
+          videoUrl: group.videoUrl,
+          videoMediaId: group.videoMediaId,
+        },
+        select: { id: true },
+      })
+      mapWorkflowLabId({
+        maps: params.maps,
+        scopedMap: params.maps.videoGroupIds,
+        sourceId: group.id,
+        targetId: createdGroup.id,
+      })
+    }
   }
 }

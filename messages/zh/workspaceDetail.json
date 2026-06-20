@@ -47,13 +47,12 @@
     "forkFailed": "创建真实测试检查点失败",
     "invalidResponse": "真实流程测试接口返回格式无效",
     "loading": "正在加载真实流程检查点",
-    "empty": "当前项目还没有可用剧集。",
-    "episodeNumber": "E{number}",
+    "empty": "当前剧集的 assistant 历史里还没有可恢复检查点。",
+    "checkpointNumber": "C{number}",
     "stage": "阶段：{stage}",
-    "blocking": "阻塞：{kind}",
-    "nextOperation": "下一步：{operation}",
-    "none": "无",
-    "forkAndOpen": "Fork 并打开",
-    "forking": "正在 fork"
+    "kind": "类型：{kind}",
+    "messages": "对话消息：{count} 条",
+    "createProjectAndOpen": "创建 LAB 并打开",
+    "creatingProject": "正在创建"
   }
 }

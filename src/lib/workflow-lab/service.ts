@@ -1,14 +1,39 @@
+import { Prisma } from '@prisma/client'
+import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
+import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib/project-agent/persistence'
+import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
 } from '@/lib/project-workflow/edit-first'
 import { cloneEpisodeProjectData } from './clone-episode-project-data'
-import type { WorkflowLabEpisodeSummary, WorkflowLabForkResult } from './types'
+import { cloneWorkflowLabProjectAssets } from './clone-project-assets'
+import {
+  createWorkflowLabCloneMaps,
+  mapWorkflowLabId,
+  type WorkflowLabCloneMaps,
+} from './clone-json'
+import {
+  findWorkflowLabCheckpoint,
+  listWorkflowLabCheckpointsFromMessages,
+  sliceWorkflowLabMessagesAtCheckpoint,
+} from './checkpoints'
+import {
+  buildWorkflowLabMessageReplacementMap,
+  rewriteWorkflowLabAssistantMessages,
+} from './message-rewrite'
+import type {
+  WorkflowLabCheckpointListResult,
+  WorkflowLabCheckpointSummary,
+  WorkflowLabEpisodeSummary,
+  WorkflowLabForkResult,
+  WorkflowLabProjectSummary,
+} from './types'
 
 const WORKFLOW_LAB_NAME_PREFIX = '[LAB]'
-const WORKFLOW_LAB_MAX_EPISODES = 200
+const WORKFLOW_LAB_TRANSACTION_TIMEOUT_MS = 30_000
 
 function isWorkflowLabExplicitlyEnabled(): boolean {
   const value = process.env.WORKFLOW_LAB_ENABLED?.trim().toLowerCase() ?? ''
@@ -43,116 +68,275 @@ function summarizeEpisode(
   }
 }
 
-function assertForkableWorkflow(workflow: EditFirstWorkflowState) {
-  if (workflow.blocking.kind !== 'processing') return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'WORKFLOW_LAB_PROCESSING_SOURCE_NOT_FORKABLE',
-    message: 'processing workflow checkpoints cannot be forked because active tasks would not follow the forked episode',
+function summarizeProject(project: { readonly id: string; readonly name: string }): WorkflowLabProjectSummary {
+  return {
+    id: project.id,
+    name: project.name,
+  }
+}
+
+function buildLabProjectName(params: {
+  readonly sourceName: string
+  readonly stage: string
+}): string {
+  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  return `${WORKFLOW_LAB_NAME_PREFIX} ${params.stage} - ${params.sourceName} - ${timestamp}`
+}
+
+async function loadSourceThread(params: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}) {
+  return await loadProjectAssistantThread({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+    assistantId: 'workspace-command',
   })
 }
 
-export async function listWorkflowLabEpisodes(params: {
+async function validateWorkflowLabMessages(messages: readonly UIMessage[]): Promise<UIMessage[]> {
+  const validation = await safeValidateUIMessages({ messages })
+  if (!validation.success) {
+    throw new Error('WORKFLOW_LAB_ASSISTANT_MESSAGES_INVALID')
+  }
+  return ensureUniqueUIMessages(validation.data)
+}
+
+function serializeWorkflowLabMessages(messages: readonly UIMessage[]): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(messages)) as Prisma.InputJsonValue
+}
+
+async function findSourceEpisode(params: {
   readonly projectId: string
   readonly userId: string
-}): Promise<readonly WorkflowLabEpisodeSummary[]> {
-  assertWorkflowLabEnabled()
-  const episodes = await prisma.projectEpisode.findMany({
+  readonly episodeId: string
+}) {
+  const episode = await prisma.projectEpisode.findFirst({
     where: {
+      id: params.episodeId,
       projectId: params.projectId,
       project: {
         userId: params.userId,
       },
     },
-    orderBy: [
-      { episodeNumber: 'asc' },
-      { createdAt: 'asc' },
-    ],
-    take: WORKFLOW_LAB_MAX_EPISODES,
     select: {
       id: true,
-      name: true,
+      projectId: true,
       episodeNumber: true,
+      name: true,
+      description: true,
+      novelText: true,
+      audioUrl: true,
+      audioMediaId: true,
+      srtContent: true,
     },
   })
-
-  const summaries = await Promise.all(episodes.map(async (episode) => {
-    const workflow = await resolveEditFirstWorkflowState({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: episode.id,
+  if (!episode) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'WORKFLOW_LAB_SOURCE_EPISODE_NOT_FOUND',
+      message: 'source episode not found',
     })
-    return summarizeEpisode(episode, workflow)
-  }))
-  return summaries
+  }
+  return episode
 }
 
-function buildForkEpisodeName(params: {
-  readonly sourceName: string
-  readonly sourceStage: string
-}): string {
-  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19)
-  return `${WORKFLOW_LAB_NAME_PREFIX} ${params.sourceStage} - ${params.sourceName} - ${timestamp}`
-}
-
-export async function forkWorkflowLabEpisode(params: {
+export async function listWorkflowLabCheckpoints(params: {
   readonly projectId: string
   readonly userId: string
   readonly sourceEpisodeId: string
-  readonly name?: string | null
-}): Promise<WorkflowLabForkResult> {
+}): Promise<WorkflowLabCheckpointListResult> {
   assertWorkflowLabEnabled()
-
-  const sourceWorkflow = await resolveEditFirstWorkflowState({
+  const sourceEpisode = await findSourceEpisode({
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.sourceEpisodeId,
   })
-  assertForkableWorkflow(sourceWorkflow)
+  const sourceWorkflow = await resolveEditFirstWorkflowState({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: sourceEpisode.id,
+  })
+  const sourceThread = await loadSourceThread({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: sourceEpisode.id,
+  })
 
-  const result = await prisma.$transaction(async (tx) => {
-    const sourceEpisode = await tx.projectEpisode.findFirst({
+  return {
+    sourceEpisode: summarizeEpisode(sourceEpisode, sourceWorkflow),
+    checkpoints: sourceThread
+      ? listWorkflowLabCheckpointsFromMessages({
+        sourceEpisodeId: sourceEpisode.id,
+        messages: sourceThread.messages,
+      })
+      : [],
+  }
+}
+
+function mapEpisodeId(params: {
+  readonly maps: WorkflowLabCloneMaps
+  readonly sourceEpisodeId: string
+  readonly targetEpisodeId: string
+}) {
+  mapWorkflowLabId({
+    maps: params.maps,
+    scopedMap: params.maps.allIds,
+    sourceId: params.sourceEpisodeId,
+    targetId: params.targetEpisodeId,
+  })
+}
+
+async function createLabChoiceInterruption(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly checkpoint: WorkflowLabCheckpointSummary
+}): Promise<void> {
+  if (params.checkpoint.kind !== 'choice' || !params.checkpoint.choiceType) return
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: params.projectId,
+    episodeId: params.episodeId,
+  })
+  const run = await params.tx.projectAgentRun.create({
+    data: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef,
+      episodeId: params.episodeId,
+      requestId: crypto.randomUUID(),
+      status: 'awaiting_choice',
+      controlKind: 'user_turn',
+      stopReason: 'awaiting_choice',
+    },
+    select: { id: true },
+  })
+  await params.tx.projectAgentInterruption.create({
+    data: {
+      runId: run.id,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef,
+      episodeId: params.episodeId,
+      type: 'choice',
+      status: 'pending',
+      operationId: 'request_edit_first_choice',
+      approvalId: `choice:${crypto.randomUUID()}`,
+      toolCallId: `workflow-lab:${crypto.randomUUID()}`,
+      payload: {
+        choiceType: params.checkpoint.choiceType,
+        cardId: params.checkpoint.id,
+      } satisfies Prisma.InputJsonObject,
+      runState: null,
+    },
+  })
+}
+
+export async function forkWorkflowLabCheckpointProject(params: {
+  readonly projectId: string
+  readonly userId: string
+  readonly sourceEpisodeId: string
+  readonly checkpointId: string
+  readonly name?: string | null
+}): Promise<WorkflowLabForkResult> {
+  assertWorkflowLabEnabled()
+
+  const [sourceProject, sourceEpisode, sourceThread] = await Promise.all([
+    prisma.project.findFirst({
       where: {
-        id: params.sourceEpisodeId,
-        projectId: params.projectId,
-        project: {
-          userId: params.userId,
-        },
+        id: params.projectId,
+        userId: params.userId,
+      },
+    }),
+    findSourceEpisode({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.sourceEpisodeId,
+    }),
+    loadSourceThread({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.sourceEpisodeId,
+    }),
+  ])
+
+  if (!sourceProject) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'WORKFLOW_LAB_SOURCE_PROJECT_NOT_FOUND',
+      message: 'source project not found',
+    })
+  }
+  if (!sourceThread) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'WORKFLOW_LAB_SOURCE_ASSISTANT_THREAD_NOT_FOUND',
+      message: 'source assistant thread not found',
+    })
+  }
+
+  const checkpoint = findWorkflowLabCheckpoint({
+    sourceEpisodeId: sourceEpisode.id,
+    messages: sourceThread.messages,
+    checkpointId: params.checkpointId,
+  })
+  if (!checkpoint) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'WORKFLOW_LAB_CHECKPOINT_NOT_FOUND',
+      message: 'workflow lab checkpoint not found',
+    })
+  }
+
+  const forkName = params.name?.trim() || buildLabProjectName({
+    sourceName: sourceProject.name,
+    stage: checkpoint.workflowStage,
+  })
+
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    const maps = createWorkflowLabCloneMaps()
+    const labProject = await tx.project.create({
+      data: {
+        name: forkName,
+        description: sourceProject.description,
+        userId: params.userId,
+        analysisModel: sourceProject.analysisModel,
+        imageModel: sourceProject.imageModel,
+        videoModel: sourceProject.videoModel,
+        singleShotVideoModel: sourceProject.singleShotVideoModel,
+        sequenceVideoModel: sourceProject.sequenceVideoModel,
+        musicModel: sourceProject.musicModel,
+        videoRatio: sourceProject.videoRatio,
+        globalAssetText: sourceProject.globalAssetText,
+        characterModel: sourceProject.characterModel,
+        locationModel: sourceProject.locationModel,
+        storyboardModel: sourceProject.storyboardModel,
+        editModel: sourceProject.editModel,
+        videoResolution: sourceProject.videoResolution,
+        capabilityOverrides: sourceProject.capabilityOverrides,
+        imageResolution: sourceProject.imageResolution,
+        importStatus: null,
       },
       select: {
         id: true,
-        projectId: true,
-        episodeNumber: true,
         name: true,
-        description: true,
-        novelText: true,
-        audioUrl: true,
-        audioMediaId: true,
-        srtContent: true,
       },
     })
-    if (!sourceEpisode) {
-      throw new ApiError('NOT_FOUND', {
-        code: 'WORKFLOW_LAB_SOURCE_EPISODE_NOT_FOUND',
-        message: 'source episode not found',
-      })
-    }
+    maps.allIds.set(sourceProject.id, labProject.id)
 
-    const episodeMax = await tx.projectEpisode.aggregate({
-      where: { projectId: params.projectId },
-      _max: { episodeNumber: true },
-    })
-    const nextEpisodeNumber = (episodeMax._max.episodeNumber ?? 0) + 1
-    const trimmedName = params.name?.trim() ?? ''
-    const forkName = trimmedName || buildForkEpisodeName({
-      sourceName: sourceEpisode.name,
-      sourceStage: sourceWorkflow.stage,
+    await cloneWorkflowLabProjectAssets({
+      tx,
+      sourceProjectId: sourceProject.id,
+      targetProjectId: labProject.id,
+      maps,
     })
 
-    const forkedEpisode = await tx.projectEpisode.create({
+    const labEpisode = await tx.projectEpisode.create({
       data: {
-        projectId: params.projectId,
-        episodeNumber: nextEpisodeNumber,
-        name: forkName,
+        projectId: labProject.id,
+        episodeNumber: 1,
+        name: sourceEpisode.name,
         description: sourceEpisode.description,
         novelText: sourceEpisode.novelText,
         audioUrl: sourceEpisode.audioUrl,
@@ -165,46 +349,90 @@ export async function forkWorkflowLabEpisode(params: {
         episodeNumber: true,
       },
     })
+    mapEpisodeId({
+      maps,
+      sourceEpisodeId: sourceEpisode.id,
+      targetEpisodeId: labEpisode.id,
+    })
 
     await cloneEpisodeProjectData({
       tx,
+      sourceProjectId: sourceProject.id,
+      targetProjectId: labProject.id,
       sourceEpisodeId: sourceEpisode.id,
-      targetEpisodeId: forkedEpisode.id,
-      projectId: params.projectId,
+      targetEpisodeId: labEpisode.id,
+      stage: checkpoint.workflowStage,
+      maps,
+    })
+
+    const rawCheckpointMessages = sliceWorkflowLabMessagesAtCheckpoint({
+      messages: sourceThread.messages,
+      checkpoint,
+      includeCheckpointPart: checkpoint.kind === 'choice',
+    })
+    const rewrittenMessages = rewriteWorkflowLabAssistantMessages({
+      messages: rawCheckpointMessages,
+      replacements: buildWorkflowLabMessageReplacementMap({
+        sourceProjectId: sourceProject.id,
+        targetProjectId: labProject.id,
+        sourceEpisodeId: sourceEpisode.id,
+        targetEpisodeId: labEpisode.id,
+        idMap: maps.allIds,
+      }),
+    })
+    const messages = await validateWorkflowLabMessages(rewrittenMessages)
+    await tx.projectAssistantThread.create({
+      data: {
+        projectId: labProject.id,
+        userId: params.userId,
+        episodeId: labEpisode.id,
+        assistantId: 'workspace-command',
+        scopeRef: buildProjectAssistantScopeRef({
+          projectId: labProject.id,
+          episodeId: labEpisode.id,
+        }),
+        messagesJson: serializeWorkflowLabMessages(messages),
+      },
+    })
+    await createLabChoiceInterruption({
+      tx,
+      projectId: labProject.id,
+      userId: params.userId,
+      episodeId: labEpisode.id,
+      checkpoint,
     })
 
     await tx.project.update({
-      where: { id: params.projectId },
-      data: { lastEpisodeId: forkedEpisode.id },
+      where: { id: labProject.id },
+      data: { lastEpisodeId: labEpisode.id },
     })
 
     return {
-      sourceEpisode: {
-        id: sourceEpisode.id,
-        name: sourceEpisode.name,
-        episodeNumber: sourceEpisode.episodeNumber,
-      },
-      forkedEpisode,
+      labProject,
+      labEpisode,
     }
   }, {
-    timeout: 30_000,
+    timeout: WORKFLOW_LAB_TRANSACTION_TIMEOUT_MS,
   })
 
-  const [forkedWorkflow, sourceWorkflowAfterFork] = await Promise.all([
+  const [sourceWorkflowAfterFork, labWorkflow] = await Promise.all([
     resolveEditFirstWorkflowState({
-      projectId: params.projectId,
+      projectId: sourceProject.id,
       userId: params.userId,
-      episodeId: result.forkedEpisode.id,
+      episodeId: sourceEpisode.id,
     }),
     resolveEditFirstWorkflowState({
-      projectId: params.projectId,
+      projectId: transactionResult.labProject.id,
       userId: params.userId,
-      episodeId: result.sourceEpisode.id,
+      episodeId: transactionResult.labEpisode.id,
     }),
   ])
 
   return {
-    sourceEpisode: summarizeEpisode(result.sourceEpisode, sourceWorkflowAfterFork),
-    forkedEpisode: summarizeEpisode(result.forkedEpisode, forkedWorkflow),
+    checkpoint,
+    sourceProject: summarizeProject(sourceProject),
+    sourceEpisode: summarizeEpisode(sourceEpisode, sourceWorkflowAfterFork),
+    labProject: summarizeProject(transactionResult.labProject),
+    labEpisode: summarizeEpisode(transactionResult.labEpisode, labWorkflow),
   }
 }

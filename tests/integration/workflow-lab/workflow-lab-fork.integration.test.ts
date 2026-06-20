@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import type { UIMessage } from 'ai'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { resetSystemState } from '../../helpers/db-reset'
 import {
@@ -8,17 +9,149 @@ import {
 } from '../../helpers/fixtures'
 import { prisma } from '../../helpers/prisma'
 import { buildProjectAssistantScopeRef } from '@/lib/project-agent/persistence'
-import { forkWorkflowLabEpisode, listWorkflowLabEpisodes } from '@/lib/workflow-lab/service'
+import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import {
+  forkWorkflowLabCheckpointProject,
+  listWorkflowLabCheckpoints,
+} from '@/lib/workflow-lab/service'
+import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
-describe('workflow lab fork integration', () => {
+function buildStyleChoiceMessages(params: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly screenplayId: string
+  readonly firstPreviewId: string
+  readonly secondPreviewId: string
+}): UIMessage[] {
+  return [
+    {
+      id: 'user-1',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: '生成一个测试短片',
+        },
+      ],
+    },
+    {
+      id: 'assistant-style-choice',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          text: '请选择视觉风格。',
+        },
+        {
+          type: 'data-assistant-choice-card',
+          data: {
+            cardId: `edit-first-style:${params.screenplayId}`,
+            runId: 'source-run-1',
+            interruptionId: 'source-interruption-1',
+            toolCallId: 'source-tool-call-1',
+            choiceType: 'style',
+            title: '选择视觉风格',
+            description: '请选择一个风格候选。',
+            groups: [
+              {
+                key: 'stylePreviewId',
+                label: '视觉风格',
+                required: true,
+                options: [
+                  {
+                    value: params.firstPreviewId,
+                    label: '候选 1',
+                    description: '第一版',
+                    imageUrl: 'https://example.test/style-a.png',
+                    meta: 'style-a',
+                  },
+                  {
+                    value: params.secondPreviewId,
+                    label: '候选 2',
+                    description: '第二版',
+                    imageUrl: 'https://example.test/style-b.png',
+                    meta: 'style-b',
+                  },
+                ],
+              },
+            ],
+            submitLabel: '确认并继续',
+            submit: {
+              kind: 'confirm_edit_style_preview',
+              projectId: params.projectId,
+              episodeId: params.episodeId,
+              aspectRatio: '9:16',
+            },
+          },
+        },
+      ],
+    },
+    {
+      id: 'assistant-after-choice',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'data-assistant-choice-resolved',
+          data: {
+            runId: 'source-run-1',
+            interruptionId: 'source-interruption-1',
+            choiceType: 'style',
+            toolCallId: 'source-tool-call-1',
+            cardId: `edit-first-style:${params.screenplayId}`,
+          },
+        },
+      ],
+    },
+  ]
+}
+
+describe('workflow lab checkpoint project fork integration', () => {
   beforeEach(async () => {
     await resetSystemState()
   })
 
-  it('forks a stable style-choice checkpoint without copying assistant conversation state', async () => {
+  it('creates an isolated lab project from a real assistant style-choice checkpoint and restores the pending choice', async () => {
     const user = await createFixtureUser()
     const project = await createFixtureProject(user.id)
     const episode = await createFixtureEpisode(project.id, 1)
+
+    const character = await prisma.projectCharacter.create({
+      data: {
+        projectId: project.id,
+        name: 'Mira',
+        profileData: 'scientist',
+        profileConfirmed: true,
+      },
+    })
+    await prisma.characterAppearance.create({
+      data: {
+        characterId: character.id,
+        appearanceIndex: 0,
+        changeReason: 'default',
+        imageUrl: 'https://example.test/mira.png',
+      },
+    })
+    const location = await prisma.projectLocation.create({
+      data: {
+        projectId: project.id,
+        name: 'Lab',
+        summary: 'A bright lab.',
+      },
+    })
+    const locationImage = await prisma.locationImage.create({
+      data: {
+        locationId: location.id,
+        imageIndex: 0,
+        imageUrl: 'https://example.test/lab.png',
+        isSelected: true,
+        spatialProfileStatus: 'completed',
+        spatialProfileJson: { zones: ['bench'] } satisfies Prisma.InputJsonObject,
+      },
+    })
+    await prisma.projectLocation.update({
+      where: { id: location.id },
+      data: { selectedImageId: locationImage.id },
+    })
 
     const screenplay = await prisma.projectEditScreenplay.create({
       data: {
@@ -27,7 +160,7 @@ describe('workflow lab fork integration', () => {
         userPrompt: 'source prompt',
         styleBibleJson: { tone: 'cinematic', palette: 'blue gold' } satisfies Prisma.InputJsonObject,
         screenplayText: 'INT. TEST ROOM - DAY',
-        status: 'style_preview_ready',
+        status: 'ready',
       },
     })
 
@@ -43,10 +176,10 @@ describe('workflow lab fork integration', () => {
         styleBibleJson: { lens: '35mm', contrast: 'high' } satisfies Prisma.InputJsonObject,
         imagePrompt: 'cool light frame',
         imageKey: 'style-a-key',
-        status: 'completed',
+        status: 'confirmed',
       },
     })
-    await prisma.projectEditStylePreview.create({
+    const secondPreview = await prisma.projectEditStylePreview.create({
       data: {
         projectId: project.id,
         episodeId: episode.id,
@@ -62,76 +195,14 @@ describe('workflow lab fork integration', () => {
       },
     })
 
-    const clip = await prisma.projectClip.create({
-      data: {
-        episodeId: episode.id,
-        summary: 'source clip',
-        content: 'source clip content',
-        location: 'Lab',
-        characters: 'Mira',
-        screenplay: 'INT. TEST ROOM - DAY',
-      },
-    })
-    const storyboard = await prisma.projectStoryboard.create({
-      data: {
-        episodeId: episode.id,
-        clipId: clip.id,
-        panelCount: 1,
-        storyboardTextJson: JSON.stringify([{ panel: 1, text: 'Mira enters.' }]),
-        photographyPlan: JSON.stringify({ currentStage: 'blocking_ready' }),
-      },
-    })
-    const panel = await prisma.projectPanel.create({
-      data: {
-        storyboardId: storyboard.id,
-        panelIndex: 0,
-        panelNumber: 1,
-        description: 'Mira enters the lab.',
-        imagePrompt: 'Mira entering a lab',
-        imageUrl: 'https://example.test/panel.png',
-        lastVideoGenerationOptions: { duration: 4 } satisfies Prisma.InputJsonObject,
-      },
-    })
-    await prisma.supplementaryPanel.create({
-      data: {
-        storyboardId: storyboard.id,
-        sourceType: 'panel',
-        sourcePanelId: panel.id,
-        description: 'Extra angle',
-        imagePrompt: 'Mira from side angle',
-        imageUrl: 'https://example.test/supplementary.png',
-      },
-    })
-    await prisma.projectStoryboardBlockingArtifact.create({
-      data: {
-        storyboardId: storyboard.id,
-        kind: 'spatial_reference',
-        sourceVideoBlockId: 'video-block-1',
-        groupIndex: 0,
-        prompt: 'block the scene',
-        imageUrl: 'https://example.test/blocking.png',
-        metadataJson: { source: 'test' } satisfies Prisma.InputJsonObject,
-        status: 'completed',
-      },
-    })
-    await prisma.videoEditorProject.create({
-      data: {
-        episodeId: episode.id,
-        projectData: JSON.stringify({ tracks: [] }),
-        renderStatus: 'completed',
-        outputUrl: 'https://example.test/final.mp4',
-      },
-    })
-    await prisma.projectVideoGroup.create({
+    await prisma.projectEditDirectorDecoupage.create({
       data: {
         projectId: project.id,
         episodeId: episode.id,
-        gridMode: 'single',
-        shotNumbers: [1] satisfies Prisma.InputJsonArray,
-        durationSec: 4,
-        prompt: 'video group prompt',
-        status: 'completed',
-        videoUrl: 'https://example.test/group.mp4',
+        editScreenplayId: screenplay.id,
+        userPrompt: 'after style',
+        decoupageJson: { beats: [] } satisfies Prisma.InputJsonObject,
+        status: 'ready',
       },
     })
 
@@ -142,144 +213,155 @@ describe('workflow lab fork integration', () => {
         episodeId: episode.id,
         assistantId: 'workspace-command',
         scopeRef: buildProjectAssistantScopeRef({ projectId: project.id, episodeId: episode.id }),
-        messagesJson: [] satisfies Prisma.InputJsonArray,
+        messagesJson: buildStyleChoiceMessages({
+          projectId: project.id,
+          episodeId: episode.id,
+          screenplayId: screenplay.id,
+          firstPreviewId: firstPreview.id,
+          secondPreviewId: secondPreview.id,
+        }) as unknown as Prisma.InputJsonArray,
       },
     })
 
-    const result = await forkWorkflowLabEpisode({
+    const checkpoints = await listWorkflowLabCheckpoints({
       projectId: project.id,
       userId: user.id,
       sourceEpisodeId: episode.id,
     })
-
-    expect(result.sourceEpisode.workflowStage).toBe('needs_style_choice')
-    expect(result.sourceEpisode.blockingKind).toBe('needs_user_choice')
-    expect(result.sourceEpisode.allowedOperationIds).toEqual(['generate_edit_style_previews'])
-    expect(result.forkedEpisode.workflowStage).toBe('needs_style_choice')
-    expect(result.forkedEpisode.id).not.toBe(episode.id)
-    expect(result.forkedEpisode.name).toContain('[LAB] needs_style_choice - Episode 1 -')
-
-    const updatedProject = await prisma.project.findUniqueOrThrow({
-      where: { id: project.id },
-      select: { lastEpisodeId: true },
+    expect(checkpoints.checkpoints).toHaveLength(1)
+    expect(checkpoints.checkpoints[0]).toMatchObject({
+      kind: 'choice',
+      workflowStage: 'needs_style_choice',
+      choiceType: 'style',
+      assistantMessageCount: 2,
     })
-    expect(updatedProject.lastEpisodeId).toBe(result.forkedEpisode.id)
 
-    const copiedScreenplay = await prisma.projectEditScreenplay.findUniqueOrThrow({
-      where: { episodeId: result.forkedEpisode.id },
+    const result = await forkWorkflowLabCheckpointProject({
+      projectId: project.id,
+      userId: user.id,
+      sourceEpisodeId: episode.id,
+      checkpointId: checkpoints.checkpoints[0].id,
+    })
+
+    expect(result.labProject.id).not.toBe(project.id)
+    expect(result.labProject.name).toContain('[LAB] needs_style_choice -')
+    expect(result.labEpisode.id).not.toBe(episode.id)
+    expect(result.labEpisode.workflowStage).toBe('needs_style_choice')
+
+    const sourceWorkflow = await resolveEditFirstWorkflowState({
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+    })
+    expect(sourceWorkflow.stage).toBe('ready_to_generate_edit_script')
+
+    const labScreenplay = await prisma.projectEditScreenplay.findUniqueOrThrow({
+      where: { episodeId: result.labEpisode.id },
       include: {
         stylePreviews: {
           orderBy: { styleKey: 'asc' },
         },
+        directorDecoupage: true,
       },
     })
-    expect(copiedScreenplay.id).not.toBe(screenplay.id)
-    expect(copiedScreenplay.status).toBe('style_preview_ready')
-    expect(copiedScreenplay.screenplayText).toBe('INT. TEST ROOM - DAY')
-    expect(copiedScreenplay.stylePreviews).toHaveLength(2)
-    expect(copiedScreenplay.stylePreviews[0].id).not.toBe(firstPreview.id)
-    expect(copiedScreenplay.stylePreviews[0].editScreenplayId).toBe(copiedScreenplay.id)
-    expect(copiedScreenplay.stylePreviews[0].styleKey).toBe('style-a')
-    expect(copiedScreenplay.stylePreviews[0].status).toBe('completed')
+    expect(labScreenplay.projectId).toBe(result.labProject.id)
+    expect(labScreenplay.id).not.toBe(screenplay.id)
+    expect(labScreenplay.status).toBe('style_preview_ready')
+    expect(labScreenplay.directorDecoupage).toBeNull()
+    expect(labScreenplay.stylePreviews).toHaveLength(2)
+    expect(labScreenplay.stylePreviews[0].id).not.toBe(firstPreview.id)
+    expect(labScreenplay.stylePreviews[0].status).toBe('completed')
+    expect(labScreenplay.stylePreviews[1].status).toBe('completed')
 
-    const copiedStoryboard = await prisma.projectStoryboard.findFirstOrThrow({
-      where: { episodeId: result.forkedEpisode.id },
-      include: {
-        clip: true,
-        panels: {
-          orderBy: { panelIndex: 'asc' },
-        },
-        supplementaryPanels: true,
-        blockingArtifacts: true,
-      },
+    const labCharacter = await prisma.projectCharacter.findFirstOrThrow({
+      where: { projectId: result.labProject.id, name: 'Mira' },
+      include: { appearances: true },
     })
-    expect(copiedStoryboard.id).not.toBe(storyboard.id)
-    expect(copiedStoryboard.clipId).not.toBe(clip.id)
-    expect(copiedStoryboard.clip.summary).toBe('source clip')
-    expect(copiedStoryboard.panels).toHaveLength(1)
-    expect(copiedStoryboard.panels[0].id).not.toBe(panel.id)
-    expect(copiedStoryboard.panels[0].description).toBe('Mira enters the lab.')
-    expect(copiedStoryboard.supplementaryPanels).toHaveLength(1)
-    expect(copiedStoryboard.supplementaryPanels[0].sourcePanelId).toBe(copiedStoryboard.panels[0].id)
-    expect(copiedStoryboard.blockingArtifacts).toHaveLength(1)
-    expect(copiedStoryboard.blockingArtifacts[0].sourceVideoBlockId).toBe('video-block-1')
+    expect(labCharacter.id).not.toBe(character.id)
+    expect(labCharacter.appearances).toHaveLength(1)
 
-    const copiedEditorProject = await prisma.videoEditorProject.findUniqueOrThrow({
-      where: { episodeId: result.forkedEpisode.id },
+    const labLocation = await prisma.projectLocation.findFirstOrThrow({
+      where: { projectId: result.labProject.id, name: 'Lab' },
+      include: { images: true },
     })
-    expect(copiedEditorProject.outputUrl).toBe('https://example.test/final.mp4')
+    expect(labLocation.id).not.toBe(location.id)
+    expect(labLocation.images).toHaveLength(1)
+    expect(labLocation.selectedImageId).toBe(labLocation.images[0].id)
 
-    const copiedVideoGroup = await prisma.projectVideoGroup.findFirstOrThrow({
-      where: { episodeId: result.forkedEpisode.id },
+    const labDecoupageCount = await prisma.projectEditDirectorDecoupage.count({
+      where: { episodeId: result.labEpisode.id },
     })
-    expect(copiedVideoGroup.shotNumbers).toEqual([1])
-    expect(copiedVideoGroup.videoUrl).toBe('https://example.test/group.mp4')
+    expect(labDecoupageCount).toBe(0)
 
-    const forkedAssistantThreadCount = await prisma.projectAssistantThread.count({
+    const labThread = await prisma.projectAssistantThread.findUniqueOrThrow({
       where: {
-        projectId: project.id,
-        userId: user.id,
-        assistantId: 'workspace-command',
-        scopeRef: buildProjectAssistantScopeRef({
-          projectId: project.id,
-          episodeId: result.forkedEpisode.id,
-        }),
+        projectId_userId_assistantId_scopeRef: {
+          projectId: result.labProject.id,
+          userId: user.id,
+          assistantId: 'workspace-command',
+          scopeRef: buildProjectAssistantScopeRef({
+            projectId: result.labProject.id,
+            episodeId: result.labEpisode.id,
+          }),
+        },
       },
     })
-    expect(forkedAssistantThreadCount).toBe(0)
+    const labMessages = labThread.messagesJson as unknown as UIMessage[]
+    expect(labMessages).toHaveLength(2)
+    const cardPart = labMessages[1]?.parts[1]
+    expect(cardPart?.type).toBe('data-assistant-choice-card')
+    const cardData = cardPart?.type === 'data-assistant-choice-card'
+      ? cardPart.data as ProjectAgentChoiceCardPartData
+      : null
+    expect(cardData?.submit).toMatchObject({
+      projectId: result.labProject.id,
+      episodeId: result.labEpisode.id,
+    })
+    expect(cardData?.cardId).toBe(`edit-first-style:${labScreenplay.id}`)
+    expect(cardData?.groups[0]?.options.map((option) => option.value)).toEqual(
+      labScreenplay.stylePreviews.map((preview) => preview.id),
+    )
 
-    const summaries = await listWorkflowLabEpisodes({
-      projectId: project.id,
-      userId: user.id,
+    const pendingChoice = await prisma.projectAgentInterruption.findFirstOrThrow({
+      where: {
+        projectId: result.labProject.id,
+        userId: user.id,
+        episodeId: result.labEpisode.id,
+        type: 'choice',
+        status: 'pending',
+      },
     })
-    expect(summaries.map((summary) => ({
-      id: summary.id,
-      workflowStage: summary.workflowStage,
-      blockingKind: summary.blockingKind,
-    }))).toEqual([
-      {
-        id: episode.id,
-        workflowStage: 'needs_style_choice',
-        blockingKind: 'needs_user_choice',
-      },
-      {
-        id: result.forkedEpisode.id,
-        workflowStage: 'needs_style_choice',
-        blockingKind: 'needs_user_choice',
-      },
-    ])
+    expect(pendingChoice.operationId).toBe('request_edit_first_choice')
+    expect(pendingChoice.payload).toMatchObject({
+      choiceType: 'style',
+    })
   })
 
-  it('rejects processing checkpoints instead of creating an unreal fork with orphaned active work', async () => {
+  it('rejects checkpoint forks when the source assistant thread is missing', async () => {
     const user = await createFixtureUser()
     const project = await createFixtureProject(user.id)
     const episode = await createFixtureEpisode(project.id, 1)
 
-    await prisma.projectEditScreenplay.create({
-      data: {
-        projectId: project.id,
-        episodeId: episode.id,
-        userPrompt: 'source prompt',
-        styleBibleJson: Prisma.JsonNull,
-        screenplayText: 'INT. TEST ROOM - DAY',
-        status: 'style_preview_generating',
-      },
-    })
-
-    await expect(forkWorkflowLabEpisode({
+    await expect(forkWorkflowLabCheckpointProject({
       projectId: project.id,
       userId: user.id,
       sourceEpisodeId: episode.id,
+      checkpointId: 'choice:1:0:missing',
     })).rejects.toMatchObject({
-      code: 'INVALID_PARAMS',
+      code: 'NOT_FOUND',
       details: expect.objectContaining({
-        code: 'WORKFLOW_LAB_PROCESSING_SOURCE_NOT_FORKABLE',
+        code: 'WORKFLOW_LAB_SOURCE_ASSISTANT_THREAD_NOT_FOUND',
       }),
     })
 
-    const episodeCount = await prisma.projectEpisode.count({
-      where: { projectId: project.id },
+    const projectCount = await prisma.project.count({
+      where: {
+        userId: user.id,
+        name: {
+          startsWith: '[LAB]',
+        },
+      },
     })
-    expect(episodeCount).toBe(1)
+    expect(projectCount).toBe(0)
   })
 })

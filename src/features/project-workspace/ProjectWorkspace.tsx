@@ -129,7 +129,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
               projectId={projectId}
               episodeId={episodeId}
               enabled={props.workflowLabEnabled}
-              onEpisodeForked={props.onWorkflowLabEpisodeForked}
+              onProjectForked={props.onWorkflowLabProjectForked}
             />
           ) : null}
 

@@ -5,18 +5,23 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import type { WorkflowLabEpisodeSummary, WorkflowLabForkResult } from '@/lib/workflow-lab/types'
+import type {
+  WorkflowLabCheckpointSummary,
+  WorkflowLabEpisodeSummary,
+  WorkflowLabForkResult,
+} from '@/lib/workflow-lab/types'
 
 interface WorkflowLabPanelProps {
   readonly projectId: string
   readonly episodeId?: string
   readonly enabled: boolean
-  readonly onEpisodeForked?: (episodeId: string) => void | Promise<void>
+  readonly onProjectForked?: (params: { projectId: string; episodeId: string }) => void | Promise<void>
 }
 
 interface WorkflowLabListResponse {
   readonly enabled: boolean
-  readonly episodes: readonly WorkflowLabEpisodeSummary[]
+  readonly sourceEpisode: WorkflowLabEpisodeSummary | null
+  readonly checkpoints: readonly WorkflowLabCheckpointSummary[]
   readonly currentEpisodeId: string | null
 }
 
@@ -34,6 +39,10 @@ function readStringArray(value: unknown): readonly string[] {
   return value.filter((entry): entry is string => typeof entry === 'string')
 }
 
+function readNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function readEpisodeSummary(value: unknown): WorkflowLabEpisodeSummary | null {
   const record = readRecord(value)
   if (!record) return null
@@ -42,7 +51,7 @@ function readEpisodeSummary(value: unknown): WorkflowLabEpisodeSummary | null {
   const name = readString(record.name)
   const workflowStage = readString(record.workflowStage)
   const blockingKind = readString(record.blockingKind)
-  const episodeNumber = typeof record.episodeNumber === 'number' ? record.episodeNumber : null
+  const episodeNumber = readNumber(record.episodeNumber)
 
   if (!id || !name || !workflowStage || !blockingKind || episodeNumber === null) return null
 
@@ -58,13 +67,54 @@ function readEpisodeSummary(value: unknown): WorkflowLabEpisodeSummary | null {
   }
 }
 
+function readCheckpoint(value: unknown): WorkflowLabCheckpointSummary | null {
+  const record = readRecord(value)
+  if (!record) return null
+
+  const id = readString(record.id)
+  const sourceEpisodeId = readString(record.sourceEpisodeId)
+  const kind = readString(record.kind)
+  const workflowStage = readString(record.workflowStage)
+  const title = readString(record.title)
+  const messageIndex = readNumber(record.messageIndex)
+  const partIndex = readNumber(record.partIndex)
+  const assistantMessageCount = readNumber(record.assistantMessageCount)
+
+  if (
+    !id
+    || !sourceEpisodeId
+    || (kind !== 'choice' && kind !== 'approval')
+    || !workflowStage
+    || !title
+    || messageIndex === null
+    || partIndex === null
+    || assistantMessageCount === null
+  ) return null
+
+  const choiceType = readString(record.choiceType)
+  return {
+    id,
+    sourceEpisodeId,
+    kind,
+    workflowStage: workflowStage as WorkflowLabCheckpointSummary['workflowStage'],
+    title,
+    detail: readString(record.detail),
+    choiceType: choiceType as WorkflowLabCheckpointSummary['choiceType'],
+    operationId: readString(record.operationId),
+    messageIndex,
+    partIndex,
+    assistantMessageCount,
+  }
+}
+
 function readListResponse(value: unknown): WorkflowLabListResponse | null {
   const record = readRecord(value)
-  if (!record || typeof record.enabled !== 'boolean' || !Array.isArray(record.episodes)) return null
+  if (!record || typeof record.enabled !== 'boolean' || !Array.isArray(record.checkpoints)) return null
 
   return {
     enabled: record.enabled,
-    episodes: record.episodes.map(readEpisodeSummary).filter((episode): episode is WorkflowLabEpisodeSummary => episode !== null),
+    sourceEpisode: readEpisodeSummary(record.sourceEpisode),
+    checkpoints: record.checkpoints.map(readCheckpoint).filter((checkpoint): checkpoint is WorkflowLabCheckpointSummary => checkpoint !== null),
     currentEpisodeId: readString(record.currentEpisodeId),
   }
 }
@@ -74,13 +124,26 @@ function readForkResult(value: unknown): WorkflowLabForkResult | null {
   const result = readRecord(record?.result)
   if (!record || record.success !== true || !result) return null
 
-  const sourceEpisode = readEpisodeSummary(result.sourceEpisode)
-  const forkedEpisode = readEpisodeSummary(result.forkedEpisode)
-  if (!sourceEpisode || !forkedEpisode) return null
+  const checkpoint = readCheckpoint(result.checkpoint)
+  const labProject = readRecord(result.labProject)
+  const labEpisode = readEpisodeSummary(result.labEpisode)
+  const labProjectId = readString(labProject?.id)
+  const labProjectName = readString(labProject?.name)
+
+  if (!checkpoint || !labEpisode || !labProjectId || !labProjectName) return null
 
   return {
-    sourceEpisode,
-    forkedEpisode,
+    checkpoint,
+    sourceProject: {
+      id: readString(readRecord(result.sourceProject)?.id) ?? '',
+      name: readString(readRecord(result.sourceProject)?.name) ?? '',
+    },
+    sourceEpisode: readEpisodeSummary(result.sourceEpisode) ?? labEpisode,
+    labProject: {
+      id: labProjectId,
+      name: labProjectName,
+    },
+    labEpisode,
   }
 }
 
@@ -88,38 +151,39 @@ export default function WorkflowLabPanel({
   projectId,
   episodeId,
   enabled,
-  onEpisodeForked,
+  onProjectForked,
 }: WorkflowLabPanelProps) {
   const t = useTranslations('workspaceDetail.workflowLab')
   const [expanded, setExpanded] = useState(true)
   const [serverEnabled, setServerEnabled] = useState(true)
-  const [episodes, setEpisodes] = useState<readonly WorkflowLabEpisodeSummary[]>([])
+  const [sourceEpisode, setSourceEpisode] = useState<WorkflowLabEpisodeSummary | null>(null)
+  const [checkpoints, setCheckpoints] = useState<readonly WorkflowLabCheckpointSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [forkingSourceId, setForkingSourceId] = useState<string | null>(null)
+  const [forkingCheckpointId, setForkingCheckpointId] = useState<string | null>(null)
 
-  const currentEpisode = useMemo(
-    () => episodes.find((episode) => episode.id === episodeId) ?? null,
-    [episodeId, episodes],
+  const currentStageLabel = useMemo(
+    () => sourceEpisode?.workflowStage ?? null,
+    [sourceEpisode?.workflowStage],
   )
 
-  const loadEpisodes = useCallback(async () => {
-    if (!enabled) return
+  const loadCheckpoints = useCallback(async () => {
+    if (!enabled || !episodeId) return
 
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams()
-      if (episodeId) params.set('episodeId', episodeId)
-      const query = params.toString()
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/workflow-lab${query ? `?${query}` : ''}`)
+      params.set('episodeId', episodeId)
+      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/workflow-lab?${params.toString()}`)
       if (!response.ok) {
         throw new Error(await readApiErrorMessage(response, t('loadFailed')))
       }
       const payload = readListResponse(await response.json())
       if (!payload) throw new Error(t('invalidResponse'))
       setServerEnabled(payload.enabled)
-      setEpisodes(payload.episodes)
+      setSourceEpisode(payload.sourceEpisode)
+      setCheckpoints(payload.checkpoints)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loadFailed'))
     } finally {
@@ -128,21 +192,22 @@ export default function WorkflowLabPanel({
   }, [enabled, episodeId, projectId, t])
 
   useEffect(() => {
-    void loadEpisodes()
-  }, [loadEpisodes])
+    void loadCheckpoints()
+  }, [loadCheckpoints])
 
-  const handleFork = useCallback(async (sourceEpisodeId: string) => {
-    if (forkingSourceId) return
+  const handleForkCheckpoint = useCallback(async (checkpoint: WorkflowLabCheckpointSummary) => {
+    if (forkingCheckpointId || !episodeId) return
 
-    setForkingSourceId(sourceEpisodeId)
+    setForkingCheckpointId(checkpoint.id)
     setError(null)
     try {
       const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/workflow-lab`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'forkEpisode',
-          sourceEpisodeId,
+          action: 'forkCheckpointProject',
+          sourceEpisodeId: episodeId,
+          checkpointId: checkpoint.id,
         }),
       })
       if (!response.ok) {
@@ -150,14 +215,16 @@ export default function WorkflowLabPanel({
       }
       const result = readForkResult(await response.json())
       if (!result) throw new Error(t('invalidResponse'))
-      await Promise.resolve(onEpisodeForked?.(result.forkedEpisode.id))
-      await loadEpisodes()
+      await Promise.resolve(onProjectForked?.({
+        projectId: result.labProject.id,
+        episodeId: result.labEpisode.id,
+      }))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('forkFailed'))
     } finally {
-      setForkingSourceId(null)
+      setForkingCheckpointId(null)
     }
-  }, [forkingSourceId, loadEpisodes, onEpisodeForked, projectId, t])
+  }, [episodeId, forkingCheckpointId, onProjectForked, projectId, t])
 
   if (!enabled) return null
 
@@ -176,7 +243,7 @@ export default function WorkflowLabPanel({
   }
 
   return (
-    <section className="fixed bottom-4 left-4 z-30 flex max-h-[calc(100vh-8rem)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] text-[var(--glass-text-primary)] shadow-[0_24px_70px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+    <section className="fixed bottom-4 left-4 z-30 flex max-h-[calc(100vh-8rem)] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] text-[var(--glass-text-primary)] shadow-[0_24px_70px_rgba(15,23,42,0.22)] backdrop-blur-xl">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--glass-stroke-subtle)] px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -184,14 +251,14 @@ export default function WorkflowLabPanel({
             <span>{t('title')}</span>
           </div>
           <p className="mt-1 truncate text-xs text-[var(--glass-text-tertiary)]">
-            {currentEpisode ? t('currentStage', { stage: currentEpisode.workflowStage }) : t('currentUnknown')}
+            {currentStageLabel ? t('currentStage', { stage: currentStageLabel }) : t('currentUnknown')}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             className="glass-btn-base glass-btn-secondary flex h-9 w-9 items-center justify-center rounded-full p-0"
-            onClick={() => void loadEpisodes()}
+            onClick={() => void loadCheckpoints()}
             disabled={loading}
             aria-label={t('refresh')}
             title={t('refresh')}
@@ -223,56 +290,51 @@ export default function WorkflowLabPanel({
             </div>
           ) : null}
 
-          {loading && episodes.length === 0 ? (
+          {loading && checkpoints.length === 0 ? (
             <div className="flex items-center gap-2 px-2 py-4 text-sm text-[var(--glass-text-secondary)]">
               <AppIcon name="loader" className="h-4 w-4 animate-spin" />
               <span>{t('loading')}</span>
             </div>
-          ) : episodes.length === 0 ? (
+          ) : checkpoints.length === 0 ? (
             <div className="px-2 py-4 text-sm text-[var(--glass-text-secondary)]">
               {t('empty')}
             </div>
           ) : (
             <div className="space-y-2">
-              {episodes.map((episode) => {
-                const isCurrent = episode.id === episodeId
-                const isForking = forkingSourceId === episode.id
+              {checkpoints.map((checkpoint, index) => {
+                const isForking = forkingCheckpointId === checkpoint.id
                 return (
                   <article
-                    key={episode.id}
-                    className={`rounded-lg border px-3 py-3 ${
-                      isCurrent
-                        ? 'border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)]'
-                        : 'border-[var(--glass-stroke-subtle)] bg-[var(--glass-bg-surface)]'
-                    }`}
+                    key={checkpoint.id}
+                    className="rounded-lg border border-[var(--glass-stroke-subtle)] bg-[var(--glass-bg-surface)] px-3 py-3"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="shrink-0 rounded-md bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--glass-text-secondary)]">
-                            {t('episodeNumber', { number: episode.episodeNumber })}
+                            {t('checkpointNumber', { number: index + 1 })}
                           </span>
-                          <h3 className="truncate text-sm font-semibold">{episode.name}</h3>
+                          <h3 className="truncate text-sm font-semibold">{checkpoint.title}</h3>
                         </div>
                         <div className="mt-2 space-y-1 text-xs text-[var(--glass-text-secondary)]">
-                          <p>{t('stage', { stage: episode.workflowStage })}</p>
-                          <p>{t('blocking', { kind: episode.blockingKind })}</p>
-                          <p>{t('nextOperation', { operation: episode.nextOperationId ?? t('none') })}</p>
+                          <p>{t('stage', { stage: checkpoint.workflowStage })}</p>
+                          <p>{t('kind', { kind: checkpoint.kind })}</p>
+                          <p>{t('messages', { count: checkpoint.assistantMessageCount })}</p>
                         </div>
                       </div>
                       <button
                         type="button"
                         className="glass-btn-base glass-btn-secondary flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold disabled:cursor-wait disabled:opacity-60"
-                        onClick={() => void handleFork(episode.id)}
-                        disabled={forkingSourceId !== null}
-                        title={t('forkAndOpen')}
+                        onClick={() => void handleForkCheckpoint(checkpoint)}
+                        disabled={forkingCheckpointId !== null}
+                        title={t('createProjectAndOpen')}
                       >
                         {isForking ? (
                           <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <AppIcon name="copy" className="h-3.5 w-3.5" />
                         )}
-                        <span>{isForking ? t('forking') : t('forkAndOpen')}</span>
+                        <span>{isForking ? t('creatingProject') : t('createProjectAndOpen')}</span>
                       </button>
                     </div>
                   </article>

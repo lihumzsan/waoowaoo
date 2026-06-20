@@ -47,13 +47,12 @@
     "forkFailed": "Failed to create real test checkpoint",
     "invalidResponse": "Real workflow lab API returned an invalid response",
     "loading": "Loading real workflow checkpoints",
-    "empty": "This project has no available episodes.",
-    "episodeNumber": "E{number}",
+    "empty": "This episode's assistant history has no restorable checkpoints yet.",
+    "checkpointNumber": "C{number}",
     "stage": "Stage: {stage}",
-    "blocking": "Blocking: {kind}",
-    "nextOperation": "Next: {operation}",
-    "none": "None",
-    "forkAndOpen": "Fork and Open",
-    "forking": "Forking"
+    "kind": "Type: {kind}",
+    "messages": "Assistant messages: {count}",
+    "createProjectAndOpen": "Create LAB and Open",
+    "creatingProject": "Creating"
   }
 }

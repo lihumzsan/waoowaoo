@@ -1,13 +1,16 @@
 import { Prisma } from '@prisma/client'
-import { readMappedId, toInputJson, type WorkflowLabIdMap } from './clone-json'
+import {
+  mapWorkflowLabId,
+  readMappedId,
+  toInputJson,
+  type WorkflowLabCloneMaps,
+} from './clone-json'
 
 export async function cloneWorkflowLabStoryboards(params: {
   readonly tx: Prisma.TransactionClient
   readonly sourceEpisodeId: string
   readonly targetEpisodeId: string
-  readonly clipIdMap: WorkflowLabIdMap
-  readonly storyboardIdMap: WorkflowLabIdMap
-  readonly panelIdMap: WorkflowLabIdMap
+  readonly maps: WorkflowLabCloneMaps
 }) {
   const storyboards = await params.tx.projectStoryboard.findMany({
     where: { episodeId: params.sourceEpisodeId },
@@ -26,7 +29,7 @@ export async function cloneWorkflowLabStoryboards(params: {
   })
 
   for (const storyboard of storyboards) {
-    const targetClipId = readMappedId(params.clipIdMap, storyboard.clipId)
+    const targetClipId = readMappedId(params.maps.clipIds, storyboard.clipId)
     const createdStoryboard = await params.tx.projectStoryboard.create({
       data: {
         episodeId: params.targetEpisodeId,
@@ -41,7 +44,12 @@ export async function cloneWorkflowLabStoryboards(params: {
       },
       select: { id: true },
     })
-    params.storyboardIdMap.set(storyboard.id, createdStoryboard.id)
+    mapWorkflowLabId({
+      maps: params.maps,
+      scopedMap: params.maps.storyboardIds,
+      sourceId: storyboard.id,
+      targetId: createdStoryboard.id,
+    })
 
     for (const panel of storyboard.panels) {
       const createdPanel = await params.tx.projectPanel.create({
@@ -83,7 +91,12 @@ export async function cloneWorkflowLabStoryboards(params: {
         },
         select: { id: true },
       })
-      params.panelIdMap.set(panel.id, createdPanel.id)
+      mapWorkflowLabId({
+        maps: params.maps,
+        scopedMap: params.maps.panelIds,
+        sourceId: panel.id,
+        targetId: createdPanel.id,
+      })
     }
 
     for (const artifact of storyboard.blockingArtifacts) {
@@ -110,7 +123,7 @@ export async function cloneWorkflowLabStoryboards(params: {
           storyboardId: createdStoryboard.id,
           sourceType: supplementaryPanel.sourceType,
           sourcePanelId: supplementaryPanel.sourcePanelId
-            ? params.panelIdMap.get(supplementaryPanel.sourcePanelId) ?? supplementaryPanel.sourcePanelId
+            ? params.maps.panelIds.get(supplementaryPanel.sourcePanelId) ?? supplementaryPanel.sourcePanelId
             : null,
           description: supplementaryPanel.description,
           imagePrompt: supplementaryPanel.imagePrompt,

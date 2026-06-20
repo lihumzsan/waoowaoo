@@ -342,14 +342,17 @@ export default function ProjectDetailPage() {
     updateUrlParams({ episode: episodeId })
   }
 
-  const handleWorkflowLabEpisodeForked = useCallback(async (episodeId: string) => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }),
-    ])
+  const handleWorkflowLabProjectForked = useCallback(async (params: { projectId: string; episodeId: string }) => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(params.projectId) })
     setIsGlobalAssetsView(false)
-    updateUrlParams({ episode: episodeId })
-  }, [projectId, queryClient, updateUrlParams])
+    router.push({
+      pathname: `/workspace/${params.projectId}`,
+      query: {
+        episode: params.episodeId,
+        workflowLab: '1',
+      },
+    })
+  }, [queryClient, router])
 
   const handleSaveDefaultAnalysisModel = async () => {
     const modelKey = analysisModelDraft.trim()
@@ -560,7 +563,7 @@ export default function ProjectDetailPage() {
               assistantAutoStartKey={assistantAutoStartKey}
               workflowLabEnabled={workflowLabEnabled}
               onAssistantAutoStartConsumed={clearAssistantAutoStart}
-              onWorkflowLabEpisodeForked={handleWorkflowLabEpisodeForked}
+              onWorkflowLabProjectForked={handleWorkflowLabProjectForked}
               onEpisodeSelect={handleEpisodeSelect}
               onEpisodeCreate={() => handleCreateEpisode(`${t('episode')} ${episodes.length + 1}`)}
               onEpisodeRename={handleRenameEpisode}

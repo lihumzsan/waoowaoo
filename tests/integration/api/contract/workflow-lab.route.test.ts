@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMockRequest } from '../../../helpers/request'
-import type { WorkflowLabEpisodeSummary, WorkflowLabForkResult } from '@/lib/workflow-lab/types'
+import type {
+  WorkflowLabCheckpointListResult,
+  WorkflowLabCheckpointSummary,
+  WorkflowLabEpisodeSummary,
+  WorkflowLabForkResult,
+} from '@/lib/workflow-lab/types'
 
 const authState = vi.hoisted(() => ({
   authenticated: true,
@@ -8,8 +13,8 @@ const authState = vi.hoisted(() => ({
 
 const workflowLabServiceMock = vi.hoisted(() => ({
   isWorkflowLabEnabled: vi.fn(),
-  listWorkflowLabEpisodes: vi.fn(),
-  forkWorkflowLabEpisode: vi.fn(),
+  listWorkflowLabCheckpoints: vi.fn(),
+  forkWorkflowLabCheckpointProject: vi.fn(),
 }))
 
 vi.mock('@/lib/api-auth', () => {
@@ -45,27 +50,45 @@ const sampleEpisode: WorkflowLabEpisodeSummary = {
   allowedOperationIds: ['generate_edit_style_previews'],
 }
 
+const sampleCheckpoint: WorkflowLabCheckpointSummary = {
+  id: 'choice:1:0:edit-first-style',
+  sourceEpisodeId: 'episode-1',
+  kind: 'choice',
+  workflowStage: 'needs_style_choice',
+  title: 'Choose Visual Style',
+  detail: 'Choose one candidate.',
+  choiceType: 'style',
+  operationId: 'request_edit_first_choice',
+  messageIndex: 1,
+  partIndex: 0,
+  assistantMessageCount: 2,
+}
+
+const sampleListResult: WorkflowLabCheckpointListResult = {
+  sourceEpisode: sampleEpisode,
+  checkpoints: [sampleCheckpoint],
+}
+
 describe('api contract - workflow lab route', () => {
   beforeEach(() => {
     authState.authenticated = true
-    workflowLabServiceMock.isWorkflowLabEnabled.mockReturnValue(true)
-    workflowLabServiceMock.listWorkflowLabEpisodes.mockResolvedValue([sampleEpisode])
-    workflowLabServiceMock.forkWorkflowLabEpisode.mockResolvedValue({
-      sourceEpisode: sampleEpisode,
-      forkedEpisode: {
-        ...sampleEpisode,
-        id: 'episode-forked',
-        name: '[LAB] Episode 1',
-        episodeNumber: 2,
-      },
-    } satisfies WorkflowLabForkResult)
     vi.clearAllMocks()
     workflowLabServiceMock.isWorkflowLabEnabled.mockReturnValue(true)
+    workflowLabServiceMock.listWorkflowLabCheckpoints.mockResolvedValue(sampleListResult)
+    workflowLabServiceMock.forkWorkflowLabCheckpointProject.mockResolvedValue({
+      checkpoint: sampleCheckpoint,
+      sourceProject: { id: 'project-1', name: 'Project' },
+      sourceEpisode: sampleEpisode,
+      labProject: { id: 'project-lab', name: '[LAB] Project' },
+      labEpisode: {
+        ...sampleEpisode,
+        id: 'episode-lab',
+        episodeNumber: 1,
+      },
+    } satisfies WorkflowLabForkResult)
   })
 
-  it('GET returns real workflow lab episodes for the authenticated project', async () => {
-    workflowLabServiceMock.listWorkflowLabEpisodes.mockResolvedValueOnce([sampleEpisode])
-
+  it('GET returns real assistant checkpoints for the authenticated episode', async () => {
     const res = await GET(
       buildMockRequest({
         path: '/api/projects/project-1/workflow-lab',
@@ -76,18 +99,33 @@ describe('api contract - workflow lab route', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(workflowLabServiceMock.listWorkflowLabEpisodes).toHaveBeenCalledWith({
+    expect(workflowLabServiceMock.listWorkflowLabCheckpoints).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
+      sourceEpisodeId: 'episode-1',
     })
     await expect(res.json()).resolves.toEqual({
       enabled: true,
-      episodes: [sampleEpisode],
+      sourceEpisode: sampleEpisode,
+      checkpoints: [sampleCheckpoint],
       currentEpisodeId: 'episode-1',
     })
   })
 
-  it('GET reports disabled mode without listing episodes', async () => {
+  it('GET rejects enabled lab requests without an episode id', async () => {
+    const res = await GET(
+      buildMockRequest({
+        path: '/api/projects/project-1/workflow-lab',
+        method: 'GET',
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(res.status).toBe(400)
+    expect(workflowLabServiceMock.listWorkflowLabCheckpoints).not.toHaveBeenCalled()
+  })
+
+  it('GET reports disabled mode without listing checkpoints', async () => {
     workflowLabServiceMock.isWorkflowLabEnabled.mockReturnValue(false)
 
     const res = await GET(
@@ -99,22 +137,24 @@ describe('api contract - workflow lab route', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(workflowLabServiceMock.listWorkflowLabEpisodes).not.toHaveBeenCalled()
+    expect(workflowLabServiceMock.listWorkflowLabCheckpoints).not.toHaveBeenCalled()
     await expect(res.json()).resolves.toEqual({
       enabled: false,
-      episodes: [],
+      sourceEpisode: null,
+      checkpoints: [],
       currentEpisodeId: null,
     })
   })
 
-  it('POST forks a source episode through the workflow lab service', async () => {
+  it('POST forks a checkpoint into a new lab project through the service', async () => {
     const res = await POST(
       buildMockRequest({
         path: '/api/projects/project-1/workflow-lab',
         method: 'POST',
         body: {
-          action: 'forkEpisode',
+          action: 'forkCheckpointProject',
           sourceEpisodeId: 'episode-1',
+          checkpointId: sampleCheckpoint.id,
           name: 'Fork Name',
         },
       }),
@@ -122,21 +162,24 @@ describe('api contract - workflow lab route', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(workflowLabServiceMock.forkWorkflowLabEpisode).toHaveBeenCalledWith({
+    expect(workflowLabServiceMock.forkWorkflowLabCheckpointProject).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       sourceEpisodeId: 'episode-1',
+      checkpointId: sampleCheckpoint.id,
       name: 'Fork Name',
     })
     await expect(res.json()).resolves.toEqual({
       success: true,
       result: {
+        checkpoint: sampleCheckpoint,
+        sourceProject: { id: 'project-1', name: 'Project' },
         sourceEpisode: sampleEpisode,
-        forkedEpisode: {
+        labProject: { id: 'project-lab', name: '[LAB] Project' },
+        labEpisode: {
           ...sampleEpisode,
-          id: 'episode-forked',
-          name: '[LAB] Episode 1',
-          episodeNumber: 2,
+          id: 'episode-lab',
+          episodeNumber: 1,
         },
       },
     })
@@ -148,7 +191,25 @@ describe('api contract - workflow lab route', () => {
         path: '/api/projects/project-1/workflow-lab',
         method: 'POST',
         body: {
-          action: 'switchStage',
+          action: 'forkEpisode',
+          sourceEpisodeId: 'episode-1',
+          checkpointId: sampleCheckpoint.id,
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(res.status).toBe(400)
+    expect(workflowLabServiceMock.forkWorkflowLabCheckpointProject).not.toHaveBeenCalled()
+  })
+
+  it('POST requires checkpoint id before forking', async () => {
+    const res = await POST(
+      buildMockRequest({
+        path: '/api/projects/project-1/workflow-lab',
+        method: 'POST',
+        body: {
+          action: 'forkCheckpointProject',
           sourceEpisodeId: 'episode-1',
         },
       }),
@@ -156,7 +217,7 @@ describe('api contract - workflow lab route', () => {
     )
 
     expect(res.status).toBe(400)
-    expect(workflowLabServiceMock.forkWorkflowLabEpisode).not.toHaveBeenCalled()
+    expect(workflowLabServiceMock.forkWorkflowLabCheckpointProject).not.toHaveBeenCalled()
   })
 
   it('returns auth error before touching workflow lab service', async () => {
@@ -166,11 +227,12 @@ describe('api contract - workflow lab route', () => {
       buildMockRequest({
         path: '/api/projects/project-1/workflow-lab',
         method: 'GET',
+        query: { episodeId: 'episode-1' },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
 
     expect(res.status).toBe(401)
-    expect(workflowLabServiceMock.listWorkflowLabEpisodes).not.toHaveBeenCalled()
+    expect(workflowLabServiceMock.listWorkflowLabCheckpoints).not.toHaveBeenCalled()
   })
 })

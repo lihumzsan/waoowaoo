@@ -30,7 +30,7 @@ export interface ProjectWorkspaceProps {
   assistantAutoStartKey?: string | null
   workflowLabEnabled?: boolean
   onAssistantAutoStartConsumed?: () => void
-  onWorkflowLabEpisodeForked?: (episodeId: string) => void | Promise<void>
+  onWorkflowLabProjectForked?: (params: { projectId: string; episodeId: string }) => void | Promise<void>
   onEpisodeSelect?: (episodeId: string) => void
   onEpisodeCreate?: () => void
   onEpisodeRename?: (episodeId: string, newName: string) => void

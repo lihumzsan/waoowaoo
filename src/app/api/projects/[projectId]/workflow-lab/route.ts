@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import {
-  forkWorkflowLabEpisode,
+  forkWorkflowLabCheckpointProject,
   isWorkflowLabEnabled,
-  listWorkflowLabEpisodes,
+  listWorkflowLabCheckpoints,
 } from '@/lib/workflow-lab/service'
 
 export const runtime = 'nodejs'
@@ -26,17 +26,28 @@ export const GET = apiHandler(async (
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const episodes = isWorkflowLabEnabled()
-    ? await listWorkflowLabEpisodes({
+  const sourceEpisodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || ''
+  if (isWorkflowLabEnabled() && !sourceEpisodeId) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'WORKFLOW_LAB_SOURCE_EPISODE_REQUIRED',
+      field: 'episodeId',
+      message: 'episodeId is required',
+    })
+  }
+
+  const result = isWorkflowLabEnabled()
+    ? await listWorkflowLabCheckpoints({
       projectId,
       userId: authResult.session.user.id,
+      sourceEpisodeId,
     })
-    : []
+    : null
 
   return NextResponse.json({
     enabled: isWorkflowLabEnabled(),
-    episodes,
-    currentEpisodeId: request.nextUrl.searchParams.get('episodeId')?.trim() || null,
+    sourceEpisode: result?.sourceEpisode ?? null,
+    checkpoints: result?.checkpoints ?? [],
+    currentEpisodeId: sourceEpisodeId || null,
   })
 })
 
@@ -50,7 +61,7 @@ export const POST = apiHandler(async (
 
   const body = readObject(await request.json().catch(() => ({})))
   const action = readTrimmedString(body.action)
-  if (action !== 'forkEpisode') {
+  if (action !== 'forkCheckpointProject') {
     throw new ApiError('INVALID_PARAMS', {
       code: 'WORKFLOW_LAB_ACTION_INVALID',
       field: 'action',
@@ -67,10 +78,20 @@ export const POST = apiHandler(async (
     })
   }
 
-  const result = await forkWorkflowLabEpisode({
+  const checkpointId = readTrimmedString(body.checkpointId)
+  if (!checkpointId) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'WORKFLOW_LAB_CHECKPOINT_REQUIRED',
+      field: 'checkpointId',
+      message: 'checkpointId is required',
+    })
+  }
+
+  const result = await forkWorkflowLabCheckpointProject({
     projectId,
     userId: authResult.session.user.id,
     sourceEpisodeId,
+    checkpointId,
     name: readTrimmedString(body.name) || null,
   })
 

@@ -2,6 +2,54 @@ import { Prisma } from '@prisma/client'
 
 export type WorkflowLabIdMap = Map<string, string>
 
+export interface WorkflowLabCloneMaps {
+  readonly allIds: WorkflowLabIdMap
+  readonly characterIds: WorkflowLabIdMap
+  readonly locationIds: WorkflowLabIdMap
+  readonly locationImageIds: WorkflowLabIdMap
+  readonly characterAppearanceIds: WorkflowLabIdMap
+  readonly clipIds: WorkflowLabIdMap
+  readonly storyboardIds: WorkflowLabIdMap
+  readonly panelIds: WorkflowLabIdMap
+  readonly screenplayIds: WorkflowLabIdMap
+  readonly stylePreviewIds: WorkflowLabIdMap
+  readonly directorDecoupageIds: WorkflowLabIdMap
+  readonly editScriptIds: WorkflowLabIdMap
+  readonly assetRequirementIds: WorkflowLabIdMap
+  readonly cinematographyShotPlanIds: WorkflowLabIdMap
+  readonly videoGroupIds: WorkflowLabIdMap
+}
+
+export function createWorkflowLabCloneMaps(): WorkflowLabCloneMaps {
+  return {
+    allIds: new Map(),
+    characterIds: new Map(),
+    locationIds: new Map(),
+    locationImageIds: new Map(),
+    characterAppearanceIds: new Map(),
+    clipIds: new Map(),
+    storyboardIds: new Map(),
+    panelIds: new Map(),
+    screenplayIds: new Map(),
+    stylePreviewIds: new Map(),
+    directorDecoupageIds: new Map(),
+    editScriptIds: new Map(),
+    assetRequirementIds: new Map(),
+    cinematographyShotPlanIds: new Map(),
+    videoGroupIds: new Map(),
+  }
+}
+
+export function mapWorkflowLabId(params: {
+  readonly maps: WorkflowLabCloneMaps
+  readonly scopedMap: WorkflowLabIdMap
+  readonly sourceId: string
+  readonly targetId: string
+}) {
+  params.scopedMap.set(params.sourceId, params.targetId)
+  params.maps.allIds.set(params.sourceId, params.targetId)
+}
+
 export function toNullableInputJson(value: Prisma.JsonValue | null): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   return value === null ? Prisma.JsonNull : value as Prisma.InputJsonValue
 }
