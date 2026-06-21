@@ -5,6 +5,7 @@ export type RouteCategory =
   | 'tasks'
   | 'user'
   | 'auth'
+  | 'payments'
   | 'infra'
   | 'system'
 
@@ -16,6 +17,7 @@ export type RouteContractGroup =
   | 'task-infra-routes'
   | 'user-project-routes'
   | 'auth-routes'
+  | 'payment-routes'
   | 'infra-routes'
 
 export type RouteCatalogEntry = {
@@ -59,6 +61,9 @@ const ROUTE_FILES = [
   'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',
   'src/app/api/mutation-batches/[batchId]/revert/route.ts',
+  'src/app/api/payments/recharge/config/route.ts',
+  'src/app/api/payments/stripe/checkout/route.ts',
+  'src/app/api/payments/stripe/webhook/route.ts',
   'src/app/api/storage/sign/route.ts',
   'src/app/api/projects/[projectId]/ai-create-character/route.ts',
   'src/app/api/projects/[projectId]/ai-create-location/route.ts',
@@ -179,6 +184,7 @@ function resolveCategory(routeFile: string): RouteCategory {
   }
   if (routeFile.startsWith('src/app/api/user/') || routeFile === 'src/app/api/user-preference/route.ts') return 'user'
   if (routeFile.startsWith('src/app/api/auth/')) return 'auth'
+  if (routeFile.startsWith('src/app/api/payments/')) return 'payments'
   if (routeFile.startsWith('src/app/api/system/')) return 'system'
   return 'infra'
 }
@@ -223,6 +229,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     return 'user-project-routes'
   }
   if (routeFile.startsWith('src/app/api/auth/')) return 'auth-routes'
+  if (routeFile.startsWith('src/app/api/payments/')) return 'payment-routes'
   return 'infra-routes'
 }
 

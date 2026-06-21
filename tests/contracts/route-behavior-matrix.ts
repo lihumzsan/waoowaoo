@@ -22,10 +22,14 @@ const CONTRACT_TESTS_BY_GROUP: Record<RouteCatalogEntry['contractGroup'], Readon
   ],
   'user-project-routes': ['tests/integration/api/contract/project-crud-routes.test.ts'],
   'auth-routes': ['tests/integration/api/contract/project-crud-routes.test.ts'],
+  'payment-routes': ['tests/integration/api/contract/payment-routes.test.ts'],
   'infra-routes': ['tests/integration/api/contract/infra-routes.test.ts'],
 }
 
 function resolveChainTest(routeFile: string): string {
+  if (routeFile.startsWith('src/app/api/payments/')) {
+    return 'tests/integration/api/contract/payment-routes.test.ts'
+  }
   if (routeFile.includes('/generate-video/')) {
     return 'tests/integration/chain/video.chain.test.ts'
   }
@@ -39,14 +43,20 @@ function resolveChainTest(routeFile: string): string {
   return 'tests/integration/chain/image.chain.test.ts'
 }
 
+function resolveBehaviorTests(entry: RouteCatalogEntry): ReadonlyArray<string> {
+  const tests = [...CONTRACT_TESTS_BY_GROUP[entry.contractGroup]]
+  const chainTest = resolveChainTest(entry.routeFile)
+  if (!tests.includes(chainTest)) {
+    tests.push(chainTest)
+  }
+  return tests
+}
+
 export const ROUTE_BEHAVIOR_MATRIX: ReadonlyArray<RouteBehaviorMatrixEntry> = ROUTE_CATALOG.map((entry) => ({
   routeFile: entry.routeFile,
   contractGroup: entry.contractGroup,
   caseId: `ROUTE:${entry.routeFile.replace(/^src\/app\/api\//, '').replace(/\/route\.ts$/, '')}`,
-  tests: [
-    ...CONTRACT_TESTS_BY_GROUP[entry.contractGroup],
-    resolveChainTest(entry.routeFile),
-  ],
+  tests: resolveBehaviorTests(entry),
 }))
 
 export const ROUTE_BEHAVIOR_COUNT = ROUTE_BEHAVIOR_MATRIX.length
