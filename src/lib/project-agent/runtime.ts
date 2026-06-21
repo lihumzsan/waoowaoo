@@ -39,7 +39,7 @@ import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
-import { buildOpenRouterSessionId } from '@/lib/ai-providers/openrouter/session'
+import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
   createProjectAgentWait,
   type ProjectAgentWaitFollowUp,
@@ -542,7 +542,7 @@ export async function createProjectAgentChatResponse(input: {
     userId: input.userId,
     episodeId: context.episodeId || null,
   })
-  const openRouterSessionId = buildOpenRouterSessionId({
+  const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
     userId: input.userId,
     projectId: input.projectId,
