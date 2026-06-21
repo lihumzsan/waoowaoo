@@ -33,6 +33,8 @@ describe('public payment-readiness pages', () => {
     }
 
     expect(pages[0]).toContain('requireOfficialCloudPricingPage()')
+    expect(pages[0]).toContain("pathname: '/profile'")
+    expect(pages[0]).toContain("section: 'billing'")
     expect(pages[1]).toContain('requireOfficialCloudLegalPage()')
     expect(pages[2]).toContain('requireOfficialCloudLegalPage()')
     expect(pages[3]).toContain('requireOfficialCloudLegalPage()')

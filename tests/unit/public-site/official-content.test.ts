@@ -21,6 +21,12 @@ function writeCompleteContent(dir: string): void {
     title: 'Official pricing',
     description: 'Private pricing content',
     betaNotice: 'Checkout is not enabled.',
+    checkout: {
+      title: 'Top up',
+      body: 'Use live checkout',
+      primaryCta: 'Top up now',
+      secondaryCta: 'Create account',
+    },
     plans: {
       starter: {
         label: 'Starter label',
@@ -91,6 +97,7 @@ describe('official public-site content', () => {
 
     expect(pricing.plans).toHaveLength(1)
     expect(pricing.plans[0].price).toBe('USD 10')
+    expect(pricing.checkout.primaryCta).toBe('Top up now')
     expect(contact.publicInfo.fields[0].value).toBe('Example Private Company Limited')
     expect(contact.portalOnly.items).toEqual(['Certificate scan', 'Director KYC'])
     expect(terms.sections[0]).toEqual({
@@ -109,6 +116,12 @@ describe('official public-site content', () => {
       title: 'Official pricing',
       description: 'Private pricing content',
       betaNotice: 'Checkout is not enabled.',
+      checkout: {
+        title: 'Top up',
+        body: 'Use live checkout',
+        primaryCta: 'Top up now',
+        secondaryCta: 'Create account',
+      },
       plans: {},
       creditPolicy: {
         title: 'Credit rules',

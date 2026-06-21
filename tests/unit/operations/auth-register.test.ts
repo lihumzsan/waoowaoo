@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { AUTH_REGISTER_RESULT_CODES } from '@/lib/auth/register-result-codes'
+import { hashInviteCode } from '@/lib/billing/invite-codes'
 
 const prismaMock = vi.hoisted(() => {
   const tx = {
@@ -285,7 +286,7 @@ describe('auth register operation', () => {
     expect(prismaMock.__tx.balanceTransaction.create.mock.calls).toEqual([])
   })
 
-  it('[cloud 注册带邀请码] -> 仍然不在注册阶段隐式入账', async () => {
+  it('[cloud 注册带可选邀请码] -> 注册事务内兑换邀请码并入账', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
@@ -308,7 +309,63 @@ describe('auth register operation', () => {
         name: true,
       },
     })
-    expect(prismaMock.__tx.inviteCode.findUnique.mock.calls).toEqual([])
+    expect(prismaMock.__tx.inviteCode.findUnique).toHaveBeenCalledWith({
+      where: { codeHash: hashInviteCode('beta-1') },
+    })
+    expect(prismaMock.__tx.inviteCode.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'invite-1',
+        disabledAt: null,
+        redeemedCount: { lt: 5 },
+      },
+      data: {
+        redeemedCount: { increment: 1 },
+      },
+    })
+    expect(prismaMock.__tx.inviteRedemption.create).toHaveBeenCalledWith({
+      data: {
+        inviteCodeId: 'invite-1',
+        userId: 'user-1',
+        amount: 100,
+      },
+    })
+    expect(prismaMock.__tx.userBalance.upsert).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      create: { userId: 'user-1', balance: 100, frozenAmount: 0, totalSpent: 0 },
+      update: { balance: { increment: 100 } },
+    })
+    expect(prismaMock.__tx.balanceTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-1',
+        type: 'adjust',
+        amount: 100,
+        balanceAfter: 100,
+        relatedId: 'invite-1',
+        freezeId: null,
+        operatorId: 'invite-code',
+        externalOrderId: 'invite-1',
+        idempotencyKey: 'invite:invite-1:user-1',
+      }),
+    })
+  })
+
+  it('[cloud 注册带无效可选邀请码] -> 显式失败且不静默注册入账', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    prismaMock.__tx.inviteCode.findUnique.mockResolvedValue(null)
+
+    const promise = executeRegister({ name: 'alice', password: 'secret1', inviteCode: 'missing-code' })
+
+    await expect(promise).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: expect.objectContaining({
+        code: 'INVITE_CODE_INVALID',
+        field: 'inviteCode',
+      }),
+    })
+    expect(prismaMock.__tx.inviteCode.findUnique).toHaveBeenCalledWith({
+      where: { codeHash: hashInviteCode('missing-code') },
+    })
     expect(prismaMock.__tx.inviteCode.updateMany.mock.calls).toEqual([])
     expect(prismaMock.__tx.inviteRedemption.create.mock.calls).toEqual([])
     expect(prismaMock.__tx.userBalance.upsert.mock.calls).toEqual([])

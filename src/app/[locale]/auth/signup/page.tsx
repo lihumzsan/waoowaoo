@@ -26,6 +26,7 @@ export default function SignUp() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [inviteCode, setInviteCode] = useState("")
+  const [showInviteCodeInput, setShowInviteCodeInput] = useState(false)
   const [inviteCodeRequired, setInviteCodeRequired] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -48,6 +49,7 @@ export default function SignUp() {
       ) {
         const features = Reflect.get(payload, 'features')
         if (isPublicDeploymentFeatures(features)) {
+          setShowInviteCodeInput(features.showInviteCode || features.requireInviteCodeOnSignup)
           setInviteCodeRequired(features.requireInviteCodeOnSignup)
         }
       }
@@ -123,7 +125,7 @@ export default function SignUp() {
       const payload = {
         name,
         password,
-        ...(inviteCodeRequired ? { inviteCode: inviteCode.trim() } : {}),
+        ...(showInviteCodeInput && inviteCode.trim() ? { inviteCode: inviteCode.trim() } : {}),
       }
       const response = await apiFetch("/api/auth/register", {
         method: "POST",
@@ -216,10 +218,10 @@ export default function SignUp() {
                 />
               </div>
 
-              {inviteCodeRequired && (
+              {showInviteCodeInput && (
                 <div>
                   <label htmlFor="inviteCode" className="glass-field-label block mb-2">
-                    {t('inviteCode')}
+                    {inviteCodeRequired ? t('inviteCode') : t('inviteCodeOptional')}
                   </label>
                   <input
                     id="inviteCode"
@@ -228,9 +230,9 @@ export default function SignUp() {
                     autoComplete="off"
                     value={inviteCode}
                     onChange={(e) => setInviteCode(e.target.value)}
-                    required
+                    required={inviteCodeRequired}
                     className="glass-input-base w-full px-4 py-3"
-                    placeholder={t('inviteCodePlaceholder')}
+                    placeholder={inviteCodeRequired ? t('inviteCodePlaceholder') : t('inviteCodeOptionalPlaceholder')}
                   />
                 </div>
               )}

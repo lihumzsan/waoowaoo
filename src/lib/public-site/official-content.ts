@@ -32,6 +32,12 @@ export interface OfficialPricingPageContent {
   betaNotice: string
   plans: readonly OfficialPricingPlan[]
   creditPolicy: OfficialTextSection
+  checkout: {
+    title: string
+    body: string
+    primaryCta: string
+    secondaryCta: string
+  }
 }
 
 export interface OfficialContactField {
@@ -154,6 +160,7 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
   const schema = pageFileName('pricing', locale)
   const record = readJsonRecord(schema)
   const plans = readRequiredRecord(record, 'plans', schema)
+  const checkout = readRequiredRecord(record, 'checkout', schema)
   const planItems = Object.entries(plans).map(([planKey, planValue]) => {
     if (!isRecord(planValue)) fail(schema, `plans.${planKey} must be an object`)
     return {
@@ -174,6 +181,12 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
     betaNotice: readRequiredString(record, 'betaNotice', schema),
     plans: planItems,
     creditPolicy: readSection(readRequiredRecord(record, 'creditPolicy', schema), `${schema}.creditPolicy`),
+    checkout: {
+      title: readRequiredString(checkout, 'title', `${schema}.checkout`),
+      body: readRequiredString(checkout, 'body', `${schema}.checkout`),
+      primaryCta: readRequiredString(checkout, 'primaryCta', `${schema}.checkout`),
+      secondaryCta: readRequiredString(checkout, 'secondaryCta', `${schema}.checkout`),
+    },
   }
 }
 

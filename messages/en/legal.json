@@ -1,7 +1,7 @@
 {
   "publicFooter": {
     "brand": "waoowaoo",
-    "betaNotice": "Official beta is active. Self-service payments are not yet available.",
+    "betaNotice": "The official cloud edition supports Stripe self-service top-ups.",
     "navLabel": "Public policy links",
     "links": {
       "pricing": "Pricing",
@@ -42,8 +42,8 @@
         "body": "Users must keep account credentials secure. The platform may restrict, suspend, or terminate accounts involved in abnormal activity, violations, fraud, abuse, or actions that affect service security or stability."
       },
       "payments": {
-        "title": "Payments and beta status",
-        "body": "Self-service payments are not available during the current official beta. Beta credits may be obtained through invite codes or manual admin grants. When paid checkout launches, payments will be processed through Stripe, Airwallex, or other supported payment methods."
+        "title": "Payments and credits",
+        "body": "The official cloud edition supports self-service credit purchases through Stripe. Users enter a top-up amount in the account billing page and are redirected to Stripe-hosted Checkout. Currently available methods include Stripe-enabled cards, Link, Apple Pay, and other approved methods; local payment methods such as WeChat Pay and Alipay depend on payment-provider approval. Invite codes and manual grants are used only for trials, tests, or operational credits."
       },
       "liability": {
         "title": "Limitation of liability",
@@ -79,7 +79,7 @@
       },
       "payments": {
         "title": "Payment data",
-        "body": "After paid checkout launches, sensitive payment details such as card numbers will be handled by Stripe, Airwallex, or other payment providers. We generally store only orders, credits, transaction statuses, and required accounting records."
+        "body": "Sensitive payment details such as card numbers are handled by Stripe, Airwallex, or other payment providers. We generally store only orders, credits, transaction statuses, and required accounting records."
       },
       "retention": {
         "title": "Retention",
@@ -102,7 +102,7 @@
   "refund": {
     "eyebrow": "Refunds",
     "title": "Refund Policy",
-    "description": "This policy explains refund rules for beta credits and future paid credits. Self-service payments are not yet available.",
+    "description": "This policy explains refund rules for trial credits and paid credits.",
     "updatedAt": "Last updated: to be confirmed before production launch",
     "sections": {
       "beta": {
@@ -110,8 +110,8 @@
         "body": "Credits issued through invite codes or manual admin grants during beta are not purchased cash rights and are not eligible for cash refunds, withdrawals, or transfer."
       },
       "paidCredits": {
-        "title": "Future paid credits",
-        "body": "After paid checkout launches, unused paid credits may be refundable within a specified period after purchase. The refund window is currently to be confirmed; 7 or 14 days is recommended before launch."
+        "title": "Paid credits",
+        "body": "Unused paid credits may be refundable within the specified refund window after purchase. The current refund window is 7 days after purchase; used packages, consumed credits, or credits already used for generation tasks that incurred service costs are not refundable."
       },
       "usedCredits": {
         "title": "Used credits",

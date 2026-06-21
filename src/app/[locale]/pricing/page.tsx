@@ -3,6 +3,7 @@ import PublicFooter from '@/components/PublicFooter'
 import { normalizeOfficialLocale, readOfficialPricingPage } from '@/lib/public-site/official-content'
 import { requireOfficialCloudPricingPage } from '@/lib/public-site/visibility'
 import { readPublicDeploymentFeatures } from '@/lib/deployment/server-features'
+import { Link } from '@/i18n/navigation'
 import type { Locale } from '@/i18n/routing'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,33 @@ export default async function PricingPage({
 
         <section className="mb-8 rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-tone-warning-bg)]/55 p-5 text-sm leading-7 text-[var(--glass-text-secondary)] backdrop-blur-xl">
           {content.betaNotice}
+        </section>
+
+        <section className="mb-8 rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-surface)]/72 p-6 backdrop-blur-xl">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl space-y-2">
+              <h2 className="text-2xl font-semibold tracking-normal text-[var(--glass-text-primary)]">
+                {content.checkout.title}
+              </h2>
+              <p className="text-sm leading-7 text-[var(--glass-text-secondary)]">
+                {content.checkout.body}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row md:flex-col">
+              <Link
+                href={{ pathname: '/profile', query: { section: 'billing' } }}
+                className="glass-btn-base glass-btn-primary rounded-xl px-5 py-3 text-center text-sm font-semibold"
+              >
+                {content.checkout.primaryCta}
+              </Link>
+              <Link
+                href={{ pathname: '/auth/signup' }}
+                className="glass-btn-secondary rounded-xl px-5 py-3 text-center text-sm font-semibold"
+              >
+                {content.checkout.secondaryCta}
+              </Link>
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">

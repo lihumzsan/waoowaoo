@@ -1,14 +1,20 @@
 {
   "eyebrow": "Pricing",
   "title": "Pricing and Credits",
-  "description": "The official waoowaoo cloud edition will use credits for AI text, image, video, and music generation. These are beta placeholder prices and can be updated before paid launch.",
-  "betaNotice": "Self-service top-up is not available during the official beta. Users can receive trial credits through invite codes or manual admin grants. The prices below describe the planned paid version for payment review and do not mean checkout is currently enabled.",
+  "description": "The official waoowaoo cloud edition uses credits for AI text, image, video, and music generation. Users can top up through Stripe after creating an account.",
+  "betaNotice": "Self-service top-up is available. Stripe currently supports enabled methods such as cards, Link, and Apple Pay; WeChat Pay and Alipay will appear in Checkout after payment-provider approval. Invite codes and manual grants are used only for trials, tests, or operational credits.",
+  "checkout": {
+    "title": "Top up and start generating",
+    "body": "Top-ups use the live Stripe Checkout flow. Credits are valued in CNY and converted to HKD using the configured settlement rate. After Stripe confirms the payment through webhook, credits are added automatically.",
+    "primaryCta": "Top up now",
+    "secondaryCta": "Create account"
+  },
   "plans": {
     "starter": {
       "label": "Personal starter",
       "name": "Starter",
       "price": "US$9",
-      "status": "Planned paid-launch package",
+      "status": "Public reference package",
       "details": {
         "credits": "Includes 1,000 credits",
         "usage": "Usable for text, image, video, and music generation",
@@ -19,7 +25,7 @@
       "label": "Creator",
       "name": "Creator",
       "price": "US$29",
-      "status": "Planned paid-launch package",
+      "status": "Public reference package",
       "details": {
         "credits": "Includes 4,000 credits",
         "usage": "For ongoing projects and multi-asset generation",
@@ -30,7 +36,7 @@
       "label": "Studio",
       "name": "Studio",
       "price": "US$99",
-      "status": "Planned paid-launch package",
+      "status": "Public reference package",
       "details": {
         "credits": "Includes 15,000 credits",
         "usage": "For team projects and frequent video generation",
@@ -40,6 +46,6 @@
   },
   "creditPolicy": {
     "title": "Credit rules",
-    "body": "Credits are in-platform AI generation units. They are not cash, cannot be withdrawn, cannot be transferred, and cannot be used outside the platform. Actual deductions depend on task type, model, resolution, duration, and other factors. When paid checkout launches, final pricing, currency, taxes, and checkout entry points will be shown."
+    "body": "Credits are in-platform AI generation units. They are not cash, cannot be withdrawn, cannot be transferred, and cannot be used outside the platform. Actual deductions depend on task type, model, resolution, duration, and other factors. Final payment amount, currency, taxes, and available payment methods are shown on the Stripe Checkout page."
   }
 }

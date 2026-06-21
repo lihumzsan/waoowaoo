@@ -103,22 +103,21 @@ async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, r
   })
 }
 
-export function assertRegistrationInviteInput(input: { inviteCode?: unknown }): string | null {
+export function readRegistrationInviteInput(input: { inviteCode?: unknown }): string | null {
   const features = getDeploymentFeatures(getDeploymentConfig())
-  if (!features.requireInviteCodeOnSignup) return null
-
   const inviteCode = readInviteCode(input.inviteCode)
-  if (!inviteCode) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'INVITE_CODE_REQUIRED',
-      field: 'inviteCode',
-    })
-  }
-  return inviteCode
+
+  if (inviteCode) return inviteCode
+
+  if (!features.requireInviteCodeOnSignup) return null
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'INVITE_CODE_REQUIRED',
+    field: 'inviteCode',
+  })
 }
 
 export async function createRegisteredUser(tx: RegistrationTx, input: RegisterUserInput): Promise<RegisteredUserResult> {
-  const inviteCode = assertRegistrationInviteInput({ inviteCode: input.inviteCode })
+  const inviteCode = readRegistrationInviteInput({ inviteCode: input.inviteCode })
 
   const user = await tx.user.create({
     data: {
