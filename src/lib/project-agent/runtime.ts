@@ -82,7 +82,7 @@ import {
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
-import { resolveProjectPhase } from './project-phase'
+import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -239,6 +239,97 @@ function buildTaskFollowUpInputItem(followUp: ProjectAgentWaitFollowUp): AgentIn
     `total=${String(followUp.total)} succeeded=${String(followUp.successCount)} failed=${String(followUp.failedCount)}`,
     ...(followUp.failedTaskIds.length > 0 ? [`failedTaskIds=${followUp.failedTaskIds.join(',')}`] : []),
     'Background tasks reached a terminal state. Give the user a short readable summary of the result, then continue with the immediate next injected operation if one exists. Do not re-run the operation that just completed.',
+  ]
+  return {
+    role: 'user',
+    content: lines.join('\n'),
+  } satisfies AgentInputItem
+}
+
+function formatRuntimeStateValue(value: string | null | undefined): string {
+  const normalized = value?.trim().replace(/\s+/g, ' ') ?? ''
+  return normalized || 'none'
+}
+
+function formatRuntimeStateList(values: readonly string[]): string {
+  return values.length > 0 ? values.map(formatRuntimeStateValue).join(',') : 'none'
+}
+
+function buildProjectStateVersion(params: {
+  phase: ProjectPhaseSnapshot
+  context: ProjectAgentContext
+  enabledOperationIds: readonly string[]
+}): string {
+  const workflow = params.phase.editFirstWorkflow
+  return [
+    params.phase.phase,
+    workflow.stage,
+    workflow.blocking.kind,
+    workflow.nextAction?.operationId ?? 'none',
+    String(params.phase.progress.clipCount),
+    String(params.phase.progress.screenplayClipCount),
+    String(params.phase.progress.storyboardCount),
+    String(params.phase.progress.panelCount),
+    String(params.phase.activePlanRunCount),
+    String(params.phase.failedItems.length),
+    String(params.phase.staleArtifacts.length),
+    params.enabledOperationIds.join('|') || 'none',
+    params.context.selectedScopeRef ?? 'none',
+    params.context.selectedPanelId ?? 'none',
+    params.context.selectedClipId ?? 'none',
+    params.context.selectedAssetId ?? 'none',
+  ].map(formatRuntimeStateValue).join(':')
+}
+
+function buildProjectStateInputItem(params: {
+  projectId: string
+  episodeId: string | null
+  context: ProjectAgentContext
+  phase: ProjectPhaseSnapshot
+  enabledOperationIds: readonly string[]
+}): AgentInputItem {
+  const workflow = params.phase.editFirstWorkflow
+  const blockingReason = workflow.blocking.reason
+    ? `${workflow.blocking.kind}:${formatRuntimeStateValue(workflow.blocking.reason)}`
+    : workflow.blocking.kind
+  const activePlanRuns = params.phase.activePlanRuns.map((run) => (
+    `${formatRuntimeStateValue(run.id)}:${formatRuntimeStateValue(run.runType)}/${formatRuntimeStateValue(run.status)}`
+  ))
+  const lines = [
+    '[project_state_snapshot]',
+    'source=runtime',
+    'authoritative=true',
+    'not_user_instruction=true',
+    'purpose=Use this compact runtime state as the default project phase/progress context for this turn.',
+    `version=${buildProjectStateVersion({
+      phase: params.phase,
+      context: params.context,
+      enabledOperationIds: params.enabledOperationIds,
+    })}`,
+    `projectId=${formatRuntimeStateValue(params.projectId)}`,
+    `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
+    `phase=${formatRuntimeStateValue(params.phase.phase)}`,
+    `workflowActive=${String(workflow.active)}`,
+    `workflowStage=${formatRuntimeStateValue(workflow.stage)}`,
+    `workflowBlocking=${blockingReason}`,
+    `workflowNextAction=${formatRuntimeStateValue(workflow.nextAction?.operationId)}`,
+    `allowedOperationIds=${formatRuntimeStateList(workflow.allowedOperationIds)}`,
+    `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
+    `progress.clipCount=${String(params.phase.progress.clipCount)}`,
+    `progress.screenplayClipCount=${String(params.phase.progress.screenplayClipCount)}`,
+    `progress.storyboardCount=${String(params.phase.progress.storyboardCount)}`,
+    `progress.panelCount=${String(params.phase.progress.panelCount)}`,
+    `activePlanRunCount=${String(params.phase.activePlanRunCount)}`,
+    `activePlanRuns=${formatRuntimeStateList(activePlanRuns)}`,
+    `failedItems=${formatRuntimeStateList(params.phase.failedItems)}`,
+    `staleArtifacts=${formatRuntimeStateList(params.phase.staleArtifacts)}`,
+    `availableActions=${formatRuntimeStateList(params.phase.availableActions)}`,
+    `selectedScopeRef=${formatRuntimeStateValue(params.context.selectedScopeRef)}`,
+    `selectedPanelId=${formatRuntimeStateValue(params.context.selectedPanelId)}`,
+    `selectedClipId=${formatRuntimeStateValue(params.context.selectedClipId)}`,
+    `selectedAssetId=${formatRuntimeStateValue(params.context.selectedAssetId)}`,
+    'instruction=Do not call get_project_phase by default. Call it only if this snapshot is missing, stale, or insufficient. Use get_project_context/get_project_snapshot only for concrete details beyond this compact state.',
+    '[/project_state_snapshot]',
   ]
   return {
     role: 'user',
@@ -525,6 +616,13 @@ export async function createProjectAgentChatResponse(input: {
           : toAgentInputItems(runtimeMessages)),
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
+        buildProjectStateInputItem({
+          projectId: input.projectId,
+          episodeId: context.episodeId || null,
+          context,
+          phase,
+          enabledOperationIds: initialEnabledOperationIds,
+        }),
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [

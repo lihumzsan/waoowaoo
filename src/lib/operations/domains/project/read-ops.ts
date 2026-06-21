@@ -57,7 +57,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_phase: defineOperation({
       id: 'get_project_phase',
-      summary: 'Resolve the current project phase, progress counts, active runs, failed items, stale artifacts, and available next actions. Always call this before acting to understand the project state.',
+      summary: 'Resolve the current project phase, progress counts, active runs, failed items, stale artifacts, and available next actions. Use only when the injected project_state_snapshot is missing, stale, or insufficient; do not call by default before every action.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({}),

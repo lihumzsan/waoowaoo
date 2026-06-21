@@ -477,7 +477,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
-    expect(streamState.capturedSystem).toContain('当前 workflow 阶段')
+    expect(streamState.capturedSystem).toContain('[project_state_snapshot]')
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',
       status: 'completed',
@@ -490,6 +490,38 @@ describe('project agent runtime deterministic tool injection', () => {
         }),
       }),
     }))
+  })
+
+  it('injects compact runtime project state into the model input', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+
+    const response = await runAssistant({
+      context: {
+        episodeId: 'episode-1',
+        selectedScopeRef: 'clip:clip-1',
+      },
+      text: '继续',
+    })
+
+    expect(response.status).toBe(200)
+    const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
+    const snapshotItem = runInputItems.find((item) => (
+      item.role === 'user'
+      && typeof item.content === 'string'
+      && item.content.includes('[project_state_snapshot]')
+    ))
+    expect(snapshotItem).toBeDefined()
+    expect(runInputItems[runInputItems.length - 1]).toBe(snapshotItem)
+    const content = snapshotItem?.content
+    if (typeof content !== 'string') throw new Error('PROJECT_STATE_SNAPSHOT_TEST_CONTENT_MISSING')
+    expect(content).toContain('source=runtime')
+    expect(content).toContain('authoritative=true')
+    expect(content).toContain('phase=draft')
+    expect(content).toContain('workflowStage=ready_to_generate_screenplay')
+    expect(content).toContain('workflowNextAction=generate_edit_screenplay')
+    expect(content).toContain('enabledOperationIds=')
+    expect(content).toContain('selectedScopeRef=clip:clip-1')
+    expect(content).toContain('Do not call get_project_phase by default')
   })
 
   it('feeds the choice back as an in-band tool result while using workflow availability for next tools', async () => {
@@ -701,7 +733,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(response.status).toBe(200)
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
     expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
-    expect(streamState.capturedSystem).toContain('Assistant 权限模式：auto')
+    expect(streamState.capturedSystem).toContain('当前权限模式：auto')
   })
 
   it('enables storyboard image generation but not video generation before images are ready', async () => {
