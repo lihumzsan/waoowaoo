@@ -144,7 +144,6 @@ export interface AgentRuntimeContextPartData {
     coreOperationIds: string[]
     workflowOperationIds: string[]
     initialEnabledOperationIds: string[]
-    continuationOperationId: string | null
     resumeOperationId: string | null
     includeChoiceOperation: boolean
   }

@@ -48,7 +48,7 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
-import type { EditFirstChoiceContinuation } from './edit-first-choice-continuation'
+import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import type { EditFirstChoiceType } from './choice-card'
 import {
   clearProjectAgentInterruptionRunState,
@@ -94,7 +94,8 @@ interface ProjectAgentAgentsRunContext {
 
 /**
  * Control resolved by the route from the structured request body + database.
- * The runtime never infers continuation intent from message history.
+ * Choice controls carry only the submitted user decision. The model chooses
+ * the next tool from live workflow availability.
  */
 export type ProjectAgentResolvedControl =
   | {
@@ -113,7 +114,7 @@ export type ProjectAgentResolvedControl =
     choiceType: EditFirstChoiceType
     toolCallId: string | null
     cardId: string | null
-    continuation: EditFirstChoiceContinuation
+    choiceResult: EditFirstChoiceResult
   }
   | {
     kind: 'task_follow_up'
@@ -265,6 +266,17 @@ function collectFunctionToolOutputs(
       output: result.output,
     }]
   })
+}
+
+function choiceResponseMadeToolProgress(params: {
+  registry: ProjectAgentOperationRegistry
+  executedToolNames: ReadonlySet<string>
+}): boolean {
+  for (const toolName of params.executedToolNames) {
+    if (toolName === 'request_edit_first_choice') return true
+    if (params.registry[toolName]?.intent === 'act') return true
+  }
+  return false
 }
 
 function readApprovalString(value: unknown, key: string): string | null {
@@ -461,7 +473,6 @@ export async function createProjectAgentChatResponse(input: {
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
   const requestId = stableRequestId
-  const choiceContinuation = control.kind === 'choice' ? control.continuation : null
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
   const liveWorkflow = createProjectAgentLiveWorkflowState({
     requestId,
@@ -473,7 +484,6 @@ export async function createProjectAgentChatResponse(input: {
   const toolset = resolveProjectAgentToolset({
     registry: operations,
     context,
-    continuationOperationId: choiceContinuation?.operationId ?? null,
     resumeOperationId: approvalInterruption?.operationId ?? null,
   })
   const operationIds = toolset.operationIds
@@ -503,7 +513,7 @@ export async function createProjectAgentChatResponse(input: {
               buildDeclinedApprovalsInputItem(control.declinedInterruptions),
             )
           : toAgentInputItems(runtimeMessages)),
-        ...(control.kind === 'choice' ? control.continuation.inputItems : []),
+        ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
       ]
 
@@ -534,7 +544,6 @@ export async function createProjectAgentChatResponse(input: {
         coreOperationIds: toolset.coreOperationIds,
         workflowOperationIds: toolset.workflowOperationIds,
         initialEnabledOperationIds,
-        continuationOperationId: toolset.continuationOperationId,
         resumeOperationId: toolset.resumeOperationId,
         includeChoiceOperation: toolset.includeChoiceOperation,
       },
@@ -586,7 +595,6 @@ export async function createProjectAgentChatResponse(input: {
       `tools=${String(operationIds.length)}`,
       `enabledTools=${String(initialEnabledOperationIds.length)}`,
       `editFirstStage=${phase.editFirstWorkflow.stage}`,
-      ...(choiceContinuation ? [`choiceContinuation=${choiceContinuation.operationId}`] : []),
     ].join('\n')))
     initialChunks.push(createDataChunk('data-agent-debug', {
       requestId,
@@ -613,6 +621,7 @@ export async function createProjectAgentChatResponse(input: {
 
   let latestStopPart: ProjectAgentStopPartData | null = null
   const stopController = createProjectAgentStopController()
+  const executedToolNames = new Set<string>()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
   const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
@@ -659,7 +668,11 @@ export async function createProjectAgentChatResponse(input: {
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
-      const stopPart = stopController.evaluateStep(collectFunctionToolOutputs(toolResults))
+      const toolOutputs = collectFunctionToolOutputs(toolResults)
+      for (const output of toolOutputs) {
+        executedToolNames.add(output.toolName)
+      }
+      const stopPart = stopController.evaluateStep(toolOutputs)
       if (!stopPart) {
         return {
           isFinalOutput: false,
@@ -759,6 +772,34 @@ export async function createProjectAgentChatResponse(input: {
 
         if (approvalInterruption) {
           await clearProjectAgentInterruptionRunState(approvalInterruption.id)
+        }
+
+        if (
+          control.kind === 'choice'
+          && !latestStopPart
+          && !approvalItem
+          && !choiceResponseMadeToolProgress({ registry: operations, executedToolNames })
+        ) {
+          latestStopPart = {
+            reason: 'tool_error',
+            stepCount: 0,
+            operationIds: ['request_edit_first_choice'],
+            codes: ['PROJECT_AGENT_CHOICE_RESPONSE_NO_PROGRESS'],
+          }
+          projectAgentLogger.error({
+            action: 'assistant.choice_response.no_progress',
+            message: 'Choice response run completed without an action or follow-up choice tool call',
+            requestId,
+            projectId: input.projectId,
+            userId: input.userId,
+            details: {
+              runId: input.run.id,
+              choiceType: control.choiceType,
+              workflowStage: phase.editFirstWorkflow.stage,
+              initialEnabledOperationIds,
+              executedToolNames: Array.from(executedToolNames).sort(),
+            },
+          })
         }
 
         const waitFollowUpMode = await maybeCreateProjectAgentWait({

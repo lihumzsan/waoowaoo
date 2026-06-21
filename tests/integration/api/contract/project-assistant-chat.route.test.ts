@@ -443,7 +443,7 @@ describe('project assistant chat route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/assistant/chat -> resolves a choice response into an in-band continuation', async () => {
+  it('POST /api/projects/[projectId]/assistant/chat -> resolves a choice response into an in-band choice result', async () => {
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
@@ -475,8 +475,8 @@ describe('project assistant chat route', () => {
       control: expect.objectContaining({
         kind: 'choice',
         choiceType: 'style',
-        continuation: expect.objectContaining({
-          operationId: 'generate_edit_director_decoupage',
+        choiceResult: expect.objectContaining({
+          inputItems: expect.any(Array) as unknown[],
         }),
       }),
     }))
@@ -518,8 +518,8 @@ describe('project assistant chat route', () => {
       control: expect.objectContaining({
         kind: 'choice',
         choiceType: 'asset_review',
-        continuation: expect.objectContaining({
-          operationId: 'generate_edit_cinematography_shot_plan',
+        choiceResult: expect.objectContaining({
+          inputItems: expect.any(Array) as unknown[],
         }),
       }),
     }))

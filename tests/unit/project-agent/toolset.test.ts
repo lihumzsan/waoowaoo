@@ -75,11 +75,10 @@ describe('project agent live toolset registration', () => {
     ]))
   })
 
-  it('keeps the choice tool during a choice continuation run', () => {
+  it('keeps the choice tool available without forcing a continuation operation', () => {
     const result = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
-      continuationOperationId: 'generate_edit_screenplay',
     })
 
     expect(result.operationIds).toContain('generate_edit_screenplay')
@@ -171,6 +170,21 @@ describe('project agent live operation enablement', () => {
       workflow: movedOn,
       operationId: 'generate_edit_style_previews',
     })).toBe(true)
+  })
+
+  it('does not always enable a workflow operation just because it follows a choice result', () => {
+    const toolset = resolveProjectAgentToolset({
+      registry: registry(),
+      context: { episodeId: 'episode-1' },
+    })
+    const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_screenplay')).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: review,
+      operationId: 'generate_edit_screenplay',
+    })).toBe(false)
   })
 
   it('treats core read tools and the choice tool as always enabled', () => {

@@ -2,28 +2,23 @@ import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { EditFirstChoiceType } from './choice-card'
+import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 import {
   isEditFirstDurationTier,
   type EditFirstDurationTier,
 } from '@/lib/edit-script/duration-tier'
 
-type ChoiceContinuationOperationId =
-  | 'generate_edit_screenplay'
-  | 'generate_edit_style_previews'
-  | 'revise_edit_screenplay'
-  | 'generate_edit_director_decoupage'
-  | 'generate_edit_cinematography_shot_plan'
-
 interface UnknownRecord {
   [key: string]: unknown
 }
 
-export interface EditFirstChoiceContinuation {
-  operationId: ChoiceContinuationOperationId
+export interface EditFirstChoiceResult {
   /**
    * Synthetic function_call/function_call_result pair injected into the next
    * run input so the model sees its own choice request answered in-band,
-   * instead of receiving the choice through system-prompt prose.
+   * instead of receiving the choice through system-prompt prose. This only
+   * carries the user's structured choice result; it never selects the next
+   * operation.
    */
   inputItems: AgentInputItem[]
 }
@@ -54,7 +49,6 @@ function buildChoiceInputItems(params: {
   toolCallId: string | null
   choiceType: EditFirstChoiceType
   result: UnknownRecord
-  nextOperationId: ChoiceContinuationOperationId
 }): AgentInputItem[] {
   const callId = params.toolCallId ?? `edit_first_choice_${randomUUID()}`
   return [
@@ -75,7 +69,6 @@ function buildChoiceInputItems(params: {
         text: JSON.stringify({
           ok: true,
           choiceType: params.choiceType,
-          nextOperationId: params.nextOperationId,
           ...params.result,
         }),
       },
@@ -83,12 +76,12 @@ function buildChoiceInputItems(params: {
   ]
 }
 
-export function resolveEditFirstChoiceContinuation(params: {
+export function buildEditFirstChoiceResult(params: {
   choiceType: EditFirstChoiceType
   toolCallId: string | null
   output: UnknownRecord
   latestUserText: string
-}): EditFirstChoiceContinuation | null {
+}): EditFirstChoiceResult | null {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
 
   if (params.choiceType === 'duration_and_aspect_ratio') {
@@ -96,11 +89,9 @@ export function resolveEditFirstChoiceContinuation(params: {
     const aspectRatio = readAspectRatio(params.output.aspectRatio)
     if (!durationTier || !aspectRatio || !params.latestUserText) return null
     return {
-      operationId: 'generate_edit_screenplay',
       inputItems: buildChoiceInputItems({
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
-        nextOperationId: 'generate_edit_screenplay',
         result: {
           prompt: params.latestUserText,
           durationTier,
@@ -116,22 +107,18 @@ export function resolveEditFirstChoiceContinuation(params: {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
       return {
-        operationId: 'revise_edit_screenplay',
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
-          nextOperationId: 'revise_edit_screenplay',
           result: { decision: 'revise', revisionNotes },
         }),
       }
     }
     if (decision === 'approve') {
       return {
-        operationId: 'generate_edit_style_previews',
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
-          nextOperationId: 'generate_edit_style_previews',
           result: { decision: 'approve' },
         }),
       }
@@ -143,11 +130,9 @@ export function resolveEditFirstChoiceContinuation(params: {
     const decision = readString(params.output.decision)
     if (decision !== 'approve') return null
     return {
-      operationId: 'generate_edit_cinematography_shot_plan',
       inputItems: buildChoiceInputItems({
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
-        nextOperationId: 'generate_edit_cinematography_shot_plan',
         result: { decision: 'approve' },
       }),
     }
@@ -157,12 +142,31 @@ export function resolveEditFirstChoiceContinuation(params: {
   const aspectRatio = readAspectRatio(params.output.aspectRatio)
   if (!stylePreviewId || !aspectRatio) return null
   return {
-    operationId: 'generate_edit_director_decoupage',
     inputItems: buildChoiceInputItems({
       toolCallId: params.toolCallId,
       choiceType: params.choiceType,
-      nextOperationId: 'generate_edit_director_decoupage',
       result: { stylePreviewId, aspectRatio, saved: true },
     }),
   }
+}
+
+export async function applyEditFirstChoiceResultSideEffects(params: {
+  choiceType: EditFirstChoiceType
+  output: UnknownRecord
+  projectId: string
+  userId: string
+  episodeId: string | null
+}): Promise<void> {
+  if (params.output.ok !== true && params.output.ok !== undefined) return
+  if (params.choiceType !== 'asset_review') return
+  const decision = readString(params.output.decision)
+  if (decision !== 'approve') return
+  if (!params.episodeId) {
+    throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')
+  }
+  await approveProjectEditScriptAssets({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+  })
 }

@@ -89,23 +89,33 @@ vi.mock('@openai/agents', () => {
     isEnabled?: boolean | (() => boolean | Promise<boolean>)
     execute?: (input: unknown, runContext: unknown, details: unknown) => unknown | Promise<unknown>
   }
+  type MockToolResult = {
+    type: 'function_output'
+    tool: {
+      name: string
+    }
+    output: unknown
+  }
 
   class Agent {
     name: string
     instructions: string
     modelSettings: Record<string, unknown>
     tools: MockTool[]
+    toolUseBehavior?: (runContext: unknown, toolResults: MockToolResult[]) => unknown
 
     constructor(config: {
       name: string
       instructions: string
       modelSettings?: Record<string, unknown>
       tools: MockTool[]
+      toolUseBehavior?: (runContext: unknown, toolResults: MockToolResult[]) => unknown
     }) {
       this.name = config.name
       this.instructions = config.instructions
       this.modelSettings = config.modelSettings ?? {}
       this.tools = config.tools
+      this.toolUseBehavior = config.toolUseBehavior
     }
   }
 
@@ -171,11 +181,18 @@ vi.mock('@openai/agents', () => {
         throw new Error('TEST_EXECUTABLE_WORKFLOW_TOOL_NOT_FOUND')
       }
       streamState.executedToolNames.push(executable.name)
-      await executable.execute({}, {}, {
+      const output = await executable.execute({}, {}, {
         toolCall: {
           callId: `tool-${executable.name}-1`,
         },
       })
+      agent.toolUseBehavior?.({}, [{
+        type: 'function_output',
+        tool: {
+          name: executable.name,
+        },
+        output,
+      }])
       streamState.capturedEnabledToolNamesAfterExecution = await collectEnabledToolNames(agent.tools)
     }
     streamState.capturedTools = Object.fromEntries(agent.tools.map((tool) => [tool.name, tool]))
@@ -286,7 +303,7 @@ vi.mock('@/lib/project-agent/runs', () => ({
 }))
 
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
-import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
+import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
   kind: 'user_turn',
@@ -477,8 +494,8 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('feeds the choice back as an in-band tool result while keeping later choice tools available', async () => {
-    const continuation = resolveEditFirstChoiceContinuation({
+  it('feeds the choice back as an in-band tool result while using workflow availability for next tools', async () => {
+    const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'duration_and_aspect_ratio',
       toolCallId: 'tool-choice-1',
       latestUserText: '民俗恐怖片',
@@ -488,8 +505,9 @@ describe('project agent runtime deterministic tool injection', () => {
         aspectRatio: '16:9',
       },
     })
-    expect(continuation).not.toBeNull()
+    expect(choiceResult).not.toBeNull()
 
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
     const response = await createProjectAgentChatResponse({
       request: buildRequest(),
       userId: 'user-1',
@@ -503,7 +521,7 @@ describe('project agent runtime deterministic tool injection', () => {
         choiceType: 'duration_and_aspect_ratio',
         toolCallId: 'tool-choice-1',
         cardId: 'edit-first-duration-aspect-ratio',
-        continuation: continuation!,
+        choiceResult: choiceResult!,
       },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
@@ -513,7 +531,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     expect(streamState.capturedModelSettings).not.toHaveProperty('toolChoice')
-    // continuation guidance travels as a synthetic in-band tool result, not via system prompt
+    // The submitted choice travels as a synthetic in-band tool result, not via system prompt.
     expect(streamState.capturedSystem).not.toContain('剪辑先行选择卡续跑指令')
     const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
     expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
@@ -524,8 +542,57 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedEnabledToolNames).toContain('request_edit_first_choice')
   })
 
-  it('keeps screenplay review choice available after screenplay generation in a choice continuation', async () => {
-    const continuation = resolveEditFirstChoiceContinuation({
+  it('fails a choice response run when the model does not call an action or follow-up choice tool', async () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-choice-review',
+      latestUserText: '恐怖片',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })
+    expect(choiceResult).not.toBeNull()
+    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_edit_screenplay',
+    ])
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
+      control: {
+        kind: 'choice',
+        interruptionId: 'choice-interruption-1',
+        choiceType: 'screenplay_review',
+        toolCallId: 'tool-choice-review',
+        cardId: 'edit-first-screenplay-review',
+        choiceResult: choiceResult!,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '恐怖片' }] },
+      ],
+    })
+    await drainCapturedResponseStream()
+
+    expect(response.status).toBe(200)
+    expect(loggerState.error).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'assistant.choice_response.no_progress',
+    }))
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-choice_response',
+      status: 'failed',
+      stopReason: 'tool_error',
+      errorCode: 'PROJECT_AGENT_CHOICE_RESPONSE_NO_PROGRESS',
+    }))
+  })
+
+  it('keeps screenplay review choice available after screenplay generation from a choice response', async () => {
+    const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'duration_and_aspect_ratio',
       toolCallId: 'tool-choice-1',
       latestUserText: '恐怖片',
@@ -535,7 +602,7 @@ describe('project agent runtime deterministic tool injection', () => {
         aspectRatio: '16:9',
       },
     })
-    expect(continuation).not.toBeNull()
+    expect(choiceResult).not.toBeNull()
 
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
     workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValueOnce(buildWorkflow('screenplay_ready_for_review', [
@@ -556,7 +623,7 @@ describe('project agent runtime deterministic tool injection', () => {
         choiceType: 'duration_and_aspect_ratio',
         toolCallId: 'tool-choice-1',
         cardId: 'edit-first-duration-aspect-ratio',
-        continuation: continuation!,
+        choiceResult: choiceResult!,
       },
       messages: [
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '恐怖片' }] },

@@ -45,7 +45,6 @@ export interface ProjectAgentToolset {
   operationIds: string[]
   coreOperationIds: string[]
   workflowOperationIds: string[]
-  continuationOperationId: string | null
   resumeOperationId: string | null
   includeChoiceOperation: boolean
 }
@@ -82,7 +81,6 @@ function pushRequiredTool(params: {
 export function resolveProjectAgentToolset(params: {
   registry: ProjectAgentOperationRegistry
   context: ProjectAgentContext
-  continuationOperationId?: string | null
   resumeOperationId?: string | null
 }): ProjectAgentToolset {
   const operationIds: string[] = []
@@ -126,19 +124,6 @@ export function resolveProjectAgentToolset(params: {
     }
   }
 
-  const continuationOperationId = params.continuationOperationId ?? null
-  if (continuationOperationId) {
-    const beforeLength = operationIds.length
-    pushRequiredTool({
-      registry: params.registry,
-      operationIds,
-      operationId: continuationOperationId,
-    })
-    if (operationIds.length > beforeLength) {
-      workflowOperationIds.push(continuationOperationId)
-    }
-  }
-
   const resumeOperationId = params.resumeOperationId ?? null
   if (resumeOperationId) {
     const beforeLength = operationIds.length
@@ -157,7 +142,6 @@ export function resolveProjectAgentToolset(params: {
     operationIds,
     coreOperationIds,
     workflowOperationIds,
-    continuationOperationId,
     resumeOperationId,
     includeChoiceOperation,
   }
@@ -166,16 +150,15 @@ export function resolveProjectAgentToolset(params: {
 /**
  * Operations whose availability does not depend on the live workflow state:
  * read/UI core tools, the choice card (its execution validates choiceType
- * against the live workflow stage), and the run's resume/continuation operation — a restored approval
- * or choice continuation must stay callable even if the workflow has moved
- * past the stage that originally offered it.
+ * against the live workflow stage), and the run's resumed approval operation.
+ * A restored approval must stay callable even if the workflow has moved past
+ * the stage that originally offered it.
  */
 export function isProjectAgentOperationAlwaysEnabled(
   toolset: ProjectAgentToolset,
   operationId: string,
 ): boolean {
   return toolset.coreOperationIds.includes(operationId)
-    || operationId === toolset.continuationOperationId
     || operationId === toolset.resumeOperationId
     || operationId === EDIT_FIRST_CHOICE_OPERATION_ID
 }
@@ -193,7 +176,7 @@ export function isProjectAgentOperationEnabled(params: {
 }): boolean {
   if (isProjectAgentOperationAlwaysEnabled(params.toolset, params.operationId)) return true
   const enabledOperationIds = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
-  const nextOperationId = params.workflow.nextAction?.operationId ?? null
-  if (nextOperationId) enabledOperationIds.add(nextOperationId)
+  const nextActionOperationId = params.workflow.nextAction?.operationId ?? null
+  if (nextActionOperationId) enabledOperationIds.add(nextActionOperationId)
   return enabledOperationIds.has(params.operationId)
 }

@@ -30,9 +30,11 @@ import {
   declinePendingProjectAgentInterruptionsForUserTurn,
 } from '@/lib/project-agent/interruptions'
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
-import { resolveEditFirstChoiceContinuation } from '@/lib/project-agent/edit-first-choice-continuation'
+import {
+  applyEditFirstChoiceResultSideEffects,
+  buildEditFirstChoiceResult,
+} from '@/lib/project-agent/edit-first-choice-result'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
-import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 import {
   createProjectAgentRun,
   getProjectAgentRun,
@@ -256,23 +258,20 @@ async function resolveProjectAgentControl(params: {
         })
       }
     }
-    if (controlAction.choiceType === 'asset_review' && readNonEmptyString(controlAction.output.decision) === 'approve') {
-      if (!scope.episodeId) {
-        throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')
-      }
-      await approveProjectEditScriptAssets({
-        projectId: scope.projectId,
-        userId: scope.userId,
-        episodeId: scope.episodeId,
-      })
-    }
-    const continuation = resolveEditFirstChoiceContinuation({
+    await applyEditFirstChoiceResultSideEffects({
+      choiceType: controlAction.choiceType,
+      output: controlAction.output,
+      projectId: scope.projectId,
+      userId: scope.userId,
+      episodeId: scope.episodeId ?? null,
+    })
+    const choiceResult = buildEditFirstChoiceResult({
       choiceType: controlAction.choiceType,
       toolCallId: controlAction.toolCallId,
       output: controlAction.output,
       latestUserText: readLatestVisibleUserText(params.messages),
     })
-    if (!continuation) {
+    if (!choiceResult) {
       throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
     }
     return {
@@ -281,7 +280,7 @@ async function resolveProjectAgentControl(params: {
       choiceType: controlAction.choiceType,
       toolCallId: controlAction.toolCallId,
       cardId: readNonEmptyString(controlAction.output.cardId),
-      continuation,
+      choiceResult,
     }
   }
 
