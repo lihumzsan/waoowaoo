@@ -46,7 +46,7 @@ describe('api contract - plan approval routes', () => {
       linkedTaskId: 'task-1',
       status: 'running',
       summary: 'summary',
-      steps: [{ skillId: 's1' }],
+      steps: [{ operationId: 'operation-1' }],
     })
 
     const res = await approvePost(

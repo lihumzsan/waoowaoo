@@ -44,7 +44,6 @@ export interface PlanRunEventInput {
 
 export interface PlanRunStepInput {
   stepKey: string
-  skillId?: string | null
   operationId: string
   taskId?: string | null
   stepIndex: number

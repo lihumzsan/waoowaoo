@@ -109,7 +109,7 @@
     "storyToScriptFailed": "Story to script failed",
     "scriptToStoryboardFailed": "Script to storyboard failed",
     "assistantPlanRequired": "Describe the goal in the AI assistant so it can decide the next step freely.",
-    "assistantGuidanceRequest": "Read the current story from project context, then decide freely what should happen next. You may search and load relevant Skills, create and validate a plan, and ask for confirmation before any write, long-running, or billable operation.",
+    "assistantGuidanceRequest": "Read the current story from project context, then decide freely what should happen next. When execution is needed, use the currently available tool/operation directly, and ask for confirmation before any write, long-running, or billable operation.",
     "taskStreamTimeout": "Task timed out. The task may still be running in the background — please check its status or retry"
   },
   "rebuildConfirm": {

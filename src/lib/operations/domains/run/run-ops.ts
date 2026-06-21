@@ -118,7 +118,6 @@ export function createPlanRunOperations(): ProjectAgentOperationRegistryDraft {
         goal: z.string().optional().nullable(),
         steps: z.array(z.object({
           stepKey: z.string().min(1),
-          skillId: z.string().optional().nullable(),
           operationId: z.string().min(1),
           taskId: z.string().optional().nullable(),
           stepIndex: z.number().int().positive(),

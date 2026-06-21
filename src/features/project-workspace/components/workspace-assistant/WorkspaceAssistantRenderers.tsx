@@ -19,7 +19,6 @@ import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
 import type {
-  AgentPlanPartData,
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
   ProjectAgentStopPartData,
@@ -46,24 +45,6 @@ import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { isEditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
-
-const AGENT_SKILL_LABEL_KEYS: Record<string, string> = {
-  'creative-direction': 'creativeDirection',
-  screenwriting: 'screenwriting',
-  'story-structure': 'storyStructure',
-  'storyboard-direction': 'storyboardDirection',
-  'visual-continuity': 'visualContinuity',
-  'location-selection': 'locationSelection',
-  'character-selection': 'characterSelection',
-  'audio-direction': 'audioDirection',
-  'media-generation': 'mediaGeneration',
-}
-
-function formatSkillLabel(skillId: string | null | undefined, t: ReturnType<typeof useTranslations<'assistantAgent'>>): string {
-  if (!skillId) return t('cards.skillLabels.unnamed')
-  const labelKey = AGENT_SKILL_LABEL_KEYS[skillId]
-  return labelKey ? t(`cards.skillLabels.${labelKey}`) : skillId
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -1061,30 +1042,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   )
 }
 
-export function AgentPlanDataCard({ data }: DataMessagePartProps<AgentPlanPartData>) {
-  const t = useTranslations('assistantAgent')
-  return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
-      <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name="bookOpen" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{data.summary || data.goal}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="ml-5 mt-1 text-[11px]">
-        {data.validation.ok ? t('cards.planValidated') : t('cards.planNeedsRevision')}
-      </div>
-      <div className="ml-5 mt-2 space-y-1 text-[11px]">
-        {data.steps.map((step: AgentPlanPartData['steps'][number]) => (
-          <div key={`${data.draftPlanId}:step:${step.stepKey}`}>
-            <span className="text-[var(--glass-text-secondary)]">{formatSkillLabel(step.skillId, t)}</span>
-            <span> · {step.operationId} · {step.reason}</span>
-          </div>
-        ))}
-      </div>
-    </details>
-  )
-}
-
 function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPartData>) {
   const t = useTranslations('assistantAgent')
   return (
@@ -1273,7 +1230,6 @@ export function useWorkspaceAssistantMessagePartComponents({
         'project-phase': ProjectPhaseDataCard,
         'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
-        plan: AgentPlanDataCard,
         'project-context': ProjectContextDataCard,
       },
     },

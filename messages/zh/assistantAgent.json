@@ -95,18 +95,6 @@
     "screenplays": "剧本 {count}",
     "storyboards": "分镜 {count}",
     "projectContext": "项目上下文",
-    "skillLabels": {
-      "unnamed": "未命名技能",
-      "creativeDirection": "创意方向",
-      "screenwriting": "剧本写作",
-      "storyStructure": "故事结构",
-      "storyboardDirection": "分镜指导",
-      "visualContinuity": "视觉连续性",
-      "locationSelection": "场景选择",
-      "characterSelection": "角色选择",
-      "audioDirection": "声音指导",
-      "mediaGeneration": "媒体生成"
-    },
     "projectLabel": "项目",
     "episodeLabel": "剧集",
     "workspaceLabel": "工作区",

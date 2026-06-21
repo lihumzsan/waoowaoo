@@ -6,7 +6,6 @@ import type {
 } from '@/lib/project-context/types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
-import type { PlanValidationIssue } from '@/lib/agent-skills/types'
 import type { AssistantPermissionMode } from './permission-mode'
 
 export type UnknownObject = { [key: string]: unknown }
@@ -94,27 +93,6 @@ export interface ProjectAgentChoiceResolvedPartData {
   choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
   toolCallId?: string | null
   cardId?: string | null
-}
-
-export interface AgentPlanPartData {
-  draftPlanId: string
-  goal: string
-  summary: string
-  requiresApproval: boolean
-  validation: {
-    ok: boolean
-    issues: PlanValidationIssue[]
-  }
-  steps: Array<{
-    stepKey: string
-    skillId: string
-    reason: string
-    operationId: string
-    inputArtifacts: string[]
-    outputArtifacts: string[]
-    dependsOn: string[]
-    requiresApproval: boolean
-  }>
 }
 
 export interface AgentDebugPartData {
@@ -298,5 +276,4 @@ export type WorkspaceAssistantPartType =
   | 'data-project-phase'
   | 'data-task-submitted'
   | 'data-task-batch-submitted'
-  | 'data-plan'
   | 'data-project-context'

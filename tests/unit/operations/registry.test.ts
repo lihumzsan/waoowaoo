@@ -124,40 +124,16 @@ describe('project agent operation registry', () => {
     })
   })
 
-  it('registers Agent Skill gateway tools as assistant-visible operations', () => {
+  it('does not register removed skill gateway operations', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.search_skills?.groupPath).toEqual(['skill'])
-    expect(registry.load_skill?.groupPath).toEqual(['skill'])
-    expect(registry.create_plan?.groupPath).toEqual(['skill'])
-    expect(registry.validate_plan?.groupPath).toEqual(['skill'])
-    expect(registry.invoke_operation?.groupPath).toEqual(['skill'])
-    expect(registry.search_skills?.intent).toBe('query')
-    expect(registry.load_skill?.intent).toBe('query')
-    expect(registry.create_plan?.intent).toBe('plan')
-    expect(registry.validate_plan?.intent).toBe('plan')
-    expect(registry.invoke_operation?.intent).toBe('act')
-
-    for (const operationId of ['search_skills', 'load_skill', 'create_plan', 'validate_plan']) {
-      expect(registry[operationId]?.effects).toEqual({
-        writes: false,
-        billable: false,
-        destructive: false,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      })
-    }
-    expect(registry.invoke_operation?.effects).toEqual({
-      writes: true,
-      billable: true,
-      destructive: false,
-      overwrite: true,
-      bulk: false,
-      externalSideEffects: true,
-      longRunning: true,
-    })
-    expect(registry.invoke_operation?.confirmation.required).toBe(true)
+    expect(registry.search_skills).toBeUndefined()
+    expect(registry.load_skill).toBeUndefined()
+    expect(registry.create_plan).toBeUndefined()
+    expect(registry.validate_plan).toBeUndefined()
+    expect(registry.execute_plan).toBeUndefined()
+    expect(registry.invoke_operation).toBeUndefined()
+    expect(registry.list_skill_catalog).toBeUndefined()
+    expect(registry.list_saved_skills).toBeUndefined()
   })
 })

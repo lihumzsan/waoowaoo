@@ -95,18 +95,6 @@
     "screenplays": "Screenplays {count}",
     "storyboards": "Storyboards {count}",
     "projectContext": "Project Context",
-    "skillLabels": {
-      "unnamed": "Unnamed Skill",
-      "creativeDirection": "Creative Direction",
-      "screenwriting": "Screenwriting",
-      "storyStructure": "Story Structure",
-      "storyboardDirection": "Storyboard Direction",
-      "visualContinuity": "Visual Continuity",
-      "locationSelection": "Location Selection",
-      "characterSelection": "Character Selection",
-      "audioDirection": "Audio Direction",
-      "mediaGeneration": "Media Generation"
-    },
     "projectLabel": "Project",
     "episodeLabel": "Episode",
     "workspaceLabel": "Workspace",

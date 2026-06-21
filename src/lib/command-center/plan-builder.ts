@@ -1,8 +1,13 @@
 import { ARTIFACT_TYPES } from '@/lib/artifact-system/types'
-import type { CommandSkillId, SkillDefinition } from '@/lib/skill-system/types'
-import type { CommandEnvelope, ExecutionPlanDraft, PlanStep } from './types'
+import type {
+  CommandEnvelope,
+  CommandOperationDefinition,
+  CommandOperationId,
+  ExecutionPlanDraft,
+  PlanStep,
+} from './types'
 
-const COMMAND_SKILLS: Record<CommandSkillId, SkillDefinition> = {
+const COMMAND_OPERATIONS: Record<CommandOperationId, CommandOperationDefinition> = {
   insert_panel: {
     id: 'insert_panel',
     name: 'Insert Panel',
@@ -49,35 +54,35 @@ const COMMAND_SKILLS: Record<CommandSkillId, SkillDefinition> = {
   },
 }
 
-function getPlanSkillDefinition(skillId: CommandSkillId): SkillDefinition {
-  return COMMAND_SKILLS[skillId]
+function getPlanOperationDefinition(operationId: CommandOperationId): CommandOperationDefinition {
+  return COMMAND_OPERATIONS[operationId]
 }
 
-function buildPlanStep(skillId: CommandSkillId, orderIndex: number, dependsOn: string[]): PlanStep {
-  const skill = getPlanSkillDefinition(skillId)
+function buildPlanStep(operationId: CommandOperationId, orderIndex: number, dependsOn: string[]): PlanStep {
+  const operation = getPlanOperationDefinition(operationId)
   return {
-    stepKey: skill.id,
-    skillId: skill.id,
-    title: skill.name,
+    stepKey: operation.id,
+    operationId: operation.id,
+    title: operation.name,
     orderIndex,
-    inputArtifacts: skill.inputArtifacts,
-    outputArtifacts: skill.outputArtifacts,
-    invalidates: skill.invalidates,
-    mutationKind: skill.mutationKind,
-    riskLevel: skill.riskLevel,
-    requiresApproval: skill.requiresApproval,
+    inputArtifacts: operation.inputArtifacts,
+    outputArtifacts: operation.outputArtifacts,
+    invalidates: operation.invalidates,
+    mutationKind: operation.mutationKind,
+    riskLevel: operation.riskLevel,
+    requiresApproval: operation.requiresApproval,
     dependsOn,
   }
 }
 
 export function buildExecutionPlanDraft(command: CommandEnvelope): ExecutionPlanDraft {
-  const step = buildPlanStep(command.skillId, 0, [])
+  const step = buildPlanStep(command.operationId, 0, [])
   return {
-    summary: getPlanSkillDefinition(command.skillId).summary,
+    summary: getPlanOperationDefinition(command.operationId).summary,
     requiresApproval: step.requiresApproval,
     riskSummary: {
       highestRiskLevel: step.riskLevel,
-      reasons: step.invalidates.map((artifactType) => `${step.skillId} invalidates ${artifactType}`),
+      reasons: step.invalidates.map((artifactType) => `${step.operationId} invalidates ${artifactType}`),
     },
     steps: [step],
   }

@@ -2,19 +2,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const roots = [
-  'src/lib/agent-skills',
   'src/lib/command-center',
   'src/lib/operations',
-  'src/lib/operations/domains/agent-skill',
   'src/lib/project-context',
   'src/lib/project-projection',
   'src/lib/project-agent/copy.ts',
   'src/lib/project-agent/router.ts',
-  'src/lib/saved-skills',
   'src/lib/task/types.ts',
   'src/app/api',
   'src/features/project-workspace',
-  'skills/agent',
   'prisma/schema.prisma',
 ]
 
@@ -39,7 +35,12 @@ const banned = [
 ]
 
 const bannedPaths = [
+  'skills/agent',
   'skills/project-workflow',
+  'src/lib/agent-skills',
+  'src/lib/operations/domains/agent-skill',
+  'src/lib/saved-skills',
+  'src/lib/skill-system',
   'src/lib/run-runtime',
   'src/lib/workflow-engine',
   'src/app/api/runs',
@@ -87,7 +88,7 @@ for (const root of roots) {
 
 if (violations.length > 0) {
   console.error([
-    'Fixed workflow references are forbidden in assistant Agent Skill surfaces.',
+    'Fixed workflow references are forbidden in assistant tooluse surfaces.',
     ...violations,
   ].join('\n'))
   process.exit(1)

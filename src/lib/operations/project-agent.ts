@@ -1,5 +1,4 @@
 import { createReadOperations } from './domains/project/read-ops'
-import { createAgentSkillOperations } from './domains/agent-skill/agent-skill-ops'
 import { createGovernanceOperations } from './domains/governance/governance-ops'
 import { createEditOperations } from './domains/storyboard/edit-ops'
 import { createStoryboardPanelEditOperations } from './domains/storyboard/panel-edit-ops'
@@ -143,12 +142,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createReadOperations(), {
       groupPath: ['project', 'read'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAgentSkillOperations(), {
-      groupPath: ['skill'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

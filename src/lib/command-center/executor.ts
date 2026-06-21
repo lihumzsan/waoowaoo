@@ -56,7 +56,7 @@ type ExecutionPlanStepRow = {
   id: string
   planId: string
   stepKey: string
-  skillId: string
+  operationId: string
   orderIndex: number
   scopeRef: string | null
   dependsOnJson: unknown
@@ -156,15 +156,15 @@ export function normalizeCommandEnvelope(params: {
   const input = readObject(body.input)
   const policyOverrides = readObject(body.policyOverrides)
 
-  if (commandType === 'run_skill') {
-    const skillIdRaw = readTrimmedString(body.skillId)
+  if (commandType === 'run_operation') {
+    const operationIdRaw = readTrimmedString(body.operationId)
     if (
-      skillIdRaw !== 'insert_panel'
-      && skillIdRaw !== 'panel_variant'
-      && skillIdRaw !== 'regenerate_storyboard_text'
-      && skillIdRaw !== 'modify_shot_prompt'
+      operationIdRaw !== 'insert_panel'
+      && operationIdRaw !== 'panel_variant'
+      && operationIdRaw !== 'regenerate_storyboard_text'
+      && operationIdRaw !== 'modify_shot_prompt'
     ) {
-      throw new Error('skillId is invalid')
+      throw new Error('operationId is invalid')
     }
     return {
       commandType,
@@ -173,7 +173,7 @@ export function normalizeCommandEnvelope(params: {
       episodeId,
       scopeRef,
       policyOverrides,
-      skillId: skillIdRaw,
+      operationId: operationIdRaw,
       input,
     }
   }
@@ -209,8 +209,8 @@ function toStatus(value: string): CommandStatus {
 function mapPlanStepRow(row: ExecutionPlanStepRow): PlanStep {
   return {
     stepKey: row.stepKey,
-    skillId: row.skillId,
-    title: row.skillId,
+    operationId: row.operationId,
+    title: row.operationId,
     orderIndex: row.orderIndex,
     scopeRef: row.scopeRef,
     inputArtifacts: Array.isArray(row.inputArtifactsJson) ? row.inputArtifactsJson as PlanStep['inputArtifacts'] : [],
@@ -254,7 +254,7 @@ function mapCommandResult(params: {
 }
 
 function taskTypeForCommand(command: CommandEnvelope): TaskType {
-  switch (command.skillId) {
+  switch (command.operationId) {
     case 'insert_panel':
       return TASK_TYPE.INSERT_PANEL
     case 'panel_variant':
@@ -264,13 +264,13 @@ function taskTypeForCommand(command: CommandEnvelope): TaskType {
     case 'modify_shot_prompt':
       return TASK_TYPE.AI_MODIFY_SHOT_PROMPT
     default:
-      throw new Error(`TASK_TYPE_NOT_SUPPORTED: ${command.skillId satisfies never}`)
+      throw new Error(`TASK_TYPE_NOT_SUPPORTED: ${command.operationId satisfies never}`)
   }
 }
 
 function dedupeKeyForCommand(command: CommandEnvelope): string | null {
   if (!command.episodeId) return null
-  return `${command.skillId}:${command.episodeId}:${command.scopeRef || 'scope'}`
+  return `${command.operationId}:${command.episodeId}:${command.scopeRef || 'scope'}`
 }
 
 async function resolveCommandTaskPayload(command: CommandEnvelope, userId: string): Promise<JsonRecord> {
@@ -350,7 +350,7 @@ async function createPersistentCommand(params: {
     data: params.plan.steps.map((step) => ({
       planId: planRow.id,
       stepKey: step.stepKey,
-      skillId: step.skillId,
+      operationId: step.operationId,
       orderIndex: step.orderIndex,
       scopeRef: step.scopeRef || null,
       dependsOnJson: step.dependsOn,

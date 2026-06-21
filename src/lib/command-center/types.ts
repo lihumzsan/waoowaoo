@@ -2,7 +2,7 @@ import type { ArtifactType } from '@/lib/artifact-system/types'
 import type { ProjectPolicyOverrideInput } from '@/lib/project-context/types'
 
 export type CommandSource = 'gui' | 'assistant-panel'
-export type CommandType = 'run_skill'
+export type CommandType = 'run_operation'
 export type CommandStatus =
   | 'planned'
   | 'awaiting_approval'
@@ -21,25 +21,46 @@ export interface CommandEnvelopeBase {
   policyOverrides?: ProjectPolicyOverrideInput | null
 }
 
-export interface RunSkillCommand extends CommandEnvelopeBase {
-  commandType: 'run_skill'
-  skillId: 'insert_panel' | 'panel_variant' | 'regenerate_storyboard_text' | 'modify_shot_prompt'
+export type CommandOperationId =
+  | 'insert_panel'
+  | 'panel_variant'
+  | 'regenerate_storyboard_text'
+  | 'modify_shot_prompt'
+
+export type OperationRiskLevel = 'low' | 'medium' | 'high'
+export type OperationMutationKind = 'read' | 'generate' | 'update' | 'delete'
+
+export interface CommandOperationDefinition {
+  id: CommandOperationId
+  name: string
+  summary: string
+  riskLevel: OperationRiskLevel
+  requiresApproval: boolean
+  inputArtifacts: ArtifactType[]
+  outputArtifacts: ArtifactType[]
+  invalidates: ArtifactType[]
+  mutationKind: OperationMutationKind
+}
+
+export interface RunOperationCommand extends CommandEnvelopeBase {
+  commandType: 'run_operation'
+  operationId: CommandOperationId
   input: Record<string, unknown>
 }
 
-export type CommandEnvelope = RunSkillCommand
+export type CommandEnvelope = RunOperationCommand
 
 export interface PlanStep {
   stepKey: string
-  skillId: string
+  operationId: string
   title: string
   orderIndex: number
   scopeRef?: string | null
   inputArtifacts: ArtifactType[]
   outputArtifacts: ArtifactType[]
   invalidates: ArtifactType[]
-  mutationKind: 'read' | 'generate' | 'update' | 'delete'
-  riskLevel: 'low' | 'medium' | 'high'
+  mutationKind: OperationMutationKind
+  riskLevel: OperationRiskLevel
   requiresApproval: boolean
   dependsOn: string[]
 }

@@ -39,13 +39,11 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'context',
-            skillId: 'creative-direction',
             operationId: 'get_project_context',
             outputArtifacts: ['creative.brief'],
           },
           {
             stepKey: 'snapshot',
-            skillId: 'creative-direction',
             operationId: 'get_project_snapshot',
             dependsOn: ['context'],
           },
@@ -102,7 +100,6 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'write_script_01',
-            skillId: 'screenwriting',
             operationId: 'write_screenplay',
           },
         ],
@@ -141,7 +138,6 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'write_script_01',
-            skillId: 'screenwriting',
             operationId: 'write_screenplay',
             input: {
               episodeId: 'episode-explicit',
@@ -177,12 +173,10 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'music',
-            skillId: 'media-generation',
             operationId: 'generate_project_music',
           },
           {
             stepKey: 'video',
-            skillId: 'media-generation',
             operationId: 'generate_panel_video',
             dependsOn: ['music'],
           },
@@ -224,7 +218,6 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'music',
-            skillId: 'media-generation',
             operationId: 'generate_project_music',
           },
         ],

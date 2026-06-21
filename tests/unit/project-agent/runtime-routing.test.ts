@@ -377,8 +377,6 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'get_task_status',
     'get_project_command',
     'list_recent_commands',
-    'list_skill_catalog',
-    'list_saved_skills',
     'get_project_assets',
     'get_project_costs',
     'get_project_data',

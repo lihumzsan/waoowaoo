@@ -14,7 +14,6 @@ type JsonRecord = Record<string, unknown>
 
 export interface ExecutablePlanStep {
   stepKey: string
-  skillId: string
   operationId: string
   inputArtifacts?: string[]
   outputArtifacts?: string[]
@@ -28,7 +27,6 @@ export interface ExecutablePlanInput {
 }
 
 export type PlanStepInvoker = (params: {
-  skillId: string
   operationId: string
   input: JsonRecord
 }) => Promise<ProjectAgentToolResult<unknown>>
@@ -130,7 +128,6 @@ export async function executeAgentPlan(params: {
     goal: params.input.goal,
     steps: params.input.steps.map((step, index) => ({
       stepKey: step.stepKey,
-      skillId: step.skillId,
       operationId: step.operationId,
       stepIndex: index + 1,
       stepTotal: params.input.steps.length,
@@ -172,7 +169,6 @@ export async function executeAgentPlan(params: {
       episodeId: params.episodeId,
     })
     const result = await params.invokeStep({
-      skillId: step.skillId,
       operationId: step.operationId,
       input: operationInput,
     })

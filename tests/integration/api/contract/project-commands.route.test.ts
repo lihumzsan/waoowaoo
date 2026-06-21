@@ -26,7 +26,7 @@ const executorMock = vi.hoisted(() => ({
     steps: [
       {
         stepKey: 'panel_variant',
-        skillId: 'panel_variant',
+        operationId: 'panel_variant',
         title: 'Panel Variant',
         orderIndex: 0,
         inputArtifacts: ['panel.image'],
@@ -50,7 +50,7 @@ const executorMock = vi.hoisted(() => ({
       steps: [],
       createdAt: '2026-04-13T00:00:00.000Z',
       updatedAt: '2026-04-13T00:00:00.000Z',
-      commandType: 'run_skill',
+      commandType: 'run_operation',
       source: 'gui',
       episodeId: 'episode-1',
       approval: null,
@@ -141,8 +141,8 @@ describe('project commands routes', () => {
         path: '/api/projects/project-1/commands',
         method: 'POST',
         body: {
-          commandType: 'run_skill',
-          skillId: 'panel_variant',
+          commandType: 'run_operation',
+          operationId: 'panel_variant',
           episodeId: 'episode-1',
           scopeRef: 'panel:panel-1',
           input: { panelId: 'panel-1' },
@@ -174,7 +174,7 @@ describe('project commands routes', () => {
       steps: [
         {
           stepKey: 'insert_panel',
-          skillId: 'insert_panel',
+          operationId: 'insert_panel',
           title: 'Insert Panel',
           orderIndex: 0,
           inputArtifacts: ['storyboard.panel_set'],
@@ -193,9 +193,9 @@ describe('project commands routes', () => {
         path: '/api/projects/project-1/commands',
         method: 'POST',
         body: {
-          commandType: 'run_skill',
+          commandType: 'run_operation',
           source: 'assistant-panel',
-          skillId: 'insert_panel',
+          operationId: 'insert_panel',
           episodeId: 'episode-1',
           scopeRef: 'panel:panel-1',
           input: { panelId: 'panel-1' },
@@ -230,7 +230,7 @@ describe('project commands routes', () => {
         steps: [],
         createdAt: '2026-04-13T00:00:00.000Z',
         updatedAt: '2026-04-13T00:00:00.000Z',
-        commandType: 'run_skill',
+        commandType: 'run_operation',
         source: 'gui',
         episodeId: 'episode-1',
         approval: null,

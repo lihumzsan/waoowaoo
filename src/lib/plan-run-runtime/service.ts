@@ -37,7 +37,6 @@ type PlanStepRunRow = {
   id: string
   planRunId: string
   stepKey: string
-  skillId: string | null
   operationId: string
   taskId: string | null
   status: string
@@ -182,7 +181,6 @@ function mapPlanStep(row: PlanStepRunRow) {
     id: row.id,
     planRunId: row.planRunId,
     stepKey: row.stepKey,
-    skillId: row.skillId,
     operationId: row.operationId,
     taskId: row.taskId,
     status: row.status,
@@ -263,7 +261,6 @@ export async function createPlanRun(input: CreatePlanRunInput) {
         data: steps.map((step) => ({
           planRunId: run.id,
           stepKey: step.stepKey,
-          skillId: step.skillId || null,
           operationId: step.operationId,
           taskId: step.taskId || null,
           status: PLAN_STEP_STATUS.PENDING,

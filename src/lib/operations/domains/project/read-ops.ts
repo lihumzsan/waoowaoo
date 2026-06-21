@@ -3,11 +3,9 @@ import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { withPrismaRetry } from '@/lib/prisma-retry'
 import { assembleProjectContext } from '@/lib/project-context/assembler'
 import { listProjectCommands, syncProjectCommandStatus } from '@/lib/command-center/executor'
-import { listAgentSkillManifests, loadAgentSkill } from '@/lib/agent-skills/registry'
 import { resolveProjectPhase } from '@/lib/project-agent/project-phase'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
-import { listSavedSkills } from '@/lib/saved-skills/service'
 import { buildAssistantProjectContextSnapshot } from '@/lib/project-agent/presentation'
 import type {
   ProjectContextPartData,
@@ -131,74 +129,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
         })
         if (input.detail === 'full') return projectContext
         return snapshot
-      },
-    }),
-    list_skill_catalog: defineOperation({
-      id: 'list_skill_catalog',
-      summary: 'List available Agent Skill catalog entries.',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: z.object({
-        documentPath: z.string().min(1).optional(),
-        maxChars: z.number().int().positive().max(20000).optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (_, input) => {
-        const catalog = listAgentSkillManifests().map((skill) => ({
-          id: skill.id,
-          kind: 'agent-skill' as const,
-          name: skill.name,
-          summary: skill.summary,
-          description: skill.description,
-          documentPath: skill.documentPath,
-        }))
-        const payload = {
-          catalog,
-        }
-
-        const documentPath = normalizeString(input.documentPath)
-        if (!documentPath) return payload
-
-        const manifest = listAgentSkillManifests().find((skill) => skill.documentPath === documentPath)
-        if (!manifest) return payload
-        const loaded = loadAgentSkill(manifest.id)
-        if (!loaded) return payload
-        const content = loaded.instructions
-        const limit = Math.max(200, Math.min(20000, input.maxChars ?? 6000))
-        return {
-          ...payload,
-          document: {
-            documentPath,
-            truncated: content.length > limit,
-            content: content.slice(0, limit),
-          },
-        }
-      },
-    }),
-    list_saved_skills: defineOperation({
-      id: 'list_saved_skills',
-      summary: 'List saved skills for the current user within this project.',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: z.object({
-        limit: z.number().int().positive().max(50).optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const items = await listSavedSkills({
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          limit: input.limit ?? 20,
-        })
-        return items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          summary: item.summary,
-          kind: item.kind,
-          projectId: item.projectId,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt.toISOString(),
-        }))
       },
     }),
     get_task_status: defineOperation({

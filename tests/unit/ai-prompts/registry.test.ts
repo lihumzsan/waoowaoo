@@ -3,7 +3,7 @@ import { buildAiPrompt, getAiPromptTemplate, resolveAiPromptIdFromOperationId } 
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 
 describe('ai prompt registry', () => {
-  it('maps workflow skill ids to the same unified template id', () => {
+  it('maps workflow operation ids to the same unified template id', () => {
     expect(resolveAiPromptIdFromOperationId('analyze_characters')).toBe(AI_PROMPT_IDS.CHARACTER_ANALYZE)
     expect(resolveAiPromptIdFromOperationId('create_shot_plan')).toBe(AI_PROMPT_IDS.STORYBOARD_PLAN)
   })

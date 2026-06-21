@@ -101,6 +101,41 @@ describe('plan run runtime service', () => {
     }))
   })
 
+  it('creates PlanRun steps with operation ids only', async () => {
+    await createPlanRun({
+      userId: 'user-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      planId: 'execution-plan-1',
+      goal: 'write scene',
+      steps: [
+        {
+          stepKey: 'context',
+          operationId: 'get_project_context',
+          stepIndex: 1,
+          stepTotal: 1,
+        },
+      ],
+    })
+
+    expect(prismaState.tx.planStepRun.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          planRunId: 'plan-run-1',
+          stepKey: 'context',
+          operationId: 'get_project_context',
+        }),
+      ],
+    })
+    expect(prismaState.tx.planStepRun.createMany).not.toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          skillId: expect.anything(),
+        }),
+      ],
+    })
+  })
+
   it('fails before creating a PlanRun when the supplied planId is not persisted', async () => {
     prismaState.tx.executionPlan.findFirst.mockResolvedValue(null)
 

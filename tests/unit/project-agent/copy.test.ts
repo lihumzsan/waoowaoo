@@ -56,13 +56,14 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('把修改后的完整剧本逐字输出给用户')
     expect(prompt).toContain('剧本生成或修改是例外：终态 follow-up 中必须从项目上下文读取并输出当前完整剧本')
     expect(prompt).toContain('读取当前项目上下文并选择合适的已启用生成工具')
-    expect(prompt).toContain('只有当用户明确询问技能、可复用计划或 skill catalog 文档时，才使用 Agent Skill 工具')
     expect(prompt).toContain('批量处理全部 requirements 时不要传 requirementId')
     expect(prompt).toContain('禁止传 "*" 或任何通配值')
     expect(prompt).toContain('没有 ready 摄影 shot plan 和 ready 分镜空间定位/空间一致性准备时调用 generate_edit_script_storyboard')
     expect(prompt).not.toContain('只能通过固定 workflow package 执行')
     expect(prompt).not.toContain('workflow package 内部 skills 顺序不可更改')
     expect(prompt).not.toContain('先调用 search_skills')
+    expect(prompt).not.toContain('Agent Skill')
+    expect(prompt).not.toContain('skill catalog')
   })
 
   it('adds the same next-step gate to the English prompt', () => {

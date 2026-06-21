@@ -3,13 +3,13 @@ import { buildExecutionPlanDraft } from '@/lib/command-center/plan-builder'
 import { normalizeCommandEnvelope, resolvePlanApprovalRequirement } from '@/lib/command-center/executor'
 
 describe('command-center approval routing', () => {
-  it('run_skill commands keep baseline approval behavior', () => {
+  it('run_operation commands keep baseline approval behavior', () => {
     const command = normalizeCommandEnvelope({
       projectId: 'project-1',
       body: {
-        commandType: 'run_skill',
+        commandType: 'run_operation',
         source: 'gui',
-        skillId: 'panel_variant',
+        operationId: 'panel_variant',
         episodeId: 'episode-1',
         scopeRef: 'panel:panel-1',
         input: {

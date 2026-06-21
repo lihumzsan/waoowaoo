@@ -5,10 +5,10 @@ import {
 } from '../../../scripts/guards/no-assistant-fixed-workflow-surface.mjs'
 
 describe('no assistant fixed workflow surface guard', () => {
-  it('allows generic Agent Skill instructions', () => {
+  it('allows generic tooluse operation instructions', () => {
     expect(inspectAssistantFixedWorkflowSurface(
-      'skills/agent/screenwriting/SKILL.md',
-      'Use this skill to decide whether direct script writing is enough.',
+      'src/lib/project-agent/copy.ts',
+      'Use the current injected tool definitions to decide whether direct script writing is enough.',
     )).toEqual([])
   })
 
@@ -31,6 +31,9 @@ describe('no assistant fixed workflow surface guard', () => {
   })
 
   it('flags old fixed workflow paths', () => {
+    expect(inspectForbiddenFixedWorkflowPath('skills/agent', true)).toEqual([
+      'skills/agent must not exist',
+    ])
     expect(inspectForbiddenFixedWorkflowPath('skills/project-workflow', true)).toEqual([
       'skills/project-workflow must not exist',
     ])
