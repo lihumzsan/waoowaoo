@@ -20,6 +20,8 @@ type RouteContext = {
   params: Promise<Record<string, string>>
 }
 
+const TEST_ANALYSIS_MODEL = 'openrouter::anthropic/claude-sonnet-4.6'
+
 const authState = vi.hoisted<AuthState>(() => ({
   authenticated: true,
 }))
@@ -37,10 +39,10 @@ const maybeSubmitLLMTaskMock = vi.hoisted(() =>
 
 const configServiceMock = vi.hoisted(() => ({
   getUserModelConfig: vi.fn(async () => ({
-    analysisModel: 'llm::analysis',
+    analysisModel: TEST_ANALYSIS_MODEL,
   })),
   getProjectModelConfig: vi.fn(async () => ({
-    analysisModel: 'llm::analysis',
+    analysisModel: TEST_ANALYSIS_MODEL,
   })),
 }))
 
