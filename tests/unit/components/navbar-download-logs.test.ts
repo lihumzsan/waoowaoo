@@ -161,7 +161,7 @@ describe('Navbar compact split navigation', () => {
       showInviteCode: true,
       showBilling: true,
       showApiConfig: false,
-      requireInviteCodeOnSignup: true,
+      requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
     }
 

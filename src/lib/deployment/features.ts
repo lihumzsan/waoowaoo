@@ -32,7 +32,7 @@ const CLOUD_DEPLOYMENT_FEATURES: DeploymentFeatures = {
   showInviteCode: true,
   showBilling: true,
   showApiConfig: false,
-  requireInviteCodeOnSignup: true,
+  requireInviteCodeOnSignup: false,
   usePlatformProviderConfig: true,
 }
 

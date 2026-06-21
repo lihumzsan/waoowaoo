@@ -177,7 +177,7 @@ describe('api contract - infra routes (behavior)', () => {
         showInviteCode: true,
         showBilling: true,
         showApiConfig: false,
-        requireInviteCodeOnSignup: true,
+        requireInviteCodeOnSignup: false,
         usePlatformProviderConfig: true,
       },
       billingMode: 'ENFORCE',

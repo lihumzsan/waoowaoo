@@ -47,6 +47,7 @@ import { createAuthOperations } from '@/lib/operations/domains/auth/auth-ops'
 type RegisterInput = {
   name?: unknown
   password?: unknown
+  inviteCode?: unknown
 }
 
 type RegisterResult = {
@@ -247,30 +248,19 @@ describe('auth register operation', () => {
     expect(prismaMock.__tx.inviteRedemption.create.mock.calls).toEqual([])
   })
 
-  it('[cloud 注册缺少邀请码] -> 拒绝创建用户', async () => {
+  it('[cloud 公开注册] -> 不需要邀请码也能创建用户和初始余额', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
-    const promise = executeRegister({ name: 'alice', password: 'secret1' })
+    const result = await executeRegister({ name: 'alice', password: 'secret1' }) as RegisterResult
 
-    await expect(promise).rejects.toMatchObject({
-      code: 'INVALID_PARAMS',
-      details: expect.objectContaining({
-        code: 'INVITE_CODE_REQUIRED',
-        field: 'inviteCode',
-      }),
+    expect(result).toEqual({
+      message: AUTH_REGISTER_RESULT_CODES.success,
+      user: {
+        id: 'user-1',
+        name: 'alice',
+      },
     })
-    expect(prismaMock.__tx.user.create.mock.calls).toEqual([])
-    expect(prismaMock.__tx.userBalance.create.mock.calls).toEqual([])
-  })
-
-  it('[cloud 注册带邀请码] -> 同一事务内创建用户、余额并按邀请码金额入账', async () => {
-    process.env.DEPLOYMENT_EDITION = 'cloud'
-    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
-
-    const result = await executeRegister({ name: 'alice', password: 'secret1', inviteCode: ' beta-1 ' }) as RegisterResult
-
-    expect(result.user).toEqual({ id: 'user-1', name: 'alice' })
     expect(prismaMock.__tx.user.create).toHaveBeenCalledWith({
       data: {
         name: 'alice',
@@ -281,39 +271,47 @@ describe('auth register operation', () => {
         name: true,
       },
     })
-    expect(prismaMock.__tx.inviteCode.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'invite-1',
-        disabledAt: null,
-        redeemedCount: { lt: 5 },
-      },
+    expect(prismaMock.__tx.userBalance.create).toHaveBeenCalledWith({
       data: {
-        redeemedCount: { increment: 1 },
+        userId: 'user-1',
+        balance: 0,
+        frozenAmount: 0,
+        totalSpent: 0,
       },
     })
-    expect(prismaMock.__tx.inviteRedemption.create).toHaveBeenCalledWith({
+    expect(prismaMock.__tx.inviteCode.findUnique.mock.calls).toEqual([])
+    expect(prismaMock.__tx.inviteCode.updateMany.mock.calls).toEqual([])
+    expect(prismaMock.__tx.inviteRedemption.create.mock.calls).toEqual([])
+    expect(prismaMock.__tx.balanceTransaction.create.mock.calls).toEqual([])
+  })
+
+  it('[cloud 注册带邀请码] -> 仍然不在注册阶段隐式入账', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+
+    const result = await executeRegister({ name: 'alice', password: 'secret1', inviteCode: ' beta-1 ' }) as RegisterResult
+
+    expect(result).toEqual({
+      message: AUTH_REGISTER_RESULT_CODES.success,
+      user: {
+        id: 'user-1',
+        name: 'alice',
+      },
+    })
+    expect(prismaMock.__tx.user.create).toHaveBeenCalledWith({
       data: {
-        inviteCodeId: 'invite-1',
-        userId: 'user-1',
-        amount: 100,
+        name: 'alice',
+        password: 'hashed-password',
+      },
+      select: {
+        id: true,
+        name: true,
       },
     })
-    expect(prismaMock.__tx.userBalance.upsert).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
-      create: { userId: 'user-1', balance: 100, frozenAmount: 0, totalSpent: 0 },
-      update: { balance: { increment: 100 } },
-    })
-    expect(prismaMock.__tx.balanceTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        userId: 'user-1',
-        type: 'adjust',
-        amount: 100,
-        balanceAfter: 100,
-        relatedId: 'invite-1',
-        operatorId: 'invite-code',
-        externalOrderId: 'invite-1',
-        idempotencyKey: 'invite:invite-1:user-1',
-      }),
-    })
+    expect(prismaMock.__tx.inviteCode.findUnique.mock.calls).toEqual([])
+    expect(prismaMock.__tx.inviteCode.updateMany.mock.calls).toEqual([])
+    expect(prismaMock.__tx.inviteRedemption.create.mock.calls).toEqual([])
+    expect(prismaMock.__tx.userBalance.upsert.mock.calls).toEqual([])
+    expect(prismaMock.__tx.balanceTransaction.create.mock.calls).toEqual([])
   })
 })

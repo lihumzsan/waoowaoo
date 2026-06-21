@@ -96,7 +96,7 @@ describe('deployment config', () => {
       showInviteCode: true,
       showBilling: true,
       showApiConfig: false,
-      requireInviteCodeOnSignup: true,
+      requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
     })
   })
