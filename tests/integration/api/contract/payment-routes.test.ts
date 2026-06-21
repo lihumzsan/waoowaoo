@@ -98,7 +98,7 @@ describe('api contract - payment routes', () => {
   })
 
   it('POST /api/payments/stripe/checkout creates a Checkout session with HKD settlement metadata', async () => {
-    const fetchMock = vi.fn(async (): Promise<Response> => new Response(
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({
         id: 'cs_test_payment_route',
         url: 'https://checkout.stripe.test/cs_test_payment_route',
@@ -157,7 +157,7 @@ describe('api contract - payment routes', () => {
 
   it('POST /api/payments/stripe/checkout rejects unauthenticated users before creating Stripe sessions', async () => {
     authState.authenticated = false
-    const fetchMock = vi.fn(async (): Promise<Response> => new Response(null, { status: 500 }))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status: 500 }))
     vi.stubGlobal('fetch', fetchMock)
 
     const mod = await import('@/app/api/payments/stripe/checkout/route')
