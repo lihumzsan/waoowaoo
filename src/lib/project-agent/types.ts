@@ -224,7 +224,8 @@ export interface EditStylePreviewGenerationPartData {
     styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
     title: string
     summary: string
-    taskId: string
+    // 追加候选在「建行 → 派发任务 → 回填 taskId」之间存在窗口；taskId 缺失时仍需展示成生成中。
+    taskId?: string
     aspectRatio?: '9:16' | '16:9' | '21:9'
   }>
 }

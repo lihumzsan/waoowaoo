@@ -291,14 +291,14 @@ async function buildActiveStylePreviewGeneration(params: {
   if (screenplay.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
   const agentRunId = resolveStylePreviewAgentRunId(params.run)
   const items = screenplay.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
-    if (!preview.taskId) return []
+    // taskId 缺失（追加候选刚建行、尚未回填）也要收录，否则停靠卡会停在旧的候选数、看不到新生成的。
     if (!isStylePreviewKey(preview.styleKey)) return []
     return [{
       id: preview.id,
       styleKey: preview.styleKey,
       title: preview.title,
       summary: preview.summary,
-      taskId: preview.taskId,
+      ...(preview.taskId ? { taskId: preview.taskId } : {}),
       ...(isAspectRatio(preview.aspectRatio) ? { aspectRatio: preview.aspectRatio } : {}),
     }]
   })

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
+import { AppIcon } from '@/components/ui/icons'
 import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
@@ -173,6 +174,7 @@ export default function WorkspaceAssistantPanel({
   } | null>(null)
   const layout = buildWorkspaceAssistantPanelLayout(isCollapsed, assistantPanelWidth)
   const [composerText, setComposerText] = useState('')
+  const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [assistantPermissionMode, setAssistantPermissionModeState] = useState<AssistantPermissionMode>(
     readStoredAssistantPermissionMode,
@@ -309,6 +311,8 @@ export default function WorkspaceAssistantPanel({
   const handleComposerSubmit = useCallback(async () => {
     const normalizedText = composerText.trim()
     if (!normalizedText) return
+    // 发消息时把底部停靠的视觉风格卡收成细条，避免大卡占满底部、把刚发的消息顶出视口
+    setStylePreviewDockCollapsed(true)
     setComposerText('')
     await assistantRuntime.sendMessage(normalizedText)
   }, [assistantRuntime, composerText])
@@ -440,6 +444,11 @@ export default function WorkspaceAssistantPanel({
     }
     : null
   const displayedStylePreviewGenerationCard = assistantRuntime.sessionState?.activeStylePreviewGeneration ?? null
+  const stylePreviewDockCardKey = displayedStylePreviewGenerationCard?.key ?? null
+  // 仅在「用户发消息」时折叠；卡片本身变化（新一批候选）或消失时回到展开态
+  useEffect(() => {
+    setStylePreviewDockCollapsed(false)
+  }, [stylePreviewDockCardKey])
   const activeExternalTaskOperationId = assistantRuntime.sessionState?.activeWaits.find((wait) => wait.status === 'pending')?.operationId
     ?? assistantRuntime.sessionState?.activeTasks.find((task) => task.operationId)?.operationId
     ?? null
@@ -638,14 +647,29 @@ export default function WorkspaceAssistantPanel({
                       />
                     ) : null}
                     {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
-                      <EditStylePreviewGenerationDataCard
-                        type="data"
-                        name="edit-style-preview-generation"
-                        status={{ type: 'complete' }}
-                        data={displayedStylePreviewGenerationCard.data}
-                        onStyleSelected={handleStylePreviewSelected}
-                        onPreviewImage={setPreviewImageUrl}
-                      />
+                      stylePreviewDockCollapsed ? (
+                        <button
+                          type="button"
+                          onClick={() => setStylePreviewDockCollapsed(false)}
+                          className="flex w-full items-center gap-2 rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 px-3.5 py-2.5 text-left shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-colors hover:bg-neutral-50"
+                        >
+                          <AppIcon name="imageAlt" className="h-4 w-4 shrink-0 text-[var(--glass-accent-from)]" />
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--glass-text-primary)]">
+                            {t('panel.stylePreviewDockCollapsed', { count: displayedStylePreviewGenerationCard.data.items.length })}
+                          </span>
+                          <span className="shrink-0 text-[12px] font-medium text-[var(--glass-text-tertiary)]">{t('panel.stylePreviewDockExpand')}</span>
+                          <AppIcon name="chevronDown" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+                        </button>
+                      ) : (
+                        <EditStylePreviewGenerationDataCard
+                          type="data"
+                          name="edit-style-preview-generation"
+                          status={{ type: 'complete' }}
+                          data={displayedStylePreviewGenerationCard.data}
+                          onStyleSelected={handleStylePreviewSelected}
+                          onPreviewImage={setPreviewImageUrl}
+                        />
+                      )
                     ) : null}
                   </div>
                 </div>

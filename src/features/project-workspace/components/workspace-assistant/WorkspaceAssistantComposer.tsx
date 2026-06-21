@@ -129,7 +129,7 @@ export function WorkspaceAssistantComposer({
 
   return (
     <div>
-      <div className="flex flex-col rounded-[14px] px-3.5 pb-2 pt-2">
+      <div className="flex flex-col rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/95 px-4 pb-2.5 pt-3 shadow-[0_6px_20px_rgba(15,23,42,0.07)]">
         <textarea
           rows={2}
           value={value}
@@ -165,7 +165,7 @@ export function WorkspaceAssistantComposer({
             aria-label={t('panel.send')}
             disabled={!value.trim() || pending}
             onClick={() => { void onSubmit() }}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
           </button>

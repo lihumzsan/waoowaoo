@@ -1,4 +1,5 @@
 export const AI_PROMPT_IDS = {
+  PROJECT_AGENT_SYSTEM: 'project-agent-system',
   CHARACTER_ANALYZE: 'character-analyze',
   CHARACTER_CREATE: 'character-create',
   CHARACTER_MODIFY: 'character-modify',

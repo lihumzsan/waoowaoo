@@ -30,14 +30,14 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   if (!Array.isArray(data.items)) return null
   const items = data.items.flatMap((item): EditStylePreviewGenerationPartData['items'] => {
     if (!isRecord(item)) return []
-    if (typeof item.id !== 'string' || typeof item.title !== 'string' || typeof item.summary !== 'string' || typeof item.taskId !== 'string') return []
+    if (typeof item.id !== 'string' || typeof item.title !== 'string' || typeof item.summary !== 'string') return []
     if (!isStyleKey(item.styleKey)) return []
     return [{
       id: item.id,
       styleKey: item.styleKey,
       title: item.title,
       summary: item.summary,
-      taskId: item.taskId,
+      ...(typeof item.taskId === 'string' && item.taskId ? { taskId: item.taskId } : {}),
       ...(isAspectRatio(item.aspectRatio) ? { aspectRatio: item.aspectRatio } : {}),
     }]
   })
@@ -77,14 +77,14 @@ export function buildStylePreviewGenerationCardFromScreenplay(
   const stylePreviews = screenplay.stylePreviews ?? []
   if (stylePreviews.some((preview) => preview.status === 'confirmed')) return null
   const items = stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
-    if (!preview.taskId) return []
+    if (!isStyleKey(preview.styleKey)) return []
     return [{
       id: preview.id,
       styleKey: preview.styleKey,
       title: preview.title,
       summary: preview.summary,
-      taskId: preview.taskId,
-      aspectRatio: preview.aspectRatio,
+      ...(preview.taskId ? { taskId: preview.taskId } : {}),
+      ...(preview.aspectRatio ? { aspectRatio: preview.aspectRatio } : {}),
     }]
   })
   if (items.length === 0) return null

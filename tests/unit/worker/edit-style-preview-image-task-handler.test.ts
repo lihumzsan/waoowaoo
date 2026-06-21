@@ -154,6 +154,45 @@ describe('worker edit-style-preview-image-task-handler', () => {
     })
   })
 
+  it('marks the screenplay preview-ready after appended candidates push the total beyond three', async () => {
+    prismaMock.projectEditStylePreview.findMany.mockResolvedValueOnce([
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+    ])
+
+    await handleEditStylePreviewImageTask(buildJob({
+      stylePreviewId: 'preview-1',
+      imageModel: 'storyboard-image-model',
+      prompt: 'single image, 3x3 grid',
+    }))
+
+    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
+      where: { id: 'screenplay-1' },
+      data: { status: 'style_preview_ready' },
+    })
+  })
+
+  it('does not mark preview-ready while an appended candidate is still generating', async () => {
+    prismaMock.projectEditStylePreview.findMany.mockResolvedValueOnce([
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'completed' },
+      { status: 'generating' },
+    ])
+
+    await handleEditStylePreviewImageTask(buildJob({
+      stylePreviewId: 'preview-1',
+      imageModel: 'storyboard-image-model',
+      prompt: 'single image, 3x3 grid',
+    }))
+
+    expect(prismaMock.projectEditScreenplay.update).not.toHaveBeenCalled()
+  })
+
   it('marks only the failed preview when image generation fails', async () => {
     handlerSharedMock.generateCleanImageToStorage.mockRejectedValueOnce(new Error('IMAGE_PROVIDER_FAILED'))
 

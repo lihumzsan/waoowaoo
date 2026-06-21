@@ -14,7 +14,7 @@ import type { ComponentProps } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import EstimatedTaskProgressOverlay from '@/components/task/EstimatedTaskProgressOverlay'
+import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProgress'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
@@ -803,6 +803,75 @@ function truncateStylePreviewErrorMessage(message: string | null | undefined): s
   return singleLine.length > 180 ? `${singleLine.slice(0, 180)}...` : singleLine
 }
 
+function StylePreviewRing({ percent, size = 64 }: { percent: number; size?: number }) {
+  const clamped = Math.max(0, Math.min(100, percent))
+  const ringDegrees = clamped * 3.6
+  const ringThickness = size < 40 ? 3 : 4
+  return (
+    <div className="relative flex items-center justify-center" style={{ height: size, width: size }}>
+      <div
+        className="absolute inset-0 rounded-full transition-[background] duration-500 ease-out"
+        style={{
+          background: `conic-gradient(var(--glass-accent-from) 0deg, var(--glass-accent-to) ${ringDegrees}deg, rgba(255,255,255,0.22) ${ringDegrees}deg, rgba(255,255,255,0.22) 360deg)`,
+        }}
+      />
+      <div className="absolute rounded-full bg-black/35" style={{ inset: ringThickness }} />
+      <span className="absolute font-semibold tabular-nums text-white" style={{ fontSize: size < 40 ? 9 : 13 }}>
+        {Math.floor(clamped)}
+      </span>
+    </div>
+  )
+}
+
+function useStylePreviewRunningPercent(taskState: TaskTargetState | undefined): number | null {
+  const progress = useEstimatedTaskProgress(taskState ?? null)
+  if (!progress || !progress.isRunning) return null
+  return Math.floor(Math.max(0, Math.min(99, progress.percent)))
+}
+
+/* 生成中浮层：取代旧的居中黑块，改为圆环 + 状态胶囊 */
+function StylePreviewGeneratingOverlay({ taskState }: { taskState: TaskTargetState | undefined }) {
+  const t = useTranslations('assistantAgent')
+  const percent = useStylePreviewRunningPercent(taskState)
+  return (
+    <div className="absolute inset-0 z-20">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
+      <div className="relative flex h-full flex-col items-center justify-center gap-2">
+        {percent !== null ? (
+          <StylePreviewRing percent={percent} size={64} />
+        ) : (
+          <AppIcon name="loader" className="h-8 w-8 animate-spin text-white" />
+        )}
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-md ring-1 ring-white/15">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--glass-accent-to)]" />
+          {percent !== null ? `${t('cards.stylePreviewGenerating')} ${percent}%` : t('cards.stylePreviewLoading')}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/* 折叠小行缩略图里的迷你进度 */
+function StylePreviewRowProgress({ taskState }: { taskState: TaskTargetState | undefined }) {
+  const percent = useStylePreviewRunningPercent(taskState)
+  return percent !== null
+    ? <StylePreviewRing percent={percent} size={30} />
+    : <AppIcon name="loader" className="h-4 w-4 animate-spin text-white" />
+}
+
+/* 生成/加载占位：暗黑玻璃态模糊面（取代浅灰骨架） */
+function StylePreviewLoadingSurface() {
+  return (
+    <div className="workspace-node-loading-surface absolute inset-0 bg-[#0c111b]">
+      <div
+        className="absolute inset-0 opacity-70 blur-2xl"
+        style={{ background: 'radial-gradient(55% 60% at 28% 22%, #2c3f63 0%, transparent 60%), radial-gradient(50% 55% at 78% 82%, #1d3358 0%, transparent 60%)' }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent" />
+    </div>
+  )
+}
+
 export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData> & {
   onStyleSelected?: (params: {
     runId: string
@@ -816,16 +885,10 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
   const [localPreviewImageUrl, setLocalPreviewImageUrl] = useState<string | null>(null)
-  const [expandedSummaryIds, setExpandedSummaryIds] = useState<ReadonlySet<string>>(() => new Set())
-  const taskTargets = useMemo(() => data.items.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
-    targetType: 'ProjectEditStylePreview',
-    targetId: item.id,
-    types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
-  })), [data.items])
-  const taskTargetStateQuery = useTaskTargetStateMap(data.projectId, taskTargets, {
-    enabled: taskTargets.length > 0,
-  })
-  const taskStateMap = taskTargetStateQuery.byKey
+  const [focusId, setFocusId] = useState<string | null>(null)
+  // 第一性原理：候选清单的唯一事实来源是 screenplay.stylePreviews（实时查询）。
+  // part 携带的 data.items 仅作首帧种子；screenplay 一到就接管 —— 追加候选会自动出现，
+  // 不再依赖快照清单或 taskId 是否回填。
   const screenplayQuery = useQuery({
     queryKey: queryKeys.project.editScreenplay(data.projectId, data.episodeId),
     queryFn: async (): Promise<ProjectEditScreenplay | null> => {
@@ -835,24 +898,41 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       return payload.screenplay ?? null
     },
     refetchInterval: (query) => {
-      const screenplay = query.state.data ?? null
-      const previews = screenplay?.stylePreviews ?? []
+      const previews = query.state.data?.stylePreviews ?? []
       if (previews.some((preview) => preview.status === 'confirmed')) return false
-      const allTerminal = data.items.every((item) => {
-        const preview = previews.find((candidate) => candidate.id === item.id) ?? null
-        return isEditStylePreviewTerminal(preview)
-      })
+      if (previews.length === 0) return 2500
+      const allTerminal = previews.every((preview) => isEditStylePreviewTerminal(preview))
       return allTerminal ? false : 2500
     },
   })
-  const previewsById = useMemo(() => {
-    const previews = screenplayQuery.data?.stylePreviews ?? []
-    return new Map(previews.map((preview) => [preview.id, preview]))
-  }, [screenplayQuery.data?.stylePreviews])
+  const liveStylePreviews = screenplayQuery.data?.stylePreviews ?? null
+  const previewsById = useMemo(() => (
+    new Map((liveStylePreviews ?? []).map((preview) => [preview.id, preview]))
+  ), [liveStylePreviews])
+  const liveItems = useMemo<EditStylePreviewGenerationPartData['items']>(() => {
+    if (!liveStylePreviews) return data.items
+    return liveStylePreviews.map((preview) => ({
+      id: preview.id,
+      styleKey: preview.styleKey,
+      title: preview.title,
+      summary: preview.summary,
+      ...(preview.taskId ? { taskId: preview.taskId } : {}),
+      aspectRatio: preview.aspectRatio,
+    }))
+  }, [liveStylePreviews, data.items])
+  const taskTargets = useMemo(() => liveItems.map((item: EditStylePreviewGenerationPartData['items'][number]) => ({
+    targetType: 'ProjectEditStylePreview',
+    targetId: item.id,
+    types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
+  })), [liveItems])
+  const taskTargetStateQuery = useTaskTargetStateMap(data.projectId, taskTargets, {
+    enabled: taskTargets.length > 0,
+  })
+  const taskStateMap = taskTargetStateQuery.byKey
   const displayedItems = useMemo(() => resolveDisplayedEditStylePreviewItems({
-    items: data.items,
+    items: liveItems,
     previewsById,
-  }), [data.items, previewsById])
+  }), [liveItems, previewsById])
   const cardStatuses = useMemo(() => displayedItems.map((item) => {
     const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
     const preview = previewsById.get(item.id) ?? null
@@ -888,17 +968,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       setSelectingPreviewId(null)
     }
   }
-  const toggleSummary = (itemId: string) => {
-    setExpandedSummaryIds((current) => {
-      const next = new Set(current)
-      if (next.has(itemId)) {
-        next.delete(itemId)
-      } else {
-        next.add(itemId)
-      }
-      return next
-    })
-  }
   const openPreviewImage = (imageUrl: string) => {
     if (props.onPreviewImage) {
       props.onPreviewImage(imageUrl)
@@ -906,6 +975,10 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     }
     setLocalPreviewImageUrl(imageUrl)
   }
+
+  const effectiveFocusId = focusId && displayedItems.some((item) => item.id === focusId)
+    ? focusId
+    : displayedItems[0]?.id ?? null
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
@@ -927,7 +1000,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
             : t('cards.stylePreviewGenerationCount', { count: displayedItems.length })}
         </div>
       </div>
-      <div className="mt-2 space-y-2">
+      <div className="mt-2.5 space-y-2">
         {displayedItems.map((item: EditStylePreviewGenerationPartData['items'][number]) => {
           const taskState = taskStateMap.get(`ProjectEditStylePreview:${item.id}`)
           const preview = previewsById.get(item.id) ?? null
@@ -938,97 +1011,108 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           })
           const ready = cardStatus === 'completed' && isEditStylePreviewChoiceReady(preview)
           const failed = cardStatus === 'failed'
-          const loading = cardStatus === 'loading'
+          const inProgress = cardStatus === 'generating' || cardStatus === 'loading'
           const selecting = selectingPreviewId === item.id
-          const summaryExpanded = expandedSummaryIds.has(item.id)
           const confirmed = preview?.status === 'confirmed'
           const imageUrl = preview?.imageUrl ?? null
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
-          const showInlineStatus = !confirmed && (ready || loading)
+
+          // 未展开的候选：缩小为可点击的小行，副标题展示风格文案
+          if (item.id !== effectiveFocusId) {
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setFocusId(item.id)}
+                className="flex w-full items-center gap-3 rounded-[14px] border border-[var(--glass-stroke-base)] bg-white/80 px-2.5 py-2 text-left transition-colors hover:bg-neutral-50"
+              >
+                <div className="relative h-10 w-14 shrink-0 overflow-hidden rounded-[10px] bg-[#0c111b] ring-1 ring-[var(--glass-stroke-base)]">
+                  {imageUrl ? (
+                    <Image src={imageUrl} alt={item.title} width={112} height={80} unoptimized className="h-full w-full object-cover" />
+                  ) : (
+                    <StylePreviewLoadingSurface />
+                  )}
+                  {inProgress ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                      <StylePreviewRowProgress taskState={taskState} />
+                    </div>
+                  ) : null}
+                  {failed ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--glass-tone-warn-bg)]/55">
+                      <AppIcon name="alert" className="h-4 w-4 text-[var(--glass-tone-warn-fg)]" />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
+                  <div className="truncate text-[11px] leading-4 text-[var(--glass-text-tertiary)]">{item.summary}</div>
+                </div>
+                {confirmed ? (
+                  <AppIcon name="badgeCheck" className="h-4 w-4 shrink-0 text-[var(--glass-accent-from)]" />
+                ) : (
+                  <AppIcon name="chevronRight" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+                )}
+              </button>
+            )
+          }
+
+          // 焦点候选：放大显示，确认按钮叠在图片右下角，文案在图片下方
           return (
             <div
               key={item.id}
-              className={`overflow-hidden rounded-xl border bg-white/80 ${failed ? 'border-[var(--glass-tone-warn-fg)]/35' : 'border-[var(--glass-stroke-base)]'}`}
+              className={`overflow-hidden rounded-[16px] border bg-white/85 ${failed ? 'border-[var(--glass-tone-warn-fg)]/35' : 'border-[var(--glass-stroke-base)]'}`}
             >
-              <div className="relative min-h-36 overflow-hidden bg-neutral-100">
-                <div className="absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-[var(--glass-text-primary)] shadow-sm">
-                  {item.title}
+              <div className="relative">
+                <div className="relative aspect-[16/10] overflow-hidden bg-[#0c111b]">
+                  {imageUrl ? (
+                    <button
+                      type="button"
+                      aria-label={t('cards.stylePreviewOpenPreview')}
+                      className="block h-full w-full cursor-zoom-in overflow-hidden text-left"
+                      onClick={() => openPreviewImage(imageUrl)}
+                    >
+                      <Image
+                        src={imageUrl}
+                        alt={item.title}
+                        width={768}
+                        height={480}
+                        unoptimized
+                        className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.02]"
+                      />
+                    </button>
+                  ) : failed ? (
+                    <div className="flex h-full items-center justify-center bg-[var(--glass-tone-warn-bg)]/35 px-4 text-center text-xs font-medium text-[var(--glass-tone-warn-fg)]">
+                      {t('cards.stylePreviewGenerationFailed')}
+                    </div>
+                  ) : (
+                    <StylePreviewLoadingSurface />
+                  )}
+                  {inProgress ? <StylePreviewGeneratingOverlay taskState={taskState} /> : null}
                 </div>
-                {imageUrl ? (
-                  <button
-                    type="button"
-                    aria-label={t('cards.stylePreviewOpenPreview')}
-                    className="block h-44 w-full cursor-zoom-in overflow-hidden text-left"
-                    onClick={() => openPreviewImage(imageUrl)}
-                  >
-                    <Image
-                      src={imageUrl}
-                      alt={item.title}
-                      width={768}
-                      height={432}
-                      unoptimized
-                      className="h-44 w-full object-cover transition-transform duration-200 hover:scale-[1.01]"
-                    />
-                  </button>
-                ) : failed ? (
-                  <div className="flex h-36 items-center justify-center bg-[var(--glass-tone-warn-bg)]/35 px-4 text-center text-xs font-medium text-[var(--glass-tone-warn-fg)]">
-                    {t('cards.stylePreviewGenerationFailed')}
-                  </div>
-                ) : (
-                  <div className="workspace-node-loading-surface h-36 bg-slate-100" />
-                )}
-                <EstimatedTaskProgressOverlay taskState={taskState} />
-              </div>
-              <div className="space-y-1 p-2">
-                <button
-                  type="button"
-                  aria-label={summaryExpanded ? t('cards.stylePreviewSummaryCollapse') : t('cards.stylePreviewSummaryExpand')}
-                  className="group flex w-full items-start gap-1.5 text-left text-[11px] leading-5 text-[var(--glass-text-secondary)] transition-colors hover:text-[var(--glass-text-primary)]"
-                  onClick={() => toggleSummary(item.id)}
-                >
-                  <span className={`min-w-0 flex-1 ${summaryExpanded ? 'block' : 'line-clamp-1'}`}>
-                    {item.summary}
-                  </span>
-                  <AppIcon
-                    name="chevronDown"
-                    className={`mt-1 h-3 w-3 shrink-0 text-[var(--glass-text-tertiary)] transition-transform group-hover:text-[var(--glass-text-secondary)] ${summaryExpanded ? 'rotate-180' : ''}`}
-                  />
-                </button>
-                {showInlineStatus ? (
-                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--glass-text-tertiary)]">
-                    <AppIcon name={failed ? 'alert' : ready ? 'check' : 'loader'} className={`h-3 w-3 ${ready || failed ? '' : 'animate-spin'}`} />
-                    <span>
-                      {failed
-                        ? t('cards.stylePreviewGenerationFailed')
-                        : ready
-                          ? t('cards.stylePreviewReady')
-                          : t('cards.stylePreviewLoading')}
-                    </span>
-                  </div>
-                ) : null}
-                {failed && errorMessage ? (
-                  <div className="rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[10px] leading-4 text-[var(--glass-tone-warn-fg)]">
-                    {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
-                  </div>
-                ) : null}
                 {confirmed ? (
-                  <button
-                    type="button"
-                    className="mt-1 inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-xl border border-[var(--glass-stroke-base)] bg-neutral-100 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)]"
-                    disabled
-                  >
-                    <AppIcon name="check" className="h-4 w-4" />
+                  <div className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-1.5 rounded-full bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md">
+                    <AppIcon name="badgeCheck" className="h-3.5 w-3.5 text-[var(--glass-accent-from)]" />
                     {t('cards.stylePreviewConfirmed')}
-                  </button>
+                  </div>
                 ) : ready ? (
                   <button
                     type="button"
-                    className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/90 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={selecting || confirmStylePreview.isPending}
                     onClick={() => { void handleSelectStylePreview(item, preview) }}
+                    className="group/btn absolute bottom-3 right-3 z-30 inline-flex items-center gap-1 rounded-full bg-white/92 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {selecting ? t('cards.choiceSubmitting') : t('cards.stylePreviewSelect')}
+                    {!selecting ? <AppIcon name="chevronRight" className="h-3.5 w-3.5 text-[var(--glass-accent-from)] transition-transform group-hover/btn:translate-x-0.5" /> : null}
                   </button>
+                ) : null}
+              </div>
+              <div className="p-3">
+                <div className="text-[15px] font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
+                <p className="mt-1.5 text-[12px] leading-5 text-[var(--glass-text-secondary)]">{item.summary}</p>
+                {failed && errorMessage ? (
+                  <div className="mt-2 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[10px] leading-4 text-[var(--glass-tone-warn-fg)]">
+                    {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
+                  </div>
                 ) : null}
               </div>
             </div>

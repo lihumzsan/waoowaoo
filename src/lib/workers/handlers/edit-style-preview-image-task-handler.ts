@@ -17,13 +17,15 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-async function updateScreenplayStatusIfAllPreviewsCompleted(editScreenplayId: string) {
+async function updateScreenplayStatusIfAllPreviewsTerminal(editScreenplayId: string) {
   const previews = await prisma.projectEditStylePreview.findMany({
     where: { editScreenplayId },
     select: { status: true },
   })
-  if (previews.length < 1 || previews.length > 3) return
-  if (!previews.every((preview) => preview.status === 'completed')) return
+  // 不能假设候选恒为 1~3 张：追加（regenerate/append）会让总数超过 3。
+  // 只要存在候选、且全部到终态（completed/confirmed/failed），就把剧本标记为可选择。
+  if (previews.length < 1) return
+  if (!previews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed' || preview.status === 'failed')) return
   await prisma.projectEditScreenplay.update({
     where: { id: editScreenplayId },
     data: { status: EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY },
@@ -93,7 +95,7 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
         errorMessage: null,
       },
     })
-    await updateScreenplayStatusIfAllPreviewsCompleted(preview.editScreenplayId)
+    await updateScreenplayStatusIfAllPreviewsTerminal(preview.editScreenplayId)
 
     await reportTaskProgress(job, 95, {
       stage: 'edit_style_preview_image_persist',

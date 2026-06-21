@@ -2,6 +2,10 @@ import { AI_PROMPT_IDS, type AiPromptId } from './ids'
 import type { AiPromptCatalogEntry } from './types'
 
 export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
+  [AI_PROMPT_IDS.PROJECT_AGENT_SYSTEM]: {
+    pathStem: 'project-agent/system',
+    variableKeys: ['assistant_permission_mode', 'project_id', 'episode_id'],
+  },
   [AI_PROMPT_IDS.CHARACTER_ANALYZE]: {
     pathStem: 'character/analyze',
     variableKeys: ['input', 'characters_lib_info', 'style_bible'],
