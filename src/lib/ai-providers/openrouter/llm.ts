@@ -3,6 +3,10 @@ import { runOpenAIBaseUrlLlmCompletion, runOpenAIBaseUrlLlmStream } from '@/lib/
 import { getCompletionParts } from '@/lib/ai-providers/shared/completion-parts'
 import { buildAiProviderLlmResult } from '@/lib/ai-providers/shared/llm-result'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
+import {
+  buildOpenRouterRequestOptions,
+  normalizeOpenRouterSessionId,
+} from '@/lib/ai-providers/openrouter/session'
 import type {
   AiProviderLlmResult,
   AiProviderLlmStreamContext,
@@ -24,6 +28,7 @@ export async function runOpenRouterLlmCompletion(input: {
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
   maxRetries: number
+  openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
   if (!input.providerConfig.baseUrl) {
     throw new Error('PROVIDER_BASE_URL_MISSING: openrouter (llm)')
@@ -40,6 +45,7 @@ export async function runOpenRouterLlmCompletion(input: {
     reasoningEffort: input.reasoningEffort,
     maxRetries: input.maxRetries,
     isOpenRouter: true,
+    openRouterSessionId: input.openRouterSessionId,
   })
 }
 
@@ -74,6 +80,7 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
     baseURL: input.providerConfig.baseUrl,
     apiKey: input.providerConfig.apiKey,
   })
+  const openRouterSessionId = normalizeOpenRouterSessionId(input.options?.openRouterSessionId)
   const completion = await client.chat.completions.create({
     model: input.selection.modelId,
     messages: [{
@@ -81,7 +88,7 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
       content,
     }],
     temperature: input.temperature,
-  })
+  }, buildOpenRouterRequestOptions(openRouterSessionId))
   const normalizedCompletion = completion as OpenAI.Chat.Completions.ChatCompletion
   const completionParts = getCompletionParts(normalizedCompletion)
   return buildAiProviderLlmResult({
@@ -89,6 +96,10 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
     logProvider: 'openrouter',
     text: completionParts.text,
     reasoning: completionParts.reasoning,
-    successDetails: { engine: 'openai_sdk_vision' },
+    successDetails: {
+      engine: 'openai_sdk_vision',
+      openRouterSessionId: openRouterSessionId ?? null,
+      openRouterResponse: normalizedCompletion,
+    },
   })
 }

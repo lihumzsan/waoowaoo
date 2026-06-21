@@ -27,6 +27,7 @@ export const openRouterAdapter: AiProviderAdapter = {
     reasoning: input.reasoning,
     reasoningEffort: input.reasoningEffort,
     maxRetries: input.maxRetries,
+    openRouterSessionId: input.openRouterSessionId,
   }),
   languageModel: {
     create: createOpenAiSdkLanguageModel,

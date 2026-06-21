@@ -5,7 +5,12 @@ import { getCompletionParts } from '@/lib/ai-providers/shared/completion-parts'
 import { buildOpenAIChatCompletion } from '@/lib/ai-providers/shared/openai-chat-completion'
 import { buildAiProviderLlmResult } from '@/lib/ai-providers/shared/llm-result'
 import {
+  buildOpenRouterRequestOptions,
+  normalizeOpenRouterSessionId,
+} from '@/lib/ai-providers/openrouter/session'
+import {
   buildReasoningAwareContent,
+  completionUsageSummary,
   extractStreamDeltaParts,
   getConversationMessages,
   getSystemPrompt,
@@ -42,6 +47,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
   maxRetries: number
   isOpenRouter?: boolean
+  openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
   if (!input.isOpenRouter) {
     const aiOpenAI = createOpenAI({
@@ -92,6 +98,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
     baseURL: input.baseUrl,
     apiKey: input.apiKey,
   })
+  const openRouterSessionId = normalizeOpenRouterSessionId(input.openRouterSessionId)
   const extraParams: { [key: string]: unknown } = {}
   if (input.reasoning) {
     extraParams.reasoning = { effort: input.reasoningEffort }
@@ -101,7 +108,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
     messages: input.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     temperature: input.temperature,
     ...extraParams,
-  })
+  }, buildOpenRouterRequestOptions(openRouterSessionId))
   const normalizedCompletion = completion as OpenAI.Chat.Completions.ChatCompletion
   const completionParts = getCompletionParts(normalizedCompletion)
   return buildAiProviderLlmResult({
@@ -109,7 +116,11 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
     logProvider: input.providerName,
     text: completionParts.text,
     reasoning: completionParts.reasoning,
-    successDetails: { engine: 'openai_sdk' },
+    successDetails: {
+      engine: 'openai_sdk',
+      openRouterSessionId: openRouterSessionId ?? null,
+      openRouterResponse: normalizedCompletion,
+    },
   })
 }
 
@@ -207,6 +218,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     baseURL: input.providerConfig.baseUrl,
     apiKey: input.providerConfig.apiKey,
   })
+  const openRouterSessionId = normalizeOpenRouterSessionId(input.options.openRouterSessionId)
   const extraParams: { [key: string]: unknown } = {}
   if (input.options.reasoning ?? true) {
     extraParams.reasoning = { effort: input.options.reasoningEffort || 'high' }
@@ -218,7 +230,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     ...((input.options.reasoning ?? true) ? {} : { temperature: input.options.temperature ?? 0.7 }),
     stream: true,
     ...extraParams,
-  } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming)
+  } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, buildOpenRouterRequestOptions(openRouterSessionId))
   let text = ''
   let reasoning = ''
   let seq = 1
@@ -257,15 +269,9 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
       finalCompletion = null
     }
   }
-  const completion = buildOpenAIChatCompletion(
+  const completion = finalCompletion ?? buildOpenAIChatCompletion(
     input.selection.modelId,
     buildReasoningAwareContent(text, reasoning),
-    finalCompletion
-      ? {
-        promptTokens: Number(finalCompletion.usage?.prompt_tokens ?? 0),
-        completionTokens: Number(finalCompletion.usage?.completion_tokens ?? 0),
-      }
-      : undefined,
   )
   emitStreamStage(input.callbacks, stepMeta, 'completed', input.providerName)
   input.callbacks?.onComplete?.(text, stepMeta)
@@ -274,5 +280,11 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     logProvider: input.providerName,
     text,
     reasoning,
+    usage: finalCompletion ? completionUsageSummary(finalCompletion) : null,
+    successDetails: {
+      engine: 'openai_sdk_stream',
+      openRouterSessionId: openRouterSessionId ?? null,
+      openRouterResponse: finalCompletion,
+    },
   })
 }

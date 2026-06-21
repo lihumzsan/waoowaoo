@@ -74,20 +74,60 @@ describe('OpenRouter vision adapter', () => {
       baseURL: 'https://openrouter.example/v1',
       apiKey: 'sk-openrouter',
     })
-    expect(completionCreateMock).toHaveBeenCalledWith({
-      model: 'anthropic/claude-sonnet-4',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Analyze this scene image.' },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,bWVkaWEtb3ZlcmxheQ==' } },
-        ],
-      }],
-      temperature: 0.2,
-    })
+    expect(completionCreateMock).toHaveBeenCalledWith(
+      {
+        model: 'anthropic/claude-sonnet-4',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Analyze this scene image.' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,bWVkaWEtb3ZlcmxheQ==' } },
+          ],
+        }],
+        temperature: 0.2,
+      },
+      undefined,
+    )
     expect(normalizeToBase64ForGenerationMock).toHaveBeenCalledWith('/m/media-overlay')
     expect(result.text).toBe('vision analysis')
     expect(result.logProvider).toBe('openrouter')
+  })
+
+  it('passes OpenRouter session headers for vision calls', async () => {
+    await runOpenRouterVisionCompletion({
+      userId: 'user-1',
+      providerKey: 'openrouter',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'anthropic/claude-sonnet-4',
+        modelKey: 'openrouter::anthropic/claude-sonnet-4',
+        variantSubKind: 'official',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.example/v1',
+      },
+      textPrompt: 'Analyze this scene image.',
+      imageUrls: ['/m/media-overlay'],
+      temperature: 0.2,
+      reasoning: true,
+      options: {
+        openRouterSessionId: 'vision-session',
+      },
+    })
+
+    expect(completionCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'anthropic/claude-sonnet-4',
+      }),
+      {
+        headers: {
+          'x-session-id': 'vision-session',
+        },
+      },
+    )
   })
 
   it('fails explicitly when OpenRouter vision is missing a base URL', async () => {

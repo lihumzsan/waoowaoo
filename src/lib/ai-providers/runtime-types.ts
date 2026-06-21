@@ -53,6 +53,7 @@ export type AiProviderVisionExecutionContext = {
   imageUrls: string[]
   temperature: number
   reasoning: boolean
+  options?: ProviderChatCompletionOptions
 }
 
 export type AiProviderLanguageModelContext = {
@@ -63,6 +64,7 @@ export type AiProviderLanguageModelContext = {
     modelKey: string
   }
   providerConfig: AiLlmProviderConfig
+  openRouterSessionId?: string
 }
 
 export type AiProviderImageExecutionContext = {

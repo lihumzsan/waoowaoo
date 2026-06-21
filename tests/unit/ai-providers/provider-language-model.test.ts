@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const openAiState = vi.hoisted(() => ({
-  createOpenAI: vi.fn((settings: { apiKey?: string; baseURL?: string; name?: string }) => ({
+  createOpenAI: vi.fn((settings: { apiKey?: string; baseURL?: string; name?: string; headers?: Record<string, string> }) => ({
     chat: vi.fn((modelId: string) => ({
       provider: settings.name,
       modelId,
@@ -70,6 +70,35 @@ describe('ai provider language model registry', () => {
       apiKey: 'sk-openrouter',
       baseURL: 'https://openrouter.ai/api/v1',
       name: 'openrouter',
+      fetch: expect.any(Function),
+    })
+  })
+
+  it('passes OpenRouter session headers to AI SDK language models', () => {
+    createRegisteredLanguageModel({
+      providerKey: 'openrouter',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'anthropic/claude-sonnet-4.5',
+        modelKey: 'openrouter::anthropic/claude-sonnet-4.5',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+      },
+      openRouterSessionId: 'project-agent-session',
+    })
+
+    expect(openAiState.createOpenAI).toHaveBeenCalledWith({
+      apiKey: 'sk-openrouter',
+      baseURL: 'https://openrouter.ai/api/v1',
+      name: 'openrouter',
+      headers: {
+        'x-session-id': 'project-agent-session',
+      },
+      fetch: expect.any(Function),
     })
   })
 })

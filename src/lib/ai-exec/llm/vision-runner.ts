@@ -19,7 +19,11 @@ import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
-import type { AiProviderVisionExecutionContext } from '@/lib/ai-providers/runtime-types'
+import {
+  buildOpenRouterSessionId,
+  normalizeOpenRouterSessionId,
+} from '@/lib/ai-providers/openrouter/session'
+import type { AiProviderLlmResult, AiProviderVisionExecutionContext } from '@/lib/ai-providers/runtime-types'
 
 ensureAiCatalogsRegistered()
 
@@ -41,9 +45,28 @@ function getErrorBody(error: unknown): { message?: unknown; code?: unknown } {
   return root
 }
 
+function resolveOpenRouterSessionForVision(input: {
+  providerKey: string
+  userId: string
+  projectId?: string
+  action?: string
+  modelKey: string
+  explicitSessionId?: string
+}): string | undefined {
+  if (input.providerKey !== 'openrouter') return undefined
+  return normalizeOpenRouterSessionId(input.explicitSessionId)
+    ?? buildOpenRouterSessionId({
+      kind: 'vision',
+      userId: input.userId,
+      projectId: input.projectId,
+      action: input.action,
+      modelKey: input.modelKey,
+    })
+}
+
 async function executeVisionCompletionViaAdapter(
   input: AiProviderVisionExecutionContext,
-): Promise<{ completion: OpenAI.Chat.Completions.ChatCompletion; logProvider: string }> {
+): Promise<AiProviderLlmResult> {
   const provider = resolveAiProviderAdapter(input.selection.provider)
   if (provider.completeVision) {
     const result = await provider.completeVision(input)
@@ -100,6 +123,18 @@ export async function runChatCompletionWithVision(
 
   const { temperature = 0.7, maxRetries = 2, reasoning = true } = options
   const normalizedImageUrls = await normalizeVisionImageUrls(imageUrls)
+  const projectId =
+    typeof options.projectId === 'string' && options.projectId.trim().length > 0
+      ? options.projectId.trim()
+      : undefined
+  const openRouterSessionId = resolveOpenRouterSessionForVision({
+    providerKey,
+    userId,
+    projectId,
+    action: options.action,
+    modelKey: selection.modelKey,
+    explicitSessionId: options.openRouterSessionId,
+  })
 
   let lastError: Error | null = null
 
@@ -116,6 +151,7 @@ export async function runChatCompletionWithVision(
         imageUrls: normalizedImageUrls,
         temperature,
         reasoning,
+        options: openRouterSessionId ? { ...options, openRouterSessionId } : options,
       })
       recordCompletionUsage(resolvedModelId, result.completion)
       llmLogger.info({
@@ -128,6 +164,7 @@ export async function runChatCompletionWithVision(
           attempt,
           maxRetries,
           imageCount: normalizedImageUrls.length,
+          ...(result.successDetails || {}),
         },
       })
       return result.completion

@@ -21,19 +21,40 @@ export type LlmRawMessage = {
 type LlmUsage = {
   promptTokens: number
   completionTokens: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  cacheHitRate?: number
 }
 
 export function completionUsageSummary(
   completion: OpenAI.Chat.Completions.ChatCompletion | null | undefined,
 ): LlmUsage | null {
-  const usage = completion?.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined
+  const usage = completion?.usage as {
+    prompt_tokens?: number
+    completion_tokens?: number
+    prompt_tokens_details?: {
+      cached_tokens?: number
+      cache_write_tokens?: number
+    } | null
+  } | undefined
   if (!usage) return null
   const promptTokens = Number(usage.prompt_tokens ?? 0)
   const completionTokens = Number(usage.completion_tokens ?? 0)
   if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return null
+  const cachedInputTokens = Number(usage.prompt_tokens_details?.cached_tokens ?? 0)
+  const cacheWriteTokens = Number(usage.prompt_tokens_details?.cache_write_tokens ?? 0)
   return {
     promptTokens,
     completionTokens,
+    ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0
+      ? { cachedInputTokens }
+      : {}),
+    ...(Number.isFinite(cacheWriteTokens) && cacheWriteTokens >= 0
+      ? { cacheWriteTokens }
+      : {}),
+    ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0 && promptTokens > 0
+      ? { cacheHitRate: cachedInputTokens / promptTokens }
+      : {}),
   }
 }
 
@@ -48,6 +69,7 @@ export function logLlmRawInput(params: {
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
   temperature: number
   action?: string
+  openRouterSessionId?: string
   messages: LlmRawMessage[]
 }) {
   llmLogger.info({
@@ -68,6 +90,7 @@ export function logLlmRawInput(params: {
         temperature: params.temperature,
         reasoning: params.reasoning,
         reasoningEffort: params.reasoningEffort,
+        openRouterSessionId: params.openRouterSessionId ?? null,
       },
       messages: params.messages,
     },
@@ -85,6 +108,7 @@ export function logLlmRawOutput(params: {
   text: string
   reasoning: string
   usage?: LlmUsage | null
+  providerResponse?: unknown
 }) {
   const isEmpty = !params.text
   const logPayload = {
@@ -107,6 +131,7 @@ export function logLlmRawOutput(params: {
         empty: isEmpty || undefined,
       },
       usage: params.usage || null,
+      providerResponse: params.providerResponse ?? null,
     },
   }
   if (isEmpty) {
@@ -137,6 +162,9 @@ export function recordCompletionUsage(model: string, completion: OpenAI.Chat.Com
     model,
     inputTokens: summary.promptTokens,
     outputTokens: summary.completionTokens,
+    cachedInputTokens: summary.cachedInputTokens,
+    cacheWriteTokens: summary.cacheWriteTokens,
+    cacheHitRate: summary.cacheHitRate,
   })
 }
 

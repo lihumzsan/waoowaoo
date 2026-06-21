@@ -61,7 +61,14 @@ type ResolvedActual = {
   metadata?: Record<string, unknown>
 }
 
-type UsageByModel = Record<string, { inputTokens: number; outputTokens: number; cost: number }>
+type UsageByModel = Record<string, {
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  cacheHitRate: number
+  cost: number
+}>
 
 const MONEY_SCALE = 6
 const MONEY_EPSILON = 1e-9
@@ -130,34 +137,56 @@ function resolveTextCostFromUsage(
 
   let inputTokens = 0
   let outputTokens = 0
+  let cachedInputTokens = 0
+  let cacheWriteTokens = 0
   let cost = 0
   const byModel: UsageByModel = {}
 
   for (const item of usage) {
     const inTokens = Math.max(0, Math.floor(Number(item.inputTokens || 0)))
     const outTokens = Math.max(0, Math.floor(Number(item.outputTokens || 0)))
+    const cachedTokens = Math.max(0, Math.floor(Number(item.cachedInputTokens || 0)))
+    const writeTokens = Math.max(0, Math.floor(Number(item.cacheWriteTokens || 0)))
     const model = item.model || 'unknown'
     const hasBillableTokens = inTokens > 0 || outTokens > 0
     const itemCost = hasBillableTokens ? normalizeMoney(calcText(model, inTokens, outTokens)) : 0
 
     inputTokens += inTokens
     outputTokens += outTokens
+    cachedInputTokens += cachedTokens
+    cacheWriteTokens += writeTokens
     cost += itemCost
 
     if (!byModel[model]) {
-      byModel[model] = { inputTokens: 0, outputTokens: 0, cost: 0 }
+      byModel[model] = {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        cacheHitRate: 0,
+        cost: 0,
+      }
     }
     byModel[model].inputTokens += inTokens
     byModel[model].outputTokens += outTokens
+    byModel[model].cachedInputTokens += cachedTokens
+    byModel[model].cacheWriteTokens += writeTokens
+    byModel[model].cacheHitRate = byModel[model].inputTokens > 0
+      ? byModel[model].cachedInputTokens / byModel[model].inputTokens
+      : 0
     byModel[model].cost += itemCost
   }
 
+  const cacheHitRate = inputTokens > 0 ? cachedInputTokens / inputTokens : 0
   return {
     actualCost: normalizeMoney(cost),
     actualQuantity: inputTokens + outputTokens,
     metadata: {
       actualInputTokens: inputTokens,
       actualOutputTokens: outputTokens,
+      actualCachedInputTokens: cachedInputTokens,
+      actualCacheWriteTokens: cacheWriteTokens,
+      actualCacheHitRate: cacheHitRate,
       usageByModel: byModel,
     },
   }

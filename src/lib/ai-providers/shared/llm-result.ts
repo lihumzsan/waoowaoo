@@ -1,5 +1,5 @@
 import type OpenAI from 'openai'
-import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
+import type { AiLlmExecutionResult, AiLlmUsage } from '@/lib/ai-registry/types'
 import { completionUsageSummary } from '@/lib/ai-providers/shared/llm-support'
 
 export function buildAiProviderLlmResult(input: {
@@ -7,7 +7,7 @@ export function buildAiProviderLlmResult(input: {
   logProvider: string
   text: string
   reasoning: string
-  usage?: { promptTokens: number; completionTokens: number } | null
+  usage?: AiLlmUsage | null
   successDetails?: { [key: string]: unknown }
 }): Pick<
   AiLlmExecutionResult,

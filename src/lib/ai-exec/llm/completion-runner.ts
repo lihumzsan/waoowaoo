@@ -21,6 +21,10 @@ import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
+import {
+  buildOpenRouterSessionId,
+  normalizeOpenRouterSessionId,
+} from '@/lib/ai-providers/openrouter/session'
 import type { AiLlmExecutionInput, AiLlmExecutionResult } from '@/lib/ai-registry/types'
 
 ensureAiCatalogsRegistered()
@@ -38,6 +42,25 @@ function errorMessage(error: unknown): string {
   const record = toRecord(error)
   if (record && typeof record.message === 'string') return record.message
   return 'unknown error'
+}
+
+function resolveOpenRouterSessionForCompletion(input: {
+  providerKey: string
+  userId: string
+  projectId?: string
+  action?: string
+  modelKey: string
+  explicitSessionId?: string
+}): string | undefined {
+  if (input.providerKey !== 'openrouter') return undefined
+  return normalizeOpenRouterSessionId(input.explicitSessionId)
+    ?? buildOpenRouterSessionId({
+      kind: 'llm',
+      userId: input.userId,
+      projectId: input.projectId,
+      action: input.action,
+      modelKey: input.modelKey,
+    })
 }
 
 async function executeLlmCompletionViaAdapter(
@@ -88,6 +111,14 @@ export async function chatCompletionStream(
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
       ? options.projectId.trim()
       : undefined
+  const openRouterSessionId = resolveOpenRouterSessionForCompletion({
+    providerKey,
+    userId,
+    projectId,
+    action: options.action,
+    modelKey: selection.modelKey,
+    explicitSessionId: options.openRouterSessionId,
+  })
   logLlmRawInput({
     userId,
     projectId,
@@ -99,6 +130,7 @@ export async function chatCompletionStream(
     reasoningEffort,
     temperature,
     action: options.action,
+    openRouterSessionId,
     messages,
   })
 
@@ -110,12 +142,13 @@ export async function chatCompletionStream(
   }
 
   try {
+    const streamOptions = openRouterSessionId ? { ...options, openRouterSessionId } : options
     const result = await providerRuntime.streamLlm({
       userId,
       selection,
       providerConfig,
       messages,
-      options,
+      options: streamOptions,
       callbacks,
     })
     logLlmRawOutput({
@@ -129,6 +162,7 @@ export async function chatCompletionStream(
       text: result.text,
       reasoning: result.reasoning,
       usage: result.usage ?? undefined,
+      providerResponse: result.successDetails?.openRouterResponse ?? null,
     })
     recordCompletionUsage(resolvedModelId, result.completion)
     return result.completion
@@ -203,6 +237,14 @@ export async function runChatCompletion(
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
       ? options.projectId.trim()
       : undefined
+  const openRouterSessionId = resolveOpenRouterSessionForCompletion({
+    providerKey,
+    userId,
+    projectId,
+    action: options.action,
+    modelKey: selection.modelKey,
+    explicitSessionId: options.openRouterSessionId,
+  })
   logLlmRawInput({
     userId,
     projectId,
@@ -214,6 +256,7 @@ export async function runChatCompletion(
     reasoningEffort,
     temperature,
     action: options.action,
+    openRouterSessionId,
     messages,
   })
 
@@ -232,6 +275,7 @@ export async function runChatCompletion(
         reasoning,
         reasoningEffort,
         maxRetries,
+        openRouterSessionId,
       })
       logLlmRawOutput({
         userId,
@@ -244,6 +288,7 @@ export async function runChatCompletion(
         text: result.text,
         reasoning: result.reasoning,
         usage: result.usage,
+        providerResponse: result.successDetails?.openRouterResponse ?? null,
       })
       recordCompletionUsage(resolvedModelId, result.completion)
       llmLogger.info({

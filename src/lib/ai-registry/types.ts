@@ -77,6 +77,7 @@ export interface ChatCompletionOptions {
   maxRetries?: number
   projectId?: string
   action?: string
+  openRouterSessionId?: string
   streamStepId?: string
   streamStepAttempt?: number
   streamStepTitle?: string
@@ -197,11 +198,15 @@ export type AiLlmExecutionInput = {
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
   maxRetries: number
+  openRouterSessionId?: string
 }
 
 export type AiLlmUsage = {
   promptTokens: number
   completionTokens: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  cacheHitRate?: number
 }
 
 export type AiLlmExecutionResult = {

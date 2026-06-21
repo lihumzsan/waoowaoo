@@ -7,6 +7,7 @@ import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 export async function resolveProjectAgentLanguageModel(input: {
   userId: string
   analysisModelKey: string
+  openRouterSessionId?: string
 }): Promise<{
   languageModel: LanguageModel
 }> {
@@ -18,6 +19,7 @@ export async function resolveProjectAgentLanguageModel(input: {
       providerKey,
       selection,
       providerConfig,
+      openRouterSessionId: input.openRouterSessionId,
     }),
   }
 }

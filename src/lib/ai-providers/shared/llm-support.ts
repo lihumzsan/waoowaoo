@@ -8,6 +8,7 @@ export interface ProviderChatCompletionOptions {
   maxRetries?: number
   projectId?: string
   action?: string
+  openRouterSessionId?: string
   streamStepId?: string
   streamStepAttempt?: number
   streamStepTitle?: string
@@ -42,6 +43,10 @@ export function completionUsageSummary(
       completion_tokens?: number
       promptTokens?: number
       completionTokens?: number
+      prompt_tokens_details?: {
+        cached_tokens?: number
+        cache_write_tokens?: number
+      } | null
     } | null
   },
 ) {
@@ -49,7 +54,21 @@ export function completionUsageSummary(
   if (!usage) return null
   const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0)
   const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0)
-  return { promptTokens, completionTokens }
+  const cachedInputTokens = Number(usage.prompt_tokens_details?.cached_tokens ?? 0)
+  const cacheWriteTokens = Number(usage.prompt_tokens_details?.cache_write_tokens ?? 0)
+  return {
+    promptTokens,
+    completionTokens,
+    ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0
+      ? { cachedInputTokens }
+      : {}),
+    ...(Number.isFinite(cacheWriteTokens) && cacheWriteTokens >= 0
+      ? { cacheWriteTokens }
+      : {}),
+    ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0 && promptTokens > 0
+      ? { cacheHitRate: cachedInputTokens / promptTokens }
+      : {}),
+  }
 }
 
 function splitThinkTaggedContent(input: string): { text: string; reasoning: string } {
