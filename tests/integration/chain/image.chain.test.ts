@@ -41,6 +41,12 @@ const sharedMock = vi.hoisted(() => ({
   parseJsonStringArray: vi.fn(() => [] as string[]),
 }))
 
+const IMAGE_GENERATION_OPTIONS = {
+  aspectRatio: '1:1',
+  resolution: '1K',
+  quality: 'standard',
+} as const
+
 vi.mock('bullmq', () => ({
   Queue: class {
     private readonly queueName: string
@@ -170,7 +176,13 @@ describe('chain contract - image queue behavior', () => {
       episodeId: null,
       targetType: 'GlobalCharacterAppearance',
       targetId: 'appearance-1',
-      payload: { type: 'character', id: 'global-character-1', appearanceId: 'appearance-1', appearanceIndex: 0 },
+      payload: {
+        type: 'character',
+        id: 'global-character-1',
+        appearanceId: 'appearance-1',
+        appearanceIndex: 0,
+        generationOptions: IMAGE_GENERATION_OPTIONS,
+      },
       userId: 'user-1',
     })
 
@@ -184,6 +196,10 @@ describe('chain contract - image queue behavior', () => {
       appearanceId: 'appearance-1',
       imageCount: 3,
     })
+
+    expect(sharedMock.generateCleanImageToStorage).toHaveBeenCalledWith(expect.objectContaining({
+      options: IMAGE_GENERATION_OPTIONS,
+    }))
 
     expect(prismaMock.globalCharacterAppearance.update).toHaveBeenCalledWith({
       where: { id: 'appearance-1' },
