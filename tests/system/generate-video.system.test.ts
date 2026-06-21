@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY } from '@/lib/ai-providers/openrouter/models'
 import { callRoute } from '../integration/api/helpers/call-route'
 import { installAuthMocks, mockAuthenticated, resetAuthMockState } from '../helpers/auth'
 import { resetSystemState } from '../helpers/db-reset'
@@ -100,9 +101,10 @@ describe('system - generate video', () => {
         locale: 'zh',
         storyboardId: seeded.storyboard.id,
         panelIndex: 0,
-        videoModel: 'fal::seedance/video',
+        videoModel: OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
         generationOptions: {
           resolution: '720p',
+          generateAudio: false,
         },
       },
       { params: { projectId: seeded.project.id } },
@@ -123,6 +125,7 @@ describe('system - generate video', () => {
     expect(panel?.videoUrl).toBe(videoState.uploadedCosKey)
     expect(panel?.lastVideoGenerationOptions).toEqual({
       resolution: '720p',
+      generateAudio: false,
     })
 
     const eventTypes = await listTaskEventTypes(json.taskId)

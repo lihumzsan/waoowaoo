@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/ai-providers/fal/models'
+import {
+  OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
+  OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+} from '@/lib/ai-providers/openrouter/models'
 import { prisma } from './prisma'
 
 function suffix() {
@@ -21,12 +26,12 @@ export async function createFixtureProject(userId: string) {
     data: {
       userId,
       name: `project_${id}`,
-      analysisModel: 'openrouter::anthropic/claude-sonnet-4',
-      characterModel: 'fal::banana/character',
-      locationModel: 'fal::banana/location',
-      storyboardModel: 'fal::banana/storyboard',
-      editModel: 'fal::banana/edit',
-      videoModel: 'fal::seedance/video',
+      analysisModel: OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
+      characterModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      storyboardModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      videoModel: OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
       videoRatio: '9:16',
       imageResolution: '2K',
     },
@@ -37,12 +42,12 @@ export async function createFixtureNovelProject(projectId: string) {
   return await prisma.project.update({
     where: { id: projectId },
     data: {
-      analysisModel: 'openrouter::anthropic/claude-sonnet-4',
-      characterModel: 'fal::banana/character',
-      locationModel: 'fal::banana/location',
-      storyboardModel: 'fal::banana/storyboard',
-      editModel: 'fal::banana/edit',
-      videoModel: 'fal::seedance/video',
+      analysisModel: OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
+      characterModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      storyboardModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      videoModel: OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
       videoRatio: '9:16',
       imageResolution: '2K',
     }
