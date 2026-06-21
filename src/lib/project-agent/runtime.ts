@@ -31,10 +31,10 @@ import type {
   ProjectAgentStopPartData,
 } from './types'
 import {
-  buildProjectAgentSystemPrompt,
   localizeProjectAgentOperationTitle,
   localizeSelectableToolDescription,
 } from './copy'
+import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'

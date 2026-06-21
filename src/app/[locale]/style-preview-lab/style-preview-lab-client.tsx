@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 
 /* ------------------------------------------------------------------ */
@@ -66,24 +66,21 @@ const avg = (m: Record<string, number>) => MOCK_STYLES.reduce((a, s) => a + (m[s
 /* ------------------------------------------------------------------ */
 
 function ProgressRing({ percent, size = 56 }: { percent: number; size?: number }) {
-  const r = size * 0.34
-  const circ = 2 * Math.PI * r
   const clamped = Math.max(0, Math.min(100, percent))
-  const offset = circ * (1 - clamped / 100)
   const stroke = size < 40 ? 3 : 3.5
+  const progressDegrees = clamped * 3.6
+  const ringStyle: CSSProperties = {
+    height: size,
+    width: size,
+    padding: stroke,
+    background: `conic-gradient(var(--glass-accent-from) 0deg, var(--glass-accent-to) ${progressDegrees}deg, rgba(255,255,255,0.22) ${progressDegrees}deg 360deg)`,
+  }
+
   return (
-    <div className="relative flex items-center justify-center" style={{ height: size, width: size }}>
-      <svg viewBox="0 0 48 48" className="h-full w-full -rotate-90">
-        <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth={stroke} />
-        <circle cx="24" cy="24" r={r} fill="none" stroke="url(#splRingGrad)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.22,0.61,0.36,1)' }} />
-        <defs>
-          <linearGradient id="splRingGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="var(--glass-accent-from)" />
-            <stop offset="100%" stopColor="var(--glass-accent-to)" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <span className="absolute font-semibold tabular-nums text-white" style={{ fontSize: size < 40 ? 9 : 13 }}>{Math.floor(clamped)}</span>
+    <div className="rounded-full transition-all duration-500 ease-out" style={ringStyle}>
+      <div className="flex h-full w-full items-center justify-center rounded-full bg-[rgba(15,23,42,0.76)]">
+        <span className="font-semibold tabular-nums text-white" style={{ fontSize: size < 40 ? 9 : 13 }}>{Math.floor(clamped)}</span>
+      </div>
     </div>
   )
 }
@@ -318,7 +315,7 @@ function VersionFilm({ state, m }: { state: LabState; m: Record<string, number> 
           <div className="absolute right-3 top-3 z-20"><StatusPill generating={generating} percent={p} /></div>
         </div>
       )}
-      renderRow={(s, p, generating) => (
+      renderRow={(s) => (
         <div className="flex items-center gap-3 overflow-hidden rounded-[14px] border border-[var(--glass-stroke-base)] bg-white/80 transition-colors hover:bg-neutral-50">
           <div className="flex h-12 w-9 shrink-0 items-center justify-center bg-gradient-to-b from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] text-[15px] font-bold text-white">0{idx(s.key)}</div>
           <div className="min-w-0 flex-1 py-1.5">

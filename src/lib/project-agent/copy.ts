@@ -1,6 +1,4 @@
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 import type { ProjectAgentLocale } from './locale'
-import type { AssistantPermissionMode } from './permission-mode'
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   asset_hub_list_folders: {
@@ -129,23 +127,6 @@ export function localizeProjectAgentOperationTitle(
   const copy = PROJECT_AGENT_OPERATION_TITLE_COPY[operationId]
   if (!copy) return locale === 'en' ? 'Project operation' : '项目操作'
   return copy[locale]
-}
-
-export function buildProjectAgentSystemPrompt(params: {
-  locale: ProjectAgentLocale
-  projectId: string
-  episodeId: string
-  assistantPermissionMode: AssistantPermissionMode
-}): string {
-  return buildAiPrompt({
-    promptId: AI_PROMPT_IDS.PROJECT_AGENT_SYSTEM,
-    locale: params.locale,
-    variables: {
-      assistant_permission_mode: params.assistantPermissionMode,
-      project_id: params.projectId,
-      episode_id: params.episodeId,
-    },
-  })
 }
 
 export function buildCompressionPrompt(locale: ProjectAgentLocale, transcript: string): {
