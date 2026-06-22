@@ -12,7 +12,7 @@
         "recharge": "充值",
         "frozen": "冻结",
         "totalSpent": "累计消费",
-        "creditsUnit": "额度"
+        "creditsUnit": ""
     },
     "downloadLogs": "下载日志",
     "signin": "登录",

@@ -16,8 +16,10 @@ interface HomeClientProps {
 
 export default function HomeClient({ initialDeploymentFeatures }: HomeClientProps) {
   const t = useTranslations('landing')
+  const tn = useTranslations('nav')
   const { status } = useSession()
   const router = useRouter()
+  const showPricingLink = initialDeploymentFeatures.showPricingPage === true
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -71,6 +73,14 @@ export default function HomeClient({ initialDeploymentFeatures }: HomeClientProp
                 >
                   {t('getStarted')}
                 </Link>
+                {showPricingLink ? (
+                  <Link
+                    href={{ pathname: '/pricing' }}
+                    className="glass-btn-base glass-btn-secondary rounded-xl px-8 py-4 font-semibold transition-all duration-300"
+                  >
+                    {tn('pricing')}
+                  </Link>
+                ) : null}
               </div>
             </div>
 

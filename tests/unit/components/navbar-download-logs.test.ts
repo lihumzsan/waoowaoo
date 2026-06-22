@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
-import Navbar, { buildNavbarSettingsMenuItems, shouldCloseNavbarSettingsMenu } from '@/components/Navbar'
+import Navbar, { buildNavbarSettingsMenuItems, formatCreditAmount, shouldCloseNavbarSettingsMenu } from '@/components/Navbar'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 
 const useSessionMock = vi.fn()
@@ -62,9 +62,17 @@ const messages = {
       apiConfig: 'API 配置',
       billingRecords: '扣费记录',
     },
+    account: {
+      balance: '可用余额',
+      recharge: '充值',
+      frozen: '冻结',
+      totalSpent: '累计消费',
+      creditsUnit: '',
+    },
     downloadLogs: '下载日志',
     signin: '登录',
     signup: '注册',
+    logout: '退出登录',
   },
   common: {
     appName: 'waoowaoo',
@@ -253,5 +261,10 @@ describe('Navbar compact split navigation', () => {
     expect(shouldCloseNavbarSettingsMenu(menuTarget, trigger, menu)).toBe(false)
     expect(shouldCloseNavbarSettingsMenu(pageTarget, trigger, menu)).toBe(true)
     expect(shouldCloseNavbarSettingsMenu(null, trigger, menu)).toBe(false)
+  })
+
+  it('omits the balance unit when the navigation unit label is empty', () => {
+    expect(formatCreditAmount(100, '')).toBe('100.00')
+    expect(formatCreditAmount(100, '额度')).toBe('100.00 额度')
   })
 })

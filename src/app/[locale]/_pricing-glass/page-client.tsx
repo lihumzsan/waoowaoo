@@ -25,14 +25,6 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
   const recharge = useRecharge()
   return (
     <div className="glass-page min-h-screen pb-24">
-      {/* soft accent wash so the glass reads */}
-      <div
-        className="pointer-events-none fixed inset-x-0 top-0 -z-0 h-[420px]"
-        style={{
-          background:
-            'radial-gradient(60% 70% at 30% 0%, var(--glass-accent-shadow-soft), transparent 70%), radial-gradient(50% 60% at 80% 10%, rgba(186,156,255,0.18), transparent 70%)',
-        }}
-      />
       <main className="relative mx-auto max-w-6xl px-5 pt-16 sm:px-8">
         <span className="glass-chip glass-chip-info">{content.eyebrow}</span>
         <p className="mt-4 max-w-xl text-base leading-7 text-[var(--glass-text-secondary)]">{content.subtitle}</p>

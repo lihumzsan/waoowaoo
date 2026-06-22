@@ -68,9 +68,11 @@ function isNavbarBalancePayload(value: unknown): value is { success: boolean } &
   )
 }
 
-function formatCreditAmount(value: number, unit: string): string {
+export function formatCreditAmount(value: number, unit: string): string {
   const amount = Number.isFinite(value) ? value : 0
-  return `${amount.toFixed(2)} ${unit}`
+  const normalizedUnit = unit.trim()
+  if (normalizedUnit.length === 0) return amount.toFixed(2)
+  return `${amount.toFixed(2)} ${normalizedUnit}`
 }
 
 export function buildNavbarSettingsMenuItems(
