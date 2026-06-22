@@ -88,7 +88,6 @@ export async function createStripeCheckoutSession(input: CreateStripeCheckoutSes
   params.set('success_url', successUrl)
   params.set('cancel_url', cancelUrl)
   params.set('client_reference_id', input.userId)
-  params.set('automatic_payment_methods[enabled]', 'true')
   params.set('line_items[0][quantity]', '1')
   params.set('line_items[0][price_data][currency]', quote.settlementCurrency.toLowerCase())
   params.set('line_items[0][price_data][unit_amount]', String(quote.settlementUnitAmount))

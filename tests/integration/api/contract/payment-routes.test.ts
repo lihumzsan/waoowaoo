@@ -167,7 +167,7 @@ describe('api contract - payment routes', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined
     const body = readFormBody(init)
     expect(body.get('mode')).toBe('payment')
-    expect(body.get('automatic_payment_methods[enabled]')).toBe('true')
+    expect(body.has('automatic_payment_methods[enabled]')).toBe(false)
     expect(body.get('line_items[0][price_data][currency]')).toBe('hkd')
     expect(body.get('line_items[0][price_data][unit_amount]')).toBe('1000')
     expect(body.get('line_items[0][price_data][product_data][name]')).toBe('WaooAI 额度')
