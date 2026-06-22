@@ -90,6 +90,9 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   }
 
   const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
+  if (providerFamily === 'openrouter' && !baseUrl) {
+    throw new Error(`PLATFORM_PROVIDER_BASE_URL_MISSING: ${providerId}`)
+  }
   return {
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),

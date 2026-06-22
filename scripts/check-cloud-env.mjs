@@ -33,6 +33,10 @@ const PLATFORM_KEY_BY_PROVIDER = {
   openrouter: 'PLATFORM_OPENROUTER_API_KEY',
 }
 
+const PLATFORM_BASE_URL_BY_PROVIDER = {
+  openrouter: 'PLATFORM_OPENROUTER_BASE_URL',
+}
+
 function parseEnvLine(line) {
   const trimmed = line.trim()
   if (!trimmed || trimmed.startsWith('#')) return null
@@ -91,6 +95,7 @@ if (env.BILLING_MODE !== 'ENFORCE') {
 }
 
 const requiredPlatformKeys = new Set()
+const requiredPlatformBaseUrls = new Set()
 for (const modelEnvKey of DEFAULT_MODEL_KEYS) {
   const provider = readModelProvider(env[modelEnvKey])
   if (!provider) {
@@ -103,9 +108,19 @@ for (const modelEnvKey of DEFAULT_MODEL_KEYS) {
     continue
   }
   requiredPlatformKeys.add(platformKey)
+  const platformBaseUrl = PLATFORM_BASE_URL_BY_PROVIDER[provider]
+  if (platformBaseUrl) {
+    requiredPlatformBaseUrls.add(platformBaseUrl)
+  }
 }
 
 for (const key of requiredPlatformKeys) {
+  if (isMissing(env[key])) {
+    missing.push(key)
+  }
+}
+
+for (const key of requiredPlatformBaseUrls) {
   if (isMissing(env[key])) {
     missing.push(key)
   }

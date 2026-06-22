@@ -75,6 +75,9 @@ function createOpenRouterLoggingFetch(input: {
 
 export function createOpenAiSdkLanguageModel(input: AiProviderLanguageModelContext): LanguageModel {
   const isOpenRouter = input.providerKey === 'openrouter'
+  if (isOpenRouter && !input.providerConfig.baseUrl) {
+    throw new Error('PROVIDER_BASE_URL_MISSING: openrouter (language-model)')
+  }
   const openai = createOpenAI({
     apiKey: input.providerConfig.apiKey,
     ...(input.providerConfig.baseUrl ? { baseURL: input.providerConfig.baseUrl } : {}),

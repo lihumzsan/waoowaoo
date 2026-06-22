@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const openAiState = vi.hoisted(() => ({
-  createOpenAI: vi.fn((settings: { apiKey?: string; baseURL?: string; name?: string; headers?: Record<string, string> }) => ({
+  createOpenAI: vi.fn((settings: {
+    apiKey?: string
+    baseURL?: string
+    name?: string
+    headers?: Record<string, string>
+    fetch?: typeof fetch
+  }) => ({
     chat: vi.fn((modelId: string) => ({
       provider: settings.name,
       modelId,
@@ -72,6 +78,23 @@ describe('ai provider language model registry', () => {
       name: 'openrouter',
       fetch: expect.any(Function),
     })
+  })
+
+  it('fails explicitly when OpenRouter language models are missing base URL', () => {
+    expect(() => createRegisteredLanguageModel({
+      providerKey: 'openrouter',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'anthropic/claude-sonnet-4.5',
+        modelKey: 'openrouter::anthropic/claude-sonnet-4.5',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+      },
+    })).toThrow('PROVIDER_BASE_URL_MISSING: openrouter (language-model)')
+    expect(openAiState.createOpenAI).not.toHaveBeenCalled()
   })
 
   it('passes OpenRouter session headers to AI SDK language models', () => {

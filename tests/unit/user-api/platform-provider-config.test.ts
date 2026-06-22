@@ -7,6 +7,7 @@ const ORIGINAL_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
   PLATFORM_GOOGLE_API_KEY: process.env.PLATFORM_GOOGLE_API_KEY,
   PLATFORM_OPENROUTER_API_KEY: process.env.PLATFORM_OPENROUTER_API_KEY,
+  PLATFORM_OPENROUTER_BASE_URL: process.env.PLATFORM_OPENROUTER_BASE_URL,
   BILLING_MODE: process.env.BILLING_MODE,
 }
 
@@ -27,6 +28,7 @@ describe('platform provider config', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.PLATFORM_OPENROUTER_API_KEY = 'platform-openrouter-key'
+    process.env.PLATFORM_OPENROUTER_BASE_URL = 'https://openrouter.example/api/v1'
 
     const config = await getProviderConfig('user-1', 'openrouter')
 
@@ -34,6 +36,7 @@ describe('platform provider config', () => {
       id: 'openrouter',
       name: 'openrouter',
       apiKey: 'platform-openrouter-key',
+      baseUrl: 'https://openrouter.example/api/v1',
     })
     await expect(hasApiConfig('user-1')).resolves.toBe(true)
   })
@@ -44,6 +47,15 @@ describe('platform provider config', () => {
     delete process.env.PLATFORM_OPENROUTER_API_KEY
 
     await expect(getProviderConfig('user-1', 'openrouter')).rejects.toThrow('PLATFORM_PROVIDER_API_KEY_MISSING')
+  })
+
+  it('fails explicitly when a required platform base URL is missing', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    process.env.PLATFORM_OPENROUTER_API_KEY = 'platform-openrouter-key'
+    delete process.env.PLATFORM_OPENROUTER_BASE_URL
+
+    await expect(getProviderConfig('user-1', 'openrouter')).rejects.toThrow('PLATFORM_PROVIDER_BASE_URL_MISSING')
   })
 
   it('uses platform models in platform-key mode without user config', async () => {
