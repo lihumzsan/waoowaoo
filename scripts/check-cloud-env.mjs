@@ -17,12 +17,22 @@ const REQUIRED_KEYS = [
   'STRIPE_WEBHOOK_SECRET',
 ]
 
-const PLATFORM_KEY_GROUP = [
-  'PLATFORM_GOOGLE_API_KEY',
-  'PLATFORM_FAL_API_KEY',
-  'PLATFORM_ARK_API_KEY',
-  'PLATFORM_OPENROUTER_API_KEY',
+const DEFAULT_MODEL_KEYS = [
+  'PLATFORM_DEFAULT_ANALYSIS_MODEL',
+  'PLATFORM_DEFAULT_CHARACTER_MODEL',
+  'PLATFORM_DEFAULT_LOCATION_MODEL',
+  'PLATFORM_DEFAULT_STORYBOARD_MODEL',
+  'PLATFORM_DEFAULT_EDIT_MODEL',
+  'PLATFORM_DEFAULT_VIDEO_MODEL',
+  'PLATFORM_DEFAULT_MUSIC_MODEL',
 ]
+
+const PLATFORM_KEY_BY_PROVIDER = {
+  google: 'PLATFORM_GOOGLE_API_KEY',
+  fal: 'PLATFORM_FAL_API_KEY',
+  ark: 'PLATFORM_ARK_API_KEY',
+  openrouter: 'PLATFORM_OPENROUTER_API_KEY',
+}
 
 function parseEnvLine(line) {
   const trimmed = line.trim()
@@ -54,6 +64,13 @@ function isMissing(value) {
   return typeof value !== 'string' || value.trim() === ''
 }
 
+function readModelProvider(modelKey) {
+  if (isMissing(modelKey)) return null
+  const separatorIndex = modelKey.indexOf('::')
+  if (separatorIndex <= 0) return null
+  return modelKey.slice(0, separatorIndex)
+}
+
 const envFile = process.argv[2] || '.env.cloud.local'
 if (!existsSync(envFile)) {
   console.error(`CLOUD_ENV_FILE_MISSING:${envFile}`)
@@ -74,9 +91,25 @@ if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
 }
 
-const hasPlatformKey = PLATFORM_KEY_GROUP.some((key) => !isMissing(env[key]))
-if (!hasPlatformKey) {
-  missing.push(`one of ${PLATFORM_KEY_GROUP.join(',')}`)
+const requiredPlatformKeys = new Set()
+for (const modelEnvKey of DEFAULT_MODEL_KEYS) {
+  const provider = readModelProvider(env[modelEnvKey])
+  if (!provider) {
+    missing.push(`${modelEnvKey}=provider::model`)
+    continue
+  }
+  const platformKey = PLATFORM_KEY_BY_PROVIDER[provider]
+  if (!platformKey) {
+    missing.push(`PLATFORM_PROVIDER_SUPPORTED:${provider}`)
+    continue
+  }
+  requiredPlatformKeys.add(platformKey)
+}
+
+for (const key of requiredPlatformKeys) {
+  if (isMissing(env[key])) {
+    missing.push(key)
+  }
 }
 
 if (!isMissing(env.OFFICIAL_CONTENT_DIR)) {
