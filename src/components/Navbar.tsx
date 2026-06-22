@@ -228,9 +228,9 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                 <Image
                   src="/logo-small.png"
                   alt={tc('appName')}
-                  width={250}
-                  height={78}
-                  className="h-[78px] w-[250px] object-contain transition-transform group-hover:scale-105"
+                  width={200}
+                  height={62}
+                  className="h-[62px] w-[200px] object-contain transition-transform group-hover:scale-105"
                 />
               </Link>
               {update ? (
