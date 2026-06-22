@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
 
 const prismaMock = vi.hoisted(() => ({
   projectStoryboard: {
@@ -384,6 +385,57 @@ describe('edit script storyboard camera plan handler', () => {
     expect(updatePlan).not.toHaveProperty('strategyOutput')
   })
 
+  it('adds billing fields when prepare enqueues the internal camera plan task', async () => {
+    const { handleEditScriptStoryboardPrepareTask } = await import(
+      '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
+    )
+    const sourceSnapshot = buildSourceSnapshotWithLocation()
+    const analysisModel = 'anthropic/claude-sonnet-4'
+    persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
+      id: 'storyboard-prepare-1',
+    })
+    submitterMock.submitTask.mockResolvedValue({
+      taskId: 'camera-plan-task-1',
+    })
+    const job = {
+      data: {
+        ...buildJob().data,
+        type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
+        targetType: 'ProjectEditScript',
+        targetId: 'edit-script-1',
+        payload: {
+          editScriptId: 'edit-script-1',
+          sourceSnapshot,
+          modelConfigSnapshot: {
+            analysisModel,
+            storyboardModel: 'storyboard-model-1',
+          },
+        },
+      },
+    } as unknown as Job<TaskJobData>
+
+    await handleEditScriptStoryboardPrepareTask(job)
+
+    const submittedPayload = submitterMock.submitTask.mock.calls[0]?.[0]?.payload
+    expect(submittedPayload).toMatchObject({
+      editScriptId: 'edit-script-1',
+      storyboardId: 'storyboard-prepare-1',
+      analysisModel,
+      maxInputTokens: 12000,
+    })
+    const billingInfo = buildDefaultTaskBillingInfo(
+      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
+      submittedPayload,
+    )
+    expect(billingInfo).toMatchObject({
+      billable: true,
+      taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
+      apiType: 'text',
+      model: analysisModel,
+      quantity: 12000,
+    })
+  })
+
   it('persists panel prompts without enqueueing panel image tasks', async () => {
     const { handleEditScriptStoryboardCameraPlanTask } = await import(
       '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
@@ -395,6 +447,11 @@ describe('edit script storyboard camera plan handler', () => {
     expect(persistenceMock.upsertStoryboardPanelsFromPrompts).toHaveBeenCalledWith(expect.objectContaining({
       storyboardId: 'storyboard-1',
       locale: 'zh',
+      generatedPanels: [expect.objectContaining({
+        shotBlocking: expect.objectContaining({
+          locationName: 'Temple courtyard',
+        }),
+      })],
     }))
     expect(prismaMock.projectStoryboard.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'storyboard-1' },
@@ -425,25 +482,10 @@ describe('edit script storyboard camera plan handler', () => {
         aestheticIntent: 'quiet',
         emotionalEffect: 'calm',
         continuityNote: 'same space',
-        shotBlocking: {
-          locationName: 'Temple courtyard',
-          absolutePosition: 'courtyard midground',
-          relativePosition: 'old monk near disciple',
-          screenPosition: 'center frame',
-          characterPlacements: [{
-            characterName: 'Old monk',
-            absolutePosition: 'courtyard midground',
-            relativePosition: 'near disciple',
-            screenPosition: 'center frame',
-            facing: 'toward disciple',
-            eyeline: 'toward disciple',
-          }],
-          cameraPlacement: 'front of courtyard',
-          composition: 'balanced',
-          continuityNote: 'same space',
-        },
       }],
     })
+    expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('characterPlacements')
+    expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalVideoPrompt')
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalPanelPrompt')
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('blocks')
     expect(submitterMock.submitTask).not.toHaveBeenCalled()

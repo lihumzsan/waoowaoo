@@ -17,6 +17,7 @@ import {
   upsertEditScriptStoryboardShell,
   upsertStoryboardPanelsFromPrompts,
 } from '@/lib/edit-script/storyboard-consistency/persistence'
+import { buildEditFirstTextTaskPayloadFromAnalysisModel } from '@/lib/edit-script/task-billing'
 
 interface ParsedPayload {
   readonly editScriptId: string
@@ -163,7 +164,6 @@ function compactCameraPlanPanelForStorage(value: unknown): Record<string, unknow
     aestheticIntent: readString(panel.aestheticIntent),
     emotionalEffect: readString(panel.emotionalEffect),
     continuityNote: readString(panel.continuityNote),
-    shotBlocking: readRecord(panel.shotBlocking),
   }
 }
 
@@ -261,12 +261,15 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
       operationId: 'edit_script_storyboard_spatial_text_blocking',
       operationSource: 'edit-script-storyboard-spatial-profile',
       requestId: job.data.trace?.requestId || null,
-      payload: {
-        editScriptId: parsed.editScriptId,
-        storyboardId: storyboard.id,
-        sourceSnapshot: parsed.sourceSnapshot,
-        modelConfigSnapshot: parsed.modelConfigSnapshot,
-      },
+      payload: buildEditFirstTextTaskPayloadFromAnalysisModel({
+        analysisModel: parsed.modelConfigSnapshot.analysisModel,
+        payload: {
+          editScriptId: parsed.editScriptId,
+          storyboardId: storyboard.id,
+          sourceSnapshot: parsed.sourceSnapshot,
+          modelConfigSnapshot: parsed.modelConfigSnapshot,
+        },
+      }),
       dedupeKey: `edit_script_storyboard_spatial_text_blocking:${storyboard.id}`,
     })
     return { storyboardId: storyboard.id, spatialProfileCount: parsed.sourceSnapshot.assets.filter((asset) => asset.kind === 'location').length, nextTaskId: submitted.taskId }
