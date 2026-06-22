@@ -75,6 +75,10 @@ export function formatCreditAmount(value: number, unit: string): string {
   return `${amount.toFixed(2)} ${normalizedUnit}`
 }
 
+export function formatCompactCreditAmount(value: number): string {
+  return formatCreditAmount(value, '')
+}
+
 export function buildNavbarSettingsMenuItems(
   features: PublicDeploymentFeatures | null,
   labels: NavbarSettingsLabels,
@@ -420,7 +424,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                       {balance ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-tone-info-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--glass-tone-info-fg)]">
                           <AppIcon name="coins" className="h-3 w-3" />
-                          {formatCreditAmount(balance.balance, creditsUnit)}
+                          {formatCompactCreditAmount(balance.balance)}
                         </span>
                       ) : null}
                       <AppIcon name="chevronDown" className={`h-3.5 w-3.5 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />

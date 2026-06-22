@@ -12,7 +12,7 @@
         "recharge": "Top Up",
         "frozen": "Frozen",
         "totalSpent": "Spent",
-        "creditsUnit": ""
+        "creditsUnit": "credits"
     },
     "downloadLogs": "Download Logs",
     "signin": "Sign In",

@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
-import Navbar, { buildNavbarSettingsMenuItems, formatCreditAmount, shouldCloseNavbarSettingsMenu } from '@/components/Navbar'
+import Navbar, {
+  buildNavbarSettingsMenuItems,
+  formatCompactCreditAmount,
+  formatCreditAmount,
+  shouldCloseNavbarSettingsMenu,
+} from '@/components/Navbar'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 
 const useSessionMock = vi.fn()
@@ -67,7 +72,7 @@ const messages = {
       recharge: '充值',
       frozen: '冻结',
       totalSpent: '累计消费',
-      creditsUnit: '',
+      creditsUnit: '额度',
     },
     downloadLogs: '下载日志',
     signin: '登录',
@@ -263,8 +268,8 @@ describe('Navbar compact split navigation', () => {
     expect(shouldCloseNavbarSettingsMenu(null, trigger, menu)).toBe(false)
   })
 
-  it('omits the balance unit when the navigation unit label is empty', () => {
-    expect(formatCreditAmount(100, '')).toBe('100.00')
+  it('keeps menu balance units while allowing compact trigger balance text', () => {
+    expect(formatCompactCreditAmount(100)).toBe('100.00')
     expect(formatCreditAmount(100, '额度')).toBe('100.00 额度')
   })
 })
