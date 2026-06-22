@@ -47,5 +47,29 @@
   "creditPolicy": {
     "title": "额度规则",
     "body": "credits 是平台内 AI 生成额度，不是现金余额，不能提现、不可转让、不可用于平台外交易。实际扣除会根据任务类型、模型、分辨率、时长等因素确定。最终支付金额、币种、税费和可用支付方式会在 Stripe Checkout 页面展示。"
+  },
+  "glass": {
+    "featuredBadge": "最受欢迎",
+    "checkoutBusy": "正在跳转…",
+    "rechargePlan": "充值 {credits}",
+    "customRechargeTitle": "自定义充值",
+    "customRechargeDescription": "输入任意额度，直接进入 Stripe 安全结账。",
+    "customCreditLabel": "自定义额度（credits）",
+    "customCreditPlaceholder": "请输入额度",
+    "checkoutNow": "立即充值",
+    "configLoadError": "无法加载充值配置，请登录后重试。",
+    "rechargeUnavailable": "当前充值未开放或需要登录。",
+    "creditRangeError": "请输入 {min} – {max} 之间的额度。",
+    "checkoutCreateFailed": "创建结账会话失败，请稍后重试。",
+    "checkoutCreateFailedFallback": "创建结账会话失败。",
+    "estimatePrefix": "预计结算 {amount}",
+    "settlementRate": "结算 1 credit = {rate} {currency}",
+    "infoFooterTitle": "价格规则、政策与商户信息",
+    "infoFooterDescription": "点击下方任意条目展开查看完整内容。",
+    "creditRulesTitle": "额度与价格规则",
+    "creditRulesHint": "credits 如何计费",
+    "paymentTitle": "充值与支付",
+    "paymentHint": "Stripe · 支付方式 · 结算",
+    "merchantHint": "Merchant"
   }
 }

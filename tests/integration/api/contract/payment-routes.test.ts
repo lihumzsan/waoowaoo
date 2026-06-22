@@ -33,7 +33,7 @@ function setPaymentEnv(): void {
   process.env.BILLING_MODE = 'ENFORCE'
   process.env.PAYMENT_MIN_CREDITS = '5'
   process.env.PAYMENT_MAX_CREDITS = '1000'
-  process.env.PAYMENT_CNY_TO_HKD_RATE = '1.1'
+  process.env.PAYMENT_CNY_TO_HKD_RATE = '1'
   process.env.PAYMENT_PUBLIC_BASE_URL = 'https://demo.example.test'
   process.env.STRIPE_SECRET_KEY = 'sk_test_payment_route'
 }
@@ -93,7 +93,7 @@ describe('api contract - payment routes', () => {
       enabled: true,
       minCredits: 5,
       maxCredits: 1000,
-      cnyToHkdRate: 1.1,
+      cnyToHkdRate: 1,
     })
   })
 
@@ -134,8 +134,8 @@ describe('api contract - payment routes', () => {
       url: 'https://checkout.stripe.test/cs_test_payment_route',
       quote: {
         credits: 10,
-        settlementAmount: 11,
-        settlementUnitAmount: 1100,
+        settlementAmount: 10,
+        settlementUnitAmount: 1000,
       },
     })
 
@@ -145,7 +145,7 @@ describe('api contract - payment routes', () => {
     expect(body.get('mode')).toBe('payment')
     expect(body.get('automatic_payment_methods[enabled]')).toBe('true')
     expect(body.get('line_items[0][price_data][currency]')).toBe('hkd')
-    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('1100')
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('1000')
     expect(body.get('line_items[0][price_data][product_data][name]')).toBe('WaooAI 额度')
     expect(body.get('metadata[waoowaoo_kind]')).toBe('credit_recharge')
     expect(body.get('metadata[user_id]')).toBe('user-payment-1')

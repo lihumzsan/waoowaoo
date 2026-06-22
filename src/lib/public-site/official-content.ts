@@ -21,16 +21,33 @@ export interface OfficialPricingPlan {
   label: string
   name: string
   price: string
+  unit: string
+  creditsAmount: number
+  tagline: string
   status: string
   details: readonly string[]
 }
 
+export interface OfficialPricingFaq {
+  question: string
+  answer: string
+}
+
+export interface OfficialPricingCompareRow {
+  label: string
+  values: readonly string[]
+}
+
 export interface OfficialPricingPageContent {
+  brand: string
   eyebrow: string
   title: string
   description: string
   betaNotice: string
+  paymentNote: string
   plans: readonly OfficialPricingPlan[]
+  compareRows: readonly OfficialPricingCompareRow[]
+  faqs: readonly OfficialPricingFaq[]
   creditPolicy: OfficialTextSection
   checkout: {
     title: string
@@ -80,6 +97,14 @@ function readRequiredString(record: Record<string, unknown>, key: string, schema
   return value
 }
 
+function readRequiredPositiveNumber(record: Record<string, unknown>, key: string, schema: string): number {
+  const value = record[key]
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    fail(schema, `${key} must be a positive number`)
+  }
+  return value
+}
+
 function readRequiredRecord(record: Record<string, unknown>, key: string, schema: string): Record<string, unknown> {
   const value = record[key]
   if (!isRecord(value)) fail(schema, `${key} must be an object`)
@@ -110,6 +135,30 @@ function readSectionArray(record: Record<string, unknown>, key: string, schema: 
   return value.map((item, index) => {
     if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
     return readSection(item, `${schema}.${key}[${index}]`)
+  })
+}
+
+function readFaqArray(record: Record<string, unknown>, key: string, schema: string): readonly OfficialPricingFaq[] {
+  const value = record[key]
+  if (!Array.isArray(value)) fail(schema, `${key} must be an array`)
+  return value.map((item, index) => {
+    if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
+    return {
+      question: readRequiredString(item, 'question', `${schema}.${key}[${index}]`),
+      answer: readRequiredString(item, 'answer', `${schema}.${key}[${index}]`),
+    }
+  })
+}
+
+function readCompareRows(record: Record<string, unknown>, key: string, schema: string): readonly OfficialPricingCompareRow[] {
+  const value = record[key]
+  if (!Array.isArray(value)) fail(schema, `${key} must be an array`)
+  return value.map((item, index) => {
+    if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
+    return {
+      label: readRequiredString(item, 'label', `${schema}.${key}[${index}]`),
+      values: readStringArray(item, 'values', `${schema}.${key}[${index}]`),
+    }
   })
 }
 
@@ -167,6 +216,9 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
       label: readRequiredString(planValue, 'label', `${schema}.plans.${planKey}`),
       name: readRequiredString(planValue, 'name', `${schema}.plans.${planKey}`),
       price: readRequiredString(planValue, 'price', `${schema}.plans.${planKey}`),
+      unit: readRequiredString(planValue, 'unit', `${schema}.plans.${planKey}`),
+      creditsAmount: readRequiredPositiveNumber(planValue, 'creditsAmount', `${schema}.plans.${planKey}`),
+      tagline: readRequiredString(planValue, 'tagline', `${schema}.plans.${planKey}`),
       status: readRequiredString(planValue, 'status', `${schema}.plans.${planKey}`),
       details: readStringArray(planValue, 'details', `${schema}.plans.${planKey}`),
     }
@@ -175,11 +227,15 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
   if (planItems.length === 0) fail(schema, 'plans must contain at least one plan')
 
   return {
+    brand: readRequiredString(record, 'brand', schema),
     eyebrow: readRequiredString(record, 'eyebrow', schema),
     title: readRequiredString(record, 'title', schema),
     description: readRequiredString(record, 'description', schema),
     betaNotice: readRequiredString(record, 'betaNotice', schema),
+    paymentNote: readRequiredString(record, 'paymentNote', schema),
     plans: planItems,
+    compareRows: readCompareRows(record, 'compareRows', schema),
+    faqs: readFaqArray(record, 'faqs', schema),
     creditPolicy: readSection(readRequiredRecord(record, 'creditPolicy', schema), `${schema}.creditPolicy`),
     checkout: {
       title: readRequiredString(checkout, 'title', `${schema}.checkout`),

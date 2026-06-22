@@ -17,10 +17,12 @@ function writeJson(dir: string, fileName: string, value: unknown): void {
 
 function writeCompleteContent(dir: string): void {
   writeJson(dir, 'pricing.zh.json', {
+    brand: 'ExampleAI',
     eyebrow: 'Pricing',
     title: 'Official pricing',
     description: 'Private pricing content',
     betaNotice: 'Checkout is not enabled.',
+    paymentNote: 'Live payment note',
     checkout: {
       title: 'Top up',
       body: 'Use live checkout',
@@ -32,10 +34,19 @@ function writeCompleteContent(dir: string): void {
         label: 'Starter label',
         name: 'Starter',
         price: 'USD 10',
+        unit: 'one-time',
+        creditsAmount: 100,
+        tagline: 'Start small',
         status: 'Available soon',
         details: ['100 credits', 'Email support'],
       },
     },
+    compareRows: [
+      { label: 'Included credits', values: ['100'] },
+    ],
+    faqs: [
+      { question: 'What are credits?', answer: 'Generation units.' },
+    ],
     creditPolicy: {
       title: 'Credit rules',
       body: 'Private credit rules',
@@ -97,7 +108,9 @@ describe('official public-site content', () => {
 
     expect(pricing.plans).toHaveLength(1)
     expect(pricing.plans[0].price).toBe('USD 10')
+    expect(pricing.plans[0].creditsAmount).toBe(100)
     expect(pricing.checkout.primaryCta).toBe('Top up now')
+    expect(pricing.faqs[0].question).toBe('What are credits?')
     expect(contact.publicInfo.fields[0].value).toBe('Example Private Company Limited')
     expect(contact.portalOnly.items).toEqual(['Certificate scan', 'Director KYC'])
     expect(terms.sections[0]).toEqual({
@@ -112,10 +125,12 @@ describe('official public-site content', () => {
 
   it('fails explicitly when private content schema is invalid', () => {
     writeJson(tempDir, 'pricing.zh.json', {
+      brand: 'ExampleAI',
       eyebrow: 'Pricing',
       title: 'Official pricing',
       description: 'Private pricing content',
       betaNotice: 'Checkout is not enabled.',
+      paymentNote: 'Live payment note',
       checkout: {
         title: 'Top up',
         body: 'Use live checkout',
@@ -123,6 +138,8 @@ describe('official public-site content', () => {
         secondaryCta: 'Create account',
       },
       plans: {},
+      compareRows: [],
+      faqs: [],
       creditPolicy: {
         title: 'Credit rules',
         body: 'Private credit rules',
