@@ -24,8 +24,10 @@
   "total": "总计",
   "filter": "筛选",
   "allTypes": "全部类型",
-  "recharge": "额度入账",
-  "consume": "服务消费",
+  "transactionKinds": {
+    "recharge": "额度入账",
+    "consume": "服务消费"
+  },
   "transactionType": "类型",
   "amount": "额度",
   "balance": "剩余额度",

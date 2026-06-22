@@ -14,6 +14,7 @@ import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
+import { getProfileTransactionKindTranslationKey } from '@/lib/profile/transaction-labels'
 
 type DeploymentPayload = {
   features?: PublicDeploymentFeatures
@@ -517,7 +518,7 @@ export default function ProfilePage() {
                           <tbody>
                             {transactions.map((item) => (
                               <tr key={item.id} className="border-t border-[var(--glass-stroke-base)]">
-                                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{t(item.type === 'consume' ? 'consume' : 'recharge')}</td>
+                                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{t(getProfileTransactionKindTranslationKey(item.type))}</td>
                                 <td className="px-4 py-3 text-[var(--glass-text-primary)]">{item.amount.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-[var(--glass-text-secondary)]">{item.balanceAfter.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-[var(--glass-text-tertiary)]">{new Date(item.createdAt).toLocaleString()}</td>

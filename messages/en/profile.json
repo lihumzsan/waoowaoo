@@ -24,8 +24,10 @@
   "total": "Total",
   "filter": "Filter",
   "allTypes": "All Types",
-  "recharge": "Credits Added",
-  "consume": "Service Consumption",
+  "transactionKinds": {
+    "recharge": "Credits Added",
+    "consume": "Service Consumption"
+  },
   "transactionType": "Type",
   "amount": "Credits",
   "balance": "Remaining Credits",
