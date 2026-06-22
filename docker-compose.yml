@@ -1,9 +1,16 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   # ==================== MySQL ====================
   mysql:
     image: mysql:8.0
     container_name: waoowaoo-mysql
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: waoowaoo123
       MYSQL_DATABASE: waoowaoo
@@ -27,6 +34,7 @@ services:
     image: redis:7-alpine
     container_name: waoowaoo-redis
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "16379:6379"
     volumes:
@@ -44,6 +52,7 @@ services:
     image: minio/minio:RELEASE.2025-02-28T09-55-16Z
     container_name: waoowaoo-minio
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -65,6 +74,7 @@ services:
     image: ghcr.io/saturndec/waoowaoo:latest
     container_name: waoowaoo-app
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # 数据库（指向容器内部 MySQL，用服务名 mysql 而非 localhost）
       DATABASE_URL: "mysql://root:waoowaoo123@mysql:3306/waoowaoo"

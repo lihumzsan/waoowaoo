@@ -1,7 +1,14 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   mysql:
     image: mysql:8.0
     container_name: waoowaoo-test-mysql
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: waoowaoo_test
@@ -21,6 +28,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: waoowaoo-test-redis
+    logging: *default-logging
     ports:
       - "6380:6379"
     command: ["redis-server", "--appendonly", "no"]
