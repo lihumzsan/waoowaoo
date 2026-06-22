@@ -1,6 +1,7 @@
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { isKnownErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { getUserMessageByCode } from '@/lib/errors/user-messages'
+import { parseApiErrorPayload } from '@/lib/api-error-payload'
 
 export type TaskErrorSummary = {
   code: string | null
@@ -35,8 +36,23 @@ function looksCancelledMessage(value: string | null): boolean {
   )
 }
 
+function formatCreditAmount(value: number): string {
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatInsufficientBalanceMessage(required: number | null, available: number | null): string {
+  if (required !== null && available !== null) {
+    return `余额不足，本次需要 ${formatCreditAmount(required)}，当前余额 ${formatCreditAmount(available)}。内容已保留，请充值后重试。`
+  }
+  return '余额不足，内容已保留，请充值后重试。'
+}
+
 export function resolveTaskErrorSummary(payload: unknown, fallbackMessage = 'Task failed'): TaskErrorSummary {
   const source = asObject(payload) || {}
+  const apiError = parseApiErrorPayload(payload)
   const sourceError = asObject(source.error) || {}
   const sourceErrorDetails = asObject(sourceError.details)
   const sourceDetails = asObject(source.details)
@@ -80,6 +96,14 @@ export function resolveTaskErrorSummary(payload: unknown, fallbackMessage = 'Tas
       code: normalized?.code || 'CONFLICT',
       message: 'Task cancelled by user',
       cancelled: true,
+    }
+  }
+
+  if (normalized?.code === 'INSUFFICIENT_BALANCE' || apiError.code === 'INSUFFICIENT_BALANCE') {
+    return {
+      code: 'INSUFFICIENT_BALANCE',
+      message: formatInsufficientBalanceMessage(apiError.required, apiError.available),
+      cancelled: false,
     }
   }
 

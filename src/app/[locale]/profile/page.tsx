@@ -1,5 +1,5 @@
 'use client'
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -9,6 +9,7 @@ import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
 import { apiFetch } from '@/lib/api-fetch'
+import { parseApiErrorPayload } from '@/lib/api-error-payload'
 import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
@@ -56,6 +57,11 @@ type RechargeConfigPayload = {
 
 type CheckoutPayload = {
   url?: string
+}
+
+function readApiFailureReason(payload: unknown, fallback: string): string {
+  const parsed = parseApiErrorPayload(payload)
+  return parsed.code || parsed.message || fallback
 }
 
 function formatAmount(value: number | undefined, currency: string | undefined): string {
@@ -118,6 +124,7 @@ export default function ProfilePage() {
   const [redeemStatus, setRedeemStatus] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [rechargeConfig, setRechargeConfig] = useState<RechargeConfig | null>(null)
+  const [rechargeConfigError, setRechargeConfigError] = useState<string | null>(null)
   const [rechargeAmount, setRechargeAmount] = useState('')
   const [rechargeStatus, setRechargeStatus] = useState<string | null>(null)
   const [recharging, setRecharging] = useState(false)
@@ -168,30 +175,42 @@ export default function ProfilePage() {
     )
   }, [activeSection, deploymentFeatures, router])
 
-  const loadBalance = async () => {
+  const loadBalance = useCallback(async () => {
     const response = await apiFetch('/api/user/balance')
     if (!response.ok) return
     const payload: unknown = await response.json()
     if (isBalancePayload(payload)) setBalance(payload)
-  }
+  }, [])
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     const response = await apiFetch('/api/user/transactions?pageSize=20')
     if (!response.ok) return
     const payload: unknown = await response.json()
     if (isTransactionsPayload(payload) && Array.isArray(payload.transactions)) {
       setTransactions(payload.transactions)
     }
-  }
+  }, [])
 
-  const loadRechargeConfig = async () => {
+  const loadRechargeConfig = useCallback(async () => {
     const response = await apiFetch('/api/payments/recharge/config')
-    if (!response.ok) return
-    const payload: unknown = await response.json()
+    const payload: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      setRechargeConfig(null)
+      setRechargeConfigError(t('recharge.configLoadFailed', {
+        reason: readApiFailureReason(payload, `HTTP_${response.status}`),
+      }))
+      return
+    }
     if (isRechargeConfigPayload(payload) && payload.recharge) {
       setRechargeConfig(payload.recharge)
+      setRechargeConfigError(null)
+      return
     }
-  }
+    setRechargeConfig(null)
+    setRechargeConfigError(t('recharge.configLoadFailed', {
+      reason: 'PAYMENT_RECHARGE_CONFIG_INVALID',
+    }))
+  }, [t])
 
   useEffect(() => {
     if (!session || deploymentFeatures?.showBilling !== true) return
@@ -200,7 +219,7 @@ export default function ProfilePage() {
     if (deploymentFeatures.showRecharge) {
       void loadRechargeConfig()
     }
-  }, [session, deploymentFeatures])
+  }, [session, deploymentFeatures, loadBalance, loadTransactions, loadRechargeConfig])
 
   useEffect(() => {
     const paymentStatus = searchParams.get('payment')
@@ -356,7 +375,9 @@ export default function ProfilePage() {
                               .then(async (response) => {
                                 const payload: unknown = await response.json()
                                 if (!response.ok || !isCheckoutPayload(payload) || !payload.url) {
-                                  throw new Error(t('recharge.checkoutFailed'))
+                                  throw new Error(t('recharge.checkoutFailedWithReason', {
+                                    reason: readApiFailureReason(payload, `HTTP_${response.status}`),
+                                  }))
                                 }
                                 window.location.assign(payload.url)
                               })
@@ -400,6 +421,8 @@ export default function ProfilePage() {
                             </div>
                           </div>
                         </form>
+                      ) : rechargeConfigError ? (
+                        <p className="text-sm text-[var(--glass-tone-danger-fg)]">{rechargeConfigError}</p>
                       ) : (
                         <p className="text-sm text-[var(--glass-text-secondary)]">{t('recharge.unavailable')}</p>
                       )}

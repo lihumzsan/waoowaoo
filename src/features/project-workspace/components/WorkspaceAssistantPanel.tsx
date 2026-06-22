@@ -314,7 +314,12 @@ export default function WorkspaceAssistantPanel({
     // 发消息时把底部停靠的视觉风格卡收成细条，避免大卡占满底部、把刚发的消息顶出视口
     setStylePreviewDockCollapsed(true)
     setComposerText('')
-    await assistantRuntime.sendMessage(normalizedText)
+    try {
+      await assistantRuntime.sendMessage(normalizedText)
+    } catch (error) {
+      setComposerText(normalizedText)
+      throw error
+    }
   }, [assistantRuntime, composerText])
   useEffect(() => {
     if (!autoStartMessage || !autoStartKey) return

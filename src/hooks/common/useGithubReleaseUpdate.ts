@@ -30,6 +30,10 @@ export interface UseGithubReleaseUpdateResult {
   checkNow: () => Promise<void>
 }
 
+export interface UseGithubReleaseUpdateOptions {
+  enabled?: boolean
+}
+
 function readMutedUpdateVersion(): string | null {
   if (typeof window === 'undefined') return null
   return window.localStorage.getItem(MUTED_UPDATE_VERSION_KEY)
@@ -40,7 +44,8 @@ function writeMutedUpdateVersion(version: string): void {
   window.localStorage.setItem(MUTED_UPDATE_VERSION_KEY, version)
 }
 
-export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
+export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = {}): UseGithubReleaseUpdateResult {
+  const enabled = options.enabled === true
   const currentVersion = useMemo(() => normalizeSemverTag(APP_VERSION), [])
 
   const [update, setUpdate] = useState<ReleaseUpdateInfo | null>(null)
@@ -51,6 +56,15 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
   const latestRequestRef = useRef(0)
 
   const checkNow = useCallback(async () => {
+    if (!enabled) {
+      setCheckError(null)
+      setUpdate(null)
+      setShouldPulse(false)
+      setShowModal(false)
+      setIsChecking(false)
+      return
+    }
+
     const requestId = latestRequestRef.current + 1
     latestRequestRef.current = requestId
     setIsChecking(true)
@@ -99,9 +113,18 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
     setShouldPulse(shouldPulseUpdate(nextUpdate.latestVersion, mutedVersion))
     setUpdate(nextUpdate)
     setIsChecking(false)
-  }, [currentVersion])
+  }, [currentVersion, enabled])
 
   useEffect(() => {
+    if (!enabled) {
+      setCheckError(null)
+      setUpdate(null)
+      setShouldPulse(false)
+      setShowModal(false)
+      setIsChecking(false)
+      return
+    }
+
     let cancelled = false
 
     const run = async () => {
@@ -118,7 +141,7 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [checkNow])
+  }, [checkNow, enabled])
 
   const dismissCurrentUpdate = useCallback(() => {
     if (update) {

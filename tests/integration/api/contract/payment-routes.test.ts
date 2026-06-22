@@ -97,6 +97,30 @@ describe('api contract - payment routes', () => {
     })
   })
 
+  it('GET /api/payments/recharge/config reports missing payment env explicitly', async () => {
+    delete process.env.PAYMENT_MIN_CREDITS
+
+    const mod = await import('@/app/api/payments/recharge/config/route')
+    const req = buildMockRequest({
+      path: '/api/payments/recharge/config',
+      method: 'GET',
+    })
+
+    const res = await mod.GET(req, { params: Promise.resolve({}) })
+    const json = await res.json() as {
+      error: {
+        code: string
+        details: {
+          code: string
+        }
+      }
+    }
+
+    expect(res.status).toBe(400)
+    expect(json.error.code).toBe('MISSING_CONFIG')
+    expect(json.error.details.code).toBe('PAYMENT_MIN_CREDITS_REQUIRED')
+  })
+
   it('POST /api/payments/stripe/checkout creates a Checkout session with HKD settlement metadata', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({

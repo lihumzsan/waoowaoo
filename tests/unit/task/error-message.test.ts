@@ -91,4 +91,20 @@ describe('task error message normalization', () => {
     expect(summary.code).toBe('NETWORK_ERROR')
     expect(summary.message).toBe('网络异常，请稍后重试。')
   })
+
+  it('formats insufficient balance details from API error payload', () => {
+    const summary = resolveTaskErrorSummary({
+      error: {
+        code: 'INSUFFICIENT_BALANCE',
+        message: 'INSUFFICIENT_CREDITS: required=12.0000, available=3.5000',
+        details: {
+          required: 12,
+          available: 3.5,
+        },
+      },
+    })
+
+    expect(summary.code).toBe('INSUFFICIENT_BALANCE')
+    expect(summary.message).toBe('余额不足，本次需要 12.00，当前余额 3.50。内容已保留，请充值后重试。')
+  })
 })

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from "react"
+import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from "@/components/Navbar"
 import PasswordInput from "@/components/auth/PasswordInput"
@@ -9,6 +10,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { AUTH_REGISTER_RESULT_CODES, type AuthRegisterResultCode } from '@/lib/auth/register-result-codes'
 import { readAuthRegisterResultCode } from '@/lib/auth/register-result-response'
 import { isPublicDeploymentFeatures } from '@/lib/deployment/public-client'
+import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 import { Link, useRouter } from '@/i18n/navigation'
 
 function readServerDetailCode(value: unknown): string | null {
@@ -138,10 +140,23 @@ export default function SignUp() {
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess(t('signupSuccess'))
-        setTimeout(() => {
-          router.push({ pathname: '/auth/signin' })
-        }, 2000)
+        const loginResult = await signIn('credentials', {
+          username: name,
+          password,
+          redirect: false,
+        })
+
+        if (loginResult?.error) {
+          setSuccess(t('signupSuccessLoginFallback'))
+          setTimeout(() => {
+            router.push({ pathname: '/auth/signin' })
+          }, 1200)
+          return
+        }
+
+        setSuccess(t('signupSuccessAutoLogin'))
+        router.push(buildAuthenticatedHomeTarget())
+        router.refresh()
       } else {
         setError(resolveSignupErrorMessage(data))
       }

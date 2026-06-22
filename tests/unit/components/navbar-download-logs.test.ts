@@ -57,6 +57,7 @@ const messages = {
     workspace: '工作区',
     assetHub: '资产中心',
     profile: '设置中心',
+    pricing: '价格',
     settingsMenu: {
       apiConfig: 'API 配置',
       billingRecords: '扣费记录',
@@ -128,7 +129,7 @@ describe('Navbar compact split navigation', () => {
     expect(html).not.toContain('href="/profile?section=billing"')
     expect(html).not.toContain('href="/profile?section=stylePresets"')
     expect(html).not.toContain('我的风格')
-    expect(html).toContain('检查更新')
+    expect(html).not.toContain('检查更新')
   })
 
   it('builds self-hosted settings with API configuration only', () => {
@@ -140,6 +141,7 @@ describe('Navbar compact split navigation', () => {
       showInviteCode: false,
       showBilling: false,
       showApiConfig: true,
+      showUpdateCheck: true,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: false,
     }
@@ -161,6 +163,7 @@ describe('Navbar compact split navigation', () => {
       showInviteCode: true,
       showBilling: true,
       showApiConfig: false,
+      showUpdateCheck: false,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
     }
@@ -171,6 +174,32 @@ describe('Navbar compact split navigation', () => {
     })).toEqual([
       { section: 'billing', icon: 'receipt', label: '扣费记录' },
     ])
+  })
+
+  it('hides update checks for cloud deployment features', () => {
+    Reflect.set(globalThis, 'React', React)
+    useSessionMock.mockReturnValue({
+      data: { user: { name: 'Earth' } },
+      status: 'authenticated',
+    })
+
+    const features: PublicDeploymentFeatures = {
+      showOfficialPublicPages: true,
+      showPricingPage: true,
+      showLegalPages: true,
+      showRecharge: true,
+      showInviteCode: true,
+      showBilling: true,
+      showApiConfig: false,
+      showUpdateCheck: false,
+      requireInviteCodeOnSignup: false,
+      usePlatformProviderConfig: true,
+    }
+
+    const html = renderWithIntl(createElement(Navbar, { initialDeploymentFeatures: features }))
+
+    expect(html).not.toContain('检查更新')
+    expect(html).not.toContain('更新')
   })
 
   it('does not keep a persistent selected state on the current navbar route', () => {

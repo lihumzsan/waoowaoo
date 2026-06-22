@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
+import { parseApiErrorPayload } from '@/lib/api-error-payload'
 import type { GlassPolicy, GlassPricingContent } from './content'
 
 /* ----------------------------------------------------------------- */
@@ -32,6 +33,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object'
 }
 
+function readApiFailureReason(payload: unknown, fallback: string): string {
+  const parsed = parseApiErrorPayload(payload)
+  return parsed.code || parsed.message || fallback
+}
+
 export function useRecharge(): RechargeState {
   const t = useTranslations('pricing.glass')
   const [config, setConfig] = useState<RechargeConfig | null>(null)
@@ -42,15 +48,25 @@ export function useRecharge(): RechargeState {
   useEffect(() => {
     let alive = true
     void apiFetch('/api/payments/recharge/config')
-      .then((r) => r.json())
+      .then(async (r) => {
+        const payload: unknown = await r.json().catch(() => null)
+        if (!r.ok) {
+          throw new Error(t('configLoadErrorWithReason', {
+            reason: readApiFailureReason(payload, `HTTP_${r.status}`),
+          }))
+        }
+        return payload
+      })
       .then((payload: unknown) => {
         if (!alive) return
         if (isRecord(payload) && isRecord(payload.recharge)) {
           setConfig(payload.recharge as unknown as RechargeConfig)
+          return
         }
+        setStatus({ kind: 'error', text: t('configLoadErrorWithReason', { reason: 'PAYMENT_RECHARGE_CONFIG_INVALID' }) })
       })
-      .catch(() => {
-        if (alive) setStatus({ kind: 'error', text: t('configLoadError') })
+      .catch((error: unknown) => {
+        if (alive) setStatus({ kind: 'error', text: error instanceof Error ? error.message : t('configLoadError') })
       })
       .finally(() => alive && setLoading(false))
     return () => {
@@ -82,9 +98,11 @@ export function useRecharge(): RechargeState {
         body: JSON.stringify({ credits }),
       })
         .then(async (r) => {
-          const payload: unknown = await r.json()
+          const payload: unknown = await r.json().catch(() => null)
           if (!r.ok || !isRecord(payload) || typeof payload.url !== 'string') {
-            throw new Error(t('checkoutCreateFailed'))
+            throw new Error(t('checkoutCreateFailedWithReason', {
+              reason: readApiFailureReason(payload, `HTTP_${r.status}`),
+            }))
           }
           window.location.assign(payload.url)
         })

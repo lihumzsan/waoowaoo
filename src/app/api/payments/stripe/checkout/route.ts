@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { createStripeCheckoutSession } from '@/lib/payments/stripe-checkout'
+import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
 
 const checkoutSchema = z.object({
   credits: z.number().positive(),
@@ -46,13 +47,22 @@ export const POST = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  const session = await createStripeCheckoutSession({
-    userId: authResult.session.user.id,
-    email: authResult.session.user.email,
-    locale: resolveLocale(request),
-    origin: resolvePublicOrigin(request),
-    credits: parsed.data.credits,
-  })
+  let session: Awaited<ReturnType<typeof createStripeCheckoutSession>>
+  try {
+    session = await createStripeCheckoutSession({
+      userId: authResult.session.user.id,
+      email: authResult.session.user.email,
+      locale: resolveLocale(request),
+      origin: resolvePublicOrigin(request),
+      credits: parsed.data.credits,
+    })
+  } catch (error) {
+    if (isPaymentConfigurationError(error)) {
+      const code = readPaymentConfigurationErrorCode(error)
+      throw new ApiError('MISSING_CONFIG', { code, message: code })
+    }
+    throw error
+  }
 
   return NextResponse.json({
     success: true,

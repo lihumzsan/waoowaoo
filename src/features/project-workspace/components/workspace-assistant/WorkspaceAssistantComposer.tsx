@@ -39,10 +39,17 @@ function cx(...names: Array<string | false | null | undefined>) {
  * message bubble stays in the thread without a reply, so a silent or truncated
  * error reads as "the assistant died".
  */
-function resolveComposerErrorMessageKey(error: string): 'panel.sendErrorBusy' | 'panel.sendErrorGeneric' {
-  return error.includes('PROJECT_AGENT_RUN_ACTIVE')
-    ? 'panel.sendErrorBusy'
-    : 'panel.sendErrorGeneric'
+function isInsufficientBalanceErrorText(error: string): boolean {
+  const normalized = error.toUpperCase()
+  return normalized.includes('INSUFFICIENT_BALANCE') || normalized.includes('INSUFFICIENT_CREDITS')
+}
+
+function resolveComposerErrorMessageKey(
+  error: string,
+): 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.sendErrorGeneric' {
+  if (error.includes('PROJECT_AGENT_RUN_ACTIVE')) return 'panel.sendErrorBusy'
+  if (isInsufficientBalanceErrorText(error)) return 'panel.sendErrorInsufficientBalance'
+  return 'panel.sendErrorGeneric'
 }
 
 export function WorkspaceAssistantComposer({

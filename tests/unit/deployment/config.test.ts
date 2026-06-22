@@ -77,6 +77,7 @@ describe('deployment config', () => {
       showInviteCode: false,
       showBilling: false,
       showApiConfig: true,
+      showUpdateCheck: true,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: false,
     })
@@ -96,6 +97,7 @@ describe('deployment config', () => {
       showInviteCode: true,
       showBilling: true,
       showApiConfig: false,
+      showUpdateCheck: false,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
     })

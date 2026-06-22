@@ -67,12 +67,15 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
   const { data: session, status } = useSession()
   const t = useTranslations('nav')
   const tc = useTranslations('common')
-  const { currentVersion, update, shouldPulse, showModal, openModal, dismissCurrentUpdate, checkNow } = useGithubReleaseUpdate()
+  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
+  const showUpdateCheck = deploymentFeatures?.showUpdateCheck === true
+  const { currentVersion, update, shouldPulse, showModal, openModal, dismissCurrentUpdate, checkNow } = useGithubReleaseUpdate({
+    enabled: showUpdateCheck,
+  })
   const [checkMsg, setCheckMsg] = useState<string | null>(null)
   const [checkMsgFading, setCheckMsgFading] = useState(false)
   const [manualChecking, setManualChecking] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsMenuStyle, setSettingsMenuStyle] = useState<CSSProperties | null>(null)
   const settingsTriggerRef = useRef<HTMLDivElement>(null)
@@ -201,16 +204,18 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
         <AppIcon name="download" className="h-4 w-4 transition-transform group-hover:scale-110" />
         <span>{t('downloadLogs')}</span>
       </a>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => void handleCheckUpdate()}
-        disabled={manualChecking}
-        className="glass-selection-control group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium disabled:opacity-50"
-      >
-        <AppIcon name="refresh" className={`h-4 w-4 transition-transform group-hover:scale-110 ${manualChecking ? 'animate-spin' : ''}`} />
-        <span>{tc('updateNotice.checkUpdate')}</span>
-      </button>
+      {showUpdateCheck ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => void handleCheckUpdate()}
+          disabled={manualChecking}
+          className="glass-selection-control group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium disabled:opacity-50"
+        >
+          <AppIcon name="refresh" className={`h-4 w-4 transition-transform group-hover:scale-110 ${manualChecking ? 'animate-spin' : ''}`} />
+          <span>{tc('updateNotice.checkUpdate')}</span>
+        </button>
+      ) : null}
     </div>
   )
 
@@ -233,7 +238,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                   className="h-[62px] w-[200px] object-contain transition-transform group-hover:scale-105"
                 />
               </Link>
-              {update ? (
+              {showUpdateCheck && update ? (
                 <button
                   type="button"
                   onClick={openModal}
@@ -244,7 +249,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                   <AppIcon name="upload" className="h-3.5 w-3.5" />
                   {tc('updateNotice.updateTag')}
                 </button>
-              ) : checkMsg === 'upToDate' ? (
+              ) : showUpdateCheck && checkMsg === 'upToDate' ? (
                 <span
                   className="text-[11px] font-medium text-[var(--glass-tone-success-fg)] transition-opacity duration-1000"
                   style={{ opacity: checkMsgFading ? 0 : 1 }}
@@ -320,7 +325,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                         </Link>
                       ))}
                       <a href={downloadLogsHref} download>{t('downloadLogs')}</a>
-                      <span>{tc('updateNotice.checkUpdate')}</span>
+                      {showUpdateCheck ? <span>{tc('updateNotice.checkUpdate')}</span> : null}
                     </div>
                   ) : null}
                 </>
@@ -354,7 +359,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
         </div>
       </nav>
       {reserveLayoutSpace ? <div aria-hidden="true" className="h-16" /> : null}
-      {update ? (
+      {showUpdateCheck && update ? (
         <UpdateNoticeModal
           show={showModal}
           currentVersion={currentVersion}
