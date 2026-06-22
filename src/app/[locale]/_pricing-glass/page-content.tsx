@@ -10,7 +10,7 @@ import {
 import { requireOfficialCloudPricingPage } from '@/lib/public-site/visibility'
 import type { Locale } from '@/i18n/routing'
 import { buildGlassPricingContent } from './content'
-import PricingGlass1Client from '../pricing-glass-1/client'
+import PricingGlassPageClient from './page-client'
 
 export interface PricingGlassPageContentProps {
   readonly params: Promise<{ readonly locale: Locale }>
@@ -32,7 +32,7 @@ export async function PricingGlassPageContent({ params }: PricingGlassPageConten
   return (
     <>
       <Navbar initialDeploymentFeatures={deploymentFeatures} />
-      <PricingGlass1Client content={content} />
+      <PricingGlassPageClient content={content} />
       <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </>
   )

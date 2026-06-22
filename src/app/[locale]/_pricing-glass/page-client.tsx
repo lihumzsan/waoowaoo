@@ -1,14 +1,14 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import type { GlassPlan, GlassPricingContent } from '../_pricing-glass/content'
+import type { GlassPlan, GlassPricingContent } from './content'
 import {
   CustomRecharge,
   GlassInfoFooter,
   RechargeStatus,
   Tick,
   useRecharge,
-} from '../_pricing-glass/shared'
+} from './shared'
 
 const FEATURED: GlassPlan['id'] = 'creator'
 
@@ -20,7 +20,7 @@ function isCheckValue(value: string): boolean {
   return value === '有' || value.toLowerCase() === 'yes'
 }
 
-export default function PricingGlass1Client({ content }: { readonly content: GlassPricingContent }) {
+export default function PricingGlassPageClient({ content }: { readonly content: GlassPricingContent }) {
   const t = useTranslations('pricing.glass')
   const recharge = useRecharge()
   return (
