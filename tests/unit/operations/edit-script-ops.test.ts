@@ -203,6 +203,12 @@ const submitOperationTaskMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/operations/submit-operation-task', () => submitOperationTaskMock)
 
+vi.mock('@/lib/config-service', () => ({
+  getProjectModelConfig: vi.fn(async () => ({
+    analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+  })),
+}))
+
 const choiceCardMock = vi.hoisted(() => ({
   buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
     cardId: 'edit-first-duration-aspect-ratio',
@@ -765,6 +771,8 @@ describe('edit-script operations', () => {
       payload: expect.objectContaining({
         episodeId: 'episode-1',
         screenplayId: 'screenplay-1',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        maxInputTokens: 12_000,
       }),
     }))
     expect(submitOperationTaskMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({

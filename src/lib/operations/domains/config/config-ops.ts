@@ -25,6 +25,8 @@ const MODEL_FIELDS = [
   'musicModel',
 ] as const
 
+const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
+
 const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType> = {
   analysisModel: 'llm',
   characterModel: 'image',
@@ -48,6 +50,16 @@ function assertNoLegacyStyleFields(body: Record<string, unknown>) {
       code: 'LEGACY_STYLE_CONFIG_REMOVED',
       field,
       message: 'legacy visual style config is no longer supported; use the AI-generated Style Bible workflow.',
+    })
+  }
+}
+
+function assertCloudProjectConfigFields(body: Record<string, unknown>) {
+  for (const field of Object.keys(body)) {
+    if ((CLOUD_PROJECT_CONFIG_FIELDS as readonly string[]).includes(field)) continue
+    throw new ApiError('FORBIDDEN', {
+      code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
+      field,
     })
   }
 }
@@ -315,14 +327,12 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        if (getDeploymentConfig().edition === 'cloud') {
-          throw new ApiError('FORBIDDEN', {
-            code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
-          })
-        }
-
+        const deployment = getDeploymentConfig()
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyStyleFields(body)
+        if (deployment.edition === 'cloud') {
+          assertCloudProjectConfigFields(body)
+        }
 
         const currentProjectConfig = await prisma.project.findUnique({
           where: { id: ctx.projectId },
@@ -345,9 +355,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const allowedProjectFields = [
-          ...MODEL_FIELDS,
+          ...(deployment.edition === 'cloud' ? [] : MODEL_FIELDS),
           'videoRatio',
-          'capabilityOverrides',
+          ...(deployment.edition === 'cloud' ? [] : ['capabilityOverrides'] as const),
         ] as const
 
         const updateData: Record<string, unknown> = {}

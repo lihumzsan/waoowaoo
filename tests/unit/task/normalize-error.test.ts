@@ -47,6 +47,17 @@ describe('normalizeAnyError provider-specific mapping', () => {
     expect(normalized.retryable).toBe(true)
   })
 
+  it('maps numeric provider code 500 to retryable EXTERNAL_ERROR', () => {
+    const normalized = normalizeAnyError({
+      code: 500,
+      message: 'Internal Server Error',
+      provider: 'openrouter',
+    })
+    expect(normalized.code).toBe('EXTERNAL_ERROR')
+    expect(normalized.retryable).toBe(true)
+    expect(normalized.provider).toBe('openrouter')
+  })
+
   it('maps explicit video API format errors to VIDEO_API_FORMAT_UNSUPPORTED', () => {
     const normalized = normalizeAnyError(
       new Error('VIDEO_API_FORMAT_UNSUPPORTED: provider response did not include a task id'),

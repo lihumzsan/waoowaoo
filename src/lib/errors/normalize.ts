@@ -40,6 +40,29 @@ function containsAny(haystack: string, needles: string[]) {
   return false
 }
 
+function readHttpStatus(value: unknown): number | null {
+  const raw = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d{3}$/.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : NaN
+  if (!Number.isInteger(raw) || raw < 100 || raw > 599) return null
+  return raw
+}
+
+function codeFromHttpStatus(status: number): UnifiedErrorCode {
+  if (status === 401) return 'UNAUTHORIZED'
+  if (status === 403) return 'FORBIDDEN'
+  if (status === 404) return 'NOT_FOUND'
+  if (status === 409) return 'CONFLICT'
+  if (status === 422) return 'SENSITIVE_CONTENT'
+  if (status === 429) return 'RATE_LIMIT'
+  if (status === 504) return 'GENERATION_TIMEOUT'
+  if (status >= 500) return 'EXTERNAL_ERROR'
+  if (status >= 400) return 'INVALID_PARAMS'
+  return DEFAULT_ERROR_CODE
+}
+
 function isModelNotOpenCode(code: unknown): boolean {
   if (typeof code !== 'string') return false
   const normalized = code.trim().toUpperCase()
@@ -149,16 +172,7 @@ function inferCodeFromMessage(message: string): UnifiedErrorCode | null {
       if (parsedStatus === 404 || parsedStatus === 405 || parsedStatus === 415) {
         return 'VIDEO_API_FORMAT_UNSUPPORTED'
       }
-      if (parsedStatus === 401) return 'UNAUTHORIZED'
-      if (parsedStatus === 403) return 'FORBIDDEN'
-      if (parsedStatus === 404) return 'NOT_FOUND'
-      if (parsedStatus === 409) return 'CONFLICT'
-      if (parsedStatus === 422) return 'SENSITIVE_CONTENT'
-      if (parsedStatus === 429) return 'RATE_LIMIT'
-      if (parsedStatus === 502 || parsedStatus === 503) return 'EXTERNAL_ERROR'
-      if (parsedStatus === 504) return 'GENERATION_TIMEOUT'
-      if (parsedStatus >= 500) return 'EXTERNAL_ERROR'
-      if (parsedStatus >= 400) return 'INVALID_PARAMS'
+      return codeFromHttpStatus(parsedStatus)
     }
   }
 
@@ -260,21 +274,13 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
     return buildNormalizedError('EMPTY_RESPONSE', message, options.details, provider)
   }
 
-  if (typeof errorLike.status === 'number') {
-    if (errorLike.status === 401) return buildNormalizedError('UNAUTHORIZED', message, options.details, provider)
-    // 403 可能是欠费（AccountOverdueError），需优先检查消息内容再决定错误码
-    if (errorLike.status === 403) {
-      if (containsAny(lowerMessage, ['accountoverdueerror', 'overdue balance', 'overdue', 'account has an overdue'])) {
-        return buildNormalizedError('INSUFFICIENT_BALANCE', message, options.details, provider)
-      }
-      return buildNormalizedError('FORBIDDEN', message, options.details, provider)
+  const httpStatus = readHttpStatus(errorLike.status) ?? readHttpStatus(errorLike.code)
+  if (httpStatus !== null) {
+    const code = codeFromHttpStatus(httpStatus)
+    if (httpStatus === 403 && containsAny(lowerMessage, ['accountoverdueerror', 'overdue balance', 'overdue', 'account has an overdue'])) {
+      return buildNormalizedError('INSUFFICIENT_BALANCE', message, options.details, provider)
     }
-    if (errorLike.status === 404) return buildNormalizedError('NOT_FOUND', message, options.details, provider)
-    if (errorLike.status === 409) return buildNormalizedError('CONFLICT', message, options.details, provider)
-    if (errorLike.status === 422) return buildNormalizedError('SENSITIVE_CONTENT', message, options.details, provider)
-    if (errorLike.status === 429) return buildNormalizedError('RATE_LIMIT', message, options.details, provider)
-    if (errorLike.status === 502 || errorLike.status === 503) return buildNormalizedError('EXTERNAL_ERROR', message, options.details, provider)
-    if (errorLike.status === 504) return buildNormalizedError('GENERATION_TIMEOUT', message, options.details, provider)
+    return buildNormalizedError(code, message, options.details, provider)
   }
 
   const inferredCode = inferCodeFromMessage(lowerMessage)

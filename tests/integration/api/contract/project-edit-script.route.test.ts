@@ -318,6 +318,11 @@ vi.mock('@/lib/edit-script/task-submission', async () => {
 vi.mock('@/lib/operations/submit-operation-task', () => ({
   submitOperationTask: submitOperationTaskMock,
 }))
+vi.mock('@/lib/config-service', () => ({
+  getProjectModelConfig: vi.fn(async () => ({
+    analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+  })),
+}))
 
 import {
   GET as editScriptGet,
@@ -531,6 +536,8 @@ describe('project edit script route', () => {
         episodeId: 'episode-1',
         screenplayId: 'screenplay-1',
         displayMode: 'detail',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        maxInputTokens: 12_000,
       }),
       dedupeKey: 'edit_director_decoupage_generate:project-1:screenplay-1',
     }))
@@ -585,6 +592,8 @@ describe('project edit script route', () => {
         episodeId: 'episode-1',
         editScriptId: 'edit-1',
         displayMode: 'detail',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        maxInputTokens: 12_000,
       }),
       dedupeKey: 'edit_cinematography_shot_plan_generate:project-1:edit-1',
     }))

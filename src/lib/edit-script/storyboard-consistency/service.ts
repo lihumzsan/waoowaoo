@@ -5,6 +5,7 @@ import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
 import { isStoryboardSpatialProfileStageReady } from '@/lib/project-workflow/edit-first-readiness'
+import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 
 interface SubmitSpatialBlockingStoryboardInput {
   readonly projectId: string
@@ -75,12 +76,16 @@ export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpa
     operationId: 'generate_edit_script_storyboard_spatial_blocking',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
-    payload: {
-      editScriptId,
-      sourceSnapshot,
-      modelConfigSnapshot,
-      count: sourceSnapshot.shots.length,
-    },
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        editScriptId,
+        sourceSnapshot,
+        modelConfigSnapshot,
+        count: sourceSnapshot.shots.length,
+      },
+    }),
     dedupeKey: `edit_script_storyboard_prepare:${input.projectId}:${input.episodeId}:${editScriptId}`,
   })
   return {
@@ -134,12 +139,16 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     operationId: 'generate_edit_script_storyboard_panels',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
-    payload: {
-      editScriptId,
-      storyboardId: ready.storyboardId,
-      sourceSnapshot,
-      modelConfigSnapshot,
-    },
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        editScriptId,
+        storyboardId: ready.storyboardId,
+        sourceSnapshot,
+        modelConfigSnapshot,
+      },
+    }),
     dedupeKey: `edit_script_storyboard_camera_plan:${ready.storyboardId}`,
   })
   return {

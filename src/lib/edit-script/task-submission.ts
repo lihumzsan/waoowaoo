@@ -7,6 +7,7 @@ import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { buildEditFirstStructuredUserPrompt, type EditFirstDurationTier } from './duration-tier'
 import type { EditScriptVideoRatio } from './types'
+import { buildEditFirstTextTaskPayload } from './task-billing'
 import {
   resolveEditCinematographyShotPlanTaskTarget,
   resolveEditDirectorDecoupageTaskTarget,
@@ -253,16 +254,19 @@ export async function submitProjectEditScreenplayGenerationTask(input: {
       operationId: 'generate_edit_screenplay',
       source: input.source,
       confirmed: input.confirmed,
-      payload: {
-        episodeId: input.episodeId,
-        screenplayId: target.screenplayId,
-        prompt: input.prompt,
-        durationTier: input.durationTier,
-        aspectRatio: input.aspectRatio,
-        displayMode: 'detail',
-      },
+      payload: await buildEditFirstTextTaskPayload({
+        projectId: input.projectId,
+        userId: input.userId,
+        payload: {
+          episodeId: input.episodeId,
+          screenplayId: target.screenplayId,
+          prompt: input.prompt,
+          durationTier: input.durationTier,
+          aspectRatio: input.aspectRatio,
+          displayMode: 'detail',
+        },
+      }),
       dedupeKey,
-      billingInfo: null,
       locale: input.locale,
     })
 
@@ -310,16 +314,19 @@ export async function submitProjectEditScreenplayRevisionTask(input: {
     operationId: 'revise_edit_screenplay',
     source: input.source,
     confirmed: input.confirmed,
-    payload: {
-      episodeId: target.episodeId,
-      screenplayId: target.screenplayId,
-      revisionInstruction: input.revisionInstruction,
-      durationTier: input.durationTier,
-      aspectRatio: input.aspectRatio,
-      displayMode: 'detail',
-    },
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        episodeId: target.episodeId,
+        screenplayId: target.screenplayId,
+        revisionInstruction: input.revisionInstruction,
+        durationTier: input.durationTier,
+        aspectRatio: input.aspectRatio,
+        displayMode: 'detail',
+      },
+    }),
     dedupeKey: `edit_screenplay_revise:${input.projectId}:${target.screenplayId}`,
-    billingInfo: null,
     locale: input.locale,
   })
 
@@ -359,13 +366,16 @@ export async function submitProjectEditDirectorDecoupageTask(input: {
     operationId: 'generate_edit_director_decoupage',
     source: input.source,
     confirmed: input.confirmed,
-    payload: {
-      episodeId: target.episodeId,
-      screenplayId: target.screenplayId,
-      displayMode: 'detail',
-    },
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        episodeId: target.episodeId,
+        screenplayId: target.screenplayId,
+        displayMode: 'detail',
+      },
+    }),
     dedupeKey: `edit_director_decoupage_generate:${input.projectId}:${target.screenplayId}`,
-    billingInfo: null,
     locale: input.locale,
   })
 
@@ -405,13 +415,16 @@ export async function submitProjectEditCinematographyShotPlanTask(input: {
     operationId: 'generate_edit_cinematography_shot_plan',
     source: input.source,
     confirmed: input.confirmed,
-    payload: {
-      episodeId: target.episodeId,
-      editScriptId: target.editScriptId,
-      displayMode: 'detail',
-    },
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        episodeId: target.episodeId,
+        editScriptId: target.editScriptId,
+        displayMode: 'detail',
+      },
+    }),
     dedupeKey: `edit_cinematography_shot_plan_generate:${input.projectId}:${target.editScriptId}`,
-    billingInfo: null,
     locale: input.locale,
   })
 

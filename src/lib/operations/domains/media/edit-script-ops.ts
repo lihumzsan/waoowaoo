@@ -40,6 +40,7 @@ import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   EDIT_FIRST_DURATION_TIERS,
 } from '@/lib/edit-script/duration-tier'
+import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 const editFirstDurationTierSchema = z.enum(EDIT_FIRST_DURATION_TIERS)
@@ -555,11 +556,15 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScriptInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const payload: Record<string, unknown> = {
-          episodeId,
-          ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-          ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-        }
+        const payload = await buildEditFirstTextTaskPayload({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          payload: {
+            episodeId,
+            ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+            ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
+          },
+        })
         const result = await submitOperationTask({
           request: ctx.request,
           projectId: ctx.projectId,
@@ -573,7 +578,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           confirmed: input.confirmed === true,
           payload,
           dedupeKey: `edit_script_generate:${ctx.projectId}:${episodeId}`,
-          billingInfo: null,
           locale: resolveLocale(ctx.context.locale),
         })
 

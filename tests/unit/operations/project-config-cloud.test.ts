@@ -7,11 +7,17 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
   },
 }))
+const mediaAttachMock = vi.hoisted(() => ({
+  attachMediaFieldsToProject: vi.fn(),
+}))
+const projectReadModelMock = vi.hoisted(() => ({
+  buildProjectReadModel: vi.fn(),
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/logging/semantic', () => ({ logProjectAction: vi.fn() }))
-vi.mock('@/lib/media/attach', () => ({ attachMediaFieldsToProject: vi.fn() }))
-vi.mock('@/lib/projects/build-project-read-model', () => ({ buildProjectReadModel: vi.fn() }))
+vi.mock('@/lib/media/attach', () => mediaAttachMock)
+vi.mock('@/lib/projects/build-project-read-model', () => projectReadModelMock)
 
 import { createConfigOperations } from '@/lib/operations/domains/config/config-ops'
 
@@ -34,6 +40,8 @@ describe('project config operations in cloud deployment', () => {
     vi.clearAllMocks()
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    mediaAttachMock.attachMediaFieldsToProject.mockImplementation(async (project: unknown) => project)
+    projectReadModelMock.buildProjectReadModel.mockImplementation((project: unknown) => project)
   })
 
   afterEach(() => {
@@ -63,15 +71,51 @@ describe('project config operations in cloud deployment', () => {
     expect(prismaMock.project.findUnique.mock.calls).toEqual([])
   })
 
-  it('rejects project config writes in cloud mode', async () => {
+  it('allows project-owned video ratio writes in cloud mode', async () => {
+    const projectRow = {
+      id: 'project-1',
+      name: 'Cloud Project',
+      analysisModel: null,
+      characterModel: null,
+      locationModel: null,
+      storyboardModel: null,
+      editModel: null,
+      videoModel: null,
+      singleShotVideoModel: null,
+      sequenceVideoModel: null,
+      musicModel: null,
+    }
+    const updatedProject = {
+      ...projectRow,
+      videoRatio: '9:16',
+    }
+    prismaMock.project.findUnique.mockResolvedValue(projectRow)
+    prismaMock.project.update.mockResolvedValue(updatedProject)
+
+    const result = await createConfigOperations().update_project_config.execute(buildContext(), {
+      videoRatio: '9:16',
+    })
+
+    expect(prismaMock.project.update.mock.calls).toEqual([[
+      {
+        where: { id: 'project-1' },
+        data: { videoRatio: '9:16' },
+      },
+    ]])
+    expect(result).toEqual({ project: updatedProject })
+  })
+
+  it('rejects platform-managed model config writes in cloud mode', async () => {
     await expect(createConfigOperations().update_project_config.execute(buildContext(), {
-      videoRatio: '16:9',
+      editModel: 'openrouter::anthropic/claude-sonnet-4.6',
     })).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({
         code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
+        field: 'editModel',
       }),
     })
+    expect(prismaMock.project.findUnique.mock.calls).toEqual([])
     expect(prismaMock.project.update.mock.calls).toEqual([])
   })
 })

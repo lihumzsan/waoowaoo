@@ -24,6 +24,11 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/operations/submit-operation-task', () => ({
   submitOperationTask: submitOperationTaskMock,
 }))
+vi.mock('@/lib/config-service', () => ({
+  getProjectModelConfig: vi.fn(async () => ({
+    analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+  })),
+}))
 
 import {
   submitProjectEditScreenplayGenerationTask,
@@ -113,6 +118,8 @@ describe('edit screenplay task submission', () => {
         prompt: '生成一部恐怖短片',
         durationTier: 'short',
         aspectRatio: '16:9',
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        maxInputTokens: 12_000,
       }),
     }))
     expect(prismaMock.projectEditScreenplay.create.mock.invocationCallOrder[0])
