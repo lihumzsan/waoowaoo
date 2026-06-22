@@ -109,6 +109,8 @@
     "test:pr": "bash scripts/test-regression-runner.sh npm run test:all",
     "typecheck": "tsc --noEmit",
     "lint:all": "npm run lint -- .",
+    "security:secrets:staged": "node scripts/security/secret-scan.mjs --staged",
+    "security:secrets:repo": "node scripts/security/secret-scan.mjs --repo",
     "verify:commit": "echo \"verify:commit skipped; full verification runs on pre-push via npm run verify:push\"",
     "test:services:prepare": "tsx scripts/test-services.ts prepare",
     "test:services:start": "tsx scripts/test-services.ts start",
