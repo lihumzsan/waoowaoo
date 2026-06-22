@@ -7,6 +7,13 @@
         "apiConfig": "API Configuration",
         "billingRecords": "Billing Records"
     },
+    "account": {
+        "balance": "Balance",
+        "recharge": "Top Up",
+        "frozen": "Frozen",
+        "totalSpent": "Spent",
+        "creditsUnit": "credits"
+    },
     "downloadLogs": "Download Logs",
     "signin": "Sign In",
     "signup": "Sign Up",

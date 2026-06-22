@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
+import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import UpdateNoticeModal from './UpdateNoticeModal'
@@ -49,6 +50,29 @@ export function shouldCloseNavbarSettingsMenu(
   return true
 }
 
+interface NavbarUserBalance {
+  currency: string
+  balance: number
+  frozenAmount: number
+  totalSpent: number
+}
+
+function isNavbarBalancePayload(value: unknown): value is { success: boolean } & NavbarUserBalance {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return (
+    record.success === true &&
+    typeof record.balance === 'number' &&
+    typeof record.frozenAmount === 'number' &&
+    typeof record.totalSpent === 'number'
+  )
+}
+
+function formatCreditAmount(value: number, unit: string): string {
+  const amount = Number.isFinite(value) ? value : 0
+  return `${amount.toFixed(2)} ${unit}`
+}
+
 export function buildNavbarSettingsMenuItems(
   features: PublicDeploymentFeatures | null,
   labels: NavbarSettingsLabels,
@@ -78,6 +102,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
   const [mounted, setMounted] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsMenuStyle, setSettingsMenuStyle] = useState<CSSProperties | null>(null)
+  const [balance, setBalance] = useState<NavbarUserBalance | null>(null)
   const settingsTriggerRef = useRef<HTMLDivElement>(null)
   const settingsMenuRef = useRef<HTMLDivElement>(null)
   const downloadLogsHref = '/api/admin/download-logs'
@@ -85,6 +110,10 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
   const navControlClass = 'glass-selection-control inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium'
 
   const showPricingLink = deploymentFeatures?.showPricingPage === true
+  const showRecharge = deploymentFeatures?.showRecharge === true
+  const showBilling = deploymentFeatures?.showBilling === true
+  const userName = session?.user?.name ?? t('profile')
+  const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
     billingRecords: t('settingsMenu.billingRecords'),
@@ -119,6 +148,35 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
   }, [])
 
   useEffect(() => {
+    // 仅在计费已启用（cloud 版 showBilling=true）时拉取余额；
+    // 本地/自托管版计费整体关闭，无余额概念，不显示。
+    if (!session || !showBilling) {
+      setBalance(null)
+      return
+    }
+    let cancelled = false
+    apiFetch('/api/user/balance')
+      .then(async (response) => {
+        if (!response.ok) return
+        const payload: unknown = await response.json()
+        if (!cancelled && isNavbarBalancePayload(payload)) {
+          setBalance({
+            currency: payload.currency,
+            balance: payload.balance,
+            frozenAmount: payload.frozenAmount,
+            totalSpent: payload.totalSpent,
+          })
+        }
+      })
+      .catch(() => {
+        /* 余额获取失败时静默降级，不阻塞导航栏 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [session, showBilling])
+
+  useEffect(() => {
     if (!settingsOpen) return
 
     const updatePosition = () => {
@@ -126,7 +184,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
       if (!trigger) return
 
       const rect = trigger.getBoundingClientRect()
-      const width = 240
+      const width = 280
       const viewportPadding = 16
       const maxLeft = Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
       const left = Math.min(Math.max(viewportPadding, rect.right - width), maxLeft)
@@ -176,6 +234,45 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
       style={settingsMenuStyle ?? undefined}
       className="z-[1000] rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] p-2 shadow-[0_18px_50px_-24px_rgba(0,0,0,0.55)] backdrop-blur-xl"
     >
+      {/* 账户头部：仅用户名 */}
+      <div className="rounded-lg px-3 py-2">
+        <div className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{userName}</div>
+      </div>
+
+      {/* 余额信息 */}
+      {balance ? (
+        <div className="mt-1 rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-muted)] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-[var(--glass-text-secondary)]">
+              <AppIcon name="coins" className="h-3.5 w-3.5" />
+              {t('account.balance')}
+            </span>
+            {showRecharge ? (
+              <Link
+                href={{ pathname: '/profile', query: { section: 'billing' } }}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSettingsOpen(false)}
+                className="glass-btn-base glass-btn-primary px-2.5 py-1 text-xs font-medium"
+              >
+                {t('account.recharge')}
+              </Link>
+            ) : null}
+          </div>
+          <div className="mt-1 text-lg font-semibold text-[var(--glass-text-primary)]">
+            {formatCreditAmount(balance.balance, creditsUnit)}
+          </div>
+          {showBilling ? (
+            <div className="mt-1.5 flex items-center gap-3 text-[11px] text-[var(--glass-text-tertiary)]">
+              <span>{t('account.frozen')}: {formatCreditAmount(balance.frozenAmount, creditsUnit)}</span>
+              <span>{t('account.totalSpent')}: {formatCreditAmount(balance.totalSpent, creditsUnit)}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {settingsMenuItems.length > 0 || balance ? <div className="my-2 h-px bg-[var(--glass-stroke-base)]" /> : null}
+
       {settingsMenuItems.map(item => (
         <Link
           key={item.section}
@@ -216,6 +313,16 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
           <span>{tc('updateNotice.checkUpdate')}</span>
         </button>
       ) : null}
+      <div className="my-2 h-px bg-[var(--glass-stroke-base)]" />
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => { setSettingsOpen(false); void signOut({ callbackUrl: '/' }) }}
+        className="glass-selection-control group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--glass-tone-danger-fg)]"
+      >
+        <AppIcon name="logout" className="h-4 w-4 transition-transform group-hover:scale-110" />
+        <span>{t('logout')}</span>
+      </button>
     </div>
   )
 
@@ -305,10 +412,15 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                       aria-controls={settingsMenuId}
                       onClick={() => setSettingsOpen(open => !open)}
                       className={navControlClass}
-                      title={t('profile')}
+                      title={userName}
                     >
-                      <AppIcon name="settingsHexAlt" className="h-4 w-4" />
-                      {t('profile')}
+                      <span className="max-w-[10rem] truncate">{userName}</span>
+                      {balance ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-tone-info-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--glass-tone-info-fg)]">
+                          <AppIcon name="coins" className="h-3 w-3" />
+                          {formatCreditAmount(balance.balance, creditsUnit)}
+                        </span>
+                      ) : null}
                       <AppIcon name="chevronDown" className={`h-3.5 w-3.5 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
                     </button>
                   </div>

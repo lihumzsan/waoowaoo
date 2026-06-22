@@ -7,6 +7,13 @@
         "apiConfig": "API 配置",
         "billingRecords": "扣费记录"
     },
+    "account": {
+        "balance": "可用余额",
+        "recharge": "充值",
+        "frozen": "冻结",
+        "totalSpent": "累计消费",
+        "creditsUnit": "额度"
+    },
     "downloadLogs": "下载日志",
     "signin": "登录",
     "signup": "注册",
