@@ -34,16 +34,22 @@ function readEnvFile(filePath) {
   return env
 }
 
-const [, , envFile, command, ...args] = process.argv
+const cliArgs = process.argv.slice(2)
+const separatorIndex = cliArgs.indexOf('--')
+const envFiles = separatorIndex >= 0 ? cliArgs.slice(0, separatorIndex) : cliArgs.slice(0, 1)
+const commandArgs = separatorIndex >= 0 ? cliArgs.slice(separatorIndex + 1) : cliArgs.slice(1)
+const [command, ...args] = commandArgs
 
-if (!envFile || !command) {
-  console.error('Usage: node scripts/run-with-env.mjs <env-file> <command> [...args]')
+if (envFiles.length === 0 || !command) {
+  console.error('Usage: node scripts/run-with-env.mjs <env-file> [<env-file> ...] -- <command> [...args]')
   process.exit(2)
 }
 
 const env = {
   ...process.env,
-  ...readEnvFile(envFile),
+}
+for (const envFile of envFiles) {
+  Object.assign(env, readEnvFile(envFile))
 }
 
 const result = spawnSync(command, args, {
