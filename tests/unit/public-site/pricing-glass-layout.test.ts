@@ -9,6 +9,12 @@ function readRepoFile(path: string): string {
 }
 
 describe('pricing glass layout', () => {
+  it('does not reserve navbar layout space above the pricing canvas', () => {
+    const pageContent = readRepoFile('src/app/[locale]/_pricing-glass/page-content.tsx')
+
+    expect(pageContent).toContain('<Navbar reserveLayoutSpace={false} initialDeploymentFeatures={deploymentFeatures} />')
+  })
+
   it('uses the plain glass page canvas without the fixed top gradient wash', () => {
     const pageClient = readRepoFile('src/app/[locale]/_pricing-glass/page-client.tsx')
 

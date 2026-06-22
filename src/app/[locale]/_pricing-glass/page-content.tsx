@@ -31,7 +31,7 @@ export async function PricingGlassPageContent({ params }: PricingGlassPageConten
 
   return (
     <>
-      <Navbar initialDeploymentFeatures={deploymentFeatures} />
+      <Navbar reserveLayoutSpace={false} initialDeploymentFeatures={deploymentFeatures} />
       <PricingGlassPageClient content={content} />
       <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </>
