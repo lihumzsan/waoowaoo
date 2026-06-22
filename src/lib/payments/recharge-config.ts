@@ -3,24 +3,22 @@ import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { roundMoney } from '@/lib/billing/money'
 
 export const CREDIT_VALUE_CURRENCY = 'CNY' as const
-export const STRIPE_SETTLEMENT_CURRENCY = 'HKD' as const
+export const STRIPE_PAYMENT_CURRENCY = 'CNY' as const
 
 export interface RechargeConfig {
   enabled: boolean
   creditValueCurrency: typeof CREDIT_VALUE_CURRENCY
-  settlementCurrency: typeof STRIPE_SETTLEMENT_CURRENCY
+  paymentCurrency: typeof STRIPE_PAYMENT_CURRENCY
   minCredits: number
   maxCredits: number
-  cnyToHkdRate: number
 }
 
 export interface RechargeQuote {
   credits: number
-  settlementAmount: number
-  settlementUnitAmount: number
+  paymentAmount: number
+  paymentUnitAmount: number
   creditValueCurrency: typeof CREDIT_VALUE_CURRENCY
-  settlementCurrency: typeof STRIPE_SETTLEMENT_CURRENCY
-  cnyToHkdRate: number
+  paymentCurrency: typeof STRIPE_PAYMENT_CURRENCY
 }
 
 function readRequiredPositiveNumber(name: string): number {
@@ -39,10 +37,9 @@ function disabledRechargeConfig(): RechargeConfig {
   return {
     enabled: false,
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
-    settlementCurrency: STRIPE_SETTLEMENT_CURRENCY,
+    paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits: 0,
     maxCredits: 0,
-    cnyToHkdRate: 0,
   }
 }
 
@@ -58,10 +55,9 @@ export function getRechargeConfig(): RechargeConfig {
   return {
     enabled: true,
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
-    settlementCurrency: STRIPE_SETTLEMENT_CURRENCY,
+    paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits,
     maxCredits,
-    cnyToHkdRate: readRequiredPositiveNumber('PAYMENT_CNY_TO_HKD_RATE'),
   }
 }
 
@@ -84,17 +80,16 @@ export function normalizeRechargeCredits(input: number, config: RechargeConfig):
 
 export function quoteRecharge(inputCredits: number, config: RechargeConfig = getRechargeConfig()): RechargeQuote {
   const credits = normalizeRechargeCredits(inputCredits, config)
-  const settlementAmount = roundMoney(credits * config.cnyToHkdRate, 2)
-  const settlementUnitAmount = Math.round(settlementAmount * 100)
-  if (!Number.isInteger(settlementUnitAmount) || settlementUnitAmount <= 0) {
-    throw new Error('PAYMENT_SETTLEMENT_AMOUNT_INVALID')
+  const paymentAmount = roundMoney(credits, 2)
+  const paymentUnitAmount = Math.round(paymentAmount * 100)
+  if (!Number.isInteger(paymentUnitAmount) || paymentUnitAmount <= 0) {
+    throw new Error('PAYMENT_AMOUNT_INVALID')
   }
   return {
     credits,
-    settlementAmount,
-    settlementUnitAmount,
+    paymentAmount,
+    paymentUnitAmount,
     creditValueCurrency: config.creditValueCurrency,
-    settlementCurrency: config.settlementCurrency,
-    cnyToHkdRate: config.cnyToHkdRate,
+    paymentCurrency: config.paymentCurrency,
   }
 }

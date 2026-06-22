@@ -14,10 +14,9 @@ import type { GlassPolicy, GlassPricingContent } from './content'
 export interface RechargeConfig {
   enabled: boolean
   creditValueCurrency: string
-  settlementCurrency: string
+  paymentCurrency: string
   minCredits: number
   maxCredits: number
-  cnyToHkdRate: number
 }
 
 interface RechargeState {
@@ -36,6 +35,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function readApiFailureReason(payload: unknown, fallback: string): string {
   const parsed = parseApiErrorPayload(payload)
   return parsed.code || parsed.message || fallback
+}
+
+function formatCurrencyAmount(value: number, currency: string): string {
+  if (currency === 'CNY') return `¥${value.toFixed(2)}`
+  return `${currency} ${value.toFixed(2)}`
 }
 
 export function useRecharge(): RechargeState {
@@ -117,10 +121,11 @@ export function useRecharge(): RechargeState {
   const estimate = useCallback(
     (credits: number) => {
       if (!config || !Number.isFinite(credits) || credits <= 0) return null
-      const amount = credits * config.cnyToHkdRate
-      return `约 ${config.settlementCurrency} ${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+      return t('estimateAmount', {
+        amount: formatCurrencyAmount(credits, config.paymentCurrency),
+      })
     },
-    [config],
+    [config, t],
   )
 
   return { config, loading, busy, status, checkout, estimate }
@@ -174,14 +179,7 @@ export function CustomRecharge({ recharge, className }: { recharge: RechargeStat
       </div>
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--glass-text-tertiary)]">
         {est && <span>{t('estimatePrefix', { amount: est })}</span>}
-        {recharge.config && (
-          <span>
-            {t('settlementRate', {
-              rate: recharge.config.cnyToHkdRate,
-              currency: recharge.config.settlementCurrency,
-            })}
-          </span>
-        )}
+        {recharge.config && <span>{t('unitValue')}</span>}
       </div>
       <RechargeStatus status={recharge.status} />
     </div>

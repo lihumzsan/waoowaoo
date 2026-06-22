@@ -5,7 +5,7 @@
   "betaNotice": "Self-service top-up is available. Stripe currently supports enabled methods such as cards, Link, and Apple Pay; WeChat Pay and Alipay will appear in Checkout after payment-provider approval. Invite codes and manual grants are used only for trials, tests, or operational credits.",
   "checkout": {
     "title": "Top up and start generating",
-    "body": "Top-ups use the live Stripe Checkout flow. Credits are valued in CNY and converted to HKD using the configured settlement rate. After Stripe confirms the payment through webhook, credits are added automatically.",
+    "body": "Top-ups use the live Stripe Checkout flow. 1 credit is charged as ¥1. After Stripe confirms the payment through webhook, credits are added automatically.",
     "primaryCta": "Top up now",
     "secondaryCta": "Create account"
   },
@@ -64,8 +64,9 @@
     "checkoutCreateFailed": "Unable to create the checkout session. Please try again later.",
     "checkoutCreateFailedWithReason": "Unable to create the checkout session: {reason}",
     "checkoutCreateFailedFallback": "Unable to create the checkout session.",
-    "estimatePrefix": "Estimated settlement {amount}",
-    "settlementRate": "Settlement 1 credit = {rate} {currency}",
+    "estimatePrefix": "Estimated charge {amount}",
+    "estimateAmount": "{amount}",
+    "unitValue": "1 credit = ¥1",
     "infoFooterTitle": "Pricing Rules, Policies, and Merchant Information",
     "infoFooterDescription": "Open any section below to review the full details.",
     "creditRulesTitle": "Credits and pricing rules",

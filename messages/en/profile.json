@@ -58,11 +58,11 @@
   },
   "recharge": {
     "title": "Top Up Credits",
-    "description": "Enter the credits to add. Credits are valued in CNY and settled through Stripe in HKD.",
+    "description": "Enter the credits to add. 1 credit is charged as ¥1.",
     "amountLabel": "Credits",
     "placeholder": "Enter credits",
     "range": "Range {min} - {max} credits",
-    "exchangeRate": "1 credit = ¥1, settled at {rate} HKD",
+    "unitValue": "1 credit = ¥1",
     "estimatedCharge": "Estimated charge {amount}",
     "submit": "Continue to payment",
     "processing": "Creating payment",

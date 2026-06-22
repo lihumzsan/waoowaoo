@@ -58,21 +58,20 @@ function appendMetadata(params: URLSearchParams, prefix: string, quote: Recharge
   params.set(`${prefix}[user_id]`, userId)
   params.set(`${prefix}[credits]`, quote.credits.toFixed(2))
   params.set(`${prefix}[credit_value_currency]`, quote.creditValueCurrency)
-  params.set(`${prefix}[settlement_amount]`, quote.settlementAmount.toFixed(2))
-  params.set(`${prefix}[settlement_currency]`, quote.settlementCurrency.toLowerCase())
-  params.set(`${prefix}[cny_to_hkd_rate]`, String(quote.cnyToHkdRate))
+  params.set(`${prefix}[payment_amount]`, quote.paymentAmount.toFixed(2))
+  params.set(`${prefix}[payment_currency]`, quote.paymentCurrency.toLowerCase())
 }
 
 function getCheckoutProductText(locale: 'zh' | 'en', quote: RechargeQuote): { name: string; description: string } {
   if (locale === 'en') {
     return {
       name: 'WaooAI Credits',
-      description: `${quote.credits.toFixed(2)} credits, billed in ${quote.settlementCurrency}`,
+      description: `${quote.credits.toFixed(2)} credits, billed in ${quote.paymentCurrency}`,
     }
   }
   return {
     name: 'WaooAI 额度',
-    description: `${quote.credits.toFixed(2)} 额度，使用 ${quote.settlementCurrency} 结算`,
+    description: `${quote.credits.toFixed(2)} 额度，使用人民币支付`,
   }
 }
 
@@ -89,8 +88,8 @@ export async function createStripeCheckoutSession(input: CreateStripeCheckoutSes
   params.set('cancel_url', cancelUrl)
   params.set('client_reference_id', input.userId)
   params.set('line_items[0][quantity]', '1')
-  params.set('line_items[0][price_data][currency]', quote.settlementCurrency.toLowerCase())
-  params.set('line_items[0][price_data][unit_amount]', String(quote.settlementUnitAmount))
+  params.set('line_items[0][price_data][currency]', quote.paymentCurrency.toLowerCase())
+  params.set('line_items[0][price_data][unit_amount]', String(quote.paymentUnitAmount))
   params.set('line_items[0][price_data][product_data][name]', productText.name)
   params.set('line_items[0][price_data][product_data][description]', productText.description)
   if (input.email) {

@@ -21,40 +21,36 @@ describe('payments/recharge-config', () => {
     delete process.env.DEPLOYMENT_EDITION
     delete process.env.PAYMENT_MIN_CREDITS
     delete process.env.PAYMENT_MAX_CREDITS
-    delete process.env.PAYMENT_CNY_TO_HKD_RATE
 
     const { getRechargeConfig } = await loadModule()
 
     expect(getRechargeConfig()).toEqual({
       enabled: false,
       creditValueCurrency: 'CNY',
-      settlementCurrency: 'HKD',
+      paymentCurrency: 'CNY',
       minCredits: 0,
       maxCredits: 0,
-      cnyToHkdRate: 0,
     })
   })
 
-  it('requires explicit cloud payment bounds and rate', async () => {
+  it('requires explicit cloud payment bounds', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
     delete process.env.PAYMENT_MIN_CREDITS
     process.env.PAYMENT_MAX_CREDITS = '1000'
-    process.env.PAYMENT_CNY_TO_HKD_RATE = '1'
 
     const { getRechargeConfig } = await loadModule()
 
     expect(() => getRechargeConfig()).toThrow('PAYMENT_MIN_CREDITS_REQUIRED')
   })
 
-  it('quotes CNY-valued credits into HKD settlement cents', async () => {
+  it('quotes credits as CNY payment cents without an exchange rate', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
     process.env.PAYMENT_MIN_CREDITS = '5'
     process.env.PAYMENT_MAX_CREDITS = '1000'
-    process.env.PAYMENT_CNY_TO_HKD_RATE = '1'
 
     const { getRechargeConfig, quoteRecharge } = await loadModule()
     const config = getRechargeConfig()
@@ -62,11 +58,10 @@ describe('payments/recharge-config', () => {
     expect(config.enabled).toBe(true)
     expect(quoteRecharge(88.88, config)).toEqual({
       credits: 88.88,
-      settlementAmount: 88.88,
-      settlementUnitAmount: 8888,
+      paymentAmount: 88.88,
+      paymentUnitAmount: 8888,
       creditValueCurrency: 'CNY',
-      settlementCurrency: 'HKD',
-      cnyToHkdRate: 1,
+      paymentCurrency: 'CNY',
     })
   })
 
@@ -76,7 +71,6 @@ describe('payments/recharge-config', () => {
     process.env.BILLING_MODE = 'ENFORCE'
     process.env.PAYMENT_MIN_CREDITS = '5'
     process.env.PAYMENT_MAX_CREDITS = '1000'
-    process.env.PAYMENT_CNY_TO_HKD_RATE = '1'
 
     const { getRechargeConfig, quoteRecharge } = await loadModule()
     const config = getRechargeConfig()

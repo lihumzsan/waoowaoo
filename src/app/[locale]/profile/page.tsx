@@ -45,10 +45,9 @@ type TransactionsPayload = {
 type RechargeConfig = {
   enabled: boolean
   creditValueCurrency: string
-  settlementCurrency: string
+  paymentCurrency: string
   minCredits: number
   maxCredits: number
-  cnyToHkdRate: number
 }
 
 type RechargeConfigPayload = {
@@ -71,6 +70,7 @@ function formatAmount(value: number | undefined, currency: string | undefined): 
 
 function formatCurrencyAmount(value: number | undefined, currency: string | undefined): string {
   const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  if (currency === 'CNY') return `¥${amount.toFixed(2)}`
   return `${currency || ''} ${amount.toFixed(2)}`.trim()
 }
 
@@ -248,8 +248,8 @@ export default function ProfilePage() {
   const showInviteCode = deploymentFeatures?.showInviteCode === true
   const balanceText = showBilling ? formatAmount(balance?.balance, balance?.currency) : noBillingText
   const parsedRechargeAmount = Number(rechargeAmount)
-  const estimatedSettlementAmount = rechargeConfig?.enabled === true && Number.isFinite(parsedRechargeAmount)
-    ? parsedRechargeAmount * rechargeConfig.cnyToHkdRate
+  const estimatedPaymentAmount = rechargeConfig?.enabled === true && Number.isFinite(parsedRechargeAmount)
+    ? parsedRechargeAmount
     : 0
   const sectionItems: Array<{
     section: ProfileSection
@@ -413,10 +413,10 @@ export default function ProfilePage() {
                           </div>
                           <div className="grid gap-2 text-xs text-[var(--glass-text-tertiary)] sm:grid-cols-3">
                             <div>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</div>
-                            <div>{t('recharge.exchangeRate', { rate: rechargeConfig.cnyToHkdRate })}</div>
+                            <div>{t('recharge.unitValue')}</div>
                             <div>
                               {t('recharge.estimatedCharge', {
-                                amount: formatCurrencyAmount(estimatedSettlementAmount, rechargeConfig.settlementCurrency),
+                                amount: formatCurrencyAmount(estimatedPaymentAmount, rechargeConfig.paymentCurrency),
                               })}
                             </div>
                           </div>

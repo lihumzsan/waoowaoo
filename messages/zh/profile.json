@@ -58,11 +58,11 @@
   },
   "recharge": {
     "title": "充值额度",
-    "description": "输入要入账的额度。系统额度按人民币价值计算，Stripe 以港币结算。",
+    "description": "输入要入账的额度。1 额度按人民币 1 元支付。",
     "amountLabel": "充值额度",
     "placeholder": "输入额度",
     "range": "范围 {min} - {max} 额度",
-    "exchangeRate": "1 额度 = ¥1，按 {rate} HKD 结算",
+    "unitValue": "1 额度 = ¥1",
     "estimatedCharge": "预计支付 {amount}",
     "submit": "前往支付",
     "processing": "创建支付中",
