@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import type { EditFirstChoiceType } from '../choice-card'
+import type { EditFirstChoiceType } from '../edit-first-choice-tools'
 import type { ProjectAgentRunControlKind, ProjectAgentRunStatus } from '../runs'
 import type { ProjectAgentWaitFollowUpMode, ProjectAgentWaitTerminalStatus } from '../waits'
 import type { ProjectAssistantId } from '../types'

@@ -1,5 +1,6 @@
 import type { ProjectAgentOperationDefinition } from '@/lib/operations/types'
 import { isEditFirstAutoApprovedOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
+import { EDIT_FIRST_CHOICE_OPERATION_IDS } from './edit-first-choice-tools'
 
 export type AssistantPermissionMode = 'ask' | 'auto'
 
@@ -11,7 +12,7 @@ const HUMAN_INPUT_OPERATION_IDS: ReadonlySet<string> = new Set([
   'ui_single_select',
   'ui_multi_select',
   'ui_safety_ack',
-  'request_edit_first_choice',
+  ...EDIT_FIRST_CHOICE_OPERATION_IDS,
 ])
 
 export function isAssistantPermissionMode(value: unknown): value is AssistantPermissionMode {

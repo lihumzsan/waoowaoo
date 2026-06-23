@@ -3,6 +3,7 @@ import {
   applyEditFirstChoiceResultSideEffects,
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 
 vi.mock('@/lib/edit-script/service', () => ({
@@ -53,7 +54,7 @@ describe('buildEditFirstChoiceResult', () => {
 
     const { callId, name, parsed } = readSyntheticToolResult(choiceResult)
     expect(callId).toBe('tool-call-1')
-    expect(name).toBe('request_edit_first_choice')
+    expect(name).toBe(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
     expect(parsed.choiceType).toBe('duration_and_aspect_ratio')
     expect(parsed.prompt).toBe('民俗恐怖片')
     expect(parsed.durationTier).toBe('medium')

@@ -4,6 +4,10 @@ import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { createEditScriptOperations } from '@/lib/operations/domains/media/edit-script-ops'
 import { TASK_TYPE } from '@/lib/task/types'
+import {
+  EDIT_FIRST_CHOICE_OPERATION_IDS,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+} from '@/lib/project-agent/edit-first-choice-tools'
 
 const serviceMock = vi.hoisted(() => ({
   resolveEditDirectorDecoupageTaskTarget: vi.fn(async () => ({
@@ -237,9 +241,13 @@ const choiceCardMock = vi.hoisted(() => ({
   })),
 }))
 
-vi.mock('@/lib/project-agent/choice-card', () => ({
-  buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
-}))
+vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/project-agent/choice-card')>()
+  return {
+    ...actual,
+    buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
+  }
+})
 
 const interruptionMock = vi.hoisted(() => ({
   createProjectAgentChoiceInterruption: vi.fn(async () => 'choice-interruption-1'),
@@ -297,8 +305,7 @@ describe('edit-script operations', () => {
 
   it('exposes edit-first artifacts as independent operations', () => {
     const operations = createEditScriptOperations()
-
-    expect(Object.keys(operations).sort()).toEqual([
+    const expectedOperationIds = [
       'generate_edit_cinematography_shot_plan',
       'generate_edit_director_decoupage',
       'generate_edit_screenplay',
@@ -307,13 +314,17 @@ describe('edit-script operations', () => {
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_spatial_blocking',
       'generate_edit_style_previews',
-      'request_edit_first_choice',
+      ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       'revise_edit_screenplay',
-    ])
+    ].sort()
+
+    expect(Object.keys(operations).sort()).toEqual(expectedOperationIds)
     expect(operations.generate_edit_script?.summary).toContain('director decoupage')
     expect(operations.generate_edit_script?.confirmation?.required).toBe(true)
     expect(operations.generate_edit_style_previews?.confirmation?.required).toBe(false)
-    expect(operations.request_edit_first_choice?.intent).toBe('query')
+    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
+      expect(operations[operationId]?.intent).toBe('query')
+    }
   })
 
   it('submits screenplay generation as an async screenplay task', async () => {
@@ -484,9 +495,7 @@ describe('edit-script operations', () => {
   it('emits a fixed assistant choice card through the request choice operation', async () => {
     const operations = createEditScriptOperations()
     const writerEvents: Record<string, unknown>[] = []
-    const result = await operations.request_edit_first_choice.execute(buildContext(createTestWriter(writerEvents)), {
-      choiceType: 'duration_and_aspect_ratio',
-    })
+    const result = await operations[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].execute(buildContext(createTestWriter(writerEvents)), {})
 
     expect(workflowMock.resolveEditFirstWorkflowState).toHaveBeenCalledWith({
       projectId: 'project-1',
@@ -503,7 +512,7 @@ describe('edit-script operations', () => {
     }))
     expect(interruptionMock.createProjectAgentChoiceInterruption).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-1',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
       toolCallId: 'tool-call-choice',
       payload: expect.objectContaining({
         choiceType: 'duration_and_aspect_ratio',
@@ -533,12 +542,12 @@ describe('edit-script operations', () => {
     })
   })
 
-  it('rejects next-step confirmation as a structured request choice type', () => {
+  it('does not use choiceType as a request choice input field', () => {
     const operations = createEditScriptOperations()
 
-    expect(operations.request_edit_first_choice.inputSchema.safeParse({
+    expect(operations[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].inputSchema.safeParse({
       choiceType: 'next_step_confirmation',
-    }).success).toBe(false)
+    }).success).toBe(true)
   })
 
   it('submits style preview generation after screenplay review', async () => {

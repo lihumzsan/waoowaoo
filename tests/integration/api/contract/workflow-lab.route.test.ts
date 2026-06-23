@@ -6,6 +6,7 @@ import type {
   WorkflowLabEpisodeSummary,
   WorkflowLabForkResult,
 } from '@/lib/workflow-lab/types'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 const authState = vi.hoisted(() => ({
   authenticated: true,
@@ -58,7 +59,7 @@ const sampleCheckpoint: WorkflowLabCheckpointSummary = {
   title: 'Choose Visual Style',
   detail: 'Choose one candidate.',
   choiceType: 'style',
-  operationId: 'request_edit_first_choice',
+  operationId: EDIT_FIRST_CHOICE_TOOL_IDS.style,
   messageIndex: 1,
   partIndex: 0,
   assistantMessageCount: 2,

@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
-import type { EditFirstChoiceType } from './choice-card'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import { buildEditFirstAssistantChoiceCard } from './choice-card'
 import type {
   EditStylePreviewGenerationPartData,

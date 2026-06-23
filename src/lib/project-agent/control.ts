@@ -1,4 +1,4 @@
-import type { EditFirstChoiceType } from './choice-card'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 type UnknownRecord = Record<string, unknown>
 

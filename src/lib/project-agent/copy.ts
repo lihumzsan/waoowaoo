@@ -25,13 +25,25 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '按 id 获取单个全局场景。',
     en: 'Get a global location by id.',
   },
-  request_edit_first_choice: {
-    zh: '在剪辑先行流程中请求固定内容选择：生成剧本前一次性询问时长和画面比例，剧本生成后请求剧本审核，风格候选 ready 后询问视觉风格，资产和空间档案 ready 后请求资产审核。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
-    en: 'Request a fixed content choice in edit-first production: ask duration and aspect ratio together before screenplay generation, request screenplay review after screenplay generation, ask visual style after style previews are ready, or request asset review after required assets and spatial profiles are ready. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+  request_edit_duration_aspect_ratio_choice: {
+    zh: '在剪辑先行流程中，生成剧本前请求用户一次性选择短片时长和画面比例。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request the user to choose duration and aspect ratio together before screenplay generation in edit-first production. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+  },
+  request_edit_screenplay_review_choice: {
+    zh: '在剪辑先行流程中，剧本生成后请求用户审核剧本：确认进入视觉风格，或提交修改意见。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request screenplay review after screenplay generation in edit-first production: approve progression to visual style, or submit revision notes. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+  },
+  request_edit_style_choice: {
+    zh: '在剪辑先行流程中，视觉风格候选 ready 后请求用户选择一个视觉风格。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request the user to choose one visual style after style preview candidates are ready in edit-first production. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+  },
+  request_edit_asset_review_choice: {
+    zh: '在剪辑先行流程中，资产和空间档案 ready 后请求用户审核资产并确认是否继续。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request required asset review after assets and spatial profiles are ready in edit-first production. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
   },
   generate_edit_screenplay: {
-    zh: '生成剪辑先行剧本。必须传入 prompt、durationTier、aspectRatio 三个字段；durationTier 和 aspectRatio 必须来自 request_edit_first_choice 返回的用户选择结果，不能只依赖 prompt 自然语言。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出给用户；不要只说已生成，也不要让用户去画布查看。',
-    en: 'Generate the edit-first screenplay. You must pass prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection confirmed through request_edit_first_choice; do not rely on prompt text alone. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo it to the user in chat; do not merely say it was generated or tell the user to view the canvas.',
+    zh: '生成剪辑先行剧本。必须传入 prompt、durationTier、aspectRatio 三个字段；durationTier 和 aspectRatio 必须来自 request_edit_duration_aspect_ratio_choice 返回的用户选择结果，不能只依赖 prompt 自然语言。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出给用户；不要只说已生成，也不要让用户去画布查看。',
+    en: 'Generate the edit-first screenplay. You must pass prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection confirmed through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo it to the user in chat; do not merely say it was generated or tell the user to view the canvas.',
   },
   revise_edit_screenplay: {
     zh: '修改当前剪辑先行剧本。仅在剧本已生成、用户尚未确认进入风格候选/导演拆镜/剪辑表前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；必须传入 revisionInstruction、durationTier、aspectRatio，修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
@@ -60,9 +72,21 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
 }
 
 const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: string }> = {
-  request_edit_first_choice: {
-    zh: '确认选择',
-    en: 'Confirm choices',
+  request_edit_duration_aspect_ratio_choice: {
+    zh: '选择时长与画幅',
+    en: 'Choose duration & aspect ratio',
+  },
+  request_edit_screenplay_review_choice: {
+    zh: '审核剧本',
+    en: 'Review screenplay',
+  },
+  request_edit_style_choice: {
+    zh: '选择视觉风格',
+    en: 'Choose visual style',
+  },
+  request_edit_asset_review_choice: {
+    zh: '审核资产',
+    en: 'Review assets',
   },
   generate_edit_screenplay: {
     zh: '生成剧本',

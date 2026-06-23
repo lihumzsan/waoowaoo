@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
+import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 describe('project agent operation registry', () => {
   it('keeps operation ids aligned and core fields defined', () => {
@@ -53,8 +54,10 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_cinematography_shot_plan?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_storyboard_spatial_blocking?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_storyboard?.channels).toEqual({ tool: true, api: true })
-    expect(registry.request_edit_first_choice?.channels).toEqual({ tool: true, api: true })
-    expect(registry.request_edit_first_choice?.intent).toBe('query')
+    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
+      expect(registry[operationId]?.channels).toEqual({ tool: true, api: true })
+      expect(registry[operationId]?.intent).toBe('query')
+    }
 
     expect(registry.delete_storyboard_panel?.groupPath).toEqual(['storyboard', 'edit'])
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])
@@ -67,7 +70,9 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_cinematography_shot_plan?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_storyboard_spatial_blocking?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_storyboard?.groupPath).toEqual(['edit-script'])
-    expect(registry.request_edit_first_choice?.groupPath).toEqual(['edit-script'])
+    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
+      expect(registry[operationId]?.groupPath).toEqual(['edit-script'])
+    }
 
     for (const operation of Object.values(registry)) {
       if (!operation.channels.tool) continue

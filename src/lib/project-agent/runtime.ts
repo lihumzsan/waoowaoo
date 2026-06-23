@@ -52,7 +52,7 @@ import {
   type ProjectAgentRunLock,
 } from './run-lock'
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
-import type { EditFirstChoiceType } from './choice-card'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import {
   clearProjectAgentInterruptionRunState,
   createProjectAgentApprovalInterruption,

@@ -4,6 +4,10 @@ import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowOperationId, EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { ProjectAgentRunRecord } from '@/lib/project-agent/runs'
+import {
+  EDIT_FIRST_CHOICE_OPERATION_IDS,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+} from '@/lib/project-agent/edit-first-choice-tools'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 const streamState = vi.hoisted(() => ({
@@ -405,7 +409,7 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'get_project_data',
     'get_task',
     'list_tasks',
-    'request_edit_first_choice',
+    ...EDIT_FIRST_CHOICE_OPERATION_IDS,
   ]
   const actIds = [
     'generate_edit_screenplay',
@@ -493,13 +497,13 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([
       'get_project_phase',
       'get_project_context',
-      'request_edit_first_choice',
+      ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       'generate_edit_screenplay',
     ]))
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
-    expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
+    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('[project_state_snapshot]')
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',
@@ -509,7 +513,10 @@ describe('project agent runtime deterministic tool injection', () => {
       action: 'assistant.toolset.resolved',
       details: expect.objectContaining({
         toolset: expect.objectContaining({
-          operationIds: expect.arrayContaining(['request_edit_first_choice', 'generate_edit_screenplay']),
+          operationIds: expect.arrayContaining([
+            EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+            'generate_edit_screenplay',
+          ]),
         }),
       }),
     }))
@@ -590,9 +597,9 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
     expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.capturedEnabledToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedEnabledToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
   })
 
   it('allows a choice response run to finish when the model chooses not to call another tool', async () => {
@@ -685,7 +692,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     expect(streamState.executedToolNames).toEqual(['generate_edit_screenplay'])
-    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('request_edit_first_choice')
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
     expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('generate_edit_style_previews')
     expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('revise_edit_screenplay')
   })
@@ -725,7 +732,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(response.status).toBe(200)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
   })
 
   it('keeps screenplay review card available after screenplay generation', async () => {
@@ -736,7 +743,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     await runAssistant({ text: '剧本满意' })
 
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
     expect(streamState.capturedToolNames).toContain('revise_edit_screenplay')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
   })
@@ -755,7 +762,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
-    expect(streamState.capturedTools.request_edit_first_choice.needsApproval).toBeUndefined()
+    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前权限模式：auto')
   })
 
@@ -838,7 +845,7 @@ describe('project agent runtime deterministic tool injection', () => {
     })
 
     expect(streamState.capturedToolNames).toContain('get_project_phase')
-    expect(streamState.capturedToolNames).toContain('request_edit_first_choice')
+    expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.style)
     expect(streamState.capturedToolNames).toContain('generate_edit_script')
   })
 

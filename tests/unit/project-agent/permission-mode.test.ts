@@ -4,6 +4,7 @@ import {
   parseAssistantPermissionMode,
   shouldRequireAssistantToolApproval,
 } from '@/lib/project-agent/permission-mode'
+import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 function buildOperation(id: string) {
@@ -70,7 +71,7 @@ describe('assistant permission mode', () => {
       'ui_single_select',
       'ui_multi_select',
       'ui_safety_ack',
-      'request_edit_first_choice',
+      ...EDIT_FIRST_CHOICE_OPERATION_IDS,
     ]) {
       expect(shouldRequireAssistantToolApproval({
         mode: 'ask',

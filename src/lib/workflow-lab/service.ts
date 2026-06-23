@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib/project-agent/persistence'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import {
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
@@ -224,7 +225,7 @@ async function createLabChoiceInterruption(params: {
       episodeId: params.episodeId,
       type: 'choice',
       status: 'pending',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS[params.checkpoint.choiceType],
       approvalId: `choice:${crypto.randomUUID()}`,
       toolCallId: `workflow-lab:${crypto.randomUUID()}`,
       payload: {

@@ -27,7 +27,10 @@ import {
 } from '@/lib/project-agent/choice-card'
 import type {
   EditFirstChoiceType,
-} from '@/lib/project-agent/choice-card'
+} from '@/lib/project-agent/edit-first-choice-tools'
+import {
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+} from '@/lib/project-agent/edit-first-choice-tools'
 import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
@@ -60,8 +63,8 @@ const confirmedInputFields = {
 const generateEditScreenplayInputSchema = z.object({
   ...confirmedInputFields,
   prompt: z.string().trim().min(1).describe('The user creative request/story premise. Do not use this field as the only carrier for duration or aspect ratio.'),
-  durationTier: editFirstDurationTierSchema.describe('Required edit-first duration tier. Use the value selected by the user in request_edit_first_choice: short, medium, or long.'),
-  aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the value selected by the user in request_edit_first_choice.'),
+  durationTier: editFirstDurationTierSchema.describe('Required edit-first duration tier. Use the value selected by the user in request_edit_duration_aspect_ratio_choice: short, medium, or long.'),
+  aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the value selected by the user in request_edit_duration_aspect_ratio_choice.'),
 }).passthrough()
 
 const reviseEditScreenplayInputSchema = z.object({
@@ -79,9 +82,8 @@ const generateEditStylePreviewsInputSchema = z.object({
   count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
 }).passthrough()
 
-const requestEditFirstChoiceInputSchema = z.object({
+const requestEditChoiceInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'asset_review']),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -117,7 +119,7 @@ const generateEditScriptStoryboardInputSchema = z.object({
 type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
 type ReviseEditScreenplayInput = z.infer<typeof reviseEditScreenplayInputSchema>
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
-type RequestEditFirstChoiceInput = z.infer<typeof requestEditFirstChoiceInputSchema>
+type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
 type GenerateEditDirectorDecoupageInput = z.infer<typeof generateEditDirectorDecoupageInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
@@ -280,6 +282,81 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
   }
 }
 
+const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
+  duration_and_aspect_ratio: 'Request the edit-first duration and aspect ratio choice before screenplay generation. This tool has a fixed choice type; do not pass a choiceType argument.',
+  screenplay_review: 'Request screenplay review after the screenplay is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+}
+
+function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
+  const operationId = EDIT_FIRST_CHOICE_TOOL_IDS[choiceType]
+  return defineOperation({
+    id: operationId,
+    summary: REQUEST_EDIT_CHOICE_SUMMARIES[choiceType],
+    intent: 'query',
+    prerequisites: { episodeId: 'required' },
+    effects: EFFECTS_NONE,
+    inputSchema: requestEditChoiceInputSchema,
+    outputSchema: requestEditFirstChoiceOutputSchema,
+    execute: async (ctx, input: RequestEditChoiceInput) => {
+      const toolCallId = ctx.toolCallId?.trim() || ''
+      if (!toolCallId) {
+        throw new Error('REQUEST_EDIT_CHOICE_TOOL_CALL_ID_REQUIRED')
+      }
+      const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+      const workflow = await resolveEditFirstWorkflowState({
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        episodeId,
+      })
+      const locale = resolveLocale(ctx.context.locale)
+      const runId = ctx.context.runId?.trim()
+      if (!runId) {
+        throw new Error('REQUEST_EDIT_CHOICE_RUN_ID_REQUIRED')
+      }
+      const card = await buildEditFirstAssistantChoiceCard({
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        episodeId,
+        locale,
+        workflow,
+        choiceType,
+        toolCallId,
+      })
+      const interruptionId = await createProjectAgentChoiceInterruption({
+        runId,
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        episodeId,
+        assistantId: 'workspace-command',
+        operationId,
+        toolCallId,
+        previousActivityId: ctx.context.currentActivityId ?? null,
+        payload: toInputJsonValue({
+          choiceType,
+          cardId: card.cardId,
+          card: {
+            ...card,
+            runId,
+          },
+        }),
+      })
+      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', {
+        ...card,
+        runId,
+        interruptionId,
+      })
+      return requestEditFirstChoiceOutputSchema.parse({
+        emitted: true,
+        choiceType,
+        cardId: card.cardId,
+        workflowStage: workflow.stage,
+      })
+    },
+  })
+}
+
 export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft {
   const editScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
@@ -308,7 +385,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
   return {
     generate_edit_screenplay: defineOperation({
       id: 'generate_edit_screenplay',
-      summary: 'Generate the editable screenplay artifact for edit-first production. Required input fields: prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection made through request_edit_first_choice; do not rely on prompt text alone. Stops at screenplay review; style preview images are generated by generate_edit_style_previews after user approval.',
+      summary: 'Generate the editable screenplay artifact for edit-first production. Required input fields: prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection made through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. Stops at screenplay review; style preview images are generated by generate_edit_style_previews after user approval.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -437,71 +514,10 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         return result
       },
     }),
-    request_edit_first_choice: defineOperation({
-      id: 'request_edit_first_choice',
-      summary: 'Request a fixed assistant choice card for edit-first production content choices only. Use duration_and_aspect_ratio before screenplay generation, screenplay_review after screenplay generation, style after screenplay-based style previews are ready, and asset_review after required assets and spatial profiles are ready. Do not use this tool for execution permission; call the target operation directly and let runtime approval handle confirmation.',
-      intent: 'query',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_NONE,
-      inputSchema: requestEditFirstChoiceInputSchema,
-      outputSchema: requestEditFirstChoiceOutputSchema,
-      execute: async (ctx, input: RequestEditFirstChoiceInput) => {
-        const toolCallId = ctx.toolCallId?.trim() || ''
-        if (!toolCallId) {
-          throw new Error('REQUEST_EDIT_FIRST_CHOICE_TOOL_CALL_ID_REQUIRED')
-        }
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const workflow = await resolveEditFirstWorkflowState({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-        })
-        const choiceType: EditFirstChoiceType = input.choiceType
-        const locale = resolveLocale(ctx.context.locale)
-        const runId = ctx.context.runId?.trim()
-        if (!runId) {
-          throw new Error('REQUEST_EDIT_FIRST_CHOICE_RUN_ID_REQUIRED')
-        }
-        const card = await buildEditFirstAssistantChoiceCard({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          locale,
-          workflow,
-          choiceType,
-          toolCallId,
-        })
-        const interruptionId = await createProjectAgentChoiceInterruption({
-          runId,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          assistantId: 'workspace-command',
-          operationId: 'request_edit_first_choice',
-          toolCallId,
-          previousActivityId: ctx.context.currentActivityId ?? null,
-          payload: toInputJsonValue({
-            choiceType,
-            cardId: card.cardId,
-            card: {
-              ...card,
-              runId,
-            },
-          }),
-        })
-        writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', {
-          ...card,
-          runId,
-          interruptionId,
-        })
-        return requestEditFirstChoiceOutputSchema.parse({
-          emitted: true,
-          choiceType,
-          cardId: card.cardId,
-          workflowStage: workflow.stage,
-        })
-      },
-    }),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio]: buildRequestEditChoiceOperation('duration_and_aspect_ratio'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review]: buildRequestEditChoiceOperation('screenplay_review'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.style]: buildRequestEditChoiceOperation('style'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.asset_review]: buildRequestEditChoiceOperation('asset_review'),
     generate_edit_director_decoupage: defineOperation({
       id: 'generate_edit_director_decoupage',
       summary: 'Generate the full-shot director decoupage from a ready edit screenplay and Style Bible before building the executable edit table.',

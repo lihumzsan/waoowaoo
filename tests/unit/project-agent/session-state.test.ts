@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 const workflow = {
   active: true,
@@ -137,7 +138,13 @@ vi.mock('@/lib/project-workflow/edit-first', () => workflowMock)
 vi.mock('@/lib/project-agent/runs', () => runsMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionsMock)
 vi.mock('@/lib/project-agent/waits', () => waitsMock)
-vi.mock('@/lib/project-agent/choice-card', () => choiceCardMock)
+vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/project-agent/choice-card')>()
+  return {
+    ...actual,
+    buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
+  }
+})
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
@@ -281,7 +288,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: { choiceType: 'screenplay_review', cardId: 'edit-first-screenplay-review' },
@@ -292,7 +299,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: { choiceType: 'screenplay_review', cardId: 'edit-first-screenplay-review' },

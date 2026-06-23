@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import type { EditFirstChoiceType } from '@/lib/project-agent/choice-card'
+import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 import type {
   ProjectAgentChoiceCardPartData,
   ProjectAgentInterruptionPartData,
@@ -128,7 +128,7 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
           title: choiceCard.title,
           detail: choiceCard.description ?? null,
           choiceType: choiceCard.choiceType,
-          operationId: 'request_edit_first_choice',
+          operationId: EDIT_FIRST_CHOICE_TOOL_IDS[choiceCard.choiceType],
           messageIndex,
           partIndex,
           assistantMessageCount: messageIndex + 1,

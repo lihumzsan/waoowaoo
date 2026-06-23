@@ -1,5 +1,5 @@
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import type { EditFirstChoiceType } from '@/lib/project-agent/choice-card'
+import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 
 export type WorkflowLabCheckpointKind = 'choice' | 'approval'
 

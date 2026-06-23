@@ -5,6 +5,7 @@ import {
   PROJECT_AGENT_MAX_TURNS,
   createProjectAgentStopController,
 } from '@/lib/project-agent/stop-conditions'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 function toolErrorOutput(operationId: string, code: string) {
   return {
@@ -117,7 +118,7 @@ describe('project agent business stop signals', () => {
   it('[choice card emitted] -> stops so the agent waits for the user choice', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([{
-      toolName: 'request_edit_first_choice',
+      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
       output: {
         ok: true,
         data: {
@@ -132,7 +133,7 @@ describe('project agent business stop signals', () => {
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
       stepCount: 1,
-      operationIds: ['request_edit_first_choice'],
+      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio],
     })
   })
 

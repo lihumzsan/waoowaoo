@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { makeTestOperation, EFFECTS_NONE, EFFECTS_WRITE } from '../../helpers/project-agent-operations'
 
 const registryState = vi.hoisted(() => ({
@@ -254,9 +255,10 @@ describe('executeProjectAgentOperationFromTool gates', () => {
 
   it('[ask choice-card operation without approval] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
+    const operationId = EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio
     registryState.registry = {
-      request_edit_first_choice: makeTestOperation({
-        id: 'request_edit_first_choice',
+      [operationId]: makeTestOperation({
+        id: operationId,
         intent: 'query',
         effects: EFFECTS_NONE,
         confirmation: { required: false },
@@ -268,7 +270,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
 
     const result = await executeProjectAgentOperationFromTool({
       request: buildRequest(),
-      operationId: 'request_edit_first_choice',
+      operationId,
       projectId: 'project-1',
       userId: 'user-1',
       context: {},

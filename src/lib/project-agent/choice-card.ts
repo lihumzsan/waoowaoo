@@ -13,11 +13,19 @@ import {
   resolveEditFirstDurationSpec,
   type EditFirstDurationTier,
 } from '@/lib/edit-script/duration-tier'
+export {
+  EDIT_FIRST_CHOICE_OPERATION_IDS,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+  isEditFirstChoiceToolId,
+} from './edit-first-choice-tools'
+export type {
+  EditFirstChoiceToolId,
+  EditFirstChoiceType,
+} from './edit-first-choice-tools'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
-
-export type EditFirstChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
 
 export function readEditFirstDurationTier(text: string): EditFirstDurationTier | null {
   return readEditFirstDurationTierFromText(text)
@@ -154,7 +162,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
   const selectedAspectRatio = EDIT_FIRST_ASPECT_RATIOS.find((ratio) => ratio === project.videoRatio)
   if (!selectedAspectRatio) {
-    throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: call request_edit_first_choice with choiceType=duration_and_aspect_ratio before style choice')
+    throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: call request_edit_duration_aspect_ratio_choice before style choice')
   }
   if (!screenplay) {
     throw new Error('EDIT_FIRST_CHOICE_SCREENPLAY_NOT_FOUND')

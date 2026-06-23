@@ -3,6 +3,7 @@ import {
   normalizeOperationRuntimeSignal,
   stableArgsHash,
 } from '@/lib/project-agent/runtime-signal'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 describe('project agent runtime signal', () => {
   it('[async single] -> await_task signal', () => {
@@ -122,7 +123,7 @@ describe('project agent runtime signal', () => {
 
   it('[choice card emitted] -> await_user_confirmation signal', () => {
     expect(normalizeOperationRuntimeSignal({
-      toolName: 'request_edit_first_choice',
+      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
       output: {
         ok: true,
         data: {
@@ -134,7 +135,7 @@ describe('project agent runtime signal', () => {
       },
     })).toEqual({
       kind: 'await_user_confirmation',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
     })
   })
 

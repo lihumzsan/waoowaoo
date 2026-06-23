@@ -8,6 +8,11 @@ import {
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowOperationId, EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first'
+import {
+  EDIT_FIRST_CHOICE_OPERATION_IDS,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+  isEditFirstChoiceToolId,
+} from '@/lib/project-agent/edit-first-choice-tools'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
 
 function makeOperation(id: string, intent: 'query' | 'plan' | 'act' = 'query') {
@@ -50,12 +55,12 @@ function registry(): ProjectAgentOperationRegistry {
     'get_project_context',
     'get_project_snapshot',
     'get_task_status',
-    'request_edit_first_choice',
+    ...EDIT_FIRST_CHOICE_OPERATION_IDS,
     ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   ]
   return Object.fromEntries(ids.map((id) => [
     id,
-    makeOperation(id, id.startsWith('get_') ? 'query' : id === 'request_edit_first_choice' ? 'query' : 'act'),
+    makeOperation(id, id.startsWith('get_') || isEditFirstChoiceToolId(id) ? 'query' : 'act'),
   ]))
 }
 
@@ -70,7 +75,7 @@ describe('project agent live toolset registration', () => {
     expect(result.operationIds).toEqual(expect.arrayContaining([
       'get_project_phase',
       'get_project_context',
-      'request_edit_first_choice',
+      ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
     ]))
   })
@@ -82,7 +87,7 @@ describe('project agent live toolset registration', () => {
     })
 
     expect(result.operationIds).toContain('generate_edit_screenplay')
-    expect(result.operationIds).toContain('request_edit_first_choice')
+    expect(result.operationIds).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
     expect(result.includeChoiceOperation).toBe(true)
   })
 
@@ -194,7 +199,7 @@ describe('project agent live operation enablement', () => {
     })
 
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_phase')).toBe(true)
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'request_edit_first_choice')).toBe(true)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_script')).toBe(false)
   })
 

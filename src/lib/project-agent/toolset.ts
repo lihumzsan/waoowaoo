@@ -4,6 +4,10 @@ import {
   EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   resolveEditFirstWorkflowCapabilityOperationIds,
 } from '@/lib/project-workflow/edit-first'
+import {
+  EDIT_FIRST_CHOICE_OPERATION_IDS,
+  isEditFirstChoiceToolId,
+} from './edit-first-choice-tools'
 import type { ProjectAgentContext } from './types'
 
 const CORE_OPERATION_IDS = [
@@ -24,8 +28,6 @@ const CORE_OPERATION_IDS = [
   'get_task',
   'list_tasks',
 ] as const
-
-const EDIT_FIRST_CHOICE_OPERATION_ID = 'request_edit_first_choice'
 
 /**
  * Tool surface for a project agent run.
@@ -99,14 +101,16 @@ export function resolveProjectAgentToolset(params: {
   }
 
   if (includeChoiceOperation) {
-    const beforeLength = operationIds.length
-    pushRequiredTool({
-      registry: params.registry,
-      operationIds,
-      operationId: EDIT_FIRST_CHOICE_OPERATION_ID,
-    })
-    if (operationIds.length > beforeLength) {
-      workflowOperationIds.push(EDIT_FIRST_CHOICE_OPERATION_ID)
+    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
+      const beforeLength = operationIds.length
+      pushRequiredTool({
+        registry: params.registry,
+        operationIds,
+        operationId,
+      })
+      if (operationIds.length > beforeLength) {
+        workflowOperationIds.push(operationId)
+      }
     }
   }
 
@@ -147,8 +151,8 @@ export function resolveProjectAgentToolset(params: {
 
 /**
  * Operations whose availability does not depend on the live workflow state:
- * read/UI core tools, the choice card (its execution validates choiceType
- * against the live workflow stage), and the run's resumed approval operation.
+ * read/UI core tools, edit-first choice cards (their execution validates the
+ * fixed choice type against the live workflow stage), and the run's resumed approval operation.
  * A restored approval must stay callable even if the workflow has moved past
  * the stage that originally offered it.
  */
@@ -158,7 +162,7 @@ export function isProjectAgentOperationAlwaysEnabled(
 ): boolean {
   return toolset.coreOperationIds.includes(operationId)
     || operationId === toolset.resumeOperationId
-    || operationId === EDIT_FIRST_CHOICE_OPERATION_ID
+    || isEditFirstChoiceToolId(operationId)
 }
 
 /**

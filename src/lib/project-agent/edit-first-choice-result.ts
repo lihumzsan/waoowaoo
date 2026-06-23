@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { EditFirstChoiceType } from './choice-card'
+import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 import {
   isEditFirstDurationTier,
@@ -51,18 +51,19 @@ function buildChoiceInputItems(params: {
   result: UnknownRecord
 }): AgentInputItem[] {
   const callId = params.toolCallId ?? `edit_first_choice_${randomUUID()}`
+  const toolName = EDIT_FIRST_CHOICE_TOOL_IDS[params.choiceType]
   return [
     {
       type: 'function_call',
       callId,
-      name: 'request_edit_first_choice',
+      name: toolName,
       status: 'completed',
-      arguments: JSON.stringify({ choiceType: params.choiceType }),
+      arguments: JSON.stringify({}),
     } as AgentInputItem,
     {
       type: 'function_call_result',
       callId,
-      name: 'request_edit_first_choice',
+      name: toolName,
       status: 'completed',
       output: {
         type: 'text',

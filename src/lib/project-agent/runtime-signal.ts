@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isEditFirstChoiceToolId } from './edit-first-choice-tools'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -210,7 +211,7 @@ function normalizeActiveOperationTasks(toolName: string, data: UnknownRecord | n
 }
 
 function normalizeChoiceCardSignal(toolName: string, data: UnknownRecord | null): OperationRuntimeSignal | null {
-  if (toolName !== 'request_edit_first_choice' || !data || data.emitted !== true) return null
+  if (!isEditFirstChoiceToolId(toolName) || !data || data.emitted !== true) return null
   return {
     kind: 'await_user_confirmation',
     operationId: toolName,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { buildMockRequest } from '../../../helpers/request'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 
 const authState = vi.hoisted(() => ({
   authenticated: true,
@@ -62,6 +63,7 @@ const runMock = vi.hoisted(() => ({
     controlKind: 'approval_response',
   })),
   safelyUpdateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
+  updateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
   supersedePendingRunsInScope: vi.fn(async (): Promise<string[]> => []),
 }))
 
@@ -104,6 +106,20 @@ const threadLogMock = vi.hoisted(() => ({
   writeWorkspaceAssistantThreadLog: vi.fn(async () => '/tmp/workspace-assistant.log'),
   serializeWorkspaceAssistantThreadLog: vi.fn(() => '# Workspace Assistant Thread Log'),
   buildWorkspaceAssistantThreadLogFileName: vi.fn(() => 'workspace-assistant__project-1__episode_episode-1__thread-1.log'),
+}))
+
+const eventMock = vi.hoisted(() => ({
+  appendProjectAgentEvents: vi.fn(async (): Promise<void> => undefined),
+  getCurrentProjectAgentActivity: vi.fn(async (): Promise<unknown> => ({
+    activityId: 'activity-choice-1',
+    runId: 'run-1',
+    type: 'awaiting_choice',
+    status: 'waiting',
+    operationId: 'request_edit_screenplay_review_choice',
+    sourceOperationId: null,
+    toolCallId: 'tool-choice-1',
+    choiceType: 'screenplay_review',
+  })),
 }))
 
 const modelConfigMock = vi.hoisted(() => ({
@@ -150,6 +166,7 @@ vi.mock('@/lib/project-agent/interruptions', () => interruptionMock)
 vi.mock('@/lib/project-agent/runs', () => runMock)
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
 vi.mock('@/lib/project-agent/thread-log', () => threadLogMock)
+vi.mock('@/lib/project-agent/event', () => eventMock)
 vi.mock('@/lib/config-service', () => modelConfigMock)
 vi.mock('@/lib/project-agent/model', () => modelResolverMock)
 vi.mock('@/lib/project-agent/message-compression', () => messageCompressionMock)
@@ -531,7 +548,7 @@ describe('project assistant chat route', () => {
       runId: 'run-1',
       type: 'choice',
       status: 'consumed',
-      operationId: 'request_edit_first_choice',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
       toolCallId: 'tool-choice-1',
       payload: { choiceType: 'duration_and_aspect_ratio' },
     })

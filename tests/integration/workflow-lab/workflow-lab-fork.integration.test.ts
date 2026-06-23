@@ -10,6 +10,7 @@ import {
 import { prisma } from '../../helpers/prisma'
 import { buildProjectAssistantScopeRef } from '@/lib/project-agent/persistence'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import {
   forkWorkflowLabCheckpointProject,
   listWorkflowLabCheckpoints,
@@ -331,7 +332,7 @@ describe('workflow lab checkpoint project fork integration', () => {
         status: 'pending',
       },
     })
-    expect(pendingChoice.operationId).toBe('request_edit_first_choice')
+    expect(pendingChoice.operationId).toBe(EDIT_FIRST_CHOICE_TOOL_IDS.style)
     expect(pendingChoice.payload).toMatchObject({
       choiceType: 'style',
     })
