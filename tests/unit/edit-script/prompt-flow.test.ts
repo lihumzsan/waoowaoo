@@ -249,6 +249,9 @@ describe('edit script block-first prompt flow', () => {
     expect(panelFinalPromptBlock).toContain('Cinematography Shot Plan 决定 shot 的景别、焦段、景深、机位')
     expect(panelFinalPromptBlock).toContain('不能重新发明镜头')
     expect(panelFinalPromptBlock).toContain('每个 panel 必须输出 shotBlocking')
+    expect(panelFinalPromptBlock).toContain('shotBlocking 只能包含 JSON 示例中的字段')
+    expect(panelFinalPromptBlock).toContain('禁止在 shotBlocking 中输出 lighting、lens、shotScale')
+    expect(panelFinalPromptBlock).toContain('必须转写进 finalPanelPrompt / finalVideoPrompt')
     expect(panelFinalPromptBlock).toContain('"absolutePosition"')
     expect(panelFinalPromptBlock).toContain('"relativePosition"')
     expect(panelFinalPromptBlock).toContain('"screenPosition"')
@@ -258,6 +261,28 @@ describe('edit script block-first prompt flow', () => {
     expect(panelFinalPromptBlock).toContain('panelFinalPromptBlockOutput')
     expect(panelFinalPromptBlock).not.toContain('panelVisualPlanBlockOutput')
     expect(panelFinalPromptBlock).not.toContain('cameraPlanBlockOutput')
+
+    const englishPanelFinalPromptBlock = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK,
+      locale: 'en',
+      variables: {
+        director_decoupage_json: JSON.stringify({ shots: [] }),
+        cinematography_shot_plan_json: JSON.stringify({ shots: [] }),
+        full_edit_script_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        source_snapshot_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        spatial_profile_strategy_output_json: JSON.stringify({ strategy: 'spatial_text_blocking', locations: [] }),
+        video_block_json: JSON.stringify({ sourceVideoBlockId: 'block-1' }),
+        block_shots_json: JSON.stringify([{ shotNumber: 1 }]),
+        adjacent_blocks_json: JSON.stringify({ previous: null, next: null }),
+        previous_block_json: JSON.stringify(null),
+        next_block_json: JSON.stringify(null),
+        panel_contract_json: JSON.stringify([{ panelIndex: 0, sourceShotNumber: 1 }]),
+      },
+    })
+
+    expect(englishPanelFinalPromptBlock).toContain('shotBlocking may contain only the fields shown in the JSON example')
+    expect(englishPanelFinalPromptBlock).toContain('Do not output lighting, lens, shotScale')
+    expect(englishPanelFinalPromptBlock).toContain('must be rewritten into finalPanelPrompt / finalVideoPrompt')
 
     const englishPrimaryPrompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,

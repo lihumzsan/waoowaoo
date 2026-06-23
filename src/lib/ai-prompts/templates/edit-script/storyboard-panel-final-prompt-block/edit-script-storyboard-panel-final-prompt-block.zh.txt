@@ -7,6 +7,8 @@
 - spatial_profile_strategy_output_json 是真实空间事实；不得违反空间锚点、前中后景和光线方向。
 - 每个 panel 必须输出 shotBlocking，作为结构化执行数据；它只能来自 Cinematography Shot Plan、spatial_profile_strategy_output_json、Director Decoupage 和 edit script 动作，不得另编一套调度。
 - shotBlocking 必须用 absolutePosition、relativePosition、screenPosition、characterPlacements、cameraPlacement、cameraMovement、composition、continuityNote 把人物站位、相对关系、画面位置、机位、运镜/静止状态和连续性写清楚。
+- shotBlocking 只能包含 JSON 示例中的字段；禁止在 shotBlocking 中输出 lighting、lens、shotScale、cameraHeight、cameraAngle、depthOfField、axisAndEyeline、continuityIn、continuityOut 或任何其他额外字段。
+- Cinematography Shot Plan 中的 lighting、lens、shotScale、cameraHeight、cameraAngle、depthOfField、axisAndEyeline 等摄影信息必须转写进 finalPanelPrompt / finalVideoPrompt，不能作为 shotBlocking 的字段输出。
 - finalPanelPrompt 必须是可直接交给图片模型的单张电影分镜图提示词。
 - finalVideoPrompt 必须是可直接交给视频模型的当前 shot 视频提示词，必须包含导演动作、摄影运动/静止、声音和时长约束。
 - 不输出 x/y、坐标、网格、coordinate、blockedZones、cameraVantages、profileSource。
