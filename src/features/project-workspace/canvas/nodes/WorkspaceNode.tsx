@@ -1497,7 +1497,7 @@ function EditAssetGroupContent({
                 selectAsset()
               }}
             >
-              <div className="relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)]">
+              <div className={`relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)] ${asset.isRunning ? 'workspace-node-loading-surface' : ''}`}>
                 {imageUrl ? (
                   <MediaImageWithLoading
                     src={imageUrl}
@@ -1505,7 +1505,7 @@ function EditAssetGroupContent({
                     containerClassName="h-full w-full bg-slate-100"
                     className="h-full w-full object-cover"
                   />
-                ) : (
+                ) : asset.isRunning ? null : (
                   <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
                 )}
                 {previewSourceImageUrl && imageUrl && onPreviewImage ? (
@@ -1522,11 +1522,6 @@ function EditAssetGroupContent({
                   >
                     <AppIcon name="searchPlus" className="h-4 w-4" />
                   </button>
-                ) : null}
-                {asset.isRunning ? (
-                  <span className="workspace-node-loading-surface absolute inset-0 z-10 flex items-center justify-center bg-[var(--glass-overlay)] text-white">
-                    <LoadingSpinner />
-                  </span>
                 ) : null}
               </div>
               <div className="px-2.5 py-1.5">

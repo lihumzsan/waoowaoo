@@ -173,6 +173,17 @@ describe('workspace node rendering', () => {
             eyebrow: 'Location',
             description: 'Dock description',
             shotNumbers: [1],
+            statusLabel: 'Pending',
+            isRunning: false,
+            previewImageUrl: null,
+          },
+          {
+            requirementId: 'req-running-location',
+            kind: 'location',
+            name: 'Corridor',
+            eyebrow: 'Location',
+            description: 'Corridor description',
+            shotNumbers: [2],
             statusLabel: 'Processing',
             isRunning: true,
             previewImageUrl: null,
@@ -193,7 +204,7 @@ describe('workspace node rendering', () => {
     expect(html).not.toContain('aria-label="previewLarge: Dock"')
     expect(html).toContain('data-icon="mapPin"')
     expect(html).toContain('workspace-node-loading-surface')
-    expect(html).toContain('data-icon="loader"')
+    expect(html).not.toContain('absolute inset-0 z-10 flex items-center justify-center')
   })
 
   it('uses shot text as the edit script preview fallback when storyboard media is missing', () => {
