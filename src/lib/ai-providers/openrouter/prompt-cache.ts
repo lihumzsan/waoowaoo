@@ -41,10 +41,13 @@ function normalizeModelId(modelId: string): string {
   return modelId.trim().toLowerCase().replace(/^openrouter::/, '')
 }
 
-function toOpenRouterCacheControl(cacheControl: ProviderPromptCacheControl): OpenRouterCacheControl {
+function toOpenRouterCacheControl(
+  cacheControl: ProviderPromptCacheControl,
+  family: OpenRouterPromptCacheFamily,
+): OpenRouterCacheControl {
   return {
     type: cacheControl.type,
-    ...(cacheControl.ttl ? { ttl: cacheControl.ttl } : {}),
+    ...(family === 'anthropic' && cacheControl.ttl ? { ttl: cacheControl.ttl } : {}),
   }
 }
 
@@ -99,7 +102,7 @@ function toOpenRouterContent(
     type: 'text',
     text: part.text,
     ...(allowCacheControl && part.cacheControl && allowedCacheIndexes.has(index)
-      ? { cache_control: toOpenRouterCacheControl(part.cacheControl) }
+      ? { cache_control: toOpenRouterCacheControl(part.cacheControl, family) }
       : {}),
   }))
 }

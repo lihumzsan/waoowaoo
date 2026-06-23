@@ -111,7 +111,7 @@ describe('OpenRouter prompt cache provider contract', () => {
         {
           type: 'text',
           text: 'stable context',
-          cache_control: { type: 'ephemeral', ttl: '1h' },
+          cache_control: { type: 'ephemeral' },
         },
         { type: 'text', text: 'dynamic question' },
       ],
