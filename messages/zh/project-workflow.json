@@ -470,6 +470,7 @@
         "targetAsset": "资产 ID",
         "characterAsset": "需求人物",
         "locationAsset": "需求场景",
+        "previewLarge": "查看大图",
         "yes": "是",
         "lineKind": {
           "action": "动作",
@@ -806,8 +807,8 @@
         },
         "editAssetGroup": {
           "title": "资产需求",
-          "eyebrow": "角色 / 场景资产",
-          "body": "本片需要预生成的角色与场景资产。点击任一资产可查看详情并单独重新生成。",
+          "eyebrow": "角色与场景资产",
+          "body": "本片需要预生成的角色与场景资产。点击卡片查看详情并单独重新生成，点击图片上的放大按钮查看大图。",
           "meta": "{characters} 个人物 · {locations} 个场景"
         }
       }

@@ -1465,24 +1465,37 @@ function EditAssetGroupContent({
   readonly labels: ReturnType<typeof useTranslations>
 }) {
   const [open, setOpen] = useState<string | null>(null)
+  const onPreviewImage = useContext(WorkspaceNodeImagePreviewContext)
   const details = data.editAssetGroupDetails
   if (!details || details.assets.length === 0) {
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
   const current = details.assets.find((asset) => asset.requirementId === open) ?? null
+  const currentPreviewSourceImageUrl = current?.previewImageUrl ?? null
+  const currentPreviewDisplayImageUrl = toDisplayImageUrl(currentPreviewSourceImageUrl)
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       {renderSection(labels('description'), renderTextBlock(data.body))}
       <div className="grid grid-cols-3 gap-2.5">
         {details.assets.map((asset) => {
           const on = open === asset.requirementId
-          const imageUrl = toDisplayImageUrl(asset.previewImageUrl ?? null)
+          const previewSourceImageUrl = asset.previewImageUrl ?? null
+          const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
+          const selectAsset = () => setOpen(on ? null : asset.requirementId)
           return (
-            <button
+            <div
               key={asset.requirementId}
-              type="button"
-              className={`nodrag overflow-hidden rounded-[14px] border bg-white text-left transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
-              onClick={(event) => { event.stopPropagation(); setOpen(on ? null : asset.requirementId) }}
+              role="button"
+              tabIndex={0}
+              aria-pressed={on}
+              className={`nodrag group cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+              onClick={(event) => { event.stopPropagation(); selectAsset() }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                event.stopPropagation()
+                selectAsset()
+              }}
             >
               <div className="relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)]">
                 {imageUrl ? (
@@ -1495,6 +1508,21 @@ function EditAssetGroupContent({
                 ) : (
                   <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
                 )}
+                {previewSourceImageUrl && imageUrl && onPreviewImage ? (
+                  <button
+                    type="button"
+                    className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white opacity-100 shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/80 md:opacity-0 md:group-hover:opacity-100"
+                    aria-label={`${labels('previewLarge')}: ${asset.name}`}
+                    title={labels('previewLarge')}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onPreviewImage(previewSourceImageUrl)
+                    }}
+                  >
+                    <AppIcon name="imagePreview" className="h-4 w-4" />
+                  </button>
+                ) : null}
                 {asset.isRunning ? (
                   <span className="workspace-node-loading-surface absolute inset-0 z-10 flex items-center justify-center bg-[var(--glass-overlay)] text-white">
                     <LoadingSpinner />
@@ -1505,7 +1533,7 @@ function EditAssetGroupContent({
                 <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
                 <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -1521,20 +1549,35 @@ function EditAssetGroupContent({
             { label: labels('shotCount'), value: current.shotNumbers.join(', ') },
           ])}
           {renderTextBlock(current.description)}
-          {current.action && current.actionLabel ? (
-            <button
-              type="button"
-              className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={current.isRunning}
-              onClick={(event) => {
-                event.stopPropagation()
-                if (current.action && !current.isRunning) data.onAction?.(current.action, data.nodeId)
-              }}
-            >
-              <AppIcon name="refresh" className="h-3.5 w-3.5" />
-              {current.actionLabel}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {currentPreviewSourceImageUrl && currentPreviewDisplayImageUrl && onPreviewImage ? (
+              <button
+                type="button"
+                className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onPreviewImage(currentPreviewSourceImageUrl)
+                }}
+              >
+                <AppIcon name="imagePreview" className="h-3.5 w-3.5" />
+                {labels('previewLarge')}
+              </button>
+            ) : null}
+            {current.action && current.actionLabel ? (
+              <button
+                type="button"
+                className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={current.isRunning}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (current.action && !current.isRunning) data.onAction?.(current.action, data.nodeId)
+                }}
+              >
+                <AppIcon name="refresh" className="h-3.5 w-3.5" />
+                {current.actionLabel}
+              </button>
+            ) : null}
+          </div>
         </section>
       ) : null}
     </div>

@@ -183,6 +183,12 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('data-media-image-with-loading="true"')
     expect(html).toContain('https://example.com/pilot.png')
+    expect(html).toContain('role="button"')
+    expect(html).toContain('aria-pressed="false"')
+    expect(html).toContain('aria-label="previewLarge: Pilot"')
+    expect(html).toContain('title="previewLarge"')
+    expect(html).toContain('data-icon="imagePreview"')
+    expect(html).not.toContain('aria-label="previewLarge: Dock"')
     expect(html).toContain('data-icon="mapPin"')
     expect(html).toContain('workspace-node-loading-surface')
     expect(html).toContain('data-icon="loader"')

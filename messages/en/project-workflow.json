@@ -470,6 +470,7 @@
         "targetAsset": "Asset ID",
         "characterAsset": "Required Character",
         "locationAsset": "Required Location",
+        "previewLarge": "View large image",
         "yes": "Yes",
         "lineKind": {
           "action": "Action",
@@ -806,8 +807,8 @@
         },
         "editAssetGroup": {
           "title": "Asset Requirements",
-          "eyebrow": "Character / Scene Assets",
-          "body": "Characters and scenes to pre-generate for this video. Click any asset to view details and regenerate it individually.",
+          "eyebrow": "Character and Scene Assets",
+          "body": "Characters and scenes to pre-generate for this video. Click a card to view details and regenerate it individually, or use the image zoom button to preview it large.",
           "meta": "{characters} character(s) · {locations} scene(s)"
         }
       }
