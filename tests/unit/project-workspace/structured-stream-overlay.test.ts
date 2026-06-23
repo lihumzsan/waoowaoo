@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { mergeWorkspaceStructuredStreamOverlayNodes } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamOverlay'
+import {
+  mergeWorkspaceStructuredStreamOverlayNodes,
+  shouldClearStreamAccumulatorsForLifecycle,
+} from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamOverlay'
+import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 import {
   workspaceEditCinematographyShotPlanNodeId,
@@ -118,6 +122,18 @@ function screenplayNode(input: {
 }
 
 describe('structured stream overlay merge', () => {
+  it('clears stale stream accumulators when watchdog requeues the same task', () => {
+    expect(shouldClearStreamAccumulatorsForLifecycle(TASK_EVENT_TYPE.CREATED, {
+      reason: 'watchdog_requeue',
+    })).toBe(true)
+    expect(shouldClearStreamAccumulatorsForLifecycle(TASK_EVENT_TYPE.COMPLETED, {
+      reason: 'watchdog_requeue',
+    })).toBe(false)
+    expect(shouldClearStreamAccumulatorsForLifecycle(TASK_EVENT_TYPE.CREATED, {
+      reason: 'initial_submit',
+    })).toBe(false)
+  })
+
   it('replaces the pending node while preserving its canvas position', () => {
     const base = node('edit-script:pending:episode-1', 'episode')
     const overlay = {

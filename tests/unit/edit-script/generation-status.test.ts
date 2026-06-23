@@ -34,6 +34,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     upsert: vi.fn(),
     findFirst: vi.fn(),
+    updateMany: vi.fn(),
   },
   projectEditScreenplay: {
     findFirst: vi.fn(),
@@ -142,6 +143,7 @@ import {
 } from '@/lib/edit-script/service'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
 import { submitTask } from '@/lib/task/submitter'
+import { getProjectModelConfig } from '@/lib/config-service'
 
 function createRequest(): NextRequest {
   return new Request('http://localhost/api/projects/project-1/edit-script', {
@@ -352,6 +354,7 @@ describe('edit script generation status persistence', () => {
     txMock.projectEditAssetRequirement.deleteMany.mockResolvedValue({ count: 0 })
     txMock.projectEditAssetRequirement.createMany.mockResolvedValue({ count: 1 })
     txMock.projectEditAssetRequirement.create.mockResolvedValue({ id: 'req-1' })
+    prismaMock.projectEditScript.updateMany.mockResolvedValue({ count: 0 })
     txMock.projectLocation.create.mockResolvedValue({ id: 'location-1' })
     txMock.projectCharacter.create.mockResolvedValue({
       id: 'character-1',
@@ -1382,5 +1385,32 @@ describe('edit script generation status persistence', () => {
         logline: 'LLM_DOWN',
       }),
     }))
+  })
+
+  it('marks an existing generating edit script failed when model config resolution throws before prompt execution', async () => {
+    const message = 'PLATFORM_DEFAULT_MODEL_NOT_FOUND: analysisModel=openrouter::google/gemini-3.5-flash'
+    vi.mocked(getProjectModelConfig).mockRejectedValueOnce(new Error(message))
+
+    await expect(generateProjectEditScript({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+    })).rejects.toThrow(message)
+
+    expect(prismaMock.projectEditScript.upsert).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.updateMany).toHaveBeenCalledWith({
+      where: {
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        status: 'generating',
+      },
+      data: {
+        title: 'Edit table generation failed',
+        logline: message,
+        status: 'failed',
+      },
+    })
   })
 })

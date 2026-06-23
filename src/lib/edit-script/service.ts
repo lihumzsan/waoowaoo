@@ -1087,6 +1087,25 @@ async function markEditScriptFailed(input: {
   })
 }
 
+async function markGeneratingEditScriptFailed(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly message: string
+}): Promise<void> {
+  await prisma.projectEditScript.updateMany({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      status: 'generating',
+    },
+    data: {
+      title: 'Edit table generation failed',
+      logline: input.message,
+      status: 'failed',
+    },
+  })
+}
+
 export async function readProjectEditScript(input: {
   readonly projectId: string
   readonly episodeId: string
@@ -1763,6 +1782,20 @@ export async function generateProjectEditDirectorDecoupage(input: GenerateEditDi
 }
 
 export async function generateProjectEditScript(input: GenerateEditScriptInput): Promise<EditScriptPayload> {
+  try {
+    return await generateProjectEditScriptInternal(input)
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : String(caught)
+    await markGeneratingEditScriptFailed({
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      message,
+    })
+    throw caught
+  }
+}
+
+async function generateProjectEditScriptInternal(input: GenerateEditScriptInput): Promise<EditScriptPayload> {
   const locale = assertLocale(input.locale)
   const [episode, project, config] = await Promise.all([
     prisma.projectEpisode.findFirst({

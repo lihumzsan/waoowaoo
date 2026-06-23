@@ -337,6 +337,24 @@ function textSnapshotsFromAccumulators(
     }))
 }
 
+function removeAccumulatorsForTask<T extends { readonly taskId: string }>(
+  current: ReadonlyMap<string, T>,
+  taskId: string,
+): ReadonlyMap<string, T> {
+  const next = new Map(current)
+  next.forEach((accumulator, key) => {
+    if (accumulator.taskId === taskId) next.delete(key)
+  })
+  return next
+}
+
+export function shouldClearStreamAccumulatorsForLifecycle(
+  lifecycleType: string | null,
+  payload: Record<string, unknown>,
+): boolean {
+  return lifecycleType === TASK_EVENT_TYPE.CREATED && readString(payload.reason) === 'watchdog_requeue'
+}
+
 function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCanvasStreamPresentation {
   const activeItemKey = items.at(-1)?.itemKey ?? null
   return {
@@ -879,6 +897,14 @@ export function useWorkspaceStructuredStreamOverlay({
       if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return
       const payload = readRecord(event.payload)
       const lifecycleType = readString(payload.lifecycleType)
+      if (shouldClearStreamAccumulatorsForLifecycle(lifecycleType, payload)) {
+        const previousTimer = retireTimersRef.current.get(event.taskId)
+        if (previousTimer !== undefined) window.clearTimeout(previousTimer)
+        retireTimersRef.current.delete(event.taskId)
+        setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
+        setTextAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
+        return
+      }
       if (
         lifecycleType !== TASK_EVENT_TYPE.COMPLETED
         && lifecycleType !== TASK_EVENT_TYPE.FAILED
@@ -889,20 +915,8 @@ export function useWorkspaceStructuredStreamOverlay({
       if (previousTimer !== undefined) window.clearTimeout(previousTimer)
       const timer = window.setTimeout(() => {
         retireTimersRef.current.delete(event.taskId)
-        setAccumulators((current) => {
-          const next = new Map(current)
-          next.forEach((accumulator, key) => {
-            if (accumulator.taskId === event.taskId) next.delete(key)
-          })
-          return next
-        })
-        setTextAccumulators((current) => {
-          const next = new Map(current)
-          next.forEach((accumulator, key) => {
-            if (accumulator.taskId === event.taskId) next.delete(key)
-          })
-          return next
-        })
+        setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
+        setTextAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
       }, STREAM_OVERLAY_RETIRE_MS)
       retireTimersRef.current.set(event.taskId, timer)
     })
