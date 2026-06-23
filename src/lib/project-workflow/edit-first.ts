@@ -424,7 +424,7 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
     case 'assets_generating':
       return []
     case 'assets_ready_for_review':
-      return []
+      return ['revise_edit_script_assets']
     case 'ready_to_generate_cinematography':
       return ['generate_edit_cinematography_shot_plan']
     case 'ready_to_generate_storyboard_spatial_blocking':

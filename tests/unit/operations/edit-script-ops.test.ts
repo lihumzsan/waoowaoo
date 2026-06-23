@@ -131,6 +131,49 @@ const serviceMock = vi.hoisted(() => ({
   })),
 }))
 
+const assetRevisionMock = vi.hoisted(() => ({
+  reviseProjectEditScriptAssets: vi.fn(async () => ({
+    success: true,
+    async: true,
+    total: 1,
+    revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+    taskIds: ['task-asset-revision-1'],
+    results: [{
+      refId: 'req-1',
+      taskId: 'task-asset-revision-1',
+      taskType: 'modify_asset_image',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    submittedTasks: [{
+      requirementId: 'req-1',
+      kind: 'character',
+      name: 'Pilot',
+      taskId: 'task-asset-revision-1',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+      taskType: 'modify_asset_image',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+    }],
+    editScript: {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      title: 'Orbital Dock',
+      durationSec: 30,
+      shotCount: 6,
+      status: 'ready',
+      assetReviewStatus: 'pending',
+      requirements: [
+        { id: 'req-1', kind: 'character', name: 'Pilot', status: 'ready', targetId: 'character-1' },
+      ],
+      videoBlocks: [],
+    },
+  })),
+}))
+
 const taskSubmissionMock = vi.hoisted(() => ({
   submitProjectEditScreenplayGenerationTask: vi.fn(async () => ({
     success: true,
@@ -161,6 +204,7 @@ const taskSubmissionMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/edit-script/service', () => serviceMock)
+vi.mock('@/lib/edit-script/asset-revision', () => assetRevisionMock)
 vi.mock('@/lib/edit-script/task-submission', async () => {
   const actual = await vi.importActual<typeof import('@/lib/edit-script/task-submission')>('@/lib/edit-script/task-submission')
   return {
@@ -315,6 +359,7 @@ describe('edit-script operations', () => {
       'generate_edit_script_storyboard_spatial_blocking',
       'generate_edit_style_previews',
       ...EDIT_FIRST_CHOICE_OPERATION_IDS,
+      'revise_edit_script_assets',
       'revise_edit_screenplay',
     ].sort()
 
@@ -694,6 +739,74 @@ describe('edit-script operations', () => {
     expect(operations.generate_edit_script_assets.inputSchema.safeParse({
       editScriptId: 'edit-1',
       requirementId: 'req-1',
+      confirmed: true,
+    }).success).toBe(true)
+  })
+
+  it('submits asset review revision notes as edit asset image modification tasks', async () => {
+    const operations = createEditScriptOperations()
+    const writerEvents: Record<string, unknown>[] = []
+    const result = await operations.revise_edit_script_assets.execute(buildContext(createTestWriter(writerEvents)), {
+      editScriptId: 'edit-1',
+      revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+      confirmed: true,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      total: 1,
+      revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+      taskIds: ['task-asset-revision-1'],
+      editScript: expect.objectContaining({
+        id: 'edit-1',
+        assetReviewStatus: 'pending',
+      }),
+    }))
+    expect(assetRevisionMock.reviseProjectEditScriptAssets).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
+      revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+    }))
+    expect(writerEvents).toEqual([
+      expect.objectContaining({
+        type: 'data-task-batch-submitted',
+        data: expect.objectContaining({
+          operationId: 'revise_edit_script_assets',
+          taskIds: ['task-asset-revision-1'],
+          results: [{
+            refId: 'req-1',
+            taskId: 'task-asset-revision-1',
+            taskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
+            targetType: 'CharacterAppearance',
+            targetId: 'appearance-1',
+          }],
+        }),
+      }),
+    ])
+  })
+
+  it('requires concrete asset revision notes and rejects wildcard revision requirement ids', () => {
+    const operations = createEditScriptOperations()
+
+    expect(operations.revise_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      revisionNotes: '',
+      confirmed: true,
+    }).success).toBe(false)
+    expect(operations.revise_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      requirementId: '*',
+      revisionNotes: '把角色改老一些',
+      confirmed: true,
+    }).success).toBe(false)
+    expect(operations.revise_edit_script_assets.inputSchema.safeParse({
+      editScriptId: 'edit-1',
+      requirementId: 'req-1',
+      revisionNotes: '把角色改老一些',
       confirmed: true,
     }).success).toBe(true)
   })

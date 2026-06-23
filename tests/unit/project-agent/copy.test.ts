@@ -167,4 +167,16 @@ describe('project agent prompt copy', () => {
     expect(enDescription).toContain('exact editScript.requirements[].id')
     expect(enDescription).toContain('Never pass "*" or any wildcard value')
   })
+
+  it('describes edit asset revision as requiring user review notes', () => {
+    const zhDescription = localizeSelectableToolDescription('revise_edit_script_assets', 'fallback', 'zh')
+    const enDescription = localizeSelectableToolDescription('revise_edit_script_assets', 'fallback', 'en')
+
+    expect(zhDescription).toContain('资产审核未通过')
+    expect(zhDescription).toContain('revisionNotes')
+    expect(zhDescription).toContain('工具成功返回前')
+    expect(enDescription).toContain('after asset review is not approved')
+    expect(enDescription).toContain('Pass revisionNotes')
+    expect(enDescription).toContain('Do not claim tasks were resubmitted until this tool succeeds')
+  })
 })

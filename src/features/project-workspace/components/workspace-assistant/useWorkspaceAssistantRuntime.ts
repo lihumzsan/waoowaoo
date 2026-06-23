@@ -31,7 +31,7 @@ import {
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
-type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
+export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 
 /**
@@ -93,6 +93,7 @@ interface UseWorkspaceAssistantRuntimeResult {
     choiceType: WorkspaceAssistantChoiceType
     toolCallId: string | null
     output: Record<string, unknown>
+    visibleUserText?: string
   }) => Promise<void>
   submitTaskFollowUp: (params: {
     runId: string
@@ -143,6 +144,24 @@ export function createWorkspaceAssistantControlMessageId(params: {
   if (!runId) throw new Error('PROJECT_ASSISTANT_CONTROL_RUN_ID_MISSING')
   const nonce = params.nonce?.trim() || createWorkspaceAssistantControlNonce()
   return `workspace-control:${params.endpoint}:${runId}:${nonce}`
+}
+
+export function createWorkspaceAssistantControlVisibleUserMessage(params: {
+  runId: string
+  endpoint: WorkspaceAssistantControlEndpoint
+  text: string
+  nonce?: string
+}): UIMessage {
+  const runId = params.runId.trim()
+  if (!runId) throw new Error('PROJECT_ASSISTANT_CONTROL_RUN_ID_MISSING')
+  const text = params.text.trim()
+  if (!text) throw new Error('PROJECT_ASSISTANT_CONTROL_VISIBLE_USER_TEXT_EMPTY')
+  const nonce = params.nonce?.trim() || createWorkspaceAssistantControlNonce()
+  return {
+    id: `workspace-control-user:${params.endpoint}:${runId}:${nonce}`,
+    role: 'user',
+    parts: [{ type: 'text', text }],
+  }
 }
 
 export function mergeWorkspaceAssistantStreamedMessage(
@@ -507,6 +526,7 @@ export function useWorkspaceAssistantRuntime({
     intent: WorkspaceAssistantControlIntent
     operationId?: string | null
     payload: Record<string, unknown>
+    visibleUserText?: string
   }) => {
     chat.clearError()
     setStreamedActivity(null)
@@ -521,13 +541,30 @@ export function useWorkspaceAssistantRuntime({
         runId: params.runId,
         endpoint: params.endpoint,
       })
+      const currentMessages = latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages
+      const visibleUserText = params.visibleUserText?.trim() ?? ''
+      const displayMessages = visibleUserText
+        ? ensureUniqueUIMessages([
+            ...currentMessages,
+            createWorkspaceAssistantControlVisibleUserMessage({
+              runId: params.runId,
+              endpoint: params.endpoint,
+              text: visibleUserText,
+            }),
+          ])
+        : currentMessages
+      if (visibleUserText) {
+        latestMessagesRef.current = displayMessages
+        chat.setMessages(displayMessages)
+        await persistMessagesNow(displayMessages)
+      }
       const response = await fetch(
         `/api/projects/${projectId}/assistant/runs/${encodeURIComponent(params.runId)}/${params.endpoint}`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            messages: latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages,
+            messages: currentMessages,
             context: contextPayload,
             assistantPermissionMode,
             ...params.payload,
@@ -571,11 +608,13 @@ export function useWorkspaceAssistantRuntime({
     choiceType: WorkspaceAssistantChoiceType
     toolCallId: string | null
     output: Record<string, unknown>
+    visibleUserText?: string
   }) => {
     await sendControlRequest({
       runId: params.runId,
       endpoint: 'choice',
       intent: 'choice',
+      visibleUserText: params.visibleUserText,
       payload: {
         interruptionId: params.interruptionId,
         choiceType: params.choiceType,
@@ -617,6 +656,7 @@ export function useWorkspaceAssistantRuntime({
       endpoint: 'approval',
       intent: params.approved ? 'approve' : 'deny',
       operationId: interaction.operationId,
+      visibleUserText: params.approved ? undefined : params.reason,
       payload: {
         interruptionId: interaction.interruptionId,
         approved: params.approved,
@@ -639,6 +679,7 @@ export function useWorkspaceAssistantRuntime({
       endpoint: 'approval',
       intent: params.approved ? 'approve' : 'deny',
       operationId: params.operationId,
+      visibleUserText: params.approved ? undefined : params.reason,
       payload: {
         interruptionId: params.interruptionId,
         approved: params.approved,

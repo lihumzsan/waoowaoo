@@ -166,6 +166,19 @@ export interface EditScriptAssetGenerationTask {
   readonly targetId: string
 }
 
+export interface EditScriptAssetRevisionTask {
+  readonly requirementId: string
+  readonly kind: EditAssetKind
+  readonly name: string
+  readonly taskId: string
+  readonly status: string
+  readonly runId: string | null
+  readonly deduped: boolean
+  readonly taskType: 'modify_asset_image'
+  readonly targetType: 'CharacterAppearance' | 'LocationImage'
+  readonly targetId: string
+}
+
 export interface EditScriptPayload {
   readonly id?: string
   readonly projectId?: string
@@ -197,6 +210,23 @@ export interface EditScriptAssetGenerationPayload {
     readonly targetId: string
   }>
   readonly submittedTasks: readonly EditScriptAssetGenerationTask[]
+  readonly editScript: EditScriptPayload
+}
+
+export interface EditScriptAssetRevisionPayload {
+  readonly success: true
+  readonly async: boolean
+  readonly total: number
+  readonly revisionNotes: string
+  readonly taskIds: readonly string[]
+  readonly results: ReadonlyArray<{
+    readonly refId: string
+    readonly taskId: string
+    readonly taskType: 'modify_asset_image'
+    readonly targetType: 'CharacterAppearance' | 'LocationImage'
+    readonly targetId: string
+  }>
+  readonly submittedTasks: readonly EditScriptAssetRevisionTask[]
   readonly editScript: EditScriptPayload
 }
 

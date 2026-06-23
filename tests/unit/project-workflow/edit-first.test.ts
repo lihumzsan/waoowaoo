@@ -236,7 +236,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('assets_ready_for_review')
     expect(state.blocking.kind).toBe('needs_user_choice')
     expect(state.nextAction).toBeNull()
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['revise_edit_script_assets'])
   })
 
   it('moves to cinematography after required assets are approved by the user', () => {

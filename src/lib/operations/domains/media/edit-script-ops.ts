@@ -4,6 +4,7 @@ import {
   generateProjectEditScriptAssets,
   generateProjectEditStylePreviews,
 } from '@/lib/edit-script/service'
+import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
 import {
   submitProjectEditCinematographyShotPlanTask,
   submitProjectEditDirectorDecoupageTask,
@@ -106,6 +107,15 @@ const generateEditScriptAssetsInputSchema = z.object({
     .optional(),
 }).passthrough()
 
+const reviseEditScriptAssetsInputSchema = z.object({
+  ...confirmedInputFields,
+  editScriptId: z.string().trim().min(1).optional(),
+  requirementId: editScriptAssetRequirementIdSchema
+    .describe('Optional exact editScript.requirements[].id. Omit requirementId to revise every required asset. Never pass "*" or any wildcard.')
+    .optional(),
+  revisionNotes: z.string().trim().min(1).describe('Concrete user asset review notes to apply when revising edit-first character/location assets.'),
+}).passthrough()
+
 const generateEditCinematographyShotPlanInputSchema = z.object({
   ...confirmedInputFields,
   editScriptId: z.string().trim().min(1).optional(),
@@ -123,6 +133,7 @@ type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
 type GenerateEditDirectorDecoupageInput = z.infer<typeof generateEditDirectorDecoupageInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
+type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSchema>
 type GenerateEditCinematographyShotPlanInput = z.infer<typeof generateEditCinematographyShotPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
@@ -209,6 +220,34 @@ const editScriptAssetGenerationOutputSchema = z.object({
     runId: z.string().nullable(),
     deduped: z.boolean(),
     taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
+    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+    targetId: z.string().min(1),
+  })),
+  editScript: editScriptSummaryOutputSchema,
+}).passthrough()
+
+const editScriptAssetRevisionOutputSchema = z.object({
+  success: z.literal(true),
+  async: z.boolean(),
+  total: z.number().int().min(0),
+  revisionNotes: z.string().min(1),
+  taskIds: z.array(z.string().min(1)),
+  results: z.array(z.object({
+    refId: z.string().min(1),
+    taskId: z.string().min(1),
+    taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
+    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+    targetId: z.string().min(1),
+  })),
+  submittedTasks: z.array(z.object({
+    requirementId: z.string().min(1),
+    kind: z.enum(['character', 'location']),
+    name: z.string().min(1),
+    taskId: z.string().min(1),
+    status: z.string().min(1),
+    runId: z.string().nullable(),
+    deduped: z.boolean(),
+    taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
     targetType: z.enum(['CharacterAppearance', 'LocationImage']),
     targetId: z.string().min(1),
   })),
@@ -651,6 +690,50 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         if (output.taskIds.length > 0) {
           writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
             operationId: 'generate_edit_script_assets',
+            total: output.total,
+            taskIds: output.taskIds,
+            results: output.results,
+          })
+        }
+        return output
+      },
+    }),
+    revise_edit_script_assets: defineOperation({
+      id: 'revise_edit_script_assets',
+      summary: 'Revise ready edit-first character/location asset images from user asset review notes and submit async modification tasks.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BULK_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将根据用户审核意见返工剪辑资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      inputSchema: reviseEditScriptAssetsInputSchema,
+      outputSchema: editScriptAssetRevisionOutputSchema,
+      execute: async (ctx, input: ReviseEditScriptAssetsInput) => {
+        const result = await reviseProjectEditScriptAssets({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          locale: resolveLocale(ctx.context.locale),
+          revisionNotes: input.revisionNotes,
+          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
+          ...(input.requirementId ? { requirementId: input.requirementId } : {}),
+        })
+        const output = editScriptAssetRevisionOutputSchema.parse({
+          success: result.success,
+          async: result.async,
+          total: result.total,
+          revisionNotes: result.revisionNotes,
+          taskIds: [...result.taskIds],
+          results: result.results.map((item) => ({ ...item })),
+          submittedTasks: result.submittedTasks.map((item) => ({ ...item })),
+          editScript: summarizeEditScriptPayload(result.editScript),
+        })
+        if (output.taskIds.length > 0) {
+          writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
+            operationId: 'revise_edit_script_assets',
             total: output.total,
             taskIds: output.taskIds,
             results: output.results,

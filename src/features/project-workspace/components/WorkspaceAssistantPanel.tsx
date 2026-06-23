@@ -424,6 +424,7 @@ export default function WorkspaceAssistantPanel({
     choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
     toolCallId: string | null
     output: Record<string, unknown>
+    visibleUserText?: string
   }) => {
     await assistantRuntime.submitChoiceResponse({
       runId: params.runId,
@@ -431,6 +432,7 @@ export default function WorkspaceAssistantPanel({
       choiceType: params.choiceType,
       toolCallId: params.toolCallId,
       output: params.output,
+      visibleUserText: params.visibleUserText,
     })
   }
   const handleStylePreviewSelected = useCallback(async (params: {

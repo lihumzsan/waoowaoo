@@ -57,6 +57,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '根据当前剪辑先行表创建/复用所需角色与场景资产，并为缺失图片提交生成任务。要处理全部需求时不要传 requirementId；只有处理单个需求时才传真实 editScript.requirements[].id，禁止传 "*" 或任何通配值。',
     en: 'Create or reuse required character/location assets from the current edit-first table and submit missing image tasks. To process every requirement, omit requirementId; pass requirementId only for one exact editScript.requirements[].id. Never pass "*" or any wildcard value.',
   },
+  revise_edit_script_assets: {
+    zh: '在资产审核未通过时，按用户提交的 revisionNotes 返工剪辑资产图片。必须传入 revisionNotes；只有要处理单个需求时才传真实 editScript.requirements[].id。工具成功返回前，不要声称已经重新提交任务。',
+    en: 'Revise edit-first asset images after asset review is not approved. Pass revisionNotes. Pass requirementId only for one exact editScript.requirements[].id. Do not claim tasks were resubmitted until this tool succeeds.',
+  },
   generate_edit_script_storyboard_spatial_blocking: {
     zh: '在摄影 shot plan ready 后、生成分镜面板前，生成分镜空间定位/空间一致性准备。只有当前 workflow 暴露该工具时才调用；不要跳过它直接生成分镜面板。',
     en: 'After the cinematography shot plan is ready and before storyboard panels, generate storyboard spatial blocking / space-consistency preparation. Call it only when the current workflow exposes this tool; do not skip it and generate panels directly.',
@@ -111,6 +115,10 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: strin
   generate_edit_script_assets: {
     zh: '生成剪辑资产',
     en: 'Generate edit assets',
+  },
+  revise_edit_script_assets: {
+    zh: '返工剪辑资产',
+    en: 'Revise edit assets',
   },
   generate_edit_script_storyboard_spatial_blocking: {
     zh: '生成空间定位',

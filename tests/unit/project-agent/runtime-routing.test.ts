@@ -418,6 +418,7 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'generate_edit_director_decoupage',
     'generate_edit_script',
     'generate_edit_script_assets',
+    'revise_edit_script_assets',
     'generate_edit_cinematography_shot_plan',
     'generate_edit_script_storyboard_spatial_blocking',
     'generate_edit_script_storyboard',
@@ -798,6 +799,47 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_assets')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_screenplay')
+  })
+
+  it('enables asset revision after an asset review choice response sends revision notes', async () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'asset_review',
+      toolCallId: 'tool-choice-asset',
+      latestUserText: '民俗恐怖片',
+      output: {
+        ok: true,
+        decision: 'revise',
+        revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+      },
+    })
+    expect(choiceResult).not.toBeNull()
+    phaseState.editFirstWorkflow = buildWorkflow('assets_ready_for_review', ['revise_edit_script_assets'])
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
+      control: {
+        kind: 'choice',
+        interruptionId: 'choice-interruption-asset',
+        choiceType: 'asset_review',
+        toolCallId: 'tool-choice-asset',
+        cardId: 'edit-first-asset-review',
+        choiceResult: choiceResult!,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedEnabledToolNames).toContain('revise_edit_script_assets')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_assets')
+    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.asset_review)
   })
 
   it('skips execution approval in auto mode while keeping choice cards approval-free', async () => {

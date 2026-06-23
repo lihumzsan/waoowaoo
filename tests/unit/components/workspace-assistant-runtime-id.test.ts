@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildWorkspaceAssistantChatId,
   createWorkspaceAssistantControlMessageId,
+  createWorkspaceAssistantControlVisibleUserMessage,
   findLatestWorkspaceAssistantRun,
   isWorkspaceAssistantOperationPendingStatus,
   isWorkspaceAssistantRunBusyStatus,
@@ -262,6 +263,19 @@ describe('workspace assistant runtime chat id', () => {
       endpoint: 'choice',
       nonce: 'nonce-1',
     })).toBe('workspace-control:choice:run-1:nonce-1')
+  })
+
+  it('creates visible user messages for free-text choice card feedback', () => {
+    expect(createWorkspaceAssistantControlVisibleUserMessage({
+      runId: ' run-1 ',
+      endpoint: 'choice',
+      text: '  把祠堂场景调得更旧  ',
+      nonce: 'nonce-1',
+    })).toEqual({
+      id: 'workspace-control-user:choice:run-1:nonce-1',
+      role: 'user',
+      parts: [{ type: 'text', text: '把祠堂场景调得更旧' }],
+    })
   })
 
   it('rejects control stream messages with empty ids before they can freeze persistence', () => {

@@ -422,6 +422,7 @@ export function AssistantChoiceCardView(props: {
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
     toolCallId: string | null
     output: Record<string, unknown>
+    visibleUserText?: string
   }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
     projectId: string
@@ -478,6 +479,7 @@ export function AssistantChoiceCardView(props: {
           decision: 'revise',
           [replyKey]: trimmedReply,
         },
+        visibleUserText: trimmedReply,
       })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
@@ -1271,6 +1273,7 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
     toolCallId: string | null
     output: Record<string, unknown>
+    visibleUserText?: string
   }) => Promise<void>
   onSetProjectVideoRatioChoice: (params: {
     projectId: string

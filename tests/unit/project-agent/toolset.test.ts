@@ -233,4 +233,23 @@ describe('project agent live operation enablement', () => {
       operationId: 'generate_edit_director_decoupage',
     })).toBe(false)
   })
+
+  it('enables asset revision but not missing-asset generation while asset review is waiting on feedback', () => {
+    const toolset = resolveProjectAgentToolset({
+      registry: registry(),
+      context: { episodeId: 'episode-1' },
+    })
+    const assetReview = workflow('assets_ready_for_review', ['revise_edit_script_assets'])
+
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: assetReview,
+      operationId: 'revise_edit_script_assets',
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: assetReview,
+      operationId: 'generate_edit_script_assets',
+    })).toBe(false)
+  })
 })
