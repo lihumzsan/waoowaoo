@@ -134,7 +134,7 @@ describe('edit-script storyboard panel service', () => {
       episodeId: 'episode-1',
       targetType: 'ProjectStoryboard',
       targetId: 'storyboard-1',
-      operationId: 'generate_edit_script_storyboard_panels',
+      operationId: 'generate_edit_script_storyboard',
       payload: expect.objectContaining({
         editScriptId: 'edit-1',
         storyboardId: 'storyboard-1',

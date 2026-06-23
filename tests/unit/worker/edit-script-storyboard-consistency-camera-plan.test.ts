@@ -1,7 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
 
 const prismaMock = vi.hoisted(() => ({
   projectStoryboard: {
@@ -325,9 +324,6 @@ describe('edit script storyboard camera plan handler', () => {
     persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
       id: 'storyboard-prepare-1',
     })
-    submitterMock.submitTask.mockResolvedValue({
-      taskId: 'camera-plan-task-1',
-    })
     const job = {
       data: {
         ...buildJob().data,
@@ -350,8 +346,8 @@ describe('edit script storyboard camera plan handler', () => {
     expect(result).toEqual({
       storyboardId: 'storyboard-prepare-1',
       spatialProfileCount: 1,
-      nextTaskId: 'camera-plan-task-1',
     })
+    expect(submitterMock.submitTask).not.toHaveBeenCalled()
     expect(prismaMock.projectStoryboardBlockingArtifact.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({
         storyboardId: 'storyboard-prepare-1',
@@ -385,17 +381,13 @@ describe('edit script storyboard camera plan handler', () => {
     expect(updatePlan).not.toHaveProperty('strategyOutput')
   })
 
-  it('adds billing fields when prepare enqueues the internal camera plan task', async () => {
+  it('does not enqueue a hidden panel prompt task during spatial prepare', async () => {
     const { handleEditScriptStoryboardPrepareTask } = await import(
       '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
     )
     const sourceSnapshot = buildSourceSnapshotWithLocation()
-    const analysisModel = 'anthropic/claude-sonnet-4'
     persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
       id: 'storyboard-prepare-1',
-    })
-    submitterMock.submitTask.mockResolvedValue({
-      taskId: 'camera-plan-task-1',
     })
     const job = {
       data: {
@@ -407,7 +399,7 @@ describe('edit script storyboard camera plan handler', () => {
           editScriptId: 'edit-script-1',
           sourceSnapshot,
           modelConfigSnapshot: {
-            analysisModel,
+            analysisModel: 'analysis-model-1',
             storyboardModel: 'storyboard-model-1',
           },
         },
@@ -416,24 +408,7 @@ describe('edit script storyboard camera plan handler', () => {
 
     await handleEditScriptStoryboardPrepareTask(job)
 
-    const submittedPayload = submitterMock.submitTask.mock.calls[0]?.[0]?.payload
-    expect(submittedPayload).toMatchObject({
-      editScriptId: 'edit-script-1',
-      storyboardId: 'storyboard-prepare-1',
-      analysisModel,
-      maxInputTokens: 12000,
-    })
-    const billingInfo = buildDefaultTaskBillingInfo(
-      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-      submittedPayload,
-    )
-    expect(billingInfo).toMatchObject({
-      billable: true,
-      taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-      apiType: 'text',
-      model: analysisModel,
-      quantity: 12000,
-    })
+    expect(submitterMock.submitTask).not.toHaveBeenCalled()
   })
 
   it('persists panel prompts without enqueueing panel image tasks', async () => {
@@ -488,6 +463,29 @@ describe('edit script storyboard camera plan handler', () => {
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalVideoPrompt')
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('finalPanelPrompt')
     expect(JSON.stringify(storedPlan.cameraPlanOutput)).not.toContain('blocks')
+    expect(submitterMock.submitTask).not.toHaveBeenCalled()
+  })
+
+  it('records panel prompt generation failures on the panel prompt stage', async () => {
+    const { handleEditScriptStoryboardCameraPlanTask } = await import(
+      '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
+    )
+    modelGenerationMock.generateStoryboardPanelFinalPrompts.mockRejectedValueOnce(new Error('MODEL_OUTPUT_INVALID'))
+
+    await expect(handleEditScriptStoryboardCameraPlanTask(buildJob())).rejects.toThrow('MODEL_OUTPUT_INVALID')
+
+    const updateCalls = prismaMock.projectStoryboard.update.mock.calls as unknown as Array<[{
+      readonly data?: {
+        readonly photographyPlan?: string
+        readonly lastError?: string
+      }
+    }]>
+    const storedPlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan)) as Record<string, unknown>
+    expect(storedPlan).toMatchObject({
+      currentStage: 'panel_prompts_failed',
+      errorMessage: 'MODEL_OUTPUT_INVALID',
+    })
+    expect(updateCalls[0]?.[0].data?.lastError).toBe('MODEL_OUTPUT_INVALID')
     expect(submitterMock.submitTask).not.toHaveBeenCalled()
   })
 })

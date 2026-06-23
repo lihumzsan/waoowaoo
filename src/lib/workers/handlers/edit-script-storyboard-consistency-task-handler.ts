@@ -2,8 +2,7 @@ import { type Job } from 'bullmq'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
-import { submitTask } from '@/lib/task/submitter'
-import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '../shared'
 import { generateStoryboardPanelFinalPrompts } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
@@ -17,7 +16,6 @@ import {
   upsertEditScriptStoryboardShell,
   upsertStoryboardPanelsFromPrompts,
 } from '@/lib/edit-script/storyboard-consistency/persistence'
-import { buildEditFirstTextTaskPayloadFromAnalysisModel } from '@/lib/edit-script/task-billing'
 
 interface ParsedPayload {
   readonly editScriptId: string
@@ -250,29 +248,7 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
         },
       })
     })
-    const submitted = await submitTask({
-      userId: job.data.userId,
-      locale: job.data.locale,
-      projectId: job.data.projectId,
-      episodeId: job.data.episodeId,
-      type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-      targetType: 'ProjectStoryboard',
-      targetId: storyboard.id,
-      operationId: 'edit_script_storyboard_spatial_text_blocking',
-      operationSource: 'edit-script-storyboard-spatial-profile',
-      requestId: job.data.trace?.requestId || null,
-      payload: buildEditFirstTextTaskPayloadFromAnalysisModel({
-        analysisModel: parsed.modelConfigSnapshot.analysisModel,
-        payload: {
-          editScriptId: parsed.editScriptId,
-          storyboardId: storyboard.id,
-          sourceSnapshot: parsed.sourceSnapshot,
-          modelConfigSnapshot: parsed.modelConfigSnapshot,
-        },
-      }),
-      dedupeKey: `edit_script_storyboard_spatial_text_blocking:${storyboard.id}`,
-    })
-    return { storyboardId: storyboard.id, spatialProfileCount: parsed.sourceSnapshot.assets.filter((asset) => asset.kind === 'location').length, nextTaskId: submitted.taskId }
+    return { storyboardId: storyboard.id, spatialProfileCount: parsed.sourceSnapshot.assets.filter((asset) => asset.kind === 'location').length }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (storyboardId) {
@@ -281,7 +257,7 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
         data: {
           lastError: message,
           photographyPlan: JSON.stringify(buildPhotographyPlan({
-            stage: 'failed',
+            stage: 'spatial_profile_failed',
             sourceSnapshot: parsed.sourceSnapshot,
             modelConfigSnapshot: parsed.modelConfigSnapshot,
             errorMessage: message,
@@ -346,7 +322,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
         lastError: message,
         photographyPlan: JSON.stringify({
           ...plan,
-          currentStage: 'failed',
+          currentStage: 'panel_prompts_failed',
           errorMessage: message,
         }),
       },

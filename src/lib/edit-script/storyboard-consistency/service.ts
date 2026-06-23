@@ -136,7 +136,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
     targetType: 'ProjectStoryboard',
     targetId: ready.storyboardId,
-    operationId: 'generate_edit_script_storyboard_panels',
+    operationId: 'generate_edit_script_storyboard',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
     payload: await buildEditFirstTextTaskPayload({

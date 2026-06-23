@@ -28,7 +28,10 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     cinematographyShotPlanStatus: null,
     storyboardCount: 0,
     spatialBlockingReady: false,
+    spatialBlockingFailed: false,
     activeSpatialBlockingTaskCount: 0,
+    storyboardPanelPromptFailed: false,
+    activeStoryboardPanelTaskCount: 0,
     panelCount: 0,
     storyboardPanelImageReadyCount: 0,
     storyboardPanelImageMissingCount: 0,
@@ -320,6 +323,30 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
+  it('offers spatial blocking regeneration when spatial preparation fails', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: false,
+      spatialBlockingFailed: true,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('failed')
+    expect(state.blocking).toEqual({
+      kind: 'failed',
+      reason: 'storyboard spatial blocking generation failed',
+    })
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_spatial_blocking')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard_spatial_blocking'])
+  })
+
   it('allows storyboard panel generation only after spatial blocking is ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
@@ -338,6 +365,51 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
     expect(state.nextAction?.requiresUserConfirmation).toBe(false)
     expect(state.blocking.kind).toBe('none')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
+  })
+
+  it('does not expose storyboard panel regeneration while panel prompts are generating', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: true,
+      activeStoryboardPanelTaskCount: 1,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('storyboard_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(state.nextAction).toBeNull()
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('offers storyboard panel regeneration when panel prompt generation fails', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasDirectorDecoupage: true,
+      directorDecoupageStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasCinematographyShotPlan: true,
+      cinematographyShotPlanStatus: 'ready',
+      spatialBlockingReady: true,
+      storyboardPanelPromptFailed: true,
+      panelCount: 0,
+    }))
+
+    expect(state.stage).toBe('failed')
+    expect(state.blocking).toEqual({
+      kind: 'failed',
+      reason: 'storyboard panel prompt generation failed',
+    })
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
   })
 

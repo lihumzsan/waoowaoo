@@ -36,7 +36,7 @@ import {
   localizeSelectableToolDescription,
 } from './copy'
 import { buildProjectAgentSystemPrompt } from './system-prompt'
-import { normalizeProjectAgentLocale } from './locale'
+import { normalizeProjectAgentLocale, type ProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
@@ -233,14 +233,38 @@ function withDeclinedApprovalsNote(
   return [...items.slice(0, items.length - 1), note, lastItem]
 }
 
-function buildTaskFollowUpInputItem(followUp: ProjectAgentWaitFollowUp): AgentInputItem {
+function buildTaskFollowUpInstruction(locale: ProjectAgentLocale): string {
+  if (locale === 'en') {
+    return [
+      'Background tasks reached a terminal state.',
+      'In this turn, before any tool call, first output a visible natural-language message to the user summarizing whether the task succeeded or failed.',
+      'Do not start this turn with a tool call.',
+      'If you continue with another operation after that message, explain the immediate next operation before calling its tool.',
+      'If status=failed, explain the failure and do not silently continue as if the previous operation succeeded.',
+      'Do not re-run the operation that just reached a terminal state unless the user explicitly asks.',
+    ].join(' ')
+  }
+  return [
+    '后台任务已经到达终态。',
+    '本轮在任何工具调用之前，必须先向用户输出一段可见的自然语言说明，说明任务是成功还是失败。',
+    '不要以工具调用作为本轮第一输出。',
+    '如果说明后要继续调用下一个操作，必须在调用工具前告诉用户马上要执行哪一步。',
+    '如果 status=failed，必须解释失败，不要像上一操作成功了一样静默继续。',
+    '不要重新运行刚刚到达终态的 operation，除非用户明确要求。',
+  ].join(' ')
+}
+
+export function buildTaskFollowUpInputItem(
+  followUp: ProjectAgentWaitFollowUp,
+  locale: ProjectAgentLocale,
+): AgentInputItem {
   const lines = [
     '[task_update]',
     `operation=${followUp.operationId}`,
     `status=${followUp.terminalStatus}`,
     `total=${String(followUp.total)} succeeded=${String(followUp.successCount)} failed=${String(followUp.failedCount)}`,
     ...(followUp.failedTaskIds.length > 0 ? [`failedTaskIds=${followUp.failedTaskIds.join(',')}`] : []),
-    'Background tasks reached a terminal state. Give the user a short readable summary of the result, then continue with the immediate next injected operation if one exists. Do not re-run the operation that just completed.',
+    buildTaskFollowUpInstruction(locale),
   ]
   return {
     role: 'user',
@@ -621,7 +645,7 @@ export async function createProjectAgentChatResponse(input: {
             )
           : toAgentInputItems(runtimeMessages)),
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
-        ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
+        ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp, locale)] : []),
         buildProjectStateInputItem({
           projectId: input.projectId,
           episodeId: context.episodeId || null,

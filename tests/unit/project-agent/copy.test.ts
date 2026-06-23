@@ -129,7 +129,7 @@ describe('project agent prompt copy', () => {
     expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'en')).toBe('Generate screenplay')
     expect(localizeProjectAgentOperationTitle('generate_edit_cinematography_shot_plan', 'zh')).toBe('生成摄影方案')
     expect(localizeProjectAgentOperationTitle('generate_edit_cinematography_shot_plan', 'en')).toBe('Generate cinematography shot plan')
-    expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard_spatial_blocking', 'zh')).toBe('生成空间定位')
+    expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard_spatial_blocking', 'zh')).toBe('生成空间一致性提示')
     expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard', 'zh')).toBe('生成分镜面板')
     expect(localizeProjectAgentOperationTitle('unknown_internal_tool', 'zh')).toBe('项目操作')
   })

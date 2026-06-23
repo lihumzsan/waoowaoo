@@ -150,8 +150,8 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     en: 'Generate cinematography shot plan',
   },
   generate_edit_script_storyboard_spatial_blocking: {
-    zh: '生成空间定位',
-    en: 'Generate spatial blocking',
+    zh: '生成空间一致性提示',
+    en: 'Generate space-consistency prompts',
   },
   generate_edit_script_storyboard: {
     zh: '生成分镜面板',

@@ -28,6 +28,14 @@ export function isStoryboardSpatialProfileStageReady(stage: string | null | unde
   return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
 }
 
+export function isStoryboardSpatialProfileStageFailed(stage: string | null | undefined): boolean {
+  return stage === 'spatial_profile_failed'
+}
+
+export function isStoryboardPanelPromptsStageFailed(stage: string | null | undefined): boolean {
+  return stage === 'panel_prompts_failed'
+}
+
 export function resolveLocationSpatialProfileReadiness(
   candidates: readonly LocationSpatialProfileCandidate[],
 ): LocationSpatialProfileReadiness {
