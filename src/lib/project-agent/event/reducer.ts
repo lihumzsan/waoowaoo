@@ -442,6 +442,15 @@ async function applyInterruptionRaised(
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.raised' }>,
 ): Promise<ProjectAgentActivitySnapshot | null> {
+  await applyActivityStarted(tx, scope, {
+    kind: 'activity.started',
+    runId: event.runId,
+    activityId: event.activityId,
+    type: event.interruptionKind === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
+    operationId: event.operationId,
+    toolCallId: event.toolCallId ?? null,
+    choiceType: event.choiceType ?? null,
+  })
   await tx.projectAgentInterruption.create({
     data: {
       id: event.interruptionId,
@@ -460,15 +469,6 @@ async function applyInterruptionRaised(
       payload: event.payload,
       runState: event.runState ?? null,
     },
-  })
-  await applyActivityStarted(tx, scope, {
-    kind: 'activity.started',
-    runId: event.runId,
-    activityId: event.activityId,
-    type: event.interruptionKind === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
-    operationId: event.operationId,
-    toolCallId: event.toolCallId ?? null,
-    choiceType: event.choiceType ?? null,
   })
   return getActivitySnapshot(tx, event.activityId)
 }

@@ -150,4 +150,51 @@ describe('project agent event reducer', () => {
       },
     })).rejects.toThrow(/PROJECT_AGENT_ACTIVITY_OVERLAP/)
   })
+
+  it('creates awaiting choice activity before interruption details to satisfy the activity foreign key', async () => {
+    await reduceProjectAgentEvent({
+      tx: asReducerTx(tx),
+      scope,
+      event: {
+        kind: 'interruption.raised',
+        runId: 'run-1',
+        activityId: 'activity-choice-1',
+        interruptionId: 'interruption-1',
+        interruptionKind: 'choice',
+        operationId: 'request_edit_duration_aspect_ratio_choice',
+        approvalId: 'choice:approval-1',
+        toolCallId: 'tool-choice-1',
+        choiceType: 'duration_and_aspect_ratio',
+        payload: {
+          choiceType: 'duration_and_aspect_ratio',
+          cardId: 'edit-first-duration-aspect-ratio',
+        },
+        runState: null,
+      },
+    })
+
+    expect(tx.projectAgentActivity.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        id: 'activity-choice-1',
+        runId: 'run-1',
+        type: 'awaiting_choice',
+        status: 'waiting',
+        operationId: 'request_edit_duration_aspect_ratio_choice',
+        choiceType: 'duration_and_aspect_ratio',
+      }),
+    }))
+    expect(tx.projectAgentInterruption.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        id: 'interruption-1',
+        runId: 'run-1',
+        activityId: 'activity-choice-1',
+        type: 'choice',
+        status: 'pending',
+        operationId: 'request_edit_duration_aspect_ratio_choice',
+      }),
+    }))
+    const activityWriteOrder = tx.projectAgentActivity.upsert.mock.invocationCallOrder[0]
+    const interruptionWriteOrder = tx.projectAgentInterruption.create.mock.invocationCallOrder[0]
+    expect(activityWriteOrder).toBeLessThan(interruptionWriteOrder)
+  })
 })
