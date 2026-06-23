@@ -47,7 +47,7 @@ type RuntimeSignalDescriptor =
   }
 
 function signalToDescriptor(signal: OperationRuntimeSignal): RuntimeSignalDescriptor | null {
-  if (signal.kind === 'await_task' || signal.kind === 'active_status') {
+  if (signal.kind === 'await_task') {
     return {
       reason: 'awaiting_external_task',
       operationId: signal.operationId,
@@ -55,6 +55,7 @@ function signalToDescriptor(signal: OperationRuntimeSignal): RuntimeSignalDescri
       phases: signal.phases,
     }
   }
+  if (signal.kind === 'active_status') return null
   if (signal.kind === 'await_user_confirmation') {
     return {
       reason: 'awaiting_user_confirmation',
