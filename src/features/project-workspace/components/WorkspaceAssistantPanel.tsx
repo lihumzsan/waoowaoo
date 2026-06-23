@@ -551,10 +551,9 @@ export default function WorkspaceAssistantPanel({
   const activeThinkingAssistantMessageId = useMemo(() => {
     return resolveWorkspaceAssistantActiveThinkingMessageId({
       pending: assistantTurnPending,
-      hasVisibleAssistantText: assistantTurnHasVisibleText,
       messages: assistantRuntime.messages,
     })
-  }, [assistantRuntime.messages, assistantTurnHasVisibleText, assistantTurnPending])
+  }, [assistantRuntime.messages, assistantTurnPending])
   const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
     pending: isAwaitingAssistantText,
     activeAssistantMessageId: activeThinkingAssistantMessageId,

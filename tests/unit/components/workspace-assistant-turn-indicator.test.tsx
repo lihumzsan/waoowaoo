@@ -87,7 +87,7 @@ describe('workspace assistant turn indicator', () => {
     expect(html).toContain('assistant-thinking-minimal')
   })
 
-  it('keeps the inline thinking target through tool-only assistant updates until visible text starts', () => {
+  it('keeps the inline thinking target through tool activity even after visible text starts', () => {
     const toolOnlyMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
       turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
       turnMessage('assistant-current', 'assistant', [
@@ -116,7 +116,6 @@ describe('workspace assistant turn indicator', () => {
     expect(toolOnlyHasPendingActivity).toBe(true)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
       pending: toolOnlyHasPendingActivity,
-      hasVisibleAssistantText: toolOnlyHasText,
       messages: toolOnlyMessages,
     })).toBe('assistant-current')
     expect(shouldShowPendingAssistantTurnPlaceholder({
@@ -138,6 +137,12 @@ describe('workspace assistant turn indicator', () => {
           },
         } as never,
         { type: 'text', text: '这里是开场。' },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'tool-call-2',
+          state: 'input-available',
+          input: { operationId: 'generate_edit_screenplay' },
+        } as never,
       ]),
     ]
 
@@ -148,9 +153,8 @@ describe('workspace assistant turn indicator', () => {
     expect(textStartedHasPendingActivity).toBe(false)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
       pending: true,
-      hasVisibleAssistantText: textStartedHasText,
       messages: textStartedMessages,
-    })).toBeNull()
+    })).toBe('assistant-current')
     expect(shouldShowPendingAssistantTurnPlaceholder({
       pending: true,
       activeAssistantMessageId: null,
@@ -184,8 +188,7 @@ describe('workspace assistant turn indicator', () => {
     expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(terminalMessages)).toBe(false)
     expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages)).toBe(false)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages),
-      hasVisibleAssistantText: false,
+      pending: true,
       messages: terminalMessages,
     })).toBeNull()
   })

@@ -78,6 +78,12 @@ export function setWorkspaceAssistantToolDetailsOpen(toolCallId: string, open: b
 export function findLatestAssistantMessageIdAfterLatestUser(
   messages: readonly Pick<UIMessage, 'id' | 'role'>[],
 ): string | null {
+  return findLatestAssistantMessageAfterLatestUser(messages)?.id ?? null
+}
+
+function findLatestAssistantMessageAfterLatestUser<TMessage extends Pick<UIMessage, 'id' | 'role'>>(
+  messages: readonly TMessage[],
+): TMessage | null {
   let latestUserMessageIndex = -1
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     if (messages[messageIndex]?.role === 'user') {
@@ -88,7 +94,7 @@ export function findLatestAssistantMessageIdAfterLatestUser(
 
   for (let messageIndex = messages.length - 1; messageIndex > latestUserMessageIndex; messageIndex -= 1) {
     const message = messages[messageIndex]
-    if (message?.role === 'assistant') return message.id
+    if (message?.role === 'assistant') return message
   }
 
   return null
@@ -158,11 +164,13 @@ export function hasWorkspaceAssistantPendingActivityAfterLatestUser(
 
 export function resolveWorkspaceAssistantActiveThinkingMessageId(params: {
   readonly pending: boolean
-  readonly hasVisibleAssistantText: boolean
-  readonly messages: readonly Pick<UIMessage, 'id' | 'role'>[]
+  readonly messages: readonly (Pick<UIMessage, 'id' | 'role'> & Partial<Pick<UIMessage, 'parts'>>)[]
 }): string | null {
-  if (!params.pending || params.hasVisibleAssistantText) return null
-  return findLatestAssistantMessageIdAfterLatestUser(params.messages)
+  if (!params.pending) return null
+  const latestAssistantMessage = findLatestAssistantMessageAfterLatestUser(params.messages)
+  if (!latestAssistantMessage) return null
+  if (latestAssistantMessage.parts?.some(isWorkspaceAssistantTerminalPausePart)) return null
+  return latestAssistantMessage.id
 }
 
 export function shouldShowPendingAssistantTurnPlaceholder(params: {
@@ -1368,10 +1376,10 @@ export function WorkspaceAssistantThreadMessage(props: {
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
+            <MessagePrimitive.Parts components={props.messagePartComponents} />
             {showInlineThinkingIndicator ? (
               <WorkspaceAssistantThinkingIndicator status="streaming" />
             ) : null}
-            <MessagePrimitive.Parts components={props.messagePartComponents} />
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>
