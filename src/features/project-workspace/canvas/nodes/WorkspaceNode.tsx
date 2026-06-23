@@ -1488,7 +1488,7 @@ function EditAssetGroupContent({
               role="button"
               tabIndex={0}
               aria-pressed={on}
-              className={`nodrag group cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+              className={`nodrag cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
               onClick={(event) => { event.stopPropagation(); selectAsset() }}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') return
@@ -1511,7 +1511,7 @@ function EditAssetGroupContent({
                 {previewSourceImageUrl && imageUrl && onPreviewImage ? (
                   <button
                     type="button"
-                    className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white opacity-100 shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/80 md:opacity-0 md:group-hover:opacity-100"
+                    className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
                     aria-label={`${labels('previewLarge')}: ${asset.name}`}
                     title={labels('previewLarge')}
                     onMouseDown={(event) => event.stopPropagation()}
@@ -1520,7 +1520,7 @@ function EditAssetGroupContent({
                       onPreviewImage(previewSourceImageUrl)
                     }}
                   >
-                    <AppIcon name="imagePreview" className="h-4 w-4" />
+                    <AppIcon name="searchPlus" className="h-4 w-4" />
                   </button>
                 ) : null}
                 {asset.isRunning ? (
@@ -1559,7 +1559,7 @@ function EditAssetGroupContent({
                   onPreviewImage(currentPreviewSourceImageUrl)
                 }}
               >
-                <AppIcon name="imagePreview" className="h-3.5 w-3.5" />
+                <AppIcon name="searchPlus" className="h-3.5 w-3.5" />
                 {labels('previewLarge')}
               </button>
             ) : null}
