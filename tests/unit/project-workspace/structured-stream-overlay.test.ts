@@ -145,6 +145,78 @@ describe('structured stream overlay merge', () => {
     expect(merged.map((item) => item.id)).toEqual(['edit-script:edit-script-1'])
   })
 
+  it('merges edit script stream overlay into the persisted running edit script placeholder', () => {
+    const official = {
+      ...node('edit-script:edit-script-1', 'editScript'),
+      data: {
+        ...node('edit-script:edit-script-1', 'editScript').data,
+        isRunning: true,
+        editScriptDetails: undefined,
+        runtimeTargets: [{
+          targetType: 'ProjectEpisode',
+          targetId: 'episode-1',
+          types: ['edit_script_generate'],
+        }],
+      },
+    }
+    const overlay = {
+      ...node('edit-script:pending:episode-1', 'episode'),
+      position: { x: 999, y: 999 },
+      data: {
+        ...node('edit-script:pending:episode-1', 'episode').data,
+        title: 'streamed core table',
+        editScriptDetails: {
+          durationSec: 5,
+          shotCount: 2,
+          shots: [
+            {
+              shotNumber: 1,
+              durationSec: 2,
+              dramaticPurpose: 'purpose 1',
+              visibleAction: 'action 1',
+              audienceFocus: 'focus 1',
+              viewpoint: 'view 1',
+              revealPlan: 'reveal 1',
+              performanceBeat: 'beat 1',
+              continuityIn: 'in 1',
+              continuityOut: 'out 1',
+              charactersAndScene: 'scene 1',
+              sound: 'sound 1',
+            },
+            {
+              shotNumber: 2,
+              durationSec: 3,
+              dramaticPurpose: 'purpose 2',
+              visibleAction: 'action 2',
+              audienceFocus: 'focus 2',
+              viewpoint: 'view 2',
+              revealPlan: 'reveal 2',
+              performanceBeat: 'beat 2',
+              continuityIn: 'in 2',
+              continuityOut: 'out 2',
+              charactersAndScene: 'scene 2',
+              sound: 'sound 2',
+            },
+          ],
+        },
+      },
+    }
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.id).toBe('edit-script:edit-script-1')
+    expect(merged[0]?.data.title).toBe('streamed core table')
+    expect(merged[0]?.data.targetType).toBe('editScript')
+    expect(merged[0]?.data.targetId).toBe('edit-script-1')
+    expect(merged[0]?.data.runtimeTargets).toEqual([{
+      targetType: 'ProjectEpisode',
+      targetId: 'episode-1',
+      types: ['edit_script_generate'],
+    }])
+    expect(merged[0]?.position).toEqual({ x: 10, y: 20 })
+  })
+
   it('replaces the persisted running screenplay node with text stream overlay while preserving position', () => {
     const base = screenplayNode({
       id: 'edit-screenplay:screenplay-1',

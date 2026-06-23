@@ -806,9 +806,40 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
     if (node.data.kind === 'spaceConsistency' && finalDataKinds.has(`spaceConsistency:${node.data.targetId}`)) return false
     return true
   })
+  const runningEditScriptBase = baseNodes.find((node) => (
+    node.data.kind === 'editScript'
+    && node.data.targetType === 'editScript'
+    && node.data.isRunning === true
+    && !node.data.editScriptDetails
+  )) ?? null
+  const editScriptOverlayForRunningBase = runningEditScriptBase
+    ? usableOverlays.find((node) => node.data.kind === 'editScript' && node.data.targetType === 'episode') ?? null
+    : null
   const overlayById = new Map(usableOverlays.map((node) => [node.id, node]))
   const usedOverlayIds = new Set<string>()
   const merged = baseNodes.map((node) => {
+    if (editScriptOverlayForRunningBase && node.id === runningEditScriptBase?.id) {
+      usedOverlayIds.add(editScriptOverlayForRunningBase.id)
+      return {
+        ...editScriptOverlayForRunningBase,
+        id: node.id,
+        position: node.position,
+        style: {
+          ...node.style,
+          width: editScriptOverlayForRunningBase.data.width,
+          height: editScriptOverlayForRunningBase.data.height,
+        },
+        data: {
+          ...node.data,
+          ...editScriptOverlayForRunningBase.data,
+          nodeId: node.id,
+          targetType: node.data.targetType,
+          targetId: node.data.targetId,
+          runtimeTargets: node.data.runtimeTargets,
+          onAction: node.data.onAction,
+        },
+      }
+    }
     const overlay = overlayById.get(node.id)
     if (!overlay) return node
     usedOverlayIds.add(overlay.id)
