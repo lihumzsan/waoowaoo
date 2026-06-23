@@ -118,43 +118,41 @@ export function createProjectAgentOperationTool(
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
-      let operationActivityId: string | null = null
-      if (params.operation.intent === 'act') {
-        if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
-        const activityId = randomUUID()
-        operationActivityId = activityId
-        const startedActivity = await appendProjectAgentEvents({
-          scope: {
-            projectId: params.projectId,
-            userId: params.userId,
-            episodeId: params.context.episodeId ?? null,
-            assistantId: 'workspace-command',
-          },
-          events: [
-            ...(params.context.currentActivityId
-              ? [{
-                  idempotencyKey: `activity-completed:${params.context.currentActivityId}:before:${activityId}`,
-                  event: {
-                    kind: 'activity.completed' as const,
-                    runId,
-                    activityId: params.context.currentActivityId,
-                  },
-                }]
-              : []),
-            {
-              idempotencyKey: `activity-started:${activityId}`,
-              event: {
-                kind: 'activity.started',
-                runId,
-                activityId,
-                type: 'operation',
-                operationId: params.operation.id,
-                ...(toolCallId ? { toolCallId } : {}),
-              },
+      if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
+      const operationActivityId = randomUUID()
+      const startedActivity = await appendProjectAgentEvents({
+        scope: {
+          projectId: params.projectId,
+          userId: params.userId,
+          episodeId: params.context.episodeId ?? null,
+          assistantId: 'workspace-command',
+        },
+        events: [
+          ...(params.context.currentActivityId
+            ? [{
+                idempotencyKey: `activity-completed:${params.context.currentActivityId}:before:${operationActivityId}`,
+                event: {
+                  kind: 'activity.completed' as const,
+                  runId,
+                  activityId: params.context.currentActivityId,
+                },
+              }]
+            : []),
+          {
+            idempotencyKey: `activity-started:${operationActivityId}`,
+            event: {
+              kind: 'activity.started',
+              runId,
+              activityId: operationActivityId,
+              type: 'operation',
+              operationId: params.operation.id,
+              ...(toolCallId ? { toolCallId } : {}),
             },
-          ],
-        })
-        if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
+          },
+        ],
+      })
+      if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
+      if (params.operation.intent === 'act') {
         writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
           runId,
           operationId: params.operation.id,
@@ -174,59 +172,55 @@ export function createProjectAgentOperationTool(
           input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
           toolCallId,
         })
-        if (operationActivityId && runId) {
-          const settledActivity = await appendProjectAgentEvents({
-            scope: {
-              projectId: params.projectId,
-              userId: params.userId,
-              episodeId: params.context.episodeId ?? null,
-              assistantId: 'workspace-command',
-            },
-            events: [{
-              idempotencyKey: result.ok
-                ? `activity-completed:${operationActivityId}`
-                : `activity-failed:${operationActivityId}:${result.error.code}`,
-              event: result.ok
-                ? {
-                    kind: 'activity.completed',
-                    runId,
-                    activityId: operationActivityId,
-                  }
-                : {
-                    kind: 'activity.failed',
-                    runId,
-                    activityId: operationActivityId,
-                    errorCode: result.error.code,
-                    errorMessage: result.error.message,
-                  },
-            }],
-          })
-          if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
-        }
+        const settledActivity = await appendProjectAgentEvents({
+          scope: {
+            projectId: params.projectId,
+            userId: params.userId,
+            episodeId: params.context.episodeId ?? null,
+            assistantId: 'workspace-command',
+          },
+          events: [{
+            idempotencyKey: result.ok
+              ? `activity-completed:${operationActivityId}`
+              : `activity-failed:${operationActivityId}:${result.error.code}`,
+            event: result.ok
+              ? {
+                  kind: 'activity.completed',
+                  runId,
+                  activityId: operationActivityId,
+                }
+              : {
+                  kind: 'activity.failed',
+                  runId,
+                  activityId: operationActivityId,
+                  errorCode: result.error.code,
+                  errorMessage: result.error.message,
+                },
+          }],
+        })
+        if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
         return result
       } catch (error) {
-        if (operationActivityId && runId) {
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          const failedActivity = await appendProjectAgentEvents({
-            scope: {
-              projectId: params.projectId,
-              userId: params.userId,
-              episodeId: params.context.episodeId ?? null,
-              assistantId: 'workspace-command',
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const failedActivity = await appendProjectAgentEvents({
+          scope: {
+            projectId: params.projectId,
+            userId: params.userId,
+            episodeId: params.context.episodeId ?? null,
+            assistantId: 'workspace-command',
+          },
+          events: [{
+            idempotencyKey: `activity-failed:${operationActivityId}:throw`,
+            event: {
+              kind: 'activity.failed',
+              runId,
+              activityId: operationActivityId,
+              errorCode: 'PROJECT_AGENT_OPERATION_THROWN',
+              errorMessage,
             },
-            events: [{
-              idempotencyKey: `activity-failed:${operationActivityId}:throw`,
-              event: {
-                kind: 'activity.failed',
-                runId,
-                activityId: operationActivityId,
-                errorCode: 'PROJECT_AGENT_OPERATION_THROWN',
-                errorMessage,
-              },
-            }],
-          })
-          if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
-        }
+          }],
+        })
+        if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
         throw error
       } finally {
         params.onExecutionSettled?.()

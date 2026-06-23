@@ -171,7 +171,7 @@ describe('createProjectAgentOperationTool', () => {
     }))
   })
 
-  it('does not emit an operation-start card for read-only query tools', async () => {
+  it('emits running activity for read-only query tools without an operation-start marker', async () => {
     const writer = {
       write: vi.fn(),
       merge: vi.fn(),
@@ -202,6 +202,16 @@ describe('createProjectAgentOperationTool', () => {
       },
     })
 
+    expect(writer.write).toHaveBeenCalledWith({
+      type: 'data-agent-activity',
+      data: expect.objectContaining({
+        runId: 'run-1',
+        type: 'operation',
+        status: 'running',
+        operationId: 'get_project_phase',
+        toolCallId: 'call-1',
+      }),
+    })
     expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
       type: 'data-agent-operation-start',
     }))

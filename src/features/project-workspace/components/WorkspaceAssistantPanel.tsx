@@ -128,14 +128,12 @@ export function shouldSuppressWorkspaceAssistantOperationRunCard(params: {
 
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
-  replyAwaitingFirstVisibleOutput: boolean
-  hasVisibleActivityIndicator: boolean
+  replyAwaitingFirstTextOutput: boolean
   awaitingUserInput: boolean
   awaitingExternalTask: boolean
 }): boolean {
   return !params.storageLoading
-    && params.replyAwaitingFirstVisibleOutput
-    && !params.hasVisibleActivityIndicator
+    && params.replyAwaitingFirstTextOutput
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
 }
@@ -567,7 +565,7 @@ export default function WorkspaceAssistantPanel({
     onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
   })
-  const assistantReplyActive = assistantRuntime.replyInFlight || assistantRuntime.replyAwaitingFirstVisibleOutput
+  const assistantReplyActive = assistantRuntime.replyInFlight || assistantRuntime.replyAwaitingFirstTextOutput
   const awaitingUserInput = resolveWorkspaceAssistantAwaitingUserInput({
     replyInFlight: assistantReplyActive,
     hasPendingInteraction: Boolean(pendingInteraction),
@@ -599,8 +597,7 @@ export default function WorkspaceAssistantPanel({
   )
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
-    replyAwaitingFirstVisibleOutput: assistantRuntime.replyAwaitingFirstVisibleOutput,
-    hasVisibleActivityIndicator: showActiveRunCard || showExternalTaskRunCard,
+    replyAwaitingFirstTextOutput: assistantRuntime.replyAwaitingFirstTextOutput,
     awaitingUserInput,
     awaitingExternalTask,
   })

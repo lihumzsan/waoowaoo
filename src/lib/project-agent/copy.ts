@@ -76,6 +76,22 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
 }
 
 const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: string }> = {
+  get_project_phase: {
+    zh: '项目阶段',
+    en: 'Project phase',
+  },
+  get_project_snapshot: {
+    zh: '项目快照',
+    en: 'Project snapshot',
+  },
+  get_project_context: {
+    zh: '项目上下文',
+    en: 'Project context',
+  },
+  get_task_status: {
+    zh: '任务状态',
+    en: 'Task status',
+  },
   request_edit_duration_aspect_ratio_choice: {
     zh: '选择时长与画幅',
     en: 'Choose duration & aspect ratio',

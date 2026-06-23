@@ -9,16 +9,16 @@ import {
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import { WorkspaceAssistantPendingTurnPlaceholder } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import {
-  hasWorkspaceAssistantVisibleOutput,
-  hasWorkspaceAssistantVisibleOutputAtOrAfterMessageIndex,
-} from '@/features/project-workspace/components/workspace-assistant/visible-output'
+  hasWorkspaceAssistantReplyLoadingStop,
+  hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex,
+  hasWorkspaceAssistantTextOutput,
+} from '@/features/project-workspace/components/workspace-assistant/reply-loading-stop'
 
 describe('workspace assistant reply loading indicator', () => {
-  it('shows only while the active reply is awaiting its first visible output', () => {
+  it('shows while the active reply is awaiting its first text output', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(true)
@@ -31,8 +31,7 @@ describe('workspace assistant reply loading indicator', () => {
   it('does not require the transport status to flip before showing the initial reply placeholder', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(true)
@@ -41,46 +40,78 @@ describe('workspace assistant reply loading indicator', () => {
   it('does not show while idle, loading storage, waiting for the user, or waiting for an external task', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: false,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: false,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: true,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: false,
-      hasVisibleActivityIndicator: false,
-      awaitingUserInput: false,
-      awaitingExternalTask: false,
-    })).toBe(false)
-    expect(shouldShowWorkspaceAssistantReplyLoading({
-      storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: true,
-      awaitingUserInput: false,
-      awaitingExternalTask: false,
-    })).toBe(false)
-    expect(shouldShowWorkspaceAssistantReplyLoading({
-      storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: true,
       awaitingExternalTask: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: false,
       awaitingExternalTask: true,
     })).toBe(false)
+  })
+
+  it('keeps thinking visible during tool use, activity cards, and data cards before text output', () => {
+    const nonTextMessages: UIMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '读取上下文' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolName: 'get_project_context',
+            toolCallId: 'call-1',
+            state: 'input-available',
+            input: {},
+          } as never,
+          {
+            type: 'data-agent-activity',
+            data: {
+              activityId: 'activity-1',
+              runId: 'run-1',
+              type: 'operation',
+              status: 'running',
+              operationId: 'get_project_context',
+              sourceOperationId: null,
+              toolCallId: 'call-1',
+              choiceType: null,
+            },
+          } as never,
+          {
+            type: 'data-project-context',
+            data: {
+              context: {},
+            },
+          } as never,
+        ],
+      },
+    ]
+
+    expect(hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex(nonTextMessages, 1)).toBe(false)
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyAwaitingFirstTextOutput: true,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
+    })).toBe(true)
   })
 
   it('does not let stale user-input waits suppress a just-started control reply', () => {
@@ -90,8 +121,7 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: true,
       awaitingUserInput: resolveWorkspaceAssistantAwaitingUserInput({
         replyInFlight: true,
         hasPendingInteraction: true,
@@ -117,17 +147,7 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
   })
 
-  it('keeps the control reply placeholder visible while only prior choice-card output exists', () => {
-    expect(shouldShowWorkspaceAssistantReplyLoading({
-      storageLoading: false,
-      replyAwaitingFirstVisibleOutput: true,
-      hasVisibleActivityIndicator: false,
-      awaitingUserInput: false,
-      awaitingExternalTask: false,
-    })).toBe(true)
-  })
-
-  it('detects visible output from the real streamed message even when the stream replaces the local id', () => {
+  it('detects text output from the real streamed message even when the stream replaces the local id', () => {
     const realStreamMessage: UIMessage = {
       id: 'server-replaced-message-id',
       role: 'assistant',
@@ -145,53 +165,17 @@ describe('workspace assistant reply loading indicator', () => {
       ],
     }
 
-    expect(hasWorkspaceAssistantVisibleOutput(realStreamMessage)).toBe(true)
+    expect(hasWorkspaceAssistantTextOutput(realStreamMessage)).toBe(true)
+    expect(hasWorkspaceAssistantReplyLoadingStop(realStreamMessage)).toBe(true)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyAwaitingFirstVisibleOutput: false,
-      hasVisibleActivityIndicator: false,
+      replyAwaitingFirstTextOutput: false,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(false)
   })
 
-  it('hides the reply placeholder when a visible tool row has started without text', () => {
-    expect(hasWorkspaceAssistantVisibleOutput({
-      id: 'assistant-1',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'dynamic-tool',
-          toolName: 'generate_edit_screenplay',
-          state: 'input-available',
-        } as never,
-      ],
-    })).toBe(true)
-  })
-
-  it('treats operation activity as visible output because it renders the active run card', () => {
-    expect(hasWorkspaceAssistantVisibleOutput({
-      id: 'assistant-activity',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'data-agent-activity',
-          data: {
-            activityId: 'activity-1',
-            runId: 'run-1',
-            type: 'operation',
-            status: 'running',
-            operationId: 'generate_edit_screenplay',
-            sourceOperationId: null,
-            toolCallId: null,
-            choiceType: null,
-          },
-        } as never,
-      ],
-    })).toBe(true)
-  })
-
-  it('detects normal chat visible output after the reply wait boundary', () => {
+  it('detects normal chat text output after the reply wait boundary', () => {
     const messages: UIMessage[] = [
       {
         id: 'assistant-old',
@@ -224,10 +208,74 @@ describe('workspace assistant reply loading indicator', () => {
       },
     ]
 
-    expect(hasWorkspaceAssistantVisibleOutputAtOrAfterMessageIndex(messages, 2)).toBe(true)
+    expect(hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex(messages, 2)).toBe(true)
   })
 
-  it('ignores visible output that existed before the current reply wait began', () => {
+  it('stops thinking when the agent yields control to user input or external tasks', () => {
+    const messages: UIMessage[] = [
+      {
+        id: 'assistant-choice',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-activity',
+            data: {
+              activityId: 'activity-choice',
+              runId: 'run-1',
+              type: 'awaiting_choice',
+              status: 'waiting',
+              operationId: null,
+              sourceOperationId: 'request_edit_screenplay_review_choice',
+              toolCallId: null,
+              choiceType: 'screenplay_review',
+            },
+          } as never,
+        ],
+      },
+      {
+        id: 'assistant-approval',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-activity',
+            data: {
+              activityId: 'activity-approval',
+              runId: 'run-1',
+              type: 'awaiting_approval',
+              status: 'waiting',
+              operationId: 'generate_edit_screenplay',
+              sourceOperationId: null,
+              toolCallId: 'call-1',
+              choiceType: null,
+            },
+          } as never,
+        ],
+      },
+      {
+        id: 'assistant-wait',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-activity',
+            data: {
+              activityId: 'activity-wait',
+              runId: 'run-1',
+              type: 'waiting_task',
+              status: 'waiting',
+              operationId: null,
+              sourceOperationId: 'generate_edit_screenplay',
+              toolCallId: null,
+              choiceType: null,
+            },
+          } as never,
+        ],
+      },
+    ]
+
+    expect(messages.every((message) => hasWorkspaceAssistantReplyLoadingStop(message))).toBe(true)
+  })
+
+  it('ignores text output that existed before the current reply wait began', () => {
     const waitingMessages: UIMessage[] = [
       {
         id: 'assistant-old',
@@ -249,12 +297,12 @@ describe('workspace assistant reply loading indicator', () => {
       },
     ]
 
-    expect(hasWorkspaceAssistantVisibleOutputAtOrAfterMessageIndex(waitingMessages, 1)).toBe(false)
-    expect(hasWorkspaceAssistantVisibleOutputAtOrAfterMessageIndex(messages, 1)).toBe(true)
+    expect(hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex(waitingMessages, 1)).toBe(false)
+    expect(hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex(messages, 1)).toBe(true)
   })
 
-  it('does not treat hidden runtime markers as visible reply output', () => {
-    expect(hasWorkspaceAssistantVisibleOutput({
+  it('does not treat hidden runtime markers as text output', () => {
+    expect(hasWorkspaceAssistantTextOutput({
       id: 'assistant-1',
       role: 'assistant',
       parts: [
