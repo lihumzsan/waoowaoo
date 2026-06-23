@@ -1,8 +1,7 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
-import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { appendProjectAgentEvents } from './event'
@@ -96,13 +95,52 @@ export interface ProjectAgentSessionWait {
 }
 
 const WAIT_CLAIM_TTL_MS = 2 * 60 * 1000
-
-const projectAgentWaitLogger = createScopedLogger({
-  module: 'project-agent.waits',
-})
+export const PROJECT_AGENT_EVENT_IDEMPOTENCY_KEY_MAX_LENGTH = 191
 
 function normalizeTaskIds(taskIds: string[]): string[] {
   return Array.from(new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
+}
+
+function hashWaitTerminalTaskState(input: {
+  terminalTaskIds: string[]
+  failedTaskIds: string[]
+}): string {
+  return createHash('sha256').update(JSON.stringify({
+    terminalTaskIds: normalizeTaskIds(input.terminalTaskIds),
+    failedTaskIds: normalizeTaskIds(input.failedTaskIds),
+  })).digest('hex')
+}
+
+function enforceProjectAgentEventIdempotencyKeyLimit(key: string): string {
+  if (key.length > PROJECT_AGENT_EVENT_IDEMPOTENCY_KEY_MAX_LENGTH) {
+    throw new Error(`PROJECT_AGENT_EVENT_IDEMPOTENCY_KEY_TOO_LONG:${key.length}`)
+  }
+  return key
+}
+
+export function buildProjectAgentTaskProgressedIdempotencyKey(input: {
+  waitId: string
+  terminalTaskIds: string[]
+  failedTaskIds: string[]
+}): string {
+  const hash = hashWaitTerminalTaskState({
+    terminalTaskIds: input.terminalTaskIds,
+    failedTaskIds: input.failedTaskIds,
+  })
+  return enforceProjectAgentEventIdempotencyKeyLimit(`task-progressed:${input.waitId}:${hash}`)
+}
+
+export function buildProjectAgentTaskTerminalIdempotencyKey(input: {
+  waitId: string
+  terminalStatus: ProjectAgentWaitTerminalStatus
+  terminalTaskIds: string[]
+  failedTaskIds: string[]
+}): string {
+  const hash = hashWaitTerminalTaskState({
+    terminalTaskIds: input.terminalTaskIds,
+    failedTaskIds: input.failedTaskIds,
+  })
+  return enforceProjectAgentEventIdempotencyKeyLimit(`task-terminal:${input.waitId}:${input.terminalStatus}:${hash}`)
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -314,7 +352,12 @@ async function applyWaitTerminalStatus(input: {
       assistantId: input.assistantId,
     },
     events: [{
-      idempotencyKey: `task-terminal:${input.waitId}:${input.terminalStatus}:${input.terminalTaskIds.join(',')}:${input.failedTaskIds.join(',')}`,
+      idempotencyKey: buildProjectAgentTaskTerminalIdempotencyKey({
+        waitId: input.waitId,
+        terminalStatus: input.terminalStatus,
+        terminalTaskIds: input.terminalTaskIds,
+        failedTaskIds: input.failedTaskIds,
+      }),
       event: {
         kind: 'task.terminal',
         runId: input.runId ?? null,
@@ -357,7 +400,11 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
     await appendProjectAgentEvents({
       scope: input,
       events: [{
-        idempotencyKey: `task-progressed:${input.waitId}:${result.terminalTaskIds.join(',')}:${result.failedTaskIds.join(',')}`,
+        idempotencyKey: buildProjectAgentTaskProgressedIdempotencyKey({
+          waitId: input.waitId,
+          terminalTaskIds: result.terminalTaskIds,
+          failedTaskIds: result.failedTaskIds,
+        }),
         event: {
           kind: 'task.progressed',
           runId: input.runId ?? null,
@@ -444,7 +491,11 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
           assistantId: row.assistantId as ProjectAssistantId,
         },
         events: [{
-          idempotencyKey: `task-progressed:${row.id}:${result.terminalTaskIds.join(',')}:${result.failedTaskIds.join(',')}`,
+          idempotencyKey: buildProjectAgentTaskProgressedIdempotencyKey({
+            waitId: row.id,
+            terminalTaskIds: result.terminalTaskIds,
+            failedTaskIds: result.failedTaskIds,
+          }),
           event: {
             kind: 'task.progressed',
             runId: row.runId,
@@ -470,29 +521,6 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
       terminalStatus: result.terminalStatus,
       terminalTaskIds: result.terminalTaskIds,
       failedTaskIds: result.failedTaskIds,
-    })
-  }
-}
-
-export async function safelyResolveProjectAgentWaitsForTaskEvent(input: {
-  taskId: string
-  projectId: string
-  userId: string
-  lifecycleType: TaskLifecycleEventType
-}): Promise<void> {
-  try {
-    await resolveProjectAgentWaitsForTaskEvent(input)
-  } catch (error) {
-    projectAgentWaitLogger.error({
-      action: 'assistant.wait.resolve.failed',
-      message: 'Failed to resolve project agent wait from task event',
-      projectId: input.projectId,
-      userId: input.userId,
-      details: {
-        taskId: input.taskId,
-        lifecycleType: input.lifecycleType,
-        error: error instanceof Error ? error.message : String(error),
-      },
     })
   }
 }

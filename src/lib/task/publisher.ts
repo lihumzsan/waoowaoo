@@ -8,7 +8,7 @@ import {
   type TaskSSEEvent,
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
-import { safelyResolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
+import { resolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -261,7 +261,7 @@ export async function publishTaskLifecycleEvent(params: {
     payload: params.payload || null,
   })
 
-  await safelyResolveProjectAgentWaitsForTaskEvent({
+  await resolveProjectAgentWaitsForTaskEvent({
     taskId: params.taskId,
     projectId: params.projectId,
     userId: params.userId,
