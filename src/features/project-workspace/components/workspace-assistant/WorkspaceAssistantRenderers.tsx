@@ -9,7 +9,7 @@ import {
   type ReasoningMessagePartProps,
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, CSSProperties } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
@@ -704,23 +704,48 @@ function truncateStylePreviewErrorMessage(message: string | null | undefined): s
   return singleLine.length > 180 ? `${singleLine.slice(0, 180)}...` : singleLine
 }
 
-function StylePreviewRing({ percent, size = 64 }: { percent: number; size?: number }) {
+/* 纤细圆环：conic 渐变 + 径向遮罩,描边轻盈,替代旧的厚环黑芯 */
+function StylePreviewRingMask(size: number): CSSProperties {
+  const stroke = size < 40 ? 2 : 2.5
+  return {
+    WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${stroke}px), #000 calc(100% - ${stroke}px))`,
+    mask: `radial-gradient(farthest-side, transparent calc(100% - ${stroke}px), #000 calc(100% - ${stroke}px))`,
+  }
+}
+
+function StylePreviewRing({ percent, size = 56 }: { percent: number; size?: number }) {
   const clamped = Math.max(0, Math.min(100, percent))
   const ringDegrees = clamped * 3.6
-  const ringThickness = size < 40 ? 3 : 4
   return (
-    <div className="relative flex items-center justify-center" style={{ height: size, width: size }}>
+    <div className="relative" style={{ height: size, width: size }}>
       <div
-        className="absolute inset-0 rounded-full transition-[background] duration-500 ease-out"
+        className="absolute inset-0 rounded-full drop-shadow-[0_0_6px_rgba(255,255,255,0.5)] transition-all duration-500 ease-out"
         style={{
-          background: `conic-gradient(var(--glass-accent-from) 0deg, var(--glass-accent-to) ${ringDegrees}deg, rgba(255,255,255,0.22) ${ringDegrees}deg, rgba(255,255,255,0.22) 360deg)`,
+          background: `conic-gradient(#fff 0deg ${ringDegrees}deg, rgba(255,255,255,0.25) ${ringDegrees}deg 360deg)`,
+          ...StylePreviewRingMask(size),
         }}
       />
-      <div className="absolute rounded-full bg-black/35" style={{ inset: ringThickness }} />
-      <span className="absolute font-semibold tabular-nums text-white" style={{ fontSize: size < 40 ? 9 : 13 }}>
-        {Math.floor(clamped)}
-      </span>
+      {size >= 40 ? (
+        <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold tabular-nums text-white">
+          {Math.floor(clamped)}
+        </span>
+      ) : null}
     </div>
+  )
+}
+
+/* 进度未知时的不定态纤细环（自旋） */
+function StylePreviewIndeterminateRing({ size = 56 }: { size?: number }) {
+  return (
+    <div
+      className="style-preview-spin rounded-full drop-shadow-[0_0_6px_rgba(255,255,255,0.45)]"
+      style={{
+        height: size,
+        width: size,
+        background: 'conic-gradient(transparent 0deg 250deg, rgba(255,255,255,0.95) 360deg)',
+        ...StylePreviewRingMask(size),
+      }}
+    />
   )
 }
 
@@ -730,34 +755,35 @@ function useStylePreviewRunningPercent(taskState: TaskTargetState | undefined): 
   return Math.floor(Math.max(0, Math.min(99, progress.percent)))
 }
 
-/* 生成中浮层：取代旧的居中黑块，改为圆环 + 状态胶囊 */
+/* 生成中浮层：光环呼吸（aurora）+ 纤细圆环，进度内嵌于环中 */
 function StylePreviewGeneratingOverlay({ taskState }: { taskState: TaskTargetState | undefined }) {
   const t = useTranslations('assistantAgent')
   const percent = useStylePreviewRunningPercent(taskState)
+  const statusLabel = percent !== null ? `${t('cards.stylePreviewGenerating')} ${percent}%` : t('cards.stylePreviewLoading')
   return (
-    <div className="absolute inset-0 z-20">
-      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
-      <div className="relative flex h-full flex-col items-center justify-center gap-2">
-        {percent !== null ? (
-          <StylePreviewRing percent={percent} size={64} />
-        ) : (
-          <AppIcon name="loader" className="h-8 w-8 animate-spin text-white" />
-        )}
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-md ring-1 ring-white/15">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--glass-accent-to)]" />
-          {percent !== null ? `${t('cards.stylePreviewGenerating')} ${percent}%` : t('cards.stylePreviewLoading')}
-        </span>
+    <div className="absolute inset-0 z-20 overflow-hidden" role="status" aria-label={statusLabel}>
+      <div className="style-preview-aura absolute inset-0" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
+      <div className="relative flex h-full items-center justify-center">
+        {percent !== null
+          ? <StylePreviewRing percent={percent} size={56} />
+          : <StylePreviewIndeterminateRing size={56} />}
       </div>
     </div>
   )
 }
 
-/* 折叠小行缩略图里的迷你进度 */
+/* 折叠小行缩略图里的迷你进度：同款光环呼吸 + 迷你环 */
 function StylePreviewRowProgress({ taskState }: { taskState: TaskTargetState | undefined }) {
   const percent = useStylePreviewRunningPercent(taskState)
-  return percent !== null
-    ? <StylePreviewRing percent={percent} size={30} />
-    : <AppIcon name="loader" className="h-4 w-4 animate-spin text-white" />
+  return (
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      <div className="style-preview-aura absolute inset-0" />
+      {percent !== null
+        ? <StylePreviewRing percent={percent} size={26} />
+        : <StylePreviewIndeterminateRing size={20} />}
+    </div>
+  )
 }
 
 /* 生成/加载占位：暗黑玻璃态模糊面（取代浅灰骨架） */
@@ -933,11 +959,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                   ) : (
                     <StylePreviewLoadingSurface />
                   )}
-                  {inProgress ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                      <StylePreviewRowProgress taskState={taskState} />
-                    </div>
-                  ) : null}
+                  {inProgress ? <StylePreviewRowProgress taskState={taskState} /> : null}
                   {failed ? (
                     <div className="absolute inset-0 flex items-center justify-center bg-[var(--glass-tone-warn-bg)]/55">
                       <AppIcon name="alert" className="h-4 w-4 text-[var(--glass-tone-warn-fg)]" />
