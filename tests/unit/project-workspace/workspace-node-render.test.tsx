@@ -78,6 +78,49 @@ describe('workspace node rendering', () => {
     expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
   })
 
+  it('uses the running card emphasis for focus highlights without changing ready status', () => {
+    const html = renderNode({
+      kind: 'editStyleBible',
+      layoutNodeType: 'editStyleBible',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      title: 'Style Bible',
+      eyebrow: 'Style',
+      body: 'style body',
+      meta: 'meta',
+      statusLabel: 'Ready',
+      isRunning: false,
+      focusHighlighted: true,
+      width: 460,
+      height: 520,
+      styleBibleDetails: {
+        styleSummary: 'quiet noir',
+        rawUserStyle: null,
+        visual: {
+          colorPrompt: null,
+          lightingPrompt: null,
+          texturePrompt: null,
+          compositionPrompt: null,
+          imageFilterPrompt: null,
+          negativePrompt: null,
+        },
+        camera: {
+          movementPrompt: null,
+          lensAndDepthPrompt: null,
+          videoRhythmPrompt: null,
+        },
+        sound: {
+          soundFilterPrompt: null,
+        },
+        hardBans: [],
+      },
+    })
+
+    expect(html).toContain('workspace-node-running-breathing')
+    expect(html).toContain('Ready')
+    expect(html).not.toContain('data-icon="loader"')
+  })
+
   it('uses shot text as the edit script preview fallback when storyboard media is missing', () => {
     expect(previewShotMediaKind({
       videoUrl: 'https://example.com/shot.mp4',

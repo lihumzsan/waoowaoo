@@ -500,6 +500,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly meta: string
   readonly statusLabel: string
   readonly isRunning?: boolean
+  readonly focusHighlighted?: boolean
   readonly streamPresentation?: WorkspaceCanvasStreamPresentation
   readonly taskProgress?: TaskRuntimeStateLike | null
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]

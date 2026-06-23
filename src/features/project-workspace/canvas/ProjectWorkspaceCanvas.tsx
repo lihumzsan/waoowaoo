@@ -94,6 +94,7 @@ import {
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
 const OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS = 15000
+const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
 const MEASURED_NODE_SIZE_EPSILON = 1
 
 export interface WorkspaceAssistantSelectionContext {
@@ -226,6 +227,8 @@ function ProjectWorkspaceCanvasContent({
   const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
+  const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
   const workspaceTaskStateByQueryKeyRef = useRef<ReadonlyMap<string, TaskRuntimeStateLike>>(new Map())
   const projectedNodeByIdRef = useRef<ReadonlyMap<string, WorkspaceCanvasFlowNode>>(new Map())
   const expansionAnchorNodePositionsRef = useRef<ReadonlyMap<string, { readonly x: number; readonly y: number }>>(new Map())
@@ -343,6 +346,49 @@ function ProjectWorkspaceCanvasContent({
         }
       : node))
   }, [clearOptimisticRunningNode, nodeRunningStatusLabel, restoreNodeRuntimeBaseline])
+  const clearFocusHighlightedNode = useCallback((nodeId: string) => {
+    const timer = focusHighlightClearTimersRef.current.get(nodeId)
+    if (timer !== undefined) {
+      window.clearTimeout(timer)
+      focusHighlightClearTimersRef.current.delete(nodeId)
+    }
+    const nextIds = new Set(focusHighlightedNodeIdsRef.current)
+    nextIds.delete(nodeId)
+    focusHighlightedNodeIdsRef.current = nextIds
+    setSourceNodes((currentNodes) => currentNodes.map((node) => node.id === nodeId && node.data.focusHighlighted === true
+      ? {
+          ...node,
+          data: {
+            ...node.data,
+            focusHighlighted: false,
+          },
+        }
+      : node))
+  }, [])
+  const markNodesFocusHighlighted = useCallback((nodeIds: readonly string[]) => {
+    if (nodeIds.length === 0) return
+    const nextIds = new Set(focusHighlightedNodeIdsRef.current)
+    nodeIds.forEach((nodeId) => {
+      const existingTimer = focusHighlightClearTimersRef.current.get(nodeId)
+      if (existingTimer !== undefined) window.clearTimeout(existingTimer)
+      nextIds.add(nodeId)
+    })
+    focusHighlightedNodeIdsRef.current = nextIds
+    const nodeIdSet = new Set(nodeIds)
+    setSourceNodes((currentNodes) => currentNodes.map((node) => nodeIdSet.has(node.id)
+      ? {
+          ...node,
+          data: {
+            ...node.data,
+            focusHighlighted: true,
+          },
+        }
+      : node))
+    nodeIds.forEach((nodeId) => {
+      const timer = window.setTimeout(() => clearFocusHighlightedNode(nodeId), FOCUS_HIGHLIGHT_TIMEOUT_MS)
+      focusHighlightClearTimersRef.current.set(nodeId, timer)
+    })
+  }, [clearFocusHighlightedNode])
   const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
     if (action.type === 'open_video_block_arrangement') {
       setVideoBlockArrangementInitialBlockIndex(action.blockIndex)
@@ -479,6 +525,7 @@ function ProjectWorkspaceCanvasContent({
         data: {
           ...node.data,
           ...runtimePatch,
+          focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
           expanded,
           expandedLayout: expanded ? profile.expandedLayout : undefined,
           onToggleExpanded: toggleNodeExpanded,
@@ -592,8 +639,9 @@ function ProjectWorkspaceCanvasContent({
   const handleFocusComplete = useCallback((focusKey: string) => {
     if (!styleBibleFocusRequestKey) return
     if (!focusKey.startsWith(`${styleBibleFocusRequestKey}:`)) return
+    markNodesFocusHighlighted(styleBibleFocusNodeIds)
     setHandledStyleBibleFocusRequestId(styleBibleFocusRequestId)
-  }, [styleBibleFocusRequestId, styleBibleFocusRequestKey])
+  }, [markNodesFocusHighlighted, styleBibleFocusNodeIds, styleBibleFocusRequestId, styleBibleFocusRequestKey])
   const {
     pendingFocusNodeIds,
     focusNow: focusCurrentRunningNodes,
@@ -648,6 +696,8 @@ function ProjectWorkspaceCanvasContent({
   useEffect(() => () => {
     optimisticRunningClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     optimisticRunningClearTimersRef.current.clear()
+    focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    focusHighlightClearTimersRef.current.clear()
   }, [])
 
   useEffect(() => {
