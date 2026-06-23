@@ -52,7 +52,7 @@ import {
   type ProjectAgentRunLock,
 } from './run-lock'
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
   clearProjectAgentInterruptionRunState,
   createProjectAgentApprovalInterruption,
@@ -591,6 +591,7 @@ export async function createProjectAgentChatResponse(input: {
     registry: operations,
     context,
     resumeOperationId: approvalInterruption?.operationId ?? null,
+    disabledOperationIds: control.kind === 'choice' ? [EDIT_FIRST_CHOICE_TOOL_IDS[control.choiceType]] : [],
   })
   const operationIds = toolset.operationIds
   const initialEnabledOperationIds = operationIds.filter((operationId) => isProjectAgentOperationEnabled({

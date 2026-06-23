@@ -192,14 +192,26 @@ describe('project agent live operation enablement', () => {
     })).toBe(false)
   })
 
-  it('treats core read tools and the choice tool as always enabled', () => {
+  it('treats core read tools as always enabled while choice tools follow workflow stage gates', () => {
     const toolset = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
+    const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    const styleChoice = workflow('needs_style_choice', ['generate_edit_style_previews'])
 
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_phase')).toBe(true)
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)).toBe(true)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: styleChoice,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+    })).toBe(false)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_script')).toBe(false)
   })
 

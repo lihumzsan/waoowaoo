@@ -599,7 +599,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.capturedEnabledToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
+    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
   })
 
   it('allows a choice response run to finish when the model chooses not to call another tool', async () => {
@@ -648,6 +648,49 @@ describe('project agent runtime deterministic tool injection', () => {
       status: 'completed',
       stopReason: 'completed',
     }))
+  })
+
+  it('does not expose screenplay review choice again after that choice was already approved', async () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-choice-review',
+      latestUserText: '确认剧本',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })
+    expect(choiceResult).not.toBeNull()
+    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_edit_screenplay',
+    ])
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
+      control: {
+        kind: 'choice',
+        interruptionId: 'choice-interruption-1',
+        choiceType: 'screenplay_review',
+        toolCallId: 'tool-choice-review',
+        cardId: 'edit-first-screenplay-review',
+        choiceResult: choiceResult!,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '确认剧本' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedEnabledToolNames).toContain('revise_edit_screenplay')
   })
 
   it('keeps screenplay review choice available after screenplay generation from a choice response', async () => {

@@ -6,6 +6,7 @@ import {
 } from '@/lib/project-workflow/edit-first'
 import {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
   isEditFirstChoiceToolId,
 } from './edit-first-choice-tools'
 import type { ProjectAgentContext } from './types'
@@ -47,6 +48,7 @@ export interface ProjectAgentToolset {
   workflowOperationIds: string[]
   resumeOperationId: string | null
   includeChoiceOperation: boolean
+  disabledOperationIds: string[]
 }
 
 function pushOptionalTool(params: {
@@ -82,6 +84,7 @@ export function resolveProjectAgentToolset(params: {
   registry: ProjectAgentOperationRegistry
   context: ProjectAgentContext
   resumeOperationId?: string | null
+  disabledOperationIds?: readonly string[]
 }): ProjectAgentToolset {
   const operationIds: string[] = []
   const coreOperationIds: string[] = []
@@ -146,6 +149,7 @@ export function resolveProjectAgentToolset(params: {
     workflowOperationIds,
     resumeOperationId,
     includeChoiceOperation,
+    disabledOperationIds: Array.from(new Set(params.disabledOperationIds ?? [])),
   }
 }
 
@@ -162,7 +166,25 @@ export function isProjectAgentOperationAlwaysEnabled(
 ): boolean {
   return toolset.coreOperationIds.includes(operationId)
     || operationId === toolset.resumeOperationId
-    || isEditFirstChoiceToolId(operationId)
+}
+
+function isEditFirstChoiceOperationEnabled(params: {
+  workflow: EditFirstWorkflowState
+  operationId: string
+}): boolean {
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio) {
+    return params.workflow.stage === 'ready_to_generate_screenplay'
+  }
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review) {
+    return params.workflow.stage === 'screenplay_ready_for_review'
+  }
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.style) {
+    return params.workflow.stage === 'needs_style_choice'
+  }
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.asset_review) {
+    return params.workflow.stage === 'assets_ready_for_review'
+  }
+  return false
 }
 
 /**
@@ -176,7 +198,14 @@ export function isProjectAgentOperationEnabled(params: {
   workflow: EditFirstWorkflowState
   operationId: string
 }): boolean {
+  if (params.toolset.disabledOperationIds.includes(params.operationId)) return false
   if (isProjectAgentOperationAlwaysEnabled(params.toolset, params.operationId)) return true
+  if (isEditFirstChoiceToolId(params.operationId)) {
+    return isEditFirstChoiceOperationEnabled({
+      workflow: params.workflow,
+      operationId: params.operationId,
+    })
+  }
   const enabledOperationIds = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
   const nextActionOperationId = params.workflow.nextAction?.operationId ?? null
   if (nextActionOperationId) enabledOperationIds.add(nextActionOperationId)
