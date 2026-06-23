@@ -72,6 +72,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   messageCount: number
   status: ChatStatus
   pending: boolean
+  controlPending: boolean
   pendingApprovalId: string | null
   approvalRespondedIds: ReadonlySet<string>
   sessionState: ProjectAgentSessionState | null
@@ -766,6 +767,7 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: Boolean(pendingRun) || chat.status === 'submitted' || chat.status === 'streaming',
+    controlPending: Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status)),
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,

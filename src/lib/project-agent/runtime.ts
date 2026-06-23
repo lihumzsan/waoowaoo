@@ -360,17 +360,6 @@ function collectFunctionToolOutputs(
   })
 }
 
-function choiceResponseMadeToolProgress(params: {
-  registry: ProjectAgentOperationRegistry
-  executedToolNames: ReadonlySet<string>
-}): boolean {
-  for (const toolName of params.executedToolNames) {
-    if (toolName === 'request_edit_first_choice') return true
-    if (params.registry[toolName]?.intent === 'act') return true
-  }
-  return false
-}
-
 function readApprovalString(value: unknown, key: string): string | null {
   if (!isRecord(value)) return null
   const raw = value[key]
@@ -729,7 +718,6 @@ export async function createProjectAgentChatResponse(input: {
 
   let latestStopPart: ProjectAgentStopPartData | null = null
   const stopController = createProjectAgentStopController()
-  const executedToolNames = new Set<string>()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
   const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
@@ -777,9 +765,6 @@ export async function createProjectAgentChatResponse(input: {
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
       const toolOutputs = collectFunctionToolOutputs(toolResults)
-      for (const output of toolOutputs) {
-        executedToolNames.add(output.toolName)
-      }
       const stopPart = stopController.evaluateStep(toolOutputs)
       if (!stopPart) {
         return {
@@ -880,34 +865,6 @@ export async function createProjectAgentChatResponse(input: {
 
         if (approvalInterruption) {
           await clearProjectAgentInterruptionRunState(approvalInterruption.id)
-        }
-
-        if (
-          control.kind === 'choice'
-          && !latestStopPart
-          && !approvalItem
-          && !choiceResponseMadeToolProgress({ registry: operations, executedToolNames })
-        ) {
-          latestStopPart = {
-            reason: 'tool_error',
-            stepCount: 0,
-            operationIds: ['request_edit_first_choice'],
-            codes: ['PROJECT_AGENT_CHOICE_RESPONSE_NO_PROGRESS'],
-          }
-          projectAgentLogger.error({
-            action: 'assistant.choice_response.no_progress',
-            message: 'Choice response run completed without an action or follow-up choice tool call',
-            requestId,
-            projectId: input.projectId,
-            userId: input.userId,
-            details: {
-              runId: input.run.id,
-              choiceType: control.choiceType,
-              workflowStage: phase.editFirstWorkflow.stage,
-              initialEnabledOperationIds,
-              executedToolNames: Array.from(executedToolNames).sort(),
-            },
-          })
         }
 
         const waitFollowUpMode = await maybeCreateProjectAgentWait({

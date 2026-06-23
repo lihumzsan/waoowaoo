@@ -9,6 +9,7 @@ import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/compon
 import {
   shouldSuppressWorkspaceAssistantOperationRunCard,
   shouldDockWorkspaceStylePreviewGenerationCard,
+  shouldDeferWorkspaceAssistantTaskFollowUp,
   WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
@@ -361,6 +362,53 @@ describe('workspace assistant panel layout', () => {
     expect(panelSource).toContain('WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS')
     expect(panelSource).toContain('window.setInterval')
     expect(panelSource).toContain('flushResolvedWaitFollowUps')
+  })
+
+  it('does not defer task follow-up only because the current run is awaiting an external task', () => {
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: false,
+      chatStatus: 'ready',
+      storageLoading: false,
+      pendingApprovalId: null,
+      currentRunStatus: 'awaiting_task',
+    })).toBe(false)
+
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: false,
+      chatStatus: 'streaming',
+      storageLoading: false,
+      pendingApprovalId: null,
+      currentRunStatus: 'awaiting_task',
+    })).toBe(true)
+
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: true,
+      chatStatus: 'ready',
+      storageLoading: false,
+      pendingApprovalId: null,
+      currentRunStatus: 'awaiting_task',
+    })).toBe(true)
+
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: false,
+      chatStatus: 'ready',
+      storageLoading: false,
+      pendingApprovalId: 'approval-1',
+      currentRunStatus: 'awaiting_task',
+    })).toBe(true)
+
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: false,
+      chatStatus: 'ready',
+      storageLoading: false,
+      pendingApprovalId: null,
+      currentRunStatus: 'running',
+    })).toBe(true)
   })
 
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {

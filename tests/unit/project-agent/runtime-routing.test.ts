@@ -572,7 +572,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedEnabledToolNames).toContain('request_edit_first_choice')
   })
 
-  it('fails a choice response run when the model does not call an action or follow-up choice tool', async () => {
+  it('allows a choice response run to finish when the model chooses not to call another tool', async () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'screenplay_review',
       toolCallId: 'tool-choice-review',
@@ -610,14 +610,13 @@ describe('project agent runtime deterministic tool injection', () => {
     await drainCapturedResponseStream()
 
     expect(response.status).toBe(200)
-    expect(loggerState.error).toHaveBeenCalledWith(expect.objectContaining({
+    expect(loggerState.error).not.toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.choice_response.no_progress',
     }))
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-choice_response',
-      status: 'failed',
-      stopReason: 'tool_error',
-      errorCode: 'PROJECT_AGENT_CHOICE_RESPONSE_NO_PROGRESS',
+      status: 'completed',
+      stopReason: 'completed',
     }))
   })
 

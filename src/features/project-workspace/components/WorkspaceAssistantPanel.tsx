@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ChatStatus } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
@@ -57,6 +58,7 @@ import {
 } from '@/lib/project-agent/permission-mode'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 
 const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
@@ -89,6 +91,21 @@ interface WorkspaceAssistantPanelProps {
   isCollapsed: boolean
   onToggleCollapsed: () => void
   onActiveOperationChange?: (operationId: string | null) => void
+}
+
+export function shouldDeferWorkspaceAssistantTaskFollowUp(input: {
+  pending: boolean
+  controlPending: boolean
+  chatStatus: ChatStatus
+  storageLoading: boolean
+  pendingApprovalId: string | null
+  currentRunStatus?: ProjectAgentRunPartData['status'] | null
+}): boolean {
+  if (input.storageLoading || input.pendingApprovalId) return true
+  if (input.chatStatus === 'submitted' || input.chatStatus === 'streaming') return true
+  if (input.controlPending) return true
+  if (!input.pending) return false
+  return input.currentRunStatus !== 'awaiting_task'
 }
 
 const WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY = 'workspace-assistant-panel-width'
@@ -231,22 +248,51 @@ export default function WorkspaceAssistantPanel({
   // server-side and the wait becomes claimable again — no local bookkeeping.
   const sendTaskFollowUp = useCallback(async (followUp: { runId: string; waitId: string; claimId: string }) => {
     const runtime = assistantRuntimeRef.current
-    if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) {
+    if (shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: runtime.pending,
+      controlPending: runtime.controlPending,
+      chatStatus: runtime.status,
+      storageLoading: runtime.storageLoading,
+      pendingApprovalId: runtime.pendingApprovalId,
+      currentRunStatus: runtime.sessionState?.currentRun?.status ?? null,
+    })) {
       queuedTaskFollowUpsRef.current = [...queuedTaskFollowUpsRef.current, followUp]
       return
     }
     await runtime.submitTaskFollowUp(followUp)
   }, [])
   useEffect(() => {
-    if (assistantRuntime.pending || assistantRuntime.storageLoading || assistantRuntime.pendingApprovalId) return
+    if (shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: assistantRuntime.pending,
+      controlPending: assistantRuntime.controlPending,
+      chatStatus: assistantRuntime.status,
+      storageLoading: assistantRuntime.storageLoading,
+      pendingApprovalId: assistantRuntime.pendingApprovalId,
+      currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
+    })) return
     const [queuedFollowUp, ...remainingFollowUps] = queuedTaskFollowUpsRef.current
     if (!queuedFollowUp) return
     queuedTaskFollowUpsRef.current = remainingFollowUps
     void assistantRuntime.submitTaskFollowUp(queuedFollowUp)
-  }, [assistantRuntime, assistantRuntime.pending, assistantRuntime.pendingApprovalId, assistantRuntime.storageLoading])
+  }, [
+    assistantRuntime,
+    assistantRuntime.controlPending,
+    assistantRuntime.pending,
+    assistantRuntime.pendingApprovalId,
+    assistantRuntime.sessionState?.currentRun?.status,
+    assistantRuntime.status,
+    assistantRuntime.storageLoading,
+  ])
   const flushResolvedWaitFollowUps = useCallback(async () => {
     const runtime = assistantRuntimeRef.current
-    if (runtime.pending || runtime.storageLoading || runtime.pendingApprovalId) return
+    if (shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: runtime.pending,
+      controlPending: runtime.controlPending,
+      chatStatus: runtime.status,
+      storageLoading: runtime.storageLoading,
+      pendingApprovalId: runtime.pendingApprovalId,
+      currentRunStatus: runtime.sessionState?.currentRun?.status ?? null,
+    })) return
     const response = await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
