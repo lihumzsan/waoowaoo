@@ -7,12 +7,11 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import Navbar from '@/components/Navbar'
-import TaskStatusInline from '@/components/task/TaskStatusInline'
+import { BrandLoading } from '@/components/ui/BrandLoading'
 import { useProjectData, useEpisodeData, useUserModels } from '@/lib/query/hooks'
 import { queryKeys } from '@/lib/query/keys'
 import ProjectWorkspace from '@/features/project-workspace/ProjectWorkspace'
 import SmartImportWizard, { SplitEpisode } from '@/features/project-workspace/components/SmartImportWizard'
-import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { resolveSelectedEpisodeId } from './episode-selection'
 import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
 import { AppIcon } from '@/components/ui/icons'
@@ -389,19 +388,12 @@ export default function ProjectDetailPage() {
   const isInitializing = loading ||
     (!shouldShowImportWizard && !isGlobalAssetsView && episodes.length > 0 && (!selectedEpisodeId || !currentEpisode))
   const isEpisodeWorkspaceReady = !isGlobalAssetsView && !shouldShowImportWizard && Boolean(selectedEpisodeId && currentEpisode)
-  const initLoadingState = resolveTaskPresentationState({
-    phase: 'processing',
-    intent: 'generate',
-    resource: 'text',
-    hasOutput: false,
-  })
-
   if (isInitializing) {
     return (
       <div className="glass-page min-h-screen">
         <Navbar />
         <main className="flex items-center justify-center h-[calc(100vh-64px)]">
-          <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
+          <BrandLoading />
         </main>
       </div>
     )
@@ -448,12 +440,7 @@ export default function ProjectDetailPage() {
             </div>
           ) : shouldShowImportWizard && !isGlobalAssetsView ? (
             isCheckingModelSetup ? (
-              <div className="glass-surface p-8 text-center">
-                <div className="mx-auto mb-4 w-12 h-12 rounded-full flex items-center justify-center bg-[var(--glass-bg-muted)] text-[var(--glass-text-tertiary)]">
-                  <TaskStatusInline state={initLoadingState} className="[&>span]:sr-only" />
-                </div>
-                <h2 className="text-xl font-semibold text-[var(--glass-text-secondary)] mb-2">{tc('loading')}</h2>
-              </div>
+              <BrandLoading className="min-h-[320px]" />
             ) : needsModelSetup ? (
               <div className="glass-surface p-8 max-w-2xl mx-auto">
                 <div className="flex items-start gap-4">
@@ -572,12 +559,7 @@ export default function ProjectDetailPage() {
             />
           ) : (
             // 加载中
-            <div className="glass-surface p-8 text-center">
-              <div className="mx-auto mb-4 w-12 h-12 rounded-full flex items-center justify-center bg-[var(--glass-bg-muted)] text-[var(--glass-text-tertiary)]">
-                <TaskStatusInline state={initLoadingState} className="[&>span]:sr-only" />
-              </div>
-              <h2 className="text-xl font-semibold text-[var(--glass-text-secondary)] mb-2">{tc('loading')}</h2>
-            </div>
+            <BrandLoading className="min-h-[320px]" />
           )}
         </div>
       </main>

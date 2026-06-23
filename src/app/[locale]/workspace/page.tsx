@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
@@ -314,11 +315,7 @@ export default function WorkspacePage() {
   }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page min-h-screen flex items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   return (

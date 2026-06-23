@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
-import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
 import Navbar from '@/components/Navbar'
 import PublicFooter from '@/components/PublicFooter'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { Link, useRouter } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
@@ -28,19 +28,7 @@ export default function HomeClient({ initialDeploymentFeatures }: HomeClientProp
   }, [status, router])
 
   if (status !== 'unauthenticated') {
-    return (
-      <div className="glass-page flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Image
-            src="/logo-small.png"
-            alt="waoowaoo"
-            width={80}
-            height={80}
-            className="animate-pulse"
-          />
-        </div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   return (

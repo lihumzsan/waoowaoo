@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { BrandLoading } from '@/components/ui/BrandLoading'
 import { AnimatedBackground } from '@/components/ui/SharedComponents'
 import { apiFetch } from '@/lib/api-fetch'
 import { WorkspaceProvider } from './WorkspaceProvider'
@@ -66,7 +67,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   }, [])
 
   if (!vm.project.projectData) {
-    return <div className="text-center text-(--glass-text-secondary)">{vm.i18n.tc('loading')}</div>
+    return <BrandLoading className="h-full min-h-[240px]" />
   }
 
   return (

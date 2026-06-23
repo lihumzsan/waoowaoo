@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
@@ -114,11 +115,7 @@ export default function HomePage() {
   }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page min-h-screen flex items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   return (

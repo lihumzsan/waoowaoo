@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import ApiConfigTab from './components/ApiConfigTab'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
@@ -236,11 +237,7 @@ export default function ProfilePage() {
   }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page flex min-h-screen items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   const noBillingText = t('openSourceNoBilling')
