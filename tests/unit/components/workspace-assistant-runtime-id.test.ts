@@ -95,6 +95,47 @@ describe('workspace assistant runtime chat id', () => {
     })
   })
 
+  it('uses the final run marker instead of an earlier running marker in the same message', () => {
+    const run = findLatestWorkspaceAssistantRun([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-agent-run',
+            data: {
+              runId: 'run-1',
+              requestId: 'request-1',
+              status: 'running',
+              controlKind: 'task_follow_up',
+            },
+          } as never,
+          {
+            type: 'text',
+            text: 'done',
+          } as never,
+          {
+            type: 'data-agent-run',
+            data: {
+              runId: 'run-1',
+              requestId: 'request-1',
+              status: 'completed',
+              controlKind: 'task_follow_up',
+              stopReason: 'completed',
+            },
+          } as never,
+        ],
+      },
+    ])
+
+    expect(run).toEqual({
+      runId: 'run-1',
+      status: 'completed',
+      operationId: null,
+      intent: null,
+    })
+  })
+
   it('does not infer the active operation from historical dynamic tool parts', () => {
     const run = findLatestWorkspaceAssistantRun([
       {

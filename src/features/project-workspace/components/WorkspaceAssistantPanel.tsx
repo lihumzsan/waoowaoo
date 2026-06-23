@@ -103,7 +103,7 @@ export function shouldDeferWorkspaceAssistantTaskFollowUp(input: {
   if (input.chatStatus === 'submitted' || input.chatStatus === 'streaming') return true
   if (input.controlPending) return true
   if (!input.pending) return false
-  return input.currentRunStatus !== 'awaiting_task'
+  return input.currentRunStatus === 'running'
 }
 
 const WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY = 'workspace-assistant-panel-width'

@@ -215,6 +215,29 @@ export async function listTaskLifecycleEvents(taskId: string, limit = 500) {
   return await mapRowsToReplayEvents(replayRows)
 }
 
+export async function listRecentTerminalLifecycleEvents(params: {
+  projectId: string
+  userId: string
+  episodeId?: string | null
+  limit?: number
+}) {
+  const safeLimit = Number.isFinite(params.limit)
+    ? Math.min(Math.max(Math.floor(params.limit ?? 200), 1), 1000)
+    : 200
+  const latestRows = await taskEventModel.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      eventType: { in: [TASK_EVENT_TYPE.COMPLETED, TASK_EVENT_TYPE.FAILED] },
+      ...(params.episodeId ? { task: { episodeId: params.episodeId } } : {}),
+    },
+    orderBy: { id: 'desc' },
+    take: safeLimit,
+  })
+  const events = await mapRowsToReplayEvents([...latestRows].reverse())
+  return events
+}
+
 export function getProjectChannel(projectId: string) {
   return `${CHANNEL_PREFIX}${projectId}`
 }

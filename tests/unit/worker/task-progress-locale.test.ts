@@ -16,6 +16,7 @@ const taskServiceMock = vi.hoisted(() => ({
 const publisherMock = vi.hoisted(() => ({
   publishTaskEvent: vi.fn(async () => undefined),
   publishTaskStreamEvent: vi.fn(async () => undefined),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))

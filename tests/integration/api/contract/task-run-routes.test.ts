@@ -6,6 +6,7 @@ import {
   buildMockRequest,
   emptyRouteContext,
   listEventsAfterMock,
+  listRecentTerminalLifecycleEventsMock,
   listTaskLifecycleEventsMock,
   resetTaskInfraMocks,
   subscriberState,
@@ -51,6 +52,7 @@ vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: vi.fn(),
   getProjectChannel: vi.fn((projectId: string) => `project:${projectId}`),
   listEventsAfter: listEventsAfterMock,
+  listRecentTerminalLifecycleEvents: listRecentTerminalLifecycleEventsMock,
   listTaskLifecycleEvents: listTaskLifecycleEventsMock,
 }))
 
@@ -178,6 +180,44 @@ describe('api contract - task run routes (behavior)', () => {
     const decoded = new TextDecoder().decode(firstChunk.value)
     expect(decoded).toContain('event:')
     await reader!.cancel()
+  })
+
+  it('GET /api/sse/replay: returns missed events as JSON for client-side recovery', async () => {
+    const { GET } = await import('@/app/api/sse/replay/route')
+
+    listEventsAfterMock.mockResolvedValueOnce([
+      {
+        id: '15',
+        type: 'task.lifecycle',
+        taskId: 'task-image-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        ts: new Date().toISOString(),
+        taskType: 'image_panel',
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        episodeId: 'episode-1',
+        payload: { lifecycleType: 'task.completed' },
+      } satisfies ReplayEvent,
+    ])
+
+    const req = buildMockRequest({
+      path: '/api/sse/replay',
+      method: 'GET',
+      query: {
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        lastEventId: '14',
+      },
+    })
+    const res = await GET(req, emptyRouteContext)
+
+    expect(res.status).toBe(200)
+    expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 14, 500)
+    const payload = await res.json() as { success: boolean; events: ReplayEvent[] }
+    expect(payload.success).toBe(true)
+    expect(payload.events).toHaveLength(1)
+    expect(payload.events[0]?.id).toBe('15')
   })
 
   it('GET /api/sse: channel lifecycle stream includes terminal completed event', async () => {

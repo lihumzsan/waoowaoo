@@ -20,6 +20,7 @@ const prismaMock = vi.hoisted(() => ({
 
 const publisherMock = vi.hoisted(() => ({
   publishTaskEvent: vi.fn(),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 const billingMock = vi.hoisted(() => ({

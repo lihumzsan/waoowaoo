@@ -55,6 +55,7 @@ vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: publishTaskEventMock,
   getProjectChannel: vi.fn((projectId: string) => `project:${projectId}`),
   listEventsAfter: vi.fn(async () => []),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
   listTaskLifecycleEvents: vi.fn(async () => []),
 }))
 

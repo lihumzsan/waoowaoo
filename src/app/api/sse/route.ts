@@ -131,7 +131,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       }
 
       logger.info({
-        action: mode === 'replay' ? 'sse.replay' : 'sse.active_snapshot',
+        action: mode.startsWith('replay') ? 'sse.replay' : 'sse.active_snapshot',
         message: 'sse bootstrap sent',
         details: { mode, count: events.length },
       })

@@ -14,10 +14,15 @@ const runtime = vi.hoisted(() => ({
   },
   effectCleanup: null as EffectCleanup,
   scheduledTimers: [] as Array<() => void>,
+  scheduledIntervals: [] as Array<() => void>,
 }))
 
 const overlayMock = vi.hoisted(() => ({
   applyTaskLifecycleToOverlay: vi.fn(),
+}))
+
+const apiFetchMock = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
 }))
 
 class FakeEventSource {
@@ -66,6 +71,7 @@ vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react')
   return {
     ...actual,
+    useCallback: <T,>(callback: T) => callback,
     useMemo: <T,>(factory: () => T) => factory(),
     useRef: <T,>(value: T) => ({ current: value }),
     useEffect: (effect: () => EffectCleanup) => {
@@ -80,6 +86,8 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/lib/query/task-target-overlay', () => overlayMock)
 
+vi.mock('@/lib/api-fetch', () => apiFetchMock)
+
 function hasInvalidation(predicate: (arg: InvalidateArg) => boolean) {
   return runtime.queryClient.invalidateQueries.mock.calls.some((call) => {
     const arg = (call[0] || {}) as InvalidateArg
@@ -92,15 +100,27 @@ describe('sse invalidation behavior', () => {
     vi.clearAllMocks()
     runtime.effectCleanup = null
     runtime.scheduledTimers = []
+    runtime.scheduledIntervals = []
     FakeEventSource.instances = []
+    apiFetchMock.apiFetch.mockReset()
 
     ;(globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource
-    ;(globalThis as unknown as { window: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout } }).window = {
+    ;(globalThis as unknown as { window: {
+      setTimeout: typeof setTimeout
+      clearTimeout: typeof clearTimeout
+      setInterval: typeof setInterval
+      clearInterval: typeof clearInterval
+    } }).window = {
       setTimeout: ((cb: () => void) => {
         runtime.scheduledTimers.push(cb)
         return runtime.scheduledTimers.length as unknown as ReturnType<typeof setTimeout>
       }) as unknown as typeof setTimeout,
       clearTimeout: (() => undefined) as unknown as typeof clearTimeout,
+      setInterval: ((cb: () => void) => {
+        runtime.scheduledIntervals.push(cb)
+        return runtime.scheduledIntervals.length as unknown as ReturnType<typeof setInterval>
+      }) as unknown as typeof setInterval,
+      clearInterval: (() => undefined) as unknown as typeof clearInterval,
     }
   })
 
@@ -117,8 +137,12 @@ describe('sse invalidation behavior', () => {
     expect(source).toBeTruthy()
 
     source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: '1',
       type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
       taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:00.000Z',
       taskType: 'IMAGE_CHARACTER',
       targetType: 'CharacterAppearance',
       targetId: 'appearance-1',
@@ -135,8 +159,12 @@ describe('sse invalidation behavior', () => {
     })).toBe(false)
 
     source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: '2',
       type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
       taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:01.000Z',
       taskType: 'IMAGE_CHARACTER',
       targetType: 'CharacterAppearance',
       targetId: 'appearance-1',
@@ -223,8 +251,12 @@ describe('sse invalidation behavior', () => {
     expect(source).toBeTruthy()
 
     source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: '3',
       type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
       taskId: 'task-director-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:00.000Z',
       taskType: 'edit_director_decoupage_generate',
       targetType: 'ProjectEditScreenplay',
       targetId: 'screenplay-1',
@@ -253,6 +285,78 @@ describe('sse invalidation behavior', () => {
         && key[1] === 'project-1'
         && key[2] === 'edit-cinematography-shot-plan'
         && key[3] === 'episode-1'
+    })).toBe(true)
+  })
+
+  it('applies replayed image panel completion events even when the stored cursor already advanced', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    apiFetchMock.apiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        events: [{
+          id: '11',
+          type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+          taskId: 'task-image-1',
+          taskType: 'image_panel',
+          targetType: 'ProjectPanel',
+          targetId: 'panel-1',
+          projectId: 'project-1',
+          userId: 'user-1',
+          ts: '2026-04-24T00:00:01.000Z',
+          episodeId: 'episode-1',
+          payload: {
+            lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+            imageUrl: 'https://example.test/panel.jpg',
+          },
+        }],
+      }),
+    })
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    expect(source).toBeTruthy()
+
+    source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: '12',
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-video-1',
+      taskType: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-2',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:02.000Z',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: TASK_EVENT_TYPE.PROCESSING,
+        progress: 99,
+      },
+    })
+
+    expect(runtime.scheduledIntervals).toHaveLength(1)
+    runtime.scheduledIntervals[0]?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(apiFetchMock.apiFetch).toHaveBeenCalledWith('/api/sse/replay?projectId=project-1&lastEventId=12&episodeId=episode-1')
+    expect(hasInvalidation((arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.episodeData('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'episode-1'
+    })).toBe(true)
+    expect(hasInvalidation((arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.storyboards.all('episode-1')[0]
+        && key[1] === 'episode-1'
     })).toBe(true)
   })
 

@@ -67,23 +67,23 @@ if (!/refetchInterval:\s*false/.test(targetStateMapText)) {
   fail('useTaskTargetStateMap must keep refetchInterval disabled', [targetStateMapPath])
 }
 
-const ssePath = 'src/lib/query/hooks/useSSE.ts'
-const sseText = readFile(ssePath)
-const targetStatesInvalidateExprMatch = sseText.match(
+const sseSyncPath = 'src/lib/query/workspace-sse-event-sync.ts'
+const sseSyncText = readFile(sseSyncPath)
+const targetStatesInvalidateExprMatch = sseSyncText.match(
   /const shouldInvalidateTargetStates\s*=\s*([\s\S]*?)\n\s*\n/,
 )
 if (!targetStatesInvalidateExprMatch) {
-  fail('Unable to locate shouldInvalidateTargetStates expression', [ssePath])
+  fail('Unable to locate shouldInvalidateTargetStates expression', [sseSyncPath])
 }
 const targetStatesInvalidateExpr = targetStatesInvalidateExprMatch[1]
 if (!/TASK_EVENT_TYPE\.COMPLETED/.test(targetStatesInvalidateExpr) || !/TASK_EVENT_TYPE\.FAILED/.test(targetStatesInvalidateExpr)) {
-  fail('useSSE must invalidate target states only for terminal events', [ssePath])
+  fail('workspace SSE sync must invalidate target states only for terminal events', [sseSyncPath])
 }
 if (/TASK_EVENT_TYPE\.CREATED/.test(targetStatesInvalidateExpr)) {
-  fail('useSSE target-state invalidation must not include CREATED', [ssePath])
+  fail('workspace SSE sync target-state invalidation must not include CREATED', [sseSyncPath])
 }
 if (/TASK_EVENT_TYPE\.PROCESSING/.test(targetStatesInvalidateExpr)) {
-  fail('useSSE target-state invalidation must not include PROCESSING', [ssePath])
+  fail('workspace SSE sync target-state invalidation must not include PROCESSING', [sseSyncPath])
 }
 
 console.log('[task-target-states-no-polling-guard] OK')

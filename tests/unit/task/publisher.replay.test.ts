@@ -47,7 +47,12 @@ vi.mock('@/lib/redis', () => ({
   },
 }))
 
-import { listEventsAfter, listTaskLifecycleEvents, publishTaskStreamEvent } from '@/lib/task/publisher'
+import {
+  listEventsAfter,
+  listRecentTerminalLifecycleEvents,
+  listTaskLifecycleEvents,
+  publishTaskStreamEvent,
+} from '@/lib/task/publisher'
 
 describe('task publisher replay', () => {
   beforeEach(() => {
@@ -227,5 +232,56 @@ describe('task publisher replay', () => {
     expect(events.map((event) => event.id)).toEqual(['101', '102'])
     expect(events.map((event) => event.type)).toEqual(['task.stream', 'task.lifecycle'])
     expect((events[0]?.payload as { stream?: { delta?: string } }).stream?.delta).toBe('chunk')
+  })
+
+  it('replays recent terminal lifecycle events scoped by episode', async () => {
+    taskEventFindManyMock.mockResolvedValueOnce([
+      {
+        id: 201,
+        taskId: 'task-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        eventType: 'task.completed',
+        payload: { lifecycleType: 'task.completed' },
+        createdAt: new Date('2026-02-27T00:00:05.000Z'),
+      },
+    ])
+    taskFindManyMock.mockResolvedValueOnce([
+      {
+        id: 'task-1',
+        type: 'image_panel',
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        episodeId: 'episode-1',
+      },
+    ])
+
+    const events = await listRecentTerminalLifecycleEvents({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      limit: 20,
+    })
+
+    expect(taskEventFindManyMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        projectId: 'project-1',
+        userId: 'user-1',
+        eventType: { in: ['task.completed', 'task.failed'] },
+        task: { episodeId: 'episode-1' },
+      },
+      orderBy: { id: 'desc' },
+      take: 20,
+    }))
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual(expect.objectContaining({
+      id: '201',
+      type: 'task.lifecycle',
+      taskId: 'task-1',
+      taskType: 'image_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+    }))
   })
 })

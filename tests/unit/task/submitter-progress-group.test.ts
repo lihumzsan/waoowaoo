@@ -20,6 +20,7 @@ vi.mock('@/lib/task/queues', () => queueMock)
 
 const publisherMock = vi.hoisted(() => ({
   publishTaskEvent: vi.fn(async () => undefined),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 vi.mock('@/lib/task/publisher', () => publisherMock)

@@ -13,6 +13,7 @@ import { createQueuedTask, createTestProject, createTestUser, seedBalance } from
 
 vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: vi.fn(async () => ({})),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 async function createPreparedMusicTask() {

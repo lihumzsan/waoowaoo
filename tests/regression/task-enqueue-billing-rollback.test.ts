@@ -17,6 +17,7 @@ vi.mock('@/lib/task/queues', () => ({
 
 vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: vi.fn(async () => ({})),
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 describe('regression - enqueue compensation', () => {

@@ -20,6 +20,7 @@ vi.mock('@/lib/task/queues', () => ({
 
 vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: publishTaskEventMock,
+  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 addTaskJobMock.mockImplementation(async () => {

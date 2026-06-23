@@ -153,6 +153,7 @@ const ROUTE_FILES = [
   'src/app/api/plan-runs/[planRunId]/route.ts',
   'src/app/api/plan-runs/[planRunId]/steps/[stepKey]/retry/route.ts',
   'src/app/api/plan-runs/route.ts',
+  'src/app/api/sse/replay/route.ts',
   'src/app/api/sse/route.ts',
   'src/app/api/system/boot-id/route.ts',
   'src/app/api/task-target-states/route.ts',
@@ -179,6 +180,7 @@ function resolveCategory(routeFile: string): RouteCategory {
     routeFile.startsWith('src/app/api/tasks/')
     || routeFile.startsWith('src/app/api/plan-runs/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
+    || routeFile === 'src/app/api/sse/replay/route.ts'
   ) {
     return 'tasks'
   }
@@ -221,6 +223,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     routeFile.startsWith('src/app/api/tasks/')
     || routeFile.startsWith('src/app/api/plan-runs/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
+    || routeFile === 'src/app/api/sse/replay/route.ts'
     || routeFile === 'src/app/api/sse/route.ts'
   ) {
     return 'task-infra-routes'

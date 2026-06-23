@@ -3,13 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 type ReplayEvent = {
   id: string
   type: string
-  mutationBatchId: string
+  mutationBatchId?: string
+  taskId?: string
+  taskType?: string | null
+  targetType?: string | null
+  targetId?: string | null
   projectId: string
   userId: string
   ts: string
-  operationId: string | null
+  operationId?: string | null
   episodeId: string | null
-  targets: Array<{ targetType: string; targetId: string }>
+  targets?: Array<{ targetType: string; targetId: string }>
+  payload?: Record<string, unknown> | null
 }
 
 type TaskSnapshotRow = {
@@ -26,12 +31,14 @@ type TaskSnapshotRow = {
 }
 
 const listEventsAfterMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
+const listRecentTerminalLifecycleEventsMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
 const listMutationBatchReplayEventsMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
 const taskFindManyMock = vi.hoisted(() => vi.fn<() => Promise<TaskSnapshotRow[]>>(async () => []))
 
 vi.mock('@/lib/task/publisher', () => ({
   getProjectChannel: (projectId: string) => `project:${projectId}`,
   listEventsAfter: listEventsAfterMock,
+  listRecentTerminalLifecycleEvents: listRecentTerminalLifecycleEventsMock,
 }))
 
 vi.mock('@/lib/mutation-batch/service', () => ({
@@ -64,6 +71,67 @@ describe('sse bootstrap operations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     taskFindManyMock.mockResolvedValue([])
+    listRecentTerminalLifecycleEventsMock.mockResolvedValue([])
+  })
+
+  it('combines numeric event replay with recent terminal events for the active episode', async () => {
+    const missedEvent = {
+      id: '15',
+      type: 'task.lifecycle',
+      taskId: 'task-video-1',
+      taskType: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-2',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:04:00.000Z',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: 'task.processing',
+        progress: 20,
+      },
+    }
+    const terminalEventBeforeCursor = {
+      id: '11',
+      type: 'task.lifecycle',
+      taskId: 'task-image-1',
+      taskType: 'image_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:02:00.000Z',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: 'task.completed',
+      },
+    }
+    listEventsAfterMock.mockResolvedValueOnce([missedEvent])
+    listRecentTerminalLifecycleEventsMock.mockResolvedValueOnce([terminalEventBeforeCursor])
+
+    const ops = createSseOperations()
+    const result = await ops.get_sse_bootstrap.execute(buildCtx() as never, {
+      episodeId: 'episode-1',
+      lastEventId: '14',
+      snapshotLimit: 100,
+    } as never)
+
+    expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 14, 5000)
+    expect(listRecentTerminalLifecycleEventsMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      limit: 100,
+    })
+    expect(result).toEqual({
+      channel: 'project:project-1',
+      mode: 'replay_with_terminal_snapshot',
+      fromEventId: 14,
+      events: [
+        missedEvent,
+        terminalEventBeforeCursor,
+      ],
+    })
   })
 
   it('replays mutation batches and active task snapshot from a mutation Last-Event-ID cursor', async () => {
@@ -127,6 +195,65 @@ describe('sse bootstrap operations', () => {
           targetId: 'panel-1',
           episodeId: 'episode-1',
           payload: expect.objectContaining({ lifecycleType: 'task.processing', progress: 50 }),
+        }),
+      ],
+    })
+  })
+
+  it('returns recent terminal events with the active snapshot when no replay cursor exists', async () => {
+    const terminalEvent = {
+      id: '12',
+      type: 'task.lifecycle',
+      taskId: 'task-image-1',
+      taskType: 'image_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:02:00.000Z',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: 'task.completed',
+      },
+    }
+    listRecentTerminalLifecycleEventsMock.mockResolvedValueOnce([terminalEvent])
+    taskFindManyMock.mockResolvedValueOnce([{
+      id: 'task-2',
+      type: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-2',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      status: 'processing',
+      progress: 40,
+      payload: null,
+      updatedAt: new Date('2026-04-24T00:03:00.000Z'),
+    }])
+
+    const ops = createSseOperations()
+    const result = await ops.get_sse_bootstrap.execute(buildCtx() as never, {
+      episodeId: 'episode-1',
+    } as never)
+
+    expect(listRecentTerminalLifecycleEventsMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      limit: 200,
+    })
+    expect(result).toEqual({
+      channel: 'project:project-1',
+      mode: 'recoverable_snapshot',
+      events: [
+        terminalEvent,
+        expect.objectContaining({
+          id: 'snapshot:task-2:1776988980000',
+          type: 'task.lifecycle',
+          taskId: 'task-2',
+          targetType: 'ProjectPanel',
+          targetId: 'panel-2',
+          episodeId: 'episode-1',
+          payload: expect.objectContaining({ lifecycleType: 'task.processing', progress: 40 }),
         }),
       ],
     })

@@ -530,6 +530,15 @@ describe('workspace assistant panel layout', () => {
       pendingApprovalId: null,
       currentRunStatus: 'running',
     })).toBe(true)
+
+    expect(shouldDeferWorkspaceAssistantTaskFollowUp({
+      pending: true,
+      controlPending: false,
+      chatStatus: 'ready',
+      storageLoading: false,
+      pendingApprovalId: null,
+      currentRunStatus: null,
+    })).toBe(false)
   })
 
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {

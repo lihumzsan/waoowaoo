@@ -38,6 +38,7 @@ export const publishTaskEventMock = vi.fn(async () => undefined)
 export const queryTaskTargetStatesMock = vi.fn()
 export const withPrismaRetryMock = vi.fn(async <T>(fn: () => Promise<T>) => await fn())
 export const listEventsAfterMock = vi.fn<typeof import('@/lib/task/publisher').listEventsAfter>(async () => [])
+export const listRecentTerminalLifecycleEventsMock = vi.fn<typeof import('@/lib/task/publisher').listRecentTerminalLifecycleEvents>(async () => [])
 export const listTaskLifecycleEventsMock = vi.fn<typeof import('@/lib/task/publisher').listTaskLifecycleEvents>(async () => [])
 export const addChannelListenerMock = vi.fn<(channel: string, listener: (message: string) => void) => Promise<() => Promise<void>>>(
   async () => async () => undefined,
@@ -91,6 +92,8 @@ export function resetTaskInfraMocks() {
     subscriberState.listener = listener
     return async () => undefined
   })
+  listEventsAfterMock.mockResolvedValue([])
+  listRecentTerminalLifecycleEventsMock.mockResolvedValue([])
   listTaskLifecycleEventsMock.mockResolvedValue([])
 }
 

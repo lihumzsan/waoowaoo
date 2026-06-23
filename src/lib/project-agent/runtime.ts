@@ -194,6 +194,22 @@ function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
   return items
 }
 
+function createAgentRunStatusChunk(params: {
+  runId: string
+  requestId: string
+  status: ProjectAgentRunPartData['status']
+  controlKind: ProjectAgentRunPartData['controlKind']
+  stopReason?: string | null
+}): ProjectAgentUiChunk {
+  return createDataChunk('data-agent-run', {
+    runId: params.runId,
+    requestId: params.requestId,
+    status: params.status,
+    controlKind: params.controlKind,
+    stopReason: params.stopReason ?? null,
+  } satisfies ProjectAgentRunPartData)
+}
+
 /**
  * Projects a control fact into the model input. Control decisions live in
  * interruption rows, never in message history — so when a pending approval is
@@ -656,13 +672,13 @@ export async function createProjectAgentChatResponse(input: {
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [
-    createDataChunk('data-agent-run', {
+    createAgentRunStatusChunk({
       runId: input.run.id,
       requestId,
       status: 'running',
       controlKind: input.run.controlKind,
       stopReason: null,
-    } satisfies ProjectAgentRunPartData),
+    }),
     createDataChunk('data-agent-runtime-context', {
       runtime: 'openai-agents-sdk',
       requestId,
@@ -948,6 +964,13 @@ export async function createProjectAgentChatResponse(input: {
             status: 'awaiting_approval',
             stopReason: 'awaiting_approval',
           })
+          chunks.push(createAgentRunStatusChunk({
+            runId: input.run.id,
+            requestId,
+            status: 'awaiting_approval',
+            controlKind: input.run.controlKind,
+            stopReason: 'awaiting_approval',
+          }))
           runStatusFinalized = true
         }
 
@@ -976,6 +999,13 @@ export async function createProjectAgentChatResponse(input: {
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
             errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
           })
+          chunks.push(createAgentRunStatusChunk({
+            runId: input.run.id,
+            requestId,
+            status: 'failed',
+            controlKind: input.run.controlKind,
+            stopReason: 'completion_error',
+          }))
           runStatusFinalized = true
           throw completionError
         }
@@ -987,6 +1017,13 @@ export async function createProjectAgentChatResponse(input: {
               status: 'awaiting_task',
               stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
             })
+            chunks.push(createAgentRunStatusChunk({
+              runId: input.run.id,
+              requestId,
+              status: 'awaiting_task',
+              controlKind: input.run.controlKind,
+              stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
+            }))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             await updateProjectAgentRunStatus({
@@ -994,6 +1031,13 @@ export async function createProjectAgentChatResponse(input: {
               status: 'awaiting_choice',
               stopReason: 'awaiting_user_choice',
             })
+            chunks.push(createAgentRunStatusChunk({
+              runId: input.run.id,
+              requestId,
+              status: 'awaiting_choice',
+              controlKind: input.run.controlKind,
+              stopReason: 'awaiting_user_choice',
+            }))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             await updateProjectAgentRunStatus({
@@ -1003,6 +1047,13 @@ export async function createProjectAgentChatResponse(input: {
               errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
               errorMessage: latestStopPart.operationIds.join(','),
             })
+            chunks.push(createAgentRunStatusChunk({
+              runId: input.run.id,
+              requestId,
+              status: 'failed',
+              controlKind: input.run.controlKind,
+              stopReason: 'tool_error',
+            }))
             runStatusFinalized = true
           } else {
             await updateProjectAgentRunStatus({
@@ -1010,6 +1061,13 @@ export async function createProjectAgentChatResponse(input: {
               status: 'completed',
               stopReason: 'completed',
             })
+            chunks.push(createAgentRunStatusChunk({
+              runId: input.run.id,
+              requestId,
+              status: 'completed',
+              controlKind: input.run.controlKind,
+              stopReason: 'completed',
+            }))
             runStatusFinalized = true
           }
         }
