@@ -46,7 +46,7 @@
   {
     "apiType": "text",
     "provider": "openrouter",
-    "modelId": "google/gemini-3-flash-preview",
+    "modelId": "google/gemini-3.5-flash",
     "pricing": {
       "mode": "capability",
       "tiers": [
@@ -54,13 +54,13 @@
           "when": {
             "tokenType": "input"
           },
-          "amount": 0.54
+          "amount": 10.8
         },
         {
           "when": {
             "tokenType": "output"
           },
-          "amount": 2.16
+          "amount": 64.8
         }
       ]
     }
@@ -156,7 +156,7 @@
   {
     "apiType": "text",
     "provider": "google",
-    "modelId": "gemini-3-flash-preview",
+    "modelId": "gemini-3.5-flash",
     "pricing": {
       "mode": "capability",
       "tiers": [
@@ -164,13 +164,13 @@
           "when": {
             "tokenType": "input"
           },
-          "amount": 3.6
+          "amount": 19.44
         },
         {
           "when": {
             "tokenType": "output"
           },
-          "amount": 21.6
+          "amount": 116.64
         }
       ]
     }

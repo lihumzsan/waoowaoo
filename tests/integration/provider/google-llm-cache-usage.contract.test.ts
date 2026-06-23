@@ -33,7 +33,7 @@ describe('Google Gemini implicit cache usage contract', () => {
   it('records Google implicit cache hit tokens from usageMetadata', async () => {
     const result = await runGoogleLlmCompletion({
       apiKey: 'sk-google',
-      modelId: 'gemini-3-flash-preview',
+      modelId: 'gemini-3.5-flash',
       messages: [{ role: 'user', content: 'stable context' }],
       temperature: 0.2,
       reasoning: false,
@@ -59,7 +59,7 @@ describe('Google Gemini implicit cache usage contract', () => {
 
     const [request] = generateContentMock.mock.calls[0] as [Record<string, unknown>]
     expect(request).toMatchObject({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       config: { temperature: 0.2 },
     })
     expect(request).not.toHaveProperty('cache_control')

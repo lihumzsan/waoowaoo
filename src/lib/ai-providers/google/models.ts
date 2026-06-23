@@ -1,10 +1,11 @@
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
-export const GOOGLE_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = 'google::gemini-3-flash-preview'
+export const GOOGLE_GEMINI_3_5_FLASH_MODEL_ID = 'gemini-3.5-flash'
+export const GOOGLE_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = `google::${GOOGLE_GEMINI_3_5_FLASH_MODEL_ID}`
 export const GOOGLE_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = 'google::lyria-3-pro-preview'
 
 export const GOOGLE_PLATFORM_MODEL_PRESETS = [
-  { provider: 'google', modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', type: 'llm' },
+  { provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm' },
   { provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash-Lite', type: 'llm' },
   { provider: 'google', modelId: 'lyria-3-pro-preview', name: 'Lyria 3 Pro Preview', type: 'music' },
 ] as const satisfies ReadonlyArray<PlatformModelPreset>
@@ -12,7 +13,7 @@ export const GOOGLE_PLATFORM_MODEL_PRESETS = [
 export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-pro-preview', capabilities: { llm: { reasoningEffortOptions: ['low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'google', modelId: 'gemini-3-flash-preview', capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3-pro-image-preview', capabilities: { image: { resolutionOptions: ['1K', '2K', '4K'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3-pro-image-preview-batch', capabilities: { image: { resolutionOptions: ['1K', '2K', '4K'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3.1-flash-image-preview', capabilities: { image: { resolutionOptions: ['0.5K', '1K', '2K', '4K'] } } },
@@ -91,7 +92,7 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
 export const GOOGLE_API_CONFIG_CATALOG_MODELS = [
   { modelId: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', type: 'llm', provider: 'google' },
   { modelId: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', type: 'llm', provider: 'google' },
-  { modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', type: 'llm', provider: 'google' },
+  { modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm', provider: 'google' },
   { modelId: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash-Lite', type: 'llm', provider: 'google' },
   { modelId: 'gemini-3-pro-image-preview', name: 'Banana Pro', type: 'image', provider: 'google' },
   { modelId: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2', type: 'image', provider: 'google' },
@@ -131,7 +132,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-pro-preview', pricing: googleTokenPricing(14.4, 86.4) },
   { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', pricing: googleTokenPricing(1.8, 10.8) },
   { apiType: 'text', provider: 'google', modelId: 'gemini-3-pro-preview', pricing: googleTokenPricing(14.4, 86.4) },
-  { apiType: 'text', provider: 'google', modelId: 'gemini-3-flash-preview', pricing: googleTokenPricing(3.6, 21.6) },
+  { apiType: 'text', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, pricing: googleTokenPricing(19.44, 116.64) },
   {
     apiType: 'image',
     provider: 'google',

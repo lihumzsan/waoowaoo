@@ -16,11 +16,11 @@ describe('billing/cost provider catalog pricing', () => {
   })
 
   it('discounts Google implicit cache hit input tokens', () => {
-    const cost = calcTextWithCache('google::gemini-3-flash-preview', 1_000_000, 0, {
+    const cost = calcTextWithCache('google::gemini-3.5-flash', 1_000_000, 0, {
       cachedInputTokens: 400_000,
     })
 
-    expect(cost).toBeCloseTo(2.304, 8)
+    expect(cost).toBeCloseTo(12.4416, 8)
   })
 
   it('charges images from provider size and quality tiers', () => {
