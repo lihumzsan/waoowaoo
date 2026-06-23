@@ -9,6 +9,7 @@ import { createTranslator } from 'use-intl/core'
 import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import {
+  resolveWorkspaceAssistantExternalTaskOperationId,
   shouldSuppressWorkspaceAssistantOperationRunCard,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldDockWorkspaceStylePreviewGenerationCard,
@@ -23,6 +24,7 @@ import {
   WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
+import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 import type { ProjectEditStylePreview } from '@/types/project'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -70,6 +72,20 @@ function buildTaskState(overrides: Partial<TaskTargetState>): TaskTargetState {
     stageLabel: null,
     lastError: null,
     updatedAt: null,
+    ...overrides,
+  }
+}
+
+function buildActivity(overrides: Partial<ProjectAgentSessionActivity>): ProjectAgentSessionActivity {
+  return {
+    activityId: 'activity-1',
+    runId: 'run-1',
+    type: 'waiting_task',
+    status: 'running',
+    operationId: 'generate_edit_script',
+    sourceOperationId: null,
+    toolCallId: null,
+    choiceType: null,
     ...overrides,
   }
 }
@@ -427,11 +443,35 @@ describe('workspace assistant panel layout', () => {
     )
 
     expect(panelSource).toContain('assistantRuntime.sessionState?.currentActivity')
-    expect(panelSource).toContain("currentActivity?.type === 'waiting_task'")
+    expect(panelSource).toContain('resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)')
     expect(panelSource).toContain('showExternalTaskRunCard')
     expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />')
     expect(panelSource).not.toContain('<WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />')
+    expect(panelSource).not.toContain('!assistantRuntime.pendingOperationId')
     expect(rendererSource).toContain("data.reason === 'awaiting_external_task'")
+
+    expect(resolveWorkspaceAssistantExternalTaskOperationId(buildActivity({
+      type: 'waiting_task',
+      status: 'running',
+      operationId: 'generate_edit_script',
+      sourceOperationId: null,
+    }))).toBe('generate_edit_script')
+    expect(resolveWorkspaceAssistantExternalTaskOperationId(buildActivity({
+      type: 'waiting_task',
+      status: 'waiting',
+      operationId: null,
+      sourceOperationId: 'generate_edit_director_decoupage',
+    }))).toBe('generate_edit_director_decoupage')
+    expect(resolveWorkspaceAssistantExternalTaskOperationId(buildActivity({
+      type: 'operation',
+      status: 'running',
+      operationId: 'get_project_context',
+    }))).toBeNull()
+    expect(resolveWorkspaceAssistantExternalTaskOperationId(buildActivity({
+      type: 'waiting_task',
+      status: 'completed',
+      operationId: 'generate_edit_script',
+    }))).toBeNull()
   })
 
   it('periodically claims resolved assistant waits to recover missed task events', () => {

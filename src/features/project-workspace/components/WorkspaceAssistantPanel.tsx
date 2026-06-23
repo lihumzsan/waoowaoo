@@ -55,6 +55,7 @@ import {
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
+import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
 const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
@@ -137,6 +138,14 @@ export function shouldShowWorkspaceAssistantExternalTaskRunCard(params: {
       operationId: params.operationId,
       stylePreviewGenerationDocked: params.stylePreviewGenerationDocked,
     })
+}
+
+export function resolveWorkspaceAssistantExternalTaskOperationId(
+  currentActivity: ProjectAgentSessionActivity | null,
+): string | null {
+  if (currentActivity?.type !== 'waiting_task') return null
+  if (currentActivity.status !== 'running' && currentActivity.status !== 'waiting') return null
+  return currentActivity.operationId ?? currentActivity.sourceOperationId
 }
 
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
@@ -546,11 +555,7 @@ export default function WorkspaceAssistantPanel({
     setStylePreviewDockCollapsed(false)
   }, [stylePreviewDockCardKey])
   const currentActivity = assistantRuntime.sessionState?.currentActivity ?? null
-  const activeExternalTaskOperationId = !assistantRuntime.pendingOperationId
-    && currentActivity?.type === 'waiting_task'
-    && (currentActivity.status === 'running' || currentActivity.status === 'waiting')
-    ? currentActivity.operationId ?? currentActivity.sourceOperationId
-    : null
+  const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
   const activeAssistantOperationId = assistantRuntime.pendingOperationId ?? activeExternalTaskOperationId
   useEffect(() => {
     onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantOperationId)
