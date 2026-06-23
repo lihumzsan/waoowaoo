@@ -135,12 +135,12 @@ describe('structured stream overlay merge', () => {
   })
 
   it('replaces the pending node while preserving its canvas position', () => {
-    const base = node('edit-script:pending:episode-1', 'episode')
+    const base = node('edit-script:episode-1', 'episode')
     const overlay = {
-      ...node('edit-script:pending:episode-1', 'episode'),
+      ...node('edit-script:episode-1', 'episode'),
       position: { x: 999, y: 999 },
       data: {
-        ...node('edit-script:pending:episode-1', 'episode').data,
+        ...node('edit-script:episode-1', 'episode').data,
         title: 'stream overlay',
       },
     }
@@ -153,19 +153,19 @@ describe('structured stream overlay merge', () => {
   })
 
   it('drops edit script overlay after official edit script details exist', () => {
-    const official = node('edit-script:edit-script-1', 'editScript')
-    const overlay = node('edit-script:pending:episode-1', 'episode')
+    const official = node('edit-script:episode-1', 'editScript')
+    const overlay = node('edit-script:episode-1', 'episode')
 
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
-    expect(merged.map((item) => item.id)).toEqual(['edit-script:edit-script-1'])
+    expect(merged.map((item) => item.id)).toEqual(['edit-script:episode-1'])
   })
 
-  it('merges edit script stream overlay into the persisted running edit script placeholder', () => {
+  it('merges edit script stream overlay into the same canonical edit script node', () => {
     const official = {
-      ...node('edit-script:edit-script-1', 'editScript'),
+      ...node('edit-script:episode-1', 'editScript'),
       data: {
-        ...node('edit-script:edit-script-1', 'editScript').data,
+        ...node('edit-script:episode-1', 'editScript').data,
         isRunning: true,
         editScriptDetails: undefined,
         runtimeTargets: [{
@@ -176,10 +176,10 @@ describe('structured stream overlay merge', () => {
       },
     }
     const overlay = {
-      ...node('edit-script:pending:episode-1', 'episode'),
+      ...node('edit-script:episode-1', 'episode'),
       position: { x: 999, y: 999 },
       data: {
-        ...node('edit-script:pending:episode-1', 'episode').data,
+        ...node('edit-script:episode-1', 'episode').data,
         title: 'streamed core table',
         editScriptDetails: {
           durationSec: 5,
@@ -221,7 +221,7 @@ describe('structured stream overlay merge', () => {
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
     expect(merged).toHaveLength(1)
-    expect(merged[0]?.id).toBe('edit-script:edit-script-1')
+    expect(merged[0]?.id).toBe('edit-script:episode-1')
     expect(merged[0]?.data.title).toBe('streamed core table')
     expect(merged[0]?.data.targetType).toBe('editScript')
     expect(merged[0]?.data.targetId).toBe('edit-script-1')

@@ -54,6 +54,7 @@ import {
 } from '../node-presentation-profiles'
 import { alignFinalTimelineNodesToBgmScore, repairWorkspaceNodeOverlaps } from '../layout/workspace-node-auto-layout'
 import {
+  workspaceNodeId,
   workspaceEditCinematographyShotPlanNodeId,
   workspaceEditDirectorDecoupageNodeId,
 } from '../workspace-canvas-node-ids'
@@ -1151,7 +1152,7 @@ export function buildWorkspaceNodeCanvasProjection({
 
   const storyBody = storyText.trim()
   const hasStory = storyBody.length > 0
-  const analysisNodeId = `analysis:${episodeId}`
+  const analysisNodeId = workspaceNodeId.analysis(episodeId)
   const clipOrder = new Map(clips.map((clip, index) => [clip.id, index]))
   const panelsWithStoryboard = sortedStoryboards(storyboards, clipOrder).flatMap((storyboard) => (
     sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
@@ -1194,17 +1195,18 @@ export function buildWorkspaceNodeCanvasProjection({
     }))
   }
 
-  const editScreenplayNodeId = editScreenplay ? `edit-screenplay:${editScreenplay.id}` : null
+  const editScreenplayNodeId = editScreenplay ? workspaceNodeId.editScreenplay(editScreenplay.id) : null
   const editScreenplayFallbackY = hasStory ? 430 : 180
   const editScreenplayHeight = editScreenplay
     ? estimateEditScreenplayNodeHeight(editScreenplay)
     : EDIT_SCREENPLAY_NODE_HEIGHT
   if (editScreenplay) {
+    const currentEditScreenplayNodeId = workspaceNodeId.editScreenplay(editScreenplay.id)
     const screenplayText = normalizeOptionalText(editScreenplay.screenplayText)
     const userPrompt = normalizeOptionalText(editScreenplay.userPrompt)
     const screenplayTitle = extractEditScreenplayTitle(screenplayText)
     nodes.push(createNode({
-      id: `edit-screenplay:${editScreenplay.id}`,
+      id: currentEditScreenplayNodeId,
       fallbackX: STORY_COLUMN_X,
       fallbackY: editScreenplayFallbackY,
       zIndex: zIndex++,
@@ -1251,7 +1253,7 @@ export function buildWorkspaceNodeCanvasProjection({
       },
     }))
     if (hasStory) {
-      edges.push(createEdge(`edge:analysis-edit-screenplay:${editScreenplay.id}`, analysisNodeId, `edit-screenplay:${editScreenplay.id}`))
+      edges.push(createEdge(`edge:analysis-edit-screenplay:${editScreenplay.id}`, analysisNodeId, currentEditScreenplayNodeId))
     }
   }
 
@@ -1265,7 +1267,7 @@ export function buildWorkspaceNodeCanvasProjection({
   const styleBiblePreviewImageUrl = styleBibleSourceId === editScreenplay?.id
     ? confirmedStylePreviewImageUrl(editScreenplay)
     : null
-  const editStyleBibleNodeId = styleBibleDetails && styleBibleSourceId ? `edit-style-bible:${styleBibleSourceId}` : null
+  const editStyleBibleNodeId = styleBibleDetails && styleBibleSourceId ? workspaceNodeId.editStyleBible(styleBibleSourceId) : null
   const editStyleBibleFallbackY = editScreenplay
     ? editScreenplayFallbackY + editScreenplayHeight + EDIT_STYLE_BIBLE_LAYER_GAP_Y
     : hasStory ? 430 : 180
@@ -1405,7 +1407,7 @@ export function buildWorkspaceNodeCanvasProjection({
   }
 
   if (editScript) {
-    const editScriptNodeId = `edit-script:${editScript.id}`
+    const editScriptNodeId = workspaceNodeId.editScript(episodeId)
     const editScriptIsGenerating = editScript.status === 'generating'
     const editScriptIsFailed = editScript.status === 'failed'
     const editScriptIsReady = !editScriptIsGenerating && !editScriptIsFailed
@@ -1465,7 +1467,7 @@ export function buildWorkspaceNodeCanvasProjection({
     ] as const
     const firstIncompleteStep = pipelineStepDefinitions.find((step) => !editPipelineStepReady(editScript, step.key))?.key ?? null
     // 「生成过程」：把 P1–P6 收纳进一张可折叠卡（步骤网格），替代原来的 6 个独立节点
-    const processGroupNodeId = shouldShowPipelineSteps ? `edit-process:${editScript.id}` : null
+    const processGroupNodeId = shouldShowPipelineSteps ? workspaceNodeId.editProcessGroup(episodeId) : null
 
     if (shouldShowPipelineSteps && processGroupNodeId) {
       const processSteps = pipelineStepDefinitions.map((step, index) => {
@@ -1594,7 +1596,7 @@ export function buildWorkspaceNodeCanvasProjection({
     const editAssetNodeIds: string[] = []
     // 资产合并为单张「editAssetGroup」卡：卡内网格展示各资产缩略图，并保留逐个生成/重新生成操作
     if (editScriptIsReady && editScript.requirements.length > 0) {
-      const assetGroupNodeId = `edit-asset-group:${editScript.id}`
+      const assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
       editAssetNodeIds.push(assetGroupNodeId)
       const assetItems = editScript.requirements.map((asset) => {
         const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
@@ -1722,7 +1724,7 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
   if (!editScript && editScriptPending) {
-    const pendingEditScriptNodeId = `edit-script:pending:${episodeId}`
+    const pendingEditScriptNodeId = workspaceNodeId.editScript(episodeId)
     nodes.push(createNode({
       id: pendingEditScriptNodeId,
       fallbackX: STORY_COLUMN_X,
@@ -1755,7 +1757,7 @@ export function buildWorkspaceNodeCanvasProjection({
 
   const clipNodeIds = new Map<string, string>()
   clips.forEach((clip, index) => {
-    const nodeId = `clip:${clip.id}`
+    const nodeId = workspaceNodeId.clip(clip.id)
     const storyboardForClip = storyboards.find((storyboard) => storyboard.clipId === clip.id) ?? null
     clipNodeIds.set(clip.id, nodeId)
     nodes.push(createNode({
@@ -1839,7 +1841,7 @@ export function buildWorkspaceNodeCanvasProjection({
   const spaceConsistencyNodeIds = new Map<string, string>()
   sortedStoryboards(storyboards, clipOrder).filter(storyboardUsesSpatialBlocking).forEach((storyboard, index) => {
     const details = createSpaceConsistencyDetails(storyboard)
-    const nodeId = `space-consistency:${storyboard.id}`
+    const nodeId = workspaceNodeId.spaceConsistency(storyboard.id)
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
     const previewImageUrl = primarySpaceConsistencyImageUrl(storyboard)
     const canGeneratePanelsFromSpatialBlocking = editScript?.status === 'ready'
@@ -1895,7 +1897,7 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    const editScriptSourceNodeId = editCinematographyShotPlanNodeId ?? (editScript ? `edit-script:${editScript.id}` : null)
+    const editScriptSourceNodeId = editCinematographyShotPlanNodeId ?? (editScript ? workspaceNodeId.editScript(episodeId) : null)
     const clipSourceNodeId = clipNodeIds.get(storyboard.clipId) ?? null
     const sourceNodeId = editScriptSourceNodeId ?? clipSourceNodeId
     if (sourceNodeId) {
@@ -1920,7 +1922,7 @@ export function buildWorkspaceNodeCanvasProjection({
       : locationReferenceBlocked
         ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
         : { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
-    const nodeId = `space-consistency:edit-script:${editScript.id}`
+    const nodeId = workspaceNodeId.pendingSpaceConsistencyForEditScript(editScript.id)
     nodes.push(createNode({
       id: nodeId,
       fallbackX: spaceConsistencyBaseX,
@@ -1960,12 +1962,12 @@ export function buildWorkspaceNodeCanvasProjection({
     }))
     edges.push(createEdge(
       `edge:edit-script-space-consistency:${editScript.id}`,
-      editCinematographyShotPlanNodeId ?? `edit-script:${editScript.id}`,
+      editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId),
       nodeId,
     ))
   }
   panelsWithStoryboard.forEach(({ storyboard, panel }, index) => {
-    const nodeId = `shot:${panel.id}`
+    const nodeId = workspaceNodeId.shot(panel.id)
     shotNodeIds.set(panel.id, nodeId)
     const position = gridPosition({
       index,
@@ -2031,7 +2033,7 @@ export function buildWorkspaceNodeCanvasProjection({
   let videoPlanLayerHeight = 0
   if (editScript?.videoBlocks?.length && canShowVideoPlanLayer) {
     const durations = editScriptShotDurationByNumber(editScript)
-    const editScriptVideoSourceNodeId = `edit-script:${editScript.id}`
+    const editScriptVideoSourceNodeId = workspaceNodeId.editScript(episodeId)
     let videoPlanRowY = videoPlanBaseY
     let videoPlanRowMaxHeight = 0
 
@@ -2131,7 +2133,7 @@ export function buildWorkspaceNodeCanvasProjection({
           ? translate('actions.generateStoryboardSingleImages')
           : undefined
       const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
-      const nodeId = `video-plan:${editScript.id}:${index + 1}`
+      const nodeId = workspaceNodeId.videoPlan(editScript.id, index + 1)
       const validationMessage = validationKey ? translate(`errors.${validationKey}`) : null
       const videoPlanHeight = estimateVideoPlanNodeHeight({
         outputAspectRatio,
@@ -2237,8 +2239,8 @@ export function buildWorkspaceNodeCanvasProjection({
     .filter((node) => node.data.kind === 'videoPlan')
     .map((node) => node.id)
   if (videoOutputNodeIds.length > 0) {
-    const finalNodeId = `final:${episodeId}`
-    const bgmScoreNodeId = `bgm-score:${episodeId}`
+    const finalNodeId = workspaceNodeId.finalTimeline(episodeId)
+    const bgmScoreNodeId = workspaceNodeId.bgmScore(episodeId)
     const totalDuration = panelsWithStoryboard.reduce((total, item) => total + (item.panel.duration ?? 0), 0)
     const imageCount = panelsWithStoryboard.filter((item) => hasImage(item.panel)).length
     const generatedVideoCount = canShowVideoPlanLayer && editScript?.videoBlocks

@@ -34,6 +34,7 @@ import {
   type TextStreamAdapterKey,
 } from './structured-stream-adapters'
 import {
+  workspaceNodeId,
   workspaceEditCinematographyShotPlanNodeId,
   workspaceEditDirectorDecoupageNodeId,
 } from '../workspace-canvas-node-ids'
@@ -490,7 +491,7 @@ function buildEditScreenplayOverlays(
     if (!screenplayText) return []
     const screenplayTitle = extractScreenplayTitle(screenplayText)
     return [createOverlayNode({
-      id: `edit-screenplay:${snapshot.targetId}`,
+      id: workspaceNodeId.editScreenplay(snapshot.targetId),
       x: 260,
       y: 430,
       data: {
@@ -531,7 +532,7 @@ function buildEditScriptOverlay(
     .filter((snapshot) => snapshot.adapterKey === 'editScript.shots')
     .flatMap((snapshot) => snapshot.items)
   return createOverlayNode({
-    id: `edit-script:pending:${episodeId}`,
+    id: workspaceNodeId.editScript(episodeId),
     x: 260,
     y: 430,
     data: {
@@ -661,7 +662,7 @@ function buildSpaceConsistencyOverlays(
     const panels = snapshot.items.flatMap((item) => item.value.kind === 'storyboardPanel' ? [item.value.panel] : [])
     if (panels.length === 0 && !snapshot.errorMessage) return []
     return [createOverlayNode({
-      id: `space-consistency:${storyboardId}`,
+      id: workspaceNodeId.spaceConsistency(storyboardId),
       x: 2048,
       y: 430,
       data: {
@@ -712,7 +713,7 @@ function buildBgmOverlay(
   const error = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.') && snapshot.errorMessage)?.errorMessage ?? null
   if (designSections.length === 0 && promptSections.length === 0 && virtualLayers.length === 0 && !error) return null
   return createOverlayNode({
-    id: `bgm-score:${episodeId}`,
+    id: workspaceNodeId.bgmScore(episodeId),
     x: 2048,
     y: 1180,
     data: {
@@ -824,40 +825,9 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
     if (node.data.kind === 'spaceConsistency' && finalDataKinds.has(`spaceConsistency:${node.data.targetId}`)) return false
     return true
   })
-  const runningEditScriptBase = baseNodes.find((node) => (
-    node.data.kind === 'editScript'
-    && node.data.targetType === 'editScript'
-    && node.data.isRunning === true
-    && !node.data.editScriptDetails
-  )) ?? null
-  const editScriptOverlayForRunningBase = runningEditScriptBase
-    ? usableOverlays.find((node) => node.data.kind === 'editScript' && node.data.targetType === 'episode') ?? null
-    : null
   const overlayById = new Map(usableOverlays.map((node) => [node.id, node]))
   const usedOverlayIds = new Set<string>()
   const merged = baseNodes.map((node) => {
-    if (editScriptOverlayForRunningBase && node.id === runningEditScriptBase?.id) {
-      usedOverlayIds.add(editScriptOverlayForRunningBase.id)
-      return {
-        ...editScriptOverlayForRunningBase,
-        id: node.id,
-        position: node.position,
-        style: {
-          ...node.style,
-          width: editScriptOverlayForRunningBase.data.width,
-          height: editScriptOverlayForRunningBase.data.height,
-        },
-        data: {
-          ...node.data,
-          ...editScriptOverlayForRunningBase.data,
-          nodeId: node.id,
-          targetType: node.data.targetType,
-          targetId: node.data.targetId,
-          runtimeTargets: node.data.runtimeTargets,
-          onAction: node.data.onAction,
-        },
-      }
-    }
     const overlay = overlayById.get(node.id)
     if (!overlay) return node
     usedOverlayIds.add(overlay.id)
@@ -868,6 +838,22 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
         ...node.style,
         width: overlay.data.width,
         height: overlay.data.height,
+      },
+      data: {
+        ...node.data,
+        ...overlay.data,
+        nodeId: node.id,
+        targetType: node.data.targetType,
+        targetId: node.data.targetId,
+        runtimeTargets: node.data.runtimeTargets,
+        actionLabel: node.data.actionLabel,
+        action: node.data.action,
+        actionDisabled: node.data.actionDisabled,
+        secondaryActionLabel: node.data.secondaryActionLabel,
+        secondaryAction: node.data.secondaryAction,
+        tertiaryActionLabel: node.data.tertiaryActionLabel,
+        tertiaryAction: node.data.tertiaryAction,
+        onAction: node.data.onAction,
       },
     }
   })
