@@ -130,8 +130,6 @@ export const iconRegistry = {
   play: Play,
   playCircle: PlayCircle,
   search: Search,
-  searchAdd: Search,
-  searchPlus: Search,
   info: Info,
   infoCircle: Info,
   folder: Folder,
