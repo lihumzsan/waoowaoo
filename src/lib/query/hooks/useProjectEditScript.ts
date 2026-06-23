@@ -6,10 +6,28 @@ import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ProjectEditCinematographyShotPlan, ProjectEditDirectorDecoupage, ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 
 interface EditScriptResponse {
   editScript: ProjectEditScript | null
+}
+
+interface EditScriptAssetSubmittedTask {
+  readonly taskId: string
+  readonly taskType: string
+  readonly targetType: 'CharacterAppearance' | 'LocationImage'
+  readonly targetId: string
+}
+
+interface GenerateEditScriptAssetsResponse {
+  readonly editScript: ProjectEditScript | null
+  readonly submittedTasks?: readonly EditScriptAssetSubmittedTask[]
+}
+
+interface GenerateEditScriptAssetsMutationResult {
+  readonly editScript: ProjectEditScript
+  readonly submittedTasks: readonly EditScriptAssetSubmittedTask[]
 }
 
 interface EditScreenplayResponse {
@@ -350,18 +368,33 @@ export function useGenerateProjectEditScriptAssets(projectId: string | null) {
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate required assets')
       }
-      const data = await response.json() as EditScriptResponse
+      const data = await response.json() as GenerateEditScriptAssetsResponse
       if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')
-      return data.editScript
+      return {
+        editScript: data.editScript,
+        submittedTasks: data.submittedTasks ?? [],
+      } satisfies GenerateEditScriptAssetsMutationResult
     },
-    onSuccess: async (editScript) => {
+    onSuccess: async ({ editScript, submittedTasks }) => {
       if (!projectId) return
+      queryClient.setQueryData(queryKeys.project.editScript(projectId, editScript.episodeId), editScript)
+      submittedTasks.forEach((task) => {
+        upsertTaskTargetOverlay(queryClient, {
+          projectId,
+          targetType: task.targetType,
+          targetId: task.targetId,
+          runningTaskId: task.taskId,
+          runningTaskType: task.taskType,
+          intent: 'generate',
+        })
+      })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editScript.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editScript.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.assets.all('project', projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, editScript.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
   })

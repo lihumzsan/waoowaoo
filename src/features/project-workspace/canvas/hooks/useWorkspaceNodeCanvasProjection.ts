@@ -711,6 +711,10 @@ function editAssetHasPreview(asset: ProjectEditAssetRequirement): boolean {
   return asset.status === 'completed' && Boolean(asset.targetId) && Boolean(stringValue(asset.previewImageUrl))
 }
 
+function editAssetRuntimeTarget(asset: ProjectEditAssetRequirement): TaskRuntimeTarget | null {
+  return TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType ?? null, asset.taskTargetId ?? null)
+}
+
 function missingLocationReferenceNames(editScript: ProjectEditScript): string[] {
   const names = editScript.requirements
     .filter((asset) => asset.kind === 'location' && !editAssetHasPreview(asset))
@@ -1624,6 +1628,9 @@ export function buildWorkspaceNodeCanvasProjection({
       })
       const charCount = assetItems.filter((asset) => asset.kind === 'character').length
       const locationCount = assetItems.length - charCount
+      const assetRuntimeTargets = editScript.requirements
+        .map(editAssetRuntimeTarget)
+        .filter((target): target is TaskRuntimeTarget => target !== null)
       nodes.push(createNode({
         id: assetGroupNodeId,
         fallbackX: STORY_COLUMN_X,
@@ -1642,6 +1649,7 @@ export function buildWorkspaceNodeCanvasProjection({
           meta: translate('nodes.editAssetGroup.meta', { characters: charCount, locations: locationCount }),
           statusLabel: assetItems.some((asset) => asset.isRunning) ? translate('status.processing') : translate('status.ready'),
           isRunning: assetItems.some((asset) => asset.isRunning),
+          runtimeTargets: assetRuntimeTargets,
           width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
           height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
           indexLabel: 'A',

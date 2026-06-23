@@ -6,11 +6,13 @@ import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import EstimatedTaskProgressOverlay, { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
+import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import { FieldGlyph, glyphForField } from './field-glyphs'
 import type {
   WorkspaceCanvasAssetRef,
+  WorkspaceCanvasEditAssetGroupItem,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
   WorkspaceCanvasScriptScene,
@@ -436,6 +438,10 @@ function videoPlanModel(data: WorkspaceCanvasFlowNode['data']): string {
 
 function LoadingSpinner() {
   return <AppIcon name="loader" className="h-4 w-4 animate-spin" />
+}
+
+function editAssetPlaceholderIconName(kind: WorkspaceCanvasEditAssetGroupItem['kind']): AppIconName {
+  return kind === 'character' ? 'user' : 'mapPin'
 }
 
 function MediaSkeleton({ height }: { readonly height: number }) {
@@ -1480,13 +1486,19 @@ function EditAssetGroupContent({
             >
               <div className="relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)]">
                 {imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageUrl} alt={asset.name} className="h-full w-full object-cover" />
+                  <MediaImageWithLoading
+                    src={imageUrl}
+                    alt={asset.name}
+                    containerClassName="h-full w-full bg-slate-100"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
-                  <FieldGlyph name={asset.kind === 'character' ? 'people' : 'pin'} className="h-6 w-6" />
+                  <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
                 )}
                 {asset.isRunning ? (
-                  <span className="absolute inset-0 flex items-center justify-center bg-white/70"><LoadingSpinner /></span>
+                  <span className="workspace-node-loading-surface absolute inset-0 z-10 flex items-center justify-center bg-[var(--glass-overlay)] text-white">
+                    <LoadingSpinner />
+                  </span>
                 ) : null}
               </div>
               <div className="px-2.5 py-1.5">

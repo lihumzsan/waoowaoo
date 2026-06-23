@@ -30,6 +30,23 @@ vi.mock('@/components/ui/icons', () => ({
   AppIcon: ({ name }: { readonly name: string }) => <span data-icon={name} />,
 }))
 
+vi.mock('@/components/media/MediaImageWithLoading', () => ({
+  MediaImageWithLoading: (props: {
+    readonly src: string
+    readonly alt: string
+    readonly className?: string
+    readonly containerClassName?: string
+  }) => (
+    <span
+      data-media-image-with-loading="true"
+      data-src={props.src}
+      aria-label={props.alt}
+      className={props.className}
+      data-container-class={props.containerClassName}
+    />
+  ),
+}))
+
 function renderNode(data: WorkspaceCanvasNodeData): string {
   const props = { data } as NodeProps<WorkspaceCanvasFlowNode>
   return renderToStaticMarkup(<WorkspaceNode {...props} />)
@@ -119,6 +136,56 @@ describe('workspace node rendering', () => {
     expect(html).toContain('workspace-node-running-breathing')
     expect(html).toContain('Ready')
     expect(html).not.toContain('data-icon="loader"')
+  })
+
+  it('renders edit asset group thumbnails with the shared image loader and AppIcon placeholders', () => {
+    const html = renderNode({
+      kind: 'editAssetGroup',
+      layoutNodeType: 'editAssetGroup',
+      targetType: 'editAssetRequirement',
+      targetId: 'edit-1',
+      title: 'Assets',
+      eyebrow: 'Asset',
+      body: 'body',
+      meta: 'meta',
+      statusLabel: 'Processing',
+      isRunning: true,
+      width: 720,
+      height: 360,
+      editAssetGroupDetails: {
+        editScriptId: 'edit-1',
+        assets: [
+          {
+            requirementId: 'req-character',
+            kind: 'character',
+            name: 'Pilot',
+            eyebrow: 'Character',
+            description: 'Pilot description',
+            shotNumbers: [1],
+            statusLabel: 'Ready',
+            isRunning: false,
+            previewImageUrl: 'https://example.com/pilot.png',
+          },
+          {
+            requirementId: 'req-location',
+            kind: 'location',
+            name: 'Dock',
+            eyebrow: 'Location',
+            description: 'Dock description',
+            shotNumbers: [1],
+            statusLabel: 'Processing',
+            isRunning: true,
+            previewImageUrl: null,
+          },
+        ],
+      },
+    })
+
+    expect(html).toContain('data-media-image-with-loading="true"')
+    expect(html).toContain('https://example.com/pilot.png')
+    expect(html).toContain('data-icon="mapPin"')
+    expect(html).toContain('workspace-node-loading-surface')
+    expect(html).toContain('data-icon="loader"')
   })
 
   it('uses shot text as the edit script preview fallback when storyboard media is missing', () => {

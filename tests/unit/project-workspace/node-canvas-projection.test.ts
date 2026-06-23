@@ -1684,6 +1684,13 @@ describe('workspace node canvas projection', () => {
     })
     expect(locationAsset?.previewImageUrl).toBe('https://example.com/location.png')
     expect(locationAsset?.shotNumbers).toEqual([1])
+    expect(assetGroupNode?.data.runtimeTargets).toEqual([
+      {
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+        types: ['image_location', 'modify_asset_image'],
+      },
+    ])
 
     expect(Math.abs(
       (assetGroupNode?.position.y ?? 0)
