@@ -75,6 +75,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   pending: boolean
   replyInFlight: boolean
   controlPending: boolean
+  activeReplyMessageId: string | null
   pendingApprovalId: string | null
   approvalRespondedIds: ReadonlySet<string>
   sessionState: ProjectAgentSessionState | null
@@ -397,6 +398,7 @@ export function useWorkspaceAssistantRuntime({
   const [syncError, setSyncError] = useState<string | null>(null)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
+  const [activeControlReplyMessageId, setActiveControlReplyMessageId] = useState<string | null>(null)
   const [streamedActivity, setStreamedActivity] = useState<ProjectAgentSessionActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
 
@@ -489,6 +491,7 @@ export function useWorkspaceAssistantRuntime({
     const currentRun = nextState.currentRun
     if (!currentRun) {
       setActiveControlRun(null)
+      setActiveControlReplyMessageId(null)
       return
     }
     if (isWorkspaceAssistantOperationPendingStatus(currentRun.status)) {
@@ -499,12 +502,16 @@ export function useWorkspaceAssistantRuntime({
         operationId: operationId ?? (current?.runId === currentRun.runId ? current.operationId : null),
         intent: current?.runId === currentRun.runId ? current.intent : null,
       }))
+      if (currentRun.status !== 'running') {
+        setActiveControlReplyMessageId(null)
+      }
       return
     }
     if (shouldClearWorkspaceAssistantControlPending(currentRun.status)) {
       setActiveControlRun((current) => {
         return current?.runId === currentRun.runId ? null : current
       })
+      setActiveControlReplyMessageId(null)
       return
     }
   }, [])
@@ -531,6 +538,11 @@ export function useWorkspaceAssistantRuntime({
   }) => {
     chat.clearError()
     setStreamedActivity(null)
+    const controlMessageId = createWorkspaceAssistantControlMessageId({
+      runId: params.runId,
+      endpoint: params.endpoint,
+    })
+    setActiveControlReplyMessageId(controlMessageId)
     setActiveControlRun({
       runId: params.runId,
       status: 'running',
@@ -538,10 +550,6 @@ export function useWorkspaceAssistantRuntime({
       intent: params.intent,
     })
     try {
-      const controlMessageId = createWorkspaceAssistantControlMessageId({
-        runId: params.runId,
-        endpoint: params.endpoint,
-      })
       const currentMessages = latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages
       const visibleUserText = params.visibleUserText?.trim() ?? ''
       const displayMessages = visibleUserText
@@ -818,6 +826,7 @@ export function useWorkspaceAssistantRuntime({
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
   const replyInFlight = chatReplyInFlight || controlPending
+  const activeReplyMessageId = controlPending ? activeControlReplyMessageId : null
 
   return {
     runtime,
@@ -827,6 +836,7 @@ export function useWorkspaceAssistantRuntime({
     pending: Boolean(pendingRun) || chat.status === 'submitted' || chat.status === 'streaming',
     replyInFlight,
     controlPending,
+    activeReplyMessageId,
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,
