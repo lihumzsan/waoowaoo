@@ -17,7 +17,6 @@ describe('workspace assistant reply loading indicator', () => {
   it('shows only while the active reply is awaiting its first visible output', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
@@ -29,18 +28,26 @@ describe('workspace assistant reply loading indicator', () => {
     expect(html).toContain('flex flex-col gap-3 px-1 py-1')
   })
 
+  it('does not require the transport status to flip before showing the initial reply placeholder', () => {
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyAwaitingFirstVisibleOutput: true,
+      hasVisibleActivityIndicator: false,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
+    })).toBe(true)
+  })
+
   it('does not show while idle, loading storage, waiting for the user, or waiting for an external task', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: false,
-      replyAwaitingFirstVisibleOutput: true,
+      replyAwaitingFirstVisibleOutput: false,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: true,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
@@ -48,7 +55,6 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: false,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
@@ -56,7 +62,6 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: true,
       awaitingUserInput: false,
@@ -64,7 +69,6 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: true,
@@ -72,7 +76,6 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
@@ -87,7 +90,6 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: resolveWorkspaceAssistantAwaitingUserInput({
@@ -118,7 +120,6 @@ describe('workspace assistant reply loading indicator', () => {
   it('keeps the control reply placeholder visible while only prior choice-card output exists', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: true,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,
@@ -147,7 +148,6 @@ describe('workspace assistant reply loading indicator', () => {
     expect(hasWorkspaceAssistantVisibleOutput(realStreamMessage)).toBe(true)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
       replyAwaitingFirstVisibleOutput: false,
       hasVisibleActivityIndicator: false,
       awaitingUserInput: false,

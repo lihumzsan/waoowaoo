@@ -865,11 +865,6 @@ export function useWorkspaceAssistantRuntime({
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
   const replyInFlight = chatReplyInFlight || controlPending
 
-  useEffect(() => {
-    if (replyInFlight || !replyAwaitingFirstVisibleOutput) return
-    setReplyAwaitingFirstVisibleOutput(false)
-  }, [replyAwaitingFirstVisibleOutput, replyInFlight])
-
   return {
     runtime,
     messages: chat.messages,
