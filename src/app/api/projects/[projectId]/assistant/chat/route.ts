@@ -31,6 +31,10 @@ import {
 } from '@/lib/project-agent/interruptions'
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import {
+  appendProjectAgentEvents,
+  getCurrentProjectAgentActivity,
+} from '@/lib/project-agent/event'
+import {
   applyEditFirstChoiceResultSideEffects,
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
@@ -38,7 +42,7 @@ import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mod
 import {
   createProjectAgentRun,
   getProjectAgentRun,
-  safelyUpdateProjectAgentRunStatus,
+  updateProjectAgentRunStatus,
   supersedePendingRunsInScope,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
@@ -257,6 +261,31 @@ async function resolveProjectAgentControl(params: {
           message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
         })
       }
+    } else {
+      const choiceActivity = await getCurrentProjectAgentActivity({
+        projectId: scope.projectId,
+        userId: scope.userId,
+        episodeId: scope.episodeId,
+        assistantId: scope.assistantId,
+        runId: controlAction.runId,
+      })
+      if (!choiceActivity || choiceActivity.type !== 'awaiting_choice') {
+        throw new ApiError('CONFLICT', {
+          code: 'PROJECT_AGENT_CHOICE_ACTIVITY_NOT_PENDING',
+          message: 'the choice activity is not pending for this control action',
+        })
+      }
+      await appendProjectAgentEvents({
+        scope,
+        events: [{
+          idempotencyKey: `activity-completed:${choiceActivity.activityId}:choice-response`,
+          event: {
+            kind: 'activity.completed',
+            runId: controlAction.runId,
+            activityId: choiceActivity.activityId,
+          },
+        }],
+      })
     }
     await applyEditFirstChoiceResultSideEffects({
       choiceType: controlAction.choiceType,
@@ -348,7 +377,7 @@ async function resolveProjectAgentRunForRequest(params: {
       message: 'the agent run is not available for this control action',
     })
   }
-  await safelyUpdateProjectAgentRunStatus({
+  await updateProjectAgentRunStatus({
     runId: run.id,
     status: 'running',
     stopReason: params.controlAction.type,
@@ -495,7 +524,7 @@ export const POST = apiHandler(async (
     } catch (error) {
       await safelyReleaseProjectAgentRunLock(runLock)
       if (run) {
-        await safelyUpdateProjectAgentRunStatus({
+        await updateProjectAgentRunStatus({
           runId: run.id,
           status: 'failed',
           stopReason: 'control_resolution_failed',

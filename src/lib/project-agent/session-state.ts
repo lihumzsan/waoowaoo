@@ -9,7 +9,6 @@ import type {
   ProjectAssistantId,
 } from './types'
 import {
-  getLatestProjectAgentInterruptionForRun,
   getPendingProjectAgentInterruptionForScope,
   type ProjectAgentInterruptionSnapshot,
 } from './interruptions'
@@ -23,6 +22,10 @@ import {
   listProjectAgentSessionWaits,
   type ProjectAgentSessionWait,
 } from './waits'
+import {
+  getCurrentProjectAgentActivity,
+  type ProjectAgentActivitySnapshot,
+} from './event'
 import {
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
@@ -41,8 +44,9 @@ export interface ProjectAgentSessionRun {
   runId: string
   status: ProjectAgentRunStatus
   controlKind: ProjectAgentRunRecord['controlKind']
-  operationId: string | null
 }
+
+export type ProjectAgentSessionActivity = ProjectAgentActivitySnapshot
 
 export type ProjectAgentSessionPendingInteraction =
   | {
@@ -80,6 +84,7 @@ export interface ProjectAgentSessionStylePreviewGeneration {
 
 export interface ProjectAgentSessionState {
   currentRun: ProjectAgentSessionRun | null
+  currentActivity: ProjectAgentSessionActivity | null
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
@@ -176,29 +181,6 @@ async function buildPendingInteraction(params: {
   return null
 }
 
-function inferRunOperationId(params: {
-  run: ProjectAgentRunRecord | null
-  pendingInteraction: ProjectAgentSessionPendingInteraction | null
-  latestRunInterruption: ProjectAgentInterruptionSnapshot | null
-  waits: readonly ProjectAgentSessionWait[]
-}): string | null {
-  const runId = params.run?.id ?? null
-  if (!runId) return null
-  if (!params.run || !isActiveRunStatus(params.run.status)) return null
-  if (params.pendingInteraction?.runId === runId) return params.pendingInteraction.operationId
-  const activeWait = params.waits.find((wait) => wait.runId === runId)
-  if (activeWait) return activeWait.operationId
-  if (
-    params.run.status === 'running'
-    && params.run.stopReason === 'approval_response'
-    && params.latestRunInterruption?.runId === runId
-    && params.latestRunInterruption.status === 'consumed'
-  ) {
-    return params.latestRunInterruption.operationId
-  }
-  return null
-}
-
 async function listActiveTasksForWaits(params: {
   projectId: string
   userId: string
@@ -243,10 +225,16 @@ function isAspectRatio(value: string | null): value is NonNullable<EditStylePrev
   return value === '9:16' || value === '16:9' || value === '21:9'
 }
 
-function resolveStylePreviewAgentRunId(run: ProjectAgentSessionRun | null): string | null {
-  if (!run) return null
-  if (run.operationId === 'generate_edit_style_previews') return run.runId
-  if (run.status === 'awaiting_choice' && run.controlKind === 'user_turn') return run.runId
+function resolveStylePreviewAgentRunId(params: {
+  run: ProjectAgentSessionRun | null
+  activity: ProjectAgentSessionActivity | null
+}): string | null {
+  if (!params.run) return null
+  if (
+    params.activity?.operationId === 'generate_edit_style_previews'
+    || params.activity?.sourceOperationId === 'generate_edit_style_previews'
+  ) return params.run.runId
+  if (params.run.status === 'awaiting_choice' && params.run.controlKind === 'user_turn') return params.run.runId
   return null
 }
 
@@ -255,6 +243,7 @@ async function buildActiveStylePreviewGeneration(params: {
   userId: string
   episodeId?: string | null
   run: ProjectAgentSessionRun | null
+  activity: ProjectAgentSessionActivity | null
 }): Promise<ProjectAgentSessionStylePreviewGeneration | null> {
   if (!params.episodeId) return null
   const screenplay = await prisma.projectEditScreenplay.findFirst({
@@ -289,7 +278,10 @@ async function buildActiveStylePreviewGeneration(params: {
   })
   if (!screenplay) return null
   if (screenplay.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
-  const agentRunId = resolveStylePreviewAgentRunId(params.run)
+  const agentRunId = resolveStylePreviewAgentRunId({
+    run: params.run,
+    activity: params.activity,
+  })
   const items = screenplay.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
     // taskId 缺失（追加候选刚建行、尚未回填）也要收录，否则停靠卡会停在旧的候选数、看不到新生成的。
     if (!isStylePreviewKey(preview.styleKey)) return []
@@ -358,21 +350,19 @@ export async function getProjectAgentSessionState(
     }),
   ])
   const run = resolveCurrentRun(runs)
-  const [pendingInteraction, latestRunInterruption, activeTasks] = await Promise.all([
+  const [pendingInteraction, currentActivity, activeTasks] = await Promise.all([
     buildPendingInteraction({
       scope,
       workflow,
       interruption: pendingInterruption,
     }),
-    run
-      ? getLatestProjectAgentInterruptionForRun({
-          projectId: input.projectId,
-          userId: input.userId,
-          episodeId: input.episodeId ?? null,
-          assistantId,
-          runId: run.id,
-        })
-      : Promise.resolve(null),
+    getCurrentProjectAgentActivity({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
+      ...(run ? { runId: run.id } : {}),
+    }),
     listActiveTasksForWaits({
       projectId: input.projectId,
       userId: input.userId,
@@ -384,12 +374,6 @@ export async function getProjectAgentSessionState(
       runId: run.id,
       status: run.status,
       controlKind: run.controlKind,
-      operationId: inferRunOperationId({
-        run,
-        pendingInteraction,
-        latestRunInterruption,
-        waits,
-      }),
     }
     : null
   const activeStylePreviewGeneration = pendingInteraction?.kind === 'choice' && pendingInteraction.choiceType === 'style'
@@ -399,10 +383,12 @@ export async function getProjectAgentSessionState(
         userId: input.userId,
         episodeId: input.episodeId ?? null,
         run: currentRun,
+        activity: currentActivity,
       })
 
   return {
     currentRun,
+    currentActivity,
     pendingInteraction,
     activeWaits: waits,
     activeTasks,

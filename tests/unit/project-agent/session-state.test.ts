@@ -14,6 +14,7 @@ const workflow = {
 type MockInterruption = {
   id: string
   runId: string
+  activityId: string | null
   type: 'approval' | 'choice'
   status: 'pending' | 'consumed'
   operationId: string
@@ -66,6 +67,7 @@ const interruptionsMock = vi.hoisted(() => ({
   getPendingProjectAgentInterruptionForScope: vi.fn(async (): Promise<MockInterruption | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
+    activityId: 'activity-approval-1',
     type: 'approval',
     status: 'pending',
     operationId: 'generate_edit_script_assets',
@@ -76,6 +78,7 @@ const interruptionsMock = vi.hoisted(() => ({
   getLatestProjectAgentInterruptionForRun: vi.fn(async (): Promise<MockInterruption | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
+    activityId: 'activity-approval-1',
     type: 'approval',
     status: 'pending',
     operationId: 'generate_edit_script_assets',
@@ -102,6 +105,19 @@ const waitsMock = vi.hoisted(() => ({
   ]),
 }))
 
+const eventMock = vi.hoisted(() => ({
+  getCurrentProjectAgentActivity: vi.fn(async (): Promise<unknown | null> => ({
+    activityId: 'activity-wait-1',
+    runId: 'run-1',
+    type: 'waiting_task',
+    status: 'waiting',
+    operationId: 'generate_edit_script_assets',
+    sourceOperationId: null,
+    toolCallId: null,
+    choiceType: null,
+  })),
+}))
+
 const choiceCardMock = vi.hoisted(() => ({
   buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
     cardId: 'edit-first-screenplay-review',
@@ -122,6 +138,7 @@ vi.mock('@/lib/project-agent/runs', () => runsMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionsMock)
 vi.mock('@/lib/project-agent/waits', () => waitsMock)
 vi.mock('@/lib/project-agent/choice-card', () => choiceCardMock)
+vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 
@@ -169,9 +186,20 @@ describe('project agent session-state', () => {
         claimId: null,
       },
     ])
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValue({
+      activityId: 'activity-wait-1',
+      runId: 'run-1',
+      type: 'waiting_task',
+      status: 'waiting',
+      operationId: 'generate_edit_script_assets',
+      sourceOperationId: null,
+      toolCallId: null,
+      choiceType: null,
+    })
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValue({
       id: 'interruption-1',
       runId: 'run-1',
+      activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
       operationId: 'generate_edit_script_assets',
@@ -182,6 +210,7 @@ describe('project agent session-state', () => {
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValue({
       id: 'interruption-1',
       runId: 'run-1',
+      activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
       operationId: 'generate_edit_script_assets',
@@ -212,8 +241,13 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       status: 'awaiting_task',
       controlKind: 'approval_response',
-      operationId: 'generate_edit_script_assets',
     })
+    expect(state.currentActivity).toEqual(expect.objectContaining({
+      runId: 'run-1',
+      type: 'waiting_task',
+      status: 'waiting',
+      operationId: 'generate_edit_script_assets',
+    }))
     expect(state.activeWaits.map((wait) => wait.operationId)).toEqual(['generate_edit_script_assets'])
     expect(state.activeTasks).toEqual([{
       taskId: 'task-1',
@@ -244,6 +278,7 @@ describe('project agent session-state', () => {
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
       id: 'choice-interruption-1',
       runId: 'run-choice-1',
+      activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
       operationId: 'request_edit_first_choice',
@@ -254,6 +289,7 @@ describe('project agent session-state', () => {
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'choice-interruption-1',
       runId: 'run-choice-1',
+      activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
       operationId: 'request_edit_first_choice',
@@ -304,6 +340,16 @@ describe('project agent session-state', () => {
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-style-choice-1',
+      runId: 'run-style-1',
+      type: 'awaiting_choice',
+      status: 'waiting',
+      operationId: null,
+      sourceOperationId: 'generate_edit_style_previews',
+      toolCallId: null,
+      choiceType: 'style',
+    })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
       id: 'screenplay-1',
       projectId: 'project-1',
@@ -333,7 +379,6 @@ describe('project agent session-state', () => {
       runId: 'run-style-1',
       status: 'awaiting_choice',
       controlKind: 'user_turn',
-      operationId: null,
     })
     expect(state.activeStylePreviewGeneration?.data).toEqual(expect.objectContaining({
       operationId: 'generate_edit_style_previews',
@@ -368,9 +413,11 @@ describe('project agent session-state', () => {
     ])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce(null)
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'interruption-stale-1',
       runId: 'run-stale-1',
+      activityId: 'activity-stale-1',
       type: 'approval',
       status: 'consumed',
       operationId: 'generate_edit_script_storyboard',
@@ -398,8 +445,8 @@ describe('project agent session-state', () => {
       runId: 'run-stale-1',
       status: 'cancelled',
       controlKind: 'user_turn',
-      operationId: null,
     })
+    expect(state.currentActivity).toBeNull()
   })
 
   it('keeps the approved operation visible while the approval response run is active', async () => {
@@ -419,9 +466,20 @@ describe('project agent session-state', () => {
     ])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-active-1',
+      runId: 'run-active-1',
+      type: 'operation',
+      status: 'running',
+      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+      sourceOperationId: null,
+      toolCallId: 'tool-active-1',
+      choiceType: null,
+    })
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'interruption-active-1',
       runId: 'run-active-1',
+      activityId: 'activity-active-1',
       type: 'approval',
       status: 'consumed',
       operationId: 'generate_edit_script_storyboard_spatial_blocking',
@@ -442,7 +500,11 @@ describe('project agent session-state', () => {
       runId: 'run-active-1',
       status: 'running',
       controlKind: 'user_turn',
-      operationId: 'generate_edit_script_storyboard_spatial_blocking',
     })
+    expect(state.currentActivity).toEqual(expect.objectContaining({
+      runId: 'run-active-1',
+      type: 'operation',
+      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+    }))
   })
 })

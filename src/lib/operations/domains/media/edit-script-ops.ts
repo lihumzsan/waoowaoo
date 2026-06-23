@@ -479,6 +479,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           assistantId: 'workspace-command',
           operationId: 'request_edit_first_choice',
           toolCallId,
+          previousActivityId: ctx.context.currentActivityId ?? null,
           payload: toInputJsonValue({
             choiceType,
             cardId: card.cardId,

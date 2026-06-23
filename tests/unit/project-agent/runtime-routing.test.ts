@@ -33,6 +33,23 @@ const runState = vi.hoisted(() => ({
   safelyUpdateProjectAgentRunStatus: vi.fn(async () => undefined),
 }))
 
+const eventState = vi.hoisted(() => ({
+  appendProjectAgentEvents: vi.fn(async (params: { events: Array<{ event: { kind: string; runId?: string; activityId?: string; operationId?: string | null; sourceOperationId?: string | null; toolCallId?: string | null; choiceType?: string | null } }> }) => {
+    const event = params.events.map((item) => item.event).find((item) => item.activityId)
+    if (!event?.activityId || !event.runId) return null
+    return {
+      activityId: event.activityId,
+      runId: event.runId,
+      type: event.kind === 'activity.started' ? 'operation' : 'operation',
+      status: event.kind === 'activity.failed' ? 'failed' : event.kind === 'activity.completed' ? 'completed' : 'running',
+      operationId: event.operationId ?? null,
+      sourceOperationId: event.sourceOperationId ?? null,
+      toolCallId: event.toolCallId ?? null,
+      choiceType: event.choiceType ?? null,
+    }
+  }),
+}))
+
 const phaseState = vi.hoisted(() => ({
   editFirstWorkflow: {
     active: false,
@@ -300,6 +317,12 @@ vi.mock('@/lib/project-agent/waits', () => ({
 
 vi.mock('@/lib/project-agent/runs', () => ({
   safelyUpdateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
+  updateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
+  cancelRunningProjectAgentRun: vi.fn(async () => true),
+}))
+
+vi.mock('@/lib/project-agent/event', () => ({
+  appendProjectAgentEvents: eventState.appendProjectAgentEvents,
 }))
 
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
@@ -682,6 +705,7 @@ describe('project agent runtime deterministic tool injection', () => {
         interruption: {
           id: 'interruption-1',
           runId: 'run-approval_response',
+          activityId: 'activity-approval-1',
           type: 'approval',
           status: 'consumed',
           operationId: 'generate_edit_screenplay',
@@ -780,6 +804,7 @@ describe('project agent runtime deterministic tool injection', () => {
           id: 'interruption-1',
           approvalId: 'approval-1',
           runId: 'run-previous',
+          activityId: 'activity-previous-approval',
           type: 'approval',
           operationId: 'generate_edit_script',
         }],

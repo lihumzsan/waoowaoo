@@ -574,6 +574,7 @@ model ProjectAssistantThread {
 model ProjectAgentWait {
   id              String    @id @default(uuid())
   runId           String?
+  activityId      String?
   projectId       String
   userId          String
   assistantId     String    @db.VarChar(64)
@@ -595,10 +596,12 @@ model ProjectAgentWait {
   updatedAt       DateTime  @updatedAt
   resolvedAt      DateTime?
   run             ProjectAgentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  activity        ProjectAgentActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([runId])
+  @@index([activityId])
   @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([followUpKey])
@@ -627,6 +630,7 @@ model ProjectAgentRun {
   updatedAt      DateTime  @updatedAt
   waits          ProjectAgentWait[]
   interruptions  ProjectAgentInterruption[]
+  activities     ProjectAgentActivity[]
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -636,9 +640,67 @@ model ProjectAgentRun {
   @@map("project_agent_runs")
 }
 
+model ProjectAgentActivity {
+  id                String    @id @default(uuid())
+  runId             String
+  projectId         String
+  userId            String
+  assistantId       String    @db.VarChar(64)
+  scopeRef          String    @db.VarChar(64)
+  episodeId         String?
+  type              String    @db.VarChar(48)
+  status            String    @default("running") @db.VarChar(32)
+  operationId       String?   @db.VarChar(128)
+  sourceOperationId String?   @db.VarChar(128)
+  toolCallId        String?   @db.VarChar(128)
+  choiceType        String?   @db.VarChar(64)
+  errorCode         String?   @db.VarChar(128)
+  errorMessage      String?   @db.Text
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  failedAt          DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  run               ProjectAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  waits             ProjectAgentWait[]
+  interruptions     ProjectAgentInterruption[]
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status, createdAt])
+  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([operationId])
+  @@map("project_agent_activities")
+}
+
+model ProjectAgentEvent {
+  id             BigInt    @id @default(autoincrement())
+  projectId      String
+  userId         String
+  assistantId    String    @db.VarChar(64)
+  scopeRef       String    @db.VarChar(64)
+  episodeId      String?
+  runId          String?
+  activityId     String?
+  kind           String    @db.VarChar(64)
+  idempotencyKey String?   @unique @db.VarChar(191)
+  payload        Json
+  createdAt      DateTime  @default(now())
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, assistantId, scopeRef, id])
+  @@index([runId, id])
+  @@index([activityId, id])
+  @@map("project_agent_events")
+}
+
 model ProjectAgentInterruption {
   id          String    @id @default(uuid())
   runId       String?
+  activityId  String?
   projectId   String
   userId      String
   assistantId String    @db.VarChar(64)
@@ -656,10 +718,12 @@ model ProjectAgentInterruption {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   run         ProjectAgentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  activity    ProjectAgentActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([runId, status, createdAt])
+  @@index([activityId])
   @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
   @@index([userId])
   @@map("project_agent_interruptions")
@@ -819,6 +883,8 @@ model Project {
   planApprovals      PlanApproval[]
   assistantThreads   ProjectAssistantThread[]
   agentRuns          ProjectAgentRun[]
+  agentActivities    ProjectAgentActivity[]
+  agentEvents        ProjectAgentEvent[]
   agentWaits         ProjectAgentWait[]
   agentInterruptions ProjectAgentInterruption[]
   assistantToolSelections ProjectAssistantToolSelection[]
@@ -944,6 +1010,8 @@ model User {
   planApprovals           PlanApproval[]
   projectAssistantThreads ProjectAssistantThread[]
   projectAgentRuns        ProjectAgentRun[]
+  projectAgentActivities  ProjectAgentActivity[]
+  projectAgentEvents      ProjectAgentEvent[]
   projectAgentWaits       ProjectAgentWait[]
   projectAgentInterruptions ProjectAgentInterruption[]
   projectAssistantToolSelections ProjectAssistantToolSelection[]

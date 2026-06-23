@@ -11,8 +11,28 @@ const executeState = vi.hoisted(() => ({
   executeProjectAgentOperationFromTool: vi.fn(async () => ({ ok: true, data: { success: true } })),
 }))
 
+const eventState = vi.hoisted(() => ({
+  appendProjectAgentEvents: vi.fn(async (params: { events: Array<{ event: { kind: string; runId?: string; activityId?: string; operationId?: string | null; toolCallId?: string | null } }> }) => {
+    const activityEvent = params.events.map((item) => item.event).find((event) => 'activityId' in event)
+    if (!activityEvent?.activityId || !activityEvent.runId) return null
+    return {
+      activityId: activityEvent.activityId,
+      runId: activityEvent.runId,
+      type: activityEvent.kind === 'activity.started' ? 'operation' : 'operation',
+      status: activityEvent.kind === 'activity.failed' ? 'failed' : activityEvent.kind === 'activity.completed' ? 'completed' : 'running',
+      operationId: activityEvent.operationId ?? 'generate_storyboard_grid_images',
+      sourceOperationId: null,
+      toolCallId: activityEvent.toolCallId ?? null,
+      choiceType: null,
+    }
+  }),
+}))
+
 vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
   executeProjectAgentOperationFromTool: executeState.executeProjectAgentOperationFromTool,
+}))
+vi.mock('@/lib/project-agent/event', () => ({
+  appendProjectAgentEvents: eventState.appendProjectAgentEvents,
 }))
 
 function buildOperation(
@@ -116,6 +136,7 @@ describe('createProjectAgentOperationTool', () => {
       userId: 'user-1',
       context: {
         episodeId: 'episode-1',
+        runId: 'run-1',
       },
       assistantPermissionMode: 'auto',
       writer: {
