@@ -45,6 +45,18 @@ function buildToolError(params: {
   }
 }
 
+function withOperationErrorDetails(
+  operation: { agentFlow?: { interruptsFor?: 'approval' | 'choice' | null } },
+  details?: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const interruptsFor = operation.agentFlow?.interruptsFor ?? null
+  if (!interruptsFor) return details ?? null
+  return {
+    ...(details ?? {}),
+    interruptsFor,
+  }
+}
+
 export async function executeProjectAgentOperationFromTool(params: {
   request: NextRequest
   operationId: string
@@ -78,6 +90,7 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'OPERATION_INPUT_INVALID',
         message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
         operationId: params.operationId,
+        details: withOperationErrorDetails(operation),
         issues: parsed.error.issues,
       }),
     }
@@ -101,11 +114,11 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'OPERATION_PREREQUISITE_MISSING',
         message: 'PROJECT_AGENT_OPERATION_PREREQUISITE_EPISODE_REQUIRED',
         operationId: params.operationId,
-        details: {
+        details: withOperationErrorDetails(operation, {
           prerequisite: 'episodeId',
           required: 'required',
           actual: null,
-        },
+        }),
       }),
     }
   }
@@ -117,12 +130,12 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'OPERATION_PREREQUISITE_MISSING',
         message: 'PROJECT_AGENT_OPERATION_PREREQUISITE_EPISODE_FORBIDDEN',
         operationId: params.operationId,
-        details: {
+        details: withOperationErrorDetails(operation, {
           prerequisite: 'episodeId',
           required: 'forbidden',
           actual: effectiveEpisodeId,
           source: contextEpisodeId ? 'context' : 'input',
-        },
+        }),
       }),
     }
   }
@@ -139,9 +152,9 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'CONFIRMATION_REQUIRED',
         message: 'PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED',
         operationId: params.operationId,
-        details: {
+        details: withOperationErrorDetails(operation, {
           approval: 'ai-sdk-tool-approval',
-        },
+        }),
       }),
     }
   }
@@ -164,9 +177,10 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'OPERATION_EXECUTION_FAILED',
         message: toMessage(error),
         operationId: params.operationId,
-        details: error instanceof Error && error.cause
-          ? { cause: error.cause }
-          : null,
+        details: withOperationErrorDetails(
+          operation,
+          error instanceof Error && error.cause ? { cause: error.cause } : null,
+        ),
       }),
     }
   }
@@ -178,6 +192,7 @@ export async function executeProjectAgentOperationFromTool(params: {
         code: 'OPERATION_OUTPUT_INVALID',
         message: 'PROJECT_AGENT_OPERATION_OUTPUT_INVALID',
         operationId: params.operationId,
+        details: withOperationErrorDetails(operation),
         issues: outputParsed.error.issues,
       }),
     }

@@ -336,6 +336,9 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
     intent: 'query',
     prerequisites: { episodeId: 'required' },
     effects: EFFECTS_NONE,
+    agentFlow: {
+      interruptsFor: 'choice',
+    },
     inputSchema: requestEditChoiceInputSchema,
     outputSchema: requestEditFirstChoiceOutputSchema,
     execute: async (ctx, input: RequestEditChoiceInput) => {

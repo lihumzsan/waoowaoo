@@ -1,8 +1,10 @@
-import { createElement } from 'react'
+import { createElement, type ComponentProps, type ComponentType, type ReactElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { NextIntlClientProvider } from 'next-intl'
+import type { AbstractIntlMessages } from 'next-intl'
 import { createTranslator } from 'use-intl/core'
 import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
@@ -17,6 +19,7 @@ import {
   resolveDisplayedEditStylePreviewItems,
   resolveEditStylePreviewCardStatus,
   resolveProgressStageLabel,
+  WorkspaceAssistantToolCallCard,
   WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -81,6 +84,37 @@ function createProgressTranslator(messages: {
       progress: messages,
     },
   }) as ProgressTranslator
+}
+
+const assistantToolCallMessages = {
+  assistantAgent: {
+    toolCall: {
+      success: '成功',
+      failed: '失败',
+      needsAction: '待处理',
+      running: '进行中',
+      arguments: '参数',
+      result: '结果',
+      waiting: '等待工具返回结果...',
+    },
+    cards: {
+      confirmationRequired: '需要确认',
+    },
+  },
+} as const
+
+function renderAssistantToolCallCard(props: Record<string, unknown>): string {
+  const providerProps: ComponentProps<typeof NextIntlClientProvider> = {
+    locale: 'zh',
+    messages: assistantToolCallMessages as unknown as AbstractIntlMessages,
+    timeZone: 'Asia/Shanghai',
+    children: createElement(
+      WorkspaceAssistantToolCallCard as ComponentType<Record<string, unknown>>,
+      props,
+    ) as ReactElement,
+  }
+
+  return renderToStaticMarkup(createElement(NextIntlClientProvider, providerProps))
 }
 
 describe('workspace assistant panel layout', () => {
@@ -196,6 +230,28 @@ describe('workspace assistant panel layout', () => {
     expect(rendererSource).toContain('ToolCallMessagePartProps')
     expect(rendererSource).toContain("toolStatus === 'requires-action'")
     expect(rendererSource).toContain('ConfirmationActionCard')
+  })
+
+  it('renders completed tool calls with ok=false as failed instead of successful', () => {
+    const html = renderAssistantToolCallCard({
+      toolName: 'request_edit_duration_aspect_ratio_choice',
+      toolCallId: 'tool-call-choice-1',
+      status: { type: 'complete' },
+      args: {
+        episodeId: 'episode-1',
+      },
+      result: {
+        ok: false,
+        error: {
+          code: 'OPERATION_EXECUTION_FAILED',
+          message: 'PROJECT_AGENT_ACTIVITY_OVERLAP',
+        },
+      },
+    })
+
+    expect(html).toContain('失败 · 选择时长与画幅')
+    expect(html).toContain('PROJECT_AGENT_ACTIVITY_OVERLAP')
+    expect(html).not.toContain('成功 · 选择时长与画幅')
   })
 
   it('uses server-side pending approval state instead of reviving persisted approval cards', () => {

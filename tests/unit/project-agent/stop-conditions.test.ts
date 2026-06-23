@@ -20,6 +20,22 @@ function toolErrorOutput(operationId: string, code: string) {
   }
 }
 
+function interruptBoundaryToolErrorOutput(operationId: string, code: string) {
+  return {
+    toolName: operationId,
+    output: {
+      ok: false,
+      error: {
+        operationId,
+        code,
+        details: {
+          interruptsFor: 'choice',
+        },
+      },
+    },
+  }
+}
+
 describe('project agent business stop signals', () => {
   it('exposes the Agents SDK max turn cap constant', () => {
     expect(PROJECT_AGENT_MAX_TURNS).toBe(12)
@@ -186,6 +202,20 @@ describe('project agent business stop signals', () => {
       stepCount: 1,
       operationIds: ['generate_edit_script'],
       codes: ['OPERATION_NOT_ALLOWED'],
+    })
+  })
+
+  it('[interrupt boundary error] -> stops immediately so the model cannot mask a failed choice setup', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([
+      interruptBoundaryToolErrorOutput(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio, 'OPERATION_EXECUTION_FAILED'),
+    ])
+
+    expect(stopPart).toEqual({
+      reason: 'tool_error',
+      stepCount: 1,
+      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio],
+      codes: ['OPERATION_EXECUTION_FAILED'],
     })
   })
 

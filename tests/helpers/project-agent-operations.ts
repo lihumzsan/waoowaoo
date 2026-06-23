@@ -2,6 +2,7 @@ import type {
   OperationChannels,
   OperationConfirmation,
   OperationEffects,
+  OperationAgentFlow,
   OperationGroupPath,
   OperationIntent,
   OperationPrerequisites,
@@ -42,6 +43,7 @@ export function makeTestOperation<Input, Output>(params: {
   prerequisites?: OperationPrerequisites
   effects?: OperationEffects
   confirmation?: OperationConfirmation
+  agentFlow?: OperationAgentFlow
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
   execute: (ctx: ProjectAgentOperationContext, input: Input) => Promise<Output>
@@ -55,6 +57,7 @@ export function makeTestOperation<Input, Output>(params: {
     prerequisites: params.prerequisites ?? { episodeId: 'optional' },
     effects: params.effects ?? EFFECTS_NONE,
     confirmation: params.confirmation ?? { required: false },
+    ...(params.agentFlow ? { agentFlow: params.agentFlow } : {}),
     toolInputSchema: createProjectAgentToolInputSchema({
       operationId: params.id,
       inputSchema: params.inputSchema as RuntimeSchema<unknown>,

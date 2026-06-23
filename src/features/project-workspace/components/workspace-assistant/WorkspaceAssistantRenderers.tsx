@@ -1050,6 +1050,15 @@ function readToolApprovalId(payload: unknown): string | null {
   return typeof id === 'string' && id.trim() ? id.trim() : null
 }
 
+function readToolResultFailureMessage(result: unknown): string | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const message = typeof error?.message === 'string' && error.message.trim() ? error.message.trim() : ''
+  if (message) return message
+  const code = typeof error?.code === 'string' && error.code.trim() ? error.code.trim() : ''
+  return code || null
+}
+
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps & {
   onRespondToolApproval?: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
   confirmationSubmittingKey?: string | null
@@ -1087,15 +1096,21 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
       />
     )
   }
+  const failureMessage = readToolResultFailureMessage(props.result)
   const summaryText = toolStatus === 'complete'
-    ? t('toolCall.success')
+    ? failureMessage ? t('toolCall.failed') : t('toolCall.success')
     : toolStatus === 'requires-action'
       ? t('toolCall.needsAction')
       : t('toolCall.running')
+  const iconName = toolStatus === 'incomplete'
+    ? 'loader'
+    : failureMessage
+      ? 'alert'
+      : 'settingsHex'
 
   return (
     <details
-      className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]"
+      className={`group text-[12px] leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}
       open={detailsOpen}
       onToggle={(event) => {
         const nextOpen = event.currentTarget.open
@@ -1104,11 +1119,16 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
       }}
     >
       <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name={toolStatus === 'incomplete' ? 'loader' : 'settingsHex'} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
+        <AppIcon name={iconName} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
         <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="ml-5 mt-1 space-y-2 text-[11px]">
+        {failureMessage ? (
+          <div className="rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 leading-4">
+            {failureMessage}
+          </div>
+        ) : null}
         <div>
           <div>{t('toolCall.arguments')}</div>
           <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all leading-5">{inputText}</pre>

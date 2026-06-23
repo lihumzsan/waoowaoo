@@ -369,6 +369,7 @@ describe('edit-script operations', () => {
     expect(operations.generate_edit_style_previews?.confirmation?.required).toBe(false)
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(operations[operationId]?.intent).toBe('query')
+      expect(operations[operationId]?.agentFlow).toEqual({ interruptsFor: 'choice' })
     }
   })
 

@@ -38,6 +38,7 @@
   "toolCall": {
     "title": "Tool Call",
     "success": "Success",
+    "failed": "Failed",
     "running": "Running",
     "needsAction": "Needs Action",
     "show": "Show",

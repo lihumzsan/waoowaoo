@@ -9,6 +9,7 @@ import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execu
 import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import type {
+  OperationAgentFlow,
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
@@ -78,6 +79,10 @@ function writeActivityDataPart(
   })
 }
 
+function isInterruptingOperation(agentFlow: OperationAgentFlow | undefined): boolean {
+  return agentFlow?.interruptsFor === 'choice' || agentFlow?.interruptsFor === 'approval'
+}
+
 export interface CreateProjectAgentOperationToolParams {
   request: NextRequest
   operation: ProjectAgentOperationDefinition
@@ -119,6 +124,25 @@ export function createProjectAgentOperationTool(
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
+      const normalizedInput = injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval)
+      if (isInterruptingOperation(params.operation.agentFlow)) {
+        try {
+          return await executeProjectAgentOperationFromTool({
+            request: params.request,
+            operationId: params.operation.id,
+            projectId: params.projectId,
+            userId: params.userId,
+            context: params.context,
+            assistantPermissionMode: params.assistantPermissionMode,
+            source: 'assistant-panel',
+            writer: params.writer,
+            input: normalizedInput,
+            toolCallId,
+          })
+        } finally {
+          params.onExecutionSettled?.()
+        }
+      }
       const operationActivityId = randomUUID()
       const startedActivity = await appendProjectAgentEvents({
         scope: {
@@ -169,7 +193,7 @@ export function createProjectAgentOperationTool(
           assistantPermissionMode: params.assistantPermissionMode,
           source: 'assistant-panel',
           writer: params.writer,
-          input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
+          input: normalizedInput,
           toolCallId,
         })
         const settledActivity = await appendProjectAgentEvents({

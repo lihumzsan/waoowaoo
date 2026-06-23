@@ -29,6 +29,7 @@ export type OperationRuntimeSignal =
     operationId: string
     code?: string
     message?: string
+    fatal?: boolean
   }
 
 export interface NormalizeOperationRuntimeSignalInput {
@@ -80,6 +81,11 @@ function readOperationId(toolName: string, data: UnknownRecord | null): string {
 function readErrorRecord(output: unknown): UnknownRecord | null {
   if (!isRecord(output) || output.ok !== false) return null
   return isRecord(output.error) ? output.error : null
+}
+
+function isInterruptBoundaryError(error: UnknownRecord): boolean {
+  const details = isRecord(error.details) ? error.details : null
+  return details?.interruptsFor === 'choice' || details?.interruptsFor === 'approval'
 }
 
 function normalizeTaskIds(value: UnknownRecord): string[] {
@@ -247,6 +253,7 @@ export function normalizeOperationRuntimeSignal(input: NormalizeOperationRuntime
       operationId: readNonEmptyString(error.operationId) ?? input.toolName,
       ...(readNonEmptyString(error.code) ? { code: readNonEmptyString(error.code) ?? undefined } : {}),
       ...(readNonEmptyString(error.message) ? { message: readNonEmptyString(error.message) ?? undefined } : {}),
+      ...(isInterruptBoundaryError(error) ? { fatal: true } : {}),
     }
   }
 

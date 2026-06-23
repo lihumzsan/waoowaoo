@@ -180,6 +180,41 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.error.message).toBe('boom')
   })
 
+  it('[interrupting operation error] -> marks the failed interaction boundary in details', async () => {
+    registryState.registry = {
+      choice_op: makeTestOperation({
+        id: 'choice_op',
+        summary: 'choice',
+        intent: 'query',
+        effects: EFFECTS_NONE,
+        confirmation: { required: false },
+        agentFlow: { interruptsFor: 'choice' },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: vi.fn(async () => {
+          throw new Error('choice setup failed')
+        }),
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'choice_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'auto',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('OPERATION_EXECUTION_FAILED')
+    expect(result.error.details).toEqual({ interruptsFor: 'choice' })
+  })
+
   it('[execution throws undefined] -> returns fallback message', async () => {
     registryState.registry = {
       fail_undefined: makeTestOperation({

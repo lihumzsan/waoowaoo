@@ -43,6 +43,7 @@ type RuntimeSignalDescriptor =
     reason: 'tool_error'
     operationId: string
     code?: string
+    fatal?: boolean
   }
 
 function signalToDescriptor(signal: OperationRuntimeSignal): RuntimeSignalDescriptor | null {
@@ -65,6 +66,7 @@ function signalToDescriptor(signal: OperationRuntimeSignal): RuntimeSignalDescri
       reason: 'tool_error',
       operationId: signal.operationId,
       ...(signal.code ? { code: signal.code } : {}),
+      ...(signal.fatal ? { fatal: true } : {}),
     }
   }
   return null
@@ -135,6 +137,7 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
         totalErrorCount += 1
         const operationErrorCount = (errorCountByOperation.get(descriptor.operationId) ?? 0) + 1
         errorCountByOperation.set(descriptor.operationId, operationErrorCount)
+        if (descriptor.fatal) exhausted = true
         if (descriptor.code && FATAL_TOOL_ERROR_CODES.has(descriptor.code)) exhausted = true
         if (operationErrorCount >= PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION) exhausted = true
       }

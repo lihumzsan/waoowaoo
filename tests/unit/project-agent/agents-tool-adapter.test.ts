@@ -1,11 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RunContext } from '@openai/agents'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationTool } from '@/lib/project-agent/agents-tool-adapter'
 import type { ProjectAgentOperationDefinition, RuntimeSchema } from '@/lib/operations/types'
 import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
-import { EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
+import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import { EFFECTS_BILLABLE, EFFECTS_NONE } from '../../helpers/project-agent-operations'
 
 const executeState = vi.hoisted(() => ({
   executeProjectAgentOperationFromTool: vi.fn(async () => ({ ok: true, data: { success: true } })),
@@ -73,6 +74,10 @@ function buildOperation(
 }
 
 describe('createProjectAgentOperationTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('maps confirmation requirements to Agents SDK approval and preserves execution path', async () => {
     const writer = {
       write: vi.fn(),
@@ -217,6 +222,63 @@ describe('createProjectAgentOperationTool', () => {
     }))
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
       operationId: 'get_project_phase',
+    }))
+  })
+
+  it('does not wrap choice interruptions in a separate operation activity', async () => {
+    const writer = {
+      write: vi.fn(),
+      merge: vi.fn(),
+      onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    }
+    const operation = {
+      ...buildOperation(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio, 'query'),
+      effects: EFFECTS_NONE,
+      confirmation: {
+        required: false,
+      },
+      agentFlow: {
+        interruptsFor: 'choice' as const,
+      },
+    }
+    const tool = createProjectAgentOperationTool({
+      request: new Request('http://localhost') as unknown as NextRequest,
+      operation,
+      description: 'Choose duration and aspect ratio',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        episodeId: 'episode-1',
+        runId: 'run-1',
+      },
+      assistantPermissionMode: 'auto',
+      writer,
+    })
+
+    expect(tool.type).toBe('function')
+    if (tool.type !== 'function') throw new Error('EXPECTED_FUNCTION_TOOL')
+    await tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-choice-1',
+        name: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })
+
+    expect(eventState.appendProjectAgentEvents).not.toHaveBeenCalled()
+    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'data-agent-activity',
+    }))
+    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'data-agent-operation-start',
+    }))
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      toolCallId: 'call-choice-1',
+      input: {
+        episodeId: 'episode-1',
+      },
     }))
   })
 })
