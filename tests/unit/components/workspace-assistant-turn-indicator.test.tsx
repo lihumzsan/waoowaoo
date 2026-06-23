@@ -12,7 +12,7 @@ import {
   hasWorkspaceAssistantReplyLoadingStop,
   hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex,
   hasWorkspaceAssistantTextOutput,
-} from '@/features/project-workspace/components/workspace-assistant/reply-loading-stop'
+} from '@/features/project-workspace/components/workspace-assistant/visible-output'
 
 describe('workspace assistant reply loading indicator', () => {
   it('shows while the active reply is awaiting its first text output', () => {

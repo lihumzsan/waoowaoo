@@ -32,7 +32,7 @@ import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mod
 import {
   hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex,
   hasWorkspaceAssistantReplyLoadingStop,
-} from './reply-loading-stop'
+} from './visible-output'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
