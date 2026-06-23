@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { isProjectAgentRunLockActive } from './run-lock'
+import { appendProjectAgentEvents } from './event'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -84,36 +86,25 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
   requestId: string
   controlKind: ProjectAgentRunControlKind
 }): Promise<ProjectAgentRunRecord> {
-  const { assistantId, scopeRef } = buildRunScope(params)
-  const run = await prisma.projectAgentRun.create({
-    data: {
-      projectId: params.projectId,
-      userId: params.userId,
-      assistantId,
-      scopeRef,
-      episodeId: params.episodeId ?? null,
-      requestId: params.requestId,
-      status: 'running',
-      controlKind: params.controlKind,
-    },
-    select: {
-      id: true,
-      projectId: true,
-      userId: true,
-      assistantId: true,
-      scopeRef: true,
-      episodeId: true,
-      requestId: true,
-      status: true,
-      controlKind: true,
-      stopReason: true,
-    },
+  const runId = randomUUID()
+  await appendProjectAgentEvents({
+    scope: params,
+    events: [{
+      idempotencyKey: `run-started:${runId}`,
+      event: {
+        kind: 'run.started',
+        runId,
+        requestId: params.requestId,
+        controlKind: params.controlKind,
+      },
+    }],
   })
-  return {
-    ...run,
-    status: normalizeRunStatus(run.status),
-    controlKind: normalizeControlKind(run.controlKind),
-  }
+  const run = await getProjectAgentRun({
+    ...params,
+    runId,
+  })
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_CREATE_FAILED:${runId}`)
+  return run
 }
 
 export async function getProjectAgentRun(params: ProjectAgentRunScope & {
@@ -190,18 +181,33 @@ export async function updateProjectAgentRunStatus(params: {
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<void> {
-  const now = new Date()
-  await prisma.projectAgentRun.updateMany({
+  const run = await prisma.projectAgentRun.findUnique({
     where: { id: params.runId },
-    data: {
-      status: params.status,
-      stopReason: params.stopReason ?? null,
-      errorCode: params.errorCode ?? null,
-      errorMessage: params.errorMessage ?? null,
-      ...(params.status === 'completed' ? { completedAt: now } : {}),
-      ...(params.status === 'failed' ? { failedAt: now } : {}),
-      ...(params.status === 'cancelled' ? { cancelledAt: now } : {}),
+    select: {
+      projectId: true,
+      userId: true,
+      episodeId: true,
+      assistantId: true,
     },
+  })
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
+  await appendProjectAgentEvents({
+    scope: {
+      projectId: run.projectId,
+      userId: run.userId,
+      episodeId: run.episodeId,
+      assistantId: run.assistantId as ProjectAssistantId,
+    },
+    events: [{
+      event: {
+        kind: 'run.status_changed',
+        runId: params.runId,
+        status: params.status,
+        stopReason: params.stopReason,
+        errorCode: params.errorCode,
+        errorMessage: params.errorMessage,
+      },
+    }],
   })
 }
 
@@ -240,20 +246,37 @@ export async function cancelRunningProjectAgentRun(params: {
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<boolean> {
-  const result = await prisma.projectAgentRun.updateMany({
+  const run = await prisma.projectAgentRun.findFirst({
     where: {
       id: params.runId,
       status: 'running',
     },
-    data: {
-      status: 'cancelled',
-      stopReason: params.stopReason,
-      errorCode: params.errorCode ?? null,
-      errorMessage: params.errorMessage ?? null,
-      cancelledAt: new Date(),
+    select: {
+      id: true,
+      projectId: true,
+      userId: true,
+      episodeId: true,
+      assistantId: true,
     },
   })
-  return result.count > 0
+  if (!run) return false
+  await appendProjectAgentEvents({
+    scope: {
+      projectId: run.projectId,
+      userId: run.userId,
+      episodeId: run.episodeId,
+      assistantId: run.assistantId as ProjectAssistantId,
+    },
+    events: [{
+      idempotencyKey: `run-cancelled:${run.id}:${params.stopReason}`,
+      event: {
+        kind: 'run.cancelled',
+        runId: run.id,
+        reason: params.stopReason,
+      },
+    }],
+  })
+  return true
 }
 
 export async function safelyCancelRunningProjectAgentRun(params: {
@@ -299,17 +322,11 @@ export async function cancelUnlockedRunningProjectAgentRunsForScope(scope: Proje
   if (await isProjectAgentRunLockActive(scope)) return []
 
   const runIds = runningRuns.map((run) => run.id)
-  await prisma.projectAgentRun.updateMany({
-    where: {
-      id: { in: runIds },
-      status: 'running',
-    },
-    data: {
-      status: 'cancelled',
-      stopReason: 'orphaned_running_run',
-      cancelledAt: new Date(),
-    },
-  })
+  await Promise.all(runIds.map((runId) => updateProjectAgentRunStatus({
+    runId,
+    status: 'cancelled',
+    stopReason: 'orphaned_running_run',
+  })))
   return runIds
 }
 
@@ -329,18 +346,10 @@ export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): 
   })
   if (pending.length === 0) return []
   const ids = pending.map((run) => run.id)
-  await prisma.projectAgentRun.updateMany({
-    where: {
-      id: { in: ids },
-      status: {
-        in: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
-      },
-    },
-    data: {
-      status: 'cancelled',
-      stopReason: 'superseded',
-      cancelledAt: new Date(),
-    },
-  })
+  await Promise.all(ids.map((runId) => updateProjectAgentRunStatus({
+    runId,
+    status: 'cancelled',
+    stopReason: 'superseded',
+  })))
   return ids
 }

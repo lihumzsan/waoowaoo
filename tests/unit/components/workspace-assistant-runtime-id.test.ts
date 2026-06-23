@@ -94,7 +94,7 @@ describe('workspace assistant runtime chat id', () => {
     })
   })
 
-  it('infers the active generation operation from streamed dynamic tool parts', () => {
+  it('does not infer the active operation from historical dynamic tool parts', () => {
     const run = findLatestWorkspaceAssistantRun([
       {
         id: 'assistant-1',
@@ -121,12 +121,12 @@ describe('workspace assistant runtime chat id', () => {
     expect(run).toEqual({
       runId: 'run-1',
       status: 'running',
-      operationId: 'generate_edit_style_previews',
+      operationId: null,
       intent: null,
     })
   })
 
-  it('infers the active generation operation from server operation-start data', () => {
+  it('does not infer the active operation from historical operation-start data', () => {
     const run = findLatestWorkspaceAssistantRun([
       {
         id: 'assistant-1',
@@ -156,7 +156,7 @@ describe('workspace assistant runtime chat id', () => {
     expect(run).toEqual({
       runId: 'run-1',
       status: 'running',
-      operationId: 'generate_edit_style_previews',
+      operationId: null,
       intent: null,
     })
   })
@@ -193,7 +193,7 @@ describe('workspace assistant runtime chat id', () => {
     })
   })
 
-  it('restores the approved operation title from the matching persisted interruption after refresh', () => {
+  it('does not restore current operation from persisted interruption history', () => {
     const run = findLatestWorkspaceAssistantRun([
       {
         id: 'assistant-approval',
@@ -227,7 +227,7 @@ describe('workspace assistant runtime chat id', () => {
     expect(run).toEqual({
       runId: 'run-1',
       status: 'running',
-      operationId: 'generate_edit_script',
+      operationId: null,
       intent: null,
     })
   })

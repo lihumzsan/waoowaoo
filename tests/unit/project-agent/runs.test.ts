@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   projectAgentRun: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+}))
+
+const eventMock = vi.hoisted(() => ({
+  appendProjectAgentEvents: vi.fn(async () => null),
 }))
 
 const runLockMock = vi.hoisted(() => ({
@@ -13,6 +19,7 @@ const runLockMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
+vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import {
   cancelRunningProjectAgentRun,
@@ -22,13 +29,27 @@ import {
 describe('project agent runs', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.projectAgentRun.findFirst.mockResolvedValue(null)
+    prismaMock.projectAgentRun.findUnique.mockResolvedValue({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })
     prismaMock.projectAgentRun.findMany.mockResolvedValue([])
     prismaMock.projectAgentRun.updateMany.mockResolvedValue({ count: 0 })
+    eventMock.appendProjectAgentEvents.mockResolvedValue(null)
     runLockMock.isProjectAgentRunLockActive.mockResolvedValue(false)
   })
 
   it('cancels only a currently running run when a response stream is cancelled', async () => {
-    prismaMock.projectAgentRun.updateMany.mockResolvedValueOnce({ count: 1 })
+    prismaMock.projectAgentRun.findFirst.mockResolvedValueOnce({
+      id: 'run-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })
 
     const cancelled = await cancelRunningProjectAgentRun({
       runId: 'run-1',
@@ -36,19 +57,21 @@ describe('project agent runs', () => {
     })
 
     expect(cancelled).toBe(true)
-    expect(prismaMock.projectAgentRun.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'run-1',
-        status: 'running',
-      },
-      data: expect.objectContaining({
-        status: 'cancelled',
-        stopReason: 'stream_cancelled',
-        errorCode: null,
-        errorMessage: null,
-        cancelledAt: expect.any(Date) as Date,
+    expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
+      scope: expect.objectContaining({
+        projectId: 'project-1',
+        userId: 'user-1',
+        episodeId: 'episode-1',
+        assistantId: 'workspace-command',
       }),
-    })
+      events: [expect.objectContaining({
+        event: expect.objectContaining({
+          kind: 'run.cancelled',
+          runId: 'run-1',
+          reason: 'stream_cancelled',
+        }),
+      })],
+    }))
   })
 
   it('does not cancel running runs while the scope still owns a runtime lock', async () => {
@@ -63,7 +86,7 @@ describe('project agent runs', () => {
     })
 
     expect(cancelledIds).toEqual([])
-    expect(prismaMock.projectAgentRun.updateMany).not.toHaveBeenCalled()
+    expect(eventMock.appendProjectAgentEvents).not.toHaveBeenCalled()
   })
 
   it('cancels orphan running runs when the scope has no runtime lock', async () => {
@@ -78,16 +101,16 @@ describe('project agent runs', () => {
     })
 
     expect(cancelledIds).toEqual(['run-1', 'run-2'])
-    expect(prismaMock.projectAgentRun.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: { in: ['run-1', 'run-2'] },
-        status: 'running',
-      },
-      data: expect.objectContaining({
-        status: 'cancelled',
-        stopReason: 'orphaned_running_run',
-        cancelledAt: expect.any(Date) as Date,
-      }),
-    })
+    expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledTimes(2)
+    expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
+      events: [expect.objectContaining({
+        event: expect.objectContaining({
+          kind: 'run.status_changed',
+          runId: 'run-1',
+          status: 'cancelled',
+          stopReason: 'orphaned_running_run',
+        }),
+      })],
+    }))
   })
 })

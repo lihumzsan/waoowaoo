@@ -1,4 +1,5 @@
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
+import { randomUUID } from 'node:crypto'
 import {
   tool,
   type Tool,
@@ -15,7 +16,8 @@ import {
   shouldRequireAssistantToolApproval,
   type AssistantPermissionMode,
 } from './permission-mode'
-import type { ProjectAgentContext, ProjectAgentOperationStartPartData } from './types'
+import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
+import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -60,6 +62,22 @@ function readToolCallId(details: unknown): string | null {
   return typeof id === 'string' && id.trim() ? id.trim() : null
 }
 
+function writeActivityDataPart(
+  writer: UIMessageStreamWriter<UIMessage>,
+  activity: ProjectAgentActivitySnapshot,
+): void {
+  writeOperationDataPart<ProjectAgentActivityPartData>(writer, 'data-agent-activity', {
+    activityId: activity.activityId,
+    runId: activity.runId,
+    type: activity.type,
+    status: activity.status,
+    operationId: activity.operationId,
+    sourceOperationId: activity.sourceOperationId,
+    toolCallId: activity.toolCallId,
+    choiceType: activity.choiceType,
+  })
+}
+
 export interface CreateProjectAgentOperationToolParams {
   request: NextRequest
   operation: ProjectAgentOperationDefinition
@@ -99,15 +117,52 @@ export function createProjectAgentOperationTool(
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       const toolCallId = readToolCallId(details)
+      const runId = params.context.runId?.trim() || null
+      let operationActivityId: string | null = null
       if (params.operation.intent === 'act') {
+        if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
+        const activityId = randomUUID()
+        operationActivityId = activityId
+        const startedActivity = await appendProjectAgentEvents({
+          scope: {
+            projectId: params.projectId,
+            userId: params.userId,
+            episodeId: params.context.episodeId ?? null,
+            assistantId: 'workspace-command',
+          },
+          events: [
+            ...(params.context.currentActivityId
+              ? [{
+                  idempotencyKey: `activity-completed:${params.context.currentActivityId}:before:${activityId}`,
+                  event: {
+                    kind: 'activity.completed' as const,
+                    runId,
+                    activityId: params.context.currentActivityId,
+                  },
+                }]
+              : []),
+            {
+              idempotencyKey: `activity-started:${activityId}`,
+              event: {
+                kind: 'activity.started',
+                runId,
+                activityId,
+                type: 'operation',
+                operationId: params.operation.id,
+                ...(toolCallId ? { toolCallId } : {}),
+              },
+            },
+          ],
+        })
+        if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
         writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
-          runId: params.context.runId ?? null,
+          runId,
           operationId: params.operation.id,
           ...(toolCallId ? { toolCallId } : {}),
         })
       }
       try {
-        return await executeProjectAgentOperationFromTool({
+        const result = await executeProjectAgentOperationFromTool({
           request: params.request,
           operationId: params.operation.id,
           projectId: params.projectId,
@@ -119,6 +174,60 @@ export function createProjectAgentOperationTool(
           input: injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval),
           toolCallId,
         })
+        if (operationActivityId && runId) {
+          const settledActivity = await appendProjectAgentEvents({
+            scope: {
+              projectId: params.projectId,
+              userId: params.userId,
+              episodeId: params.context.episodeId ?? null,
+              assistantId: 'workspace-command',
+            },
+            events: [{
+              idempotencyKey: result.ok
+                ? `activity-completed:${operationActivityId}`
+                : `activity-failed:${operationActivityId}:${result.error.code}`,
+              event: result.ok
+                ? {
+                    kind: 'activity.completed',
+                    runId,
+                    activityId: operationActivityId,
+                  }
+                : {
+                    kind: 'activity.failed',
+                    runId,
+                    activityId: operationActivityId,
+                    errorCode: result.error.code,
+                    errorMessage: result.error.message,
+                  },
+            }],
+          })
+          if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
+        }
+        return result
+      } catch (error) {
+        if (operationActivityId && runId) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          const failedActivity = await appendProjectAgentEvents({
+            scope: {
+              projectId: params.projectId,
+              userId: params.userId,
+              episodeId: params.context.episodeId ?? null,
+              assistantId: 'workspace-command',
+            },
+            events: [{
+              idempotencyKey: `activity-failed:${operationActivityId}:throw`,
+              event: {
+                kind: 'activity.failed',
+                runId,
+                activityId: operationActivityId,
+                errorCode: 'PROJECT_AGENT_OPERATION_THROWN',
+                errorMessage,
+              },
+            }],
+          })
+          if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
+        }
+        throw error
       } finally {
         params.onExecutionSettled?.()
       }

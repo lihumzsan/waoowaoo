@@ -16,6 +16,7 @@ export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
   runId?: string | null
+  currentActivityId?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedClipId?: string | null
@@ -34,6 +35,17 @@ export interface ProjectAgentOperationStartPartData {
   runId?: string | null
   operationId: string
   toolCallId?: string | null
+}
+
+export interface ProjectAgentActivityPartData {
+  activityId: string
+  runId: string
+  type: 'operation' | 'waiting_task' | 'task_follow_up' | 'awaiting_choice' | 'awaiting_approval'
+  status: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'
+  operationId?: string | null
+  sourceOperationId?: string | null
+  toolCallId?: string | null
+  choiceType?: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review' | null
 }
 
 export interface ProjectContextPartData {
@@ -270,6 +282,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'
   | 'data-agent-operation-start'
+  | 'data-agent-activity'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'

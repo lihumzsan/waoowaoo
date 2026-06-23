@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
+import { appendProjectAgentEvents } from './event'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
 export type ProjectAgentInterruptionStatus = 'pending' | 'consumed' | 'superseded'
@@ -17,6 +19,7 @@ export interface ProjectAgentInterruptionScope {
 export interface ProjectAgentApprovalInterruptionRecord {
   id: string
   runId: string | null
+  activityId: string | null
   type: ProjectAgentInterruptionType
   status: ProjectAgentInterruptionStatus
   operationId: string
@@ -28,6 +31,7 @@ export interface ProjectAgentApprovalInterruptionRecord {
 export interface ProjectAgentChoiceInterruptionRecord {
   id: string
   runId: string | null
+  activityId: string | null
   type: 'choice'
   status: ProjectAgentInterruptionStatus
   operationId: string
@@ -38,6 +42,7 @@ export interface ProjectAgentChoiceInterruptionRecord {
 export interface ProjectAgentInterruptionSnapshot {
   id: string
   runId: string | null
+  activityId: string | null
   type: ProjectAgentInterruptionType
   status: ProjectAgentInterruptionStatus
   operationId: string
@@ -77,6 +82,7 @@ function normalizeInterruptionStatus(value: string): ProjectAgentInterruptionSta
 function toInterruptionSnapshot(record: {
   id: string
   runId: string | null
+  activityId: string | null
   type: string
   status: string
   operationId: string
@@ -87,6 +93,7 @@ function toInterruptionSnapshot(record: {
   return {
     id: record.id,
     runId: record.runId,
+    activityId: record.activityId,
     type: normalizeInterruptionType(record.type),
     status: normalizeInterruptionStatus(record.status),
     operationId: record.operationId,
@@ -108,8 +115,10 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
   toolCallId: string | null
   runState: string
   payload?: Prisma.InputJsonValue
+  previousActivityId?: string | null
 }): Promise<string> {
-  const { assistantId, scopeRef } = buildScope(params)
+  const activityId = randomUUID()
+  const interruptionId = randomUUID()
   const superseded = await supersedePendingProjectAgentInterruptions(params)
   if (superseded.length > 0) {
     projectAgentInterruptionLogger.warn({
@@ -120,25 +129,37 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
       details: { supersededIds: superseded.map((record) => record.id) },
     })
   }
-  const record = await prisma.projectAgentInterruption.create({
-    data: {
-      runId: params.runId,
-      projectId: params.projectId,
-      userId: params.userId,
-      assistantId,
-      scopeRef,
-      episodeId: params.episodeId ?? null,
-      type: 'approval',
-      status: 'pending',
-      operationId: params.operationId,
-      approvalId: params.approvalId,
-      toolCallId: params.toolCallId,
-      payload: params.payload ?? {},
-      runState: params.runState,
-    },
-    select: { id: true },
+  await appendProjectAgentEvents({
+    scope: params,
+    events: [
+      ...(params.previousActivityId
+        ? [{
+            idempotencyKey: `activity-completed:${params.previousActivityId}:before:${activityId}`,
+            event: {
+              kind: 'activity.completed' as const,
+              runId: params.runId,
+              activityId: params.previousActivityId,
+            },
+          }]
+        : []),
+      {
+        idempotencyKey: `interruption-raised:${interruptionId}`,
+        event: {
+          kind: 'interruption.raised',
+          runId: params.runId,
+          activityId,
+          interruptionId,
+          interruptionKind: 'approval',
+          operationId: params.operationId,
+          approvalId: params.approvalId,
+          toolCallId: params.toolCallId,
+          payload: params.payload ?? {},
+          runState: params.runState,
+        },
+      },
+    ],
   })
-  return record.id
+  return interruptionId
 }
 
 export async function createProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
@@ -146,8 +167,10 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
   operationId: string
   toolCallId: string | null
   payload: Prisma.InputJsonValue
+  previousActivityId?: string | null
 }): Promise<string> {
-  const { assistantId, scopeRef } = buildScope(params)
+  const activityId = randomUUID()
+  const interruptionId = randomUUID()
   const superseded = await supersedePendingProjectAgentInterruptions(params)
   if (superseded.length > 0) {
     projectAgentInterruptionLogger.warn({
@@ -158,25 +181,49 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
       details: { supersededIds: superseded.map((record) => record.id) },
     })
   }
-  const record = await prisma.projectAgentInterruption.create({
-    data: {
-      runId: params.runId,
-      projectId: params.projectId,
-      userId: params.userId,
-      assistantId,
-      scopeRef,
-      episodeId: params.episodeId ?? null,
-      type: 'choice',
-      status: 'pending',
-      operationId: params.operationId,
-      approvalId: `choice:${crypto.randomUUID()}`,
-      toolCallId: params.toolCallId,
-      payload: params.payload,
-      runState: null,
-    },
-    select: { id: true },
+  await appendProjectAgentEvents({
+    scope: params,
+    events: [
+      ...(params.previousActivityId
+        ? [{
+            idempotencyKey: `activity-completed:${params.previousActivityId}:before:${activityId}`,
+            event: {
+              kind: 'activity.completed' as const,
+              runId: params.runId,
+              activityId: params.previousActivityId,
+            },
+          }]
+        : []),
+      {
+        idempotencyKey: `interruption-raised:${interruptionId}`,
+        event: {
+          kind: 'interruption.raised',
+          runId: params.runId,
+          activityId,
+          interruptionId,
+          interruptionKind: 'choice',
+          operationId: params.operationId,
+          approvalId: `choice:${randomUUID()}`,
+          toolCallId: params.toolCallId,
+          choiceType: (() => {
+            if (typeof params.payload === 'object' && params.payload && !Array.isArray(params.payload)) {
+              const choiceType = (params.payload as Record<string, unknown>).choiceType
+              if (
+                choiceType === 'duration_and_aspect_ratio'
+                || choiceType === 'screenplay_review'
+                || choiceType === 'style'
+                || choiceType === 'asset_review'
+              ) return choiceType
+            }
+            return null
+          })(),
+          payload: params.payload,
+          runState: null,
+        },
+      },
+    ],
   })
-  return record.id
+  return interruptionId
 }
 
 /**
@@ -203,22 +250,25 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
   })
   if (!record || record.status !== 'pending' || !record.runState) return null
 
-  const consumed = await prisma.projectAgentInterruption.updateMany({
-    where: {
-      id: record.id,
-      status: 'pending',
-    },
-    data: {
-      status: 'consumed',
-      response: params.response,
-      consumedAt: new Date(),
-    },
+  await appendProjectAgentEvents({
+    scope: params,
+    events: [{
+      idempotencyKey: `interruption-resolved:${record.id}:consumed`,
+      event: {
+        kind: 'interruption.resolved',
+        runId: params.runId,
+        activityId: record.activityId,
+        interruptionId: record.id,
+        outcome: 'consumed',
+        response: params.response,
+      },
+    }],
   })
-  if (consumed.count !== 1) return null
 
   return {
     id: record.id,
     runId: record.runId,
+    activityId: record.activityId,
     type: 'approval',
     status: 'consumed',
     operationId: record.operationId,
@@ -246,6 +296,7 @@ export async function getPendingProjectAgentApprovalInterruption(params: Project
     select: {
       id: true,
       runId: true,
+      activityId: true,
       type: true,
       status: true,
       operationId: true,
@@ -257,6 +308,7 @@ export async function getPendingProjectAgentApprovalInterruption(params: Project
   return {
     id: record.id,
     runId: record.runId,
+    activityId: record.activityId,
     type: 'approval',
     status: 'pending',
     operationId: record.operationId,
@@ -281,6 +333,7 @@ export async function getPendingProjectAgentInterruptionForScope(
     select: {
       id: true,
       runId: true,
+      activityId: true,
       type: true,
       status: true,
       operationId: true,
@@ -308,6 +361,7 @@ export async function getLatestProjectAgentInterruptionForRun(params: ProjectAge
     select: {
       id: true,
       runId: true,
+      activityId: true,
       type: true,
       status: true,
       operationId: true,
@@ -338,23 +392,25 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   })
   if (!record || record.status !== 'pending') return null
 
-  const consumed = await prisma.projectAgentInterruption.updateMany({
-    where: {
-      id: record.id,
-      runId: params.runId,
-      status: 'pending',
-    },
-    data: {
-      status: 'consumed',
-      response: params.response,
-      consumedAt: new Date(),
-    },
+  await appendProjectAgentEvents({
+    scope: params,
+    events: [{
+      idempotencyKey: `interruption-resolved:${record.id}:consumed`,
+      event: {
+        kind: 'interruption.resolved',
+        runId: params.runId,
+        activityId: record.activityId,
+        interruptionId: record.id,
+        outcome: 'consumed',
+        response: params.response,
+      },
+    }],
   })
-  if (consumed.count !== 1) return null
 
   return {
     id: record.id,
     runId: record.runId,
+    activityId: record.activityId,
     type: 'choice',
     status: 'consumed',
     operationId: record.operationId,
@@ -369,16 +425,37 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
  */
 export async function reopenProjectAgentInterruption(interruptionId: string): Promise<void> {
   try {
-    await prisma.projectAgentInterruption.updateMany({
+    const interruption = await prisma.projectAgentInterruption.findUnique({
       where: {
         id: interruptionId,
-        status: 'consumed',
       },
-      data: {
-        status: 'pending',
-        response: Prisma.DbNull,
-        consumedAt: null,
+      select: {
+        id: true,
+        runId: true,
+        activityId: true,
+        projectId: true,
+        userId: true,
+        episodeId: true,
+        assistantId: true,
       },
+    })
+    if (!interruption?.runId) return
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: interruption.projectId,
+        userId: interruption.userId,
+        episodeId: interruption.episodeId,
+        assistantId: interruption.assistantId as ProjectAssistantId,
+      },
+      events: [{
+        idempotencyKey: `interruption-reopened:${interruption.id}`,
+        event: {
+          kind: 'interruption.reopened',
+          runId: interruption.runId,
+          activityId: interruption.activityId,
+          interruptionId: interruption.id,
+        },
+      }],
     })
   } catch (error) {
     projectAgentInterruptionLogger.error({
@@ -403,6 +480,7 @@ export interface SupersededProjectAgentInterruption {
   id: string
   approvalId: string
   runId: string | null
+  activityId: string | null
 }
 
 export async function supersedePendingProjectAgentInterruptions(
@@ -417,19 +495,24 @@ export async function supersedePendingProjectAgentInterruptions(
       scopeRef,
       status: 'pending',
     },
-    select: { id: true, approvalId: true, runId: true },
+    select: { id: true, approvalId: true, runId: true, activityId: true },
   })
   if (pending.length === 0) return []
-  await prisma.projectAgentInterruption.updateMany({
-    where: {
-      id: { in: pending.map((record) => record.id) },
-      status: 'pending',
-    },
-    data: {
-      status: 'superseded',
-      runState: null,
-      consumedAt: new Date(),
-    },
+  if (pending.some((record) => !record.runId)) {
+    throw new Error('PROJECT_AGENT_PENDING_INTERRUPTION_RUN_ID_MISSING')
+  }
+  await appendProjectAgentEvents({
+    scope,
+    events: pending.map((record) => ({
+        idempotencyKey: `interruption-resolved:${record.id}:superseded`,
+        event: {
+          kind: 'interruption.resolved' as const,
+          runId: record.runId as string,
+          activityId: record.activityId,
+          interruptionId: record.id,
+          outcome: 'superseded' as const,
+        },
+      })),
   })
   return pending
 }
@@ -438,6 +521,7 @@ export interface DeclinedProjectAgentInterruption {
   id: string
   approvalId: string
   runId: string | null
+  activityId: string | null
   type: ProjectAgentInterruptionType
   operationId: string
 }
@@ -464,47 +548,42 @@ export async function declinePendingProjectAgentInterruptionsForUserTurn(
       scopeRef,
       status: 'pending',
     },
-    select: { id: true, approvalId: true, runId: true, type: true, operationId: true },
+    select: { id: true, approvalId: true, runId: true, activityId: true, type: true, operationId: true },
   })
   if (pending.length === 0) return []
+  if (pending.some((record) => !record.runId)) {
+    throw new Error('PROJECT_AGENT_PENDING_INTERRUPTION_RUN_ID_MISSING')
+  }
 
-  const resolvedAt = new Date()
-  const approvalIds = pending.filter((record) => record.type === 'approval').map((record) => record.id)
-  const nonApprovalIds = pending.filter((record) => record.type !== 'approval').map((record) => record.id)
-  if (approvalIds.length > 0) {
-    await prisma.projectAgentInterruption.updateMany({
-      where: {
-        id: { in: approvalIds },
-        status: 'pending',
-      },
-      data: {
-        status: 'consumed',
-        response: {
-          approved: false,
-          via: 'user_message',
+  await appendProjectAgentEvents({
+    scope,
+    events: pending.map((record) => {
+      const isApproval = record.type === 'approval'
+      return {
+        idempotencyKey: `interruption-resolved:${record.id}:${isApproval ? 'consumed' : 'superseded'}`,
+        event: {
+          kind: 'interruption.resolved' as const,
+          runId: record.runId as string,
+          activityId: record.activityId,
+          interruptionId: record.id,
+          outcome: isApproval ? 'consumed' as const : 'superseded' as const,
+          ...(isApproval
+            ? {
+                response: {
+                  approved: false,
+                  via: 'user_message',
+                } satisfies Prisma.InputJsonObject,
+              }
+            : {}),
         },
-        runState: null,
-        consumedAt: resolvedAt,
-      },
-    })
-  }
-  if (nonApprovalIds.length > 0) {
-    await prisma.projectAgentInterruption.updateMany({
-      where: {
-        id: { in: nonApprovalIds },
-        status: 'pending',
-      },
-      data: {
-        status: 'superseded',
-        runState: null,
-        consumedAt: resolvedAt,
-      },
-    })
-  }
+      }
+    }),
+  })
   return pending.map((record) => ({
     id: record.id,
     approvalId: record.approvalId,
     runId: record.runId,
+    activityId: record.activityId,
     type: record.type as ProjectAgentInterruptionType,
     operationId: record.operationId,
   }))

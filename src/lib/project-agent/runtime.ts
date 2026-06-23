@@ -25,6 +25,7 @@ import type {
   AgentRuntimeContextPartData,
   ProjectAgentChoiceResolvedPartData,
   ProjectAgentContext,
+  ProjectAgentActivityPartData,
   ProjectAgentInterruptionPartData,
   ProjectAgentInterruptionResolvedPartData,
   ProjectAgentRunPartData,
@@ -45,6 +46,7 @@ import {
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
+import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
 import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
@@ -59,8 +61,8 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
-  safelyCancelRunningProjectAgentRun,
-  safelyUpdateProjectAgentRunStatus,
+  cancelRunningProjectAgentRun,
+  updateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
 import {
@@ -244,6 +246,19 @@ function buildTaskFollowUpInputItem(followUp: ProjectAgentWaitFollowUp): AgentIn
     role: 'user',
     content: lines.join('\n'),
   } satisfies AgentInputItem
+}
+
+function toActivityPartData(activity: ProjectAgentActivitySnapshot): ProjectAgentActivityPartData {
+  return {
+    activityId: activity.activityId,
+    runId: activity.runId,
+    type: activity.type,
+    status: activity.status,
+    operationId: activity.operationId,
+    sourceOperationId: activity.sourceOperationId,
+    toolCallId: activity.toolCallId,
+    choiceType: activity.choiceType,
+  }
 }
 
 function formatRuntimeStateValue(value: string | null | undefined): string {
@@ -525,6 +540,7 @@ export async function createProjectAgentChatResponse(input: {
   const context: ProjectAgentContext = {
     ...contextBase,
     runId: input.run.id,
+    currentActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
   }
   const phase = await resolveProjectPhase({
     projectId: input.projectId,
@@ -652,6 +668,19 @@ export async function createProjectAgentChatResponse(input: {
     } satisfies AgentRuntimeContextPartData),
   ]
 
+  if (control.kind === 'task_follow_up' && control.followUp.followUpActivityId) {
+    initialChunks.push(createDataChunk('data-agent-activity', {
+      activityId: control.followUp.followUpActivityId,
+      runId: input.run.id,
+      type: 'task_follow_up',
+      status: 'running',
+      operationId: null,
+      sourceOperationId: control.followUp.operationId,
+      toolCallId: null,
+      choiceType: null,
+    } satisfies ProjectAgentActivityPartData))
+  }
+
   if (control.kind === 'approval') {
     initialChunks.push(createDataChunk('data-agent-interruption-resolved', {
       runId: input.run.id,
@@ -717,6 +746,39 @@ export async function createProjectAgentChatResponse(input: {
   })
 
   let latestStopPart: ProjectAgentStopPartData | null = null
+  let taskFollowUpActivityFinalized = false
+  const settleTaskFollowUpActivity = async (status: 'completed' | 'failed', error?: unknown): Promise<ProjectAgentUiChunk[]> => {
+    if (control.kind !== 'task_follow_up' || !control.followUp.followUpActivityId || taskFollowUpActivityFinalized) return []
+    taskFollowUpActivityFinalized = true
+    const errorMessage = error instanceof Error ? error.message : (error === undefined ? '' : String(error))
+    const activity = await appendProjectAgentEvents({
+      scope: {
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId || null,
+        assistantId: 'workspace-command',
+      },
+      events: [{
+        idempotencyKey: status === 'completed'
+          ? `activity-completed:${control.followUp.followUpActivityId}:runtime`
+          : `activity-failed:${control.followUp.followUpActivityId}:runtime`,
+        event: status === 'completed'
+          ? {
+              kind: 'activity.completed',
+              runId: input.run.id,
+              activityId: control.followUp.followUpActivityId,
+            }
+          : {
+              kind: 'activity.failed',
+              runId: input.run.id,
+              activityId: control.followUp.followUpActivityId,
+              errorCode: 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
+              errorMessage: errorMessage || 'Project agent task follow-up failed',
+            },
+      }],
+    })
+    return activity ? [createDataChunk('data-agent-activity', toActivityPartData(activity))] : []
+  }
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -842,6 +904,7 @@ export async function createProjectAgentChatResponse(input: {
             approvalId,
             toolCallId: readApprovalToolCallId(approvalItem),
             runState: result.state.toString(),
+            previousActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
           })
           chunks.push(createDataChunk('data-agent-interruption', {
             runId: input.run.id,
@@ -855,7 +918,7 @@ export async function createProjectAgentChatResponse(input: {
               description: toolDescriptions.get(operationId) ?? operationId,
             },
           } satisfies ProjectAgentInterruptionPartData))
-          await safelyUpdateProjectAgentRunStatus({
+          await updateProjectAgentRunStatus({
             runId: input.run.id,
             status: 'awaiting_approval',
             stopReason: 'awaiting_approval',
@@ -880,7 +943,8 @@ export async function createProjectAgentChatResponse(input: {
         }
 
         if (completionError && !approvalItem) {
-          await safelyUpdateProjectAgentRunStatus({
+          chunks.push(...await settleTaskFollowUpActivity('failed', completionError))
+          await updateProjectAgentRunStatus({
             runId: input.run.id,
             status: 'failed',
             stopReason: 'completion_error',
@@ -891,22 +955,23 @@ export async function createProjectAgentChatResponse(input: {
           throw completionError
         }
         if (!approvalItem) {
+          chunks.push(...await settleTaskFollowUpActivity('completed'))
           if (latestStopPart?.reason === 'awaiting_external_task') {
-            await safelyUpdateProjectAgentRunStatus({
+            await updateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'awaiting_task',
               stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
             })
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
-            await safelyUpdateProjectAgentRunStatus({
+            await updateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'awaiting_choice',
               stopReason: 'awaiting_user_choice',
             })
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
-            await safelyUpdateProjectAgentRunStatus({
+            await updateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'failed',
               stopReason: 'tool_error',
@@ -915,7 +980,7 @@ export async function createProjectAgentChatResponse(input: {
             })
             runStatusFinalized = true
           } else {
-            await safelyUpdateProjectAgentRunStatus({
+            await updateProjectAgentRunStatus({
               runId: input.run.id,
               status: 'completed',
               stopReason: 'completed',
@@ -943,7 +1008,8 @@ export async function createProjectAgentChatResponse(input: {
           },
         })
         if (runStatusFinalized) return
-        await safelyUpdateProjectAgentRunStatus({
+        await settleTaskFollowUpActivity('failed', error)
+        await updateProjectAgentRunStatus({
           runId: input.run.id,
           status: 'failed',
           stopReason: 'stream_error',
@@ -953,7 +1019,7 @@ export async function createProjectAgentChatResponse(input: {
         runStatusFinalized = true
       },
       onCancel: async () => {
-        await safelyCancelRunningProjectAgentRun({
+        await cancelRunningProjectAgentRun({
           runId: input.run.id,
           stopReason: 'stream_cancelled',
         })
@@ -965,7 +1031,7 @@ export async function createProjectAgentChatResponse(input: {
     return response
   } catch (error) {
     await releaseRunLockOnce()
-    await safelyUpdateProjectAgentRunStatus({
+    await updateProjectAgentRunStatus({
       runId: input.run.id,
       status: 'failed',
       stopReason: 'run_failed',

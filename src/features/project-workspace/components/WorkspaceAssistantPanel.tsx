@@ -500,9 +500,12 @@ export default function WorkspaceAssistantPanel({
   useEffect(() => {
     setStylePreviewDockCollapsed(false)
   }, [stylePreviewDockCardKey])
-  const activeExternalTaskOperationId = assistantRuntime.sessionState?.activeWaits.find((wait) => wait.status === 'pending')?.operationId
-    ?? assistantRuntime.sessionState?.activeTasks.find((task) => task.operationId)?.operationId
-    ?? null
+  const currentActivity = assistantRuntime.sessionState?.currentActivity ?? null
+  const activeExternalTaskOperationId = !assistantRuntime.pendingOperationId
+    && currentActivity?.type === 'waiting_task'
+    && (currentActivity.status === 'running' || currentActivity.status === 'waiting')
+    ? currentActivity.operationId ?? currentActivity.sourceOperationId
+    : null
   const activeAssistantOperationId = assistantRuntime.pendingOperationId ?? activeExternalTaskOperationId
   useEffect(() => {
     onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantOperationId)
