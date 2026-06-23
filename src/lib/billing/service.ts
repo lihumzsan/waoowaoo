@@ -7,6 +7,7 @@ import {
   calcImage,
   calcMusic,
   calcText,
+  calcTextWithCache,
   calcVideo,
   calcVideoByTokens,
 } from './cost'
@@ -113,7 +114,14 @@ function resolveCost(input: CostInput) {
     case 'text': {
       const inputTokens = Number(input.metadata?.inputTokens ?? Math.floor(input.quantity * 0.7))
       const outputTokens = Number(input.metadata?.outputTokens ?? Math.max(input.quantity - inputTokens, 0))
-      return asMoney(calcText(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0)))
+      const cachedInputTokens = Number(
+        input.metadata?.cachedInputTokens
+        ?? input.metadata?.actualCachedInputTokens
+        ?? 0,
+      )
+      return asMoney(calcTextWithCache(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0), {
+        cachedInputTokens: Math.max(cachedInputTokens, 0),
+      }))
     }
     case 'image':
       return asMoney(calcImage(input.model, input.quantity, input.metadata))
@@ -155,7 +163,7 @@ function resolveTextCostFromUsage(
     const itemCost = Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0
       ? normalizeMoney(itemProviderCostCredits)
       : hasBillableTokens
-        ? normalizeMoney(calcText(model, inTokens, outTokens))
+        ? normalizeMoney(calcTextWithCache(model, inTokens, outTokens, { cachedInputTokens: cachedTokens }))
         : 0
 
     inputTokens += inTokens

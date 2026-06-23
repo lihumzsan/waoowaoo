@@ -11,6 +11,11 @@ export type ApiType = 'text' | 'image' | 'video' | 'music'
 export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
 
 type BillingMetadata = { [field: string]: unknown }
+type TextCacheCostMetadata = {
+  cachedInputTokens?: number
+}
+
+const GOOGLE_CONTEXT_CACHE_INPUT_PRICE_MULTIPLIER = 0.1
 
 function normalizePositiveInteger(value: number): number {
   if (!Number.isFinite(value)) return 0
@@ -130,6 +135,15 @@ export function calcText(
   inputTokens: number,
   outputTokens: number,
 ): number {
+  return calcTextWithCache(model, inputTokens, outputTokens)
+}
+
+export function calcTextWithCache(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  metadata?: TextCacheCostMetadata,
+): number {
   const normalizedInputTokens = normalizePositiveInteger(inputTokens)
   const normalizedOutputTokens = normalizePositiveInteger(outputTokens)
   if (normalizedInputTokens === 0 && normalizedOutputTokens === 0) return 0
@@ -141,7 +155,23 @@ export function calcText(
       model,
       selections: { tokenType: 'input' },
     })
-    cost += (normalizedInputTokens / 1_000_000) * inputPricing.amount
+    const cachedInputTokens = Math.min(
+      normalizePositiveInteger(metadata?.cachedInputTokens ?? 0),
+      normalizedInputTokens,
+    )
+    const useGoogleContextCachePricing = inputPricing.entry.provider === 'google' && cachedInputTokens > 0
+    const fullPriceInputTokens = useGoogleContextCachePricing
+      ? normalizedInputTokens - cachedInputTokens
+      : normalizedInputTokens
+    cost += (fullPriceInputTokens / 1_000_000) * inputPricing.amount
+    if (useGoogleContextCachePricing) {
+      cost += (
+        cachedInputTokens
+        / 1_000_000
+        * inputPricing.amount
+        * GOOGLE_CONTEXT_CACHE_INPUT_PRICE_MULTIPLIER
+      )
+    }
   }
 
   if (normalizedOutputTokens > 0) {

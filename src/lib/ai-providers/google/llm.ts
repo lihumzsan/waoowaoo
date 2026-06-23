@@ -36,6 +36,10 @@ interface GoogleUsageLike {
   promptTokenCount?: unknown
   prompt_tokens?: unknown
   input_tokens?: unknown
+  cachedContentTokenCount?: unknown
+  cached_content_token_count?: unknown
+  cachedInputTokens?: unknown
+  cached_input_tokens?: unknown
   totalTokenCount?: unknown
   total_tokens?: unknown
   candidatesTokenCount?: unknown
@@ -110,7 +114,12 @@ export function extractGoogleText(response: unknown): string {
   return extractGoogleParts(response).text
 }
 
-export function extractGoogleUsage(response: unknown): { promptTokens: number; completionTokens: number } {
+export function extractGoogleUsage(response: unknown): {
+  promptTokens: number
+  completionTokens: number
+  cachedInputTokens?: number
+  cacheHitRate?: number
+} {
   const safe = response && typeof response === 'object' ? (response as GoogleResponseLike) : null
   const usage = safe?.usageMetadata || safe?.usage
   const promptTokens =
@@ -124,7 +133,18 @@ export function extractGoogleUsage(response: unknown): { promptTokens: number; c
     ?? toNumber(usage?.completion_tokens)
     ?? toNumber(usage?.output_tokens)
     ?? (typeof totalTokens === 'number' ? Math.max(totalTokens - promptTokens, 0) : 0)
-  return { promptTokens, completionTokens }
+  const cachedInputTokens =
+    toNumber(usage?.cachedContentTokenCount)
+    ?? toNumber(usage?.cached_content_token_count)
+    ?? toNumber(usage?.cachedInputTokens)
+    ?? toNumber(usage?.cached_input_tokens)
+    ?? 0
+  return {
+    promptTokens,
+    completionTokens,
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+    ...(cachedInputTokens > 0 && promptTokens > 0 ? { cacheHitRate: cachedInputTokens / promptTokens } : {}),
+  }
 }
 
 export async function runGoogleLlmCompletion(input: {

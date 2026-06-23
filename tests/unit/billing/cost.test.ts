@@ -3,6 +3,7 @@ import {
   calcImage,
   calcMusic,
   calcText,
+  calcTextWithCache,
   calcVideo,
   calcVideoByTokens,
 } from '@/lib/billing/cost'
@@ -12,6 +13,14 @@ describe('billing/cost provider catalog pricing', () => {
     const cost = calcText('openrouter::anthropic/claude-sonnet-4.6', 1_000_000, 1_000_000)
 
     expect(cost).toBeCloseTo(129.6, 8)
+  })
+
+  it('discounts Google implicit cache hit input tokens', () => {
+    const cost = calcTextWithCache('google::gemini-3-flash-preview', 1_000_000, 0, {
+      cachedInputTokens: 400_000,
+    })
+
+    expect(cost).toBeCloseTo(2.304, 8)
   })
 
   it('charges images from provider size and quality tiers', () => {
