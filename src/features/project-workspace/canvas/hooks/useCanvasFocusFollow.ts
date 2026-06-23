@@ -23,6 +23,8 @@ export interface UseCanvasFocusFollowParams {
   readonly containerRef: RefObject<HTMLDivElement | null>
   readonly enabled: boolean
   readonly focusNodeIds: readonly string[]
+  readonly focusRequestKey?: string | null
+  readonly onFocusComplete?: (focusKey: string) => void
 }
 
 export interface CanvasFocusFollowResult {
@@ -31,8 +33,14 @@ export interface CanvasFocusFollowResult {
   readonly notifyUserInteraction: () => void
 }
 
-export function buildWorkspaceCanvasFocusKey(nodeIds: readonly string[]): string {
-  return [...nodeIds].sort().join('|')
+export function buildWorkspaceCanvasFocusKey(
+  nodeIds: readonly string[],
+  focusRequestKey?: string | null,
+): string {
+  const nodeKey = [...nodeIds].sort().join('|')
+  if (!nodeKey) return ''
+  const normalizedRequestKey = focusRequestKey?.trim()
+  return normalizedRequestKey ? `${normalizedRequestKey}:${nodeKey}` : nodeKey
 }
 
 type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
@@ -109,6 +117,13 @@ export function resolveWorkspaceCanvasFocusNodeIds(
   return runningNodeId ? [runningNodeId] : []
 }
 
+export function resolveWorkspaceCanvasStyleBibleFocusNodeIds(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+): string[] {
+  const styleBibleNodeId = firstNodeIdByKind(nodes, ['editStyleBible'], false)
+  return styleBibleNodeId ? [styleBibleNodeId] : []
+}
+
 export function resolveCanvasFocusFollowDecision({
   focusKey,
   enabled,
@@ -126,6 +141,8 @@ export function useCanvasFocusFollow({
   containerRef,
   enabled,
   focusNodeIds,
+  focusRequestKey = null,
+  onFocusComplete,
 }: UseCanvasFocusFollowParams): CanvasFocusFollowResult {
   const debounceTimerRef = useRef<number | null>(null)
   const focusNodeIdsRef = useRef<readonly string[]>([])
@@ -134,7 +151,10 @@ export function useCanvasFocusFollow({
   const lastFocusedKeyRef = useRef<string | null>(null)
   const [pendingFocusNodeIds, setPendingFocusNodeIds] = useState<readonly string[]>([])
 
-  const focusKey = useMemo(() => buildWorkspaceCanvasFocusKey(focusNodeIds), [focusNodeIds])
+  const focusKey = useMemo(
+    () => buildWorkspaceCanvasFocusKey(focusNodeIds, focusRequestKey),
+    [focusNodeIds, focusRequestKey],
+  )
   focusNodeIdsRef.current = focusNodeIds
   currentFocusKeyRef.current = focusKey
 
@@ -161,7 +181,8 @@ export function useCanvasFocusFollow({
     lastFocusedKeyRef.current = activeFocusKey || null
     setPendingFocusNodeIds([])
     runFitView(focusNodes)
-  }, [collectFocusNodes, runFitView])
+    if (focusNodes.length > 0 && activeFocusKey) onFocusComplete?.(activeFocusKey)
+  }, [collectFocusNodes, onFocusComplete, runFitView])
 
   const notifyUserInteraction = useCallback(() => {
     const activeFocusKey = currentFocusKeyRef.current
@@ -213,6 +234,7 @@ export function useCanvasFocusFollow({
       lastFocusedKeyRef.current = focusKey
       setPendingFocusNodeIds([])
       runFitView(focusNodes)
+      onFocusComplete?.(focusKey)
     }, FOCUS_FOLLOW_DEBOUNCE_MS)
 
     return () => {
@@ -221,7 +243,7 @@ export function useCanvasFocusFollow({
         debounceTimerRef.current = null
       }
     }
-  }, [collectFocusNodes, containerRef, enabled, focusKey, runFitView])
+  }, [collectFocusNodes, containerRef, enabled, focusKey, onFocusComplete, runFitView])
 
   return {
     pendingFocusNodeIds,

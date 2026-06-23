@@ -91,6 +91,7 @@ interface WorkspaceAssistantPanelProps {
   isCollapsed: boolean
   onToggleCollapsed: () => void
   onActiveOperationChange?: (operationId: string | null) => void
+  onStyleBibleConfirmed?: () => void
 }
 
 export function shouldDeferWorkspaceAssistantTaskFollowUp(input: {
@@ -176,6 +177,7 @@ export default function WorkspaceAssistantPanel({
   isCollapsed,
   onToggleCollapsed,
   onActiveOperationChange,
+  onStyleBibleConfirmed,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -436,6 +438,7 @@ export default function WorkspaceAssistantPanel({
     stylePreviewId: string
     aspectRatio: EditScriptVideoRatio
   }) => {
+    onStyleBibleConfirmed?.()
     await assistantRuntimeRef.current.submitChoiceResponse({
       runId: params.runId,
       interruptionId: null,
@@ -447,7 +450,7 @@ export default function WorkspaceAssistantPanel({
         aspectRatio: params.aspectRatio,
       },
     })
-  }, [])
+  }, [onStyleBibleConfirmed])
   const handleConfirmEditStylePreviewChoice = async (params: {
     projectId: string
     episodeId: string
@@ -462,6 +465,7 @@ export default function WorkspaceAssistantPanel({
       stylePreviewId: params.stylePreviewId,
       aspectRatio: params.aspectRatio,
     })
+    onStyleBibleConfirmed?.()
   }
   const handleSetProjectVideoRatioChoice = async (params: {
     projectId: string

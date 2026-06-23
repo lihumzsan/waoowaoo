@@ -41,6 +41,7 @@ import {
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
 import {
   resolveWorkspaceCanvasFocusNodeIds,
+  resolveWorkspaceCanvasStyleBibleFocusNodeIds,
   useCanvasFocusFollow,
 } from './hooks/useCanvasFocusFollow'
 import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
@@ -106,6 +107,7 @@ interface ProjectWorkspaceCanvasContentProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
   activeAssistantOperationId?: string | null
+  styleBibleFocusRequestId?: number
 }
 
 interface CanvasViewportControlsProps {
@@ -200,6 +202,7 @@ function ProjectWorkspaceCanvasContent({
   onAssistantSelectionChange,
   editScriptPending = false,
   activeAssistantOperationId = null,
+  styleBibleFocusRequestId = 0,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
@@ -217,6 +220,7 @@ function ProjectWorkspaceCanvasContent({
   const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
+  const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [videoBlockArrangementInitialBlockIndex, setVideoBlockArrangementInitialBlockIndex] = useState<number | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -568,10 +572,28 @@ function ProjectWorkspaceCanvasContent({
     }
   }
   const flowEdges = stableEdgesRef.current.edges
-  const focusNodeIds = useMemo(
+  const operationFocusNodeIds = useMemo(
     () => resolveWorkspaceCanvasFocusNodeIds(sourceNodes, activeAssistantOperationId),
     [activeAssistantOperationId, sourceNodes],
   )
+  const hasUnhandledStyleBibleFocusRequest = styleBibleFocusRequestId > handledStyleBibleFocusRequestId
+  const styleBibleFocusNodeIds = useMemo(
+    () => (
+      hasUnhandledStyleBibleFocusRequest
+        ? resolveWorkspaceCanvasStyleBibleFocusNodeIds(sourceNodes)
+        : []
+    ),
+    [hasUnhandledStyleBibleFocusRequest, sourceNodes],
+  )
+  const styleBibleFocusRequestKey = styleBibleFocusNodeIds.length > 0
+    ? `style-bible-confirmed:${String(styleBibleFocusRequestId)}`
+    : null
+  const focusNodeIds = styleBibleFocusNodeIds.length > 0 ? styleBibleFocusNodeIds : operationFocusNodeIds
+  const handleFocusComplete = useCallback((focusKey: string) => {
+    if (!styleBibleFocusRequestKey) return
+    if (!focusKey.startsWith(`${styleBibleFocusRequestKey}:`)) return
+    setHandledStyleBibleFocusRequestId(styleBibleFocusRequestId)
+  }, [styleBibleFocusRequestId, styleBibleFocusRequestKey])
   const {
     pendingFocusNodeIds,
     focusNow: focusCurrentRunningNodes,
@@ -581,6 +603,8 @@ function ProjectWorkspaceCanvasContent({
     containerRef: canvasRef,
     enabled: autoFollowEnabled,
     focusNodeIds,
+    focusRequestKey: styleBibleFocusRequestKey,
+    onFocusComplete: handleFocusComplete,
   })
 
   useEffect(() => {
@@ -904,12 +928,14 @@ interface ProjectWorkspaceCanvasProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
   activeAssistantOperationId?: string | null
+  styleBibleFocusRequestId?: number
 }
 
 export default function ProjectWorkspaceCanvas({
   onAssistantSelectionChange,
   editScriptPending = false,
   activeAssistantOperationId = null,
+  styleBibleFocusRequestId = 0,
 }: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
@@ -917,6 +943,7 @@ export default function ProjectWorkspaceCanvas({
         onAssistantSelectionChange={onAssistantSelectionChange}
         editScriptPending={editScriptPending}
         activeAssistantOperationId={activeAssistantOperationId}
+        styleBibleFocusRequestId={styleBibleFocusRequestId}
       />
     </ReactFlowProvider>
   )

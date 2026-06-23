@@ -31,6 +31,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const [isAssistantPanelCollapsed, setIsAssistantPanelCollapsed] = useState(false)
   const [assistantSelection, setAssistantSelection] = useState<WorkspaceAssistantSelectionContext>({})
   const [activeAssistantOperationId, setActiveAssistantOperationId] = useState<string | null>(null)
+  const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
   const isEpisodeWorkspace = props.viewMode === 'episode'
 
@@ -122,6 +123,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             isCollapsed={isAssistantPanelCollapsed}
             onToggleCollapsed={() => setIsAssistantPanelCollapsed((current) => !current)}
             onActiveOperationChange={setActiveAssistantOperationId}
+            onStyleBibleConfirmed={() => setStyleBibleFocusRequestId((current) => current + 1)}
           />
           {props.workflowLabEnabled && isEpisodeWorkspace ? (
             <WorkflowLabPanel
@@ -137,6 +139,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
               <ProjectWorkspaceCanvas
                 onAssistantSelectionChange={setAssistantSelection}
                 activeAssistantOperationId={activeAssistantOperationId}
+                styleBibleFocusRequestId={styleBibleFocusRequestId}
               />
             </WorkspaceRuntimeProvider>
           </div>
