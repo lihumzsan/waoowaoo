@@ -274,7 +274,7 @@ describe('edit-first assistant choice cards', () => {
     })).rejects.toThrow('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
   })
 
-  it('builds an asset review confirmation card after required assets are ready', async () => {
+  it('builds an asset review card with revision notes after required assets are ready', async () => {
     const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
@@ -289,13 +289,17 @@ describe('edit-first assistant choice cards', () => {
       cardId: 'edit-first-asset-review',
       toolCallId: 'tool-call-1',
       choiceType: 'asset_review',
-      variant: 'confirm',
+      variant: 'confirm_or_reply',
       title: '审核分镜资产',
       groups: [],
       submitLabel: '资产满意，继续',
       submit: {
         kind: 'submit_tool_output',
       },
+      replyLabel: '需要调整',
+      replyPlaceholder: '输入你希望调整的人物、场景、空间关系或视觉问题...',
+      replySubmitLabel: '提交调整意见',
+      replyToolOutputKey: 'revisionNotes',
     })
   })
 

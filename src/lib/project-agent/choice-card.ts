@@ -249,7 +249,7 @@ function buildAssetReviewChoiceCard(params: {
     cardId: 'edit-first-asset-review',
     toolCallId: params.toolCallId,
     choiceType: 'asset_review',
-    variant: 'confirm',
+    variant: 'confirm_or_reply',
     title: isEnglish ? 'Review Required Assets' : '审核分镜资产',
     description: isEnglish
       ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
@@ -259,6 +259,12 @@ function buildAssetReviewChoiceCard(params: {
     submit: {
       kind: 'submit_tool_output',
     },
+    replyLabel: isEnglish ? 'Need changes' : '需要调整',
+    replyPlaceholder: isEnglish
+      ? 'Describe the character, location, spatial, or visual issues to adjust...'
+      : '输入你希望调整的人物、场景、空间关系或视觉问题...',
+    replySubmitLabel: isEnglish ? 'Submit changes' : '提交调整意见',
+    replyToolOutputKey: 'revisionNotes',
   }
 }
 

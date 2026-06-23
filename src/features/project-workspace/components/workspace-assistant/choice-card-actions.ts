@@ -31,5 +31,7 @@ export function resolveChoiceCardSelectionLabels(
 export function shouldShowChoiceCardManualSubmit(
   card: Pick<ProjectAgentChoiceCardPartData, 'autoSubmitOnReady' | 'variant'>,
 ): boolean {
-  return card.autoSubmitOnReady !== true && card.variant !== 'confirm_or_reply'
+  return card.autoSubmitOnReady !== true
+    && card.variant !== 'confirm'
+    && card.variant !== 'confirm_or_reply'
 }

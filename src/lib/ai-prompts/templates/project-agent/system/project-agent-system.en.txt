@@ -125,6 +125,7 @@ After the previews are ready:
 After character/location assets and spatial profiles are ready:
 
 - Request the user's asset review.
+- If the user submits asset revision notes, treat the review as not approved; do not proceed to the cinematography shot plan or mark assets as confirmed.
 - Do not proceed to the cinematography shot plan before the user confirms.
 
 On assets: editScript.requirements are binding records from the edit table to real assets, not asset ids. To create/bind/generate those assets, use the asset generation tool — omit requirementId to process all requirements; pass requirementId only for one exact requirements entry id, and never pass "*" or any wildcard value. Use the single character/location image tools only when you already have a real character/location id.

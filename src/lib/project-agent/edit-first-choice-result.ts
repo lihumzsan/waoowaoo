@@ -129,6 +129,17 @@ export function buildEditFirstChoiceResult(params: {
 
   if (params.choiceType === 'asset_review') {
     const decision = readString(params.output.decision)
+    if (decision === 'revise') {
+      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
+      if (!revisionNotes) return null
+      return {
+        inputItems: buildChoiceInputItems({
+          toolCallId: params.toolCallId,
+          choiceType: params.choiceType,
+          result: { decision: 'revise', revisionNotes },
+        }),
+      }
+    }
     if (decision !== 'approve') return null
     return {
       inputItems: buildChoiceInputItems({

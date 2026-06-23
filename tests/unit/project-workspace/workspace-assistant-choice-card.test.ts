@@ -52,6 +52,7 @@ describe('workspace assistant choice card actions', () => {
   it('hides the manual submit button for auto-submit choice cards', () => {
     expect(shouldShowChoiceCardManualSubmit({ autoSubmitOnReady: true })).toBe(false)
     expect(shouldShowChoiceCardManualSubmit({ autoSubmitOnReady: false })).toBe(true)
+    expect(shouldShowChoiceCardManualSubmit({ variant: 'confirm' })).toBe(false)
     expect(shouldShowChoiceCardManualSubmit({ variant: 'confirm_or_reply' })).toBe(false)
   })
 

@@ -129,6 +129,24 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
+  it('serializes asset review revision notes without approving assets', () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '场景太现代',
+      output: {
+        ok: true,
+        decision: 'revise',
+        revisionNotes: '把祠堂场景调得更旧，空间关系更压迫',
+      },
+    })
+
+    const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(parsed.decision).toBe('revise')
+    expect(parsed.revisionNotes).toBe('把祠堂场景调得更旧，空间关系更压迫')
+    expect(parsed.nextOperationId).toBeUndefined()
+  })
+
   it('rejects an incomplete duration/aspect-ratio selection', () => {
     expect(buildEditFirstChoiceResult({
       choiceType: 'duration_and_aspect_ratio',
@@ -164,7 +182,7 @@ describe('buildEditFirstChoiceResult', () => {
     })).toBeNull()
   })
 
-  it('rejects asset review without approval', () => {
+  it('rejects asset review revision without notes', () => {
     expect(buildEditFirstChoiceResult({
       choiceType: 'asset_review',
       toolCallId: null,
