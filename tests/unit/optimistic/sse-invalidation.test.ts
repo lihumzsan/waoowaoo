@@ -210,6 +210,52 @@ describe('sse invalidation behavior', () => {
 
   })
 
+  it('director decoupage task completion invalidates the persisted director decoupage resource', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    expect(source).toBeTruthy()
+
+    source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-director-1',
+      taskType: 'edit_director_decoupage_generate',
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+        episodeId: 'episode-1',
+        directorDecoupageId: 'director-1',
+        screenplayId: 'screenplay-1',
+      },
+    })
+
+    expect(hasInvalidation((arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.project.editDirectorDecoupage('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'edit-director-decoupage'
+        && key[3] === 'episode-1'
+    })).toBe(true)
+
+    expect(hasInvalidation((arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.project.editCinematographyShotPlan('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'edit-cinematography-shot-plan'
+        && key[3] === 'episode-1'
+    })).toBe(true)
+  })
+
   it('resource.changed 事件按资源名称触发 query invalidation', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
 

@@ -19,7 +19,16 @@ describe('resource-change-events', () => {
     expect(specs).toEqual([{
       projectId: 'project-1',
       episodeId: 'episode-1',
-      resources: ['editScreenplay', 'editScript', 'episodeData', 'projectContext', 'projectData'],
+      resources: [
+        'editScreenplay',
+        'editDirectorDecoupage',
+        'editScript',
+        'editCinematographyShotPlan',
+        'storyboards',
+        'episodeData',
+        'projectContext',
+        'projectData',
+      ],
     }])
   })
 })

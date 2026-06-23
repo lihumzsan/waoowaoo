@@ -10,10 +10,12 @@ import { applyTaskTargetTerminalStateToCache } from '../task-target-state-cache'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
 import { invalidateByTarget } from '../invalidation/invalidate-by-target'
 import {
+  extractWorkspaceResourceChangesFromTaskLifecycleEvent,
+  isWorkspaceResourceName,
+  workspaceResourceChangeFromName,
   syncWorkspaceResourceChanges,
-  WORKSPACE_RESOURCE_KIND,
-  type WorkspaceResourceChange,
 } from '../resource-change-sync'
+import type { WorkspaceResourceName } from '@/lib/task/types'
 
 type UseSSEOptions = {
   projectId?: string | null
@@ -77,46 +79,14 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
             : episodeId ?? null
           const rawResources: unknown[] = Array.isArray(payload.resources) ? payload.resources : []
           const resources = rawResources
-            .filter((resource): resource is string => typeof resource === 'string')
-          const changes: WorkspaceResourceChange[] = []
-          for (const resource of resources) {
-            if (resource === WORKSPACE_RESOURCE_KIND.PROJECT_DATA) {
-              changes.push({ kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: eventProjectId })
-              continue
-            }
-            if (!eventEpisodeId) continue
-            if (resource === WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.EPISODE_DATA) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-            }
-          }
+            .filter((resource): resource is WorkspaceResourceName => typeof resource === 'string' && isWorkspaceResourceName(resource))
+          const changes = resources
+            .map((resource) => workspaceResourceChangeFromName({
+              kind: resource,
+              projectId: eventProjectId,
+              episodeId: eventEpisodeId,
+            }))
+            .filter((change) => change !== null)
           void syncWorkspaceResourceChanges({ queryClient, changes })
           return
         }
@@ -272,13 +242,26 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
           normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
           normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
         ) {
-          invalidateByTarget({
-            queryClient,
+          const resourceChanges = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+            taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
+            lifecycleType: normalizedLifecycleType,
             projectId,
             targetType,
+            targetId,
             episodeId: resolvedEpisodeId,
-            isGlobalAssetProject,
+            payload: eventPayload,
           })
+          if (resourceChanges.length > 0) {
+            void syncWorkspaceResourceChanges({ queryClient, changes: resourceChanges })
+          } else {
+            invalidateByTarget({
+              queryClient,
+              projectId,
+              targetType,
+              episodeId: resolvedEpisodeId,
+              isGlobalAssetProject,
+            })
+          }
         }
       } catch (error) {
         _ulogError('[useSSE] failed to parse event', error)

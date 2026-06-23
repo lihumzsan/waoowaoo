@@ -165,7 +165,12 @@ export type MutationBatchSSEEvent = {
 
 export type WorkspaceResourceName =
   | 'editScreenplay'
+  | 'editDirectorDecoupage'
   | 'editScript'
+  | 'editCinematographyShotPlan'
+  | 'storyboards'
+  | 'projectAssets'
+  | 'videos'
   | 'episodeData'
   | 'projectData'
   | 'projectContext'

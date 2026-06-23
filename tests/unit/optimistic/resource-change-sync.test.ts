@@ -1,12 +1,14 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  extractWorkspaceResourceChangesFromTaskLifecycleEvent,
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChangesFromWriteResult,
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/query/resource-change-sync'
 import { queryKeys } from '@/lib/query/keys'
 import type { ProjectEditScreenplay } from '@/types/project'
+import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 
 function createScreenplay(): ProjectEditScreenplay {
   return {
@@ -32,7 +34,10 @@ describe('resource-change-sync', () => {
 
     expect(changes.map((change) => change.kind)).toEqual([
       WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+      WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN,
+      WORKSPACE_RESOURCE_KIND.STORYBOARDS,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
@@ -59,7 +64,16 @@ describe('resource-change-sync', () => {
       queryKey: queryKeys.project.editScreenplay('project-1', 'episode-1'),
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.project.editDirectorDecoupage('project-1', 'episode-1'),
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.project.editScript('project-1', 'episode-1'),
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.project.editCinematographyShotPlan('project-1', 'episode-1'),
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.storyboards.all('episode-1'),
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.episodeData('project-1', 'episode-1'),
@@ -70,5 +84,45 @@ describe('resource-change-sync', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.projectData('project-1'),
     })
+  })
+
+  it('maps director decoupage task completion to the full edit pipeline resources', () => {
+    const changes = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+      taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      projectId: 'project-1',
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+      episodeId: null,
+      payload: {
+        episodeId: 'episode-1',
+        directorDecoupageId: 'director-1',
+        screenplayId: 'screenplay-1',
+      },
+    })
+
+    expect(changes.map((change) => change.kind)).toEqual([
+      WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE,
+      WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+      WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN,
+      WORKSPACE_RESOURCE_KIND.STORYBOARDS,
+      WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
+      WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
+      WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
+    ])
+    const episodeIds = changes.flatMap((change) => {
+      if ('episodeId' in change) return [change.episodeId]
+      return []
+    })
+    expect(episodeIds).toEqual([
+      'episode-1',
+      'episode-1',
+      'episode-1',
+      'episode-1',
+      'episode-1',
+      'episode-1',
+      'episode-1',
+    ])
   })
 })

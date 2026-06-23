@@ -51,8 +51,41 @@ function isEditScriptRecord(value: unknown): value is UnknownRecord {
   )
 }
 
+function isEditDirectorDecoupageRecord(value: unknown): value is UnknownRecord {
+  if (!isRecord(value)) return false
+  return Boolean(
+    readString(value.projectId)
+      && readString(value.episodeId)
+      && readString(value.screenplayId)
+      && Array.isArray(value.shots),
+  )
+}
+
+function isEditCinematographyShotPlanRecord(value: unknown): value is UnknownRecord {
+  if (!isRecord(value)) return false
+  return Boolean(
+    readString(value.projectId)
+      && readString(value.episodeId)
+      && readString(value.editScriptId)
+      && Array.isArray(value.shots),
+  )
+}
+
 function dedupeResources(resources: readonly WorkspaceResourceName[]): WorkspaceResourceName[] {
   return Array.from(new Set(resources))
+}
+
+function editPipelineResources(): WorkspaceResourceName[] {
+  return [
+    'editScreenplay',
+    'editDirectorDecoupage',
+    'editScript',
+    'editCinematographyShotPlan',
+    'storyboards',
+    'episodeData',
+    'projectContext',
+    'projectData',
+  ]
 }
 
 export function extractWorkspaceResourceChangeEventSpecs(params: {
@@ -78,13 +111,18 @@ export function extractWorkspaceResourceChangeEventSpecs(params: {
       specs.push({
         projectId,
         episodeId,
-        resources: [
-          'editScreenplay',
-          'editScript',
-          'episodeData',
-          'projectContext',
-          'projectData',
-        ],
+        resources: editPipelineResources(),
+      })
+      continue
+    }
+    if (isEditDirectorDecoupageRecord(data)) {
+      const projectId = readString(data.projectId) ?? params.fallbackProjectId
+      const episodeId = readString(data.episodeId)
+      if (!episodeId) continue
+      specs.push({
+        projectId,
+        episodeId,
+        resources: editPipelineResources(),
       })
       continue
     }
@@ -96,11 +134,20 @@ export function extractWorkspaceResourceChangeEventSpecs(params: {
         projectId,
         episodeId,
         resources: [
-          'editScript',
-          'episodeData',
-          'projectContext',
-          'projectData',
+          ...editPipelineResources(),
+          'projectAssets',
         ],
+      })
+      continue
+    }
+    if (isEditCinematographyShotPlanRecord(data)) {
+      const projectId = readString(data.projectId) ?? params.fallbackProjectId
+      const episodeId = readString(data.episodeId)
+      if (!episodeId) continue
+      specs.push({
+        projectId,
+        episodeId,
+        resources: editPipelineResources(),
       })
     }
   }

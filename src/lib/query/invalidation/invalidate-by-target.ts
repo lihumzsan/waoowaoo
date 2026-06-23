@@ -18,7 +18,9 @@ function invalidateEpisodeScoped(params: {
   params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editCinematographyShotPlan(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
 }
 
@@ -116,6 +118,8 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
     params.targetType === 'ProjectShot' ||
     params.targetType === 'ProjectVideoGroup' ||
     params.targetType === 'ProjectEditScreenplay' ||
+    params.targetType === 'ProjectEditDirectorDecoupage' ||
+    params.targetType === 'ProjectEditCinematographyShotPlan' ||
     params.targetType === 'ProjectEditScript'
   ) {
     invalidateEpisodeScoped(params)
