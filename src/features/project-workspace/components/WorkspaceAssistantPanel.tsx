@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import type { ChatStatus, UIMessage } from 'ai'
+import type { ChatStatus } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
@@ -129,84 +129,17 @@ export function shouldSuppressWorkspaceAssistantOperationRunCard(params: {
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
   replyInFlight: boolean
-  hasVisibleReplyOutput: boolean
+  replyAwaitingFirstVisibleOutput: boolean
+  hasVisibleActivityIndicator: boolean
   awaitingUserInput: boolean
   awaitingExternalTask: boolean
 }): boolean {
   return !params.storageLoading
     && params.replyInFlight
-    && !params.hasVisibleReplyOutput
+    && params.replyAwaitingFirstVisibleOutput
+    && !params.hasVisibleActivityIndicator
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
-}
-
-const VISIBLE_WORKSPACE_ASSISTANT_DATA_PART_TYPES = new Set<string>([
-  'data-project-phase',
-  'data-task-submitted',
-  'data-task-batch-submitted',
-  'data-project-context',
-  'data-edit-style-preview-generation',
-])
-
-function readWorkspaceAssistantPartType(part: unknown): string | null {
-  if (!isRecord(part)) return null
-  const type = part.type
-  return typeof type === 'string' && type.trim() ? type : null
-}
-
-function hasWorkspaceAssistantTextOutput(part: unknown): boolean {
-  if (!isRecord(part)) return false
-  const type = readWorkspaceAssistantPartType(part)
-  if (type !== 'text' && type !== 'reasoning') return false
-  const text = part.text
-  return typeof text === 'string' && text.trim().length > 0
-}
-
-function hasWorkspaceAssistantToolOutput(part: unknown): boolean {
-  const type = readWorkspaceAssistantPartType(part)
-  if (!type) return false
-  return type === 'dynamic-tool' || type.startsWith('tool-')
-}
-
-function hasWorkspaceAssistantDataOutput(part: unknown): boolean {
-  if (!isRecord(part)) return false
-  const type = readWorkspaceAssistantPartType(part)
-  if (!type) return false
-  if (VISIBLE_WORKSPACE_ASSISTANT_DATA_PART_TYPES.has(type)) return true
-  if (type !== 'data-agent-stop') return false
-  const data = isRecord(part.data) ? part.data : null
-  return data?.reason === 'tool_error'
-}
-
-function hasWorkspaceAssistantVisibleOutput(message: UIMessage): boolean {
-  if (message.role !== 'assistant') return false
-  return message.parts.some((part) => (
-    hasWorkspaceAssistantTextOutput(part)
-      || hasWorkspaceAssistantToolOutput(part)
-      || hasWorkspaceAssistantDataOutput(part)
-  ))
-}
-
-export function hasWorkspaceAssistantVisibleReplyOutput(params: {
-  messages: readonly UIMessage[]
-  activeReplyMessageId: string | null
-  controlPending: boolean
-}): boolean {
-  if (params.activeReplyMessageId) {
-    const activeMessage = params.messages.find((message) => message.id === params.activeReplyMessageId) ?? null
-    return activeMessage ? hasWorkspaceAssistantVisibleOutput(activeMessage) : false
-  }
-  if (params.controlPending) return false
-  let latestUserMessageIndex = -1
-  for (let index = params.messages.length - 1; index >= 0; index -= 1) {
-    if (params.messages[index]?.role === 'user') {
-      latestUserMessageIndex = index
-      break
-    }
-  }
-  return params.messages
-    .slice(latestUserMessageIndex + 1)
-    .some((message) => hasWorkspaceAssistantVisibleOutput(message))
 }
 
 export function resolveWorkspaceAssistantAwaitingUserInput(params: {
@@ -645,18 +578,6 @@ export default function WorkspaceAssistantPanel({
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
     activeExternalTaskOperationId,
   })
-  const hasVisibleReplyOutput = hasWorkspaceAssistantVisibleReplyOutput({
-    messages: assistantRuntime.messages,
-    activeReplyMessageId: assistantRuntime.activeReplyMessageId,
-    controlPending: assistantRuntime.controlPending,
-  })
-  const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
-    storageLoading: assistantRuntime.storageLoading,
-    replyInFlight: assistantRuntime.replyInFlight,
-    hasVisibleReplyOutput,
-    awaitingUserInput,
-    awaitingExternalTask,
-  })
   const suppressActiveRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
     operationId: assistantRuntime.pendingOperationId,
     stylePreviewGenerationDocked: shouldDockStylePreviewGenerationCard,
@@ -677,6 +598,14 @@ export default function WorkspaceAssistantPanel({
       && activeExternalTaskOperationId
       && !suppressExternalTaskRunCard,
   )
+  const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
+    storageLoading: assistantRuntime.storageLoading,
+    replyInFlight: assistantRuntime.replyInFlight,
+    replyAwaitingFirstVisibleOutput: assistantRuntime.replyAwaitingFirstVisibleOutput,
+    hasVisibleActivityIndicator: showActiveRunCard || showExternalTaskRunCard,
+    awaitingUserInput,
+    awaitingExternalTask,
+  })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (isCollapsed) return
     event.preventDefault()
