@@ -189,7 +189,7 @@ function mapEpisodeId(params: {
   })
 }
 
-async function createLabChoiceInterruption(params: {
+async function createLabChoiceCheckpointState(params: {
   readonly tx: Prisma.TransactionClient
   readonly projectId: string
   readonly userId: string
@@ -197,11 +197,27 @@ async function createLabChoiceInterruption(params: {
   readonly checkpoint: WorkflowLabCheckpointSummary
 }): Promise<void> {
   if (params.checkpoint.kind !== 'choice' || !params.checkpoint.choiceType) return
+  await createLabChoiceState({
+    ...params,
+    choiceType: params.checkpoint.choiceType,
+    operationId: EDIT_FIRST_CHOICE_TOOL_IDS[params.checkpoint.choiceType],
+    cardId: params.checkpoint.id,
+  })
+}
+
+async function createLabRun(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly status: 'awaiting_choice' | 'awaiting_approval'
+  readonly stopReason: string
+}): Promise<{ readonly id: string; readonly scopeRef: string }> {
   const scopeRef = buildProjectAssistantScopeRef({
     projectId: params.projectId,
     episodeId: params.episodeId,
   })
-  const run = await params.tx.projectAgentRun.create({
+  return await params.tx.projectAgentRun.create({
     data: {
       projectId: params.projectId,
       userId: params.userId,
@@ -209,32 +225,143 @@ async function createLabChoiceInterruption(params: {
       scopeRef,
       episodeId: params.episodeId,
       requestId: crypto.randomUUID(),
-      status: 'awaiting_choice',
+      status: params.status,
       controlKind: 'user_turn',
-      stopReason: 'awaiting_choice',
+      stopReason: params.stopReason,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      scopeRef: true,
+    },
   })
-  await params.tx.projectAgentInterruption.create({
+}
+
+async function createLabChoiceState(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly choiceType: NonNullable<WorkflowLabCheckpointSummary['choiceType']>
+  readonly operationId: string
+  readonly cardId: string
+}): Promise<void> {
+  const run = await createLabRun({
+    ...params,
+    status: 'awaiting_choice',
+    stopReason: 'awaiting_choice',
+  })
+  const activity = await params.tx.projectAgentActivity.create({
     data: {
       runId: run.id,
       projectId: params.projectId,
       userId: params.userId,
       assistantId: 'workspace-command',
-      scopeRef,
+      scopeRef: run.scopeRef,
+      episodeId: params.episodeId,
+      type: 'awaiting_choice',
+      status: 'waiting',
+      operationId: params.choiceType === 'style' ? null : params.operationId,
+      sourceOperationId: params.choiceType === 'style' ? 'generate_edit_style_previews' : null,
+      choiceType: params.choiceType,
+      toolCallId: `workflow-lab:${crypto.randomUUID()}`,
+    },
+    select: {
+      id: true,
+      toolCallId: true,
+    },
+  })
+  if (params.choiceType === 'style') return
+
+  await params.tx.projectAgentInterruption.create({
+    data: {
+      runId: run.id,
+      activityId: activity.id,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef: run.scopeRef,
       episodeId: params.episodeId,
       type: 'choice',
       status: 'pending',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS[params.checkpoint.choiceType],
+      operationId: params.operationId,
       approvalId: `choice:${crypto.randomUUID()}`,
-      toolCallId: `workflow-lab:${crypto.randomUUID()}`,
+      toolCallId: activity.toolCallId,
       payload: {
-        choiceType: params.checkpoint.choiceType,
-        cardId: params.checkpoint.id,
+        choiceType: params.choiceType,
+        cardId: params.cardId,
       } satisfies Prisma.InputJsonObject,
       runState: null,
     },
   })
+}
+
+async function createLabApprovalState(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly operationId: string
+}): Promise<void> {
+  const run = await createLabRun({
+    ...params,
+    status: 'awaiting_approval',
+    stopReason: 'awaiting_approval',
+  })
+  const activity = await params.tx.projectAgentActivity.create({
+    data: {
+      runId: run.id,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef: run.scopeRef,
+      episodeId: params.episodeId,
+      type: 'awaiting_approval',
+      status: 'waiting',
+      operationId: params.operationId,
+      toolCallId: `workflow-lab:${crypto.randomUUID()}`,
+    },
+    select: {
+      id: true,
+      toolCallId: true,
+    },
+  })
+  await params.tx.projectAgentInterruption.create({
+    data: {
+      runId: run.id,
+      activityId: activity.id,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef: run.scopeRef,
+      episodeId: params.episodeId,
+      type: 'approval',
+      status: 'pending',
+      operationId: params.operationId,
+      approvalId: `approval:${crypto.randomUUID()}`,
+      toolCallId: activity.toolCallId,
+      payload: {} satisfies Prisma.InputJsonObject,
+      runState: null,
+    },
+  })
+}
+
+async function createLabCheckpointAgentState(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly checkpoint: WorkflowLabCheckpointSummary
+}): Promise<void> {
+  if (params.checkpoint.kind === 'choice') {
+    await createLabChoiceCheckpointState(params)
+    return
+  }
+  if (params.checkpoint.kind === 'approval' && params.checkpoint.operationId) {
+    await createLabApprovalState({
+      ...params,
+      operationId: params.checkpoint.operationId,
+    })
+  }
 }
 
 export async function forkWorkflowLabCheckpointProject(params: {
@@ -395,7 +522,7 @@ export async function forkWorkflowLabCheckpointProject(params: {
         messagesJson: serializeWorkflowLabMessages(messages),
       },
     })
-    await createLabChoiceInterruption({
+    await createLabCheckpointAgentState({
       tx,
       projectId: labProject.id,
       userId: params.userId,

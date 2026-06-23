@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
+import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type {
   WorkflowLabCheckpointSummary,
   WorkflowLabEpisodeSummary,
@@ -83,7 +85,7 @@ function readCheckpoint(value: unknown): WorkflowLabCheckpointSummary | null {
   if (
     !id
     || !sourceEpisodeId
-    || (kind !== 'choice' && kind !== 'approval')
+    || (kind !== 'choice' && kind !== 'approval' && kind !== 'stage')
     || !workflowStage
     || !title
     || messageIndex === null
@@ -154,6 +156,7 @@ export default function WorkflowLabPanel({
   onProjectForked,
 }: WorkflowLabPanelProps) {
   const t = useTranslations('workspaceDetail.workflowLab')
+  const locale = normalizeProjectAgentLocale(useLocale())
   const [expanded, setExpanded] = useState(true)
   const [serverEnabled, setServerEnabled] = useState(true)
   const [sourceEpisode, setSourceEpisode] = useState<WorkflowLabEpisodeSummary | null>(null)
@@ -303,6 +306,9 @@ export default function WorkflowLabPanel({
             <div className="space-y-2">
               {checkpoints.map((checkpoint, index) => {
                 const isForking = forkingCheckpointId === checkpoint.id
+                const title = checkpoint.kind === 'stage' && checkpoint.operationId
+                  ? localizeProjectAgentOperationTitle(checkpoint.operationId, locale)
+                  : checkpoint.title
                 return (
                   <article
                     key={checkpoint.id}
@@ -314,7 +320,7 @@ export default function WorkflowLabPanel({
                           <span className="shrink-0 rounded-md bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--glass-text-secondary)]">
                             {t('checkpointNumber', { number: index + 1 })}
                           </span>
-                          <h3 className="truncate text-sm font-semibold">{checkpoint.title}</h3>
+                          <h3 className="truncate text-sm font-semibold">{title}</h3>
                         </div>
                         <div className="mt-2 space-y-1 text-xs text-[var(--glass-text-secondary)]">
                           <p>{t('stage', { stage: checkpoint.workflowStage })}</p>

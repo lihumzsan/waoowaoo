@@ -90,7 +90,7 @@ function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartDa
 }
 
 function buildCheckpointId(params: {
-  readonly kind: 'choice' | 'approval'
+  readonly kind: 'choice' | 'approval' | 'stage'
   readonly messageIndex: number
   readonly partIndex: number
   readonly stableId: string
@@ -103,11 +103,19 @@ function buildCheckpointId(params: {
   ].join(':')
 }
 
+function readOperationBoundaryId(part: unknown): string | null {
+  if (!isRecord(part)) return null
+  if (part.type !== 'data-agent-operation-start' && part.type !== 'data-task-submitted') return null
+  const data = isRecord(part.data) ? part.data : null
+  return readString(data?.operationId)
+}
+
 export function listWorkflowLabCheckpointsFromMessages(params: {
   readonly sourceEpisodeId: string
   readonly messages: readonly UIMessage[]
 }): readonly WorkflowLabCheckpointSummary[] {
   const checkpoints: WorkflowLabCheckpointSummary[] = []
+  const seenStageCheckpointKeys = new Set<string>()
 
   params.messages.forEach((message, messageIndex) => {
     if (message.role !== 'assistant') return
@@ -138,21 +146,48 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
 
       const interruption = readApprovalInterruption(part)
       const stage = interruption ? OPERATION_STAGE_BY_ID[interruption.operationId] ?? null : null
-      if (!interruption || !stage) return
-      checkpoints.push({
-        id: buildCheckpointId({
+      if (interruption && stage) {
+        checkpoints.push({
+          id: buildCheckpointId({
+            kind: 'approval',
+            messageIndex,
+            partIndex,
+            stableId: interruption.operationId,
+          }),
+          sourceEpisodeId: params.sourceEpisodeId,
           kind: 'approval',
+          workflowStage: stage,
+          title: interruption.display.title,
+          detail: interruption.display.description,
+          choiceType: null,
+          operationId: interruption.operationId,
           messageIndex,
           partIndex,
-          stableId: interruption.operationId,
+          assistantMessageCount: messageIndex + 1,
+        })
+        return
+      }
+
+      const boundaryOperationId = readOperationBoundaryId(part)
+      const boundaryStage = boundaryOperationId ? OPERATION_STAGE_BY_ID[boundaryOperationId] ?? null : null
+      if (!boundaryOperationId || !boundaryStage) return
+      const stageKey = `${messageIndex}:${boundaryStage}:${boundaryOperationId}`
+      if (seenStageCheckpointKeys.has(stageKey)) return
+      seenStageCheckpointKeys.add(stageKey)
+      checkpoints.push({
+        id: buildCheckpointId({
+          kind: 'stage',
+          messageIndex,
+          partIndex,
+          stableId: `${boundaryStage}:${boundaryOperationId}`,
         }),
         sourceEpisodeId: params.sourceEpisodeId,
-        kind: 'approval',
-        workflowStage: stage,
-        title: interruption.display.title,
-        detail: interruption.display.description,
+        kind: 'stage',
+        workflowStage: boundaryStage,
+        title: boundaryOperationId,
+        detail: null,
         choiceType: null,
-        operationId: interruption.operationId,
+        operationId: boundaryOperationId,
         messageIndex,
         partIndex,
         assistantMessageCount: messageIndex + 1,

@@ -10,12 +10,12 @@ import {
 import { prisma } from '../../helpers/prisma'
 import { buildProjectAssistantScopeRef } from '@/lib/project-agent/persistence'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
-import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import {
   forkWorkflowLabCheckpointProject,
   listWorkflowLabCheckpoints,
 } from '@/lib/workflow-lab/service'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 
 function buildStyleChoiceMessages(params: {
   readonly projectId: string
@@ -106,6 +106,80 @@ function buildStyleChoiceMessages(params: {
   ]
 }
 
+function buildReadyToGenerateAssetsMessages(): UIMessage[] {
+  return [
+    {
+      id: 'user-1',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: '继续生成核心剪辑表',
+        },
+      ],
+    },
+    {
+      id: 'assistant-assets-boundary',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          text: '核心剪辑表已就绪，下一步将生成资产。',
+        },
+        {
+          type: 'data-agent-operation-start',
+          data: {
+            runId: 'source-run-assets',
+            operationId: 'generate_edit_script_assets',
+            toolCallId: 'source-tool-assets',
+          },
+        },
+        {
+          type: 'data-task-batch-submitted',
+          data: {
+            operationId: 'generate_edit_script_assets',
+            total: 1,
+            taskIds: ['source-task-assets'],
+          },
+        },
+      ],
+    },
+  ]
+}
+
+function buildStylePreviewOperationMessages(): UIMessage[] {
+  return [
+    {
+      id: 'user-1',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: '剧本没问题，继续生成风格预览',
+        },
+      ],
+    },
+    {
+      id: 'assistant-style-preview-boundary',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          text: '剧本已确认，下一步将生成视觉风格候选图。',
+        },
+        {
+          type: 'data-agent-operation-start',
+          data: {
+            runId: 'source-run-style-preview',
+            operationId: 'generate_edit_style_previews',
+            toolCallId: 'source-tool-style-preview',
+          },
+        },
+      ],
+    },
+  ]
+}
+
 describe('workflow lab checkpoint project fork integration', () => {
   beforeEach(async () => {
     await resetSystemState()
@@ -170,7 +244,7 @@ describe('workflow lab checkpoint project fork integration', () => {
         projectId: project.id,
         episodeId: episode.id,
         editScreenplayId: screenplay.id,
-        styleKey: 'style-a',
+        styleKey: 'style_a',
         aspectRatio: '9:16',
         title: 'Cool Light',
         summary: 'A cool cinematic palette.',
@@ -185,7 +259,7 @@ describe('workflow lab checkpoint project fork integration', () => {
         projectId: project.id,
         episodeId: episode.id,
         editScreenplayId: screenplay.id,
-        styleKey: 'style-b',
+        styleKey: 'style_b',
         aspectRatio: '9:16',
         title: 'Warm Night',
         summary: 'A warm night palette.',
@@ -323,7 +397,7 @@ describe('workflow lab checkpoint project fork integration', () => {
       labScreenplay.stylePreviews.map((preview) => preview.id),
     )
 
-    const pendingChoice = await prisma.projectAgentInterruption.findFirstOrThrow({
+    const pendingStyleChoiceCount = await prisma.projectAgentInterruption.count({
       where: {
         projectId: result.labProject.id,
         userId: user.id,
@@ -332,10 +406,242 @@ describe('workflow lab checkpoint project fork integration', () => {
         status: 'pending',
       },
     })
-    expect(pendingChoice.operationId).toBe(EDIT_FIRST_CHOICE_TOOL_IDS.style)
-    expect(pendingChoice.payload).toMatchObject({
-      choiceType: 'style',
+    expect(pendingStyleChoiceCount).toBe(0)
+
+    const styleChoiceActivity = await prisma.projectAgentActivity.findFirstOrThrow({
+      where: {
+        projectId: result.labProject.id,
+        userId: user.id,
+        episodeId: result.labEpisode.id,
+        type: 'awaiting_choice',
+        status: 'waiting',
+      },
     })
+    expect(styleChoiceActivity.operationId).toBeNull()
+    expect(styleChoiceActivity.sourceOperationId).toBe('generate_edit_style_previews')
+    expect(styleChoiceActivity.choiceType).toBe('style')
+
+    const sessionState = await getProjectAgentSessionState({
+      projectId: result.labProject.id,
+      userId: user.id,
+      episodeId: result.labEpisode.id,
+      locale: 'zh',
+    })
+    expect(sessionState.activeStylePreviewGeneration?.data.agentRunId).toBe(styleChoiceActivity.runId)
+    expect(sessionState.activeStylePreviewGeneration?.data.items.map((item) => item.id)).toEqual(
+      labScreenplay.stylePreviews.map((preview) => preview.id),
+    )
+  })
+
+  it('creates a stage checkpoint before asset generation and restores the ready edit table state', async () => {
+    const user = await createFixtureUser()
+    const project = await createFixtureProject(user.id)
+    const episode = await createFixtureEpisode(project.id, 1)
+
+    const screenplay = await prisma.projectEditScreenplay.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        userPrompt: 'source prompt',
+        styleBibleJson: { tone: 'warm' } satisfies Prisma.InputJsonObject,
+        screenplayText: 'INT. ROOM - NIGHT',
+        status: 'ready',
+      },
+    })
+    await prisma.projectEditDirectorDecoupage.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        editScreenplayId: screenplay.id,
+        userPrompt: 'decoupage',
+        decoupageJson: { beats: [] } satisfies Prisma.InputJsonObject,
+        status: 'ready',
+      },
+    })
+    const editScript = await prisma.projectEditScript.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        userPrompt: 'core table',
+        styleBibleJson: { tone: 'warm' } satisfies Prisma.InputJsonObject,
+        screenplayText: 'INT. ROOM - NIGHT',
+        title: '深夜萌友',
+        logline: '一只毛绒玩具醒来。',
+        durationSec: 27,
+        shotCount: 8,
+        status: 'ready',
+        assetReviewStatus: 'pending',
+        shotsJson: { shots: [] } satisfies Prisma.InputJsonObject,
+      },
+    })
+    await prisma.projectEditAssetRequirement.create({
+      data: {
+        editScriptId: editScript.id,
+        projectId: project.id,
+        episodeId: episode.id,
+        kind: 'character',
+        name: '主角',
+        description: '一个需要生成的主角资产。',
+        shotIndexes: [1, 2] satisfies Prisma.InputJsonArray,
+        status: 'pending',
+      },
+    })
+    await prisma.projectAssistantThread.create({
+      data: {
+        projectId: project.id,
+        userId: user.id,
+        episodeId: episode.id,
+        assistantId: 'workspace-command',
+        scopeRef: buildProjectAssistantScopeRef({ projectId: project.id, episodeId: episode.id }),
+        messagesJson: buildReadyToGenerateAssetsMessages() as unknown as Prisma.InputJsonArray,
+      },
+    })
+
+    const checkpoints = await listWorkflowLabCheckpoints({
+      projectId: project.id,
+      userId: user.id,
+      sourceEpisodeId: episode.id,
+    })
+    expect(checkpoints.checkpoints).toHaveLength(1)
+    expect(checkpoints.checkpoints[0]).toMatchObject({
+      kind: 'stage',
+      workflowStage: 'ready_to_generate_assets',
+      operationId: 'generate_edit_script_assets',
+      assistantMessageCount: 2,
+    })
+
+    const result = await forkWorkflowLabCheckpointProject({
+      projectId: project.id,
+      userId: user.id,
+      sourceEpisodeId: episode.id,
+      checkpointId: checkpoints.checkpoints[0].id,
+    })
+
+    const labWorkflow = await resolveEditFirstWorkflowState({
+      projectId: result.labProject.id,
+      userId: user.id,
+      episodeId: result.labEpisode.id,
+    })
+    expect(labWorkflow.stage).toBe('ready_to_generate_assets')
+    expect(labWorkflow.nextAction?.operationId).toBe('generate_edit_script_assets')
+
+    const labEditScript = await prisma.projectEditScript.findUniqueOrThrow({
+      where: { episodeId: result.labEpisode.id },
+      include: { requirements: true },
+    })
+    expect(labEditScript.id).not.toBe(editScript.id)
+    expect(labEditScript.status).toBe('ready')
+    expect(labEditScript.requirements).toHaveLength(1)
+    expect(labEditScript.requirements[0]?.status).toBe('pending')
+    expect(labEditScript.requirements[0]?.targetId).toBeNull()
+
+    const labThread = await prisma.projectAssistantThread.findUniqueOrThrow({
+      where: {
+        projectId_userId_assistantId_scopeRef: {
+          projectId: result.labProject.id,
+          userId: user.id,
+          assistantId: 'workspace-command',
+          scopeRef: buildProjectAssistantScopeRef({
+            projectId: result.labProject.id,
+            episodeId: result.labEpisode.id,
+          }),
+        },
+      },
+    })
+    const labMessages = labThread.messagesJson as unknown as UIMessage[]
+    expect(labMessages).toHaveLength(2)
+    expect(labMessages[1]?.parts.map((part) => part.type)).toEqual(['text'])
+
+    const activeRunCount = await prisma.projectAgentRun.count({
+      where: {
+        projectId: result.labProject.id,
+        userId: user.id,
+        episodeId: result.labEpisode.id,
+      },
+    })
+    expect(activeRunCount).toBe(0)
+  })
+
+  it('restores a style preview generation stage checkpoint without recreating the screenplay review choice', async () => {
+    const user = await createFixtureUser()
+    const project = await createFixtureProject(user.id)
+    const episode = await createFixtureEpisode(project.id, 1)
+
+    const screenplay = await prisma.projectEditScreenplay.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        userPrompt: 'source prompt',
+        styleBibleJson: { tone: 'calm' } satisfies Prisma.InputJsonObject,
+        screenplayText: 'INT. QUIET ROOM - NIGHT',
+        status: 'ready',
+      },
+    })
+    await prisma.projectAssistantThread.create({
+      data: {
+        projectId: project.id,
+        userId: user.id,
+        episodeId: episode.id,
+        assistantId: 'workspace-command',
+        scopeRef: buildProjectAssistantScopeRef({ projectId: project.id, episodeId: episode.id }),
+        messagesJson: buildStylePreviewOperationMessages() as unknown as Prisma.InputJsonArray,
+      },
+    })
+
+    const checkpoints = await listWorkflowLabCheckpoints({
+      projectId: project.id,
+      userId: user.id,
+      sourceEpisodeId: episode.id,
+    })
+    expect(checkpoints.checkpoints).toHaveLength(1)
+    expect(checkpoints.checkpoints[0]).toMatchObject({
+      kind: 'stage',
+      workflowStage: 'screenplay_ready_for_review',
+      operationId: 'generate_edit_style_previews',
+      assistantMessageCount: 2,
+    })
+
+    const result = await forkWorkflowLabCheckpointProject({
+      projectId: project.id,
+      userId: user.id,
+      sourceEpisodeId: episode.id,
+      checkpointId: checkpoints.checkpoints[0].id,
+    })
+
+    const labWorkflow = await resolveEditFirstWorkflowState({
+      projectId: result.labProject.id,
+      userId: user.id,
+      episodeId: result.labEpisode.id,
+    })
+    expect(labWorkflow.stage).toBe('screenplay_ready_for_review')
+    expect(labWorkflow.nextAction?.operationId).toBe('generate_edit_style_previews')
+
+    const labScreenplay = await prisma.projectEditScreenplay.findUniqueOrThrow({
+      where: { episodeId: result.labEpisode.id },
+      include: { stylePreviews: true },
+    })
+    expect(labScreenplay.id).not.toBe(screenplay.id)
+    expect(labScreenplay.status).toBe('screenplay_ready')
+    expect(labScreenplay.stylePreviews).toHaveLength(0)
+
+    const activeRunCount = await prisma.projectAgentRun.count({
+      where: {
+        projectId: result.labProject.id,
+        userId: user.id,
+        episodeId: result.labEpisode.id,
+      },
+    })
+    expect(activeRunCount).toBe(0)
+
+    const pendingInterruptionCount = await prisma.projectAgentInterruption.count({
+      where: {
+        projectId: result.labProject.id,
+        userId: user.id,
+        episodeId: result.labEpisode.id,
+        status: 'pending',
+      },
+    })
+    expect(pendingInterruptionCount).toBe(0)
   })
 
   it('rejects checkpoint forks when the source assistant thread is missing', async () => {

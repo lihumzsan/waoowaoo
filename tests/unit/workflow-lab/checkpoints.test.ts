@@ -56,6 +56,21 @@ function buildMessages(): UIMessage[] {
       id: 'assistant-2',
       role: 'assistant',
       parts: [
+        { type: 'text', text: 'generate edit assets' },
+        {
+          type: 'data-agent-operation-start',
+          data: {
+            runId: 'run-source',
+            operationId: 'generate_edit_script_assets',
+            toolCallId: 'tool-generate-assets',
+          },
+        },
+      ],
+    },
+    {
+      id: 'assistant-3',
+      role: 'assistant',
+      parts: [
         { type: 'text', text: 'ready to generate videos' },
         {
           type: 'data-agent-interruption',
@@ -84,7 +99,7 @@ describe('workflow lab checkpoints', () => {
       messages: buildMessages(),
     })
 
-    expect(checkpoints).toHaveLength(2)
+    expect(checkpoints).toHaveLength(3)
     expect(checkpoints[0]).toMatchObject({
       kind: 'choice',
       workflowStage: 'needs_style_choice',
@@ -93,10 +108,17 @@ describe('workflow lab checkpoints', () => {
       partIndex: 1,
     })
     expect(checkpoints[1]).toMatchObject({
+      kind: 'stage',
+      workflowStage: 'ready_to_generate_assets',
+      operationId: 'generate_edit_script_assets',
+      messageIndex: 2,
+      partIndex: 1,
+    })
+    expect(checkpoints[2]).toMatchObject({
       kind: 'approval',
       workflowStage: 'ready_to_generate_videos',
       operationId: 'generate_episode_videos',
-      messageIndex: 2,
+      messageIndex: 3,
       partIndex: 1,
     })
   })
@@ -116,13 +138,25 @@ describe('workflow lab checkpoints', () => {
     expect(choiceSlice).toHaveLength(2)
     expect(choiceSlice[1]?.parts.map((part) => part.type)).toEqual(['text', 'data-assistant-choice-card'])
 
-    const approvalSlice = sliceWorkflowLabMessagesAtCheckpoint({
+    const stageCheckpoint = checkpoints.find((checkpoint) => checkpoint.kind === 'stage')
+    if (!stageCheckpoint) throw new Error('EXPECTED_STAGE_CHECKPOINT')
+    const stageSlice = sliceWorkflowLabMessagesAtCheckpoint({
       messages,
-      checkpoint: checkpoints[1],
+      checkpoint: stageCheckpoint,
       includeCheckpointPart: false,
     })
-    expect(approvalSlice).toHaveLength(3)
-    expect(approvalSlice[2]?.parts.map((part) => part.type)).toEqual(['text'])
+    expect(stageSlice).toHaveLength(3)
+    expect(stageSlice[2]?.parts.map((part) => part.type)).toEqual(['text'])
+
+    const approvalCheckpoint = checkpoints.find((checkpoint) => checkpoint.kind === 'approval')
+    if (!approvalCheckpoint) throw new Error('EXPECTED_APPROVAL_CHECKPOINT')
+    const approvalSlice = sliceWorkflowLabMessagesAtCheckpoint({
+      messages,
+      checkpoint: approvalCheckpoint,
+      includeCheckpointPart: false,
+    })
+    expect(approvalSlice).toHaveLength(4)
+    expect(approvalSlice[3]?.parts.map((part) => part.type)).toEqual(['text'])
   })
 
   it('rewrites exact project, episode, and artifact ids inside restored assistant messages', () => {

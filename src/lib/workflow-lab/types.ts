@@ -1,7 +1,7 @@
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 
-export type WorkflowLabCheckpointKind = 'choice' | 'approval'
+export type WorkflowLabCheckpointKind = 'choice' | 'approval' | 'stage'
 
 export interface WorkflowLabEpisodeSummary {
   readonly id: string
