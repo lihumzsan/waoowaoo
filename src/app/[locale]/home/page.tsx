@@ -13,10 +13,7 @@ import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
-import {
-  createHomeProjectLaunch,
-  writeHomeAssistantAutoStartMessage,
-} from '@/lib/home/create-project-launch'
+import { submitHomeQuickStartLaunch } from '@/lib/home/quick-start-submit'
 import { formatDefaultProjectTimestamp } from '@/lib/projects/default-name'
 import { HOME_QUICK_START_MIN_ROWS } from '@/lib/ui/textarea-height'
 
@@ -87,32 +84,21 @@ export default function HomePage() {
 
   // 创建项目并跳转
   const handleCreate = async () => {
-    if (!inputValue.trim() || createLoading) return
-    setCreateError(null)
-    setCreateLoading(true)
-    try {
-      const storyText = inputValue.trim()
-      const result = await createHomeProjectLaunch({
-        apiFetch,
-        projectName: t('defaultProjectName', {
-          timestamp: formatDefaultProjectTimestamp(new Date()),
-        }),
-        storyText,
-        episodeName: `${tc('episode')} 1`,
-      })
-
-      writeHomeAssistantAutoStartMessage({
-        projectId: result.projectId,
-        episodeId: result.episodeId,
-        message: storyText,
-      })
-      router.push(result.target)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t('createFailed')
-      setCreateError(message)
-    } finally {
-      setCreateLoading(false)
-    }
+    await submitHomeQuickStartLaunch({
+      inputValue,
+      isSubmitting: createLoading,
+      apiFetch,
+      projectName: t('defaultProjectName', {
+        timestamp: formatDefaultProjectTimestamp(new Date()),
+      }),
+      episodeName: `${tc('episode')} 1`,
+      setSubmitting: setCreateLoading,
+      setError: setCreateError,
+      navigate: (target) => {
+        router.push(target)
+      },
+      resolveErrorMessage: (error) => error instanceof Error ? error.message : t('createFailed'),
+    })
   }
 
   // 时间格式化
