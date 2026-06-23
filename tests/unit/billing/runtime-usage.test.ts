@@ -22,6 +22,7 @@ describe('billing/runtime-usage', () => {
         cachedInputTokens: 7.2,
         cacheWriteTokens: 3.8,
         cacheHitRate: 1.2,
+        providerCostCredits: 0.1234567,
       })
       return { ok: true }
     })
@@ -34,6 +35,7 @@ describe('billing/runtime-usage', () => {
         cachedInputTokens: 7,
         cacheWriteTokens: 3,
         cacheHitRate: 1,
+        providerCostCredits: 0.1234567,
       },
     ])
   })

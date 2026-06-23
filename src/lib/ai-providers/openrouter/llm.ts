@@ -12,6 +12,7 @@ import type {
   AiProviderLlmStreamContext,
   AiProviderVisionExecutionContext,
 } from '@/lib/ai-providers/runtime-types'
+import type { ProviderChatMessage } from '@/lib/ai-providers/shared/llm-support'
 
 type OpenRouterVisionContentPart =
   | { type: 'text'; text: string }
@@ -23,7 +24,7 @@ export async function runOpenRouterLlmCompletion(input: {
     apiKey: string
     baseUrl?: string
   }
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'

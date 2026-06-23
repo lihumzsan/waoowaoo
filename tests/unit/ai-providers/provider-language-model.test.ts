@@ -124,4 +124,40 @@ describe('ai provider language model registry', () => {
       fetch: expect.any(Function),
     })
   })
+
+  it('injects Claude prompt cache control in OpenRouter AI SDK fetch bodies', async () => {
+    createRegisteredLanguageModel({
+      providerKey: 'openrouter',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'anthropic/claude-sonnet-4.6',
+        modelKey: 'openrouter::anthropic/claude-sonnet-4.6',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+      },
+    })
+    const settings = openAiState.createOpenAI.mock.calls[0]?.[0]
+    const fetchImpl = settings?.fetch
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }))
+
+    await fetchImpl?.('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'anthropic/claude-sonnet-4.6',
+        messages: [{ role: 'user', content: 'stable prompt '.repeat(120) }],
+      }),
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      model: 'anthropic/claude-sonnet-4.6',
+      messages: [{ role: 'user', content: 'stable prompt '.repeat(120) }],
+      cache_control: { type: 'ephemeral', ttl: '1h' },
+    })
+    fetchMock.mockRestore()
+  })
 })

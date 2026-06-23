@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
+import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
+import { flattenProviderMessageContent } from '@/lib/ai-providers/shared/llm-support'
 import { buildDefaultTaskBillingInfo, withTextBilling } from '@/lib/billing'
 import { buildImageBillingPayloadFromUserConfig, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { safeParseJsonObject } from '@/lib/json-repair'
@@ -175,6 +176,8 @@ type EditScriptGenerationStage =
   | 'edit_script_primary'
   | 'edit_script_asset_extract'
   | 'edit_script_video_prompt'
+
+const EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS = 1024
 
 interface EditScriptGenerationStep {
   readonly stage: EditScriptGenerationStage
@@ -470,17 +473,20 @@ async function runPromptStep(input: {
   readonly stepIndex: number
   readonly stepTotal: number
 }): Promise<Record<string, unknown>> {
-  const finalPrompt = buildAiPrompt({
+  const finalPromptContent = buildAiPromptContent({
     promptId: input.promptId,
     locale: input.locale,
     variables: input.variables,
+    cacheVariableKeys: Object.keys(input.variables),
+    minCacheChars: EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS,
   })
+  const finalPrompt = flattenProviderMessageContent(finalPromptContent)
   const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
   const action = input.promptId
   const runCompletion = async () => executeAiTextStep({
     userId: input.userId,
     model: input.model,
-    messages: [{ role: 'user', content: finalPrompt }],
+    messages: [{ role: 'user', content: finalPromptContent }],
     temperature: 0.4,
     projectId: input.projectId,
     action,
@@ -516,17 +522,20 @@ async function runPromptTextStep(input: {
   readonly stepIndex: number
   readonly stepTotal: number
 }): Promise<string> {
-  const finalPrompt = buildAiPrompt({
+  const finalPromptContent = buildAiPromptContent({
     promptId: input.promptId,
     locale: input.locale,
     variables: input.variables,
+    cacheVariableKeys: Object.keys(input.variables),
+    minCacheChars: EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS,
   })
+  const finalPrompt = flattenProviderMessageContent(finalPromptContent)
   const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
   const action = input.promptId
   const runCompletion = async () => executeAiTextStep({
     userId: input.userId,
     model: input.model,
-    messages: [{ role: 'user', content: finalPrompt }],
+    messages: [{ role: 'user', content: finalPromptContent }],
     temperature: 0.5,
     projectId: input.projectId,
     action,

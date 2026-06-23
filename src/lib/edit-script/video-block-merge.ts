@@ -2,7 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
+import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
+import { flattenProviderMessageContent } from '@/lib/ai-providers/shared/llm-support'
 import { withTextBilling } from '@/lib/billing'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { safeParseJsonObject } from '@/lib/json-repair'
@@ -20,6 +21,8 @@ import type {
 } from './types'
 import { editScriptStyleBibleSchema, editScriptVideoBlockMergeSchema } from './types'
 import { assertNoRunningVideoGroupOverlap } from './video-group-running-guard'
+
+const EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS = 1024
 
 interface MergeEditScriptVideoBlocksInput {
   readonly projectId: string
@@ -293,16 +296,19 @@ async function runMergePromptStep(input: {
   readonly variables: Record<string, string>
 }): Promise<Record<string, unknown>> {
   const promptId = AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_MERGE
-  const finalPrompt = buildAiPrompt({
+  const finalPromptContent = buildAiPromptContent({
     promptId,
     locale: input.locale,
     variables: input.variables,
+    cacheVariableKeys: Object.keys(input.variables),
+    minCacheChars: EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS,
   })
+  const finalPrompt = flattenProviderMessageContent(finalPromptContent)
   const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
   const runCompletion = async () => executeAiTextStep({
     userId: input.userId,
     model: input.model,
-    messages: [{ role: 'user', content: finalPrompt }],
+    messages: [{ role: 'user', content: finalPromptContent }],
     temperature: 0.4,
     projectId: input.projectId,
     action: promptId,

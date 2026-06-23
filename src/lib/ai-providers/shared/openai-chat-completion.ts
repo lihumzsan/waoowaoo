@@ -8,6 +8,7 @@ export function buildOpenAIChatCompletion(
     completionTokens?: number
     cachedInputTokens?: number
     cacheWriteTokens?: number
+    providerCostCredits?: number
   },
 ): OpenAI.Chat.Completions.ChatCompletion {
   const messageContent: OpenAI.Chat.Completions.ChatCompletionMessage['content'] =
@@ -39,6 +40,9 @@ export function buildOpenAIChatCompletion(
             cache_write_tokens: usage?.cacheWriteTokens ?? 0,
           },
         }
+        : {}),
+      ...(typeof usage?.providerCostCredits === 'number'
+        ? { provider_cost_credits: usage.providerCostCredits }
         : {}),
     },
   } as OpenAI.Chat.Completions.ChatCompletion

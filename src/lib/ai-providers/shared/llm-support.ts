@@ -1,5 +1,6 @@
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
+import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 
 export interface ProviderChatCompletionOptions {
   temperature?: number
@@ -34,7 +35,39 @@ export interface ProviderChatCompletionStreamCallbacks {
   onError?: (error: unknown, step?: InternalLLMStreamStepMeta) => void
 }
 
-export type ProviderChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
+export type ProviderPromptCacheControl = {
+  type: 'ephemeral'
+  ttl?: '1h'
+}
+
+export type ProviderTextContentPart = {
+  type: 'text'
+  text: string
+  cacheControl?: ProviderPromptCacheControl
+}
+
+export type ProviderChatMessageContent = string | ProviderTextContentPart[]
+
+export type ProviderChatMessage = {
+  role: 'user' | 'assistant' | 'system'
+  content: ProviderChatMessageContent
+}
+
+export function flattenProviderMessageContent(content: ProviderChatMessageContent): string {
+  if (typeof content === 'string') return content
+  return content.map((part) => part.text).join('')
+}
+
+export function normalizeProviderContentParts(content: ProviderChatMessageContent): ProviderTextContentPart[] {
+  if (typeof content === 'string') {
+    return content ? [{ type: 'text', text: content }] : []
+  }
+  return content.filter((part) => part.text.length > 0)
+}
+
+export function providerMessageHasCacheControl(message: ProviderChatMessage): boolean {
+  return normalizeProviderContentParts(message.content).some((part) => Boolean(part.cacheControl))
+}
 
 export function completionUsageSummary(
   completion: {
@@ -47,6 +80,9 @@ export function completionUsageSummary(
         cached_tokens?: number
         cache_write_tokens?: number
       } | null
+      cost?: number
+      total_cost?: number
+      provider_cost_credits?: number
     } | null
   },
 ) {
@@ -56,6 +92,8 @@ export function completionUsageSummary(
   const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0)
   const cachedInputTokens = Number(usage.prompt_tokens_details?.cached_tokens ?? 0)
   const cacheWriteTokens = Number(usage.prompt_tokens_details?.cache_write_tokens ?? 0)
+  const explicitProviderCostCredits = Number(usage.provider_cost_credits)
+  const providerCostUsd = Number(usage.cost ?? usage.total_cost)
   return {
     promptTokens,
     completionTokens,
@@ -68,6 +106,11 @@ export function completionUsageSummary(
     ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0 && promptTokens > 0
       ? { cacheHitRate: cachedInputTokens / promptTokens }
       : {}),
+    ...(Number.isFinite(explicitProviderCostCredits) && explicitProviderCostCredits >= 0
+      ? { providerCostCredits: explicitProviderCostCredits }
+      : Number.isFinite(providerCostUsd) && providerCostUsd >= 0
+        ? { providerCostCredits: usdToCredits(providerCostUsd) }
+        : {}),
   }
 }
 
@@ -167,14 +210,17 @@ function extractCompletionPartsFromContent(content: unknown): { text: string; re
 }
 
 export function getSystemPrompt(messages: ProviderChatMessage[]) {
-  const systemParts = messages.filter((message) => message.role === 'system').map((message) => message.content).filter(Boolean)
+  const systemParts = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => flattenProviderMessageContent(message.content))
+    .filter(Boolean)
   return systemParts.length === 0 ? undefined : systemParts.join('\n')
 }
 
 export function getConversationMessages(messages: ProviderChatMessage[]) {
   return messages
     .filter((message) => message.role !== 'system')
-    .map((message) => ({ role: message.role, content: message.content }))
+    .map((message) => ({ role: message.role, content: flattenProviderMessageContent(message.content) }))
 }
 
 export function mapReasoningEffort(effort: 'minimal' | 'low' | 'medium' | 'high' | undefined) {

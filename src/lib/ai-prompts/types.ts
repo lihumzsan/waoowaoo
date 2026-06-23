@@ -1,5 +1,6 @@
 import type { Locale } from '@/i18n/routing'
 import type { AiPromptId } from './ids'
+import type { ProviderChatMessageContent, ProviderPromptCacheControl } from '@/lib/ai-providers/shared/llm-support'
 
 export type AiPromptLocale = Locale
 export type AiPromptVariables = Record<string, string>
@@ -15,3 +16,11 @@ export type BuildAiPromptInput = {
   locale: AiPromptLocale
   variables?: AiPromptVariables
 }
+
+export type BuildAiPromptContentInput = BuildAiPromptInput & {
+  cacheVariableKeys?: readonly string[]
+  cacheControl?: ProviderPromptCacheControl
+  minCacheChars?: number
+}
+
+export type AiPromptMessageContent = ProviderChatMessageContent

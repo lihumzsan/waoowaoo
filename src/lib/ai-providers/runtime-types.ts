@@ -6,7 +6,11 @@ import type {
   AiVariantDescriptor,
   AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
-import type { ProviderChatCompletionOptions, ProviderChatCompletionStreamCallbacks } from '@/lib/ai-providers/shared/llm-support'
+import type {
+  ProviderChatCompletionOptions,
+  ProviderChatCompletionStreamCallbacks,
+  ProviderChatMessage,
+} from '@/lib/ai-providers/shared/llm-support'
 
 export type GenerateResult = {
   success: boolean
@@ -39,7 +43,7 @@ export type AiProviderLlmStreamContext = {
     variantData?: { [key: string]: unknown }
   }
   providerConfig: AiLlmProviderConfig
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  messages: ProviderChatMessage[]
   options: ProviderChatCompletionOptions
   callbacks?: ProviderChatCompletionStreamCallbacks
 }

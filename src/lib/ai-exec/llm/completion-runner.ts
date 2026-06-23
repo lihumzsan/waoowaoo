@@ -25,7 +25,7 @@ import {
   buildOpenRouterSessionId,
   normalizeOpenRouterSessionId,
 } from '@/lib/ai-providers/openrouter/session'
-import type { AiLlmExecutionInput, AiLlmExecutionResult } from '@/lib/ai-registry/types'
+import type { AiLlmExecutionInput, AiLlmExecutionResult, ChatMessage } from '@/lib/ai-registry/types'
 
 ensureAiCatalogsRegistered()
 
@@ -80,7 +80,7 @@ async function executeLlmCompletionViaAdapter(
 export async function chatCompletionStream(
   userId: string,
   model: string | null | undefined,
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  messages: ChatMessage[],
   options: ChatCompletionOptions = {},
   callbacks?: ChatCompletionStreamCallbacks,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -196,7 +196,7 @@ export async function chatCompletionStream(
 export async function runChatCompletion(
   userId: string,
   model: string | null | undefined,
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  messages: ChatMessage[],
   options: ChatCompletionOptions = {},
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const internalCallbacks = getInternalLLMStreamCallbacks()

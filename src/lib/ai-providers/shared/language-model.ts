@@ -1,6 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 import type { AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
+import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
+import type { ProviderChatMessage, ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
 import { createScopedLogger } from '@/lib/logging/core'
 
 const openRouterLanguageModelLogger = createScopedLogger({
@@ -30,12 +32,103 @@ function parseResponseBody(text: string): unknown {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function parseRequestBody(text: string): Record<string, unknown> | null {
+  if (!text) return null
+  try {
+    return asRecord(JSON.parse(text) as unknown)
+  } catch {
+    return null
+  }
+}
+
+function toProviderMessageContent(value: unknown): ProviderChatMessageContent | null {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return null
+  const parts = value.flatMap((item) => {
+    const record = asRecord(item)
+    if (!record || record.type !== 'text' || typeof record.text !== 'string') return []
+    return [{ type: 'text' as const, text: record.text }]
+  })
+  return parts.length > 0 ? parts : null
+}
+
+function toProviderMessages(value: unknown): ProviderChatMessage[] | null {
+  if (!Array.isArray(value)) return null
+  const messages: ProviderChatMessage[] = []
+  for (const item of value) {
+    const record = asRecord(item)
+    if (!record) return null
+    const rawRole = record.role
+    if (rawRole !== 'user' && rawRole !== 'assistant' && rawRole !== 'system') return null
+    const content = toProviderMessageContent(record.content)
+    if (content === null) return null
+    messages.push({ role: rawRole, content })
+  }
+  return messages
+}
+
+async function readFetchRequestBody(input: RequestInfo | URL, init?: RequestInit): Promise<string | null> {
+  if (typeof init?.body === 'string') return init.body
+  if (typeof Request !== 'undefined' && input instanceof Request) {
+    return await input.clone().text().catch(() => null)
+  }
+  return null
+}
+
+async function withOpenRouterPromptCache(input: {
+  requestInput: RequestInfo | URL
+  requestInit?: RequestInit
+  modelId: string
+}): Promise<{ requestInput: RequestInfo | URL; requestInit?: RequestInit }> {
+  const bodyText = await readFetchRequestBody(input.requestInput, input.requestInit)
+  const body = bodyText ? parseRequestBody(bodyText) : null
+  if (!body || body.cache_control) return input
+  const modelId = typeof body.model === 'string' ? body.model : input.modelId
+  const messages = toProviderMessages(body.messages)
+  if (!messages) return input
+  const promptCacheRequest = buildOpenRouterPromptCacheRequest({ modelId, messages })
+  if (!promptCacheRequest.cacheControl) return input
+
+  const nextBody = JSON.stringify({
+    ...body,
+    cache_control: promptCacheRequest.cacheControl,
+  })
+  if (typeof input.requestInit?.body === 'string') {
+    return {
+      requestInput: input.requestInput,
+      requestInit: {
+        ...input.requestInit,
+        body: nextBody,
+      },
+    }
+  }
+  if (typeof Request !== 'undefined' && input.requestInput instanceof Request) {
+    return {
+      requestInput: new Request(input.requestInput, { body: nextBody }),
+      requestInit: input.requestInit,
+    }
+  }
+  return input
+}
+
 function createOpenRouterLoggingFetch(input: {
   sessionId?: string
+  modelId: string
 }): typeof fetch {
   return async (requestInput, requestInit) => {
     const startedAt = Date.now()
-    const response = await fetch(requestInput, requestInit)
+    const prepared = await withOpenRouterPromptCache({
+      requestInput,
+      requestInit,
+      modelId: input.modelId,
+    })
+    const response = await fetch(prepared.requestInput, prepared.requestInit)
     const responseClone = response.clone()
     void responseClone.text()
       .then((bodyText) => {
@@ -86,7 +179,10 @@ export function createOpenAiSdkLanguageModel(input: AiProviderLanguageModelConte
       ? { headers: { 'x-session-id': input.openRouterSessionId } }
       : {}),
     ...(isOpenRouter
-      ? { fetch: createOpenRouterLoggingFetch({ sessionId: input.openRouterSessionId }) }
+      ? { fetch: createOpenRouterLoggingFetch({
+        sessionId: input.openRouterSessionId,
+        modelId: input.selection.modelId,
+      }) }
       : {}),
   })
   return openai.chat(input.selection.modelId)

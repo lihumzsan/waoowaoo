@@ -6,8 +6,11 @@ import {
   buildReasoningAwareContent,
   emitStreamChunk,
   emitStreamStage,
+  flattenProviderMessageContent,
+  normalizeProviderContentParts,
   resolveStreamStepMeta,
   withStreamChunkTimeout,
+  type ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
 import { asUnknownObject, getErrorMessage, type UnknownObject } from '@/lib/ai-providers/shared/helpers'
 import type {
@@ -38,6 +41,11 @@ interface GoogleUsageLike {
   candidatesTokenCount?: unknown
   completion_tokens?: unknown
   output_tokens?: unknown
+}
+
+function toGoogleTextParts(content: ProviderChatMessage['content']): Array<{ text: string }> {
+  const parts = normalizeProviderContentParts(content).map((part) => ({ text: part.text }))
+  return parts.length > 0 ? parts : [{ text: '' }]
 }
 
 interface GoogleResponseLike {
@@ -123,7 +131,7 @@ export async function runGoogleLlmCompletion(input: {
   apiKey: string
   baseUrl?: string
   modelId: string
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
@@ -136,13 +144,13 @@ export async function runGoogleLlmCompletion(input: {
 
   const systemParts = input.messages
     .filter((message) => message.role === 'system')
-    .map((message) => message.content)
+    .map((message) => flattenProviderMessageContent(message.content))
     .filter(Boolean)
   const contents = input.messages
     .filter((message) => message.role !== 'system')
     .map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }],
+      parts: toGoogleTextParts(message.content),
     }))
 
   const systemInstruction = systemParts.length > 0
@@ -191,13 +199,13 @@ export async function runGoogleLlmStream(input: AiProviderLlmStreamContext): Pro
 
   const systemParts = input.messages
     .filter((message) => message.role === 'system')
-    .map((message) => message.content)
+    .map((message) => flattenProviderMessageContent(message.content))
     .filter(Boolean)
   const contents = input.messages
     .filter((message) => message.role !== 'system')
     .map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }],
+      parts: toGoogleTextParts(message.content),
     }))
   const systemInstruction = systemParts.length > 0
     ? { parts: [{ text: systemParts.join('\n') }] }

@@ -7,6 +7,7 @@ export interface TextUsageEntry {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   cacheHitRate?: number
+  providerCostCredits?: number
 }
 
 type TextUsageStore = {
@@ -34,6 +35,7 @@ export function recordTextUsage(entry: TextUsageEntry) {
   const cachedInputTokens = Math.max(0, Math.floor(entry.cachedInputTokens || 0))
   const cacheWriteTokens = Math.max(0, Math.floor(entry.cacheWriteTokens || 0))
   const cacheHitRate = Number(entry.cacheHitRate)
+  const providerCostCredits = Number(entry.providerCostCredits)
   store.textUsage.push({
     model: entry.model,
     inputTokens: Math.max(0, Math.floor(entry.inputTokens || 0)),
@@ -41,5 +43,6 @@ export function recordTextUsage(entry: TextUsageEntry) {
     ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
     ...(cacheWriteTokens > 0 ? { cacheWriteTokens } : {}),
     ...(Number.isFinite(cacheHitRate) && cacheHitRate >= 0 ? { cacheHitRate: Math.min(1, cacheHitRate) } : {}),
+    ...(Number.isFinite(providerCostCredits) && providerCostCredits >= 0 ? { providerCostCredits } : {}),
   })
 }

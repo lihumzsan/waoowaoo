@@ -1,4 +1,4 @@
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
+import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import type { Locale } from '@/i18n/routing'
@@ -17,6 +17,8 @@ interface GenerationContext {
   readonly model: string
   readonly locale: Locale
 }
+
+const EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS = 1024
 
 function stringifyForPrompt(value: unknown): string {
   return JSON.stringify(value, null, 2)
@@ -140,15 +142,17 @@ async function runTextJsonStep(input: GenerationContext & {
   readonly stepIndex: number
   readonly stepTotal: number
 }): Promise<Record<string, unknown>> {
-  const finalPrompt = buildAiPrompt({
+  const finalPromptContent = buildAiPromptContent({
     promptId: input.promptId,
     locale: input.locale,
     variables: input.variables,
+    cacheVariableKeys: Object.keys(input.variables),
+    minCacheChars: EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS,
   })
   const completion = await executeAiTextStep({
     userId: input.userId,
     model: input.model,
-    messages: [{ role: 'user', content: finalPrompt }],
+    messages: [{ role: 'user', content: finalPromptContent }],
     temperature: 0.35,
     projectId: input.projectId,
     action: input.promptId,

@@ -8,6 +8,7 @@ import {
   buildOpenRouterRequestOptions,
   normalizeOpenRouterSessionId,
 } from '@/lib/ai-providers/openrouter/session'
+import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
 import {
   buildReasoningAwareContent,
   completionUsageSummary,
@@ -20,6 +21,7 @@ import {
   resolveStreamStepMeta,
   withStreamChunkTimeout,
   shouldUseOpenAIReasoningProviderOptions,
+  type ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
 import type {
   AiProviderLlmResult,
@@ -35,13 +37,56 @@ type OpenAIStreamWithFinal = AsyncIterable<unknown> & {
   finalChatCompletion?: () => Promise<OpenAI.Chat.Completions.ChatCompletion>
 }
 
+type OpenRouterStreamUsage = {
+  promptTokens: number
+  completionTokens: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  cacheHitRate?: number
+  providerCostCredits?: number
+}
+
+function extractOpenRouterStreamUsage(part: unknown): OpenRouterStreamUsage | null {
+  const record = part && typeof part === 'object'
+    ? (part as {
+      usage?: {
+        prompt_tokens?: unknown
+        completion_tokens?: unknown
+        prompt_tokens_details?: {
+          cached_tokens?: unknown
+          cache_write_tokens?: unknown
+        } | null
+        cost?: unknown
+        total_cost?: unknown
+        provider_cost_credits?: unknown
+      } | null
+    })
+    : null
+  if (!record?.usage) return null
+  const summary = completionUsageSummary({
+    usage: record.usage as {
+      prompt_tokens?: number
+      completion_tokens?: number
+      prompt_tokens_details?: {
+        cached_tokens?: number
+        cache_write_tokens?: number
+      } | null
+      cost?: number
+      total_cost?: number
+      provider_cost_credits?: number
+    },
+  })
+  if (!summary) return null
+  return summary
+}
+
 export async function runOpenAIBaseUrlLlmCompletion(input: {
   providerName: string
   providerKey: string
   modelId: string
   baseUrl: string
   apiKey: string
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
@@ -103,12 +148,17 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   if (input.reasoning) {
     extraParams.reasoning = { effort: input.reasoningEffort }
   }
+  const promptCacheRequest = buildOpenRouterPromptCacheRequest({
+    modelId: input.modelId,
+    messages: input.messages,
+  })
   const completion = await client.chat.completions.create({
     model: input.modelId,
-    messages: input.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    messages: promptCacheRequest.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     temperature: input.temperature,
+    ...(promptCacheRequest.cacheControl ? { cache_control: promptCacheRequest.cacheControl } : {}),
     ...extraParams,
-  }, buildOpenRouterRequestOptions(openRouterSessionId))
+  } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, buildOpenRouterRequestOptions(openRouterSessionId))
   const normalizedCompletion = completion as OpenAI.Chat.Completions.ChatCompletion
   const completionParts = getCompletionParts(normalizedCompletion)
   return buildAiProviderLlmResult({
@@ -224,18 +274,25 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     extraParams.reasoning = { effort: input.options.reasoningEffort || 'high' }
   }
   emitStreamStage(input.callbacks, stepMeta, 'streaming', input.providerName)
+  const promptCacheRequest = buildOpenRouterPromptCacheRequest({
+    modelId: input.selection.modelId,
+    messages: input.messages,
+  })
   const stream = await client.chat.completions.create({
     model: input.selection.modelId,
-    messages: input.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    messages: promptCacheRequest.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     ...((input.options.reasoning ?? true) ? {} : { temperature: input.options.temperature ?? 0.7 }),
     stream: true,
+    ...(promptCacheRequest.cacheControl ? { cache_control: promptCacheRequest.cacheControl } : {}),
     ...extraParams,
   } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming, buildOpenRouterRequestOptions(openRouterSessionId))
   let text = ''
   let reasoning = ''
   let seq = 1
   let finalCompletion: OpenAI.Chat.Completions.ChatCompletion | null = null
+  let streamUsage: OpenRouterStreamUsage | null = null
   for await (const part of withStreamChunkTimeout(stream as AsyncIterable<unknown>)) {
+    streamUsage = extractOpenRouterStreamUsage(part) ?? streamUsage
     const { textDelta, reasoningDelta } = extractStreamDeltaParts(part)
     if (reasoningDelta) {
       reasoning += reasoningDelta
@@ -272,6 +329,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
   const completion = finalCompletion ?? buildOpenAIChatCompletion(
     input.selection.modelId,
     buildReasoningAwareContent(text, reasoning),
+    streamUsage ?? undefined,
   )
   emitStreamStage(input.callbacks, stepMeta, 'completed', input.providerName)
   input.callbacks?.onComplete?.(text, stepMeta)
@@ -280,7 +338,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     logProvider: input.providerName,
     text,
     reasoning,
-    usage: finalCompletion ? completionUsageSummary(finalCompletion) : null,
+    usage: finalCompletion ? completionUsageSummary(finalCompletion) : streamUsage,
     successDetails: {
       engine: 'openai_sdk_stream',
       openRouterSessionId: openRouterSessionId ?? null,

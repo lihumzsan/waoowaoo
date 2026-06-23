@@ -67,6 +67,7 @@ type UsageByModel = Record<string, {
   cachedInputTokens: number
   cacheWriteTokens: number
   cacheHitRate: number
+  providerCostCredits: number
   cost: number
 }>
 
@@ -139,6 +140,7 @@ function resolveTextCostFromUsage(
   let outputTokens = 0
   let cachedInputTokens = 0
   let cacheWriteTokens = 0
+  let providerCostCredits = 0
   let cost = 0
   const byModel: UsageByModel = {}
 
@@ -147,14 +149,22 @@ function resolveTextCostFromUsage(
     const outTokens = Math.max(0, Math.floor(Number(item.outputTokens || 0)))
     const cachedTokens = Math.max(0, Math.floor(Number(item.cachedInputTokens || 0)))
     const writeTokens = Math.max(0, Math.floor(Number(item.cacheWriteTokens || 0)))
+    const itemProviderCostCredits = Number(item.providerCostCredits)
     const model = item.model || 'unknown'
     const hasBillableTokens = inTokens > 0 || outTokens > 0
-    const itemCost = hasBillableTokens ? normalizeMoney(calcText(model, inTokens, outTokens)) : 0
+    const itemCost = Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0
+      ? normalizeMoney(itemProviderCostCredits)
+      : hasBillableTokens
+        ? normalizeMoney(calcText(model, inTokens, outTokens))
+        : 0
 
     inputTokens += inTokens
     outputTokens += outTokens
     cachedInputTokens += cachedTokens
     cacheWriteTokens += writeTokens
+    if (Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0) {
+      providerCostCredits += normalizeMoney(itemProviderCostCredits)
+    }
     cost += itemCost
 
     if (!byModel[model]) {
@@ -164,6 +174,7 @@ function resolveTextCostFromUsage(
         cachedInputTokens: 0,
         cacheWriteTokens: 0,
         cacheHitRate: 0,
+        providerCostCredits: 0,
         cost: 0,
       }
     }
@@ -171,6 +182,9 @@ function resolveTextCostFromUsage(
     byModel[model].outputTokens += outTokens
     byModel[model].cachedInputTokens += cachedTokens
     byModel[model].cacheWriteTokens += writeTokens
+    if (Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0) {
+      byModel[model].providerCostCredits += normalizeMoney(itemProviderCostCredits)
+    }
     byModel[model].cacheHitRate = byModel[model].inputTokens > 0
       ? byModel[model].cachedInputTokens / byModel[model].inputTokens
       : 0
@@ -187,6 +201,7 @@ function resolveTextCostFromUsage(
       actualCachedInputTokens: cachedInputTokens,
       actualCacheWriteTokens: cacheWriteTokens,
       actualCacheHitRate: cacheHitRate,
+      actualProviderCostCredits: providerCostCredits,
       usageByModel: byModel,
     },
   }

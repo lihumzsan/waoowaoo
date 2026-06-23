@@ -1,4 +1,3 @@
-import OpenAI from 'openai'
 import { getInternalBaseUrl } from '@/lib/env'
 import { buildAiProviderLlmResult } from '@/lib/ai-providers/shared/llm-result'
 import {
@@ -7,6 +6,7 @@ import {
   emitStreamStage,
   resolveStreamStepMeta,
   withStreamChunkTimeout,
+  type ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
 import {
   arkResponsesCompletion,
@@ -27,7 +27,7 @@ export { arkResponsesCompletion, arkResponsesStream, buildArkThinkingParam, conv
 export async function runArkLlmCompletion(input: {
   apiKey: string
   modelId: string
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  messages: ProviderChatMessage[]
   reasoning: boolean
 }): Promise<AiProviderLlmResult> {
   const arkThinkingParams = buildArkThinkingParam(input.modelId, input.reasoning)

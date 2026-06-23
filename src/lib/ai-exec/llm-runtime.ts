@@ -3,6 +3,8 @@ import OpenAI from 'openai'
 import { recordTextUsage as recordBillingTextUsage } from '@/lib/billing/runtime-usage'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { createScopedLogger } from '@/lib/logging/core'
+import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
+import type { ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
 
 export const llmLogger = createScopedLogger({
   module: 'llm.client',
@@ -15,7 +17,7 @@ export const _ulogError = (...args: unknown[]) => llmLogger.error(...args)
 
 export type LlmRawMessage = {
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: ProviderChatMessageContent
 }
 
 type LlmUsage = {
@@ -24,6 +26,7 @@ type LlmUsage = {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   cacheHitRate?: number
+  providerCostCredits?: number
 }
 
 export function completionUsageSummary(
@@ -36,6 +39,9 @@ export function completionUsageSummary(
       cached_tokens?: number
       cache_write_tokens?: number
     } | null
+    cost?: number
+    total_cost?: number
+    provider_cost_credits?: number
   } | undefined
   if (!usage) return null
   const promptTokens = Number(usage.prompt_tokens ?? 0)
@@ -43,6 +49,8 @@ export function completionUsageSummary(
   if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return null
   const cachedInputTokens = Number(usage.prompt_tokens_details?.cached_tokens ?? 0)
   const cacheWriteTokens = Number(usage.prompt_tokens_details?.cache_write_tokens ?? 0)
+  const explicitProviderCostCredits = Number(usage.provider_cost_credits)
+  const providerCostUsd = Number(usage.cost ?? usage.total_cost)
   return {
     promptTokens,
     completionTokens,
@@ -55,6 +63,11 @@ export function completionUsageSummary(
     ...(Number.isFinite(cachedInputTokens) && cachedInputTokens >= 0 && promptTokens > 0
       ? { cacheHitRate: cachedInputTokens / promptTokens }
       : {}),
+    ...(Number.isFinite(explicitProviderCostCredits) && explicitProviderCostCredits >= 0
+      ? { providerCostCredits: explicitProviderCostCredits }
+      : Number.isFinite(providerCostUsd) && providerCostUsd >= 0
+        ? { providerCostCredits: usdToCredits(providerCostUsd) }
+        : {}),
   }
 }
 
@@ -165,6 +178,7 @@ export function recordCompletionUsage(model: string, completion: OpenAI.Chat.Com
     cachedInputTokens: summary.cachedInputTokens,
     cacheWriteTokens: summary.cacheWriteTokens,
     cacheHitRate: summary.cacheHitRate,
+    providerCostCredits: summary.providerCostCredits,
   })
 }
 

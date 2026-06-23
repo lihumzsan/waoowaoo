@@ -59,6 +59,7 @@ const aiPromptsMock = vi.hoisted(() => ({
     EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'edit-script-video-block-merge',
   },
   buildAiPrompt: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
+  buildAiPromptContent: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))

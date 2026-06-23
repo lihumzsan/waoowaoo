@@ -1,9 +1,13 @@
 import { AI_PROMPT_CATALOG } from './registry'
 import { getAiPromptTemplate } from './template-store'
-import type { BuildAiPromptInput } from './types'
+import type { BuildAiPromptContentInput, BuildAiPromptInput } from './types'
+import type { ProviderChatMessageContent, ProviderTextContentPart } from '@/lib/ai-providers/shared/llm-support'
 
 const SINGLE_PLACEHOLDER_PATTERN = /\{([A-Za-z0-9_]+)\}/g
 const DOUBLE_PLACEHOLDER_PATTERN = /\{\{([A-Za-z0-9_]+)\}\}/g
+const PLACEHOLDER_TOKEN_PATTERN = /\{\{([A-Za-z0-9_]+)\}\}|\{([A-Za-z0-9_]+)\}/g
+const DEFAULT_CACHE_CONTROL = { type: 'ephemeral', ttl: '1h' } as const
+const DEFAULT_MIN_CACHE_CHARS = 1024
 
 function extractPlaceholders(template: string): string[] {
   const keys = new Set<string>()
@@ -29,6 +33,16 @@ function replaceAllPlaceholders(template: string, key: string, value: string): s
 }
 
 export function buildAiPrompt(input: BuildAiPromptInput): string {
+  const { template, variables, entry } = resolvePromptTemplate(input)
+
+  let rendered = template
+  for (const key of entry.variableKeys) {
+    rendered = replaceAllPlaceholders(rendered, key, variables[key] || '')
+  }
+  return rendered
+}
+
+function resolvePromptTemplate(input: BuildAiPromptInput) {
   const variables = {
     ...(input.variables ?? {}),
   }
@@ -62,9 +76,49 @@ export function buildAiPrompt(input: BuildAiPromptInput): string {
     }
   }
 
-  let rendered = template
-  for (const key of entry.variableKeys) {
-    rendered = replaceAllPlaceholders(rendered, key, variables[key] || '')
+  return { template, variables, entry }
+}
+
+function pushPromptPart(parts: ProviderTextContentPart[], next: ProviderTextContentPart) {
+  if (!next.text) return
+  const previous = parts[parts.length - 1]
+  if (!next.cacheControl && previous && !previous.cacheControl) {
+    previous.text += next.text
+    return
   }
-  return rendered
+  parts.push(next)
+}
+
+export function buildAiPromptContent(input: BuildAiPromptContentInput): ProviderChatMessageContent {
+  const { template, variables } = resolvePromptTemplate(input)
+  const cacheVariableKeys = new Set(input.cacheVariableKeys ?? [])
+  if (cacheVariableKeys.size === 0) return buildAiPrompt(input)
+
+  const minCacheChars = Math.max(1, Math.floor(input.minCacheChars ?? DEFAULT_MIN_CACHE_CHARS))
+  const cacheControl = input.cacheControl ?? DEFAULT_CACHE_CONTROL
+  const parts: ProviderTextContentPart[] = []
+  let cursor = 0
+
+  for (const match of template.matchAll(PLACEHOLDER_TOKEN_PATTERN)) {
+    const index = match.index ?? 0
+    if (index > cursor) {
+      pushPromptPart(parts, { type: 'text', text: template.slice(cursor, index) })
+    }
+
+    const key = match[1] || match[2] || ''
+    const value = variables[key] || ''
+    pushPromptPart(parts, {
+      type: 'text',
+      text: value,
+      ...(cacheVariableKeys.has(key) && value.length >= minCacheChars ? { cacheControl } : {}),
+    })
+    cursor = index + match[0].length
+  }
+
+  if (cursor < template.length) {
+    pushPromptPart(parts, { type: 'text', text: template.slice(cursor) })
+  }
+
+  const hasCacheBlock = parts.some((part) => Boolean(part.cacheControl))
+  return hasCacheBlock ? parts : buildAiPrompt(input)
 }

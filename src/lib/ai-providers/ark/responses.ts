@@ -1,3 +1,9 @@
+import {
+  flattenProviderMessageContent,
+  normalizeProviderContentParts,
+  type ProviderChatMessage,
+} from '@/lib/ai-providers/shared/llm-support'
+
 export interface ArkResponsesOptions {
   apiKey: string
   model: string
@@ -143,18 +149,17 @@ export async function arkResponsesCompletion(options: ArkResponsesOptions): Prom
   }
 }
 
-type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
 interface ArkResponsesInputItem {
   role: string
   content: Array<{ type: string; text: string }>
 }
 
-export function convertChatMessagesToArkInput(messages: ChatMessage[]): ArkResponsesInputItem[] {
+export function convertChatMessagesToArkInput(messages: ProviderChatMessage[]): ArkResponsesInputItem[] {
   const systemParts: string[] = []
   const input: ArkResponsesInputItem[] = []
   for (const msg of messages) {
     if (msg.role === 'system') {
-      systemParts.push(msg.content)
+      systemParts.push(flattenProviderMessageContent(msg.content))
       continue
     }
     const role = msg.role === 'assistant' ? 'assistant' : 'user'
@@ -163,10 +168,18 @@ export function convertChatMessagesToArkInput(messages: ChatMessage[]): ArkRespo
       contentItems.push({ type: 'input_text', text: systemParts.join('\n') })
       systemParts.length = 0
     }
-    contentItems.push({
-      type: role === 'assistant' ? 'output_text' : 'input_text',
-      text: msg.content,
-    })
+    for (const part of normalizeProviderContentParts(msg.content)) {
+      contentItems.push({
+        type: role === 'assistant' ? 'output_text' : 'input_text',
+        text: part.text,
+      })
+    }
+    if (contentItems.length === 0) {
+      contentItems.push({
+        type: role === 'assistant' ? 'output_text' : 'input_text',
+        text: '',
+      })
+    }
     input.push({ role, content: contentItems })
   }
   if (systemParts.length > 0) {
