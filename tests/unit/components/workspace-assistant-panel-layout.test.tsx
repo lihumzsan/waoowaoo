@@ -8,6 +8,7 @@ import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/c
 import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import {
   shouldSuppressWorkspaceAssistantOperationRunCard,
+  shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldDockWorkspaceStylePreviewGenerationCard,
   shouldDeferWorkspaceAssistantTaskFollowUp,
   WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
@@ -336,6 +337,29 @@ describe('workspace assistant panel layout', () => {
     })).toBe(false)
   })
 
+  it('shows the active run card only for external task waits', () => {
+    expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
+      storageLoading: false,
+      operationId: 'generate_edit_screenplay',
+      stylePreviewGenerationDocked: false,
+    })).toBe(true)
+    expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
+      storageLoading: false,
+      operationId: null,
+      stylePreviewGenerationDocked: false,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
+      storageLoading: true,
+      operationId: 'generate_edit_screenplay',
+      stylePreviewGenerationDocked: false,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
+      storageLoading: false,
+      operationId: 'generate_edit_style_previews',
+      stylePreviewGenerationDocked: true,
+    })).toBe(false)
+  })
+
   it('renders external task waits from session-state through the unified active-run loading card', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
@@ -350,6 +374,7 @@ describe('workspace assistant panel layout', () => {
     expect(panelSource).toContain("currentActivity?.type === 'waiting_task'")
     expect(panelSource).toContain('showExternalTaskRunCard')
     expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />')
+    expect(panelSource).not.toContain('<WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />')
     expect(rendererSource).toContain("data.reason === 'awaiting_external_task'")
   })
 

@@ -126,6 +126,19 @@ export function shouldSuppressWorkspaceAssistantOperationRunCard(params: {
   return params.stylePreviewGenerationDocked && params.operationId === 'generate_edit_style_previews'
 }
 
+export function shouldShowWorkspaceAssistantExternalTaskRunCard(params: {
+  storageLoading: boolean
+  operationId: string | null | undefined
+  stylePreviewGenerationDocked: boolean
+}): boolean {
+  return !params.storageLoading
+    && Boolean(params.operationId)
+    && !shouldSuppressWorkspaceAssistantOperationRunCard({
+      operationId: params.operationId,
+      stylePreviewGenerationDocked: params.stylePreviewGenerationDocked,
+    })
+}
+
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
   replyAwaitingFirstTextOutput: boolean
@@ -575,26 +588,11 @@ export default function WorkspaceAssistantPanel({
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
     activeExternalTaskOperationId,
   })
-  const suppressActiveRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
-    operationId: assistantRuntime.pendingOperationId,
-    stylePreviewGenerationDocked: shouldDockStylePreviewGenerationCard,
-  })
-  const suppressExternalTaskRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
+  const showExternalTaskRunCard = shouldShowWorkspaceAssistantExternalTaskRunCard({
+    storageLoading: assistantRuntime.storageLoading,
     operationId: activeExternalTaskOperationId,
     stylePreviewGenerationDocked: shouldDockStylePreviewGenerationCard,
   })
-  const showActiveRunCard = Boolean(
-    assistantRuntime.pending
-      && !assistantRuntime.storageLoading
-      && assistantRuntime.pendingOperationId
-      && !suppressActiveRunCard,
-  )
-  const showExternalTaskRunCard = Boolean(
-    !showActiveRunCard
-      && !assistantRuntime.storageLoading
-      && activeExternalTaskOperationId
-      && !suppressExternalTaskRunCard,
-  )
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
     replyAwaitingFirstTextOutput: assistantRuntime.replyAwaitingFirstTextOutput,
@@ -700,9 +698,6 @@ export default function WorkspaceAssistantPanel({
                     </ThreadPrimitive.Messages>
                     {showAssistantReplyLoading ? (
                       <WorkspaceAssistantPendingTurnPlaceholder />
-                    ) : null}
-                    {showActiveRunCard ? (
-                      <WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />
                     ) : null}
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
                       <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />
