@@ -128,6 +128,22 @@ function isWorkspaceAssistantVisibleTextPart(part: unknown): boolean {
     && part.text.trim().length > 0
 }
 
+function isWorkspaceAssistantRunningRunPart(part: unknown): boolean {
+  if (!isRecord(part) || part.type !== 'data-agent-run') return false
+  const data = isRecord(part.data) ? part.data : null
+  return data?.status === 'running'
+}
+
+function isWorkspaceAssistantToolPart(part: unknown): part is Record<string, unknown> {
+  if (!isRecord(part) || typeof part.type !== 'string') return false
+  return part.type === 'dynamic-tool' || part.type.startsWith('tool-')
+}
+
+function isWorkspaceAssistantActiveToolPart(part: unknown): boolean {
+  if (!isWorkspaceAssistantToolPart(part)) return false
+  return part.state === 'input-streaming' || part.state === 'input-available'
+}
+
 function isWorkspaceAssistantTerminalPausePart(part: unknown): boolean {
   if (!isRecord(part) || typeof part.type !== 'string') return false
   return part.type === 'data-agent-stop'
@@ -146,20 +162,29 @@ export function hasWorkspaceAssistantPendingActivityAfterLatestUser(
     }
   }
 
-  let hasAssistantActivity = false
+  let hasActiveToolActivity = false
+  let hasPreTextRunActivity = false
+  let hasVisibleText = false
   for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
     const message = messages[messageIndex]
     if (!message || message.role !== 'assistant') continue
     for (const part of message.parts) {
-      if (isWorkspaceAssistantVisibleTextPart(part)) return false
       if (isWorkspaceAssistantTerminalPausePart(part)) return false
-      if (isRecord(part) && typeof part.type === 'string') {
-        hasAssistantActivity = true
+      if (isWorkspaceAssistantVisibleTextPart(part)) {
+        hasVisibleText = true
+        continue
+      }
+      if (isWorkspaceAssistantActiveToolPart(part)) {
+        hasActiveToolActivity = true
+        continue
+      }
+      if (!hasVisibleText && isWorkspaceAssistantRunningRunPart(part)) {
+        hasPreTextRunActivity = true
       }
     }
   }
 
-  return hasAssistantActivity
+  return hasActiveToolActivity || (hasPreTextRunActivity && !hasVisibleText)
 }
 
 export function resolveWorkspaceAssistantActiveThinkingMessageId(params: {

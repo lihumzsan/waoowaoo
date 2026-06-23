@@ -23,6 +23,16 @@ function turnMessage(
   return { id, role, parts }
 }
 
+function resolveAssistantTurnPending(
+  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
+  runtimePending = false,
+  storageLoading = false,
+): boolean {
+  return !storageLoading && (
+    runtimePending || hasWorkspaceAssistantPendingActivityAfterLatestUser(messages)
+  )
+}
+
 describe('workspace assistant turn indicator', () => {
   it('anchors thinking to the assistant message after the latest user turn', () => {
     const messages: readonly Pick<UIMessage, 'id' | 'role'>[] = [
@@ -148,24 +158,60 @@ describe('workspace assistant turn indicator', () => {
 
     const textStartedHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(textStartedMessages)
     const textStartedHasPendingActivity = hasWorkspaceAssistantPendingActivityAfterLatestUser(textStartedMessages)
+    const textStartedTurnPending = resolveAssistantTurnPending(textStartedMessages)
 
     expect(textStartedHasText).toBe(true)
-    expect(textStartedHasPendingActivity).toBe(false)
+    expect(textStartedHasPendingActivity).toBe(true)
+    expect(textStartedTurnPending).toBe(true)
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: true,
+      pending: textStartedTurnPending,
       messages: textStartedMessages,
     })).toBe('assistant-current')
     expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
+      pending: textStartedTurnPending,
       activeAssistantMessageId: null,
       hasVisibleAssistantText: textStartedHasText,
     })).toBe(false)
   })
 
-  it('does not keep thinking after a terminal pause part takes over the turn', () => {
+  it('does not keep thinking after visible text when only completed tool output remains', () => {
+    const completedToolMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
+      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
+      turnMessage('assistant-current', 'assistant', [
+        {
+          type: 'data-agent-run',
+          data: {
+            runId: 'run-1',
+            requestId: 'request-1',
+            status: 'running',
+            controlKind: 'user_turn',
+          },
+        } as never,
+        { type: 'text', text: '这里是开场。' },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'tool-call-2',
+          state: 'output-available',
+          output: { ok: true },
+        } as never,
+      ]),
+    ]
+    const completedTurnPending = resolveAssistantTurnPending(completedToolMessages)
+
+    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(completedToolMessages)).toBe(true)
+    expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(completedToolMessages)).toBe(false)
+    expect(completedTurnPending).toBe(false)
+    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: completedTurnPending,
+      messages: completedToolMessages,
+    })).toBeNull()
+  })
+
+  it('does not keep thinking after an external task wait takes over the turn', () => {
     const terminalMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
       turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
       turnMessage('assistant-current', 'assistant', [
+        { type: 'text', text: '我这就为你生成剧本。' },
         {
           type: 'dynamic-tool',
           toolCallId: 'tool-call-1',
@@ -184,9 +230,15 @@ describe('workspace assistant turn indicator', () => {
         } as never,
       ]),
     ]
+    const terminalTurnPending = resolveAssistantTurnPending(terminalMessages)
 
-    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(terminalMessages)).toBe(false)
+    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(terminalMessages)).toBe(true)
     expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages)).toBe(false)
+    expect(terminalTurnPending).toBe(false)
+    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
+      pending: terminalTurnPending,
+      messages: terminalMessages,
+    })).toBeNull()
     expect(resolveWorkspaceAssistantActiveThinkingMessageId({
       pending: true,
       messages: terminalMessages,
