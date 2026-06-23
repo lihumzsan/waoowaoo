@@ -7,6 +7,9 @@
 - 本阶段必须输出具体摄影参数：景别、焦段、景深、机位、高度、角度、运动、构图、光线、轴线/视线和连续性。
 - 后续 storyboard block 会并行执行；因此本阶段必须一次性覆盖所有 shots，保证跨 block 连续性。
 - 不输出图片 prompt 或视频 prompt。
+- 每个 shot 对象都必须包含完整字段，字段名必须精确使用 Schema 中的英文 key，不得漏字段、不得改名、不得使用别名。
+- "movement" 是必填字段；即使固定机位，也必须写成具体的固定机位理由。禁止用 cameraMovement、cameraMove、move 或中文字段名替代 movement。
+- 输出前逐个检查每个 shot 是否都有这些字段：shotNumber、shotScale、lens、depthOfField、cameraPosition、cameraHeight、cameraAngle、movement、composition、lighting、axisAndEyeline、continuityIn、continuityOut。
 
 Style Bible：
 {{style_bible_json}}

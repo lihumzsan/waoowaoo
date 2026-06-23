@@ -1,4 +1,10 @@
 import type { ProjectAgentLocale } from './locale'
+import type { EditFirstWorkflowOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
+
+type ProjectAgentOperationTitleCopy = {
+  zh: string
+  en: string
+}
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   asset_hub_list_folders: {
@@ -75,7 +81,7 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
   },
 }
 
-const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: string }> = {
+const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   get_project_phase: {
     zh: '项目阶段',
     en: 'Project phase',
@@ -108,6 +114,9 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: strin
     zh: '审核资产',
     en: 'Review assets',
   },
+} satisfies Record<string, ProjectAgentOperationTitleCopy>
+
+const EDIT_FIRST_OPERATION_TITLE_COPY = {
   generate_edit_screenplay: {
     zh: '生成剧本',
     en: 'Generate screenplay',
@@ -136,6 +145,10 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: strin
     zh: '返工剪辑资产',
     en: 'Revise edit assets',
   },
+  generate_edit_cinematography_shot_plan: {
+    zh: '生成摄影方案',
+    en: 'Generate cinematography shot plan',
+  },
   generate_edit_script_storyboard_spatial_blocking: {
     zh: '生成空间定位',
     en: 'Generate spatial blocking',
@@ -156,6 +169,11 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, { zh: string; en: strin
     zh: '渲染最终视频',
     en: 'Render final video',
   },
+} satisfies Record<EditFirstWorkflowOperationId, ProjectAgentOperationTitleCopy>
+
+const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTitleCopy> = {
+  ...GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY,
+  ...EDIT_FIRST_OPERATION_TITLE_COPY,
 }
 
 export function localizeSelectableToolDescription(

@@ -4,6 +4,7 @@ import {
   localizeSelectableToolDescription,
 } from '@/lib/project-agent/copy'
 import { buildProjectAgentSystemPrompt } from '@/lib/project-agent/system-prompt'
+import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-policy'
 
 describe('project agent prompt copy', () => {
   it('uses direct operation rules instead of fixed workflow or skill-gateway rules', () => {
@@ -119,8 +120,15 @@ describe('project agent prompt copy', () => {
   })
 
   it('localizes user-facing operation titles without exposing internal ids', () => {
+    for (const operationId of EDIT_FIRST_WORKFLOW_OPERATION_IDS) {
+      expect(localizeProjectAgentOperationTitle(operationId, 'zh')).not.toBe('项目操作')
+      expect(localizeProjectAgentOperationTitle(operationId, 'en')).not.toBe('Project operation')
+    }
+
     expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'zh')).toBe('生成剧本')
     expect(localizeProjectAgentOperationTitle('generate_edit_screenplay', 'en')).toBe('Generate screenplay')
+    expect(localizeProjectAgentOperationTitle('generate_edit_cinematography_shot_plan', 'zh')).toBe('生成摄影方案')
+    expect(localizeProjectAgentOperationTitle('generate_edit_cinematography_shot_plan', 'en')).toBe('Generate cinematography shot plan')
     expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard_spatial_blocking', 'zh')).toBe('生成空间定位')
     expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard', 'zh')).toBe('生成分镜面板')
     expect(localizeProjectAgentOperationTitle('unknown_internal_tool', 'zh')).toBe('项目操作')

@@ -73,6 +73,29 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).toContain('shotScale')
     expect(prompt).toContain('lens')
     expect(prompt).toContain('axisAndEyeline')
+    expect(prompt).toContain('"movement" is required')
+    expect(prompt).toContain('Do not replace movement with cameraMovement, cameraMove, move, or localized field names')
+    expect(prompt).toContain('Before returning, validate every shot has these fields')
+    expect(prompt).toContain('cameraAngle, movement, composition')
     expect(prompt).toContain('must cover all shots in one pass')
+  })
+
+  it('prompts the Chinese cinematography module not to omit movement on any shot', () => {
+    const prompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
+      locale: 'zh',
+      variables: {
+        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {}, hardBans: [] } }),
+        director_decoupage_json: JSON.stringify({ shots: [{ shotNumber: 4, visibleAction: '角色在床边抚摸狗狗。' }] }),
+        edit_script_json: JSON.stringify({ shots: [{ shotNumber: 4 }], videoBlocks: [] }),
+        asset_context_json: JSON.stringify({ assets: [] }),
+        spatial_profiles_json: JSON.stringify({ locations: [] }),
+      },
+    })
+
+    expect(prompt).toContain('"movement" 是必填字段')
+    expect(prompt).toContain('禁止用 cameraMovement、cameraMove、move 或中文字段名替代 movement')
+    expect(prompt).toContain('输出前逐个检查每个 shot 是否都有这些字段')
+    expect(prompt).toContain('cameraAngle、movement、composition')
   })
 })

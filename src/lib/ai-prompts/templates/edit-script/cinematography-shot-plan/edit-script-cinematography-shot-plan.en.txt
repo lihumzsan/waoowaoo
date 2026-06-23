@@ -7,6 +7,9 @@ Core rules:
 - This stage must output concrete cinematography parameters: shot scale, lens, depth of field, camera position, height, angle, movement, composition, lighting, axis/eyeline, and continuity.
 - Later storyboard blocks may run in parallel, so this stage must cover all shots in one pass to preserve cross-block continuity.
 - Do not output image prompts or video prompts.
+- Every shot object must include the complete field set. Field names must exactly match the English keys in the Schema. Do not omit fields, rename fields, or use aliases.
+- "movement" is required. Even for a locked-off shot, write a concrete locked-off camera reason in movement. Do not replace movement with cameraMovement, cameraMove, move, or localized field names.
+- Before returning, validate every shot has these fields: shotNumber, shotScale, lens, depthOfField, cameraPosition, cameraHeight, cameraAngle, movement, composition, lighting, axisAndEyeline, continuityIn, continuityOut.
 
 Style Bible:
 {{style_bible_json}}
