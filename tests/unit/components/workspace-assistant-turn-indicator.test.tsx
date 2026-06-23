@@ -1,247 +1,84 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { UIMessage } from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
-  findLatestAssistantMessageIdAfterLatestUser,
-  hasWorkspaceAssistantPendingActivityAfterLatestUser,
-  hasWorkspaceAssistantVisibleTextAfterLatestUser,
-  resolveWorkspaceAssistantActiveThinkingMessageId,
-  shouldShowPendingAssistantTurnPlaceholder,
-  WorkspaceAssistantPendingTurnPlaceholder,
-} from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
+  resolveWorkspaceAssistantAwaitingExternalTask,
+  resolveWorkspaceAssistantAwaitingUserInput,
+  shouldShowWorkspaceAssistantReplyLoading,
+} from '@/features/project-workspace/components/WorkspaceAssistantPanel'
+import { WorkspaceAssistantPendingTurnPlaceholder } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 
-function message(id: string, role: UIMessage['role']): Pick<UIMessage, 'id' | 'role'> {
-  return { id, role }
-}
-
-function turnMessage(
-  id: string,
-  role: UIMessage['role'],
-  parts: UIMessage['parts'],
-): Pick<UIMessage, 'id' | 'role' | 'parts'> {
-  return { id, role, parts }
-}
-
-function resolveAssistantTurnPending(
-  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
-  runtimePending = false,
-  storageLoading = false,
-): boolean {
-  return !storageLoading && (
-    runtimePending || hasWorkspaceAssistantPendingActivityAfterLatestUser(messages)
-  )
-}
-
-describe('workspace assistant turn indicator', () => {
-  it('anchors thinking to the assistant message after the latest user turn', () => {
-    const messages: readonly Pick<UIMessage, 'id' | 'role'>[] = [
-      message('user-1', 'user'),
-      message('assistant-1-with-tools', 'assistant'),
-      message('user-2', 'user'),
-      message('assistant-2-with-tools', 'assistant'),
-      message('user-3-current', 'user'),
-      message('assistant-3-current', 'assistant'),
-    ]
-
-    expect(findLatestAssistantMessageIdAfterLatestUser(messages)).toBe('assistant-3-current')
-  })
-
-  it('does not attach a streaming indicator to historical assistant tool calls before the latest user turn', () => {
-    const messages: readonly Pick<UIMessage, 'id' | 'role'>[] = [
-      message('user-1', 'user'),
-      message('assistant-1-with-tools', 'assistant'),
-      message('user-2-current', 'user'),
-    ]
-
-    const activeAssistantMessageId = findLatestAssistantMessageIdAfterLatestUser(messages)
-
-    expect(activeAssistantMessageId).toBeNull()
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
-      activeAssistantMessageId,
-      hasVisibleAssistantText: false,
+describe('workspace assistant reply loading indicator', () => {
+  it('shows from the explicit reply-in-flight state instead of message contents', () => {
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: true,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
     })).toBe(true)
-  })
-
-  it('shows a stable pending assistant placeholder only before the current assistant message exists and before visible text', () => {
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
-      activeAssistantMessageId: null,
-      hasVisibleAssistantText: false,
-    })).toBe(true)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
-      activeAssistantMessageId: 'assistant-current',
-      hasVisibleAssistantText: false,
-    })).toBe(false)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: false,
-      activeAssistantMessageId: null,
-      hasVisibleAssistantText: false,
-    })).toBe(false)
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
-      activeAssistantMessageId: null,
-      hasVisibleAssistantText: true,
-    })).toBe(false)
 
     const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder />)
     expect(html).toContain('assistant-thinking-minimal')
     expect(html).toContain('flex flex-col gap-3 px-1 py-1')
   })
 
-  it('renders the thinking placeholder while a server run remains pending after the chat stream is ready', () => {
-    const html = renderToStaticMarkup(<WorkspaceAssistantPendingTurnPlaceholder />)
-
-    expect(html).toContain('assistant-thinking-minimal')
-  })
-
-  it('keeps the inline thinking target through tool activity even after visible text starts', () => {
-    const toolOnlyMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
-      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
-      turnMessage('assistant-current', 'assistant', [
-        {
-          type: 'data-agent-run',
-          data: {
-            runId: 'run-1',
-            requestId: 'request-1',
-            status: 'running',
-            controlKind: 'user_turn',
-          },
-        } as never,
-        {
-          type: 'dynamic-tool',
-          toolCallId: 'tool-call-1',
-          state: 'output-available',
-          output: { ok: true },
-        } as never,
-      ]),
-    ]
-
-    const toolOnlyHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(toolOnlyMessages)
-    const toolOnlyHasPendingActivity = hasWorkspaceAssistantPendingActivityAfterLatestUser(toolOnlyMessages)
-
-    expect(toolOnlyHasText).toBe(false)
-    expect(toolOnlyHasPendingActivity).toBe(true)
-    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: toolOnlyHasPendingActivity,
-      messages: toolOnlyMessages,
-    })).toBe('assistant-current')
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: true,
-      activeAssistantMessageId: 'assistant-current',
-      hasVisibleAssistantText: toolOnlyHasText,
+  it('does not show while idle, loading storage, waiting for the user, or waiting for an external task', () => {
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: false,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
     })).toBe(false)
-
-    const textStartedMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
-      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
-      turnMessage('assistant-current', 'assistant', [
-        {
-          type: 'data-agent-run',
-          data: {
-            runId: 'run-1',
-            requestId: 'request-1',
-            status: 'running',
-            controlKind: 'user_turn',
-          },
-        } as never,
-        { type: 'text', text: '这里是开场。' },
-        {
-          type: 'dynamic-tool',
-          toolCallId: 'tool-call-2',
-          state: 'input-available',
-          input: { operationId: 'generate_edit_screenplay' },
-        } as never,
-      ]),
-    ]
-
-    const textStartedHasText = hasWorkspaceAssistantVisibleTextAfterLatestUser(textStartedMessages)
-    const textStartedHasPendingActivity = hasWorkspaceAssistantPendingActivityAfterLatestUser(textStartedMessages)
-    const textStartedTurnPending = resolveAssistantTurnPending(textStartedMessages)
-
-    expect(textStartedHasText).toBe(true)
-    expect(textStartedHasPendingActivity).toBe(true)
-    expect(textStartedTurnPending).toBe(true)
-    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: textStartedTurnPending,
-      messages: textStartedMessages,
-    })).toBe('assistant-current')
-    expect(shouldShowPendingAssistantTurnPlaceholder({
-      pending: textStartedTurnPending,
-      activeAssistantMessageId: null,
-      hasVisibleAssistantText: textStartedHasText,
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: true,
+      replyInFlight: true,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: true,
+      awaitingUserInput: true,
+      awaitingExternalTask: false,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: true,
+      awaitingUserInput: false,
+      awaitingExternalTask: true,
     })).toBe(false)
   })
 
-  it('does not keep thinking after visible text when only completed tool output remains', () => {
-    const completedToolMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
-      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
-      turnMessage('assistant-current', 'assistant', [
-        {
-          type: 'data-agent-run',
-          data: {
-            runId: 'run-1',
-            requestId: 'request-1',
-            status: 'running',
-            controlKind: 'user_turn',
-          },
-        } as never,
-        { type: 'text', text: '这里是开场。' },
-        {
-          type: 'dynamic-tool',
-          toolCallId: 'tool-call-2',
-          state: 'output-available',
-          output: { ok: true },
-        } as never,
-      ]),
-    ]
-    const completedTurnPending = resolveAssistantTurnPending(completedToolMessages)
-
-    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(completedToolMessages)).toBe(true)
-    expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(completedToolMessages)).toBe(false)
-    expect(completedTurnPending).toBe(false)
-    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: completedTurnPending,
-      messages: completedToolMessages,
-    })).toBeNull()
+  it('does not let stale user-input waits suppress a just-started control reply', () => {
+    expect(resolveWorkspaceAssistantAwaitingUserInput({
+      replyInFlight: true,
+      hasPendingInteraction: true,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: true,
+      awaitingUserInput: resolveWorkspaceAssistantAwaitingUserInput({
+        replyInFlight: true,
+        hasPendingInteraction: true,
+      }),
+      awaitingExternalTask: false,
+    })).toBe(true)
   })
 
-  it('does not keep thinking after an external task wait takes over the turn', () => {
-    const terminalMessages: readonly Pick<UIMessage, 'id' | 'role' | 'parts'>[] = [
-      turnMessage('user-current', 'user', [{ type: 'text', text: '生成一段剧本' }]),
-      turnMessage('assistant-current', 'assistant', [
-        { type: 'text', text: '我这就为你生成剧本。' },
-        {
-          type: 'dynamic-tool',
-          toolCallId: 'tool-call-1',
-          state: 'output-available',
-          output: { ok: true },
-        } as never,
-        {
-          type: 'data-agent-stop',
-          data: {
-            reason: 'awaiting_external_task',
-            stepCount: 1,
-            operationIds: ['generate_edit_screenplay'],
-            taskIds: ['task-1'],
-            phases: ['edit_script'],
-          },
-        } as never,
-      ]),
-    ]
-    const terminalTurnPending = resolveAssistantTurnPending(terminalMessages)
-
-    expect(hasWorkspaceAssistantVisibleTextAfterLatestUser(terminalMessages)).toBe(true)
-    expect(hasWorkspaceAssistantPendingActivityAfterLatestUser(terminalMessages)).toBe(false)
-    expect(terminalTurnPending).toBe(false)
-    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: terminalTurnPending,
-      messages: terminalMessages,
-    })).toBeNull()
-    expect(resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: true,
-      messages: terminalMessages,
-    })).toBeNull()
+  it('treats user and external waits as active only after the reply has yielded control', () => {
+    expect(resolveWorkspaceAssistantAwaitingUserInput({
+      replyInFlight: false,
+      hasPendingInteraction: true,
+    })).toBe(true)
+    expect(resolveWorkspaceAssistantAwaitingExternalTask({
+      replyInFlight: false,
+      currentRunStatus: 'awaiting_task',
+      activeExternalTaskOperationId: null,
+    })).toBe(true)
+    expect(resolveWorkspaceAssistantAwaitingExternalTask({
+      replyInFlight: true,
+      currentRunStatus: 'awaiting_task',
+      activeExternalTaskOperationId: 'generate_edit_screenplay',
+    })).toBe(false)
   })
 })

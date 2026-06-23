@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ChatStatus } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
@@ -14,10 +14,6 @@ import {
   ConfirmationActionCard,
   WorkspaceAssistantActiveRunCard,
   EditStylePreviewGenerationDataCard,
-  hasWorkspaceAssistantPendingActivityAfterLatestUser,
-  hasWorkspaceAssistantVisibleTextAfterLatestUser,
-  resolveWorkspaceAssistantActiveThinkingMessageId,
-  shouldShowPendingAssistantTurnPlaceholder,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
@@ -128,6 +124,36 @@ export function shouldSuppressWorkspaceAssistantOperationRunCard(params: {
   stylePreviewGenerationDocked: boolean
 }): boolean {
   return params.stylePreviewGenerationDocked && params.operationId === 'generate_edit_style_previews'
+}
+
+export function shouldShowWorkspaceAssistantReplyLoading(params: {
+  storageLoading: boolean
+  replyInFlight: boolean
+  awaitingUserInput: boolean
+  awaitingExternalTask: boolean
+}): boolean {
+  return !params.storageLoading
+    && params.replyInFlight
+    && !params.awaitingUserInput
+    && !params.awaitingExternalTask
+}
+
+export function resolveWorkspaceAssistantAwaitingUserInput(params: {
+  replyInFlight: boolean
+  hasPendingInteraction: boolean
+}): boolean {
+  return !params.replyInFlight && params.hasPendingInteraction
+}
+
+export function resolveWorkspaceAssistantAwaitingExternalTask(params: {
+  replyInFlight: boolean
+  currentRunStatus?: ProjectAgentRunPartData['status'] | null
+  activeExternalTaskOperationId?: string | null
+}): boolean {
+  return !params.replyInFlight && (
+    params.currentRunStatus === 'awaiting_task'
+      || Boolean(params.activeExternalTaskOperationId)
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -539,27 +565,20 @@ export default function WorkspaceAssistantPanel({
     onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
   })
-  const assistantTurnHasVisibleText = useMemo(
-    () => hasWorkspaceAssistantVisibleTextAfterLatestUser(assistantRuntime.messages),
-    [assistantRuntime.messages],
-  )
-  const assistantTurnHasPendingActivity = useMemo(
-    () => hasWorkspaceAssistantPendingActivityAfterLatestUser(assistantRuntime.messages),
-    [assistantRuntime.messages],
-  )
-  const assistantTurnPending = !assistantRuntime.storageLoading
-    && (assistantRuntime.pending || assistantTurnHasPendingActivity)
-  const isAwaitingAssistantText = assistantTurnPending && !assistantTurnHasVisibleText
-  const activeThinkingAssistantMessageId = useMemo(() => {
-    return resolveWorkspaceAssistantActiveThinkingMessageId({
-      pending: assistantTurnPending,
-      messages: assistantRuntime.messages,
-    })
-  }, [assistantRuntime.messages, assistantTurnPending])
-  const showPendingAssistantTurnPlaceholder = shouldShowPendingAssistantTurnPlaceholder({
-    pending: isAwaitingAssistantText,
-    activeAssistantMessageId: activeThinkingAssistantMessageId,
-    hasVisibleAssistantText: assistantTurnHasVisibleText,
+  const awaitingUserInput = resolveWorkspaceAssistantAwaitingUserInput({
+    replyInFlight: assistantRuntime.replyInFlight,
+    hasPendingInteraction: Boolean(pendingInteraction),
+  })
+  const awaitingExternalTask = resolveWorkspaceAssistantAwaitingExternalTask({
+    replyInFlight: assistantRuntime.replyInFlight,
+    currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
+    activeExternalTaskOperationId,
+  })
+  const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
+    storageLoading: assistantRuntime.storageLoading,
+    replyInFlight: assistantRuntime.replyInFlight,
+    awaitingUserInput,
+    awaitingExternalTask,
   })
   const suppressActiveRunCard = shouldSuppressWorkspaceAssistantOperationRunCard({
     operationId: assistantRuntime.pendingOperationId,
@@ -675,11 +694,10 @@ export default function WorkspaceAssistantPanel({
                       {() => (
                         <WorkspaceAssistantThreadMessage
                           messagePartComponents={partComponents}
-                          activeThinkingAssistantMessageId={activeThinkingAssistantMessageId}
                         />
                       )}
                     </ThreadPrimitive.Messages>
-                    {showPendingAssistantTurnPlaceholder ? (
+                    {showAssistantReplyLoading ? (
                       <WorkspaceAssistantPendingTurnPlaceholder />
                     ) : null}
                     {showActiveRunCard ? (

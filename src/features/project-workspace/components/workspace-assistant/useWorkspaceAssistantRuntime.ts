@@ -73,6 +73,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   messageCount: number
   status: ChatStatus
   pending: boolean
+  replyInFlight: boolean
   controlPending: boolean
   pendingApprovalId: string | null
   approvalRespondedIds: ReadonlySet<string>
@@ -814,6 +815,9 @@ export function useWorkspaceAssistantRuntime({
     : null
   const pendingRun = activeControlOperationRun ?? streamedActivityOperationRun ?? serverOperationRun
   const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(pendingRun)
+  const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
+  const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
+  const replyInFlight = chatReplyInFlight || controlPending
 
   return {
     runtime,
@@ -821,7 +825,8 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: Boolean(pendingRun) || chat.status === 'submitted' || chat.status === 'streaming',
-    controlPending: Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status)),
+    replyInFlight,
+    controlPending,
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,

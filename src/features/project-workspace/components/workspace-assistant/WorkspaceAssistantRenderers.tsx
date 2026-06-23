@@ -9,7 +9,6 @@ import {
   type ReasoningMessagePartProps,
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
-import type { UIMessage } from 'ai'
 import type { ComponentProps } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -73,139 +72,6 @@ export function setWorkspaceAssistantToolDetailsOpen(toolCallId: string, open: b
     return
   }
   workspaceAssistantToolDetailsOpenIds.delete(toolCallId)
-}
-
-export function findLatestAssistantMessageIdAfterLatestUser(
-  messages: readonly Pick<UIMessage, 'id' | 'role'>[],
-): string | null {
-  return findLatestAssistantMessageAfterLatestUser(messages)?.id ?? null
-}
-
-function findLatestAssistantMessageAfterLatestUser<TMessage extends Pick<UIMessage, 'id' | 'role'>>(
-  messages: readonly TMessage[],
-): TMessage | null {
-  let latestUserMessageIndex = -1
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    if (messages[messageIndex]?.role === 'user') {
-      latestUserMessageIndex = messageIndex
-      break
-    }
-  }
-
-  for (let messageIndex = messages.length - 1; messageIndex > latestUserMessageIndex; messageIndex -= 1) {
-    const message = messages[messageIndex]
-    if (message?.role === 'assistant') return message
-  }
-
-  return null
-}
-
-export function hasWorkspaceAssistantVisibleTextAfterLatestUser(
-  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
-): boolean {
-  let latestUserMessageIndex = -1
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    if (messages[messageIndex]?.role === 'user') {
-      latestUserMessageIndex = messageIndex
-      break
-    }
-  }
-
-  for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
-    const message = messages[messageIndex]
-    if (!message || message.role !== 'assistant') continue
-    const hasVisibleText = message.parts.some(isWorkspaceAssistantVisibleTextPart)
-    if (hasVisibleText) return true
-  }
-
-  return false
-}
-
-function isWorkspaceAssistantVisibleTextPart(part: unknown): boolean {
-  return isRecord(part)
-    && part.type === 'text'
-    && typeof part.text === 'string'
-    && part.text.trim().length > 0
-}
-
-function isWorkspaceAssistantRunningRunPart(part: unknown): boolean {
-  if (!isRecord(part) || part.type !== 'data-agent-run') return false
-  const data = isRecord(part.data) ? part.data : null
-  return data?.status === 'running'
-}
-
-function isWorkspaceAssistantToolPart(part: unknown): part is Record<string, unknown> {
-  if (!isRecord(part) || typeof part.type !== 'string') return false
-  return part.type === 'dynamic-tool' || part.type.startsWith('tool-')
-}
-
-function isWorkspaceAssistantActiveToolPart(part: unknown): boolean {
-  if (!isWorkspaceAssistantToolPart(part)) return false
-  return part.state === 'input-streaming' || part.state === 'input-available'
-}
-
-function isWorkspaceAssistantTerminalPausePart(part: unknown): boolean {
-  if (!isRecord(part) || typeof part.type !== 'string') return false
-  return part.type === 'data-agent-stop'
-    || part.type === 'data-agent-interruption'
-    || part.type === 'data-assistant-choice-card'
-}
-
-export function hasWorkspaceAssistantPendingActivityAfterLatestUser(
-  messages: readonly Pick<UIMessage, 'role' | 'parts'>[],
-): boolean {
-  let latestUserMessageIndex = -1
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    if (messages[messageIndex]?.role === 'user') {
-      latestUserMessageIndex = messageIndex
-      break
-    }
-  }
-
-  let hasActiveToolActivity = false
-  let hasPreTextRunActivity = false
-  let hasVisibleText = false
-  for (let messageIndex = latestUserMessageIndex + 1; messageIndex < messages.length; messageIndex += 1) {
-    const message = messages[messageIndex]
-    if (!message || message.role !== 'assistant') continue
-    for (const part of message.parts) {
-      if (isWorkspaceAssistantTerminalPausePart(part)) return false
-      if (isWorkspaceAssistantVisibleTextPart(part)) {
-        hasVisibleText = true
-        continue
-      }
-      if (isWorkspaceAssistantActiveToolPart(part)) {
-        hasActiveToolActivity = true
-        continue
-      }
-      if (!hasVisibleText && isWorkspaceAssistantRunningRunPart(part)) {
-        hasPreTextRunActivity = true
-      }
-    }
-  }
-
-  return hasActiveToolActivity || (hasPreTextRunActivity && !hasVisibleText)
-}
-
-export function resolveWorkspaceAssistantActiveThinkingMessageId(params: {
-  readonly pending: boolean
-  readonly messages: readonly (Pick<UIMessage, 'id' | 'role'> & Partial<Pick<UIMessage, 'parts'>>)[]
-}): string | null {
-  if (!params.pending) return null
-  const latestAssistantMessage = findLatestAssistantMessageAfterLatestUser(params.messages)
-  if (!latestAssistantMessage) return null
-  if (latestAssistantMessage.parts?.some(isWorkspaceAssistantTerminalPausePart)) return null
-  return latestAssistantMessage.id
-}
-
-export function shouldShowPendingAssistantTurnPlaceholder(params: {
-  readonly pending: boolean
-  readonly activeAssistantMessageId: string | null
-  readonly hasVisibleAssistantText: boolean
-}): boolean {
-  return params.pending
-    && !params.activeAssistantMessageId
-    && !params.hasVisibleAssistantText
 }
 
 export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {
@@ -1381,14 +1247,7 @@ function HiddenConversationSummaryMessage(props: {
 
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: MessagePartComponents
-  activeThinkingAssistantMessageId: string | null
 }) {
-  const showInlineThinkingIndicator = useMessage((state) => (
-    props.activeThinkingAssistantMessageId !== null
-    && state.role === 'assistant'
-    && state.id === props.activeThinkingAssistantMessageId
-  ))
-
   return (
     <>
       <MessagePrimitive.If user>
@@ -1405,9 +1264,6 @@ export function WorkspaceAssistantThreadMessage(props: {
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
             <MessagePrimitive.Parts components={props.messagePartComponents} />
-            {showInlineThinkingIndicator ? (
-              <WorkspaceAssistantThinkingIndicator status="streaming" />
-            ) : null}
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>
