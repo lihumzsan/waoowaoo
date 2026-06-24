@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
-import { AppIcon, BrandLogoMark, type AppIconName } from '@/components/ui/icons'
+import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import UpdateNoticeModal from './UpdateNoticeModal'
 import { useGithubReleaseUpdate } from '@/hooks/common/useGithubReleaseUpdate'
 import { Link } from '@/i18n/navigation'
@@ -342,8 +343,9 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                 rel={session ? 'noopener noreferrer' : undefined}
                 className="group"
               >
-                <BrandLogoMark
-                  title={tc('appName')}
+                <Image
+                  src="/logo-small.png"
+                  alt={tc('appName')}
                   width={200}
                   height={62}
                   className="h-[62px] w-[200px] object-contain transition-transform group-hover:scale-105"
