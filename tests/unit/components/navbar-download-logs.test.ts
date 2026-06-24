@@ -81,6 +81,7 @@ const messages = {
   },
   common: {
     appName: 'waoowaoo',
+    loading: '加载中',
     betaVersion: 'Beta v{version}',
     updateNotice: {
       openDialog: '打开更新弹窗',
@@ -126,6 +127,39 @@ describe('Navbar compact split navigation', () => {
     expect(html).toContain('pointer-events-none fixed')
     expect(html).toContain('glass-surface-nav')
     expect(html).not.toContain('glass-nav sticky')
+  })
+
+  it('renders the navbar brand as a square svg mark instead of a stretched bitmap', () => {
+    Reflect.set(globalThis, 'React', React)
+    useSessionMock.mockReturnValue({
+      data: { user: { name: 'Earth' } },
+      status: 'authenticated',
+    })
+
+    const html = renderWithIntl(createElement(Navbar))
+
+    expect(html).not.toContain('logo-small.png')
+    expect(html).not.toContain('w-[200px]')
+    expect(html).not.toContain('h-[62px]')
+    expect(html).toContain('viewBox="0 0 120 120"')
+    expect(html).toContain('h-[52px] w-[52px]')
+  })
+
+  it('shows a visible animated skeleton while the session is loading', () => {
+    Reflect.set(globalThis, 'React', React)
+    useSessionMock.mockReturnValue({
+      data: null,
+      status: 'loading',
+    })
+
+    const html = renderWithIntl(createElement(Navbar))
+
+    expect(html).toContain('role="status"')
+    expect(html).toContain('aria-label="加载中"')
+    expect(html).toContain('motion-safe:animate-pulse')
+    expect(html).toContain('bg-[var(--glass-tone-neutral-bg)]')
+    expect(html).toContain('border-[var(--glass-stroke-base)]')
+    expect(html).not.toContain('bg-[var(--glass-bg-muted)] animate-pulse')
   })
 
   it('keeps signed-in profile section targets behind deployment feature hydration', () => {

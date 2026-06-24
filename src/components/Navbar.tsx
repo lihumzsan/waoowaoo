@@ -1,14 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import { BrandLogoShape } from '@/components/ui/icons/BrandLogoShape'
 import UpdateNoticeModal from './UpdateNoticeModal'
 import { useGithubReleaseUpdate } from '@/hooks/common/useGithubReleaseUpdate'
 import { Link } from '@/i18n/navigation'
@@ -93,10 +93,25 @@ export function buildNavbarSettingsMenuItems(
   ]
 }
 
+function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
+  const skeletonClassName =
+    'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-tone-neutral-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
+
+  return (
+    <div role="status" aria-label={label} className="flex items-center gap-2.5">
+      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-20`} />
+      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-24`} />
+      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-10`} />
+      <span className="sr-only">{label}</span>
+    </div>
+  )
+}
+
 export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFeatures = null }: NavbarProps) {
   const { data: session, status } = useSession()
   const t = useTranslations('nav')
   const tc = useTranslations('common')
+  const logoUid = `navbar-logo-${useId().replace(/:/g, '')}`
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const showUpdateCheck = deploymentFeatures?.showUpdateCheck === true
   const { currentVersion, update, shouldPulse, showModal, openModal, dismissCurrentUpdate, checkNow } = useGithubReleaseUpdate({
@@ -341,14 +356,13 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
                 href={session ? buildAuthenticatedHomeTarget() : { pathname: '/' }}
                 target={session ? '_blank' : undefined}
                 rel={session ? 'noopener noreferrer' : undefined}
-                className="group"
+                className="group flex h-[52px] w-[52px] items-center justify-center"
               >
-                <Image
-                  src="/logo-small.png"
-                  alt={tc('appName')}
-                  width={200}
-                  height={62}
-                  className="h-[62px] w-[200px] object-contain transition-transform group-hover:scale-105"
+                <BrandLogoShape
+                  uid={logoUid}
+                  size={52}
+                  title={tc('appName')}
+                  className="h-[52px] w-[52px] transition-transform group-hover:scale-105"
                 />
               </Link>
               {showUpdateCheck && update ? (
@@ -374,12 +388,7 @@ export default function Navbar({ reserveLayoutSpace = true, initialDeploymentFea
             </div>
             <div className="glass-surface-nav pointer-events-auto flex min-h-[52px] items-center gap-2 px-2 py-2">
               {status === 'loading' ? (
-                /* Session 加载中骨架屏 */
-                <div className="flex items-center space-x-4">
-                  <div className="h-4 w-16 rounded-full bg-[var(--glass-bg-muted)] animate-pulse" />
-                  <div className="h-4 w-16 rounded-full bg-[var(--glass-bg-muted)] animate-pulse" />
-                  <div className="h-8 w-20 rounded-lg bg-[var(--glass-bg-muted)] animate-pulse" />
-                </div>
+                <NavbarSessionLoadingSkeleton label={tc('loading')} />
               ) : session ? (
                 <>
                   {showPricingLink ? (
