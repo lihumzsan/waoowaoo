@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query'
+import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { queryKeys } from './keys'
 import { TASK_EVENT_TYPE, TASK_TYPE, type WorkspaceResourceName } from '@/lib/task/types'
 import type {
@@ -87,6 +87,31 @@ function readString(value: unknown): string | null {
 
 function readPayloadRecord(value: unknown): UnknownRecord | null {
   return isRecord(value) ? value : null
+}
+
+function normalizeTaskType(value: unknown): string | null {
+  return readString(value)?.toLowerCase() ?? null
+}
+
+function isAssetTaskType(taskType: string | null): boolean {
+  return taskType === TASK_TYPE.IMAGE_CHARACTER ||
+    taskType === TASK_TYPE.IMAGE_LOCATION ||
+    taskType === TASK_TYPE.MODIFY_ASSET_IMAGE ||
+    taskType === TASK_TYPE.AI_MODIFY_APPEARANCE ||
+    taskType === TASK_TYPE.AI_MODIFY_LOCATION ||
+    taskType === TASK_TYPE.AI_MODIFY_PROP ||
+    taskType === TASK_TYPE.AI_CREATE_CHARACTER ||
+    taskType === TASK_TYPE.AI_CREATE_LOCATION ||
+    taskType === TASK_TYPE.REFERENCE_TO_CHARACTER
+}
+
+function isProjectAssetTargetType(targetType: string | null): boolean {
+  return targetType === 'CharacterAppearance' ||
+    targetType === 'LocationImage' ||
+    targetType === 'ProjectCharacter' ||
+    targetType === 'ProjectLocation' ||
+    targetType === 'ProjectAsset' ||
+    targetType === 'ProjectProp'
 }
 
 function episodeScopedChange(
@@ -326,8 +351,8 @@ export function extractWorkspaceResourceChangesFromTaskLifecycleEvent(params: {
 
   const payload = readPayloadRecord(params.payload)
   const episodeId = readString(params.episodeId) ?? readString(payload?.episodeId)
-  const taskType = readString(params.taskType)
-  if (!taskType) return []
+  const taskType = normalizeTaskType(params.taskType)
+  const targetType = readString(params.targetType)
 
   if (
     taskType === TASK_TYPE.EDIT_SCREENPLAY_GENERATE ||
@@ -359,17 +384,7 @@ export function extractWorkspaceResourceChangesFromTaskLifecycleEvent(params: {
     return episodeId ? mediaResourceChanges(params.projectId, episodeId) : []
   }
 
-  if (
-    taskType === TASK_TYPE.IMAGE_CHARACTER ||
-    taskType === TASK_TYPE.IMAGE_LOCATION ||
-    taskType === TASK_TYPE.MODIFY_ASSET_IMAGE ||
-    taskType === TASK_TYPE.AI_MODIFY_APPEARANCE ||
-    taskType === TASK_TYPE.AI_MODIFY_LOCATION ||
-    taskType === TASK_TYPE.AI_MODIFY_PROP ||
-    taskType === TASK_TYPE.AI_CREATE_CHARACTER ||
-    taskType === TASK_TYPE.AI_CREATE_LOCATION ||
-    taskType === TASK_TYPE.REFERENCE_TO_CHARACTER
-  ) {
+  if (isAssetTaskType(taskType) || isProjectAssetTargetType(targetType)) {
     return assetResourceChanges(params.projectId, episodeId)
   }
 
@@ -397,6 +412,17 @@ export async function syncWorkspaceResourceChanges(params: {
 }) {
   const changes = dedupeResourceChanges(params.changes)
   const invalidations: Promise<unknown>[] = []
+  const activeRefetchKeys = new Set<string>()
+
+  const refetchActiveOnce = (queryKey: QueryKey) => {
+    const key = JSON.stringify(queryKey)
+    if (activeRefetchKeys.has(key)) return
+    activeRefetchKeys.add(key)
+    invalidations.push(params.queryClient.refetchQueries({
+      queryKey,
+      type: 'active',
+    }))
+  }
 
   for (const change of changes) {
     if (change.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY) {
@@ -426,15 +452,17 @@ export async function syncWorkspaceResourceChanges(params: {
     }
 
     if (change.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT) {
+      const queryKey = queryKeys.project.editScript(change.projectId, change.episodeId)
       if (change.data !== undefined) {
         params.queryClient.setQueryData(
-          queryKeys.project.editScript(change.projectId, change.episodeId),
+          queryKey,
           change.data,
         )
       }
       invalidations.push(params.queryClient.invalidateQueries({
-        queryKey: queryKeys.project.editScript(change.projectId, change.episodeId),
+        queryKey,
       }))
+      refetchActiveOnce(queryKey)
       continue
     }
 
@@ -490,9 +518,11 @@ export async function syncWorkspaceResourceChanges(params: {
         queryKey: queryKeys.projectAssets.all(change.projectId),
       }))
       if (change.episodeId) {
+        const editScriptQueryKey = queryKeys.project.editScript(change.projectId, change.episodeId)
         invalidations.push(params.queryClient.invalidateQueries({
-          queryKey: queryKeys.project.editScript(change.projectId, change.episodeId),
+          queryKey: editScriptQueryKey,
         }))
+        refetchActiveOnce(editScriptQueryKey)
       }
       continue
     }

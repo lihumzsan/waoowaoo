@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   extractWorkspaceResourceChangesFromTaskLifecycleEvent,
   extractWorkspaceResourceChangesFromWriteResult,
+  syncWorkspaceResourceChanges,
   syncWorkspaceResourceChangesFromWriteResult,
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/query/resource-change-sync'
@@ -124,5 +125,70 @@ describe('resource-change-sync', () => {
       'episode-1',
       'episode-1',
     ])
+  })
+
+  it('maps asset image completion to edit script resources from either task type or target type', () => {
+    const byTaskType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+      taskType: TASK_TYPE.IMAGE_CHARACTER,
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      projectId: 'project-1',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      episodeId: 'episode-1',
+      payload: {
+        imageUrl: 'images/character.png',
+      },
+    })
+    const byTargetType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+      taskType: null,
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      projectId: 'project-1',
+      targetType: 'LocationImage',
+      targetId: 'location-image-1',
+      episodeId: 'episode-1',
+      payload: {
+        imageUrl: 'images/location.png',
+      },
+    })
+
+    for (const changes of [byTaskType, byTargetType]) {
+      expect(changes.map((change) => change.kind)).toEqual([
+        WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS,
+        WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+        WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
+        WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
+        WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
+      ])
+      expect(changes.some((change) => (
+        change.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT &&
+        change.episodeId === 'episode-1'
+      ))).toBe(true)
+    }
+  })
+
+  it('actively refetches edit script when project asset resources change for an episode', async () => {
+    const queryClient = new QueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
+    const refetchQueries = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
+
+    await syncWorkspaceResourceChanges({
+      queryClient,
+      changes: [
+        {
+          kind: WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS,
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+        },
+      ],
+    })
+
+    const editScriptQueryKey = queryKeys.project.editScript('project-1', 'episode-1')
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: editScriptQueryKey,
+    })
+    expect(refetchQueries).toHaveBeenCalledWith({
+      queryKey: editScriptQueryKey,
+      type: 'active',
+    })
   })
 })

@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryKeys } from '@/lib/query/keys'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE } from '@/lib/task/types'
 
-type InvalidateArg = { queryKey?: readonly unknown[]; exact?: boolean }
+type InvalidateArg = { queryKey?: readonly unknown[]; exact?: boolean; type?: 'active' | 'all' | 'inactive' }
 
 type EffectCleanup = (() => void) | void | null
 
 const runtime = vi.hoisted(() => ({
   queryClient: {
     invalidateQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
+    refetchQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
     setQueryData: vi.fn(),
     getQueriesData: vi.fn(() => []),
   },
@@ -143,7 +144,7 @@ describe('sse invalidation behavior', () => {
       projectId: 'project-1',
       userId: 'user-1',
       ts: '2026-04-24T00:00:00.000Z',
-      taskType: 'IMAGE_CHARACTER',
+      taskType: 'image_character',
       targetType: 'CharacterAppearance',
       targetId: 'appearance-1',
       episodeId: 'episode-1',
@@ -165,7 +166,7 @@ describe('sse invalidation behavior', () => {
       projectId: 'project-1',
       userId: 'user-1',
       ts: '2026-04-24T00:00:01.000Z',
-      taskType: 'IMAGE_CHARACTER',
+      taskType: 'image_character',
       targetType: 'CharacterAppearance',
       targetId: 'appearance-1',
       episodeId: 'episode-1',
@@ -183,6 +184,11 @@ describe('sse invalidation behavior', () => {
         && key[1] === 'project-1'
         && arg.exact === false
     })).toBe(true)
+
+    expect(runtime.queryClient.refetchQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.project.editScript('project-1', 'episode-1'),
+      type: 'active',
+    })
 
     expect(overlayMock.applyTaskLifecycleToOverlay).toHaveBeenCalledWith(
       runtime.queryClient,
