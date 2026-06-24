@@ -3,7 +3,7 @@ import { generateStoryboardPanelFinalPrompts } from '@/lib/edit-script/storyboar
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
 const promptMock = vi.hoisted(() => ({
-  buildAiPrompt: vi.fn((input: { promptId: string; variables: Record<string, string> }) => JSON.stringify(input)),
+  buildAiPromptContent: vi.fn((input: { promptId: string; variables: Record<string, string> }) => JSON.stringify(input)),
 }))
 
 const aiExecMock = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ vi.mock('@/lib/ai-prompts', () => ({
     EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
     EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK: 'edit-script-storyboard-panel-final-prompt-block',
   },
-  buildAiPrompt: promptMock.buildAiPrompt,
+  buildAiPromptContent: promptMock.buildAiPromptContent,
 }))
 
 vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
@@ -229,7 +229,7 @@ describe('edit-script storyboard spatial text blocking generation', () => {
         shotBlocking: cameraPanel.shotBlocking,
       },
     })
-    const promptCalls = promptMock.buildAiPrompt.mock.calls.map((call) => call[0])
+    const promptCalls = promptMock.buildAiPromptContent.mock.calls.map((call) => call[0])
     expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门')
     expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).not.toContain('placementZones')
     expect(promptCalls[0]?.variables.video_block_json).toContain('edit-1:videoBlock:1')

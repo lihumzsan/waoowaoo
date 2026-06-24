@@ -23,9 +23,10 @@ describe('BrandLoading', () => {
     const html = renderToStaticMarkup(createElement(BrandLoading))
 
     expect(html).toContain('data-brand-logo-motion="loading"')
-    expect(html).toContain('<title')
+    expect(html).toContain('role="img"')
+    expect(html).toContain('aria-label="waoowaoo"')
     expect(html).toContain('waoowaoo')
-    expect(html).toContain('href="/logo-small.png"')
+    expect(html).toContain('logo-small.png')
     expect(html).toContain('brand-logo-mark__reveal')
     expect(html).toContain('brand-logo-mark__sweep')
     expect(html).toContain('class="sr-only"')

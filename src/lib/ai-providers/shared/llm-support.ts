@@ -1,6 +1,15 @@
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
+import {
+  chatMessageHasCacheControl,
+  flattenChatMessageContent,
+  normalizeChatMessageContentParts,
+  type ChatMessage,
+  type ChatMessageContent,
+  type PromptCacheControl,
+  type TextContentPart,
+} from '@/lib/ai-registry/message-content'
 
 export interface ProviderChatCompletionOptions {
   temperature?: number
@@ -35,39 +44,14 @@ export interface ProviderChatCompletionStreamCallbacks {
   onError?: (error: unknown, step?: InternalLLMStreamStepMeta) => void
 }
 
-export type ProviderPromptCacheControl = {
-  type: 'ephemeral'
-  ttl?: '1h'
-}
+export type ProviderPromptCacheControl = PromptCacheControl
+export type ProviderTextContentPart = TextContentPart
+export type ProviderChatMessageContent = ChatMessageContent
+export type ProviderChatMessage = ChatMessage
 
-export type ProviderTextContentPart = {
-  type: 'text'
-  text: string
-  cacheControl?: ProviderPromptCacheControl
-}
-
-export type ProviderChatMessageContent = string | ProviderTextContentPart[]
-
-export type ProviderChatMessage = {
-  role: 'user' | 'assistant' | 'system'
-  content: ProviderChatMessageContent
-}
-
-export function flattenProviderMessageContent(content: ProviderChatMessageContent): string {
-  if (typeof content === 'string') return content
-  return content.map((part) => part.text).join('')
-}
-
-export function normalizeProviderContentParts(content: ProviderChatMessageContent): ProviderTextContentPart[] {
-  if (typeof content === 'string') {
-    return content ? [{ type: 'text', text: content }] : []
-  }
-  return content.filter((part) => part.text.length > 0)
-}
-
-export function providerMessageHasCacheControl(message: ProviderChatMessage): boolean {
-  return normalizeProviderContentParts(message.content).some((part) => Boolean(part.cacheControl))
-}
+export const flattenProviderMessageContent = flattenChatMessageContent
+export const normalizeProviderContentParts = normalizeChatMessageContentParts
+export const providerMessageHasCacheControl = chatMessageHasCacheControl
 
 export function completionUsageSummary(
   completion: {

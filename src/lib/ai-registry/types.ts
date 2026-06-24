@@ -1,7 +1,7 @@
 import type OpenAI from 'openai'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
-import type { ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
+import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
 
 export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
@@ -68,7 +68,7 @@ export type AiResolvedLlmSelection = AiResolvedSelection
 
 export type AiLlmMessage = {
   role: 'user' | 'assistant' | 'system'
-  content: ProviderChatMessageContent
+  content: ChatMessageContent
 }
 
 export interface ChatCompletionOptions {
@@ -104,7 +104,7 @@ export interface ChatCompletionStreamCallbacks {
   onError?: (error: unknown, step?: InternalLLMStreamStepMeta) => void
 }
 
-export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: ProviderChatMessageContent }
+export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: ChatMessageContent }
 
 export type AiRuntimeErrorCode =
   | 'NETWORK_ERROR'
@@ -132,7 +132,7 @@ export type AiStepMeta = {
 
 export type AiTextMessages = Array<{
   role: 'user' | 'assistant' | 'system'
-  content: ProviderChatMessageContent
+  content: ChatMessageContent
 }>
 
 export type AiStepExecutionInput = {

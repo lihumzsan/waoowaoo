@@ -1,7 +1,7 @@
 import { AI_PROMPT_CATALOG } from './registry'
 import { getAiPromptTemplate } from './template-store'
 import type { BuildAiPromptContentInput, BuildAiPromptInput } from './types'
-import type { ProviderChatMessageContent, ProviderTextContentPart } from '@/lib/ai-providers/shared/llm-support'
+import type { ChatMessageContent, TextContentPart } from '@/lib/ai-registry/message-content'
 
 const SINGLE_PLACEHOLDER_PATTERN = /\{([A-Za-z0-9_]+)\}/g
 const DOUBLE_PLACEHOLDER_PATTERN = /\{\{([A-Za-z0-9_]+)\}\}/g
@@ -79,7 +79,7 @@ function resolvePromptTemplate(input: BuildAiPromptInput) {
   return { template, variables, entry }
 }
 
-function pushPromptPart(parts: ProviderTextContentPart[], next: ProviderTextContentPart) {
+function pushPromptPart(parts: TextContentPart[], next: TextContentPart) {
   if (!next.text) return
   const previous = parts[parts.length - 1]
   if (!next.cacheControl && previous && !previous.cacheControl) {
@@ -89,14 +89,14 @@ function pushPromptPart(parts: ProviderTextContentPart[], next: ProviderTextCont
   parts.push(next)
 }
 
-export function buildAiPromptContent(input: BuildAiPromptContentInput): ProviderChatMessageContent {
+export function buildAiPromptContent(input: BuildAiPromptContentInput): ChatMessageContent {
   const { template, variables } = resolvePromptTemplate(input)
   const cacheVariableKeys = new Set(input.cacheVariableKeys ?? [])
   if (cacheVariableKeys.size === 0) return buildAiPrompt(input)
 
   const minCacheChars = Math.max(1, Math.floor(input.minCacheChars ?? DEFAULT_MIN_CACHE_CHARS))
   const cacheControl = input.cacheControl ?? DEFAULT_CACHE_CONTROL
-  const parts: ProviderTextContentPart[] = []
+  const parts: TextContentPart[] = []
   let cursor = 0
 
   for (const match of template.matchAll(PLACEHOLDER_TOKEN_PATTERN)) {

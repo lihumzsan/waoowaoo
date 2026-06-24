@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
-import { flattenProviderMessageContent } from '@/lib/ai-providers/shared/llm-support'
+import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { safeParseJsonObject } from '@/lib/json-repair'
@@ -303,7 +303,7 @@ async function runMergePromptStep(input: {
     cacheVariableKeys: Object.keys(input.variables),
     minCacheChars: EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS,
   })
-  const finalPrompt = flattenProviderMessageContent(finalPromptContent)
+  const finalPrompt = flattenChatMessageContent(finalPromptContent)
   const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
   const runCompletion = async () => executeAiTextStep({
     userId: input.userId,
