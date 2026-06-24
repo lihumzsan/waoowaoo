@@ -528,6 +528,8 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly previewImageUrl?: string | null
   readonly previewAspectRatio?: number | null
   readonly previewDisplayHeight?: number | null
+  /** 待生成媒体的加载背景图(用户选中的视觉风格图);无则退回模糊磨砂底 */
+  readonly loadingStyleImageUrl?: string | null
   readonly scriptDetails?: WorkspaceCanvasScriptDetails
   readonly shotDetails?: WorkspaceCanvasShotDetails
   readonly imageDetails?: WorkspaceCanvasImageDetails

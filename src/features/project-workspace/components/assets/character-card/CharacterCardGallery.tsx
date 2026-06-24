@@ -3,10 +3,11 @@
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { resolveErrorDisplay } from '@/lib/errors/display'
-import TaskStatusOverlay from '@/components/task/TaskStatusOverlay'
 import type { TaskPresentationState } from '@/lib/task/presentation'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
+import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
+import { buildAssetImageProgressSource } from '@/lib/task/asset-image-progress'
 
 type CharacterCardGalleryProps =
   | {
@@ -63,7 +64,14 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
                 />
 
                 {isThisTaskRunning && (
-                  <TaskStatusOverlay state={props.displayTaskPresentation} />
+                  <MediaGenerationLoading
+                    taskState={buildAssetImageProgressSource({
+                      assetKind: 'character',
+                      targetId: `${props.characterId}:${originalIndex}`,
+                      running: true,
+                    })}
+                    size={48}
+                  />
                 )}
 
                 <div
@@ -136,7 +144,14 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
         </div>
       )}
       {props.isAppearanceTaskRunning && (
-        <TaskStatusOverlay state={props.displayTaskPresentation} />
+        <MediaGenerationLoading
+          taskState={buildAssetImageProgressSource({
+            assetKind: 'character',
+            targetId: props.characterName,
+            running: true,
+          })}
+          size={64}
+        />
       )}
       {!props.isAppearanceTaskRunning && (
         <div className="absolute top-2 left-2 flex gap-1">

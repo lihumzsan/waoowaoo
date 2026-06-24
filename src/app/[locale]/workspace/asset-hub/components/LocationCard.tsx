@@ -12,10 +12,10 @@ import {
 } from '@/lib/query/mutations'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
-import TaskStatusOverlay from '@/components/task/TaskStatusOverlay'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
+import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
+import { buildAssetImageProgressSource } from '@/lib/task/asset-image-progress'
 import ImageGenerationInlineCountButton from '@/components/image-generation/ImageGenerationInlineCountButton'
-import ImageGenerationSlotOverlay from '@/components/image-generation/ImageGenerationSlotOverlay'
 import { getImageGenerationCountOptions } from '@/lib/image-generation/count'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 import {
@@ -317,11 +317,15 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
                       )}
                     </div>
                   )}
-                  {phase === 'generating' && (
-                    <ImageGenerationSlotOverlay label={tAssets('image.generating')} />
-                  )}
-                  {phase === 'regenerating' && (
-                    <ImageGenerationSlotOverlay label={tAssets('image.regenerating')} />
+                  {(phase === 'generating' || phase === 'regenerating') && (
+                    <MediaGenerationLoading
+                      taskState={buildAssetImageProgressSource({
+                        assetKind: 'location',
+                        targetId: img.id,
+                        running: true,
+                      })}
+                      size={48}
+                    />
                   )}
                   <div className={`absolute bottom-2 left-2 text-xs px-2 py-0.5 rounded ${isThisSelected ? 'glass-chip glass-chip-success' : 'glass-chip glass-chip-neutral'}`}>
                     {tAssets('image.optionNumber', { number: img.imageIndex + 1 })}
@@ -431,7 +435,14 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
           </div>
         )}
         {isTaskRunning && (
-          <TaskStatusOverlay state={displayTaskPresentation} />
+          <MediaGenerationLoading
+            taskState={buildAssetImageProgressSource({
+              assetKind: 'location',
+              targetId: location.id,
+              running: true,
+            })}
+            size={64}
+          />
         )}
         {taskErrorDisplay && !isTaskRunning && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[var(--glass-danger-ring)] text-[var(--glass-tone-danger-fg)] p-3 gap-1">

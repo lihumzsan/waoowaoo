@@ -3,11 +3,11 @@
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { resolveErrorDisplay } from '@/lib/errors/display'
-import TaskStatusOverlay from '@/components/task/TaskStatusOverlay'
 import type { TaskPresentationState } from '@/lib/task/presentation'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
-import ImageGenerationSlotOverlay from '@/components/image-generation/ImageGenerationSlotOverlay'
+import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
+import { buildAssetImageProgressSource } from '@/lib/task/asset-image-progress'
 import {
   countGeneratedImageSlots,
   resolveGroupedImageSlotPhase,
@@ -118,12 +118,15 @@ export default function LocationImageList(props: LocationImageListProps) {
                   </div>
                 )}
 
-                {phase === 'generating' && (
-                  <ImageGenerationSlotOverlay label={t('image.generating')} />
-                )}
-
-                {phase === 'regenerating' && (
-                  <ImageGenerationSlotOverlay label={t('image.regenerating')} />
+                {(phase === 'generating' || phase === 'regenerating') && (
+                  <MediaGenerationLoading
+                    taskState={buildAssetImageProgressSource({
+                      assetKind: 'location',
+                      targetId: img.id,
+                      running: true,
+                    })}
+                    size={48}
+                  />
                 )}
 
                 <div
@@ -210,7 +213,14 @@ export default function LocationImageList(props: LocationImageListProps) {
         </div>
       )}
       {props.isTaskRunning && (
-        <TaskStatusOverlay state={props.displayTaskPresentation} />
+        <MediaGenerationLoading
+          taskState={buildAssetImageProgressSource({
+            assetKind: 'location',
+            targetId: props.locationName,
+            running: true,
+          })}
+          size={64}
+        />
       )}
       {!props.isTaskRunning && (
         <div className="absolute top-2 left-2 flex gap-1">

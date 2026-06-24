@@ -626,13 +626,13 @@ describe('workspace assistant panel layout', () => {
     expect(rendererSource).not.toContain('onClick={() => setPreviewImageUrl(preview.imageUrl)}')
   })
 
-  it('keeps estimated progress overlays from blurring generated card content', () => {
+  it('keeps the unified media-generation loading overlay non-interactive and full-cover', () => {
     const overlaySource = readFileSync(
-      join(process.cwd(), 'src/components/task/EstimatedTaskProgressOverlay.tsx'),
+      join(process.cwd(), 'src/components/media/MediaGenerationLoading.tsx'),
       'utf8',
     )
 
+    // 统一加载层覆盖整块媒体区域,且不能拦截指针事件(否则会破坏卡片交互)。
     expect(overlaySource).toContain('pointer-events-none absolute inset-0')
-    expect(overlaySource).not.toContain('backdrop-blur')
   })
 })

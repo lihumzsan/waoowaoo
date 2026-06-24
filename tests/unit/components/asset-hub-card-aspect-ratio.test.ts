@@ -29,7 +29,7 @@ vi.mock('@/components/ui/icons', () => ({
     createElement('span', { className: props.className, 'data-icon': props.name }),
 }))
 
-vi.mock('@/components/task/TaskStatusOverlay', () => ({
+vi.mock('@/components/media/MediaGenerationLoading', () => ({
   default: () => createElement('div', null, 'overlay'),
 }))
 

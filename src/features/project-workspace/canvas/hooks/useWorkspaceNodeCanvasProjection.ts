@@ -2459,8 +2459,15 @@ export function buildWorkspaceNodeCanvasProjection({
       : edge,
   )
 
+  // 给所有待生成媒体节点统一附上加载背景图(用户选中的视觉风格图),供统一加载组件使用。
+  const nodesWithLoadingStyleImage = nodes.map((node) =>
+    node.data.kind === 'shot' || node.data.kind === 'imageAsset' || node.data.kind === 'videoClip'
+      ? { ...node, data: { ...node.data, loadingStyleImageUrl: styleBiblePreviewImageUrl } }
+      : node,
+  )
+
   return {
-    nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodes)),
+    nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodesWithLoadingStyleImage)),
     edges: decoratedEdges,
   }
 }

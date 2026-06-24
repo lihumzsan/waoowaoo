@@ -9,7 +9,7 @@ vi.mock('@/components/ui/icons', () => ({
   AppIcon: () => createElement('span', null),
 }))
 
-vi.mock('@/components/task/TaskStatusOverlay', () => ({
+vi.mock('@/components/media/MediaGenerationLoading', () => ({
   default: () => createElement('div', null, 'overlay'),
 }))
 

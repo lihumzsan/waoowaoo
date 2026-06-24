@@ -5,7 +5,8 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
-import EstimatedTaskProgressOverlay, { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
+import { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
+import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
@@ -446,15 +447,6 @@ function editAssetPlaceholderIconName(kind: WorkspaceCanvasEditAssetGroupItem['k
   return kind === 'character' ? 'user' : 'mapPin'
 }
 
-function MediaSkeleton({ height }: { readonly height: number }) {
-  return (
-    <div
-      className="workspace-node-loading-surface overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100"
-      style={{ height }}
-    />
-  )
-}
-
 function validCandidateImages(data: WorkspaceCanvasFlowNode['data']): string[] {
   if (data.kind !== 'shot') return []
   return (data.imageDetails?.candidateImages ?? []).filter((url) => !url.startsWith('PENDING:'))
@@ -664,11 +656,15 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
       ? data.previewDisplayHeight
       : 118
   const running = data.__running === true
+  const loadingRingSize = Math.max(48, Math.min(96, Math.round(previewHeight * 0.5)))
   if (running && !displayVideoUrl && !displayImageUrl) {
     return (
-      <div className="relative">
-        <MediaSkeleton height={previewHeight} />
-        <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
+      <div className="relative" style={{ height: previewHeight }}>
+        <MediaGenerationLoading
+          taskState={data.taskProgress}
+          styleImageUrl={data.loadingStyleImageUrl}
+          size={loadingRingSize}
+        />
       </div>
     )
   }
@@ -683,7 +679,11 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
             buttonClassName="block w-full cursor-zoom-in overflow-hidden"
             imageClassName="block h-auto w-full object-contain"
           />
-          <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
+          <MediaGenerationLoading
+            taskState={data.taskProgress}
+            styleImageUrl={data.loadingStyleImageUrl}
+            size={loadingRingSize}
+          />
         </div>
         {!running && panelId && candidateUrls.length > 0 && canUseCandidateActions ? (
           <div className="nodrag nowheel rounded-[16px] border border-sky-100 bg-sky-50/80 p-2">
@@ -778,7 +778,11 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
           </span>
         </div>
       )}
-      <EstimatedTaskProgressOverlay taskState={data.taskProgress} />
+      <MediaGenerationLoading
+        taskState={data.taskProgress}
+        styleImageUrl={data.loadingStyleImageUrl}
+        size={loadingRingSize}
+      />
     </div>
   )
 }

@@ -14,7 +14,8 @@ import {
 } from '@/lib/query/mutations'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
-import TaskStatusOverlay from '@/components/task/TaskStatusOverlay'
+import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
+import { buildAssetImageProgressSource } from '@/lib/task/asset-image-progress'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import ImageGenerationInlineCountButton from '@/components/image-generation/ImageGenerationInlineCountButton'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
@@ -403,7 +404,14 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onEdit }: 
                     </div>
                 )}
                 {isAppearanceTaskRunning && (
-                    <TaskStatusOverlay state={displayTaskPresentation} />
+                    <MediaGenerationLoading
+                        taskState={buildAssetImageProgressSource({
+                            assetKind: 'character',
+                            targetId: character.id,
+                            running: true,
+                        })}
+                        size={64}
+                    />
                 )}
                 {taskErrorDisplay && !isAppearanceTaskRunning && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-[var(--glass-danger-ring)] text-[var(--glass-tone-danger-fg)] p-3 gap-1">
