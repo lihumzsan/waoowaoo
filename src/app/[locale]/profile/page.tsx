@@ -485,7 +485,7 @@ export default function ProfilePage() {
                     </section>
                   ) : null}
 
-                  <section className="glass-surface-soft min-h-0 flex-1 rounded-2xl border border-[var(--glass-stroke-base)] p-5">
+                  <section className="glass-surface-soft flex-none rounded-2xl border border-[var(--glass-stroke-base)] p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('accountTransactions')}</h2>
                       <button
