@@ -41,10 +41,20 @@ describe('task state service helpers', () => {
     expect(
       extractStoryboardGridPanelIds({
         storyboardGrid: {
+          mode: '2x2',
+          sourceVideoBlockId: 'edit-1:video-block:1',
           panelIds: ['panel-1', 'panel-2', 'panel-2', '', 123],
         },
       }),
     ).toEqual(['panel-1', 'panel-2'])
+    expect(
+      extractStoryboardGridPanelIds({
+        storyboardGrid: {
+          mode: '2x2',
+          panelIds: ['panel-1', 'panel-2'],
+        },
+      }),
+    ).toEqual([])
   })
 
   it('builds idle state when no tasks found', () => {
@@ -168,6 +178,7 @@ describe('task state service helpers', () => {
         payload: {
           storyboardGrid: {
             mode: '2x2',
+            sourceVideoBlockId: 'edit-1:video-block:1',
             panelIds: ['panel-1', 'panel-2', 'panel-3'],
           },
           ui: {

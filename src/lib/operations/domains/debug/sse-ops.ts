@@ -4,6 +4,7 @@ import { listEventsAfter, getProjectChannel, listRecentTerminalLifecycleEvents }
 import { listMutationBatchReplayEvents } from '@/lib/mutation-batch/service'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_STATUS, type TaskSSEEvent } from '@/lib/task/types'
 import { coerceTaskIntent } from '@/lib/task/intent'
+import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -76,12 +77,18 @@ async function listActiveLifecycleSnapshot(params: {
     const lifecycleType = row.status === TASK_STATUS.QUEUED
       ? TASK_EVENT_TYPE.CREATED
       : TASK_EVENT_TYPE.PROCESSING
-    const eventPayload: Record<string, unknown> = {
-      ...(payload || {}),
-      lifecycleType,
-      intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, row.type),
-      progress: typeof row.progress === 'number' ? row.progress : null,
-    }
+    const eventPayload = withTaskCoveredTargetsPayload({
+      taskType: row.type,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      payload: {
+        ...(payload || {}),
+        lifecycleType,
+        intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, row.type),
+        progress: typeof row.progress === 'number' ? row.progress : null,
+      },
+      coveragePayload: payload,
+    })
 
     return {
       id: `snapshot:${row.id}:${row.updatedAt.getTime()}`,

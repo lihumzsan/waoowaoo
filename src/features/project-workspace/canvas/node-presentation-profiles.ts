@@ -171,6 +171,11 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     expandedLayout: 'wide',
     defaultExpanded: false,
   },
+  storyboardPanelGeneration: {
+    collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+  },
   videoPlan: {
     collapsed: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
     expandedLayout: 'stack',

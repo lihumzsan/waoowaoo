@@ -67,6 +67,17 @@ describe('workspace canvas focus follow', () => {
     expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script_storyboard_images')).toEqual(['shot:panel-2'])
   })
 
+  it('focuses storyboard panel generation before falling back to generated shot nodes', () => {
+    const nodes = [
+      workspaceNode('space-consistency:storyboard-1', 'spaceConsistency', false),
+      workspaceNode('storyboard-panel-generation:storyboard-1', 'storyboardPanelGeneration', false),
+      workspaceNode('shot:panel-1', 'shot', false),
+    ]
+
+    expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script_storyboard'))
+      .toEqual(['storyboard-panel-generation:storyboard-1'])
+  })
+
   it('resolves confirmed style bible focus requests to the style bible card', () => {
     const nodes = [
       workspaceNode('edit-screenplay:screenplay-1', 'editScreenplay', false),

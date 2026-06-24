@@ -11,7 +11,7 @@ import {
   workspaceCanvasNodesOverlap,
 } from '@/features/project-workspace/canvas/layout/workspace-node-auto-layout'
 
-type TestNodeKind = 'shot' | 'editScript' | 'spaceConsistency' | 'videoPlan' | 'bgmScore' | 'finalTimeline'
+type TestNodeKind = 'shot' | 'editScript' | 'spaceConsistency' | 'storyboardPanelGeneration' | 'videoPlan' | 'bgmScore' | 'finalTimeline'
 
 function createNode(input: {
   readonly id: string
@@ -295,6 +295,14 @@ describe('workspace node auto layout', () => {
       width: 420,
       height: 560,
     })
+    const storyboardPanelGeneration = createNode({
+      id: 'storyboard-panel-generation:storyboard-1',
+      kind: 'storyboardPanelGeneration',
+      x: 620,
+      y: 700,
+      width: 420,
+      height: 360,
+    })
     const nextVideoPlan = createNode({
       id: 'video-plan:2',
       kind: 'videoPlan',
@@ -314,14 +322,17 @@ describe('workspace node auto layout', () => {
 
     const repaired = avoidExpandedSpaceConsistencyLaneOverlaps([
       spaceConsistency,
+      storyboardPanelGeneration,
       videoPlan,
       nextVideoPlan,
       bgmScore,
     ])
+    const repairedStoryboardPanelGeneration = repaired.find((node) => node.id === storyboardPanelGeneration.id)
     const repairedVideoPlan = repaired.find((node) => node.id === videoPlan.id)
     const repairedNextVideoPlan = repaired.find((node) => node.id === nextVideoPlan.id)
     const repairedBgmScore = repaired.find((node) => node.id === bgmScore.id)
 
+    expect(repairedStoryboardPanelGeneration?.position.x).toBe(948)
     expect(repairedVideoPlan?.position.x).toBe(948)
     expect(repairedNextVideoPlan?.position.x).toBe(1412)
     expect(repairedBgmScore?.position.x).toBe(948)

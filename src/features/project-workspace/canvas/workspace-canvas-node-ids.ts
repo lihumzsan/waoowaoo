@@ -10,6 +10,7 @@ export const workspaceNodeId = {
   clip: (clipId: string): string => `clip:${clipId}`,
   shot: (panelId: string): string => `shot:${panelId}`,
   spaceConsistency: (storyboardId: string): string => `space-consistency:${storyboardId}`,
+  storyboardPanelGeneration: (storyboardId: string): string => `storyboard-panel-generation:${storyboardId}`,
   pendingSpaceConsistencyForEditScript: (editScriptId: string): string => `space-consistency:edit-script:${editScriptId}`,
   videoPlan: (editScriptId: string, blockNumber: number): string => `video-plan:${editScriptId}:${blockNumber}`,
   bgmScore: (episodeId: string): string => `bgm-score:${episodeId}`,

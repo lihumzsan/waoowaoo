@@ -22,12 +22,13 @@ export type WorkspaceCanvasNodeKind =
   | 'editScript'
   | 'editCinematographyShotPlan'
   | 'spaceConsistency'
+  | 'storyboardPanelGeneration'
   | 'videoPlan'
   | 'bgmScore'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'storyboardPanelGeneration' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {

@@ -2388,6 +2388,86 @@ describe('workspace node canvas projection', () => {
     expect(spaceNode?.data.action).toBeUndefined()
   })
 
+  it('uses a storyboard panel generation node instead of marking space consistency running', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-panel-gen',
+          clipId: 'clip-panel-gen',
+          panels: [],
+          photographyPlan: JSON.stringify({
+            consistencyMode: 'spatial_text_blocking',
+            currentStage: 'spatial_profile_ready',
+            cameraPlanOutput: {
+              strategy: 'spatial_text_blocking',
+              panels: [],
+            },
+          }),
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+      activeAssistantOperationId: 'generate_edit_script_storyboard',
+      editScript: createSingleVideoEditScript({ id: 'edit-panel-gen' }),
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-panel-gen',
+        editScriptId: 'edit-panel-gen',
+      }),
+    })
+
+    const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-panel-gen')
+    const panelGenerationNode = projection.nodes.find((node) => node.id === 'storyboard-panel-generation:storyboard-panel-gen')
+
+    expect(spaceNode?.data.kind).toBe('spaceConsistency')
+    expect(spaceNode?.data.statusLabel).toBe('status.ready')
+    expect(spaceNode?.data.isRunning).toBe(false)
+    expect(spaceNode?.data.runtimeTargets?.map(taskRuntimeTargetQueryKey)).toEqual([
+      taskRuntimeTargetQueryKey(TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare('edit-panel-gen')!),
+    ])
+
+    expect(panelGenerationNode?.data.kind).toBe('storyboardPanelGeneration')
+    expect(panelGenerationNode?.data.targetType).toBe('storyboardPanelGeneration')
+    expect(panelGenerationNode?.data.statusLabel).toBe('status.ready')
+    expect(panelGenerationNode?.data.isRunning).toBe(false)
+    expect(panelGenerationNode?.data.action).toBeUndefined()
+    expect(panelGenerationNode?.data.runtimeTargets?.map(taskRuntimeTargetQueryKey)).toEqual([
+      taskRuntimeTargetQueryKey(TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration('storyboard-panel-gen')!),
+    ])
+    const runtimeTarget = TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration('storyboard-panel-gen')
+    if (!panelGenerationNode || !runtimeTarget) throw new Error('STORYBOARD_PANEL_GENERATION_TARGET_MISSING')
+    const failedPatch = resolveWorkspaceNodeRuntimePatch({
+      node: panelGenerationNode,
+      statesByQueryKey: new Map([[
+        taskRuntimeTargetQueryKey(runtimeTarget),
+        {
+          phase: 'failed',
+          runningTaskId: null,
+          runningTaskType: 'edit_script_storyboard_camera_plan',
+          lastError: {
+            code: 'PANEL_GENERATION_FAILED',
+            message: 'panel prompt generation failed',
+          },
+        },
+      ]]),
+      isOptimisticallyRunning: false,
+      labels: {
+        running: 'status.aiEditing',
+        failed: 'status.failed',
+      },
+    })
+    expect(failedPatch.statusLabel).toBe('status.failed')
+    expect(failedPatch.body).toBe('panel prompt generation failed')
+    expect(projection.nodes.some((node) => node.data.kind === 'shot')).toBe(false)
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:space-consistency-storyboard-panel-generation:storyboard-panel-gen',
+      source: 'space-consistency:storyboard-panel-gen',
+      target: 'storyboard-panel-generation:storyboard-panel-gen',
+    }))
+  })
+
   it('projects spatial blocking details as a space consistency node before panels', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
@@ -2608,7 +2688,7 @@ describe('workspace node canvas projection', () => {
     expect(spaceNode?.data.statusLabel).toBe('status.ready')
   })
 
-  it('offers storyboard generation from a ready spatial blocking node before panels exist', () => {
+  it('offers storyboard generation from a dedicated panel generation node before panels exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
@@ -2639,15 +2719,26 @@ describe('workspace node canvas projection', () => {
     })
 
     const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial-ready')
+    const panelGenerationNode = projection.nodes.find((node) => node.id === 'storyboard-panel-generation:storyboard-spatial-ready')
+    const editScriptNode = projection.nodes.find((node) => node.id === 'edit-script:episode-1')
     expect(spaceNode?.data.actionLabel).toBe('actions.regenerateSpatialBlocking')
     expect(spaceNode?.data.action).toEqual({
       type: 'generate_edit_storyboard_spatial_blocking',
       editScriptId: 'edit-spatial-ready',
     })
-    expect(spaceNode?.data.secondaryActionLabel).toBe('actions.generateStoryboard')
-    expect(spaceNode?.data.secondaryAction).toEqual({
+    expect(spaceNode?.data.secondaryActionLabel).toBeUndefined()
+    expect(spaceNode?.data.secondaryAction).toBeUndefined()
+    expect(panelGenerationNode?.data.kind).toBe('storyboardPanelGeneration')
+    expect(panelGenerationNode?.data.actionLabel).toBe('actions.generateStoryboard')
+    expect(panelGenerationNode?.data.action).toEqual({
       type: 'generate_edit_storyboard',
       editScriptId: 'edit-spatial-ready',
     })
+    expect(editScriptNode?.data.action?.type).not.toBe('generate_edit_storyboard')
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:space-consistency-storyboard-panel-generation:storyboard-spatial-ready',
+      source: 'space-consistency:storyboard-spatial-ready',
+      target: 'storyboard-panel-generation:storyboard-spatial-ready',
+    }))
   })
 })

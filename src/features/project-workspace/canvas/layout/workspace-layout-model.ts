@@ -95,6 +95,7 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'spaceConsistency':
     case 'editCinematographyShotPlan':
       return 'spaceConsistency'
+    case 'storyboardPanelGeneration':
     case 'shot':
       return 'shots'
     case 'videoPlan':

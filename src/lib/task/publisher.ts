@@ -9,6 +9,7 @@ import {
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { resolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
+import { withTaskCoveredTargetsPayload } from './covered-targets'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -29,6 +30,7 @@ type TaskMeta = {
   targetType: string
   targetId: string
   episodeId: string | null
+  payload: unknown
 }
 
 type TaskEventModel = {
@@ -99,6 +101,7 @@ function buildLifecycleEvent(params: {
   targetId?: string | null
   episodeId?: string | null
   payload?: Record<string, unknown> | null
+  coveragePayload?: unknown
 }): TaskSSEEvent {
   return {
     id: params.id,
@@ -111,8 +114,33 @@ function buildLifecycleEvent(params: {
     targetType: params.targetType || null,
     targetId: params.targetId || null,
     episodeId: params.episodeId || null,
-    payload: normalizeLifecyclePayload(params.lifecycleType, params.taskType, params.payload || null),
+    payload: withTaskCoveredTargetsPayload({
+      taskType: params.taskType,
+      targetType: params.targetType,
+      targetId: params.targetId,
+      payload: normalizeLifecyclePayload(
+        params.lifecycleType,
+        params.taskType,
+        params.payload || null,
+      ),
+      coveragePayload: params.coveragePayload ?? params.payload ?? null,
+    }),
   }
+}
+
+async function loadTaskMeta(taskId: string): Promise<TaskMeta | null> {
+  const rows = await taskModel.findMany({
+    where: { id: { in: [taskId] } },
+    select: {
+      id: true,
+      type: true,
+      targetType: true,
+      targetId: true,
+      episodeId: true,
+      payload: true,
+    },
+  })
+  return rows[0] ?? null
 }
 
 function normalizeStreamPayload(
@@ -165,6 +193,7 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
           targetType: true,
           targetId: true,
           episodeId: true,
+          payload: true,
         },
       })
     : []
@@ -199,6 +228,7 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
       targetId: task?.targetId || null,
       episodeId: task?.episodeId || null,
       payload: row.payload || null,
+      coveragePayload: task?.payload ?? row.payload ?? null,
     })
   })
 }
@@ -256,6 +286,23 @@ export async function publishTaskLifecycleEvent(params: {
 }) {
   const persist = params.persist !== false
   const normalizedType = normalizeLifecycleType(params.lifecycleType)
+  const taskMeta = await loadTaskMeta(params.taskId)
+  const eventTaskType = params.taskType || taskMeta?.type || null
+  const eventTargetType = params.targetType || taskMeta?.targetType || null
+  const eventTargetId = params.targetId || taskMeta?.targetId || null
+  const eventEpisodeId = params.episodeId || taskMeta?.episodeId || null
+  const coveragePayload = taskMeta?.payload ?? params.payload ?? null
+  const normalizedPayload = withTaskCoveredTargetsPayload({
+    taskType: eventTaskType,
+    targetType: eventTargetType,
+    targetId: eventTargetId,
+    payload: normalizeLifecyclePayload(
+      params.lifecycleType,
+      eventTaskType,
+      params.payload || null,
+    ),
+    coveragePayload,
+  })
   const event = persist
     ? await taskEventModel.create({
         data: {
@@ -263,7 +310,7 @@ export async function publishTaskLifecycleEvent(params: {
           projectId: params.projectId,
           userId: params.userId,
           eventType: normalizedType,
-          payload: normalizeLifecyclePayload(params.lifecycleType, params.taskType, params.payload || null),
+          payload: normalizedPayload,
         },
       })
     : null
@@ -277,11 +324,12 @@ export async function publishTaskLifecycleEvent(params: {
     taskId: params.taskId,
     projectId: params.projectId,
     userId: params.userId,
-    taskType: params.taskType || null,
-    targetType: params.targetType || null,
-    targetId: params.targetId || null,
-    episodeId: params.episodeId || null,
-    payload: params.payload || null,
+    taskType: eventTaskType,
+    targetType: eventTargetType,
+    targetId: eventTargetId,
+    episodeId: eventEpisodeId,
+    payload: normalizedPayload,
+    coveragePayload,
   })
 
   await resolveProjectAgentWaitsForTaskEvent({

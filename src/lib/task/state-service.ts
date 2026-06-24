@@ -4,6 +4,9 @@ import { normalizeTaskError } from '@/lib/errors/normalize'
 import { coerceTaskIntent, type TaskIntent } from './intent'
 import { TASK_TYPE } from './types'
 import { buildTaskProgressGroupId, readTaskPayloadProgressGroupId } from './progress-group'
+import { resolveTaskCoveredTargets } from './covered-targets'
+
+export { extractStoryboardGridPanelIds } from './covered-targets'
 
 export type TaskTargetQuery = {
   targetType: string
@@ -56,28 +59,6 @@ export function pairKey(targetType: string, targetId: string) {
 export function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
-}
-
-function parseObject(value: unknown): Record<string, unknown> | null {
-  const objectValue = asObject(value)
-  if (objectValue) return objectValue
-  if (typeof value !== 'string') return null
-  try {
-    return asObject(JSON.parse(value) as unknown)
-  } catch {
-    return null
-  }
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return Array.from(new Set(value.flatMap((item) => typeof item === 'string' && item.trim() ? [item.trim()] : [])))
-}
-
-export function extractStoryboardGridPanelIds(payload: unknown): string[] {
-  const payloadObject = parseObject(payload)
-  const storyboardGrid = parseObject(payloadObject?.storyboardGrid)
-  return asStringArray(storyboardGrid?.panelIds)
 }
 
 export function asNonEmptyString(value: unknown): string | null {
@@ -250,13 +231,12 @@ function targetAcceptsTaskType(target: TaskTargetQuery, taskType: string): boole
 }
 
 function taskTargetKeys(row: Pick<TaskStateRow, 'targetType' | 'targetId' | 'type' | 'payload'>): string[] {
-  const keys = [pairKey(row.targetType, row.targetId)]
-  if (row.targetType === 'ProjectPanel' && row.type === TASK_TYPE.IMAGE_PANEL) {
-    for (const panelId of extractStoryboardGridPanelIds(row.payload)) {
-      keys.push(pairKey('ProjectPanel', panelId))
-    }
-  }
-  return Array.from(new Set(keys))
+  return resolveTaskCoveredTargets({
+    taskType: row.type,
+    targetType: row.targetType,
+    targetId: row.targetId,
+    payload: row.payload,
+  }).map((target) => pairKey(target.targetType, target.targetId))
 }
 
 async function queryStoryboardGridImageRows(params: {

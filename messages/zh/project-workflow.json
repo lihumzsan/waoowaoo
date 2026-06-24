@@ -802,6 +802,12 @@
           "locationReferenceRequired": "请先生成场景资产图片。没有最终场景图时，无法分析真实空间档案。",
           "meta": "{profiles} 份空间档案 · {cameraPlans} 个镜头方案"
         },
+        "storyboardPanelGeneration": {
+          "title": "分镜面板生成",
+          "eyebrow": "分镜结构",
+          "body": "AI 正在把空间定位、摄影方案和剪辑表转化为逐镜分镜面板提示。",
+          "meta": "{panels} 个分镜面板"
+        },
         "editAsset": {
           "meta": "关联镜头：{shots}"
         },

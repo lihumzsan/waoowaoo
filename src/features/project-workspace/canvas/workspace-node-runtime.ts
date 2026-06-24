@@ -103,6 +103,13 @@ function withRuntimeErrorMessage(
     }
   }
 
+  if (node.data.kind === 'storyboardPanelGeneration') {
+    return {
+      ...patch,
+      body: errorMessage,
+    }
+  }
+
   return patch
 }
 

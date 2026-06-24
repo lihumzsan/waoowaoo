@@ -8,6 +8,7 @@ const SPACE_CONSISTENCY_STACK_GAP = 56
 const SPACE_CONSISTENCY_TO_CONTENT_LANE_GAP = 88
 const POSITION_EPSILON = 0.5
 const SPACE_CONSISTENCY_CONTENT_LANE_NODE_KINDS = new Set<WorkspaceCanvasFlowNode['data']['kind']>([
+  'storyboardPanelGeneration',
   'shot',
   'videoPlan',
   'bgmScore',

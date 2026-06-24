@@ -152,7 +152,7 @@ export const TASK_RUNTIME_TARGETS = {
       TASK_TYPE.INSERT_PANEL,
     ])
   },
-  projectStoryboardConsistency(storyboardId: string | null | undefined) {
+  projectStoryboardPanelGeneration(storyboardId: string | null | undefined) {
     return target('ProjectStoryboard', storyboardId, [
       TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
     ])

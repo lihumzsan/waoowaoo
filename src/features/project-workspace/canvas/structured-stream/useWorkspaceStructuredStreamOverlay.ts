@@ -14,7 +14,6 @@ import {
   WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-  WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
 } from '../node-presentation-profiles'
 import type {
   WorkspaceCanvasEditPipelineStepItem,
@@ -446,6 +445,21 @@ function pipelineItemsFromCinematographyShots(
   }))
 }
 
+function pipelineItemsFromStoryboardPanels(
+  panels: readonly Extract<StructuredStreamParsedItem, { readonly kind: 'storyboardPanel' }>['panel'][],
+  translate: Translate,
+): WorkspaceCanvasEditPipelineStepItem[] {
+  return panels.map((panel) => ({
+    title: translate('nodeFields.shotIndex', { index: panel.sourceShotNumber }),
+    fields: [
+      { label: translate('nodeFields.imagePrompt'), value: panel.finalPanelPrompt },
+      { label: translate('nodeFields.videoPrompt'), value: panel.finalVideoPrompt },
+    ],
+    body: panel.finalPanelPrompt,
+    chips: [String(panel.sourceShotNumber)],
+  }))
+}
+
 function createOverlayNode(params: {
   readonly id: string
   readonly x: number
@@ -651,7 +665,7 @@ function buildCinematographyOverlay(
   })
 }
 
-function buildSpaceConsistencyOverlays(
+function buildStoryboardPanelGenerationOverlays(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
 ): readonly WorkspaceCanvasFlowNode[] {
@@ -662,37 +676,28 @@ function buildSpaceConsistencyOverlays(
     const panels = snapshot.items.flatMap((item) => item.value.kind === 'storyboardPanel' ? [item.value.panel] : [])
     if (panels.length === 0 && !snapshot.errorMessage) return []
     return [createOverlayNode({
-      id: workspaceNodeId.spaceConsistency(storyboardId),
+      id: workspaceNodeId.storyboardPanelGeneration(storyboardId),
       x: 2048,
       y: 430,
       data: {
-        kind: 'spaceConsistency',
-        layoutNodeType: 'spaceConsistency',
-        targetType: 'storyboard',
+        kind: 'storyboardPanelGeneration',
+        layoutNodeType: 'storyboardPanelGeneration',
+        targetType: 'storyboardPanelGeneration',
         targetId: storyboardId,
-        title: translate('nodes.spaceConsistency.title'),
-        eyebrow: translate('nodes.spaceConsistency.eyebrow'),
-        body: snapshot.errorMessage ?? translate('nodes.spaceConsistency.body'),
-        meta: translate('nodes.spaceConsistency.meta', { profiles: 0, cameraPlans: panels.length }),
+        storyboardId,
+        title: translate('nodes.storyboardPanelGeneration.title'),
+        eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
+        body: snapshot.errorMessage ?? translate('nodes.storyboardPanelGeneration.body'),
+        meta: translate('nodes.storyboardPanelGeneration.meta', { panels: panels.length }),
         statusLabel: snapshot.errorMessage ? translate('status.failed') : translate('status.processing'),
         isRunning: !snapshot.errorMessage,
-        width: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE.height,
-        indexLabel: 'S',
+        width: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height,
+        indexLabel: 'P',
         defaultExpanded: true,
         streamPresentation: streamPresentation(snapshot.items),
-        spaceConsistencyDetails: {
-          storyboardId,
-          stage: 'panel_prompts_streaming',
-          spatialProfileCount: 0,
-          cameraPlanCount: panels.length,
-          spatialProfiles: [],
-          cameraPlans: panels.map((panel) => ({
-            panelIndex: panel.panelIndex,
-            sourceShotNumber: panel.sourceShotNumber,
-            sourceVideoBlockId: panel.sourceVideoBlockId,
-            shotBlocking: panel.shotBlocking,
-          })),
+        editPipelineStepDetails: {
+          items: pipelineItemsFromStoryboardPanels(panels, translate),
         },
       },
     })]
@@ -783,7 +788,7 @@ function buildOverlayNodes(
     buildDirectorOverlay(snapshots, translate),
     buildEditScriptOverlay(snapshots, episodeId, translate),
     buildCinematographyOverlay(snapshots, translate),
-    ...buildSpaceConsistencyOverlays(snapshots, translate),
+    ...buildStoryboardPanelGenerationOverlays(snapshots, translate),
     buildBgmOverlay(snapshots, episodeId, translate),
   ].filter((node): node is WorkspaceCanvasFlowNode => node !== null)
 }
@@ -814,6 +819,9 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
     if (node.data.kind === 'spaceConsistency' && (node.data.spaceConsistencyDetails?.cameraPlanCount ?? 0) > 0 && node.data.isRunning !== true) {
       finalDataKinds.add(`spaceConsistency:${node.data.targetId}`)
     }
+    if (node.data.kind === 'shot' && node.data.storyboardId && node.data.isRunning !== true) {
+      finalDataKinds.add(`storyboardPanelGeneration:${node.data.storyboardId}`)
+    }
   })
 
   const usableOverlays = overlayNodes.filter((node) => {
@@ -823,6 +831,7 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
     if (node.data.kind === 'editCinematographyShotPlan' && finalDataKinds.has('editCinematographyShotPlan')) return false
     if (node.data.kind === 'bgmScore' && finalDataKinds.has('bgmScore')) return false
     if (node.data.kind === 'spaceConsistency' && finalDataKinds.has(`spaceConsistency:${node.data.targetId}`)) return false
+    if (node.data.kind === 'storyboardPanelGeneration' && finalDataKinds.has(`storyboardPanelGeneration:${node.data.targetId}`)) return false
     return true
   })
   const overlayById = new Map(usableOverlays.map((node) => [node.id, node]))

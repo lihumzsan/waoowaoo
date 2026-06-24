@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import type { WorkspaceResourceName } from '@/lib/task/types'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
+import { readTaskCoveredTargets, type TaskCoveredTarget } from '@/lib/task/covered-targets'
 import { queryKeys } from './keys'
 import { invalidateByTarget } from './invalidation/invalidate-by-target'
 import { applyTaskLifecycleToOverlay } from './task-target-overlay'
@@ -15,6 +16,18 @@ import {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function resolveLifecycleTargets(input: {
+  readonly targetType: string | null
+  readonly targetId: string | null
+  readonly payload: Record<string, unknown> | null
+}): readonly TaskCoveredTarget[] {
+  const coveredTargets = readTaskCoveredTargets(input.payload?.coveredTargets)
+  if (coveredTargets.length > 0) return coveredTargets
+  return input.targetType && input.targetId
+    ? [{ targetType: input.targetType, targetId: input.targetId }]
+    : []
 }
 
 export function isWorkspaceSSEEvent(value: unknown): value is SSEEvent {
@@ -148,32 +161,18 @@ export function applyWorkspaceSSEEvent(params: {
       : typeof payloadRecord?.message === 'string' && payloadRecord.message.trim()
         ? payloadRecord.message.trim()
         : null
-
-  applyTaskLifecycleToOverlay(queryClient, {
-    projectId,
-    lifecycleType: normalizedLifecycleType,
+  const lifecycleTargets = resolveLifecycleTargets({
     targetType,
     targetId,
-    taskId: typeof event.taskId === 'string' ? event.taskId : null,
-    taskType: typeof event.taskType === 'string' ? event.taskType : null,
-    progressGroupId,
-    intent: payloadIntent,
-    hasOutputAtStart,
-    progress: typeof payloadRecord?.progress === 'number' ? Math.floor(payloadRecord.progress) : null,
-    stage: typeof payloadRecord?.stage === 'string' ? payloadRecord.stage : null,
-    stageLabel: typeof payloadRecord?.stageLabel === 'string' ? payloadRecord.stageLabel : null,
-    eventTs: typeof event.ts === 'string' ? event.ts : null,
+    payload: payloadRecord,
   })
 
-  if (
-    normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
-  ) {
-    applyTaskTargetTerminalStateToCache(queryClient, {
+  for (const lifecycleTarget of lifecycleTargets) {
+    applyTaskLifecycleToOverlay(queryClient, {
       projectId,
-      targetType,
-      targetId,
-      phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
+      lifecycleType: normalizedLifecycleType,
+      targetType: lifecycleTarget.targetType,
+      targetId: lifecycleTarget.targetId,
       taskId: typeof event.taskId === 'string' ? event.taskId : null,
       taskType: typeof event.taskType === 'string' ? event.taskType : null,
       progressGroupId,
@@ -182,10 +181,33 @@ export function applyWorkspaceSSEEvent(params: {
       progress: typeof payloadRecord?.progress === 'number' ? Math.floor(payloadRecord.progress) : null,
       stage: typeof payloadRecord?.stage === 'string' ? payloadRecord.stage : null,
       stageLabel: typeof payloadRecord?.stageLabel === 'string' ? payloadRecord.stageLabel : null,
-      errorCode: payloadErrorCode,
-      errorMessage: payloadErrorMessage,
       eventTs: typeof event.ts === 'string' ? event.ts : null,
     })
+  }
+
+  if (
+    normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
+    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
+  ) {
+    for (const lifecycleTarget of lifecycleTargets) {
+      applyTaskTargetTerminalStateToCache(queryClient, {
+        projectId,
+        targetType: lifecycleTarget.targetType,
+        targetId: lifecycleTarget.targetId,
+        phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
+        taskId: typeof event.taskId === 'string' ? event.taskId : null,
+        taskType: typeof event.taskType === 'string' ? event.taskType : null,
+        progressGroupId,
+        intent: payloadIntent,
+        hasOutputAtStart,
+        progress: typeof payloadRecord?.progress === 'number' ? Math.floor(payloadRecord.progress) : null,
+        stage: typeof payloadRecord?.stage === 'string' ? payloadRecord.stage : null,
+        stageLabel: typeof payloadRecord?.stageLabel === 'string' ? payloadRecord.stageLabel : null,
+        errorCode: payloadErrorCode,
+        errorMessage: payloadErrorMessage,
+        eventTs: typeof event.ts === 'string' ? event.ts : null,
+      })
+    }
   }
 
   if (

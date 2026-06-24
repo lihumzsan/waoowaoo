@@ -8,17 +8,21 @@ function canvasNode(input: {
   readonly x: number
   readonly y: number
   readonly zIndex?: number
+  readonly kind?: WorkspaceCanvasFlowNode['data']['kind']
+  readonly targetType?: WorkspaceCanvasFlowNode['data']['targetType']
+  readonly targetId?: string
 }): WorkspaceCanvasFlowNode {
+  const kind = input.kind ?? 'shot'
   return {
     id: input.id,
     type: 'workspaceNode',
     position: { x: input.x, y: input.y },
     zIndex: input.zIndex,
     data: {
-      kind: 'shot',
-      layoutNodeType: 'shot',
-      targetType: 'panel',
-      targetId: input.id,
+      kind,
+      layoutNodeType: kind,
+      targetType: input.targetType ?? 'panel',
+      targetId: input.targetId ?? input.id,
       title: input.id,
       eyebrow: '',
       body: '',
@@ -51,5 +55,28 @@ describe('workspace canvas layout input', () => {
       locked: false,
       collapsed: false,
     }])
+  })
+
+  it('persists storyboard panel generation node layout with its dedicated target type', () => {
+    const input = buildWorkspaceCanvasLayoutInput({
+      episodeId: 'episode-1',
+      nodes: [
+        canvasNode({
+          id: 'storyboard-panel-generation:storyboard-1',
+          kind: 'storyboardPanelGeneration',
+          targetType: 'storyboardPanelGeneration',
+          targetId: 'storyboard-1',
+          x: 420,
+          y: 180,
+        }),
+      ],
+    })
+
+    expect(input.nodeLayouts[0]).toEqual(expect.objectContaining({
+      nodeKey: 'storyboard-panel-generation:storyboard-1',
+      nodeType: 'storyboardPanelGeneration',
+      targetType: 'storyboardPanelGeneration',
+      targetId: 'storyboard-1',
+    }))
   })
 })

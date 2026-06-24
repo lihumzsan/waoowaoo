@@ -14,6 +14,9 @@ function createNode(input: {
   readonly width?: number
   readonly height?: number
   readonly layoutBasePosition?: { readonly x: number; readonly y: number }
+  readonly targetType?: WorkspaceCanvasFlowNode['data']['targetType']
+  readonly targetId?: string
+  readonly storyboardId?: string
 }): WorkspaceCanvasFlowNode {
   const width = input.width ?? 100
   const height = input.height ?? 120
@@ -26,8 +29,9 @@ function createNode(input: {
     data: {
       kind: input.kind,
       layoutNodeType,
-      targetType: 'panel',
-      targetId: input.id,
+      targetType: input.targetType ?? 'panel',
+      targetId: input.targetId ?? input.id,
+      storyboardId: input.storyboardId,
       title: input.id,
       eyebrow: 'node',
       body: 'body',
@@ -47,10 +51,32 @@ describe('workspace layout model', () => {
     expect(resolveWorkspaceCanvasLayoutLane('editScript')).toBe('editScript')
     expect(resolveWorkspaceCanvasLayoutLane('editRequiredAsset')).toBe('assets')
     expect(resolveWorkspaceCanvasLayoutLane('spaceConsistency')).toBe('spaceConsistency')
+    expect(resolveWorkspaceCanvasLayoutLane('storyboardPanelGeneration')).toBe('shots')
     expect(resolveWorkspaceCanvasLayoutLane('shot')).toBe('shots')
     expect(resolveWorkspaceCanvasLayoutLane('videoPlan')).toBe('videoPlan')
     expect(resolveWorkspaceCanvasLayoutLane('bgmScore')).toBe('bgm')
     expect(resolveWorkspaceCanvasLayoutLane('finalTimeline')).toBe('final')
+  })
+
+  it('groups storyboard panel generation nodes with their storyboard shot lane', () => {
+    const model = buildWorkspaceCanvasLayoutModel({
+      nodes: [
+        createNode({
+          id: 'storyboard-panel-generation:storyboard-1',
+          kind: 'storyboardPanelGeneration',
+          targetType: 'storyboardPanelGeneration',
+          targetId: 'storyboard-1',
+          storyboardId: 'storyboard-1',
+        }),
+      ],
+    })
+
+    expect(model.nodes[0]).toMatchObject({
+      lane: 'shots',
+      groupId: 'shots:storyboard-1',
+      targetType: 'storyboardPanelGeneration',
+      targetId: 'storyboard-1',
+    })
   })
 
   it('keeps baseline position, order, and measured size separate from render nodes', () => {

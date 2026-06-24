@@ -148,6 +148,7 @@ export type TaskSSEEvent = {
   episodeId?: string | null
   payload?: (Record<string, unknown> & {
     lifecycleType?: TaskLifecycleEventType
+    coveredTargets?: readonly { readonly targetType: string; readonly targetId: string }[]
   }) | null
 }
 

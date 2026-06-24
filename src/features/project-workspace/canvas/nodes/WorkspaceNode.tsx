@@ -53,6 +53,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'image'
     case 'spaceConsistency':
       return 'chart'
+    case 'storyboardPanelGeneration':
+      return 'clapperboard'
     case 'videoPlan':
       return 'clapperboard'
     case 'bgmScore':
@@ -2241,6 +2243,8 @@ function NodeContent({
       return <EditCinematographyContent data={data} labels={labels} />
     case 'spaceConsistency':
       return <SpaceConsistencyContent data={data} labels={labels} expanded={expanded} />
+    case 'storyboardPanelGeneration':
+      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':
       return <VideoPlanContent data={data} labels={labels} expanded={expanded} />
     case 'editRequiredAsset':

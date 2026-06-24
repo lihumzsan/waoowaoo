@@ -1453,9 +1453,7 @@ export function buildWorkspaceNodeCanvasProjection({
           : !cinematographyShotPlanReady
             ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
         : spatialBlockingReady
-          ? storyboardPanelGenerationRunning
-            ? null
-            : { label: translate('actions.generateStoryboard'), action: { type: 'generate_edit_storyboard', editScriptId: editScript.id } as const, disabled: false }
+          ? null
           : locationReferenceReady
             ? spatialBlockingRunning
               ? null
@@ -1851,10 +1849,11 @@ export function buildWorkspaceNodeCanvasProjection({
     const details = createSpaceConsistencyDetails(storyboard)
     const nodeId = workspaceNodeId.spaceConsistency(storyboard.id)
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
+    const storyboardHasPanels = (storyboard.panels?.length ?? 0) > 0
     const previewImageUrl = primarySpaceConsistencyImageUrl(storyboard)
     const canGeneratePanelsFromSpatialBlocking = editScript?.status === 'ready'
       && hasReadyCinematographyShotPlan
-      && !hasStoryboardPanels
+      && !storyboardHasPanels
       && storyboardSpatialBlockingReady(storyboard)
     nodes.push(createNode({
       id: nodeId,
@@ -1880,12 +1879,9 @@ export function buildWorkspaceNodeCanvasProjection({
         }),
         statusLabel: storyboard.lastError
           ? translate('status.failed')
-          : storyboardPanelGenerationRunning
-            ? translate('status.processing')
-            : translate('status.ready'),
-        isRunning: storyboardPanelGenerationRunning,
+          : translate('status.ready'),
+        isRunning: false,
         runtimeTargets: runtimeTargets(
-          TASK_RUNTIME_TARGETS.projectStoryboardConsistency(storyboard.id),
           TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript?.id),
         ),
         width: SPACE_CONSISTENCY_NODE_WIDTH,
@@ -1898,10 +1894,6 @@ export function buildWorkspaceNodeCanvasProjection({
         action: editScript?.status === 'ready' && hasReadyCinematographyShotPlan && !storyboardPanelGenerationRunning
           ? { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id }
           : undefined,
-        secondaryActionLabel: canGeneratePanelsFromSpatialBlocking && !storyboardPanelGenerationRunning ? translate('actions.generateStoryboard') : undefined,
-        secondaryAction: canGeneratePanelsFromSpatialBlocking && !storyboardPanelGenerationRunning && editScript
-          ? { type: 'generate_edit_storyboard', editScriptId: editScript.id }
-          : undefined,
         onAction,
       },
     }))
@@ -1910,6 +1902,43 @@ export function buildWorkspaceNodeCanvasProjection({
     const sourceNodeId = editScriptSourceNodeId ?? clipSourceNodeId
     if (sourceNodeId) {
       edges.push(createEdge(`edge:space-consistency-source:${storyboard.id}`, sourceNodeId, nodeId))
+    }
+
+    if (!storyboardHasPanels && (canGeneratePanelsFromSpatialBlocking || storyboardPanelGenerationRunning) && editScript) {
+      const panelGenerationNodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
+      nodes.push(createNode({
+        id: panelGenerationNodeId,
+        fallbackX: storyboardFlowBaseX,
+        fallbackY: shotGridBaseY + index * (EDIT_PIPELINE_STEP_NODE_HEIGHT + 92),
+        zIndex: zIndex++,
+        savedLayoutByKey,
+        ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
+        data: {
+          kind: 'storyboardPanelGeneration',
+          layoutNodeType: 'storyboardPanelGeneration',
+          targetType: 'storyboardPanelGeneration',
+          targetId: storyboard.id,
+          storyboardId: storyboard.id,
+          title: translate('nodes.storyboardPanelGeneration.title'),
+          eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
+          body: translate('nodes.storyboardPanelGeneration.body'),
+          meta: translate('nodes.storyboardPanelGeneration.meta', { panels: 0 }),
+          statusLabel: translate('status.ready'),
+          isRunning: false,
+          runtimeTargets: runtimeTargets(
+            TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration(storyboard.id),
+          ),
+          width: EDIT_PIPELINE_STEP_NODE_WIDTH,
+          height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
+          indexLabel: 'P',
+          actionLabel: !storyboardPanelGenerationRunning ? translate('actions.generateStoryboard') : undefined,
+          action: !storyboardPanelGenerationRunning
+            ? { type: 'generate_edit_storyboard', editScriptId: editScript.id }
+            : undefined,
+          onAction,
+        },
+      }))
+      edges.push(createEdge(`edge:space-consistency-storyboard-panel-generation:${storyboard.id}`, nodeId, panelGenerationNodeId))
     }
   })
   if (shouldShowPendingSpaceConsistencyLayer) {

@@ -6,6 +6,7 @@ import {
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 import {
+  workspaceNodeId,
   workspaceEditCinematographyShotPlanNodeId,
   workspaceEditDirectorDecoupageNodeId,
 } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
@@ -116,6 +117,67 @@ function screenplayNode(input: {
       editScreenplayDetails: {
         screenplayText: input.screenplayText,
         userPrompt: 'prompt',
+      },
+    },
+  }
+}
+
+function shotNode(input: {
+  readonly id: string
+  readonly storyboardId: string
+}): WorkspaceCanvasFlowNode {
+  return {
+    id: input.id,
+    type: 'workspaceNode',
+    position: { x: 10, y: 20 },
+    data: {
+      nodeId: input.id,
+      kind: 'shot',
+      layoutNodeType: 'shot',
+      targetType: 'panel',
+      targetId: input.id,
+      storyboardId: input.storyboardId,
+      title: input.id,
+      eyebrow: 'eyebrow',
+      body: 'body',
+      meta: 'meta',
+      statusLabel: 'ready',
+      isRunning: false,
+      width: 320,
+      height: 560,
+    },
+  }
+}
+
+function storyboardPanelGenerationNode(input: {
+  readonly storyboardId: string
+  readonly isRunning: boolean
+}): WorkspaceCanvasFlowNode {
+  const id = workspaceNodeId.storyboardPanelGeneration(input.storyboardId)
+  return {
+    id,
+    type: 'workspaceNode',
+    position: { x: 999, y: 999 },
+    data: {
+      nodeId: id,
+      kind: 'storyboardPanelGeneration',
+      layoutNodeType: 'storyboardPanelGeneration',
+      targetType: 'storyboardPanelGeneration',
+      targetId: input.storyboardId,
+      storyboardId: input.storyboardId,
+      title: 'panel generation',
+      eyebrow: 'eyebrow',
+      body: 'body',
+      meta: 'meta',
+      statusLabel: input.isRunning ? 'processing' : 'ready',
+      isRunning: input.isRunning,
+      width: 420,
+      height: 360,
+      editPipelineStepDetails: {
+        items: [{
+          title: 'Shot 1',
+          fields: [{ label: 'Prompt', value: 'Value' }],
+        }],
       },
     },
   }
@@ -319,6 +381,21 @@ describe('structured stream overlay merge', () => {
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
     expect(merged.map((item) => item.id)).toEqual([nodeId])
+  })
+
+  it('drops storyboard panel generation overlay after official shot nodes exist', () => {
+    const officialShot = shotNode({
+      id: workspaceNodeId.shot('panel-1'),
+      storyboardId: 'storyboard-1',
+    })
+    const overlay = storyboardPanelGenerationNode({
+      storyboardId: 'storyboard-1',
+      isRunning: true,
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([officialShot], [overlay])
+
+    expect(merged.map((item) => item.id)).toEqual([workspaceNodeId.shot('panel-1')])
   })
 
   it('replaces stable director decoupage pending node while preserving position', () => {

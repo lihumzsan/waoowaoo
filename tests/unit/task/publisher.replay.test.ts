@@ -16,6 +16,7 @@ type TaskMeta = {
   targetType: string
   targetId: string
   episodeId: string | null
+  payload?: Record<string, unknown> | null
 }
 
 const taskEventFindManyMock = vi.hoisted(() =>
@@ -253,6 +254,7 @@ describe('task publisher replay', () => {
         targetType: 'ProjectPanel',
         targetId: 'panel-1',
         episodeId: 'episode-1',
+        payload: null,
       },
     ])
 
@@ -283,5 +285,48 @@ describe('task publisher replay', () => {
       targetId: 'panel-1',
       episodeId: 'episode-1',
     }))
+  })
+
+  it('replays terminal storyboard grid image events with covered panel targets from task payload', async () => {
+    taskEventFindManyMock.mockResolvedValueOnce([
+      {
+        id: 301,
+        taskId: 'task-grid-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        eventType: 'task.completed',
+        payload: { lifecycleType: 'task.completed' },
+        createdAt: new Date('2026-02-27T00:00:06.000Z'),
+      },
+    ])
+    taskFindManyMock.mockResolvedValueOnce([
+      {
+        id: 'task-grid-1',
+        type: 'image_panel',
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        episodeId: 'episode-1',
+        payload: {
+          storyboardGrid: {
+            mode: '2x2',
+            sourceVideoBlockId: 'edit-1:video-block:1',
+            panelIds: ['panel-1', 'panel-2', 'panel-2', 'panel-3'],
+          },
+        },
+      },
+    ])
+
+    const events = await listRecentTerminalLifecycleEvents({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      limit: 20,
+    })
+
+    expect(events[0]?.payload?.coveredTargets).toEqual([
+      { targetType: 'ProjectPanel', targetId: 'panel-1' },
+      { targetType: 'ProjectPanel', targetId: 'panel-2' },
+      { targetType: 'ProjectPanel', targetId: 'panel-3' },
+    ])
   })
 })
