@@ -255,7 +255,9 @@ function buildTaskFollowUpInstruction(locale: ProjectAgentLocale): string {
       'Background tasks reached a terminal state.',
       'In this turn, before any tool call, first output a visible natural-language message to the user summarizing whether the task succeeded or failed.',
       'Do not start this turn with a tool call.',
-      'If you continue with another operation after that message, explain the immediate next operation before calling its tool.',
+      'If status=completed, read [project_state_snapshot] and the injected enabled operations; when they expose exactly one executable next operation for the earliest missing artifact, you must continue in this same turn after the visible message and call that next tool.',
+      'Do not stop after only summarizing a successful task, and do not call only read-only context tools then stop unless concrete fields are missing for the next tool input.',
+      'If no single executable next operation exists, explain the blocker or required user choice.',
       'If status=failed, explain the failure and do not silently continue as if the previous operation succeeded.',
       'Do not re-run the operation that just reached a terminal state unless the user explicitly asks.',
     ].join(' ')
@@ -264,7 +266,9 @@ function buildTaskFollowUpInstruction(locale: ProjectAgentLocale): string {
     '后台任务已经到达终态。',
     '本轮在任何工具调用之前，必须先向用户输出一段可见的自然语言说明，说明任务是成功还是失败。',
     '不要以工具调用作为本轮第一输出。',
-    '如果说明后要继续调用下一个操作，必须在调用工具前告诉用户马上要执行哪一步。',
+    '如果 status=completed，必须读取 [project_state_snapshot] 和本轮已注入的可执行操作；当它们显示最早缺失产物存在唯一明确的下一步工具时，本轮必须在可见说明后继续调用该工具。',
+    '不要只总结任务成功后停止，也不要只调用只读上下文工具后停止，除非下一步入参确实缺少具体字段。',
+    '如果没有唯一可执行的下一步，必须说明阻塞原因或需要用户做出的选择。',
     '如果 status=failed，必须解释失败，不要像上一操作成功了一样静默继续。',
     '不要重新运行刚刚到达终态的 operation，除非用户明确要求。',
   ].join(' ')

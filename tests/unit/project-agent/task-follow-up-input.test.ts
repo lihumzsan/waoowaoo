@@ -37,7 +37,9 @@ describe('project agent task follow-up input', () => {
     expect(content).toContain('status=completed')
     expect(content).toContain('本轮在任何工具调用之前，必须先向用户输出一段可见的自然语言说明')
     expect(content).toContain('不要以工具调用作为本轮第一输出')
-    expect(content).toContain('必须在调用工具前告诉用户马上要执行哪一步')
+    expect(content).toContain('最早缺失产物存在唯一明确的下一步工具时')
+    expect(content).toContain('本轮必须在可见说明后继续调用该工具')
+    expect(content).toContain('不要只总结任务成功后停止')
   })
 
   it('requires visible failure reporting before recovery tool calls', () => {
@@ -52,6 +54,8 @@ describe('project agent task follow-up input', () => {
     expect(content).toContain('failedTaskIds=task-failed-1')
     expect(content).toContain('before any tool call, first output a visible natural-language message')
     expect(content).toContain('Do not start this turn with a tool call')
+    expect(content).toContain('when they expose exactly one executable next operation')
+    expect(content).toContain('you must continue in this same turn after the visible message')
     expect(content).toContain('If status=failed, explain the failure')
   })
 })

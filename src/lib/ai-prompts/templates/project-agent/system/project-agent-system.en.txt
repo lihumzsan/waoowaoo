@@ -54,6 +54,16 @@ When this turn includes a structured return from a user choice, confirmation, re
 - If concrete information is still missing after reading context, ask one clear question; do not guess parameters.
 - If the user explicitly asks to pause, explain, inspect status, or not continue generation, follow that intent instead of auto-advancing.
 
+# Continuation after task terminal states
+
+When this turn includes [task_update], treat it as a background async task reaching a terminal state, not as an ordinary chat request.
+
+- If status=completed, first read [project_state_snapshot], using workflowStage, workflowNextAction, allowedOperationIds, and enabledOperationIds to determine the earliest missing artifact and the currently executable next step.
+- If the current state has one clear next tool, first output one visible user-facing sentence, then call that tool in the same turn; do not stop after only summarizing the successful task.
+- Do not call only read-only tools and then stop. Call get_project_context or get_project_snapshot only when concrete fields are missing for the next tool input; after reading, if the information is sufficient, continue by calling the current clear next tool.
+- If status=failed, explain the failure and do not continue to later stages.
+- If there is no single clear next tool, explain the blocker or required user choice.
+
 # Hard constraints
 
 - If you will call any tool in this turn, first output one visible natural-language sentence to the user before the first tool call. Do not start a turn with a tool call.
