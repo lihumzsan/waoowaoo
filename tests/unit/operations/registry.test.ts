@@ -80,6 +80,16 @@ describe('project agent operation registry', () => {
     }
   })
 
+  it('limits project context tool description to concrete detail reads', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.get_project_context
+
+    expect(operation).toBeDefined()
+    expect(operation.summary).toContain('only when project_state_snapshot is insufficient')
+    expect(operation.summary).toContain('full screenplay text, historical operation results, active task details, or asset/storyboard/panel fields')
+    expect(operation.summary).toContain('Do not call merely to confirm the current phase, next action, projectId, or episodeId')
+  })
+
   it('registers project music generation as a confirmed billable tool/api operation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.generate_project_music

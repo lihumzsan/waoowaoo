@@ -102,7 +102,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Load the current project and episode context snapshot.',
+      summary: 'Load concrete project or episode details only when project_state_snapshot is insufficient for the requested content, such as full screenplay text, historical operation results, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, next action, projectId, or episodeId.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
