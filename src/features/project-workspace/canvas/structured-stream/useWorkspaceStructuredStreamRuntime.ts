@@ -8,17 +8,9 @@ import {
   createStructuredStreamParseState,
   type StructuredStreamParseState,
 } from '@/lib/structured-stream/incremental-json'
-import {
-  WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-  WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-} from '../node-presentation-profiles'
 import type {
   WorkspaceCanvasEditPipelineStepItem,
   WorkspaceCanvasFlowNode,
-  WorkspaceCanvasNodeData,
   WorkspaceCanvasStreamPresentation,
 } from '../node-canvas-types'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
@@ -37,17 +29,24 @@ import {
   workspaceEditCinematographyShotPlanNodeId,
   workspaceEditDirectorDecoupageNodeId,
 } from '../workspace-canvas-node-ids'
+import type {
+  WorkspaceCanvasStreamKind,
+  WorkspaceCanvasStreamPatch,
+  WorkspaceCanvasStreamPatchData,
+  WorkspaceCanvasStreamTarget,
+} from './workspace-structured-stream-runtime-types'
 
 type TranslateValues = Readonly<Record<string, string | number>>
 type Translate = (key: string, values?: TranslateValues) => string
 
-interface UseWorkspaceStructuredStreamOverlayInput {
+interface UseWorkspaceStructuredStreamRuntimeInput {
   readonly episodeId: string
   readonly translate: Translate
 }
 
-interface UseWorkspaceStructuredStreamOverlayResult {
-  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+interface UseWorkspaceStructuredStreamRuntimeResult {
+  readonly targets: readonly WorkspaceCanvasStreamTarget[]
+  readonly patches: readonly WorkspaceCanvasStreamPatch[]
 }
 
 interface StreamAccumulator {
@@ -99,7 +98,7 @@ interface TextStreamSnapshot {
   readonly text: string
 }
 
-const STREAM_OVERLAY_RETIRE_MS = 8000
+const STREAM_RUNTIME_RETIRE_MS = 8000
 
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -460,69 +459,63 @@ function pipelineItemsFromStoryboardPanels(
   }))
 }
 
-function createOverlayNode(params: {
-  readonly id: string
-  readonly x: number
-  readonly y: number
-  readonly data: WorkspaceCanvasNodeData
-}): WorkspaceCanvasFlowNode {
+interface WorkspaceCanvasStreamRuntimeEntry {
+  readonly target: WorkspaceCanvasStreamTarget
+  readonly patch: WorkspaceCanvasStreamPatch
+}
+
+function createStreamRuntimeEntry(input: {
+  readonly nodeId: string
+  readonly streamKind: WorkspaceCanvasStreamKind
+  readonly taskId: string
+  readonly taskType: string | null
+  readonly targetType: string | null
+  readonly targetId: string
+  readonly episodeId: string | null
+  readonly data: WorkspaceCanvasStreamPatchData
+}): WorkspaceCanvasStreamRuntimeEntry {
   return {
-    id: params.id,
-    type: 'workspaceNode',
-    position: { x: params.x, y: params.y },
-    data: {
-      ...params.data,
-      nodeId: params.id,
+    target: {
+      nodeId: input.nodeId,
+      streamKind: input.streamKind,
+      taskId: input.taskId,
+      taskType: input.taskType,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      episodeId: input.episodeId,
     },
-    style: {
-      width: params.data.width,
-      height: params.data.height,
+    patch: {
+      nodeId: input.nodeId,
+      streamKind: input.streamKind,
+      taskId: input.taskId,
+      data: input.data,
     },
   }
 }
 
-function extractScreenplayTitle(screenplayText: string): string {
-  const firstLine = screenplayText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-  if (!firstLine) return ''
-  return firstLine
-    .replace(/^#+\s*/, '')
-    .replace(/^标题[:：]\s*/, '')
-    .replace(/^《(.+)》$/, '$1')
-    .trim()
-}
-
-function buildEditScreenplayOverlays(
+function buildEditScreenplayRuntimeEntries(
   snapshots: readonly TextStreamSnapshot[],
   translate: Translate,
-): readonly WorkspaceCanvasFlowNode[] {
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editScreenplay.text')
   return matchingSnapshots.flatMap((snapshot) => {
     if (snapshot.targetType !== 'ProjectEditScreenplay' || !snapshot.targetId) return []
     const screenplayText = snapshot.text.trim()
     if (!screenplayText) return []
-    const screenplayTitle = extractScreenplayTitle(screenplayText)
-    return [createOverlayNode({
-      id: workspaceNodeId.editScreenplay(snapshot.targetId),
-      x: 260,
-      y: 430,
+    const nodeId = workspaceNodeId.editScreenplay(snapshot.targetId)
+    return [createStreamRuntimeEntry({
+      nodeId,
+      streamKind: 'editScreenplay',
+      taskId: snapshot.taskId,
+      taskType: snapshot.taskType,
+      targetType: snapshot.targetType,
+      targetId: snapshot.targetId,
+      episodeId: snapshot.episodeId,
       data: {
-        kind: 'editScreenplay',
-        layoutNodeType: 'editScreenplay',
-        targetType: 'editScreenplay',
-        targetId: snapshot.targetId,
-        title: screenplayTitle || translate('nodes.editScreenplay.pendingTitle'),
-        eyebrow: translate('nodes.editScreenplay.eyebrow'),
         body: screenplayText,
         meta: translate('nodes.editScreenplay.pendingMeta'),
         statusLabel: translate('status.processing'),
         isRunning: true,
-        width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
-        indexLabel: 'S',
-        defaultExpanded: true,
         streamPresentation: textStreamPresentation(),
         editScreenplayDetails: {
           screenplayText,
@@ -533,29 +526,30 @@ function buildEditScreenplayOverlays(
   })
 }
 
-function buildEditScriptOverlay(
+function buildEditScriptRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
   translate: Translate,
-): WorkspaceCanvasFlowNode | null {
+): WorkspaceCanvasStreamRuntimeEntry | null {
   const shotItems = itemsOfKind(snapshots, 'editScript.shots', 'editScriptShot')
   const error = snapshots.find((snapshot) => snapshot.adapterKey === 'editScript.shots' && snapshot.errorMessage)?.errorMessage ?? null
   if (shotItems.length === 0 && !error) return null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'editScript.shots') ?? null
+  if (!firstSnapshot) return null
   const durationSec = shotItems.reduce((total, item) => total + item.shot.durationSec, 0)
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey === 'editScript.shots')
     .flatMap((snapshot) => snapshot.items)
-  return createOverlayNode({
-    id: workspaceNodeId.editScript(episodeId),
-    x: 260,
-    y: 430,
+  const nodeId = workspaceNodeId.editScript(episodeId)
+  return createStreamRuntimeEntry({
+    nodeId,
+    streamKind: 'editScript',
+    taskId: firstSnapshot.taskId,
+    taskType: firstSnapshot.taskType,
+    targetType: firstSnapshot.targetType,
+    targetId: episodeId,
+    episodeId: firstSnapshot.episodeId ?? episodeId,
     data: {
-      kind: 'editScript',
-      layoutNodeType: 'editScript',
-      targetType: 'episode',
-      targetId: episodeId,
-      title: translate('nodes.editScript.pendingTitle'),
-      eyebrow: translate('nodes.editScript.eyebrow'),
       body: error ?? translate('nodes.editScript.pendingBody'),
       meta: error
         ? error
@@ -567,10 +561,6 @@ function buildEditScriptOverlay(
           }),
       statusLabel: error ? translate('status.failed') : translate('status.processing'),
       isRunning: !error,
-      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-      height: 520,
-      indexLabel: 'E',
-      defaultExpanded: true,
       streamPresentation: streamPresentation(rawItems),
       editScriptDetails: shotItems.length > 0 ? {
         durationSec,
@@ -586,28 +576,29 @@ function buildEditScriptOverlay(
   })
 }
 
-function buildDirectorOverlay(
+function buildDirectorRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
-): WorkspaceCanvasFlowNode | null {
+): WorkspaceCanvasStreamRuntimeEntry | null {
   const shotItems = itemsOfKind(snapshots, 'directorDecoupage.shots', 'directorDecoupageShot')
   if (shotItems.length === 0) return null
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey === 'directorDecoupage.shots')
     .flatMap((snapshot) => snapshot.items)
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'directorDecoupage.shots') ?? null
   const screenplayId = findSnapshotTargetId(snapshots, 'directorDecoupage.shots', 'ProjectEditScreenplay')
   if (!screenplayId) return null
-  return createOverlayNode({
-    id: workspaceEditDirectorDecoupageNodeId(screenplayId),
-    x: 260,
-    y: 430,
+  if (!firstSnapshot) return null
+  const nodeId = workspaceEditDirectorDecoupageNodeId(screenplayId)
+  return createStreamRuntimeEntry({
+    nodeId,
+    streamKind: 'editDirectorDecoupage',
+    taskId: firstSnapshot.taskId,
+    taskType: firstSnapshot.taskType,
+    targetType: firstSnapshot.targetType,
+    targetId: screenplayId,
+    episodeId: firstSnapshot.episodeId,
     data: {
-      kind: 'editDirectorDecoupage',
-      layoutNodeType: 'editDirectorDecoupage',
-      targetType: 'editScreenplay',
-      targetId: screenplayId,
-      title: translate('nodes.editDirectorDecoupage.title'),
-      eyebrow: translate('nodes.editDirectorDecoupage.eyebrow'),
       body: translate('nodes.editDirectorDecoupage.body'),
       meta: translate('nodes.editDirectorDecoupage.meta', {
         shots: shotItems.length,
@@ -615,10 +606,6 @@ function buildDirectorOverlay(
       }),
       statusLabel: translate('status.processing'),
       isRunning: true,
-      width: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width,
-      height: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height,
-      indexLabel: 'D',
-      defaultExpanded: true,
       streamPresentation: streamPresentation(rawItems),
       editPipelineStepDetails: {
         items: pipelineItemsFromDirectorShots(shotItems, translate),
@@ -627,36 +614,33 @@ function buildDirectorOverlay(
   })
 }
 
-function buildCinematographyOverlay(
+function buildCinematographyRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
-): WorkspaceCanvasFlowNode | null {
+): WorkspaceCanvasStreamRuntimeEntry | null {
   const shotItems = itemsOfKind(snapshots, 'cinematography.shots', 'cinematographyShot')
   if (shotItems.length === 0) return null
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey === 'cinematography.shots')
     .flatMap((snapshot) => snapshot.items)
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'cinematography.shots') ?? null
   const editScriptId = findSnapshotTargetId(snapshots, 'cinematography.shots', 'ProjectEditScript')
   if (!editScriptId) return null
-  return createOverlayNode({
-    id: workspaceEditCinematographyShotPlanNodeId(editScriptId),
-    x: 1092,
-    y: 430,
+  if (!firstSnapshot) return null
+  const nodeId = workspaceEditCinematographyShotPlanNodeId(editScriptId)
+  return createStreamRuntimeEntry({
+    nodeId,
+    streamKind: 'editCinematographyShotPlan',
+    taskId: firstSnapshot.taskId,
+    taskType: firstSnapshot.taskType,
+    targetType: firstSnapshot.targetType,
+    targetId: editScriptId,
+    episodeId: firstSnapshot.episodeId,
     data: {
-      kind: 'editCinematographyShotPlan',
-      layoutNodeType: 'editCinematographyShotPlan',
-      targetType: 'editScript',
-      targetId: editScriptId,
-      title: translate('nodes.editCinematographyShotPlan.title'),
-      eyebrow: translate('nodes.editCinematographyShotPlan.eyebrow'),
       body: translate('nodes.editCinematographyShotPlan.pendingBody'),
       meta: translate('nodes.editCinematographyShotPlan.meta', { shots: shotItems.length }),
       statusLabel: translate('status.processing'),
       isRunning: true,
-      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-      height: 360,
-      indexLabel: 'C',
-      defaultExpanded: true,
       streamPresentation: streamPresentation(rawItems),
       editPipelineStepDetails: {
         items: pipelineItemsFromCinematographyShots(shotItems, translate),
@@ -665,36 +649,30 @@ function buildCinematographyOverlay(
   })
 }
 
-function buildStoryboardPanelGenerationOverlays(
+function buildStoryboardPanelGenerationRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
-): readonly WorkspaceCanvasFlowNode[] {
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'storyboard.panels')
   return matchingSnapshots.flatMap((snapshot) => {
     const storyboardId = snapshot.targetId
     if (!storyboardId) return []
     const panels = snapshot.items.flatMap((item) => item.value.kind === 'storyboardPanel' ? [item.value.panel] : [])
     if (panels.length === 0 && !snapshot.errorMessage) return []
-    return [createOverlayNode({
-      id: workspaceNodeId.storyboardPanelGeneration(storyboardId),
-      x: 2048,
-      y: 430,
+    const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboardId)
+    return [createStreamRuntimeEntry({
+      nodeId,
+      streamKind: 'storyboardPanelGeneration',
+      taskId: snapshot.taskId,
+      taskType: snapshot.taskType,
+      targetType: snapshot.targetType,
+      targetId: storyboardId,
+      episodeId: snapshot.episodeId,
       data: {
-        kind: 'storyboardPanelGeneration',
-        layoutNodeType: 'storyboardPanelGeneration',
-        targetType: 'storyboardPanelGeneration',
-        targetId: storyboardId,
-        storyboardId,
-        title: translate('nodes.storyboardPanelGeneration.title'),
-        eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
         body: snapshot.errorMessage ?? translate('nodes.storyboardPanelGeneration.body'),
         meta: translate('nodes.storyboardPanelGeneration.meta', { panels: panels.length }),
         statusLabel: snapshot.errorMessage ? translate('status.failed') : translate('status.processing'),
         isRunning: !snapshot.errorMessage,
-        width: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height,
-        indexLabel: 'P',
-        defaultExpanded: true,
         streamPresentation: streamPresentation(snapshot.items),
         editPipelineStepDetails: {
           items: pipelineItemsFromStoryboardPanels(panels, translate),
@@ -704,11 +682,11 @@ function buildStoryboardPanelGenerationOverlays(
   })
 }
 
-function buildBgmOverlay(
+function buildBgmRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
   translate: Translate,
-): WorkspaceCanvasFlowNode | null {
+): WorkspaceCanvasStreamRuntimeEntry | null {
   const designSections = itemsOfKind(snapshots, 'bgm.scoreDesign.sections', 'bgmDesignSection').map((item) => item.section)
   const promptSections = itemsOfKind(snapshots, 'bgm.promptSections', 'bgmPromptSection').map((item) => item.section)
   const virtualLayers = itemsOfKind(snapshots, 'bgm.virtualLayers', 'bgmVirtualLayer').map((item) => item.layer)
@@ -717,25 +695,22 @@ function buildBgmOverlay(
     .flatMap((snapshot) => snapshot.items)
   const error = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.') && snapshot.errorMessage)?.errorMessage ?? null
   if (designSections.length === 0 && promptSections.length === 0 && virtualLayers.length === 0 && !error) return null
-  return createOverlayNode({
-    id: workspaceNodeId.bgmScore(episodeId),
-    x: 2048,
-    y: 1180,
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.')) ?? null
+  if (!firstSnapshot) return null
+  const nodeId = workspaceNodeId.bgmScore(episodeId)
+  return createStreamRuntimeEntry({
+    nodeId,
+    streamKind: 'bgmScore',
+    taskId: firstSnapshot.taskId,
+    taskType: firstSnapshot.taskType,
+    targetType: firstSnapshot.targetType,
+    targetId: episodeId,
+    episodeId: firstSnapshot.episodeId ?? episodeId,
     data: {
-      kind: 'bgmScore',
-      layoutNodeType: 'bgmScore',
-      targetType: 'episode',
-      targetId: episodeId,
-      title: translate('nodes.bgmScore.title'),
-      eyebrow: translate('nodes.bgmScore.eyebrow'),
       body: error ?? translate('nodes.bgmScore.body', { videos: 0 }),
       meta: error ? error : translate('nodes.bgmScore.ready', { count: promptSections.length }),
       statusLabel: error ? translate('status.failed') : translate('status.generatingBgm'),
       isRunning: !error,
-      width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
-      height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
-      indexLabel: 'M',
-      defaultExpanded: true,
       streamPresentation: streamPresentation(rawItems),
       bgmScoreDetails: {
         status: error ? 'failed' : 'generating',
@@ -777,98 +752,106 @@ function buildBgmOverlay(
   })
 }
 
-function buildOverlayNodes(
+function buildStreamRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   textSnapshots: readonly TextStreamSnapshot[],
   episodeId: string,
   translate: Translate,
-): readonly WorkspaceCanvasFlowNode[] {
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   return [
-    ...buildEditScreenplayOverlays(textSnapshots, translate),
-    buildDirectorOverlay(snapshots, translate),
-    buildEditScriptOverlay(snapshots, episodeId, translate),
-    buildCinematographyOverlay(snapshots, translate),
-    ...buildStoryboardPanelGenerationOverlays(snapshots, translate),
-    buildBgmOverlay(snapshots, episodeId, translate),
-  ].filter((node): node is WorkspaceCanvasFlowNode => node !== null)
+    ...buildEditScreenplayRuntimeEntries(textSnapshots, translate),
+    buildDirectorRuntimeEntry(snapshots, translate),
+    buildEditScriptRuntimeEntry(snapshots, episodeId, translate),
+    buildCinematographyRuntimeEntry(snapshots, translate),
+    ...buildStoryboardPanelGenerationRuntimeEntries(snapshots, translate),
+    buildBgmRuntimeEntry(snapshots, episodeId, translate),
+  ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 
-export function mergeWorkspaceStructuredStreamOverlayNodes(
+function storyboardIdFromPanelGenerationNodeId(nodeId: string): string | null {
+  const prefix = 'storyboard-panel-generation:'
+  return nodeId.startsWith(prefix) ? nodeId.slice(prefix.length) : null
+}
+
+function hasPersistedStreamContentForPatch(
   baseNodes: readonly WorkspaceCanvasFlowNode[],
-  overlayNodes: readonly WorkspaceCanvasFlowNode[],
+  patch: WorkspaceCanvasStreamPatch,
+): boolean {
+  const baseNode = baseNodes.find((node) => node.id === patch.nodeId) ?? null
+  if (baseNode) {
+    if (
+      patch.streamKind === 'editScreenplay'
+      && baseNode.data.kind === 'editScreenplay'
+      && baseNode.data.editScreenplayDetails
+      && baseNode.data.editScreenplayDetails.screenplayText.trim().length > 0
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+    if (
+      patch.streamKind === 'editScript'
+      && baseNode.data.kind === 'editScript'
+      && baseNode.data.targetType === 'editScript'
+      && (baseNode.data.editScriptDetails?.shots.length ?? 0) > 0
+    ) {
+      return true
+    }
+    if (
+      patch.streamKind === 'editDirectorDecoupage'
+      && baseNode.data.kind === 'editDirectorDecoupage'
+      && (baseNode.data.editPipelineStepDetails?.items.length ?? 0) > 0
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+    if (
+      patch.streamKind === 'editCinematographyShotPlan'
+      && baseNode.data.kind === 'editCinematographyShotPlan'
+      && (baseNode.data.editPipelineStepDetails?.items.length ?? 0) > 0
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+    if (
+      patch.streamKind === 'bgmScore'
+      && baseNode.data.kind === 'bgmScore'
+      && baseNode.data.bgmScoreDetails?.hasPromptDesign === true
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+  }
+
+  if (patch.streamKind !== 'storyboardPanelGeneration') return false
+  const storyboardId = storyboardIdFromPanelGenerationNodeId(patch.nodeId)
+  if (!storyboardId) return false
+  return baseNodes.some((node) => (
+    node.data.kind === 'shot'
+    && node.data.storyboardId === storyboardId
+    && node.data.isRunning !== true
+  ))
+}
+
+export function applyWorkspaceStructuredStreamPatches(
+  baseNodes: readonly WorkspaceCanvasFlowNode[],
+  patches: readonly WorkspaceCanvasStreamPatch[],
 ): readonly WorkspaceCanvasFlowNode[] {
-  if (overlayNodes.length === 0) return baseNodes
+  if (patches.length === 0) return baseNodes
 
-  const finalDataKeys = new Set<string>()
-  baseNodes.forEach((node) => {
-    if (
-      node.data.kind === 'editScreenplay'
-      && node.data.editScreenplayDetails
-      && node.data.editScreenplayDetails.screenplayText.trim().length > 0
-      && node.data.isRunning !== true
-    ) {
-      finalDataKeys.add(`editScreenplay:${node.data.targetId}`)
-    }
-    if (
-      node.data.kind === 'editScript'
-      && node.data.targetType === 'editScript'
-      && (node.data.editScriptDetails?.shots.length ?? 0) > 0
-    ) {
-      finalDataKeys.add(`editScript:${node.id}`)
-    }
-    if (
-      node.data.kind === 'editDirectorDecoupage'
-      && (node.data.editPipelineStepDetails?.items.length ?? 0) > 0
-      && node.data.isRunning !== true
-    ) {
-      finalDataKeys.add(`editDirectorDecoupage:${node.data.targetId}`)
-    }
-    if (
-      node.data.kind === 'editCinematographyShotPlan'
-      && (node.data.editPipelineStepDetails?.items.length ?? 0) > 0
-      && node.data.isRunning !== true
-    ) {
-      finalDataKeys.add(`editCinematographyShotPlan:${node.data.targetId}`)
-    }
-    if (node.data.kind === 'bgmScore' && node.data.bgmScoreDetails?.hasPromptDesign === true && node.data.isRunning !== true) {
-      finalDataKeys.add(`bgmScore:${node.data.targetId}`)
-    }
-    if (node.data.kind === 'spaceConsistency' && (node.data.spaceConsistencyDetails?.cameraPlanCount ?? 0) > 0 && node.data.isRunning !== true) {
-      finalDataKeys.add(`spaceConsistency:${node.data.targetId}`)
-    }
-    if (node.data.kind === 'shot' && node.data.storyboardId && node.data.isRunning !== true) {
-      finalDataKeys.add(`storyboardPanelGeneration:${node.data.storyboardId}`)
-    }
-  })
-
-  const usableOverlays = overlayNodes.filter((node) => {
-    if (node.data.kind === 'editScreenplay' && finalDataKeys.has(`editScreenplay:${node.data.targetId}`)) return false
-    if (node.data.kind === 'editScript' && finalDataKeys.has(`editScript:${node.id}`)) return false
-    if (node.data.kind === 'editDirectorDecoupage' && finalDataKeys.has(`editDirectorDecoupage:${node.data.targetId}`)) return false
-    if (node.data.kind === 'editCinematographyShotPlan' && finalDataKeys.has(`editCinematographyShotPlan:${node.data.targetId}`)) return false
-    if (node.data.kind === 'bgmScore' && finalDataKeys.has(`bgmScore:${node.data.targetId}`)) return false
-    if (node.data.kind === 'spaceConsistency' && finalDataKeys.has(`spaceConsistency:${node.data.targetId}`)) return false
-    if (node.data.kind === 'storyboardPanelGeneration' && finalDataKeys.has(`storyboardPanelGeneration:${node.data.targetId}`)) return false
-    return true
-  })
-  const overlayById = new Map(usableOverlays.map((node) => [node.id, node]))
-  const usedOverlayIds = new Set<string>()
+  const patchByNodeId = new Map(patches.map((patch) => [patch.nodeId, patch]))
+  const usedPatchNodeIds = new Set<string>()
   const merged = baseNodes.map((node) => {
-    const overlay = overlayById.get(node.id)
-    if (!overlay) return node
-    usedOverlayIds.add(overlay.id)
+    const patch = patchByNodeId.get(node.id)
+    if (!patch) return node
+    usedPatchNodeIds.add(patch.nodeId)
+    if (hasPersistedStreamContentForPatch(baseNodes, patch)) return node
     return {
-      ...overlay,
-      position: node.position,
-      style: {
-        ...node.style,
-        width: overlay.data.width,
-        height: overlay.data.height,
-      },
+      ...node,
       data: {
         ...node.data,
-        ...overlay.data,
+        ...patch.data,
         nodeId: node.id,
+        layoutNodeType: node.data.layoutNodeType,
         targetType: node.data.targetType,
         targetId: node.data.targetId,
         runtimeTargets: node.data.runtimeTargets,
@@ -883,16 +866,18 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
       },
     }
   })
-  usableOverlays.forEach((overlay) => {
-    if (!usedOverlayIds.has(overlay.id)) merged.push(overlay)
+  patches.forEach((patch) => {
+    if (usedPatchNodeIds.has(patch.nodeId)) return
+    if (hasPersistedStreamContentForPatch(baseNodes, patch)) return
+    throw new Error(`WORKSPACE_STREAM_PATCH_WITHOUT_CANONICAL_NODE:${patch.streamKind}:${patch.nodeId}:${patch.taskId}`)
   })
   return merged
 }
 
-export function useWorkspaceStructuredStreamOverlay({
+export function useWorkspaceStructuredStreamRuntime({
   episodeId,
   translate,
-}: UseWorkspaceStructuredStreamOverlayInput): UseWorkspaceStructuredStreamOverlayResult {
+}: UseWorkspaceStructuredStreamRuntimeInput): UseWorkspaceStructuredStreamRuntimeResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
   const [textAccumulators, setTextAccumulators] = useState<ReadonlyMap<string, TextStreamAccumulator>>(() => new Map())
@@ -929,7 +914,7 @@ export function useWorkspaceStructuredStreamOverlay({
         retireTimersRef.current.delete(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
         setTextAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
-      }, STREAM_OVERLAY_RETIRE_MS)
+      }, STREAM_RUNTIME_RETIRE_MS)
       retireTimersRef.current.set(event.taskId, timer)
     })
   }, [episodeId, subscribeTaskEvents])
@@ -939,8 +924,8 @@ export function useWorkspaceStructuredStreamOverlay({
     retireTimersRef.current.clear()
   }, [])
 
-  const nodes = useMemo(
-    () => buildOverlayNodes(
+  const entries = useMemo(
+    () => buildStreamRuntimeEntries(
       snapshotsFromAccumulators(accumulators),
       textSnapshotsFromAccumulators(textAccumulators),
       episodeId,
@@ -949,5 +934,8 @@ export function useWorkspaceStructuredStreamOverlay({
     [accumulators, textAccumulators, episodeId, translate],
   )
 
-  return { nodes }
+  return useMemo(() => ({
+    targets: entries.map((entry) => entry.target),
+    patches: entries.map((entry) => entry.patch),
+  }), [entries])
 }

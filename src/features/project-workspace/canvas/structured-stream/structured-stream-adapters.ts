@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
   editScriptShotSchema,
-  editScriptStyleBibleSchema,
   type EditCinematographyShot,
   type EditDirectorDecoupageShot,
   type EditScriptShot,
@@ -43,8 +42,6 @@ const storyboardPanelFinalPromptSchema = z.object({
   finalVideoPrompt: z.string().trim().min(30),
 }).strict()
 
-const styleBibleSectionSchema = editScriptStyleBibleSchema.shape.styleBible
-
 export interface StructuredStreamTaskEventMeta {
   readonly taskType: string | null
   readonly stepId: string | null
@@ -58,7 +55,6 @@ export type StructuredStreamAdapterKey =
   | 'bgm.scoreDesign.sections'
   | 'bgm.promptSections'
   | 'bgm.virtualLayers'
-  | 'styleBible.sections'
 
 export type TextStreamAdapterKey =
   | 'editScreenplay.text'
@@ -91,10 +87,6 @@ export type StructuredStreamParsedItem =
   | {
     readonly kind: 'bgmVirtualLayer'
     readonly layer: BgmScoreVirtualLayer
-  }
-  | {
-    readonly kind: 'styleBibleSection'
-    readonly section: z.infer<typeof styleBibleSectionSchema>
   }
 
 export interface StructuredStreamItem {
@@ -224,18 +216,6 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     itemKey: (item, fallbackIndex) => item.kind === 'bgmVirtualLayer'
       ? `${item.layer.name}:${fallbackIndex}`
       : String(fallbackIndex + 1),
-  },
-  {
-    key: 'styleBible.sections',
-    taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE],
-    mode: 'object',
-    path: ['styleBible'],
-    parseItem: (value) => ({
-      kind: 'styleBibleSection',
-      section: styleBibleSectionSchema.parse(value),
-    }),
-    itemKey: (_item, fallbackIndex) => String(fallbackIndex + 1),
   },
 ]
 

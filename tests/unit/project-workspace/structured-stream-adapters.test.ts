@@ -169,40 +169,4 @@ describe('structured stream adapters', () => {
     expect(layer.kind).toBe('bgmVirtualLayer')
   })
 
-  it('validates Style Bible single-object stream sections', () => {
-    const adapter = adapterByKey('styleBible.sections')
-    const item = adapter.parseItem({
-      strategy: 'style_bible',
-      rawUserStyle: null,
-      styleSummary: 'Restrained investigative noir with quiet camera language.',
-      stylePolicy: {
-        directing: {
-          pointOfViewPrompt: 'Keep viewpoint anchored to the investigator.',
-          performancePrompt: 'Underplay reactions and hold pauses.',
-          informationReleasePrompt: 'Reveal evidence before faces react.',
-          rhythmPrompt: 'Measured, patient shot rhythm.',
-        },
-        visual: {
-          negativePrompt: 'No comic exaggeration.',
-          imageFilterPrompt: 'Soft contrast and muted practical light.',
-          lightingPrompt: 'Directional interior light with controlled falloff.',
-          colorPrompt: 'Cool neutrals with restrained warm accents.',
-          texturePrompt: 'Fine film grain and tactile paper texture.',
-          compositionPrompt: 'Layer evidence in the foreground.',
-        },
-        camera: {
-          movementPrompt: 'Slow motivated pushes only.',
-          lensAndDepthPrompt: 'Natural focal lengths with shallow emphasis.',
-          videoRhythmPrompt: 'Let cuts breathe after reveals.',
-        },
-        sound: {
-          soundFilterPrompt: 'Quiet room tone and restrained source sound.',
-        },
-        hardBans: ['No slapstick staging'],
-      },
-    })
-
-    expect(item.kind).toBe('styleBibleSection')
-    expect(adapter.mode).toBe('object')
-  })
 })

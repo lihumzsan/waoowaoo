@@ -87,9 +87,9 @@ import {
   resolveWorkspaceNodeRuntimePatch,
 } from './workspace-node-runtime'
 import {
-  mergeWorkspaceStructuredStreamOverlayNodes,
-  useWorkspaceStructuredStreamOverlay,
-} from './structured-stream/useWorkspaceStructuredStreamOverlay'
+  applyWorkspaceStructuredStreamPatches,
+  useWorkspaceStructuredStreamRuntime,
+} from './structured-stream/useWorkspaceStructuredStreamRuntime'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
@@ -544,6 +544,10 @@ function ProjectWorkspaceCanvasContent({
     expansionAnchorNodePositionsRef.current.size > 0 ? expansionAnchorNodePositionsRef.current : undefined
   ), [])
 
+  const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
+    episodeId: episodeId ?? 'pending-episode',
+    translate: t,
+  })
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
@@ -559,6 +563,7 @@ function ProjectWorkspaceCanvasContent({
     editCinematographyShotPlan,
     activeAssistantOperationId,
     editScriptPending: effectiveEditScriptPending,
+    streamTargets: structuredStreamRuntime.targets,
     finalVideo,
     videoGroups,
     defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
@@ -567,13 +572,9 @@ function ProjectWorkspaceCanvasContent({
     translate: t,
     onAction: onNodeAction,
   })
-  const structuredStreamOverlay = useWorkspaceStructuredStreamOverlay({
-    episodeId: episodeId ?? 'pending-episode',
-    translate: t,
-  })
   const projectedNodes = useMemo(
-    () => mergeWorkspaceStructuredStreamOverlayNodes(projection.nodes, structuredStreamOverlay.nodes),
-    [projection.nodes, structuredStreamOverlay.nodes],
+    () => applyWorkspaceStructuredStreamPatches(projection.nodes, structuredStreamRuntime.patches),
+    [projection.nodes, structuredStreamRuntime.patches],
   )
   const projectionEdges = projection.edges
   projectedNodeByIdRef.current = new Map(projectedNodes.map((node) => [node.id, node]))

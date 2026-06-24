@@ -21,10 +21,28 @@ import {
   TASK_RUNTIME_TARGETS,
   taskRuntimeTargetQueryKey,
 } from '@/lib/task/runtime-targets'
+import type { WorkspaceCanvasStreamKind, WorkspaceCanvasStreamTarget } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
 
 function t(key: string, values?: Record<string, string | number>): string {
   if (!values) return key
   return `${key}:${JSON.stringify(values)}`
+}
+
+function streamTarget(input: {
+  readonly nodeId: string
+  readonly streamKind: WorkspaceCanvasStreamKind
+  readonly targetType: string
+  readonly targetId: string
+}): WorkspaceCanvasStreamTarget {
+  return {
+    nodeId: input.nodeId,
+    streamKind: input.streamKind,
+    taskId: `task:${input.streamKind}:${input.targetId}`,
+    taskType: null,
+    targetType: input.targetType,
+    targetId: input.targetId,
+    episodeId: 'episode-1',
+  }
 }
 
 function createClip(id: string, content: string): ProjectClip {
@@ -826,6 +844,95 @@ describe('workspace node canvas projection', () => {
     )
   })
 
+  it('projects a canonical pending screenplay node for screenplay stream targets', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: 'A real story',
+      clips: [],
+      storyboards: [],
+      streamTargets: [
+        streamTarget({
+          nodeId: 'edit-screenplay:screenplay-stream',
+          streamKind: 'editScreenplay',
+          targetType: 'ProjectEditScreenplay',
+          targetId: 'screenplay-stream',
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const screenplayNode = projection.nodes.find((node) => node.id === 'edit-screenplay:screenplay-stream')
+    expect(screenplayNode?.data.kind).toBe('editScreenplay')
+    expect(screenplayNode?.data.targetId).toBe('screenplay-stream')
+    expect(screenplayNode?.data.statusLabel).toBe('status.processing')
+    expect(screenplayNode?.data.isRunning).toBe(true)
+    expect(screenplayNode?.position).toEqual({ x: 260, y: 430 })
+  })
+
+  it('projects canonical pending edit pipeline nodes for stream targets', () => {
+    const editScreenplay = createEditScreenplay()
+    const editScript = createSingleVideoEditScript()
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editScript,
+      streamTargets: [
+        streamTarget({
+          nodeId: 'edit-director-decoupage:screenplay:screenplay-1',
+          streamKind: 'editDirectorDecoupage',
+          targetType: 'ProjectEditScreenplay',
+          targetId: 'screenplay-1',
+        }),
+        streamTarget({
+          nodeId: 'edit-cinematography-shot-plan:edit-script:edit-video',
+          streamKind: 'editCinematographyShotPlan',
+          targetType: 'ProjectEditScript',
+          targetId: 'edit-video',
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const directorNode = projection.nodes.find((node) => node.id === 'edit-director-decoupage:screenplay:screenplay-1')
+    const cinematographyNode = projection.nodes.find((node) => node.id === 'edit-cinematography-shot-plan:edit-script:edit-video')
+    expect(directorNode?.data.kind).toBe('editDirectorDecoupage')
+    expect(directorNode?.data.statusLabel).toBe('status.processing')
+    expect(directorNode?.data.isRunning).toBe(true)
+    expect(cinematographyNode?.data.kind).toBe('editCinematographyShotPlan')
+    expect(cinematographyNode?.data.statusLabel).toBe('status.processing')
+    expect(cinematographyNode?.data.isRunning).toBe(true)
+    expect(cinematographyNode?.data.action).toBeUndefined()
+  })
+
+  it('projects a canonical pending edit table node for edit script stream targets', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: 'A real story',
+      clips: [],
+      storyboards: [],
+      streamTargets: [
+        streamTarget({
+          nodeId: 'edit-script:episode-1',
+          streamKind: 'editScript',
+          targetType: 'ProjectEpisode',
+          targetId: 'episode-1',
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const editScriptNode = projection.nodes.find((node) => node.id === 'edit-script:episode-1')
+    expect(editScriptNode?.data.kind).toBe('editScript')
+    expect(editScriptNode?.data.statusLabel).toBe('status.processing')
+    expect(editScriptNode?.data.isRunning).toBe(true)
+  })
+
   it('does not invent a screenplay placeholder before a stable ProjectEditScreenplay target exists', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
@@ -1035,6 +1142,44 @@ describe('workspace node canvas projection', () => {
     expect(finalNode && bgmNode ? nodesOverlap(finalNode, bgmNode) : true).toBe(false)
     expect(finalNode?.data.actionDisabled).toBe(true)
     expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('bgm-score:episode-1->final:episode-1')
+  })
+
+  it('marks the canonical BGM node running for BGM stream targets', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: 'A real story',
+      clips: [createClip('clip-1', 'clip content')],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-1',
+          clipId: 'clip-1',
+          panels: [
+            createPanel({
+              id: 'panel-1',
+              panelIndex: 0,
+              imageUrl: 'https://example.com/panel-1.png',
+              videoUrl: 'https://example.com/panel-1.mp4',
+            }),
+          ],
+        }),
+      ],
+      editScript: createSingleVideoEditScript(),
+      streamTargets: [
+        streamTarget({
+          nodeId: 'bgm-score:episode-1',
+          streamKind: 'bgmScore',
+          targetType: 'ProjectEpisode',
+          targetId: 'episode-1',
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const bgmNode = projection.nodes.find((node) => node.id === 'bgm-score:episode-1')
+    expect(bgmNode?.data.kind).toBe('bgmScore')
+    expect(bgmNode?.data.statusLabel).toBe('status.generatingBgm')
+    expect(bgmNode?.data.isRunning).toBe(true)
   })
 
   it('passes generated BGM score design into the expandable canvas node', () => {
@@ -2847,5 +2992,50 @@ describe('workspace node canvas projection', () => {
       source: 'space-consistency:storyboard-spatial-ready',
       target: 'storyboard-panel-generation:storyboard-spatial-ready',
     }))
+  })
+
+  it('projects a canonical storyboard generation node for storyboard stream targets', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [
+        createStoryboard({
+          id: 'storyboard-spatial-stream',
+          clipId: 'clip-spatial',
+          panels: [],
+          photographyPlan: JSON.stringify({
+            consistencyMode: 'spatial_text_blocking',
+            currentStage: 'spatial_profile_ready',
+            sourceEditScriptId: 'edit-spatial-stream',
+          }),
+        }),
+      ],
+      streamTargets: [
+        streamTarget({
+          nodeId: 'storyboard-panel-generation:storyboard-spatial-stream',
+          streamKind: 'storyboardPanelGeneration',
+          targetType: 'ProjectStoryboard',
+          targetId: 'storyboard-spatial-stream',
+        }),
+      ],
+      savedLayouts: [],
+      translate: t,
+      editScript: createSingleVideoEditScript({
+        id: 'edit-spatial-stream',
+        status: 'ready',
+        requirements: [],
+      }),
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-spatial-stream',
+        editScriptId: 'edit-spatial-stream',
+      }),
+    })
+
+    const panelGenerationNode = projection.nodes.find((node) => node.id === 'storyboard-panel-generation:storyboard-spatial-stream')
+    expect(panelGenerationNode?.data.kind).toBe('storyboardPanelGeneration')
+    expect(panelGenerationNode?.data.statusLabel).toBe('status.processing')
+    expect(panelGenerationNode?.data.isRunning).toBe(true)
+    expect(panelGenerationNode?.data.action).toBeUndefined()
   })
 })
