@@ -265,4 +265,69 @@ describe('resource-change-sync', () => {
       type: 'active',
     })
   })
+
+  it('maps storyboard image completion to storyboard resources from either task type or target type', () => {
+    const byTaskType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+      taskType: TASK_TYPE.IMAGE_PANEL,
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      projectId: 'project-1',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+      payload: {
+        imageUrl: 'images/panel.png',
+      },
+    })
+    const byTargetType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+      taskType: null,
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      projectId: 'project-1',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+      payload: {
+        imageUrl: 'images/panel.png',
+      },
+    })
+
+    for (const changes of [byTaskType, byTargetType]) {
+      expect(changes.map((change) => change.kind)).toEqual([
+        WORKSPACE_RESOURCE_KIND.STORYBOARDS,
+        WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+        WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
+        WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
+        WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
+      ])
+      expect(changes.some((change) => (
+        change.kind === WORKSPACE_RESOURCE_KIND.STORYBOARDS &&
+        change.episodeId === 'episode-1'
+      ))).toBe(true)
+    }
+  })
+
+  it('actively refetches storyboards when storyboard resources change', async () => {
+    const queryClient = new QueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
+    const refetchQueries = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
+
+    await syncWorkspaceResourceChanges({
+      queryClient,
+      changes: [
+        {
+          kind: WORKSPACE_RESOURCE_KIND.STORYBOARDS,
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+        },
+      ],
+    })
+
+    const storyboardsQueryKey = queryKeys.storyboards.all('episode-1')
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: storyboardsQueryKey,
+    })
+    expect(refetchQueries).toHaveBeenCalledWith({
+      queryKey: storyboardsQueryKey,
+      type: 'active',
+    })
+  })
 })

@@ -364,6 +364,10 @@ describe('sse invalidation behavior', () => {
         && key[0] === queryKeys.storyboards.all('episode-1')[0]
         && key[1] === 'episode-1'
     })).toBe(true)
+    expect(runtime.queryClient.refetchQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.storyboards.all('episode-1'),
+      type: 'active',
+    })
   })
 
   it('resource.changed 事件按资源名称触发 query invalidation', async () => {

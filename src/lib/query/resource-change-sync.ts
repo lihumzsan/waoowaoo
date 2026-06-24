@@ -105,6 +105,21 @@ function isAssetTaskType(taskType: string | null): boolean {
     taskType === TASK_TYPE.REFERENCE_TO_CHARACTER
 }
 
+function isStoryboardTaskType(taskType: string | null): boolean {
+  return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE ||
+    taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
+    taskType === TASK_TYPE.REGENERATE_STORYBOARD_TEXT ||
+    taskType === TASK_TYPE.INSERT_PANEL ||
+    taskType === TASK_TYPE.IMAGE_PANEL ||
+    taskType === TASK_TYPE.PANEL_VARIANT
+}
+
+function isStoryboardTargetType(targetType: string | null): boolean {
+  return targetType === 'ProjectPanel' ||
+    targetType === 'ProjectStoryboard' ||
+    targetType === 'ProjectShot'
+}
+
 function isProjectAssetTargetType(targetType: string | null): boolean {
   return targetType === 'CharacterAppearance' ||
     targetType === 'LocationImage' ||
@@ -378,14 +393,7 @@ export function extractWorkspaceResourceChangesFromTaskLifecycleEvent(params: {
     return episodeId ? editPipelineResourceChanges(params.projectId, episodeId) : []
   }
 
-  if (
-    taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE ||
-    taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
-    taskType === TASK_TYPE.REGENERATE_STORYBOARD_TEXT ||
-    taskType === TASK_TYPE.INSERT_PANEL ||
-    taskType === TASK_TYPE.IMAGE_PANEL ||
-    taskType === TASK_TYPE.PANEL_VARIANT
-  ) {
+  if (isStoryboardTaskType(taskType) || isStoryboardTargetType(targetType)) {
     return episodeId ? storyboardResourceChanges(params.projectId, episodeId) : []
   }
 
@@ -494,9 +502,9 @@ export async function syncWorkspaceResourceChanges(params: {
     }
 
     if (change.kind === WORKSPACE_RESOURCE_KIND.STORYBOARDS) {
-      invalidations.push(params.queryClient.invalidateQueries({
-        queryKey: queryKeys.storyboards.all(change.episodeId),
-      }))
+      const queryKey = queryKeys.storyboards.all(change.episodeId)
+      invalidations.push(params.queryClient.invalidateQueries({ queryKey }))
+      refetchActiveOnce(queryKey)
       continue
     }
 
