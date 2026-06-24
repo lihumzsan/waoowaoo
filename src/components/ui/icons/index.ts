@@ -1,4 +1,5 @@
 export { AppIcon, type AppIconProps } from './AppIcon'
+export { BrandLogoMark } from './BrandLogoMark'
 export { iconRegistry, type AppIconName } from './registry'
 export { IconGradientDefs } from './custom'
 export { RatioPreviewIcon, type RatioPreviewIconProps } from './RatioPreviewIcon'

@@ -1,7 +1,7 @@
 'use client'
 
-import Image from 'next/image'
 import { useTranslations } from 'next-intl'
+import { BrandLogoMark } from '@/components/ui/icons'
 
 type BrandLoadingProps = {
   className?: string
@@ -22,12 +22,12 @@ export function BrandLoading({
 
   return (
     <div className={joinClassNames(['flex items-center justify-center', className])}>
-      <Image
-        src="/logo-small.png"
-        alt={t('appName')}
+      <BrandLogoMark
+        title={t('appName')}
         width={imageSize}
         height={imageSize}
-        className={joinClassNames(['animate-pulse object-contain', imageClassName])}
+        motion="loading"
+        className={joinClassNames(['object-contain', imageClassName])}
       />
       <span className="sr-only">{t('loading')}</span>
     </div>

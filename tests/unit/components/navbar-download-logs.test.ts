@@ -122,6 +122,7 @@ describe('Navbar compact split navigation', () => {
     expect(html).toContain('href="/home"')
     expect(html).toContain('href="/api/admin/download-logs"')
     expect(html).toContain('download=""')
+    expect(html).toContain('data-brand-logo-motion="static"')
     expect(html).not.toContain('LanguageSwitcher')
     expect(html).toContain('pointer-events-none fixed')
     expect(html).toContain('glass-surface-nav')
