@@ -47,6 +47,25 @@ vi.mock('@/components/media/MediaImageWithLoading', () => ({
   ),
 }))
 
+vi.mock('@/components/media/MediaGenerationLoading', () => ({
+  default: (props: {
+    readonly taskState?: {
+      readonly phase?: string | null
+      readonly runningTaskType?: string | null
+    } | null
+    readonly styleImageUrl?: string | null
+    readonly size?: number
+  }) => (
+    <span
+      data-media-generation-loading="true"
+      data-task-phase={props.taskState?.phase ?? ''}
+      data-task-type={props.taskState?.runningTaskType ?? ''}
+      data-style-url={props.styleImageUrl ?? ''}
+      data-size={props.size}
+    />
+  ),
+}))
+
 function renderNode(data: WorkspaceCanvasNodeData): string {
   const props = { data } as NodeProps<WorkspaceCanvasFlowNode>
   return renderToStaticMarkup(<WorkspaceNode {...props} />)
@@ -152,6 +171,7 @@ describe('workspace node rendering', () => {
       isRunning: true,
       width: 720,
       height: 360,
+      loadingStyleImageUrl: 'https://example.com/style.png',
       editAssetGroupDetails: {
         editScriptId: 'edit-1',
         assets: [
@@ -187,6 +207,14 @@ describe('workspace node rendering', () => {
             statusLabel: 'Processing',
             isRunning: true,
             previewImageUrl: null,
+            taskProgress: {
+              targetType: 'LocationImage',
+              targetId: 'location-1',
+              phase: 'processing',
+              runningTaskId: 'task-location',
+              runningTaskType: 'image_location',
+              lastError: null,
+            },
           },
         ],
       },
@@ -203,7 +231,11 @@ describe('workspace node rendering', () => {
     expect(html).not.toContain('group-hover:opacity-100')
     expect(html).not.toContain('aria-label="previewLarge: Dock"')
     expect(html).toContain('data-icon="mapPin"')
-    expect(html).toContain('workspace-node-loading-surface')
+    expect(html).toContain('data-media-generation-loading="true"')
+    expect(html).toContain('data-task-phase="processing"')
+    expect(html).toContain('data-task-type="image_location"')
+    expect(html).toContain('data-style-url="https://example.com/style.png"')
+    expect(html).not.toContain('workspace-node-loading-surface')
     expect(html).not.toContain('absolute inset-0 z-10 flex items-center justify-center')
   })
 

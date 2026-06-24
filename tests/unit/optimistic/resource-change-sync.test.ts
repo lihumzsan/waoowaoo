@@ -8,7 +8,7 @@ import {
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/query/resource-change-sync'
 import { queryKeys } from '@/lib/query/keys'
-import type { ProjectEditScreenplay } from '@/types/project'
+import type { ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
 import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 
 function createScreenplay(): ProjectEditScreenplay {
@@ -19,6 +19,39 @@ function createScreenplay(): ProjectEditScreenplay {
     userPrompt: 'make a quiet short film',
     screenplayText: '标题：《静水》',
     status: 'ready',
+  }
+}
+
+function createEditScript(): ProjectEditScript {
+  return {
+    id: 'edit-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'make a quiet short film',
+    styleBible: null,
+    title: 'Quiet Assets',
+    logline: null,
+    durationSec: 12,
+    shotCount: 1,
+    status: 'ready',
+    assetReviewStatus: 'pending',
+    shots: [],
+    videoBlocks: [],
+    requirements: [
+      {
+        id: 'req-1',
+        kind: 'character',
+        name: 'Pilot',
+        description: 'A quiet pilot.',
+        shotNumbers: [1],
+        status: 'generating',
+        targetId: 'character-1',
+        taskTargetType: 'CharacterAppearance',
+        taskTargetId: 'appearance-1',
+        errorMessage: null,
+        previewImageUrl: null,
+      },
+    ],
   }
 }
 
@@ -43,6 +76,47 @@ describe('resource-change-sync', () => {
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
     ])
+  })
+
+  it('extracts nested edit script from assistant asset generation output', () => {
+    const editScript = createEditScript()
+    const changes = extractWorkspaceResourceChangesFromWriteResult({
+      result: {
+        success: true,
+        result: {
+          success: true,
+          async: true,
+          total: 1,
+          taskIds: ['task-1'],
+          submittedTasks: [
+            {
+              requirementId: 'req-1',
+              kind: 'character',
+              name: 'Pilot',
+              taskId: 'task-1',
+              status: 'queued',
+              runId: null,
+              deduped: false,
+              taskType: TASK_TYPE.IMAGE_CHARACTER,
+              targetType: 'CharacterAppearance',
+              targetId: 'appearance-1',
+            },
+          ],
+          editScript,
+        },
+      },
+      projectId: 'project-1',
+      fallbackEpisodeId: 'episode-1',
+    })
+
+    const editScriptChange = changes.find((change) => change.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT)
+    expect(editScriptChange).toMatchObject({
+      kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      data: editScript,
+    })
+    expect(changes.some((change) => change.kind === WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS)).toBe(true)
   })
 
   it('patches screenplay cache immediately and invalidates affected state', async () => {

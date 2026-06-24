@@ -1698,6 +1698,71 @@ describe('workspace node canvas projection', () => {
     )).toBeLessThanOrEqual(16)
   })
 
+  it('maps running edit asset target state onto the grouped asset thumbnail', () => {
+    const editScript = createSingleVideoEditScript({
+      id: 'edit-assets-running',
+      requirements: [
+        {
+          id: 'req-running-character',
+          kind: 'character',
+          name: 'Pilot',
+          description: 'A quiet astronaut in a minimal suit.',
+          shotNumbers: [1],
+          status: 'generating',
+          targetId: 'character-1',
+          taskTargetType: 'CharacterAppearance',
+          taskTargetId: 'appearance-1',
+          errorMessage: null,
+          previewImageUrl: null,
+        },
+      ],
+    })
+    const projection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: 'A real story',
+      clips: [createClip('clip-1', 'clip content')],
+      storyboards: [],
+      editScript,
+      savedLayouts: [],
+      translate: t,
+    })
+    const assetGroupNode = projection.nodes.find((node) => node.id === 'edit-asset-group:edit-assets-running')
+    if (!assetGroupNode) throw new Error('ASSET_GROUP_NODE_MISSING')
+    const target = TASK_RUNTIME_TARGETS.projectEditAssetImage('CharacterAppearance', 'appearance-1')
+    if (!target) throw new Error('ASSET_TARGET_MISSING')
+
+    const patch = resolveWorkspaceNodeRuntimePatch({
+      node: assetGroupNode,
+      statesByQueryKey: new Map([[
+        taskRuntimeTargetQueryKey(target),
+        {
+          targetType: 'CharacterAppearance',
+          targetId: 'appearance-1',
+          phase: 'processing',
+          runningTaskId: 'task-character',
+          runningTaskType: 'image_character',
+          lastError: null,
+        },
+      ]]),
+      isOptimisticallyRunning: false,
+      labels: {
+        running: 'status.processing',
+        failed: 'status.failed',
+      },
+    })
+
+    const patchedAsset = patch.editAssetGroupDetails?.assets.find((asset) => asset.requirementId === 'req-running-character')
+    expect(patchedAsset?.isRunning).toBe(true)
+    expect(patchedAsset?.statusLabel).toBe('status.processing')
+    expect(patchedAsset?.taskProgress).toMatchObject({
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      phase: 'processing',
+      runningTaskId: 'task-character',
+      runningTaskType: 'image_character',
+    })
+  })
+
   it('enriches edit script preview shots with storyboard image prompts and media urls', () => {
     const editScript = createSingleVideoEditScript({
       id: 'edit-preview',

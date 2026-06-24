@@ -1487,6 +1487,7 @@ function EditAssetGroupContent({
           const on = open === asset.requirementId
           const previewSourceImageUrl = asset.previewImageUrl ?? null
           const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
+          const loadingSize = 64
           const selectAsset = () => setOpen(on ? null : asset.requirementId)
           return (
             <div
@@ -1503,7 +1504,7 @@ function EditAssetGroupContent({
                 selectAsset()
               }}
             >
-              <div className={`relative flex aspect-square items-center justify-center bg-slate-100 text-[var(--glass-text-tertiary)] ${asset.isRunning ? 'workspace-node-loading-surface' : ''}`}>
+              <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]">
                 {imageUrl ? (
                   <MediaImageWithLoading
                     src={imageUrl}
@@ -1514,6 +1515,11 @@ function EditAssetGroupContent({
                 ) : asset.isRunning ? null : (
                   <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
                 )}
+                <MediaGenerationLoading
+                  taskState={asset.taskProgress}
+                  styleImageUrl={data.loadingStyleImageUrl}
+                  size={loadingSize}
+                />
                 {previewSourceImageUrl && imageUrl && onPreviewImage ? (
                   <button
                     type="button"

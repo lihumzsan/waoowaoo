@@ -258,6 +258,28 @@ function isEditCinematographyShotPlanRecord(value: unknown): value is ProjectEdi
   )
 }
 
+function readEditScriptChangePayload(value: unknown): ProjectEditScript | null {
+  if (isEditScriptRecord(value)) return value
+  if (!isRecord(value)) return null
+  return isEditScriptRecord(value.editScript) ? value.editScript : null
+}
+
+function appendEditScriptChanges(
+  changes: WorkspaceResourceChange[],
+  data: ProjectEditScript,
+): void {
+  changes.push(
+    ...editPipelineResourceChanges(data.projectId, data.episodeId),
+    {
+      kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+      projectId: data.projectId,
+      episodeId: data.episodeId,
+      data,
+    },
+    projectScopedChange(WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS, data.projectId, data.episodeId),
+  )
+}
+
 function readWriteResultData(value: unknown): unknown[] {
   if (!isRecord(value)) return []
   const candidates: unknown[] = []
@@ -301,17 +323,9 @@ export function extractWorkspaceResourceChangesFromWriteResult(params: {
       )
       continue
     }
-    if (isEditScriptRecord(data)) {
-      changes.push(
-        ...editPipelineResourceChanges(data.projectId, data.episodeId),
-        {
-          kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
-          projectId: data.projectId,
-          episodeId: data.episodeId,
-          data,
-        },
-        projectScopedChange(WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS, data.projectId, data.episodeId),
-      )
+    const editScript = readEditScriptChangePayload(data)
+    if (editScript) {
+      appendEditScriptChanges(changes, editScript)
       continue
     }
     if (isEditCinematographyShotPlanRecord(data)) {

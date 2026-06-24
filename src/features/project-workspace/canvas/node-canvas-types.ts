@@ -424,6 +424,8 @@ export interface WorkspaceCanvasEditAssetGroupItem {
   readonly statusLabel: string
   readonly isRunning: boolean
   readonly previewImageUrl?: string | null
+  readonly runtimeTarget?: TaskRuntimeTarget | null
+  readonly taskProgress?: TaskRuntimeStateLike | null
   readonly action?: WorkspaceCanvasNodeAction
   readonly actionLabel?: string
 }

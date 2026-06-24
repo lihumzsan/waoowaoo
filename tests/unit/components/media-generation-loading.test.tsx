@@ -48,7 +48,8 @@ describe('MediaGenerationLoadingView', () => {
         size: 72,
       }),
     )
-    expect(html).toContain('workspace-node-loading-surface')
+    expect(html).toContain('bg-[var(--glass-bg-muted)]')
+    expect(html).not.toContain('workspace-node-loading-surface')
     expect(html).toContain('50%')
   })
 

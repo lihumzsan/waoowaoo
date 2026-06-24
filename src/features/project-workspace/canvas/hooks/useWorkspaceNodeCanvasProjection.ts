@@ -1601,6 +1601,7 @@ export function buildWorkspaceNodeCanvasProjection({
       const assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
       editAssetNodeIds.push(assetGroupNodeId)
       const assetItems = editScript.requirements.map((asset) => {
+        const assetRuntimeTarget = editAssetRuntimeTarget(asset)
         const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
         const canRegenerateAsset = asset.status === 'completed' && Boolean(asset.targetId)
         const assetAction: WorkspaceCanvasNodeAction | undefined = canGenerateAsset
@@ -1618,6 +1619,7 @@ export function buildWorkspaceNodeCanvasProjection({
           statusLabel: assetStatusLabel(asset.status, translate),
           isRunning: asset.status === 'generating',
           previewImageUrl: asset.previewImageUrl,
+          runtimeTarget: assetRuntimeTarget,
           action: assetAction,
           actionLabel: assetAction
             ? canGenerateAsset ? translate('actions.generateEditAsset') : translate('actions.regenerateImage')
@@ -1626,8 +1628,8 @@ export function buildWorkspaceNodeCanvasProjection({
       })
       const charCount = assetItems.filter((asset) => asset.kind === 'character').length
       const locationCount = assetItems.length - charCount
-      const assetRuntimeTargets = editScript.requirements
-        .map(editAssetRuntimeTarget)
+      const assetRuntimeTargets = assetItems
+        .map((asset) => asset.runtimeTarget)
         .filter((target): target is TaskRuntimeTarget => target !== null)
       nodes.push(createNode({
         id: assetGroupNodeId,
@@ -2461,7 +2463,7 @@ export function buildWorkspaceNodeCanvasProjection({
 
   // 给所有待生成媒体节点统一附上加载背景图(用户选中的视觉风格图),供统一加载组件使用。
   const nodesWithLoadingStyleImage = nodes.map((node) =>
-    node.data.kind === 'shot' || node.data.kind === 'imageAsset' || node.data.kind === 'videoClip'
+    node.data.kind === 'shot' || node.data.kind === 'imageAsset' || node.data.kind === 'videoClip' || node.data.kind === 'editAssetGroup'
       ? { ...node, data: { ...node.data, loadingStyleImageUrl: styleBiblePreviewImageUrl } }
       : node,
   )

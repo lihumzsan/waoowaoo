@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { AppIcon } from '@/components/ui/icons'
@@ -83,7 +84,7 @@ export function MediaGenerationLoadingView({
           <div className="absolute inset-0 bg-[rgba(10,16,30,0.32)]" />
         </>
       ) : (
-        <div className="workspace-node-loading-surface absolute inset-0 bg-[var(--glass-bg-muted)]" />
+        <div className="absolute inset-0 bg-[var(--glass-bg-muted)]" />
       )}
 
       {mode === 'failed' ? (
