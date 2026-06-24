@@ -1,7 +1,8 @@
 'use client'
 
+import { useId } from 'react'
 import { useTranslations } from 'next-intl'
-import { BrandLogoMark } from '@/components/ui/icons'
+import { BrandLogoShape } from '@/components/ui/icons/BrandLogoShape'
 
 type BrandLoadingProps = {
   className?: string
@@ -19,15 +20,15 @@ export function BrandLoading({
   imageSize = 80,
 }: BrandLoadingProps) {
   const t = useTranslations('common')
+  const uid = `brand-loading-${useId().replace(/:/g, '')}`
 
   return (
     <div className={joinClassNames(['flex items-center justify-center', className])}>
-      <BrandLogoMark
+      <BrandLogoShape
+        uid={uid}
+        size={imageSize}
         title={t('appName')}
-        width={imageSize}
-        height={imageSize}
-        motion="loading"
-        className={joinClassNames(['object-contain', imageClassName])}
+        className={joinClassNames(['brand-loading-mark object-contain', imageClassName])}
       />
       <span className="sr-only">{t('loading')}</span>
     </div>

@@ -359,3 +359,47 @@
 .workspace-node-stream-soft-detail [data-stream-field="true"]:nth-child(4) {
   animation-delay: 120ms;
 }
+
+/* —— 系统加载 Logo:液态浮动(主体轻浮摆动 + 圆点独立弹跳) —— */
+.brand-loading-mark .logo-shape__art,
+.brand-loading-mark .logo-shape__dot {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.brand-loading-mark .logo-shape__art {
+  animation: brandLoadingBob 2.8s ease-in-out infinite;
+}
+
+.brand-loading-mark .logo-shape__dot {
+  animation: brandLoadingDot 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes brandLoadingBob {
+  0%,
+  100% {
+    transform: translateY(2px) rotate(-1.5deg);
+  }
+
+  50% {
+    transform: translateY(-4px) rotate(1.5deg);
+  }
+}
+
+@keyframes brandLoadingDot {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  45% {
+    transform: translateY(-9px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-loading-mark .logo-shape__art,
+  .brand-loading-mark .logo-shape__dot {
+    animation: none;
+  }
+}

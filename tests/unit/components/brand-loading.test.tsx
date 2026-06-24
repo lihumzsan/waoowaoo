@@ -17,19 +17,22 @@ vi.mock('next-intl', () => ({
 }))
 
 describe('BrandLoading', () => {
-  it('renders the project logo with the shared left-to-right loading motion', () => {
+  it('renders the brand logo as an animated svg loading indicator', () => {
     Reflect.set(globalThis, 'React', React)
 
     const html = renderToStaticMarkup(createElement(BrandLoading))
 
-    expect(html).toContain('data-brand-logo-motion="loading"')
-    expect(html).toContain('role="img"')
-    expect(html).toContain('aria-label="waoowaoo"')
-    expect(html).toContain('waoowaoo')
-    expect(html).toContain('logo-small.png')
-    expect(html).toContain('brand-logo-mark__reveal')
-    expect(html).toContain('brand-logo-mark__sweep')
+    // SVG 形状(矢量 logo),而非位图
+    expect(html).toContain('<svg')
+    expect(html).not.toContain('logo-small.png')
+    // 液态浮动动效作用于主体与圆点的 class 钩子
+    expect(html).toContain('brand-loading-mark')
+    expect(html).toContain('logo-shape__art')
+    expect(html).toContain('logo-shape__dot')
+    // 可访问性:标题取应用名,sr-only 提示加载中
+    expect(html).toContain('<title>waoowaoo</title>')
     expect(html).toContain('class="sr-only"')
+    expect(html).toContain('加载中...')
   })
 
   it('keeps page loading on the glass full-screen surface', () => {
@@ -39,6 +42,7 @@ describe('BrandLoading', () => {
 
     expect(html).toContain('glass-page')
     expect(html).toContain('min-h-screen')
-    expect(html).toContain('data-brand-logo-motion="loading"')
+    expect(html).toContain('<svg')
+    expect(html).toContain('brand-loading-mark')
   })
 })
