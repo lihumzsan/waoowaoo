@@ -585,6 +585,7 @@ describe('edit script generation status persistence', () => {
       userId: 'user-1',
       locale: 'zh',
       screenplayId: 'screenplay-1',
+      parentTaskId: 'parent-task-1',
     })
 
     expect(result).toEqual(expect.objectContaining({
@@ -623,6 +624,7 @@ describe('edit script generation status persistence', () => {
     expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenCalledTimes(3)
     expect(submitTask).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      parentTaskId: 'parent-task-1',
       type: 'edit_style_preview_image',
       targetType: 'ProjectEditStylePreview',
       targetId: 'style-preview-style_a',

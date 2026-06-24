@@ -264,6 +264,7 @@ export async function createTask(input: CreateTaskInput) {
   const createData = {
     userId: input.userId,
     projectId: input.projectId,
+    parentTaskId: input.parentTaskId || null,
     episodeId: input.episodeId || null,
     type: input.type,
     targetType: input.targetType,

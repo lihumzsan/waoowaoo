@@ -40,6 +40,7 @@ import {
   handleEditCinematographyShotPlanGenerateTask,
   handleEditDirectorDecoupageGenerateTask,
 } from './handlers/edit-script-structured-generate'
+import { handleEditStylePreviewsGenerateTask } from './handlers/edit-style-previews-generate'
 import {
   handleEditScriptStoryboardCameraPlanTask,
   handleEditScriptStoryboardPrepareTask,
@@ -681,6 +682,8 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEditScreenplayGenerateTask(job)
     case TASK_TYPE.EDIT_SCREENPLAY_REVISE:
       return await handleEditScreenplayReviseTask(job)
+    case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
+      return await handleEditStylePreviewsGenerateTask(job)
     case TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE:
       return await handleEditDirectorDecoupageGenerateTask(job)
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:

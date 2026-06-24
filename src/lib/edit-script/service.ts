@@ -106,6 +106,7 @@ interface GenerateEditStylePreviewsInput {
   readonly screenplayId?: string
   readonly styleDirection?: string
   readonly count?: number
+  readonly parentTaskId?: string | null
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -1336,6 +1337,7 @@ async function submitEditStylePreviewImageTask(input: {
   readonly request: NextRequest
   readonly userId: string
   readonly projectId: string
+  readonly parentTaskId?: string | null
   readonly episodeId: string
   readonly locale: Locale
   readonly stylePreviewId: string
@@ -1372,6 +1374,7 @@ async function submitEditStylePreviewImageTask(input: {
     userId: input.userId,
     locale: input.locale,
     projectId: input.projectId,
+    parentTaskId: input.parentTaskId || null,
     episodeId: input.episodeId,
     type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
     targetType: 'ProjectEditStylePreview',
@@ -1385,7 +1388,7 @@ async function submitEditStylePreviewImageTask(input: {
   })
 }
 
-async function markStylePreviewGenerationFailed(input: {
+export async function markProjectEditStylePreviewGenerationFailed(input: {
   readonly screenplayId: string
   readonly message: string
 }) {
@@ -1657,6 +1660,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
         request: input.request,
         userId: input.userId,
         projectId: input.projectId,
+        parentTaskId: input.parentTaskId || null,
         episodeId: input.episodeId,
         locale,
         stylePreviewId: preview.id,
@@ -1710,7 +1714,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
     }
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught)
-    await markStylePreviewGenerationFailed({
+    await markProjectEditStylePreviewGenerationFailed({
       screenplayId: screenplay.id,
       message,
     })

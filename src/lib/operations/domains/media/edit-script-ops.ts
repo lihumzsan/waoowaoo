@@ -1,15 +1,13 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import {
-  generateProjectEditScriptAssets,
-  generateProjectEditStylePreviews,
-} from '@/lib/edit-script/service'
+import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
 import {
   submitProjectEditCinematographyShotPlanTask,
   submitProjectEditDirectorDecoupageTask,
   submitProjectEditScreenplayGenerationTask,
   submitProjectEditScreenplayRevisionTask,
+  submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
 import {
   submitEditScriptSpatialBlockingStoryboard,
@@ -18,7 +16,7 @@ import {
 import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
-import type { EditStylePreviewGenerationPartData, TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
+import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -35,9 +33,7 @@ import {
 import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
-  refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
-  taskBatchSubmitOperationOutputSchemaBase,
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
@@ -48,10 +44,6 @@ import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 const editFirstDurationTierSchema = z.enum(EDIT_FIRST_DURATION_TIERS)
-const editStylePreviewKeySchema = z.custom<EditStylePreviewGenerationPartData['items'][number]['styleKey']>(
-  (value) => typeof value === 'string' && /^style_[abc](?:_[2-9]\d*)?$/.test(value),
-)
-
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
@@ -154,25 +146,15 @@ const requestEditFirstChoiceOutputSchema = z.object({
   workflowStage: z.string().min(1),
 }).passthrough()
 
-const editStylePreviewGenerationOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
-  taskBatchSubmitOperationOutputSchemaBase.extend({
-    projectId: z.string().min(1),
+const editStylePreviewsTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+  taskSubmitOperationOutputSchemaBase.extend({
     episodeId: z.string().min(1),
     screenplayId: z.string().min(1),
-    status: z.literal('queued'),
-    stylePreviews: z.array(z.object({
-      id: z.string().min(1),
-      styleKey: editStylePreviewKeySchema,
-      aspectRatio: editScriptVideoRatioSchema.optional(),
-      title: z.string().min(1),
-      summary: z.string().min(1),
-      status: z.string().min(1),
-      taskId: z.string().min(1),
-    })),
+    taskType: z.literal(TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE),
+    targetType: z.literal('ProjectEditScreenplay'),
+    targetId: z.string().min(1),
   }).passthrough(),
 )
-
-type EditStylePreviewGenerationOutput = z.infer<typeof editStylePreviewGenerationOutputSchema>
 
 const editScriptSummaryOutputSchema = z.object({
   id: z.string().min(1).optional(),
@@ -525,35 +507,34 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         onTaskComplete: 'await_user_choice',
       },
       inputSchema: generateEditStylePreviewsInputSchema,
-      outputSchema: editStylePreviewGenerationOutputSchema,
+      outputSchema: editStylePreviewsTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = editStylePreviewGenerationOutputSchema.parse(await generateProjectEditStylePreviews({
+        const result = await submitProjectEditStylePreviewsGenerationTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
           locale: resolveLocale(ctx.context.locale),
+          source: ctx.source,
+          confirmed: input.confirmed === true,
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
           ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
           ...(input.count ? { count: input.count } : {}),
-        }))
-        writeOperationDataPart<EditStylePreviewGenerationPartData>(ctx.writer, 'data-edit-style-preview-generation', {
-          operationId: 'generate_edit_style_previews',
-          agentRunId: ctx.context.runId ?? null,
-          projectId: result.projectId,
-          episodeId: result.episodeId,
-          screenplayId: result.screenplayId,
-          items: result.stylePreviews.map((preview: EditStylePreviewGenerationOutput['stylePreviews'][number]) => ({
-            id: preview.id,
-            styleKey: preview.styleKey,
-            title: preview.title,
-            summary: preview.summary,
-            taskId: preview.taskId,
-            ...(preview.aspectRatio ? { aspectRatio: preview.aspectRatio } : {}),
-          })),
         })
-        return result
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_style_previews',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: result.screenplayId,
+        })
+        return editStylePreviewsTaskSubmitOutputSchema.parse(result)
       },
     }),
     [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio]: buildRequestEditChoiceOperation('duration_and_aspect_ratio'),

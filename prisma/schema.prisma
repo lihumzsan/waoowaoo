@@ -1166,6 +1166,7 @@ model Task {
   id               String    @id @default(uuid())
   userId           String
   projectId        String
+  parentTaskId     String?
   episodeId        String?
   type             String
   targetType       String
@@ -1197,13 +1198,16 @@ model Task {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events TaskEvent[]
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentTask Task?       @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks Task[]      @relation("TaskChildren")
+  events     TaskEvent[]
 
   @@index([status])
   @@index([type])
   @@index([targetType, targetId])
   @@index([projectId])
+  @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
   @@index([userId])

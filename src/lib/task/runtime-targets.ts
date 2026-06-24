@@ -89,6 +89,7 @@ export const TASK_RUNTIME_TARGETS = {
     return target('ProjectEditScreenplay', screenplayId, [
       TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
       TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+      TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     ])
   },
   projectEditDirectorDecoupage(screenplayId: string | null | undefined) {

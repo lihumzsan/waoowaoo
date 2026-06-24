@@ -90,6 +90,7 @@ export async function submitTask(params: {
   userId: string
   locale: Locale
   projectId: string
+  parentTaskId?: string | null
   episodeId?: string | null
   type: TaskType
   targetType: string
@@ -138,6 +139,7 @@ export async function submitTask(params: {
   const { task, deduped } = await createTask({
     userId: params.userId,
     projectId: params.projectId,
+    parentTaskId: params.parentTaskId || null,
     episodeId: params.episodeId || null,
     type: params.type,
     targetType: params.targetType,
@@ -211,6 +213,7 @@ export async function submitTask(params: {
       episodeId: params.episodeId || null,
       payload: {
         ...normalizedPayload,
+        parentTaskId: params.parentTaskId || null,
         billing: preparedBillingInfo || null,
         trace: {
           requestId: params.requestId || null,
@@ -233,6 +236,7 @@ export async function submitTask(params: {
     try {
       await addTaskJob({
         taskId: task.id,
+        parentTaskId: params.parentTaskId || null,
         type: params.type,
         locale: params.locale,
         projectId: params.projectId,

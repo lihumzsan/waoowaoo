@@ -34,26 +34,6 @@ const serviceMock = vi.hoisted(() => ({
     screenplayText: 'INT. ORBITAL DOCK - NIGHT\nCthulhu symbols pulse.',
     status: 'screenplay_ready',
   })),
-  generateProjectEditStylePreviews: vi.fn(async () => ({
-    success: true,
-    async: true,
-    projectId: 'project-1',
-    episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
-    status: 'queued',
-    total: 3,
-    taskIds: ['task-style-a', 'task-style-b', 'task-style-c'],
-    results: [
-      { refId: 'style-preview-a', taskId: 'task-style-a' },
-      { refId: 'style-preview-b', taskId: 'task-style-b' },
-      { refId: 'style-preview-c', taskId: 'task-style-c' },
-    ],
-    stylePreviews: [
-      { id: 'style-preview-a', styleKey: 'style_a', title: 'Style A', summary: 'Summary A', status: 'generating', taskId: 'task-style-a' },
-      { id: 'style-preview-b', styleKey: 'style_b', title: 'Style B', summary: 'Summary B', status: 'generating', taskId: 'task-style-b' },
-      { id: 'style-preview-c', styleKey: 'style_c', title: 'Style C', summary: 'Summary C', status: 'generating', taskId: 'task-style-c' },
-    ],
-  })),
   generateProjectEditDirectorDecoupage: vi.fn(async () => ({
     id: 'decoupage-1',
     projectId: 'project-1',
@@ -201,6 +181,19 @@ const taskSubmissionMock = vi.hoisted(() => ({
     targetType: 'ProjectEditScreenplay',
     targetId: 'screenplay-1',
   })),
+  submitProjectEditStylePreviewsGenerationTask: vi.fn(async () => ({
+    success: true,
+    async: true,
+    taskId: 'task-style-parent-1',
+    runId: 'run-style-parent-1',
+    status: 'queued',
+    deduped: false,
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    taskType: 'edit_style_previews_generate',
+    targetType: 'ProjectEditScreenplay',
+    targetId: 'screenplay-1',
+  })),
 }))
 
 vi.mock('@/lib/edit-script/service', () => serviceMock)
@@ -211,6 +204,7 @@ vi.mock('@/lib/edit-script/task-submission', async () => {
     ...actual,
     submitProjectEditScreenplayGenerationTask: taskSubmissionMock.submitProjectEditScreenplayGenerationTask,
     submitProjectEditScreenplayRevisionTask: taskSubmissionMock.submitProjectEditScreenplayRevisionTask,
+    submitProjectEditStylePreviewsGenerationTask: taskSubmissionMock.submitProjectEditStylePreviewsGenerationTask,
   }
 })
 
@@ -608,10 +602,10 @@ describe('edit-script operations', () => {
       success: true,
       async: true,
       screenplayId: 'screenplay-1',
-      taskIds: ['task-style-a', 'task-style-b', 'task-style-c'],
-      total: 3,
+      taskId: 'task-style-parent-1',
+      taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     }))
-    expect(serviceMock.generateProjectEditStylePreviews).toHaveBeenCalledWith(expect.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditStylePreviewsGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -624,16 +618,13 @@ describe('edit-script operations', () => {
     })
     expect(writerEvents).toEqual([
       expect.objectContaining({
-        type: 'data-edit-style-preview-generation',
+        type: 'data-task-submitted',
         data: expect.objectContaining({
           operationId: 'generate_edit_style_previews',
-          items: expect.arrayContaining([
-            expect.objectContaining({
-              id: 'style-preview-a',
-              title: expect.any(String),
-              taskId: 'task-style-a',
-            }),
-          ]),
+          taskId: 'task-style-parent-1',
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+          targetType: 'ProjectEditScreenplay',
+          targetId: 'screenplay-1',
         }),
       }),
     ])
@@ -648,7 +639,7 @@ describe('edit-script operations', () => {
       confirmed: true,
     })
 
-    expect(serviceMock.generateProjectEditStylePreviews).toHaveBeenCalledWith(expect.objectContaining({
+    expect(taskSubmissionMock.submitProjectEditStylePreviewsGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',

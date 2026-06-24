@@ -1,6 +1,5 @@
 import type { UIMessage } from 'ai'
 import type {
-  EditStylePreviewGenerationPartData,
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
@@ -52,20 +51,6 @@ function readNonEmptyString(value: unknown): string | null {
 function readOptionalString(value: unknown): string | null | undefined {
   if (value === null) return null
   return readNonEmptyString(value) ?? undefined
-}
-
-function readStylePreviewKey(value: unknown): EditStylePreviewGenerationPartData['items'][number]['styleKey'] | null {
-  const key = readNonEmptyString(value)
-  if (key && /^style_[abc](?:_[2-9]\d*)?$/.test(key)) {
-    return key as EditStylePreviewGenerationPartData['items'][number]['styleKey']
-  }
-  return null
-}
-
-function readStylePreviewAspectRatio(value: unknown): '9:16' | '16:9' | '21:9' | null {
-  const aspectRatio = readNonEmptyString(value)
-  if (aspectRatio === '9:16' || aspectRatio === '16:9' || aspectRatio === '21:9') return aspectRatio
-  return null
 }
 
 function readTaskSubmittedPartData(value: unknown): TaskSubmittedPartData | null {
@@ -341,48 +326,6 @@ export function createTaskBatchSubmittedDataFromOperationPayload(params: {
     taskIds,
     ...(results ? { results } : {}),
     ...(mutationBatchId !== undefined ? { mutationBatchId } : {}),
-  }
-}
-
-export function createEditStylePreviewGenerationDataFromOperationPayload(params: {
-  payload: unknown
-  operationId: string
-}): EditStylePreviewGenerationPartData | null {
-  if (params.operationId !== 'generate_edit_style_previews') return null
-  const result = readOperationResult(params.payload)
-  if (!result) return null
-  const projectId = readNonEmptyString(result.projectId)
-  const episodeId = readNonEmptyString(result.episodeId)
-  const screenplayId = readNonEmptyString(result.screenplayId)
-  if (!projectId || !episodeId || !screenplayId) return null
-  const items = Array.isArray(result.stylePreviews)
-    ? result.stylePreviews.flatMap((item) => {
-      if (!isRecord(item)) return []
-      const id = readNonEmptyString(item.id)
-      const title = readNonEmptyString(item.title)
-      const summary = readNonEmptyString(item.summary)
-      const taskId = readNonEmptyString(item.taskId)
-      const aspectRatio = readStylePreviewAspectRatio(item.aspectRatio)
-      const styleKey = readStylePreviewKey(item.styleKey)
-      return id && title && summary && taskId && styleKey
-        ? [{
-            id,
-            styleKey,
-            title,
-            summary,
-            taskId,
-            ...(aspectRatio ? { aspectRatio } : {}),
-          }]
-        : []
-    })
-    : []
-  if (items.length === 0) return null
-  return {
-    operationId: 'generate_edit_style_previews',
-    projectId,
-    episodeId,
-    screenplayId,
-    items,
   }
 }
 

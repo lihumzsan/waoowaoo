@@ -5,9 +5,10 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import { getProjectModelConfig } from '@/lib/config-service'
 import { buildEditFirstStructuredUserPrompt, type EditFirstDurationTier } from './duration-tier'
-import type { EditScriptVideoRatio } from './types'
-import { buildEditFirstTextTaskPayload } from './task-billing'
+import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from './types'
+import { buildEditFirstTextTaskPayload, buildEditFirstTextTaskPayloadFromAnalysisModel } from './task-billing'
 import {
   resolveEditCinematographyShotPlanTaskTarget,
   resolveEditDirectorDecoupageTaskTarget,
@@ -17,6 +18,7 @@ type OperationTaskSubmitResult = Awaited<ReturnType<typeof submitOperationTask>>
 
 const EDIT_SCREENPLAY_STATUS_GENERATING = 'generating'
 const EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY = 'screenplay_ready'
+const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY = 'style_preview_ready'
 
 type EditScreenplaySnapshot = {
   readonly id: string
@@ -47,6 +49,14 @@ export type EditCinematographyShotPlanTaskSubmitResult = OperationTaskSubmitResu
   readonly editScriptId: string
   readonly taskType: typeof TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE
   readonly targetType: 'ProjectEditScript'
+  readonly targetId: string
+}
+
+export type EditStylePreviewsTaskSubmitResult = OperationTaskSubmitResult & {
+  readonly episodeId: string
+  readonly screenplayId: string
+  readonly taskType: typeof TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE
+  readonly targetType: 'ProjectEditScreenplay'
   readonly targetId: string
 }
 
@@ -218,6 +228,66 @@ async function resolveEditScreenplayRevisionTarget(input: {
   return { episodeId: input.episodeId, screenplayId: screenplay.id }
 }
 
+function resolveStylePreviewCount(value: number | undefined): number {
+  if (value === undefined) return EDIT_STYLE_PREVIEW_MAX_COUNT
+  if (!Number.isInteger(value) || value < 1 || value > EDIT_STYLE_PREVIEW_MAX_COUNT) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_STYLE_PREVIEW_COUNT_INVALID',
+      message: `Style preview count must be an integer from 1 to ${String(EDIT_STYLE_PREVIEW_MAX_COUNT)}`,
+    })
+  }
+  return value
+}
+
+async function findActiveEditStylePreviewsTaskTarget(params: {
+  readonly projectId: string
+  readonly dedupeKey: string
+}): Promise<string | null> {
+  const task = await prisma.task.findFirst({
+    where: {
+      projectId: params.projectId,
+      type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+      dedupeKey: params.dedupeKey,
+      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+    },
+    select: { targetId: true },
+  })
+  return task?.targetId ?? null
+}
+
+async function resolveEditStylePreviewsTaskTarget(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly screenplay: {
+    readonly id: string
+    readonly status: string
+  }
+  readonly dedupeKey: string
+}) {
+  const activeTargetId = await findActiveEditStylePreviewsTaskTarget({
+    projectId: input.projectId,
+    dedupeKey: input.dedupeKey,
+  })
+  if (activeTargetId) {
+    if (activeTargetId !== input.screenplay.id) {
+      throw new Error(`EDIT_STYLE_PREVIEWS_ACTIVE_TARGET_MISMATCH:${activeTargetId}`)
+    }
+    return { episodeId: input.episodeId, screenplayId: input.screenplay.id }
+  }
+
+  if (
+    input.screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY
+    && input.screenplay.status !== EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCREENPLAY_REVIEW_REQUIRED',
+      message: `Edit screenplay must be ready for style preview generation or regeneration; current status is ${input.screenplay.status}`,
+    })
+  }
+
+  return { episodeId: input.episodeId, screenplayId: input.screenplay.id }
+}
+
 export async function submitProjectEditScreenplayGenerationTask(input: {
   readonly request: NextRequest
   readonly projectId: string
@@ -335,6 +405,86 @@ export async function submitProjectEditScreenplayRevisionTask(input: {
     episodeId: target.episodeId,
     screenplayId: target.screenplayId,
     taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+    targetType: 'ProjectEditScreenplay',
+    targetId: target.screenplayId,
+  }
+}
+
+export async function submitProjectEditStylePreviewsGenerationTask(input: {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly screenplayId?: string
+  readonly styleDirection?: string
+  readonly count?: number
+  readonly source: string
+  readonly confirmed: boolean
+  readonly locale: Locale
+}): Promise<EditStylePreviewsTaskSubmitResult> {
+  const count = resolveStylePreviewCount(input.count)
+  const screenplay = await prisma.projectEditScreenplay.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      ...(input.screenplayId ? { id: input.screenplayId } : {}),
+      project: { userId: input.userId },
+    },
+    select: { id: true, status: true },
+  })
+  if (!screenplay) throw new ApiError('NOT_FOUND')
+
+  const dedupeKey = `edit_style_previews_generate:${input.projectId}:${screenplay.id}`
+  const target = await resolveEditStylePreviewsTaskTarget({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    screenplay,
+    dedupeKey,
+  })
+  const config = await getProjectModelConfig(input.projectId, input.userId)
+  if (!config.storyboardModel) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_STORYBOARD_MODEL_REQUIRED',
+      message: 'Project storyboard image model is required before edit style preview generation',
+    })
+  }
+  if (!config.analysisModel) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MISSING_ANALYSIS_MODEL',
+      message: 'Analysis model is required for edit-first text task billing',
+    })
+  }
+
+  const result = await submitOperationTask({
+    request: input.request,
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: target.episodeId,
+    type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+    targetType: 'ProjectEditScreenplay',
+    targetId: target.screenplayId,
+    operationId: 'generate_edit_style_previews',
+    source: input.source,
+    confirmed: input.confirmed,
+    payload: buildEditFirstTextTaskPayloadFromAnalysisModel({
+      analysisModel: config.analysisModel,
+      payload: {
+        episodeId: target.episodeId,
+        screenplayId: target.screenplayId,
+        count,
+        ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
+        displayMode: 'detail',
+      },
+    }),
+    dedupeKey,
+    locale: input.locale,
+  })
+
+  return {
+    ...result,
+    episodeId: target.episodeId,
+    screenplayId: target.screenplayId,
+    taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     targetType: 'ProjectEditScreenplay',
     targetId: target.screenplayId,
   }

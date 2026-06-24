@@ -71,6 +71,14 @@ describe('task queues', () => {
     expect(QueueMock).toHaveBeenCalledTimes(1)
   })
 
+  it('routes style preview parent generation to the text queue', async () => {
+    const queuesModule = await import('@/lib/task/queues')
+    const taskTypes = await import('@/lib/task/types')
+
+    expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE)).toBe('text')
+    expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)).toBe('image')
+  })
+
   it('removes a terminal job with the same task id before enqueueing replacement work', async () => {
     const queuesModule = await import('@/lib/task/queues')
     const taskTypes = await import('@/lib/task/types')

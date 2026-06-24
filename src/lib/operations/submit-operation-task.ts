@@ -14,6 +14,7 @@ export async function submitOperationTask(params: {
   request: NextRequest
   userId: string
   projectId: string
+  parentTaskId?: string | null
   episodeId?: string | null
   type: TaskType
   targetType: string
@@ -50,6 +51,7 @@ export async function submitOperationTask(params: {
     locale,
     requestId: getRequestId(params.request),
     projectId: params.projectId,
+    parentTaskId: params.parentTaskId || null,
     episodeId: params.episodeId || null,
     type: params.type,
     targetType: params.targetType,

@@ -27,12 +27,14 @@ vi.mock('@/lib/operations/submit-operation-task', () => ({
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({
     analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+    storyboardModel: 'fal::gpt-image-2',
   })),
 }))
 
 import {
   submitProjectEditScreenplayGenerationTask,
   submitProjectEditScreenplayRevisionTask,
+  submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
 
 function request(): NextRequest {
@@ -209,5 +211,51 @@ describe('edit screenplay task submission', () => {
     })).rejects.toThrow('Edit screenplay can only be revised during screenplay review')
 
     expect(submitOperationTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('submits visual style generation as a parent text task after screenplay review', async () => {
+    submitOperationTaskMock.mockResolvedValueOnce(mockSubmitResult('task-style-parent-1'))
+
+    const result = await submitProjectEditStylePreviewsGenerationTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      styleDirection: '更黑暗一些',
+      count: 2,
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      taskId: 'task-style-parent-1',
+      episodeId: 'episode-1',
+      screenplayId: 'screenplay-1',
+      taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+    }))
+    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+      targetType: 'ProjectEditScreenplay',
+      targetId: 'screenplay-1',
+      operationId: 'generate_edit_style_previews',
+      dedupeKey: 'edit_style_previews_generate:project-1:screenplay-1',
+      payload: expect.objectContaining({
+        episodeId: 'episode-1',
+        screenplayId: 'screenplay-1',
+        styleDirection: '更黑暗一些',
+        count: 2,
+        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        maxInputTokens: 12_000,
+      }),
+    }))
   })
 })

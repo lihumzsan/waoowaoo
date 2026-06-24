@@ -45,6 +45,7 @@ export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]
 
 export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
+  EDIT_STYLE_PREVIEWS_GENERATE: 'edit_style_previews_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   EDIT_SCRIPT_STORYBOARD_PREPARE: 'edit_script_storyboard_prepare',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
@@ -121,6 +122,7 @@ export type TaskBillingInfo =
 
 export type TaskJobData = {
   taskId: string
+  parentTaskId?: string | null
   type: TaskType
   locale: Locale
   projectId: string
@@ -191,6 +193,7 @@ export type SSEEvent = TaskSSEEvent | MutationBatchSSEEvent | ResourceChangedSSE
 export type CreateTaskInput = {
   userId: string
   projectId: string
+  parentTaskId?: string | null
   episodeId?: string | null
   type: TaskType
   targetType: string
