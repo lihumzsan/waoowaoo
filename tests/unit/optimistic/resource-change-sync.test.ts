@@ -1,7 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  extractWorkspaceResourceChangesFromTaskLifecycleEvent,
   extractWorkspaceResourceChangesFromWriteResult,
   syncWorkspaceResourceChanges,
   syncWorkspaceResourceChangesFromWriteResult,
@@ -10,6 +9,7 @@ import {
 import { queryKeys } from '@/lib/query/keys'
 import type { ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
 import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
+import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
 function createScreenplay(): ProjectEditScreenplay {
   return {
@@ -114,14 +114,14 @@ describe('resource-change-sync', () => {
       kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       projectId: 'project-1',
       episodeId: 'episode-1',
-      data: editScript,
     })
     expect(changes.some((change) => change.kind === WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS)).toBe(true)
   })
 
-  it('patches screenplay cache immediately and invalidates affected state', async () => {
+  it('actively refetches screenplay query from successful assistant tool write result', async () => {
     const queryClient = new QueryClient()
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
+    const refetchQueries = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
     const screenplay = createScreenplay()
 
     await syncWorkspaceResourceChangesFromWriteResult({
@@ -134,9 +134,12 @@ describe('resource-change-sync', () => {
       fallbackEpisodeId: 'episode-1',
     })
 
-    expect(queryClient.getQueryData(queryKeys.project.editScreenplay('project-1', 'episode-1'))).toEqual(screenplay)
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.project.editScreenplay('project-1', 'episode-1'),
+    })
+    expect(refetchQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.project.editScreenplay('project-1', 'episode-1'),
+      type: 'active',
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.project.editDirectorDecoupage('project-1', 'episode-1'),
@@ -162,7 +165,7 @@ describe('resource-change-sync', () => {
   })
 
   it('maps director decoupage task completion to the full edit pipeline resources', () => {
-    const changes = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+    const changes = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
       taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',
@@ -202,7 +205,7 @@ describe('resource-change-sync', () => {
   })
 
   it('maps asset image completion to edit script resources from either task type or target type', () => {
-    const byTaskType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+    const byTaskType = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
       taskType: TASK_TYPE.IMAGE_CHARACTER,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',
@@ -213,7 +216,7 @@ describe('resource-change-sync', () => {
         imageUrl: 'images/character.png',
       },
     })
-    const byTargetType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+    const byTargetType = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
       taskType: null,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',
@@ -267,7 +270,7 @@ describe('resource-change-sync', () => {
   })
 
   it('maps storyboard image completion to storyboard resources from either task type or target type', () => {
-    const byTaskType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+    const byTaskType = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
       taskType: TASK_TYPE.IMAGE_PANEL,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',
@@ -278,7 +281,7 @@ describe('resource-change-sync', () => {
         imageUrl: 'images/panel.png',
       },
     })
-    const byTargetType = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
+    const byTargetType = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
       taskType: null,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',

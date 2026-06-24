@@ -32,7 +32,7 @@ function isSSEEventLike(value: unknown): value is SSEEvent {
     return typeof record.mutationBatchId === 'string' && Array.isArray(record.targets)
   }
   if (record.type === 'resource.changed') {
-    return Array.isArray(record.resources)
+    return Array.isArray(record.affectedResources)
   }
   return typeof record.taskId === 'string'
 }

@@ -28,10 +28,14 @@ const taskEventCreateMock = vi.hoisted(() =>
 const taskFindManyMock = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<TaskMeta[]>>(async () => []),
 )
+const prismaQueryRawMock = vi.hoisted(() =>
+  vi.fn<(...args: unknown[]) => Promise<unknown[]>>(async () => []),
+)
 const redisPublishMock = vi.hoisted(() => vi.fn(async () => 1))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $queryRaw: prismaQueryRawMock,
     taskEvent: {
       findMany: taskEventFindManyMock,
       create: taskEventCreateMock,
@@ -52,14 +56,18 @@ import {
   listEventsAfter,
   listRecentTerminalLifecycleEvents,
   listTaskLifecycleEvents,
+  publishTaskEvent,
   publishTaskStreamEvent,
 } from '@/lib/task/publisher'
+import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 
 describe('task publisher replay', () => {
   beforeEach(() => {
     taskEventFindManyMock.mockReset()
     taskEventCreateMock.mockReset()
     taskFindManyMock.mockReset()
+    prismaQueryRawMock.mockReset()
+    prismaQueryRawMock.mockResolvedValue([])
     redisPublishMock.mockReset()
   })
 
@@ -176,6 +184,63 @@ describe('task publisher replay', () => {
     expect(redisPublishMock).toHaveBeenCalledTimes(1)
     expect(message?.id).toBe('99')
     expect(message?.type).toBe('task.stream')
+  })
+
+  it('publishes terminal lifecycle events with explicit affected resources', async () => {
+    taskFindManyMock.mockResolvedValueOnce([
+      {
+        id: 'task-1',
+        type: TASK_TYPE.IMAGE_PANEL,
+        targetType: 'ProjectPanel',
+        targetId: 'panel-1',
+        episodeId: 'episode-1',
+        payload: null,
+      },
+    ])
+    taskEventCreateMock.mockResolvedValueOnce({
+      id: 100,
+      taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      eventType: TASK_EVENT_TYPE.COMPLETED,
+      payload: null,
+      createdAt: new Date('2026-02-27T00:00:03.000Z'),
+    })
+    redisPublishMock.mockResolvedValueOnce(1)
+
+    const message = await publishTaskEvent({
+      taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      type: TASK_EVENT_TYPE.COMPLETED,
+      taskType: TASK_TYPE.IMAGE_PANEL,
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+      payload: {
+        imageUrl: 'https://example.test/panel.png',
+      },
+    })
+
+    const expectedAffectedResources = [
+      { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
+      { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+      { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+      { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+      { kind: 'projectData', projectId: 'project-1' },
+    ]
+
+    expect(taskEventCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        taskId: 'task-1',
+        eventType: TASK_EVENT_TYPE.COMPLETED,
+        payload: expect.objectContaining({
+          lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+          affectedResources: expectedAffectedResources,
+        }),
+      }),
+    }))
+    expect(message?.payload?.affectedResources).toEqual(expectedAffectedResources)
   })
 
   it('replays lifecycle + stream rows in listEventsAfter', async () => {

@@ -4,89 +4,12 @@ import { getProjectChannel } from '@/lib/task/publisher'
 import {
   WORKSPACE_SSE_EVENT_TYPE,
   type ResourceChangedSSEEvent,
-  type WorkspaceResourceName,
+  type WorkspaceResourceRef,
 } from '@/lib/task/types'
-
-type UnknownRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
-}
-
-function readWriteResultData(value: unknown): unknown[] {
-  if (!isRecord(value)) return []
-  const candidates: unknown[] = []
-  if (value.ok === true && 'data' in value) candidates.push(value.data)
-  if (value.success === true && 'result' in value) candidates.push(value.result)
-  if ('result' in value && isRecord(value.result)) {
-    const nested = readWriteResultData(value.result)
-    if (nested.length > 0) candidates.push(...nested)
-  }
-  return candidates.length > 0 ? candidates : [value]
-}
-
-function isEditScreenplayRecord(value: unknown): value is UnknownRecord {
-  if (!isRecord(value)) return false
-  return Boolean(
-    readString(value.projectId)
-      && readString(value.episodeId)
-      && readString(value.screenplayText)
-      && readString(value.status),
-  )
-}
-
-function isEditScriptRecord(value: unknown): value is UnknownRecord {
-  if (!isRecord(value)) return false
-  return Boolean(
-    readString(value.projectId)
-      && readString(value.episodeId)
-      && Array.isArray(value.shots)
-      && Array.isArray(value.videoBlocks),
-  )
-}
-
-function isEditDirectorDecoupageRecord(value: unknown): value is UnknownRecord {
-  if (!isRecord(value)) return false
-  return Boolean(
-    readString(value.projectId)
-      && readString(value.episodeId)
-      && readString(value.screenplayId)
-      && Array.isArray(value.shots),
-  )
-}
-
-function isEditCinematographyShotPlanRecord(value: unknown): value is UnknownRecord {
-  if (!isRecord(value)) return false
-  return Boolean(
-    readString(value.projectId)
-      && readString(value.episodeId)
-      && readString(value.editScriptId)
-      && Array.isArray(value.shots),
-  )
-}
-
-function dedupeResources(resources: readonly WorkspaceResourceName[]): WorkspaceResourceName[] {
-  return Array.from(new Set(resources))
-}
-
-function editPipelineResources(): WorkspaceResourceName[] {
-  return [
-    'editScreenplay',
-    'editDirectorDecoupage',
-    'editScript',
-    'editCinematographyShotPlan',
-    'storyboards',
-    'episodeData',
-    'projectContext',
-    'projectData',
-  ]
-}
+import {
+  dedupeWorkspaceResourceRefs,
+  extractWorkspaceResourceRefsFromWriteResult,
+} from './resource-impact'
 
 export function extractWorkspaceResourceChangeEventSpecs(params: {
   result: unknown
@@ -94,67 +17,20 @@ export function extractWorkspaceResourceChangeEventSpecs(params: {
   fallbackEpisodeId?: string | null
 }): Array<{
   projectId: string
-  episodeId: string
-  resources: WorkspaceResourceName[]
+  affectedResources: WorkspaceResourceRef[]
 }> {
-  const specs: Array<{
-    projectId: string
-    episodeId: string
-    resources: WorkspaceResourceName[]
-  }> = []
-
-  for (const data of readWriteResultData(params.result)) {
-    if (isEditScreenplayRecord(data)) {
-      const projectId = readString(data.projectId) ?? params.fallbackProjectId
-      const episodeId = readString(data.episodeId)
-      if (!episodeId) continue
-      specs.push({
-        projectId,
-        episodeId,
-        resources: editPipelineResources(),
-      })
-      continue
-    }
-    if (isEditDirectorDecoupageRecord(data)) {
-      const projectId = readString(data.projectId) ?? params.fallbackProjectId
-      const episodeId = readString(data.episodeId)
-      if (!episodeId) continue
-      specs.push({
-        projectId,
-        episodeId,
-        resources: editPipelineResources(),
-      })
-      continue
-    }
-    if (isEditScriptRecord(data)) {
-      const projectId = readString(data.projectId) ?? params.fallbackProjectId
-      const episodeId = readString(data.episodeId)
-      if (!episodeId) continue
-      specs.push({
-        projectId,
-        episodeId,
-        resources: [
-          ...editPipelineResources(),
-          'projectAssets',
-        ],
-      })
-      continue
-    }
-    if (isEditCinematographyShotPlanRecord(data)) {
-      const projectId = readString(data.projectId) ?? params.fallbackProjectId
-      const episodeId = readString(data.episodeId)
-      if (!episodeId) continue
-      specs.push({
-        projectId,
-        episodeId,
-        resources: editPipelineResources(),
-      })
-    }
+  const refs = extractWorkspaceResourceRefsFromWriteResult({
+    result: params.result,
+    fallbackProjectId: params.fallbackProjectId,
+    fallbackEpisodeId: params.fallbackEpisodeId,
+  })
+  const refsByProjectId = new Map<string, WorkspaceResourceRef[]>()
+  for (const ref of refs) {
+    refsByProjectId.set(ref.projectId, [...(refsByProjectId.get(ref.projectId) ?? []), ref])
   }
-
-  return specs.map((spec) => ({
-    ...spec,
-    resources: dedupeResources(spec.resources),
+  return Array.from(refsByProjectId.entries()).map(([projectId, projectRefs]) => ({
+    projectId,
+    affectedResources: dedupeWorkspaceResourceRefs(projectRefs),
   }))
 }
 
@@ -170,13 +46,12 @@ export async function publishWorkspaceResourceChangedEventsFromWriteResult(param
   try {
     await Promise.all(specs.map(async (spec, index) => {
       const event: ResourceChangedSSEEvent = {
-        id: `resource:${now.getTime()}:${index}:${spec.projectId}:${spec.episodeId}`,
+        id: `resource:${now.getTime()}:${index}:${spec.projectId}`,
         type: WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
         projectId: spec.projectId,
         userId: params.userId,
         ts: now.toISOString(),
-        episodeId: spec.episodeId,
-        resources: spec.resources,
+        affectedResources: spec.affectedResources,
       }
       await redis.publish(getProjectChannel(spec.projectId), JSON.stringify(event))
     }))

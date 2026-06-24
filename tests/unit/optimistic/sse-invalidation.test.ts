@@ -172,6 +172,13 @@ describe('sse invalidation behavior', () => {
       episodeId: 'episode-1',
       payload: {
         lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+        affectedResources: [
+          { kind: 'projectAssets', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'projectData', projectId: 'project-1' },
+        ],
       },
     })
 
@@ -199,6 +206,40 @@ describe('sse invalidation behavior', () => {
         targetId: 'appearance-1',
       }),
     )
+  })
+
+  it('terminal task events without affectedResources do not infer resource refreshes from task type', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    expect(source).toBeTruthy()
+
+    source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: 'no-affected-resources',
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-no-resources',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:01.000Z',
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      },
+    })
+
+    expect(runtime.queryClient.refetchQueries).not.toHaveBeenCalledWith({
+      queryKey: queryKeys.project.editScript('project-1', 'episode-1'),
+      type: 'active',
+    })
   })
 
   it('mutation.batch ProjectPanel 事件触发 episode scoped query invalidation', async () => {
@@ -272,6 +313,16 @@ describe('sse invalidation behavior', () => {
         episodeId: 'episode-1',
         directorDecoupageId: 'director-1',
         screenplayId: 'screenplay-1',
+        affectedResources: [
+          { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editDirectorDecoupage', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editCinematographyShotPlan', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'projectData', projectId: 'project-1' },
+        ],
       },
     })
 
@@ -315,6 +366,13 @@ describe('sse invalidation behavior', () => {
           payload: {
             lifecycleType: TASK_EVENT_TYPE.COMPLETED,
             imageUrl: 'https://example.test/panel.jpg',
+            affectedResources: [
+              { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
+              { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+              { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+              { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+              { kind: 'projectData', projectId: 'project-1' },
+            ],
           },
         }],
       }),
@@ -388,8 +446,13 @@ describe('sse invalidation behavior', () => {
       projectId: 'project-1',
       userId: 'user-2',
       ts: '2026-04-24T00:00:00.000Z',
-      episodeId: 'episode-1',
-      resources: ['editScreenplay', 'editScript', 'episodeData', 'projectContext', 'projectData'],
+      affectedResources: [
+        { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'projectData', projectId: 'project-1' },
+      ],
     })
 
     expect(hasInvalidation((arg) => {

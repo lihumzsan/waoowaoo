@@ -18,16 +18,15 @@ describe('resource-change-events', () => {
 
     expect(specs).toEqual([{
       projectId: 'project-1',
-      episodeId: 'episode-1',
-      resources: [
-        'editScreenplay',
-        'editDirectorDecoupage',
-        'editScript',
-        'editCinematographyShotPlan',
-        'storyboards',
-        'episodeData',
-        'projectContext',
-        'projectData',
+      affectedResources: [
+        { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editDirectorDecoupage', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editCinematographyShotPlan', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'projectData', projectId: 'project-1' },
       ],
     }])
   })

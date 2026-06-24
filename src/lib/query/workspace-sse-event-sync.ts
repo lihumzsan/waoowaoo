@@ -1,18 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
-import type { WorkspaceResourceName } from '@/lib/task/types'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
 import { readTaskCoveredTargets, type TaskCoveredTarget } from '@/lib/task/covered-targets'
 import { queryKeys } from './keys'
 import { invalidateByTarget } from './invalidation/invalidate-by-target'
 import { applyTaskLifecycleToOverlay } from './task-target-overlay'
 import { applyTaskTargetTerminalStateToCache } from './task-target-state-cache'
-import {
-  extractWorkspaceResourceChangesFromTaskLifecycleEvent,
-  isWorkspaceResourceName,
-  workspaceResourceChangeFromName,
-  syncWorkspaceResourceChanges,
-} from './resource-change-sync'
+import { syncWorkspaceResourceChanges } from './resource-change-sync'
+import { readWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -74,18 +69,7 @@ export function applyWorkspaceSSEEvent(params: {
   }
 
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
-    const eventEpisodeId = typeof event.episodeId === 'string'
-      ? event.episodeId
-      : episodeId ?? null
-    const resources: WorkspaceResourceName[] = event.resources
-      .filter((resource): resource is WorkspaceResourceName => isWorkspaceResourceName(resource))
-    const changes = resources
-      .map((resource) => workspaceResourceChangeFromName({
-        kind: resource,
-        projectId: event.projectId,
-        episodeId: eventEpisodeId,
-      }))
-      .filter((change) => change !== null)
+    const changes = readWorkspaceResourceRefs(event.affectedResources)
     void syncWorkspaceResourceChanges({ queryClient, changes })
     return
   }
@@ -243,25 +227,9 @@ export function applyWorkspaceSSEEvent(params: {
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
   ) {
-    const resourceChanges = extractWorkspaceResourceChangesFromTaskLifecycleEvent({
-      taskType: typeof event.taskType === 'string' ? event.taskType : null,
-      lifecycleType: normalizedLifecycleType,
-      projectId,
-      targetType,
-      targetId,
-      episodeId: resolvedEpisodeId,
-      payload: payloadRecord,
-    })
+    const resourceChanges = readWorkspaceResourceRefs(payloadRecord?.affectedResources)
     if (resourceChanges.length > 0) {
       void syncWorkspaceResourceChanges({ queryClient, changes: resourceChanges })
-    } else {
-      invalidateByTarget({
-        queryClient,
-        projectId,
-        targetType,
-        episodeId: resolvedEpisodeId,
-        isGlobalAssetProject,
-      })
     }
   }
 }

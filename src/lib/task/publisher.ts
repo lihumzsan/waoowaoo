@@ -10,6 +10,7 @@ import {
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { resolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
+import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -303,6 +304,21 @@ export async function publishTaskLifecycleEvent(params: {
     ),
     coveragePayload,
   })
+  const affectedResources = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
+    taskType: eventTaskType,
+    lifecycleType: normalizedType,
+    projectId: params.projectId,
+    targetType: eventTargetType,
+    targetId: eventTargetId,
+    episodeId: eventEpisodeId,
+    payload: normalizedPayload,
+  })
+  const eventPayload = (
+    normalizedType === TASK_EVENT_TYPE.COMPLETED ||
+    normalizedType === TASK_EVENT_TYPE.FAILED
+  )
+    ? { ...normalizedPayload, affectedResources }
+    : normalizedPayload
   const event = persist
     ? await taskEventModel.create({
         data: {
@@ -310,7 +326,7 @@ export async function publishTaskLifecycleEvent(params: {
           projectId: params.projectId,
           userId: params.userId,
           eventType: normalizedType,
-          payload: normalizedPayload,
+          payload: eventPayload,
         },
       })
     : null
@@ -328,7 +344,7 @@ export async function publishTaskLifecycleEvent(params: {
     targetType: eventTargetType,
     targetId: eventTargetId,
     episodeId: eventEpisodeId,
-    payload: normalizedPayload,
+    payload: eventPayload,
     coveragePayload,
   })
 

@@ -151,6 +151,7 @@ export type TaskSSEEvent = {
   payload?: (Record<string, unknown> & {
     lifecycleType?: TaskLifecycleEventType
     coveredTargets?: readonly { readonly targetType: string; readonly targetId: string }[]
+    affectedResources?: readonly WorkspaceResourceRef[]
   }) | null
 }
 
@@ -173,10 +174,17 @@ export type WorkspaceResourceName =
   | 'editCinematographyShotPlan'
   | 'storyboards'
   | 'projectAssets'
+  | 'globalAssets'
   | 'videos'
   | 'episodeData'
   | 'projectData'
   | 'projectContext'
+
+export type WorkspaceResourceRef = {
+  kind: WorkspaceResourceName
+  projectId: string
+  episodeId?: string | null
+}
 
 export type ResourceChangedSSEEvent = {
   id: string
@@ -184,8 +192,7 @@ export type ResourceChangedSSEEvent = {
   projectId: string
   userId: string
   ts: string
-  episodeId: string | null
-  resources: WorkspaceResourceName[]
+  affectedResources: WorkspaceResourceRef[]
 }
 
 export type SSEEvent = TaskSSEEvent | MutationBatchSSEEvent | ResourceChangedSSEEvent
