@@ -123,6 +123,11 @@ interface UseWorkspaceAssistantRuntimeResult {
   appendMessages: (messages: UIMessage[]) => void
 }
 
+type WorkspaceAssistantSessionPollingState = {
+  currentRun: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'status'> | null
+  activeWaits: ReadonlyArray<Pick<ProjectAgentSessionState['activeWaits'][number], 'status'>>
+}
+
 export function buildWorkspaceAssistantChatId(params: {
   projectId: string
   episodeId?: string
@@ -247,15 +252,24 @@ export function resolveWorkspaceAssistantPendingOperationId(
   return trackedRun.operationId
 }
 
-export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
-  return !isWorkspaceAssistantOperationPendingStatus(status)
+export function shouldPollWorkspaceAssistantSessionState(input: {
+  chatStatus: ChatStatus
+  controlPending: boolean
+  sessionState: WorkspaceAssistantSessionPollingState | null
+}): boolean {
+  if (input.chatStatus === 'submitted' || input.chatStatus === 'streaming') return true
+  if (input.controlPending) return true
+  const runStatus = input.sessionState?.currentRun?.status ?? null
+  if (runStatus === 'running') return true
+  return Boolean(input.sessionState?.activeWaits.some((wait) => (
+    wait.status === 'pending'
+    || wait.status === 'resolved'
+    || wait.status === 'claimed'
+  )))
 }
 
-function isActiveWorkspaceAssistantSessionRunStatus(status: WorkspaceAssistantRunStatus): boolean {
-  return status === 'running'
-    || status === 'awaiting_approval'
-    || status === 'awaiting_choice'
-    || status === 'awaiting_task'
+export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
+  return !isWorkspaceAssistantOperationPendingStatus(status)
 }
 
 function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTrackedRun | null {
@@ -396,6 +410,10 @@ export function useWorkspaceAssistantRuntime({
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
   const latestSessionStateRef = useRef<ProjectAgentSessionState | null>(null)
+  const sessionStateRequestRef = useRef<{
+    key: string
+    promise: Promise<ProjectAgentSessionState | null>
+  } | null>(null)
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
@@ -552,16 +570,40 @@ export function useWorkspaceAssistantRuntime({
   }, [])
 
   const refreshSessionState = useCallback(async (): Promise<ProjectAgentSessionState | null> => {
-    try {
+    const requestKey = `${projectId}:${episodeId ?? ''}:${locale}`
+    if (sessionStateRequestRef.current?.key === requestKey) {
+      return sessionStateRequestRef.current.promise
+    }
+    const promise = (async (): Promise<ProjectAgentSessionState | null> => {
       const nextState = await fetchWorkspaceAssistantSessionState({ projectId, episodeId, locale })
       applySessionState(nextState)
       setSessionStateError(null)
       return nextState
-    } catch (error) {
-      setSessionStateError(error instanceof Error ? error.message : String(error))
-      return null
+    })()
+      .catch((error: unknown) => {
+        setSessionStateError(error instanceof Error ? error.message : String(error))
+        return null
+      })
+      .finally(() => {
+        if (sessionStateRequestRef.current?.promise === promise) {
+          sessionStateRequestRef.current = null
+        }
+      })
+    sessionStateRequestRef.current = {
+      key: requestKey,
+      promise,
     }
+    return promise
   }, [applySessionState, episodeId, locale, projectId])
+
+  const sessionStatePollingControlPending = Boolean(
+    activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status),
+  )
+  const shouldPollSessionState = shouldPollWorkspaceAssistantSessionState({
+    chatStatus: chat.status,
+    controlPending: sessionStatePollingControlPending,
+    sessionState,
+  })
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
@@ -753,14 +795,7 @@ export function useWorkspaceAssistantRuntime({
   }, [chatId, refreshSessionState])
 
   useEffect(() => {
-    const hasActiveSessionState = Boolean(
-      sessionState?.currentRun && isActiveWorkspaceAssistantSessionRunStatus(sessionState.currentRun.status),
-    ) || Boolean(sessionState?.pendingInteraction) || Boolean(sessionState?.activeWaits.some((wait) => wait.status === 'pending'))
-    const shouldPoll = chat.status === 'submitted'
-      || chat.status === 'streaming'
-      || Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
-      || hasActiveSessionState
-    if (!shouldPoll) return
+    if (!shouldPollSessionState) return
     let cancelled = false
     let timer: number | null = null
 
@@ -784,7 +819,7 @@ export function useWorkspaceAssistantRuntime({
         window.clearTimeout(timer)
       }
     }
-  }, [activeControlRun, chat.status, refreshSessionState, sessionState])
+  }, [refreshSessionState, shouldPollSessionState])
 
   useEffect(() => {
     if (hydratedSessionKeyRef.current !== chatId) return

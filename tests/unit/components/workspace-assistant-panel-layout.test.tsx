@@ -14,6 +14,7 @@ import {
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldDockWorkspaceStylePreviewGenerationCard,
   shouldDeferWorkspaceAssistantTaskFollowUp,
+  shouldPollWorkspaceAssistantWaitFollowUps,
   WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE,
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import {
@@ -474,7 +475,7 @@ describe('workspace assistant panel layout', () => {
     }))).toBeNull()
   })
 
-  it('periodically claims resolved assistant waits to recover missed task events', () => {
+  it('periodically claims assistant waits only while an active wait can resolve', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
       'utf8',
@@ -482,7 +483,36 @@ describe('workspace assistant panel layout', () => {
 
     expect(panelSource).toContain('WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS')
     expect(panelSource).toContain('window.setInterval')
+    expect(panelSource).toContain('shouldPollWaitFollowUps')
     expect(panelSource).toContain('flushResolvedWaitFollowUps')
+    expect(shouldPollWorkspaceAssistantWaitFollowUps({
+      storageLoading: true,
+      sessionState: {
+        activeWaits: [{ status: 'resolved' }],
+      },
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantWaitFollowUps({
+      storageLoading: false,
+      sessionState: null,
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantWaitFollowUps({
+      storageLoading: false,
+      sessionState: {
+        activeWaits: [],
+      },
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantWaitFollowUps({
+      storageLoading: false,
+      sessionState: {
+        activeWaits: [{ status: 'pending' }],
+      },
+    })).toBe(true)
+    expect(shouldPollWorkspaceAssistantWaitFollowUps({
+      storageLoading: false,
+      sessionState: {
+        activeWaits: [{ status: 'claimed' }],
+      },
+    })).toBe(true)
   })
 
   it('does not defer task follow-up only because the current run is awaiting an external task', () => {

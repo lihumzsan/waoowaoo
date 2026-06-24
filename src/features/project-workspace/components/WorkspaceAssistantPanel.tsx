@@ -55,7 +55,7 @@ import {
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
-import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
+import type { ProjectAgentSessionActivity, ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 
 const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
@@ -104,6 +104,20 @@ export function shouldDeferWorkspaceAssistantTaskFollowUp(input: {
   if (input.controlPending) return true
   if (!input.pending) return false
   return input.currentRunStatus === 'running'
+}
+
+export function shouldPollWorkspaceAssistantWaitFollowUps(input: {
+  storageLoading: boolean
+  sessionState: {
+    activeWaits: ReadonlyArray<Pick<ProjectAgentSessionState['activeWaits'][number], 'status'>>
+  } | null
+}): boolean {
+  if (input.storageLoading) return false
+  return Boolean(input.sessionState?.activeWaits.some((wait) => (
+    wait.status === 'pending'
+    || wait.status === 'resolved'
+    || wait.status === 'claimed'
+  )))
 }
 
 const WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY = 'workspace-assistant-panel-width'
@@ -367,23 +381,32 @@ export default function WorkspaceAssistantPanel({
       })
     }
   }, [episodeId, projectId, queryClient, sendTaskFollowUp])
+  const shouldPollWaitFollowUps = shouldPollWorkspaceAssistantWaitFollowUps({
+    storageLoading: assistantRuntime.storageLoading,
+    sessionState: assistantRuntime.sessionState,
+  })
   useEffect(() => {
-    if (assistantRuntime.storageLoading) return
+    if (!shouldPollWaitFollowUps) return
     void flushResolvedWaitFollowUps()
-  }, [assistantRuntime.storageLoading, flushResolvedWaitFollowUps])
+  }, [flushResolvedWaitFollowUps, shouldPollWaitFollowUps])
   useEffect(() => {
-    if (assistantRuntime.storageLoading) return
+    if (!shouldPollWaitFollowUps) return
     const timer = window.setInterval(() => {
       void flushResolvedWaitFollowUps()
     }, WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS)
     return () => {
       window.clearInterval(timer)
     }
-  }, [assistantRuntime.storageLoading, flushResolvedWaitFollowUps])
+  }, [flushResolvedWaitFollowUps, shouldPollWaitFollowUps])
   useEffect(() => {
     return subscribeTaskEvents((event) => {
       const terminalEvent = resolveAssistantAsyncTaskTerminalEvent(event)
       if (!terminalEvent) return
+      const runtime = assistantRuntimeRef.current
+      if (!shouldPollWorkspaceAssistantWaitFollowUps({
+        storageLoading: runtime.storageLoading,
+        sessionState: runtime.sessionState,
+      })) return
       void flushResolvedWaitFollowUps()
     })
   }, [flushResolvedWaitFollowUps, subscribeTaskEvents])

@@ -9,6 +9,7 @@ import {
   mergeWorkspaceAssistantStreamedMessage,
   resolveWorkspaceAssistantPendingOperationId,
   shouldClearWorkspaceAssistantControlPending,
+  shouldPollWorkspaceAssistantSessionState,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
 
@@ -55,6 +56,67 @@ describe('workspace assistant runtime chat id', () => {
     expect(isWorkspaceAssistantOperationPendingStatus('awaiting_choice')).toBe(false)
     expect(isWorkspaceAssistantOperationPendingStatus('awaiting_approval')).toBe(false)
     expect(isWorkspaceAssistantOperationPendingStatus('completed')).toBe(false)
+  })
+
+  it('polls session-state only while server-side progress can change without user input', () => {
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'submitted',
+      controlPending: false,
+      sessionState: null,
+    })).toBe(true)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: true,
+      sessionState: null,
+    })).toBe(true)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'running' },
+        activeWaits: [],
+      },
+    })).toBe(true)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'awaiting_task' },
+        activeWaits: [],
+      },
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'awaiting_task' },
+        activeWaits: [{ status: 'pending' }],
+      },
+    })).toBe(true)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'awaiting_approval' },
+        activeWaits: [],
+      },
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'awaiting_choice' },
+        activeWaits: [],
+      },
+    })).toBe(false)
+    expect(shouldPollWorkspaceAssistantSessionState({
+      chatStatus: 'ready',
+      controlPending: false,
+      sessionState: {
+        currentRun: { status: 'completed' },
+        activeWaits: [{ status: 'resolved' }],
+      },
+    })).toBe(true)
   })
 
   it('finds the latest streamed project agent run marker', () => {
