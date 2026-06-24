@@ -1,6 +1,5 @@
 'use client'
 
-import React, { useId } from 'react'
 import { useTranslations } from 'next-intl'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { AppIcon } from '@/components/ui/icons'
@@ -54,15 +53,11 @@ export function MediaGenerationLoadingView({
   className,
 }: MediaGenerationLoadingViewProps) {
   const t = useTranslations('common')
-  const uid = useId().replace(/:/g, '')
-  const gradId = `mgl-${uid}`
   const displayStyleUrl = toDisplayImageUrl(styleImageUrl)
   const tone: Tone = displayStyleUrl ? 'on-dark' : 'on-light'
 
   const stroke = Math.max(3, Math.round(size * 0.05))
-  const radius = (size - stroke) / 2
-  const circumference = 2 * Math.PI * radius
-  const dash = percent === null ? 0 : (clampPercent(percent) / 100) * circumference
+  const progressDegrees = percent === null ? 0 : (clampPercent(percent) / 100) * 360
   const trackColor = tone === 'on-dark' ? 'rgba(255,255,255,0.4)' : 'rgba(10,16,30,0.1)'
   const numberSize = Math.max(11, Math.round(size * 0.16))
 
@@ -122,35 +117,17 @@ export function MediaGenerationLoadingView({
             aria-valuemax={100}
             aria-valuenow={percent === null ? undefined : Math.round(percent)}
           >
-            <svg width={size} height={size} className="absolute inset-0 -rotate-90">
-              <defs>
-                <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="var(--glass-accent-from)" />
-                  <stop offset="100%" stopColor="var(--glass-accent-to)" />
-                </linearGradient>
-              </defs>
-              <circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={trackColor}
-                strokeWidth={stroke}
-              />
-              {percent !== null ? (
-                <circle
-                  cx={size / 2}
-                  cy={size / 2}
-                  r={radius}
-                  fill="none"
-                  stroke={`url(#${gradId})`}
-                  strokeWidth={stroke}
-                  strokeLinecap="round"
-                  strokeDasharray={`${dash} ${circumference}`}
-                  className="transition-[stroke-dasharray] duration-500 ease-out"
-                />
-              ) : null}
-            </svg>
+            <div
+              className="absolute inset-0 -rotate-90 rounded-full transition-[background] duration-500 ease-out"
+              style={{
+                background:
+                  percent === null
+                    ? trackColor
+                    : `conic-gradient(var(--glass-accent-from) 0deg, var(--glass-accent-to) ${progressDegrees}deg, ${trackColor} ${progressDegrees}deg 360deg)`,
+                WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${stroke}px), #000 calc(100% - ${stroke}px))`,
+                mask: `radial-gradient(farthest-side, transparent calc(100% - ${stroke}px), #000 calc(100% - ${stroke}px))`,
+              }}
+            />
             <BrandLoading imageSize={Math.round(size * 0.5)} />
           </div>
           {percent !== null ? (
