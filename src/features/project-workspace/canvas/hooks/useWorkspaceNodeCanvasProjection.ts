@@ -1410,6 +1410,11 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
+  const editPipelineBaseY = editDirectorSourceBottomY !== null
+    ? editDirectorSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
+    : hasStory ? 430 : 180
+  const pendingEditScriptFallbackY = editPipelineBaseY + EDIT_PIPELINE_STEP_NODE_HEIGHT + EDIT_PIPELINE_TO_SCRIPT_GAP_Y
+
   if (editScript) {
     const editScriptNodeId = workspaceNodeId.editScript(episodeId)
     const editScriptIsGenerating = editScript.status === 'generating'
@@ -1420,9 +1425,6 @@ export function buildWorkspaceNodeCanvasProjection({
     const pipelineStepLayerHeight = pipelineStepRows > 0
       ? pipelineStepRows * EDIT_PIPELINE_STEP_NODE_HEIGHT + (pipelineStepRows - 1) * EDIT_PIPELINE_STEP_GRID_GAP_Y
       : 0
-    const editPipelineBaseY = editDirectorSourceBottomY !== null
-      ? editDirectorSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
-      : hasStory ? 430 : 180
     const editScriptFallbackY = shouldShowPipelineSteps
       ? editPipelineBaseY + pipelineStepLayerHeight + EDIT_PIPELINE_TO_SCRIPT_GAP_Y
       : editDirectorSourceBottomY !== null
@@ -1736,7 +1738,7 @@ export function buildWorkspaceNodeCanvasProjection({
     nodes.push(createNode({
       id: pendingEditScriptNodeId,
       fallbackX: STORY_COLUMN_X,
-      fallbackY: hasStory ? 430 : 180,
+      fallbackY: pendingEditScriptFallbackY,
       zIndex: zIndex++,
       savedLayoutByKey,
       ignoreSavedLayout: true,
@@ -1758,7 +1760,13 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    if (hasStory) {
+    if (editDirectorDecoupageNodeId) {
+      edges.push(createEdge(`edge:director-decoupage-edit-script-pending:${episodeId}`, editDirectorDecoupageNodeId, pendingEditScriptNodeId))
+    } else if (editStyleBibleNodeId) {
+      edges.push(createEdge(`edge:edit-style-bible-edit-script-pending:${episodeId}`, editStyleBibleNodeId, pendingEditScriptNodeId))
+    } else if (editScreenplayNodeId) {
+      edges.push(createEdge(`edge:edit-screenplay-edit-script-pending:${episodeId}`, editScreenplayNodeId, pendingEditScriptNodeId))
+    } else if (hasStory) {
       edges.push(createEdge(`edge:analysis-edit-script-pending:${episodeId}`, analysisNodeId, pendingEditScriptNodeId))
     }
   }

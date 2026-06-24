@@ -61,7 +61,9 @@ function pipelineNode(input: {
   readonly targetType: WorkspaceCanvasFlowNode['data']['targetType']
   readonly targetId: string
   readonly isRunning: boolean
+  readonly itemTitles?: readonly string[]
 }): WorkspaceCanvasFlowNode {
+  const itemTitles = input.itemTitles ?? ['Shot 1']
   return {
     id: input.id,
     type: 'workspaceNode',
@@ -81,10 +83,10 @@ function pipelineNode(input: {
       width: 520,
       height: 360,
       editPipelineStepDetails: {
-        items: [{
-          title: 'Shot 1',
+        items: itemTitles.map((title) => ({
+          title,
           fields: [{ label: 'Field', value: 'Value' }],
-        }],
+        })),
       },
     },
   }
@@ -361,6 +363,34 @@ describe('structured stream overlay merge', () => {
     expect(merged.map((item) => item.id)).toEqual([nodeId])
   })
 
+  it('keeps director decoupage stream overlay while the official node only has empty placeholder details', () => {
+    const nodeId = workspaceEditDirectorDecoupageNodeId('screenplay-1')
+    const official = pipelineNode({
+      id: nodeId,
+      kind: 'editDirectorDecoupage',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      isRunning: false,
+      itemTitles: [],
+    })
+    const overlay = pipelineNode({
+      id: nodeId,
+      kind: 'editDirectorDecoupage',
+      targetType: 'editScreenplay',
+      targetId: 'screenplay-1',
+      isRunning: true,
+      itemTitles: ['Streamed director shot'],
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.data.isRunning).toBe(true)
+    expect(merged[0]?.data.editPipelineStepDetails?.items.map((item) => item.title)).toEqual([
+      'Streamed director shot',
+    ])
+  })
+
   it('drops cinematography pending overlay after official shot plan exists', () => {
     const nodeId = workspaceEditCinematographyShotPlanNodeId('edit-script-1')
     const official = pipelineNode({
@@ -381,6 +411,34 @@ describe('structured stream overlay merge', () => {
     const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
 
     expect(merged.map((item) => item.id)).toEqual([nodeId])
+  })
+
+  it('keeps cinematography stream overlay while the official node only has empty placeholder details', () => {
+    const nodeId = workspaceEditCinematographyShotPlanNodeId('edit-script-1')
+    const official = pipelineNode({
+      id: nodeId,
+      kind: 'editCinematographyShotPlan',
+      targetType: 'editScript',
+      targetId: 'edit-script-1',
+      isRunning: false,
+      itemTitles: [],
+    })
+    const overlay = pipelineNode({
+      id: nodeId,
+      kind: 'editCinematographyShotPlan',
+      targetType: 'editScript',
+      targetId: 'edit-script-1',
+      isRunning: true,
+      itemTitles: ['Streamed cinematography shot'],
+    })
+
+    const merged = mergeWorkspaceStructuredStreamOverlayNodes([official], [overlay])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.data.isRunning).toBe(true)
+    expect(merged[0]?.data.editPipelineStepDetails?.items.map((item) => item.title)).toEqual([
+      'Streamed cinematography shot',
+    ])
   })
 
   it('drops storyboard panel generation overlay after official shot nodes exist', () => {

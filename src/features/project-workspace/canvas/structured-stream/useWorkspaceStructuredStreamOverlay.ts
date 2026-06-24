@@ -799,39 +799,56 @@ export function mergeWorkspaceStructuredStreamOverlayNodes(
 ): readonly WorkspaceCanvasFlowNode[] {
   if (overlayNodes.length === 0) return baseNodes
 
-  const finalDataKinds = new Set<string>()
+  const finalDataKeys = new Set<string>()
   baseNodes.forEach((node) => {
-    if (node.data.kind === 'editScreenplay' && node.data.editScreenplayDetails && node.data.isRunning !== true) {
-      finalDataKinds.add(`editScreenplay:${node.data.targetId}`)
+    if (
+      node.data.kind === 'editScreenplay'
+      && node.data.editScreenplayDetails
+      && node.data.editScreenplayDetails.screenplayText.trim().length > 0
+      && node.data.isRunning !== true
+    ) {
+      finalDataKeys.add(`editScreenplay:${node.data.targetId}`)
     }
-    if (node.data.kind === 'editScript' && node.data.targetType === 'editScript' && node.data.editScriptDetails) {
-      finalDataKinds.add('editScript')
+    if (
+      node.data.kind === 'editScript'
+      && node.data.targetType === 'editScript'
+      && (node.data.editScriptDetails?.shots.length ?? 0) > 0
+    ) {
+      finalDataKeys.add(`editScript:${node.id}`)
     }
-    if (node.data.kind === 'editDirectorDecoupage' && node.data.editPipelineStepDetails && node.data.isRunning !== true) {
-      finalDataKinds.add('editDirectorDecoupage')
+    if (
+      node.data.kind === 'editDirectorDecoupage'
+      && (node.data.editPipelineStepDetails?.items.length ?? 0) > 0
+      && node.data.isRunning !== true
+    ) {
+      finalDataKeys.add(`editDirectorDecoupage:${node.data.targetId}`)
     }
-    if (node.data.kind === 'editCinematographyShotPlan' && node.data.editPipelineStepDetails && node.data.isRunning !== true) {
-      finalDataKinds.add('editCinematographyShotPlan')
+    if (
+      node.data.kind === 'editCinematographyShotPlan'
+      && (node.data.editPipelineStepDetails?.items.length ?? 0) > 0
+      && node.data.isRunning !== true
+    ) {
+      finalDataKeys.add(`editCinematographyShotPlan:${node.data.targetId}`)
     }
     if (node.data.kind === 'bgmScore' && node.data.bgmScoreDetails?.hasPromptDesign === true && node.data.isRunning !== true) {
-      finalDataKinds.add('bgmScore')
+      finalDataKeys.add(`bgmScore:${node.data.targetId}`)
     }
     if (node.data.kind === 'spaceConsistency' && (node.data.spaceConsistencyDetails?.cameraPlanCount ?? 0) > 0 && node.data.isRunning !== true) {
-      finalDataKinds.add(`spaceConsistency:${node.data.targetId}`)
+      finalDataKeys.add(`spaceConsistency:${node.data.targetId}`)
     }
     if (node.data.kind === 'shot' && node.data.storyboardId && node.data.isRunning !== true) {
-      finalDataKinds.add(`storyboardPanelGeneration:${node.data.storyboardId}`)
+      finalDataKeys.add(`storyboardPanelGeneration:${node.data.storyboardId}`)
     }
   })
 
   const usableOverlays = overlayNodes.filter((node) => {
-    if (node.data.kind === 'editScreenplay' && finalDataKinds.has(`editScreenplay:${node.data.targetId}`)) return false
-    if (node.data.kind === 'editScript' && finalDataKinds.has('editScript')) return false
-    if (node.data.kind === 'editDirectorDecoupage' && finalDataKinds.has('editDirectorDecoupage')) return false
-    if (node.data.kind === 'editCinematographyShotPlan' && finalDataKinds.has('editCinematographyShotPlan')) return false
-    if (node.data.kind === 'bgmScore' && finalDataKinds.has('bgmScore')) return false
-    if (node.data.kind === 'spaceConsistency' && finalDataKinds.has(`spaceConsistency:${node.data.targetId}`)) return false
-    if (node.data.kind === 'storyboardPanelGeneration' && finalDataKinds.has(`storyboardPanelGeneration:${node.data.targetId}`)) return false
+    if (node.data.kind === 'editScreenplay' && finalDataKeys.has(`editScreenplay:${node.data.targetId}`)) return false
+    if (node.data.kind === 'editScript' && finalDataKeys.has(`editScript:${node.id}`)) return false
+    if (node.data.kind === 'editDirectorDecoupage' && finalDataKeys.has(`editDirectorDecoupage:${node.data.targetId}`)) return false
+    if (node.data.kind === 'editCinematographyShotPlan' && finalDataKeys.has(`editCinematographyShotPlan:${node.data.targetId}`)) return false
+    if (node.data.kind === 'bgmScore' && finalDataKeys.has(`bgmScore:${node.data.targetId}`)) return false
+    if (node.data.kind === 'spaceConsistency' && finalDataKeys.has(`spaceConsistency:${node.data.targetId}`)) return false
+    if (node.data.kind === 'storyboardPanelGeneration' && finalDataKeys.has(`storyboardPanelGeneration:${node.data.targetId}`)) return false
     return true
   })
   const overlayById = new Map(usableOverlays.map((node) => [node.id, node]))

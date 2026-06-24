@@ -784,6 +784,48 @@ describe('workspace node canvas projection', () => {
     )
   })
 
+  it('keeps the pending edit table in the same layout slot as the persisted generating table', () => {
+    const styleBible = createStyleBible()
+    const editScreenplay = createEditScreenplay({ styleBible })
+    const editDirectorDecoupage = createDirectorDecoupage({ screenplayId: editScreenplay.id })
+    const pendingProjection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editDirectorDecoupage,
+      editScriptPending: true,
+      savedLayouts: [],
+      translate: t,
+    })
+    const generatingProjection = buildWorkspaceNodeCanvasProjection({
+      episodeId: 'episode-1',
+      storyText: '',
+      clips: [],
+      storyboards: [],
+      editScreenplay,
+      editDirectorDecoupage,
+      editScript: createSingleVideoEditScript({
+        status: 'generating',
+        shotCount: 0,
+        shots: [],
+        requirements: [],
+        styleBible,
+      }),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const pendingNode = pendingProjection.nodes.find((node) => node.id === 'edit-script:episode-1')
+    const generatingNode = generatingProjection.nodes.find((node) => node.id === 'edit-script:episode-1')
+
+    expect(pendingNode?.position).toEqual(generatingNode?.position)
+    expect(pendingProjection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain(
+      'edit-director-decoupage:screenplay:screenplay-1->edit-script:episode-1',
+    )
+  })
+
   it('does not invent a screenplay placeholder before a stable ProjectEditScreenplay target exists', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
