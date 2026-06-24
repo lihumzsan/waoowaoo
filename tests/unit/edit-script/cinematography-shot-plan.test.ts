@@ -79,12 +79,15 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).toContain('Do not replace movement with cameraMovement, cameraMove, move, or localized field names')
     expect(prompt).toContain('"lighting" is the only valid lighting field key')
     expect(prompt).toContain('Do not output lightning, light, lightingPrompt, or localized field names')
+    expect(prompt).toContain('every string value in shots[].* and hardBans must be English natural language')
+    expect(prompt).toContain('do not output Chinese words or Chinese sentences')
+    expect(prompt).toContain('Do not append localized labels in parentheses')
     expect(prompt).toContain('Before returning, validate every shot has these fields')
     expect(prompt).toContain('cameraAngle, movement, composition')
     expect(prompt).toContain('must cover all shots in one pass')
   })
 
-  it('prompts the Chinese cinematography module not to omit movement on any shot', () => {
+  it('regresses Chinese cinematography prompts to ban English values in shot plan output', () => {
     const prompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
       locale: 'zh',
@@ -103,6 +106,10 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).toContain('禁止用 cameraMovement、cameraMove、move 或中文字段名替代 movement')
     expect(prompt).toContain('"lighting" 是唯一合法的光线字段名')
     expect(prompt).toContain('禁止输出 lightning、light、lightingPrompt 或中文字段名')
+    expect(prompt).toContain('所有字段值必须整体使用中文自然语言')
+    expect(prompt).toContain('不得输出英文单词或英文句子')
+    expect(prompt).toContain('不要附加括号英文译名')
+    expect(prompt).toContain('不要输出“全景 (Full Shot)”或“retro game”')
     expect(prompt).toContain('输出前逐个检查每个 shot 是否都有这些字段')
     expect(prompt).toContain('cameraAngle、movement、composition')
   })

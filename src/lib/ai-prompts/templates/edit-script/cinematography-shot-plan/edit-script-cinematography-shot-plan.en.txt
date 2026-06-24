@@ -7,6 +7,8 @@ Core rules:
 - This stage must output concrete cinematography parameters: shot scale, lens, depth of field, camera position, height, angle, movement, composition, lighting, axis/eyeline, and continuity.
 - Later storyboard blocks may run in parallel, so this stage must cover all shots in one pass to preserve cross-block continuity.
 - Do not output image prompts or video prompts.
+- In the English flow, every string value in shots[].* and hardBans must be English natural language. Aside from Schema field keys, numbers, units such as mm, and exact proper names or source dialogue that cannot be translated, do not output Chinese words or Chinese sentences.
+- Shot scale, composition, movement, art style, and cinematography terms must be written in English. Do not append localized labels in parentheses.
 - The Schema below is the contract, not an example to paraphrase. Return exactly the top-level keys shown there, and each shot object must use exactly the shot keys shown there.
 - Every shot object must include the complete field set. Field names must exactly match the English keys in the Schema. Do not omit fields, add fields, rename fields, or use aliases.
 - "movement" is required. Even for a locked-off shot, write a concrete locked-off camera reason in movement. Do not replace movement with cameraMovement, cameraMove, move, or localized field names.
