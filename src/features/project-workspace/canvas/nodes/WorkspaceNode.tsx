@@ -1502,13 +1502,13 @@ function EditAssetGroupContent({
                 selectAsset()
               }}
             >
-              <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]">
+              <div className="relative flex h-[240px] items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]">
                 {imageUrl ? (
                   <MediaImageWithLoading
                     src={imageUrl}
                     alt={asset.name}
                     containerClassName="h-full w-full bg-slate-100"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                   />
                 ) : asset.isRunning ? null : (
                   <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />

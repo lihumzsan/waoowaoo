@@ -222,6 +222,10 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('data-media-image-with-loading="true"')
     expect(html).toContain('https://example.com/pilot.png')
+    expect(html).toContain('h-[240px]')
+    expect(html).toContain('object-contain')
+    expect(html).not.toContain('aspect-square')
+    expect(html).not.toContain('object-cover')
     expect(html).toContain('role="button"')
     expect(html).toContain('aria-pressed="false"')
     expect(html).toContain('aria-label="previewLarge: Pilot"')
