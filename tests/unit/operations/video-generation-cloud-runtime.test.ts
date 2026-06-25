@@ -104,7 +104,6 @@ describe('cloud video generation runtime options', () => {
     const result = await createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
       confirmed: true,
       panelId: 'panel-1',
-      videoModel: PLATFORM_VIDEO_MODEL,
       generationOptions: {
         resolution: '480p',
         generateAudio: true,
@@ -119,7 +118,6 @@ describe('cloud video generation runtime options', () => {
     expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
         videoModel: PLATFORM_VIDEO_MODEL,
-        groupVideoModel: PLATFORM_VIDEO_MODEL,
         generationOptions: expect.objectContaining({
           resolution: '480p',
           generateAudio: true,
@@ -134,7 +132,6 @@ describe('cloud video generation runtime options', () => {
     await expect(createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
       confirmed: true,
       panelId: 'panel-1',
-      videoModel: PLATFORM_VIDEO_MODEL,
       generationOptions: {
         aspectRatio: '16:9',
       },
@@ -143,6 +140,21 @@ describe('cloud video generation runtime options', () => {
       details: expect.objectContaining({
         code: 'TASK_VIDEO_RATIO_MANAGED_BY_PROJECT',
         field: 'generationOptions.aspectRatio',
+      }),
+    })
+    expect(submitOperationTaskMock.mock.calls).toEqual([])
+  })
+
+  it('rejects caller-supplied video model fields before task submission', async () => {
+    await expect(createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
+      confirmed: true,
+      panelId: 'panel-1',
+      videoModel: 'hunyuan',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: expect.objectContaining({
+        code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+        field: 'videoModel',
       }),
     })
     expect(submitOperationTaskMock.mock.calls).toEqual([])

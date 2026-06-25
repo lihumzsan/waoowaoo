@@ -159,7 +159,7 @@ describe('api contract - project media generation routes (operation adapter)', (
       buildMockRequest({
         path: '/api/projects/project-1/generate-video',
         method: 'POST',
-        body: { panelId: 'panel-1', videoModel: 'provider/model' },
+        body: { panelId: 'panel-1' },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
@@ -168,7 +168,7 @@ describe('api contract - project media generation routes (operation adapter)', (
       buildMockRequest({
         path: '/api/projects/project-1/generate-video',
         method: 'POST',
-        body: { episodeId: 'episode-1', all: true, videoModel: 'provider/model' },
+        body: { episodeId: 'episode-1', all: true },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
@@ -182,7 +182,6 @@ describe('api contract - project media generation routes (operation adapter)', (
           mode: 'grid',
           gridMode: '2x2',
           shotNumbers: [1, 2, 3, 4],
-          videoModel: 'provider/model',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -197,7 +196,6 @@ describe('api contract - project media generation routes (operation adapter)', (
           mode: 'grid',
           gridMode: '3x3',
           all: true,
-          videoModel: 'provider/model',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -211,8 +209,6 @@ describe('api contract - project media generation routes (operation adapter)', (
           episodeId: 'episode-1',
           mode: 'auto',
           all: true,
-          videoModel: 'provider/model',
-          groupVideoModel: 'ark::doubao-seedance-2-0-260128',
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -226,7 +222,6 @@ describe('api contract - project media generation routes (operation adapter)', (
           episodeId: 'episode-1',
           mode: 'asset-reference',
           blockIndex: 0,
-          videoModel: 'provider/model',
           referenceImageUrls: ['https://example.com/character.png'],
         },
       }),
@@ -241,7 +236,6 @@ describe('api contract - project media generation routes (operation adapter)', (
           episodeId: 'episode-1',
           mode: 'asset-reference',
           all: true,
-          videoModel: 'provider/model',
           referenceImageUrls: ['https://example.com/character.png'],
         },
       }),
@@ -278,7 +272,6 @@ describe('api contract - project media generation routes (operation adapter)', (
       operationId: 'generate_episode_videos_auto',
       input: expect.objectContaining({
         mode: 'auto',
-        groupVideoModel: 'ark::doubao-seedance-2-0-260128',
       }),
     }))
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(6, expect.objectContaining({
@@ -298,22 +291,22 @@ describe('api contract - project media generation routes (operation adapter)', (
     }))
   })
 
-  it('POST /api/projects/[projectId]/generate-video -> rejects blank video model before submitting an operation', async () => {
+  it('POST /api/projects/[projectId]/generate-video -> rejects request-supplied video model before submitting an operation', async () => {
     const response = await generateVideoPost(
       buildMockRequest({
         path: '/api/projects/project-1/generate-video',
         method: 'POST',
-        body: { panelId: 'panel-1', videoModel: '   ' },
+        body: { panelId: 'panel-1', videoModel: 'provider/model' },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
     const body = await response.json()
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(403)
     expect(body.error).toMatchObject({
-      code: 'INVALID_PARAMS',
+      code: 'FORBIDDEN',
       details: {
-        code: 'VIDEO_MODEL_REQUIRED',
+        code: 'TASK_MODEL_MANAGED_BY_CONFIG',
         field: 'videoModel',
       },
     })

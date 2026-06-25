@@ -105,7 +105,6 @@ export function useWorkspaceNodeCanvasActions() {
       await runtime.onGenerateVideo(
         action.storyboardId,
         action.panelIndex,
-        action.videoModel,
         action.firstLastFrame,
         action.generationOptions,
         action.panelId,
@@ -143,7 +142,6 @@ export function useWorkspaceNodeCanvasActions() {
 
     if (action.type === 'generate_all_videos') {
       await runtime.onGenerateAllVideos({
-        videoModel: action.videoModel ?? '',
         generationOptions: action.generationOptions,
       })
       return
@@ -151,7 +149,6 @@ export function useWorkspaceNodeCanvasActions() {
 
     if (action.type === 'generate_video_group') {
       await runtime.onGenerateAllVideos({
-        videoModel: action.videoModel,
         generationOptions: action.generationOptions,
         mode: 'grid',
         gridMode: action.gridMode,
@@ -162,7 +159,6 @@ export function useWorkspaceNodeCanvasActions() {
 
     if (action.type === 'generate_asset_reference_video') {
       await runtime.onGenerateAllVideos({
-        videoModel: action.videoModel,
         generationOptions: action.generationOptions,
         mode: 'asset-reference',
         blockIndex: action.blockIndex,

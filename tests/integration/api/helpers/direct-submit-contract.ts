@@ -462,7 +462,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   {
     routeFile: 'src/app/api/projects/[projectId]/generate-video/route.ts',
     body: {
-      videoModel: 'ark::doubao-seedance-2-0-260128',
       storyboardId: 'storyboard-1',
       panelIndex: 0,
       generationOptions: {
@@ -470,7 +469,8 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
         duration: 5,
       },
       firstLastFrame: {
-        flModel: 'ark::doubao-seedance-2-0-260128',
+        lastFrameStoryboardId: 'storyboard-1',
+        lastFramePanelIndex: 1,
       },
     },
     params: { projectId: 'project-1' },
@@ -478,13 +478,13 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedTargetType: 'ProjectPanel',
     expectedProjectId: 'project-1',
     expectedPayloadSubset: {
-      videoModel: 'ark::doubao-seedance-2-0-260128',
       generationOptions: {
         resolution: '720p',
         duration: 5,
       },
       firstLastFrame: {
-        flModel: 'ark::doubao-seedance-2-0-260128',
+        lastFrameStoryboardId: 'storyboard-1',
+        lastFramePanelIndex: 1,
       },
     },
   },

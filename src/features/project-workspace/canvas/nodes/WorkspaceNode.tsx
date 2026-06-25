@@ -434,8 +434,6 @@ function videoPlanModel(data: WorkspaceCanvasFlowNode['data']): string {
   }
   const action = data.action
   if (!action) return ''
-  if (action.type === 'generate_video_group') return action.videoModel.trim()
-  if (action.type === 'generate_video') return typeof action.videoModel === 'string' ? action.videoModel.trim() : ''
   return ''
 }
 
@@ -1924,7 +1922,6 @@ function VideoPlanContent({
     if (generationMode === 'asset-reference') {
       void dispatchNodeAction(data, {
         type: 'generate_asset_reference_video',
-        videoModel: assetReferenceVideoModel,
         blockIndex: details.blockIndex,
         referenceImageUrls: assetReferenceImageUrls,
         generationOptions: videoPlanGenerationOptions(data),
@@ -1934,7 +1931,6 @@ function VideoPlanContent({
     if (details.kind === 'group') {
       void dispatchNodeAction(data, {
         type: 'generate_video_group',
-        videoModel: assetReferenceVideoModel,
         gridMode: details.gridMode === '3x3' ? '3x3' : '2x2',
         shotNumbers: details.shotNumbers,
         generationOptions: videoPlanGenerationOptions(data),
@@ -1951,7 +1947,6 @@ function VideoPlanContent({
         storyboardId: firstStoryboardReference.storyboardId,
         panelIndex: firstStoryboardReference.panelIndex,
         panelId: firstStoryboardReference.panelId,
-        videoModel: assetReferenceVideoModel,
         generationOptions: videoPlanGenerationOptions(data),
       })
     }

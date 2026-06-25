@@ -818,7 +818,6 @@ describe('workspace node rendering', () => {
       actionLabel: 'Generate video',
       action: {
         type: 'generate_video_group',
-        videoModel: 'video-model-1',
         gridMode: '2x2',
         shotNumbers: [1, 2],
       },

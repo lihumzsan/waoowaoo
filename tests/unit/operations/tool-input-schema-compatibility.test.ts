@@ -139,6 +139,28 @@ describe('tool input schema compatibility', () => {
     expect(parsedWithoutPrompt.success).toBe(true)
   })
 
+  it('does not expose system-managed video model fields in model-facing video tool schemas', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operationIds = [
+      'generate_panel_video',
+      'generate_episode_videos',
+      'generate_video_group',
+      'generate_episode_video_groups',
+      'generate_episode_videos_auto',
+      'generate_asset_reference_video',
+      'generate_episode_asset_reference_videos',
+    ]
+
+    for (const operationId of operationIds) {
+      const operation = registry[operationId]
+      expect(operation).toBeDefined()
+      expect(Object.keys(operation.toolInputSchema.properties)).not.toContain('videoModel')
+      expect(Object.keys(operation.toolInputSchema.properties)).not.toContain('groupVideoModel')
+      expect(operation.toolInputSchema.required).not.toContain('videoModel')
+      expect(operation.toolInputSchema.required).not.toContain('groupVideoModel')
+    }
+  })
+
   it('makes every model-facing tool property required for OpenAI strict schema conversion', () => {
     const registry = createProjectAgentOperationRegistry()
     const violations: Array<{ id: string; path: string }> = []

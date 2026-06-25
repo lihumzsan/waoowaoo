@@ -9,7 +9,6 @@ import {
   validateProjectDraft,
   type ProjectDraftInput,
 } from '@/lib/projects/validation'
-import { DEFAULT_GROUP_VIDEO_MODEL } from '@/lib/ai-exec/video-defaults'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -258,7 +257,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               editModel: userPreference.editModel,
               videoModel: userPreference.videoModel,
               singleShotVideoModel: userPreference.videoModel,
-              sequenceVideoModel: DEFAULT_GROUP_VIDEO_MODEL,
+              sequenceVideoModel: userPreference.videoModel,
               musicModel: userPreference.musicModel,
               videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,

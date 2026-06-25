@@ -50,22 +50,15 @@ export function useWorkspaceVideoActions({
   const handleGenerateVideo = async (
     storyboardId: string,
     panelIndex: number,
-    videoModel?: string,
     firstLastFrame?: {
       lastFrameStoryboardId: string
       lastFramePanelIndex: number
-      flModel: string
       customPrompt?: string
     },
     generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => {
-    const normalizedVideoModel = typeof videoModel === 'string' && videoModel.trim()
-      ? videoModel.trim()
-      : typeof singleShotVideoModel === 'string'
-        ? singleShotVideoModel.trim()
-        : ''
-    if (!normalizedVideoModel) {
+    if (typeof singleShotVideoModel !== 'string' || !singleShotVideoModel.trim()) {
       alert(t('execution.videoModelRequired'))
       return
     }
@@ -74,7 +67,6 @@ export function useWorkspaceVideoActions({
         storyboardId,
         panelIndex,
         panelId,
-        videoModel: normalizedVideoModel,
         firstLastFrame,
         generationOptions,
       })
@@ -93,12 +85,10 @@ export function useWorkspaceVideoActions({
       alert(t('execution.selectEpisode'))
       return
     }
-    const normalizedVideoModel = typeof options?.videoModel === 'string' && options.videoModel.trim()
-      ? options.videoModel.trim()
-      : typeof singleShotVideoModel === 'string'
-        ? singleShotVideoModel.trim()
-        : ''
-    if (!normalizedVideoModel) {
+    const requiresSequenceModel = options?.mode === 'grid' || options?.mode === 'auto' || options?.mode === 'asset-reference'
+    const hasSingleShotModel = typeof singleShotVideoModel === 'string' && Boolean(singleShotVideoModel.trim())
+    const hasSequenceModel = typeof sequenceVideoModel === 'string' && Boolean(sequenceVideoModel.trim())
+    if (!hasSingleShotModel || (requiresSequenceModel && !hasSequenceModel)) {
       alert(t('execution.videoModelRequired'))
       return
     }
@@ -106,8 +96,6 @@ export function useWorkspaceVideoActions({
     try {
       await batchGenerateVideosMutation.mutateAsync({
         ...options,
-        videoModel: normalizedVideoModel,
-        groupVideoModel: options?.groupVideoModel ?? sequenceVideoModel ?? undefined,
       })
     } catch (err: unknown) {
       if (isAbortError(err)) {

@@ -15,7 +15,6 @@ import { resolveAiVideoTokenPricingContract } from '@/lib/ai-exec/video-token-pr
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { resolveBuiltinPricing } from '@/lib/ai-registry/pricing-resolution'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
-import { DEFAULT_GROUP_VIDEO_MODEL } from '@/lib/ai-exec/video-defaults'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
@@ -39,6 +38,7 @@ import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import { VIDEO_GRID_MODES, type VideoBlockPlan, type VideoBlockPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
 
 type UnknownObject = { [key: string]: unknown }
+type VideoTaskModelPurpose = 'single-shot-video' | 'sequence-video'
 const ASSET_REFERENCE_GRID_MODE = 'asset_reference'
 
 function normalizeString(value: unknown): string {
@@ -112,52 +112,51 @@ function requireVideoModelKeyFromPayload(payload: unknown): string {
   return payload.videoModel
 }
 
-async function applyCloudSystemVideoModel(params: {
+function rejectManagedVideoModelField(field: string): never {
+  throw new ApiError('FORBIDDEN', {
+    code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+    field,
+  })
+}
+
+function assertNoManagedVideoModelInput(payload: UnknownObject): void {
+  if (Object.prototype.hasOwnProperty.call(payload, 'videoModel')) {
+    rejectManagedVideoModelField('videoModel')
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'groupVideoModel')) {
+    rejectManagedVideoModelField('groupVideoModel')
+  }
+  const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
+  if (firstLast && Object.prototype.hasOwnProperty.call(firstLast, 'flModel')) {
+    rejectManagedVideoModelField('firstLastFrame.flModel')
+  }
+}
+
+async function applySystemVideoModel(params: {
   payload: UnknownObject
   projectId: string
   userId: string
+  purpose: VideoTaskModelPurpose
 }): Promise<void> {
-  if (getDeploymentConfig().edition !== 'cloud') return
+  assertNoManagedVideoModelInput(params.payload)
 
-  const plan = getPlatformRuntimePlan('video')
   const systemVideoModel = await resolveSystemModelKey({
     userId: params.userId,
     projectId: params.projectId,
-    purpose: 'video',
+    purpose: params.purpose,
   })
-  if (systemVideoModel !== plan.modelKey) {
-    throw new Error(`PLATFORM_RUNTIME_MODEL_MISMATCH: video=${systemVideoModel}`)
-  }
-
-  const providedVideoModel = normalizeString(params.payload.videoModel)
-  if (providedVideoModel && providedVideoModel !== systemVideoModel) {
-    throw new ApiError('FORBIDDEN', {
-      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
-      field: 'videoModel',
-    })
-  }
-
-  const providedGroupVideoModel = normalizeString(params.payload.groupVideoModel)
-  if (providedGroupVideoModel && providedGroupVideoModel !== systemVideoModel) {
-    throw new ApiError('FORBIDDEN', {
-      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
-      field: 'groupVideoModel',
-    })
-  }
 
   const firstLast = isRecord(params.payload.firstLastFrame) ? params.payload.firstLastFrame : null
-  const providedFirstLastModel = normalizeString(firstLast?.flModel)
-  if (providedFirstLastModel && providedFirstLastModel !== systemVideoModel) {
-    throw new ApiError('FORBIDDEN', {
-      code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
-      field: 'firstLastFrame.flModel',
-    })
-  }
-
   params.payload.videoModel = systemVideoModel
-  params.payload.groupVideoModel = systemVideoModel
   if (firstLast) {
     firstLast.flModel = systemVideoModel
+  }
+
+  if (getDeploymentConfig().edition !== 'cloud') return
+
+  const plan = getPlatformRuntimePlan('video')
+  if (systemVideoModel !== plan.modelKey) {
+    throw new Error(`PLATFORM_RUNTIME_MODEL_MISMATCH: video=${systemVideoModel}`)
   }
 
   const suppliedOptions = isRecord(params.payload.generationOptions)
@@ -334,12 +333,14 @@ async function validateVideoTaskPayloadOrThrow(params: {
   payload: UnknownObject
   projectId: string
   userId: string
+  modelPurpose: VideoTaskModelPurpose
   lastVideoGenerationOptions?: unknown
 }) {
-  await applyCloudSystemVideoModel({
+  await applySystemVideoModel({
     payload: params.payload,
     projectId: params.projectId,
     userId: params.userId,
+    purpose: params.modelPurpose,
   })
   requireVideoModelKeyFromPayload(params.payload)
   validateFirstLastFrameModel(params.payload.firstLastFrame)
@@ -372,6 +373,7 @@ async function executeGenerateEpisodeVideosOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
 
   const episodeId = normalizeString(payload.episodeId) || normalizeString(params.ctx.context.episodeId)
@@ -416,6 +418,7 @@ async function executeGenerateEpisodeVideosOperation(params: {
         payload: panelPayload,
         projectId: params.ctx.projectId,
         userId: params.ctx.userId,
+        modelPurpose: 'single-shot-video',
         lastVideoGenerationOptions: panel.lastVideoGenerationOptions,
       })
 
@@ -776,6 +779,7 @@ async function submitAssetReferenceVideoBlockTask(params: {
     payload,
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
+    modelPurpose: 'sequence-video',
   })
 
   const { groupId, previous } = await upsertVideoGroupForTask({
@@ -878,6 +882,7 @@ async function submitVideoGroupTask(params: {
     payload,
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
+    modelPurpose: 'sequence-video',
   })
 
   const { groupId, previous } = await upsertVideoGroupForTask({
@@ -932,6 +937,7 @@ async function executeGenerateVideoGroupOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const gridMode: '2x2' | '3x3' = params.input.gridMode === '3x3' ? '3x3' : '2x2'
@@ -976,6 +982,7 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const gridMode: '2x2' | '3x3' = params.input.gridMode === '3x3' ? '3x3' : '2x2'
@@ -1049,12 +1056,22 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
 
-  const singleVideoModel = normalizeString(params.input.videoModel)
-  if (!singleVideoModel) throw new Error('PROJECT_AGENT_VIDEO_MODEL_REQUIRED')
-  const groupVideoModel = normalizeString(params.input.groupVideoModel) || DEFAULT_GROUP_VIDEO_MODEL
+  const [singleVideoModel, groupVideoModel] = await Promise.all([
+    resolveSystemModelKey({
+      userId: params.ctx.userId,
+      projectId: params.ctx.projectId,
+      purpose: 'single-shot-video',
+    }),
+    resolveSystemModelKey({
+      userId: params.ctx.userId,
+      projectId: params.ctx.projectId,
+      purpose: 'sequence-video',
+    }),
+  ])
   const planned = await buildEpisodeVideoBlockPlan({
     ctx: params.ctx,
     episodeId,
@@ -1083,7 +1100,6 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
         input: {
           confirmed: params.input.confirmed,
           panelId,
-          videoModel: singleVideoModel,
           customPrompt: item.prompt,
           generationOptions: params.input.generationOptions,
         },
@@ -1108,7 +1124,6 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
       ctx: params.ctx,
       input: {
         confirmed: params.input.confirmed,
-        videoModel: groupVideoModel,
         generationOptions: params.input.generationOptions,
       },
       operationId: params.operationId,
@@ -1164,6 +1179,7 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const blockIndex = typeof params.input.blockIndex === 'number' && Number.isInteger(params.input.blockIndex)
@@ -1216,6 +1232,7 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const planned = await buildEpisodeVideoBlockPlan({
@@ -1271,6 +1288,7 @@ async function executeGeneratePanelVideoOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  assertNoManagedVideoModelInput(params.input)
   const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
   let panelId = normalizeString(payload.panelId)
   let previousVideoUrl: string | null = null
@@ -1313,6 +1331,7 @@ async function executeGeneratePanelVideoOperation(params: {
     payload,
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
+    modelPurpose: 'single-shot-video',
     lastVideoGenerationOptions: previousLastVideoGenerationOptions,
   })
 
@@ -1384,7 +1403,6 @@ const generatePanelVideoInputSchema = z.object({
   panelId: z.string().min(1).optional(),
   storyboardId: z.string().min(1).optional(),
   panelIndex: z.number().int().min(0).max(2000).optional(),
-  videoModel: z.string().min(1),
   firstLastFrame: z.unknown().optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough().refine((value) => Boolean(value.panelId || (value.storyboardId && typeof value.panelIndex === 'number')), {
@@ -1396,7 +1414,6 @@ const generateEpisodeVideosInputSchema = z.object({
   confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
   limit: z.number().int().positive().max(50).optional(),
-  videoModel: z.string().min(1),
   firstLastFrame: z.unknown().optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
@@ -1406,7 +1423,6 @@ const generateVideoGroupInputSchema = z.object({
   episodeId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
   shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-  videoModel: z.string().min(1),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
@@ -1414,15 +1430,12 @@ const generateEpisodeVideoGroupsInputSchema = z.object({
   confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
-  videoModel: z.string().min(1),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateEpisodeVideosAutoInputSchema = z.object({
   confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
-  videoModel: z.string().min(1),
-  groupVideoModel: z.string().min(1).optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
@@ -1430,7 +1443,6 @@ const generateAssetReferenceVideoInputSchema = z.object({
   confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
   blockIndex: z.number().int().min(0).max(59),
-  videoModel: z.string().min(1),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
@@ -1438,7 +1450,6 @@ const generateAssetReferenceVideoInputSchema = z.object({
 const generateEpisodeAssetReferenceVideosInputSchema = z.object({
   confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
-  videoModel: z.string().min(1),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()

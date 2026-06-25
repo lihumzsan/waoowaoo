@@ -91,12 +91,10 @@ export type WorkspaceCanvasNodeAction =
       readonly storyboardId: string
       readonly panelIndex: number
       readonly panelId: string
-      readonly videoModel?: string
       readonly generationOptions?: Record<string, string | number | boolean>
       readonly firstLastFrame?: {
         readonly lastFrameStoryboardId: string
         readonly lastFramePanelIndex: number
-        readonly flModel: string
         readonly customPrompt?: string
       }
     }
@@ -128,19 +126,16 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'toggle_panel_link'; readonly storyboardId: string; readonly panelIndex: number; readonly linked: boolean }
   | {
       readonly type: 'generate_all_videos'
-      readonly videoModel?: string
       readonly generationOptions?: Record<string, string | number | boolean>
     }
   | {
       readonly type: 'generate_video_group'
-      readonly videoModel: string
       readonly gridMode: '2x2' | '3x3'
       readonly shotNumbers: readonly number[]
       readonly generationOptions?: Record<string, string | number | boolean>
     }
   | {
       readonly type: 'generate_asset_reference_video'
-      readonly videoModel: string
       readonly blockIndex: number
       readonly referenceImageUrls: readonly string[]
       readonly generationOptions?: Record<string, string | number | boolean>

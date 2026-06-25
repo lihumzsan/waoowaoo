@@ -49,12 +49,10 @@ type VideoGenerationOptionValue = string | number | boolean
 type VideoGenerationOptions = Record<string, VideoGenerationOptionValue>
 
 interface BatchVideoGenerationParams {
-    videoModel: string
     generationOptions?: VideoGenerationOptions
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
     shotNumbers?: readonly number[]
-    groupVideoModel?: string
     blockIndex?: number
     referenceImageUrls?: readonly string[]
 }
@@ -175,12 +173,10 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             storyboardId: string
             panelIndex: number
             panelId?: string
-            videoModel: string
             generationOptions?: VideoGenerationOptions
             firstLastFrame?: {
                 lastFrameStoryboardId: string
                 lastFramePanelIndex: number
-                flModel: string
                 customPrompt?: string
             }
         }) => {
@@ -193,16 +189,13 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 firstLastFrame?: {
                     lastFrameStoryboardId: string
                     lastFramePanelIndex: number
-                    flModel: string
                     customPrompt?: string
                 }
-                videoModel: string
                 panelId?: string
                 generationOptions?: VideoGenerationOptions
             } = {
                 storyboardId: params.storyboardId,
                 panelIndex: params.panelIndex,
-                videoModel: params.videoModel,
             }
             if (params.panelId) {
                 requestBody.panelId = params.panelId
@@ -272,12 +265,10 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
             const requestBody: {
                 all: boolean
                 episodeId: string
-                videoModel: string
                 generationOptions?: VideoGenerationOptions
                 mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
                 gridMode?: '2x2' | '3x3'
                 shotNumbers?: readonly number[]
-                groupVideoModel?: string
                 blockIndex?: number
                 referenceImageUrls?: readonly string[]
             } = {
@@ -286,7 +277,6 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                     || (params.mode === 'asset-reference' && typeof params.blockIndex === 'number')
                 ),
                 episodeId,
-                videoModel: params.videoModel,
             }
             if (params.mode === 'grid' || params.mode === 'auto' || params.mode === 'asset-reference') {
                 requestBody.mode = params.mode
@@ -297,7 +287,6 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                     requestBody.shotNumbers = params.shotNumbers
                 }
             }
-            if (params.groupVideoModel) requestBody.groupVideoModel = params.groupVideoModel
             if (typeof params.blockIndex === 'number') requestBody.blockIndex = params.blockIndex
             if (Array.isArray(params.referenceImageUrls) && params.referenceImageUrls.length > 0) {
                 requestBody.referenceImageUrls = params.referenceImageUrls

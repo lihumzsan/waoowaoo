@@ -2168,7 +2168,6 @@ export function buildWorkspaceNodeCanvasProjection({
         : block.kind === 'group'
           ? blockHasPanelImages ? {
               type: 'generate_video_group',
-              videoModel: sequenceVideoModel,
               gridMode: block.gridMode === '3x3' ? '3x3' : '2x2',
               shotNumbers: block.shotNumbers,
             } : undefined
@@ -2178,7 +2177,6 @@ export function buildWorkspaceNodeCanvasProjection({
                 storyboardId: singlePanel.storyboardId,
                 panelIndex: singlePanel.panelIndex,
                 panelId: singlePanel.id,
-                videoModel: sequenceVideoModel || undefined,
               }
             : undefined
       const arrangementAction: WorkspaceCanvasNodeAction | undefined = !isRunning

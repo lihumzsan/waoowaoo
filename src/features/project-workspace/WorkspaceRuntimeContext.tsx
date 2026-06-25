@@ -63,11 +63,9 @@ export interface WorkspaceRuntimeValue {
   onGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
-    model?: string,
     firstLastFrame?: {
       lastFrameStoryboardId: string
       lastFramePanelIndex: number
-      flModel: string
       customPrompt?: string
     },
     generationOptions?: WorkspaceVideoGenerationOptions,

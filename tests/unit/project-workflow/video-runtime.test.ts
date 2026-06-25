@@ -127,10 +127,11 @@ describe('useWorkspaceVideoActions', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       t: (key: string) => key,
+      singleShotVideoModel: 'veo-3.1',
     })
 
     await expect(
-      actions.handleGenerateVideo('storyboard-1', 0, 'veo-3.1'),
+      actions.handleGenerateVideo('storyboard-1', 0),
     ).rejects.toThrow('video submit failed')
 
     expect(globalThis.alert).toHaveBeenCalledWith('execution.generationFailed: video submit failed')

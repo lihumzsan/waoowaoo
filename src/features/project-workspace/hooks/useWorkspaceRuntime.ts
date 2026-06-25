@@ -54,11 +54,9 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
-    videoModel?: string,
     firstLastFrame?: {
       lastFrameStoryboardId: string
       lastFramePanelIndex: number
-      flModel: string
       customPrompt?: string
     },
     generationOptions?: WorkspaceVideoGenerationOptions,

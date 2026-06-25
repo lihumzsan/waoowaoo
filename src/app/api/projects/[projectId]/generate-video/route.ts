@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
-import { getDeploymentConfig } from '@/lib/deployment/config'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function rejectManagedVideoModelField(field: string): never {
+  throw new ApiError('FORBIDDEN', {
+    code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+    field,
+  })
 }
 
 export const POST = apiHandler(async (
@@ -18,17 +24,18 @@ export const POST = apiHandler(async (
 
   const bodyUnknown: unknown = await request.json()
   const body = isRecord(bodyUnknown) ? bodyUnknown : {}
-  const deployment = getDeploymentConfig()
-  const videoModel = typeof body.videoModel === 'string' ? body.videoModel.trim() : ''
-  if (deployment.edition !== 'cloud' && !videoModel) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'VIDEO_MODEL_REQUIRED',
-      field: 'videoModel',
-    })
+  if (Object.prototype.hasOwnProperty.call(body, 'videoModel')) {
+    rejectManagedVideoModelField('videoModel')
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'groupVideoModel')) {
+    rejectManagedVideoModelField('groupVideoModel')
+  }
+  const firstLastFrame = isRecord(body.firstLastFrame) ? body.firstLastFrame : null
+  if (firstLastFrame && Object.prototype.hasOwnProperty.call(firstLastFrame, 'flModel')) {
+    rejectManagedVideoModelField('firstLastFrame.flModel')
   }
 
   const input: Record<string, unknown> = {}
-  if (videoModel) input.videoModel = videoModel
   if (body.all === true) input.all = true
   if (body.mode === 'grid') input.mode = 'grid'
   if (body.mode === 'auto') input.mode = 'auto'
@@ -46,7 +53,6 @@ export const POST = apiHandler(async (
     })
   }
   if (body.gridMode === '2x2' || body.gridMode === '3x3') input.gridMode = body.gridMode
-  if (typeof body.groupVideoModel === 'string') input.groupVideoModel = body.groupVideoModel
   if (Array.isArray(body.shotNumbers)) input.shotNumbers = body.shotNumbers
   if (Array.isArray(body.referenceImageUrls)) input.referenceImageUrls = body.referenceImageUrls
   if (typeof body.blockIndex === 'number') input.blockIndex = body.blockIndex

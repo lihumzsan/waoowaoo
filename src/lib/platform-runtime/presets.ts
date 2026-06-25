@@ -2,7 +2,7 @@ import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/ty
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 
-export type PlatformRuntimePurpose = SystemModelPurpose
+export type PlatformRuntimePurpose = Exclude<SystemModelPurpose, 'single-shot-video' | 'sequence-video'>
 
 export interface PlatformRuntimePlan {
   purpose: PlatformRuntimePurpose
