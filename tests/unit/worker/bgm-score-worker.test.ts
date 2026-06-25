@@ -18,8 +18,7 @@ const prismaMock = vi.hoisted(() => ({
   projectVideoGroup: {
     findMany: vi.fn(),
   },
-  videoEditorProject: {
-    findUnique: vi.fn(),
+  projectEpisodeFinalOutput: {
     upsert: vi.fn(),
   },
 }))
@@ -208,7 +207,6 @@ describe('bgm score worker', () => {
       id: storageKey.includes('music/bgm-score') ? 'media-mix' : `media-${storageKey}`,
       url: storageKey.includes('music/bgm-score') ? '/m/bgm-mix' : `/m/${storageKey}`,
     }))
-    prismaMock.videoEditorProject.findUnique.mockResolvedValue({ projectData: null })
   })
 
   it('generates BGM from the scheduled video group timeline before video media exists', async () => {
@@ -314,21 +312,23 @@ describe('bgm score worker', () => {
     expect(String(generateMusicMock.mock.calls[0]?.[2])).toContain('文本说明用内部编曲层')
     expect(storageMock.uploadObject).toHaveBeenCalledTimes(1)
 
-    const completedCall = prismaMock.videoEditorProject.upsert.mock.calls.find((call) => {
-      const arg = call[0] as { update?: { projectData?: string } }
-      const projectData = JSON.parse(arg.update?.projectData ?? '{}') as {
-        bgmScore?: {
-          status?: string
-          schemaVersion?: number
-          plan?: { virtualLayers?: readonly unknown[]; promptSections?: readonly unknown[] }
-          mix?: { url?: string }
+    const completedCall = prismaMock.projectEpisodeFinalOutput.upsert.mock.calls.find((call) => {
+      const arg = call[0] as {
+        update?: {
+          bgmScoreJson?: {
+            status?: string
+            schemaVersion?: number
+            plan?: { virtualLayers?: readonly unknown[]; promptSections?: readonly unknown[] }
+            mix?: { url?: string }
+          }
         }
       }
-      return projectData.bgmScore?.status === 'completed'
-        && projectData.bgmScore.schemaVersion === 2
-        && projectData.bgmScore.mix?.url === '/m/bgm-mix'
-        && projectData.bgmScore.plan?.virtualLayers?.length === 2
-        && projectData.bgmScore.plan?.promptSections?.length === 1
+      const bgmScore = arg.update?.bgmScoreJson
+      return bgmScore?.status === 'completed'
+        && bgmScore.schemaVersion === 2
+        && bgmScore.mix?.url === '/m/bgm-mix'
+        && bgmScore.plan?.virtualLayers?.length === 2
+        && bgmScore.plan?.promptSections?.length === 1
     })
     expect(completedCall).toBeTruthy()
 
@@ -357,11 +357,10 @@ describe('bgm score worker', () => {
     }))).rejects.toThrow('provider rejected final BGM')
 
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
-    const failedCall = prismaMock.videoEditorProject.upsert.mock.calls.find((call) => {
-      const arg = call[0] as { update?: { projectData?: string } }
-      const projectData = JSON.parse(arg.update?.projectData ?? '{}') as { bgmScore?: { status?: string; errorMessage?: string } }
-      return projectData.bgmScore?.status === 'failed'
-        && projectData.bgmScore.errorMessage === 'provider rejected final BGM'
+    const failedCall = prismaMock.projectEpisodeFinalOutput.upsert.mock.calls.find((call) => {
+      const arg = call[0] as { update?: { bgmScoreJson?: { status?: string; errorMessage?: string } } }
+      return arg.update?.bgmScoreJson?.status === 'failed'
+        && arg.update.bgmScoreJson.errorMessage === 'provider rejected final BGM'
     })
     expect(failedCall).toBeTruthy()
   })

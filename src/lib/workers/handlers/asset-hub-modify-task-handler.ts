@@ -273,7 +273,7 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     if (!isProp) {
       const profileModel = spatialProfileModel
       if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-      await assertTaskActive(job, 'analyze_global_location_spatial_profile')
+      await assertTaskActive(job, 'asset_hub_location_spatial_profile')
       await analyzeAndPersistGlobalLocationImageSpatialProfile({
         imageId: locationImage.id,
         userId,

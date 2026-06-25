@@ -45,8 +45,6 @@ interface BuildWorkspaceControllerViewModelParams {
     isAssetLibraryOpen: boolean
     assetLibraryFocusCharacterId: string | null
     assetLibraryFocusRequestId: number
-    triggerGlobalAnalyzeOnOpen: boolean
-    setTriggerGlobalAnalyzeOnOpen: (value: boolean) => void
     openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
     closeAssetLibrary: () => void
     userModelsForSettings: UserModelsPayload | null
@@ -66,12 +64,10 @@ interface BuildWorkspaceControllerViewModelParams {
     handleAcceptRebuildConfirm: () => void
   }
   executionState: {
-    isAssetAnalysisRunning: boolean
     isConfirmingAssets: boolean
     isTransitioning: boolean
     isAssistantWorkflowStarting: boolean
     transitionProgress: { step?: string; total?: number; current?: number }
-    handleAnalyzeAssets: () => Promise<void>
     requestAssistantGuidance: () => Promise<void>
     showCreatingToast: boolean
   }

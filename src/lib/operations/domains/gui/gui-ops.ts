@@ -704,108 +704,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
 	      },
 	    }),
-	    get_video_editor_project: defineOperation({
-	      id: 'get_video_editor_project',
-	      summary: 'Get video editor project data for an episode.',
-	      intent: 'query',
-	      effects: EFFECTS_QUERY,
-	      inputSchema: z.object({
-	        episodeId: z.string().min(1),
-	      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const editorProject = await prisma.videoEditorProject.findUnique({
-          where: { episodeId: input.episodeId },
-        })
-
-        if (!editorProject) {
-          return { projectData: null }
-        }
-
-        let parsedProjectData: unknown
-        try {
-          parsedProjectData = JSON.parse(editorProject.projectData)
-        } catch {
-          throw new Error('VIDEO_EDITOR_PROJECT_DATA_INVALID')
-        }
-
-        return {
-          id: editorProject.id,
-          episodeId: editorProject.episodeId,
-          projectData: parsedProjectData,
-          renderStatus: editorProject.renderStatus,
-          outputUrl: editorProject.outputUrl,
-	          updatedAt: editorProject.updatedAt,
-	        }
-	      },
-	    }),
-	    save_video_editor_project: defineOperation({
-	      id: 'save_video_editor_project',
-	      summary: 'Upsert video editor project data for an episode.',
-	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
-	      inputSchema: z.object({
-	        episodeId: z.string().min(1),
-	        projectData: z.unknown(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const editorProject = await prisma.videoEditorProject.upsert({
-          where: { episodeId: input.episodeId },
-          create: {
-            episodeId: input.episodeId,
-            projectData: JSON.stringify(input.projectData),
-          },
-          update: {
-            projectData: JSON.stringify(input.projectData),
-            updatedAt: new Date(),
-          },
-	        })
-	        return { success: true, id: editorProject.id, updatedAt: editorProject.updatedAt }
-	      },
-	    }),
-	    delete_video_editor_project: defineOperation({
-	      id: 'delete_video_editor_project',
-	      summary: 'Delete video editor project data for an episode.',
-	      intent: 'act',
-	      effects: {
-	        ...EFFECTS_WRITE_DESTRUCTIVE,
-	        overwrite: true,
-	      },
-	      confirmation: {
-	        required: true,
-	        summary: '将删除该剧集的编辑器工程数据。确认继续后请重新调用并传入 confirmed=true。',
-	      },
-	      inputSchema: z.object({
-	        confirmed: z.boolean().optional(),
-	        episodeId: z.string().min(1),
-	      }),
-      outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-	        await prisma.videoEditorProject.delete({
-	          where: { episodeId: input.episodeId },
-	        })
-	        return { success: true }
-	      },
-	    }),
 	    clear_storyboard_error: defineOperation({
 	      id: 'clear_storyboard_error',
 	      summary: 'Clear storyboard lastError field.',
@@ -1298,11 +1196,11 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
                 },
               },
             },
-            editorProject: {
+            finalOutput: {
               select: {
                 id: true,
                 episodeId: true,
-                projectData: true,
+                bgmScoreJson: true,
                 renderStatus: true,
                 renderTaskId: true,
                 outputUrl: true,
@@ -1322,7 +1220,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         return {
           episode: {
             ...episodeWithSignedUrls,
-            finalVideo: normalizeFinalVideoSummary(episodeWithSignedUrls.editorProject),
+            finalVideo: normalizeFinalVideoSummary(episodeWithSignedUrls.finalOutput),
           },
         }
       },

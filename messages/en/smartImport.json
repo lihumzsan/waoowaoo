@@ -155,14 +155,5 @@
       "boldNumber": "**Number**",
       "pureNumber": "Pure Number"
     }
-  },
-  "globalAnalysis": {
-    "title": "Global Asset Analysis",
-    "description": "Extract all characters and locations from the full book to ensure consistency across episodes",
-    "startButton": "Analyze Now",
-    "analyzing": "Analyzing...",
-    "success": "Analysis complete: {characters} new characters, {locations} new locations",
-    "failed": "Global analysis failed",
-    "confirmAndAnalyze": "Confirm & Analyze Assets"
   }
 }

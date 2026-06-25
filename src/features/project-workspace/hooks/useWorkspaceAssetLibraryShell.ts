@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 type RefreshOptions = { scope?: string; mode?: string }
 
@@ -27,8 +27,6 @@ export function useWorkspaceAssetLibraryShell({
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [assetLibraryFocusCharacterId, setAssetLibraryFocusCharacterId] = useState<string | null>(null)
   const [assetLibraryFocusRequestId, setAssetLibraryFocusRequestId] = useState(0)
-  const [triggerGlobalAnalyzeOnOpen, setTriggerGlobalAnalyzeOnOpen] = useState(false)
-  const hasTriggeredGlobalAnalyze = useRef(false)
 
   const openAssetLibrary = useCallback((focusCharacterId?: string | null, refreshAssets = true) => {
     setAssetLibraryFocusCharacterId(focusCharacterId || null)
@@ -50,25 +48,18 @@ export function useWorkspaceAssetLibraryShell({
   useEffect(() => {
     if (!searchParams) return
 
-    const shouldTriggerGlobalAnalyze = searchParams.get('globalAnalyze') === '1'
     const shouldOpenAssetLibrary = searchParams.get('assetLibrary') === '1'
     const focusCharacterId = searchParams.get('focusCharacter')
 
-    if (!shouldTriggerGlobalAnalyze && !shouldOpenAssetLibrary) {
+    if (!shouldOpenAssetLibrary) {
       return
     }
 
     const newParams = new URLSearchParams(searchParams.toString())
-    if (shouldTriggerGlobalAnalyze) newParams.delete('globalAnalyze')
     if (shouldOpenAssetLibrary) newParams.delete('assetLibrary')
     router.replace(`?${newParams.toString()}`, { scroll: false })
 
     openAssetLibrary(focusCharacterId)
-
-    if (shouldTriggerGlobalAnalyze && !hasTriggeredGlobalAnalyze.current) {
-      hasTriggeredGlobalAnalyze.current = true
-      setTriggerGlobalAnalyzeOnOpen(true)
-    }
   }, [openAssetLibrary, router, searchParams])
 
   useEffect(() => {
@@ -79,8 +70,6 @@ export function useWorkspaceAssetLibraryShell({
     isAssetLibraryOpen,
     assetLibraryFocusCharacterId,
     assetLibraryFocusRequestId,
-    triggerGlobalAnalyzeOnOpen,
-    setTriggerGlobalAnalyzeOnOpen,
     openAssetLibrary,
     closeAssetLibrary,
   }

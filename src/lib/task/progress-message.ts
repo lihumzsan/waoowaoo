@@ -19,8 +19,6 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.REGENERATE_GROUP]: 'progress.taskType.regenerateGroup',
   [TASK_TYPE.ASSET_HUB_IMAGE]: 'progress.taskType.assetHubImage',
   [TASK_TYPE.ASSET_HUB_MODIFY]: 'progress.taskType.assetHubModify',
-  [TASK_TYPE.ANALYZE_NOVEL]: 'progress.taskType.analyzeNovel',
-  [TASK_TYPE.ANALYZE_GLOBAL]: 'progress.taskType.analyzeGlobal',
   [TASK_TYPE.EDIT_SCREENPLAY_GENERATE]: 'progress.taskType.editScreenplayGenerate',
   [TASK_TYPE.EDIT_SCREENPLAY_REVISE]: 'progress.taskType.editScreenplayRevise',
   [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE]: 'progress.taskType.editScriptGenerate',

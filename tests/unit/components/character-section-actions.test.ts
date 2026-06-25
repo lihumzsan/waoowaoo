@@ -19,15 +19,6 @@ vi.mock('@/features/project-workspace/components/assets/CharacterCard', () => ({
   default: (props: unknown) => characterCardMock(props),
 }))
 
-vi.mock('@/components/task/TaskStatusInline', () => ({
-  __esModule: true,
-  default: () => null,
-}))
-
-vi.mock('@/lib/task/presentation', () => ({
-  resolveTaskPresentationState: () => null,
-}))
-
 vi.mock('@/components/ui/icons', () => ({
   AppIcon: (props: { name?: string; className?: string }) =>
     createElement('span', { 'data-icon': props.name, className: props.className }),
@@ -35,7 +26,7 @@ vi.mock('@/components/ui/icons', () => ({
 
 const messages = {
   assets: {
-    stage: {
+    overview: {
       characterAssets: '角色资产',
       counts: '{characterCount} 个角色，{appearanceCount} 个形象',
     },
@@ -92,7 +83,6 @@ describe('CharacterSection actions', () => {
         activeTaskKeys: new Set<string>(),
         onClearTaskKey: () => undefined,
         onRegisterTransientTaskKey: () => undefined,
-        isAnalyzingAssets: false,
         onAddCharacter: () => undefined,
         onDeleteCharacter: () => undefined,
         onDeleteAppearance: () => undefined,

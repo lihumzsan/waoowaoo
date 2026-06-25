@@ -17,10 +17,6 @@ interface AssetToolbarProps {
     totalAppearances: number
     totalLocations: number
     totalProps: number
-    isBatchSubmitting: boolean
-    isAnalyzingAssets: boolean
-    isGlobalAnalyzing?: boolean
-    onGlobalAnalyze?: () => void
 }
 
 export default function AssetToolbar({
@@ -29,10 +25,6 @@ export default function AssetToolbar({
     totalAppearances,
     totalLocations,
     totalProps,
-    isBatchSubmitting,
-    isAnalyzingAssets,
-    isGlobalAnalyzing = false,
-    onGlobalAnalyze,
 }: AssetToolbarProps) {
     const t = useTranslations('assets')
     const { data: assets } = useProjectAssets(projectId)
@@ -125,18 +117,6 @@ export default function AssetToolbar({
                     <span className="text-sm text-[var(--glass-text-tertiary)]">
                         {t("toolbar.assetCount", { total: totalAssets, appearances: totalAppearances, locations: totalLocations, props: totalProps })}
                     </span>
-                    {/* 全局资产分析按钮 */}
-                    {onGlobalAnalyze && (
-                        <button
-                            onClick={onGlobalAnalyze}
-                            disabled={isGlobalAnalyzing || isBatchSubmitting || isAnalyzingAssets}
-                            className="glass-btn-base glass-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={t("toolbar.globalAnalyzeHint")}
-                        >
-                            <AppIcon name="idea" className="w-3.5 h-3.5" />
-                            <span>{t("toolbar.globalAnalyze")}</span>
-                        </button>
-                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     {/* 打包下载按钮 */}

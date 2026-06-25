@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 /**
  * 项目资产库 - 小说推文模式专用
- * 包含资产生成和资产分析
+ * 包含资产展示、复制、生成和编辑
  * 
  * 重构说明 v2:
  * - 角色和场景操作函数已提取到 hooks/useCharacterActions 和 hooks/useLocationActions
@@ -13,7 +13,6 @@ import { useTranslations } from 'next-intl'
  */
 
 import { useState, useCallback, useMemo } from 'react'
-// 移除了 useRouter 导入，因为不再需要在组件中操作 URL
 import { Character, CharacterAppearance } from '@/types/project'
 import {
   useAssetActions,
@@ -29,7 +28,6 @@ import { useLocationActions } from './assets/hooks/useLocationActions'
 import { useBatchGeneration } from './assets/hooks/useBatchGeneration'
 import { useAssetModals } from './assets/hooks/useAssetModals'
 import { useAssetsCopyFromHub } from './assets/hooks/useAssetsCopyFromHub'
-import { useAssetsGlobalActions } from './assets/hooks/useAssetsGlobalActions'
 import { useAssetsImageEdit } from './assets/hooks/useAssetsImageEdit'
 
 // Components
@@ -42,21 +40,14 @@ import ProjectAssetLibraryModals from './assets/ProjectAssetLibraryModals'
 
 interface ProjectAssetLibraryProps {
   projectId: string
-  isAnalyzingAssets: boolean
   focusCharacterId?: string | null
   focusCharacterRequestId?: number
-  // 🔥 通过 props 触发全局分析（避免 URL 参数竞态条件）
-  triggerGlobalAnalyze?: boolean
-  onGlobalAnalyzeComplete?: () => void
 }
 
 export default function ProjectAssetLibrary({
   projectId,
-  isAnalyzingAssets,
   focusCharacterId = null,
   focusCharacterRequestId = 0,
-  triggerGlobalAnalyze = false,
-  onGlobalAnalyzeComplete
 }: ProjectAssetLibraryProps) {
   const { data: assets = [] } = useAssets({
     scope: 'project',
@@ -151,26 +142,12 @@ export default function ProjectAssetLibrary({
 
   // 批量生成
   const {
-    isBatchSubmitting,
     activeTaskKeys,
     registerTransientTaskKey,
     clearTransientTaskKey,
   } = useBatchGeneration({
     projectId,
     handleGenerateImage
-  })
-
-  const {
-    isGlobalAnalyzing,
-    globalAnalyzingState,
-    handleGlobalAnalyze,
-  } = useAssetsGlobalActions({
-    projectId,
-    triggerGlobalAnalyze,
-    onGlobalAnalyzeComplete,
-    onRefresh,
-    showToast,
-    t,
   })
 
   const {
@@ -279,11 +256,6 @@ export default function ProjectAssetLibrary({
       <ProjectAssetLibraryStatusOverlays
         toast={toast}
         onCloseToast={() => setToast(null)}
-        isGlobalAnalyzing={isGlobalAnalyzing}
-        globalAnalyzingState={globalAnalyzingState}
-        globalAnalyzingTitle={t('toolbar.globalAnalyzing')}
-        globalAnalyzingHint={t('toolbar.globalAnalyzingHint')}
-        globalAnalyzingTip={t('toolbar.globalAnalyzingTip')}
       />
 
       {/* 资产工具栏 */}
@@ -293,10 +265,6 @@ export default function ProjectAssetLibrary({
         totalAppearances={totalAppearances}
         totalLocations={totalLocations}
         totalProps={totalProps}
-        isBatchSubmitting={isBatchSubmitting}
-        isAnalyzingAssets={isAnalyzingAssets}
-        isGlobalAnalyzing={isGlobalAnalyzing}
-        onGlobalAnalyze={handleGlobalAnalyze}
       />
 
       {/* 资产筛选栏 */}
@@ -320,7 +288,6 @@ export default function ProjectAssetLibrary({
             activeTaskKeys={activeTaskKeys}
             onClearTaskKey={clearTransientTaskKey}
             onRegisterTransientTaskKey={registerTransientTaskKey}
-            isAnalyzingAssets={isAnalyzingAssets}
             onAddCharacter={() => setShowAddCharacter(true)}
             onDeleteCharacter={handleDeleteCharacter}
             onDeleteAppearance={handleDeleteAppearance}

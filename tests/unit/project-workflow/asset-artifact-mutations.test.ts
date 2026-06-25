@@ -4,12 +4,10 @@ const {
   useQueryClientMock,
   useMutationMock,
   requestJsonWithErrorMock,
-  requestTaskResponseWithErrorMock,
 } = vi.hoisted(() => ({
   useQueryClientMock: vi.fn(() => ({ invalidateQueries: vi.fn() })),
   useMutationMock: vi.fn((options: unknown) => options),
   requestJsonWithErrorMock: vi.fn(),
-  requestTaskResponseWithErrorMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -25,7 +23,6 @@ vi.mock('@/lib/query/mutations/mutation-shared', async () => {
     ...actual,
     invalidateQueryTemplates: vi.fn(),
     requestJsonWithError: requestJsonWithErrorMock,
-    requestTaskResponseWithError: requestTaskResponseWithErrorMock,
   }
 })
 
@@ -38,12 +35,7 @@ vi.mock('next-intl', () => ({
   },
 }))
 
-import {
-  isGlobalAnalyzeTaskRunning,
-  resolveGlobalAnalyzeCompletion,
-} from '@/features/project-workspace/components/assets/hooks/useAssetsGlobalActions'
 import { useConfirmProjectLocationSelection } from '@/lib/query/mutations/location-management-mutations'
-import { useAnalyzeProjectGlobalAssets } from '@/lib/query/mutations/useProjectConfigMutations'
 import {
   hasScriptArtifacts,
   hasStoryboardArtifacts,
@@ -55,72 +47,12 @@ interface ConfirmLocationSelectionMutation {
   mutationFn: (variables: { locationId: string }) => Promise<unknown>
 }
 
-interface AnalyzeGlobalMutation {
-  mutationFn: () => Promise<unknown>
-}
-
-describe('assets global actions task state helpers', () => {
-  it('treats queued and processing analyze task as running', () => {
-    expect(isGlobalAnalyzeTaskRunning({
-      phase: 'queued',
-      runningTaskId: 'task-1',
-      lastError: null,
-    })).toBe(true)
-
-    expect(isGlobalAnalyzeTaskRunning({
-      phase: 'processing',
-      runningTaskId: 'task-1',
-      lastError: null,
-    })).toBe(true)
-  })
-
-  it('keeps completion idle when there is no previously running task', () => {
-    expect(resolveGlobalAnalyzeCompletion(null, {
-      phase: 'completed',
-      runningTaskId: null,
-      lastError: null,
-    })).toEqual({
-      status: 'idle',
-      finishedTaskId: null,
-      errorMessage: null,
-    })
-  })
-
-  it('marks previously running task as succeeded once runtime state stops running', () => {
-    expect(resolveGlobalAnalyzeCompletion('task-2', {
-      phase: 'completed',
-      runningTaskId: null,
-      lastError: null,
-    })).toEqual({
-      status: 'succeeded',
-      finishedTaskId: 'task-2',
-      errorMessage: null,
-    })
-  })
-
-  it('surfaces failed completion message from task state', () => {
-    expect(resolveGlobalAnalyzeCompletion('task-3', {
-      phase: 'failed',
-      runningTaskId: null,
-      lastError: {
-        code: 'MODEL_NOT_CONFIGURED',
-        message: 'No model configured',
-      },
-    })).toEqual({
-      status: 'failed',
-      finishedTaskId: 'task-3',
-      errorMessage: 'No model configured',
-    })
-  })
-})
-
 describe('project location-backed confirm mutations', () => {
   beforeEach(() => {
     useQueryClientMock.mockClear()
     useMutationMock.mockClear()
     requestJsonWithErrorMock.mockReset()
     requestJsonWithErrorMock.mockResolvedValue({ success: true })
-    requestTaskResponseWithErrorMock.mockReset()
   })
 
   it('routes prop confirmation to the unified asset select-render endpoint', async () => {
@@ -143,54 +75,6 @@ describe('project location-backed confirm mutations', () => {
       },
       '确认选择失败',
     )
-  })
-})
-
-describe('project global analyze mutation', () => {
-  beforeEach(() => {
-    useQueryClientMock.mockClear()
-    useMutationMock.mockClear()
-    requestTaskResponseWithErrorMock.mockReset()
-  })
-
-  it('returns async task submission instead of waiting for final task result', async () => {
-    requestTaskResponseWithErrorMock.mockResolvedValue({
-      json: async () => ({
-        async: true,
-        taskId: 'task-global-1',
-        status: 'queued',
-        deduped: false,
-      }),
-    } as Response)
-
-    const mutation = useAnalyzeProjectGlobalAssets('project-1') as unknown as AnalyzeGlobalMutation
-    const result = await mutation.mutationFn() as { taskId: string; async: boolean }
-
-    expect(requestTaskResponseWithErrorMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/analyze-global',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ async: true }),
-      },
-      'Failed to analyze global assets',
-    )
-    expect(result).toEqual({
-      async: true,
-      taskId: 'task-global-1',
-      status: 'queued',
-      deduped: false,
-    })
-  })
-
-  it('fails explicitly when route does not return an async task submission payload', async () => {
-    requestTaskResponseWithErrorMock.mockResolvedValue({
-      json: async () => ({ success: true }),
-    } as Response)
-
-    const mutation = useAnalyzeProjectGlobalAssets('project-1') as unknown as AnalyzeGlobalMutation
-
-    await expect(mutation.mutationFn()).rejects.toThrow('Failed to submit global asset analysis task')
   })
 })
 

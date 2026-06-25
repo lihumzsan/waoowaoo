@@ -255,8 +255,6 @@ export function useProjectWorkspaceController({
     isAssetLibraryOpen: assetLibrary.isAssetLibraryOpen,
     assetLibraryFocusCharacterId: assetLibrary.assetLibraryFocusCharacterId,
     assetLibraryFocusRequestId: assetLibrary.assetLibraryFocusRequestId,
-    triggerGlobalAnalyzeOnOpen: assetLibrary.triggerGlobalAnalyzeOnOpen,
-    setTriggerGlobalAnalyzeOnOpen: assetLibrary.setTriggerGlobalAnalyzeOnOpen,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     closeAssetLibrary: assetLibrary.closeAssetLibrary,
     userModelsForSettings: userModels.userModelsForSettings,
@@ -265,12 +263,10 @@ export function useProjectWorkspaceController({
   }
 
   const executionState = {
-    isAssetAnalysisRunning: execution.isAssetAnalysisRunning,
     isConfirmingAssets: execution.isConfirmingAssets,
     isTransitioning: execution.isTransitioning,
     isAssistantWorkflowStarting: false,
     transitionProgress: execution.transitionProgress,
-    handleAnalyzeAssets: execution.handleAnalyzeAssets,
     requestAssistantGuidance: execution.requestAssistantGuidance,
     showCreatingToast: execution.showCreatingToast,
   }

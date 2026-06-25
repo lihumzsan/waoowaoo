@@ -289,21 +289,19 @@ export const prismaMock = {
       editScript: { durationSec: 30 },
     })),
   },
-  videoEditorProject: {
+  projectEpisodeFinalOutput: {
     findUnique: vi.fn(async () => ({
-      projectData: JSON.stringify({
-        schemaVersion: 1,
-        bgmScore: {
-          status: 'completed',
-          mix: {
-            mediaId: 'media-bgm',
-            url: '/m/bgm.m4a',
-            storageKey: 'music/bgm.m4a',
-            mimeType: 'audio/mp4',
-            durationMs: 30000,
-          },
+      bgmScoreJson: {
+        schemaVersion: 2,
+        status: 'completed',
+        mix: {
+          mediaId: 'media-bgm',
+          url: '/m/bgm.m4a',
+          storageKey: 'music/bgm.m4a',
+          mimeType: 'audio/mp4',
+          durationMs: 30000,
         },
-      }),
+      },
     })),
   },
   $transaction: vi.fn(async (fn: (tx: {

@@ -75,7 +75,7 @@ describe('billing/task-policy', () => {
   })
 
   it('builds text billing info from explicit model payload', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.ANALYZE_NOVEL, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCREENPLAY_GENERATE, {
       analysisModel: 'anthropic/claude-sonnet-4',
     }))
     expect(info.apiType).toBe('text')
@@ -84,7 +84,7 @@ describe('billing/task-policy', () => {
   })
 
   it('returns null for missing required models in text/image/video tasks', () => {
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.ANALYZE_NOVEL, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCREENPLAY_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()

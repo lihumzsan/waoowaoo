@@ -95,7 +95,6 @@ export function useSaveProjectEpisodesBatch(projectId: string) {
       }>
       clearExisting?: boolean
       importStatus?: 'pending' | 'completed'
-      triggerGlobalAnalysis?: boolean
     }) =>
       await requestJsonWithError(
         `/api/projects/${projectId}/episodes/batch`,

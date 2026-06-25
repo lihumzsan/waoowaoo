@@ -6,11 +6,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'project-agent/system',
     variableKeys: ['assistant_permission_mode', 'project_id', 'episode_id'],
   },
-  [AI_PROMPT_IDS.CHARACTER_ANALYZE]: {
-    pathStem: 'character/analyze',
-    variableKeys: ['input', 'characters_lib_info', 'style_bible'],
-    operationIds: ['analyze_characters'],
-  },
   [AI_PROMPT_IDS.CHARACTER_CREATE]: {
     pathStem: 'character/create',
     variableKeys: ['user_input'],
@@ -31,11 +26,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'character/reference/to-sheet',
     variableKeys: [],
   },
-  [AI_PROMPT_IDS.LOCATION_ANALYZE]: {
-    pathStem: 'location/analyze',
-    variableKeys: ['input', 'locations_lib_name'],
-    operationIds: ['analyze_locations'],
-  },
   [AI_PROMPT_IDS.LOCATION_CREATE]: {
     pathStem: 'location/create',
     variableKeys: ['user_input'],
@@ -51,11 +41,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.LOCATION_UPDATE_DESCRIPTION]: {
     pathStem: 'location/update-description',
     variableKeys: ['location_name', 'original_description', 'modify_instruction', 'image_context'],
-  },
-  [AI_PROMPT_IDS.PROP_ANALYZE]: {
-    pathStem: 'prop/analyze',
-    variableKeys: ['input', 'props_lib_name'],
-    operationIds: ['analyze_props'],
   },
   [AI_PROMPT_IDS.PROP_UPDATE_DESCRIPTION]: {
     pathStem: 'prop/update-description',

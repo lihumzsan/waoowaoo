@@ -36,17 +36,20 @@ export async function cloneEpisodeProjectData(params: {
   })
 
   if (shouldWorkflowLabCloneVideos(params.stage)) {
-    const editorProject = await params.tx.videoEditorProject.findUnique({
+    const finalOutput = await params.tx.projectEpisodeFinalOutput.findUnique({
       where: { episodeId: params.sourceEpisodeId },
     })
-    if (editorProject) {
-      await params.tx.videoEditorProject.create({
+    if (finalOutput) {
+      await params.tx.projectEpisodeFinalOutput.create({
         data: {
           episodeId: params.targetEpisodeId,
-          projectData: editorProject.projectData,
-          renderStatus: editorProject.renderStatus,
+          ...(finalOutput.bgmScoreJson !== null
+            ? { bgmScoreJson: finalOutput.bgmScoreJson as Prisma.InputJsonValue }
+            : {}),
+          renderStatus: finalOutput.renderStatus,
           renderTaskId: null,
-          outputUrl: editorProject.outputUrl,
+          outputUrl: finalOutput.outputUrl,
+          outputMediaId: finalOutput.outputMediaId,
         },
       })
     }

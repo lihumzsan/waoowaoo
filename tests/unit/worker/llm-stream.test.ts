@@ -102,18 +102,18 @@ describe('createWorkerLLMStreamCallbacks', () => {
       delta: 'A-',
       seq: 1,
       lane: 'main',
-      step: { id: 'analyze_characters', attempt: 1, title: 'A', index: 1, total: 2 },
+      step: { id: 'step_characters', attempt: 1, title: 'A', index: 1, total: 2 },
     })
     callbacks.onChunk?.({
       kind: 'text',
       delta: 'B-',
       seq: 1,
       lane: 'main',
-      step: { id: 'analyze_locations', attempt: 1, title: 'B', index: 2, total: 2 },
+      step: { id: 'step_locations', attempt: 1, title: 'B', index: 2, total: 2 },
     })
     expect(callbacks.onComplete).toBeTruthy()
     callbacks.onComplete?.('characters-final', {
-      id: 'analyze_characters',
+      id: 'step_characters',
       attempt: 1,
       title: 'A',
       index: 1,
@@ -128,7 +128,7 @@ describe('createWorkerLLMStreamCallbacks', () => {
 
     expect(finalProgressCall).toBeDefined()
     const payload = (finalProgressCall as unknown as [unknown, unknown, Record<string, unknown>])[2]
-    expect(payload.stepId).toBe('analyze_characters')
+    expect(payload.stepId).toBe('step_characters')
     expect(payload.stepTitle).toBe('A')
     expect(payload.output).toBe('characters-final')
   })

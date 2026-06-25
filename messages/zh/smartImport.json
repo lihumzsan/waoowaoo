@@ -155,14 +155,5 @@
       "boldNumber": "**数字**",
       "pureNumber": "纯数字"
     }
-  },
-  "globalAnalysis": {
-    "title": "全局资产分析",
-    "description": "一键提取全书的角色和场景，确保角色形象在所有剧集中保持一致",
-    "startButton": "立即分析",
-    "analyzing": "分析中...",
-    "success": "全局分析完成：新增 {characters} 个角色，{locations} 个场景",
-    "failed": "全局分析失败",
-    "confirmAndAnalyze": "确认并开启全局分析"
   }
 }

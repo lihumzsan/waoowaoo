@@ -23,8 +23,6 @@ const messages = {
     toolbar: {
       assetManagement: '资产管理',
       assetCount: '共 {total} 个资产（{appearances} 角色形象 + {locations} 场景 + {props} 道具）',
-      globalAnalyze: '全局分析',
-      globalAnalyzeHint: '分析所有资产',
       downloadAll: '下载全部',
       generateAll: '生成全部图片',
       regenerateAll: '重新生成全部',
@@ -51,7 +49,7 @@ const renderWithIntl = (node: ReactElement) => {
 }
 
 describe('AssetToolbar', () => {
-  it('删除批量生成与刷新按钮 -> 仅保留全局分析和下载入口', () => {
+  it('删除批量生成、刷新与全局分析按钮 -> 仅保留下载入口', () => {
     Reflect.set(globalThis, 'React', React)
 
     const html = renderWithIntl(
@@ -61,17 +59,13 @@ describe('AssetToolbar', () => {
         totalAppearances: 11,
         totalLocations: 13,
         totalProps: 0,
-        isBatchSubmitting: false,
-        isAnalyzingAssets: false,
-        isGlobalAnalyzing: false,
-        onGlobalAnalyze: () => undefined,
       }),
     )
 
-    expect(html).toContain('全局分析')
     expect(html).toContain('title="下载全部"')
     expect(html).not.toContain('生成全部图片')
     expect(html).not.toContain('重新生成全部')
     expect(html).not.toContain('>刷新<')
+    expect(html).not.toContain('全局分析')
   })
 })

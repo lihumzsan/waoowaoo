@@ -18,7 +18,7 @@ type Translate = (key: string, values?: TranslateValues) => string
 interface UseWizardStateParams {
   projectId: string
   importStatus?: string | null
-  onImportComplete: (episodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => void
+  onImportComplete: (episodes: SplitEpisode[]) => void
   t: Translate
   /** 预填文本：传入后自动设置并触发分析 */
   initialRawContent?: string
@@ -238,7 +238,7 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
     closeDeleteConfirm()
   }, [closeDeleteConfirm, deleteConfirm.index, deleteEpisode])
 
-  const handleConfirm = useCallback(async (triggerGlobalAnalysis = false) => {
+  const handleConfirm = useCallback(async () => {
     setSaving(true)
     setError(null)
 
@@ -251,11 +251,10 @@ export function useWizardState({ projectId, importStatus, onImportComplete, t, i
         })),
         clearExisting: true,
         importStatus: 'completed',
-        triggerGlobalAnalysis,
       })
 
-      _ulogInfo('[SmartImport] 剧集已保存到数据库，状态：completed, 触发全局分析:', triggerGlobalAnalysis)
-      onImportComplete(episodes, triggerGlobalAnalysis)
+      _ulogInfo('[SmartImport] 剧集已保存到数据库，状态：completed')
+      onImportComplete(episodes)
     } catch (err: unknown) {
       _ulogError('[SmartImport] 保存失败:', err)
       const message = err instanceof Error ? err.message : t('errors.saveFailed')

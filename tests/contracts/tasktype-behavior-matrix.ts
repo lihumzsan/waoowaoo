@@ -17,9 +17,7 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
     return 'tests/integration/chain/music.chain.test.ts'
   }
   if (
-    taskType === 'analyze_novel'
-    || taskType === 'analyze_global'
-    || taskType === 'edit_screenplay_generate'
+    taskType === 'edit_screenplay_generate'
     || taskType === 'edit_screenplay_revise'
     || taskType === 'edit_director_decoupage_generate'
     || taskType === 'edit_cinematography_shot_plan_generate'
@@ -52,9 +50,7 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     return 'tests/integration/api/contract/project-edit-script.route.test.ts'
   }
   if (
-    taskType === 'analyze_novel'
-    || taskType === 'analyze_global'
-    || taskType === 'ai_modify_appearance'
+    taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
     || taskType === 'ai_modify_shot_prompt'
     || taskType === 'analyze_shot_variants'

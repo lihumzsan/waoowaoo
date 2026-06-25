@@ -13,9 +13,7 @@ import { getProjectModelConfig } from '@/lib/config-service'
 import { reportTaskProgress, reportTaskStreamChunk, withTaskLifecycle } from './shared'
 import { assertTaskActive } from './utils'
 import { handleAssetHubAIDesignTask } from './handlers/asset-hub-ai-design'
-import { handleAnalyzeNovelTask } from './handlers/analyze-novel'
 import { handleEpisodeSplitTask } from './handlers/episode-split'
-import { handleAnalyzeGlobalTask } from './handlers/analyze-global'
 import { handleAssetHubAIModifyTask } from './handlers/asset-hub-ai-modify'
 import { handleReferenceToCharacterTask } from './handlers/reference-to-character'
 import { handleShotAITask } from './handlers/shot-ai-tasks'
@@ -462,12 +460,8 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEditScriptStoryboardPrepareTask(job)
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
-    case TASK_TYPE.ANALYZE_NOVEL:
-      return await handleAnalyzeNovelTask(job)
     case TASK_TYPE.EPISODE_SPLIT_LLM:
       return await handleEpisodeSplitTask(job)
-    case TASK_TYPE.ANALYZE_GLOBAL:
-      return await handleAnalyzeGlobalTask(job)
     case TASK_TYPE.EDIT_SCREENPLAY_GENERATE:
       return await handleEditScreenplayGenerateTask(job)
     case TASK_TYPE.EDIT_SCREENPLAY_REVISE:

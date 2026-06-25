@@ -154,11 +154,8 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
           hasCharacters={vm.project.projectCharacters.length > 0}
           hasLocations={vm.project.projectLocations.length > 0}
           projectId={projectId}
-          isAnalyzingAssets={vm.execution.isAssetAnalysisRunning}
           focusCharacterId={vm.ui.assetLibraryFocusCharacterId}
           focusCharacterRequestId={vm.ui.assetLibraryFocusRequestId}
-          triggerGlobalAnalyze={vm.ui.triggerGlobalAnalyzeOnOpen}
-          onGlobalAnalyzeComplete={() => vm.ui.setTriggerGlobalAnalyzeOnOpen(false)}
         />
 
         {vm.execution.showCreatingToast && (

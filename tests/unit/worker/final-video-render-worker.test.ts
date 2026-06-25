@@ -5,7 +5,7 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const execFileMock = vi.hoisted(() => vi.fn())
 const readFileMock = vi.hoisted(() => vi.fn())
 const prismaMock = vi.hoisted(() => ({
-  videoEditorProject: {
+  projectEpisodeFinalOutput: {
     findUnique: vi.fn(),
     upsert: vi.fn(),
   },
@@ -206,20 +206,18 @@ describe('final video render worker', () => {
       },
     ])
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
-    prismaMock.videoEditorProject.findUnique.mockResolvedValue({
-      projectData: JSON.stringify({
-        schemaVersion: 1,
-        bgmScore: {
-          status: 'completed',
-          mix: {
-            mediaId: 'media-bgm',
-            url: '/m/bgm',
-            storageKey: 'music/bgm-score.m4a',
-            mimeType: 'audio/mp4',
-            durationMs: 3000,
-          },
+    prismaMock.projectEpisodeFinalOutput.findUnique.mockResolvedValue({
+      bgmScoreJson: {
+        schemaVersion: 2,
+        status: 'completed',
+        mix: {
+          mediaId: 'media-bgm',
+          url: '/m/bgm',
+          storageKey: 'music/bgm-score.m4a',
+          mimeType: 'audio/mp4',
+          durationMs: 3000,
         },
-      }),
+      },
     })
   })
 
@@ -235,11 +233,11 @@ describe('final video render worker', () => {
     }))).rejects.toThrow('AI 剪辑缺少可用视频：单镜头视频（镜头 1）。请先生成这些视频后再剪辑。')
 
     expect(generateMusicMock).not.toHaveBeenCalled()
-    expect(prismaMock.videoEditorProject.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
       where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'rendering', renderTaskId: 'task-1' }),
+      update: expect.objectContaining({ renderStatus: 'processing', renderTaskId: 'task-1' }),
     }))
-    expect(prismaMock.videoEditorProject.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: { episodeId: 'episode-1' },
       update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
     }))
@@ -278,14 +276,19 @@ describe('final video render worker', () => {
     expect(mediaServiceMock.resolveStorageKeyFromMediaValue).toHaveBeenCalledWith(expect.objectContaining({
       storageKey: 'video/group-source.mp4',
     }))
-    expect(prismaMock.videoEditorProject.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'completed', renderTaskId: 'task-1' }),
+      update: expect.objectContaining({
+        renderStatus: 'completed',
+        renderTaskId: 'task-1',
+        outputUrl: '/m/final-video',
+        outputMediaId: 'media-final',
+      }),
     }))
   })
 
   it('fails explicitly when completed BGM is missing before final render work starts', async () => {
-    prismaMock.videoEditorProject.findUnique.mockResolvedValue({ projectData: null })
+    prismaMock.projectEpisodeFinalOutput.findUnique.mockResolvedValue({ bgmScoreJson: null })
     const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
 
     await expect(handleFinalVideoRenderTask(buildJob({
@@ -341,24 +344,17 @@ describe('final video render worker', () => {
     expect(ffmpegCalls.some((args) => args.includes('sidechaincompress='))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('amix=inputs=2'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes(' -an '))).toBe(true)
-    const completedProjectDataCall = prismaMock.videoEditorProject.upsert.mock.calls.find((call) => {
+    const completedFinalOutputCall = prismaMock.projectEpisodeFinalOutput.upsert.mock.calls.find((call) => {
       const arg = call[0] as { update?: { renderStatus?: string } }
       return arg.update?.renderStatus === 'completed'
     })
-    expect(completedProjectDataCall).toBeTruthy()
-    const completedProjectDataArg = completedProjectDataCall?.[0] as { update?: { projectData?: string } }
-    const projectData = JSON.parse(completedProjectDataArg.update?.projectData ?? '{}') as {
-      audioMix?: {
-        hasSourceAudio?: boolean
-        targets?: { mainIntegratedLufs?: number; bgmIntegratedLufs?: number }
-      }
-    }
-    expect(projectData.audioMix).toMatchObject({
-      hasSourceAudio: true,
-      targets: {
-        mainIntegratedLufs: -16,
-        bgmIntegratedLufs: -6,
-      },
-    })
+    expect(completedFinalOutputCall).toBeTruthy()
+    expect(completedFinalOutputCall?.[0]).toEqual(expect.objectContaining({
+      update: expect.objectContaining({
+        renderStatus: 'completed',
+        outputMediaId: 'media-final',
+        outputUrl: '/m/final-video',
+      }),
+    }))
   })
 })

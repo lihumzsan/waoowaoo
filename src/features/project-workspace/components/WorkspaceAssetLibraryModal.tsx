@@ -13,11 +13,8 @@ interface WorkspaceAssetLibraryModalProps {
   hasCharacters: boolean
   hasLocations: boolean
   projectId: string
-  isAnalyzingAssets: boolean
   focusCharacterId: string | null
   focusCharacterRequestId: number
-  triggerGlobalAnalyze: boolean
-  onGlobalAnalyzeComplete: () => void
 }
 
 export default function WorkspaceAssetLibraryModal({
@@ -28,11 +25,8 @@ export default function WorkspaceAssetLibraryModal({
   hasCharacters,
   hasLocations,
   projectId,
-  isAnalyzingAssets,
   focusCharacterId,
   focusCharacterRequestId,
-  triggerGlobalAnalyze,
-  onGlobalAnalyzeComplete,
 }: WorkspaceAssetLibraryModalProps) {
   if (!isOpen) return null
 
@@ -65,11 +59,8 @@ export default function WorkspaceAssetLibraryModal({
           )}
           <ProjectAssetLibrary
             projectId={projectId}
-            isAnalyzingAssets={isAnalyzingAssets}
             focusCharacterId={focusCharacterId}
             focusCharacterRequestId={focusCharacterRequestId}
-            triggerGlobalAnalyze={triggerGlobalAnalyze}
-            onGlobalAnalyzeComplete={onGlobalAnalyzeComplete}
           />
         </div>
       </div>

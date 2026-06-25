@@ -40,8 +40,6 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.REGENERATE_GROUP]: 'regenerate',
   [TASK_TYPE.ASSET_HUB_IMAGE]: 'generate',
   [TASK_TYPE.ASSET_HUB_MODIFY]: 'modify',
-  [TASK_TYPE.ANALYZE_NOVEL]: 'analyze',
-  [TASK_TYPE.ANALYZE_GLOBAL]: 'analyze',
   [TASK_TYPE.EDIT_SCREENPLAY_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_SCREENPLAY_REVISE]: 'modify',
   [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE]: 'generate',

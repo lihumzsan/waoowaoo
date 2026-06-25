@@ -291,27 +291,11 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/analyze-global/route.ts',
-    body: {},
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.ANALYZE_GLOBAL,
-    expectedTargetType: 'Project',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/analyze-shot-variants/route.ts',
     body: { panelId: 'panel-1' },
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.ANALYZE_SHOT_VARIANTS,
     expectedTargetType: 'ProjectPanel',
-    expectedProjectId: 'project-1',
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/analyze/route.ts',
-    body: { episodeId: 'episode-1', content: 'Analyze this chapter' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.ANALYZE_NOVEL,
-    expectedTargetType: 'Project',
     expectedProjectId: 'project-1',
   },
   {
@@ -369,7 +353,7 @@ describe('api contract - llm observe routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(ROUTE_CASES.length).toBe(17)
+    expect(ROUTE_CASES.length).toBe(15)
   })
 
   it('marks asset-hub AI routes as force-dynamic to keep app-route build registration stable', async () => {

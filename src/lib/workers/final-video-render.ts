@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { Job } from 'bullmq'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { parseEditorProjectData, readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
+import { readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
@@ -25,8 +26,6 @@ import {
   normalizeFinalRenderErrorLocale,
 } from '@/lib/video-compose/final-render-errors'
 import {
-  BGM_AUDIO_TARGET,
-  MAIN_AUDIO_TARGET,
   concatFinalRenderAudioClips,
   muxFinalRenderAudio,
   renderFinalRenderClipAudio,
@@ -193,31 +192,28 @@ async function concatClips(input: {
   ])
 }
 
-async function upsertEditorProject(input: {
+async function upsertEpisodeFinalOutput(input: {
   readonly episodeId: string
   readonly renderStatus: string
   readonly taskId: string
   readonly outputUrl?: string | null
-  readonly projectData?: Record<string, unknown>
+  readonly outputMediaId?: string | null
 }): Promise<void> {
-  const projectData = JSON.stringify(input.projectData ?? {
-    schemaVersion: 1,
-    updatedBy: 'final_video_render',
-  })
-  await prisma.videoEditorProject.upsert({
+  const updateData: Prisma.ProjectEpisodeFinalOutputUncheckedUpdateInput = {
+    renderStatus: input.renderStatus,
+    renderTaskId: input.taskId,
+    ...(input.outputUrl !== undefined ? { outputUrl: input.outputUrl } : {}),
+    ...(input.outputMediaId !== undefined ? { outputMediaId: input.outputMediaId } : {}),
+  }
+  await prisma.projectEpisodeFinalOutput.upsert({
     where: { episodeId: input.episodeId },
-    update: {
-      renderStatus: input.renderStatus,
-      renderTaskId: input.taskId,
-      ...(input.outputUrl !== undefined ? { outputUrl: input.outputUrl } : {}),
-      ...(input.projectData ? { projectData } : {}),
-    },
+    update: updateData,
     create: {
       episodeId: input.episodeId,
-      projectData,
       renderStatus: input.renderStatus,
       renderTaskId: input.taskId,
       outputUrl: input.outputUrl ?? null,
+      outputMediaId: input.outputMediaId ?? null,
     },
   })
 }
@@ -227,16 +223,16 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   if (!episodeId) throw new Error('FINAL_VIDEO_RENDER_EPISODE_REQUIRED')
 
-  await upsertEditorProject({
+  await upsertEpisodeFinalOutput({
     episodeId,
-    renderStatus: 'rendering',
+    renderStatus: 'processing',
     taskId: job.data.taskId,
   })
 
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-final-render-${randomUUID()}-`))
   try {
     await reportTaskProgress(job, 10, { stage: 'final_render_prepare' })
-    const [project, episode, editScript, panels, videoGroups, editorProject] = await Promise.all([
+    const [project, episode, editScript, panels, videoGroups, finalOutput] = await Promise.all([
       prisma.project.findUnique({
         where: { id: job.data.projectId },
         select: {
@@ -266,16 +262,15 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { episodeId, projectId: job.data.projectId },
         include: { videoMedia: true },
       }),
-      prisma.videoEditorProject.findUnique({
+      prisma.projectEpisodeFinalOutput.findUnique({
         where: { episodeId },
-        select: { projectData: true },
+        select: { bgmScoreJson: true },
       }),
     ])
     if (!project) throw new Error('FINAL_VIDEO_RENDER_PROJECT_NOT_FOUND')
     if (!episode) throw new Error('FINAL_VIDEO_RENDER_EPISODE_NOT_FOUND')
-    const bgmMix = readCompletedBgmScoreMix(editorProject?.projectData ?? null)
+    const bgmMix = readCompletedBgmScoreMix(finalOutput?.bgmScoreJson ?? null)
     if (!bgmMix) throw new Error('FINAL_VIDEO_RENDER_BGM_REQUIRED')
-    const existingProjectData = parseEditorProjectData(editorProject?.projectData ?? null)
 
     const clips = buildFinalRenderClips({ panels, videoGroups, editScript })
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
@@ -331,7 +326,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
 
     await reportTaskProgress(job, 78, { stage: 'final_render_compose' })
     const finalPath = path.join(workspaceDir, 'final.mp4')
-    const audioMix = await muxFinalRenderAudio({
+    await muxFinalRenderAudio({
       runCommand,
       stitchedPath,
       mainAudioPath,
@@ -358,40 +353,12 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       durationMs: Math.round(stitchedDurationSeconds * 1000),
     })
 
-    const projectData = {
-      schemaVersion: 1,
-      type: 'linear_final_render',
-      taskId: job.data.taskId,
-      dimensions,
-      durationSeconds: stitchedDurationSeconds,
-      bgmScore: existingProjectData.bgmScore ?? null,
-      audioMix: {
-        hasSourceAudio: audioMix.hasSourceAudio,
-        targets: {
-          mainIntegratedLufs: MAIN_AUDIO_TARGET.integratedLufs,
-          bgmIntegratedLufs: BGM_AUDIO_TARGET.integratedLufs,
-          truePeakDb: MAIN_AUDIO_TARGET.truePeakDb,
-        },
-        measured: {
-          main: audioMix.mainAudio ?? null,
-          bgm: audioMix.bgm,
-        },
-      },
-      timeline: clips.map((clip) => ({
-        order: clip.order,
-        sourceKind: clip.sourceKind,
-        panelId: clip.panelId,
-        groupId: clip.groupId ?? null,
-        shotNumber: clip.shotNumber,
-        durationSeconds: clip.durationSeconds,
-      })),
-    }
-    await upsertEditorProject({
+    await upsertEpisodeFinalOutput({
       episodeId,
       renderStatus: 'completed',
       taskId: job.data.taskId,
       outputUrl: media.url,
-      projectData,
+      outputMediaId: media.id,
     })
 
     return {
@@ -405,7 +372,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       height: dimensions.height,
     }
   } catch (error) {
-    await upsertEditorProject({
+    await upsertEpisodeFinalOutput({
       episodeId,
       renderStatus: 'failed',
       taskId: job.data.taskId,

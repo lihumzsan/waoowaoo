@@ -36,11 +36,11 @@ async function resolveEpisodeId(input: FinalRenderInput, contextEpisodeId: unkno
 }
 
 async function assertCompletedBgmScore(episodeId: string): Promise<void> {
-  const editorProject = await prisma.videoEditorProject.findUnique({
+  const finalOutput = await prisma.projectEpisodeFinalOutput.findUnique({
     where: { episodeId },
-    select: { projectData: true },
+    select: { bgmScoreJson: true },
   })
-  const mix = readCompletedBgmScoreMix(editorProject?.projectData ?? null)
+  const mix = readCompletedBgmScoreMix(finalOutput?.bgmScoreJson ?? null)
   if (!mix) throw new Error('PROJECT_AGENT_FINAL_RENDER_BGM_REQUIRED')
 }
 

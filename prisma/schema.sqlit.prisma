@@ -127,7 +127,7 @@ model ProjectEpisode {
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   storyboards             ProjectStoryboard[]
-  editorProject           VideoEditorProject?
+  finalOutput             ProjectEpisodeFinalOutput?
   editScreenplay          ProjectEditScreenplay?
   editStylePreviews       ProjectEditStylePreview[]
   editDirectorDecoupage   ProjectEditDirectorDecoupage?
@@ -283,18 +283,21 @@ model ProjectEditAssetRequirement {
 }
 
 // 视频编辑器项目 - 存储剪辑数据
-model VideoEditorProject {
-  id           String                @id @default(uuid())
-  episodeId    String                @unique
-  projectData  String // JSON 存储编辑项目数据
-  renderStatus String? // pending | rendering | completed | failed
-  renderTaskId String?
-  outputUrl    String?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @default(now()) @updatedAt
-  episode      ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+model ProjectEpisodeFinalOutput {
+  id            String         @id @default(uuid())
+  episodeId     String         @unique
+  bgmScoreJson  Json?
+  renderStatus  String?
+  renderTaskId  String?
+  outputUrl     String?
+  outputMediaId String?
+  outputMedia   MediaObject?   @relation("ProjectEpisodeFinalOutputMedia", fields: [outputMediaId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
+  episode       ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  @@map("video_editor_projects")
+  @@index([outputMediaId])
+  @@map("project_episode_final_outputs")
 }
 
 model ProjectVideoGroup {
@@ -894,6 +897,7 @@ model MediaObject {
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
   projectStoryboardBlockingArtifactImages ProjectStoryboardBlockingArtifact[] @relation("ProjectStoryboardBlockingArtifactImageMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
+  projectEpisodeFinalOutputVideos        ProjectEpisodeFinalOutput[] @relation("ProjectEpisodeFinalOutputMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]       @relation("GlobalLocationImageMedia")

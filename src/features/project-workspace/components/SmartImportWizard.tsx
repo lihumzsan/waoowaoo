@@ -13,7 +13,7 @@ export type { SplitEpisode } from './smart-import/types'
 
 interface SmartImportWizardProps {
   onManualCreate: () => void
-  onImportComplete: (episodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => void
+  onImportComplete: (episodes: SplitEpisode[]) => void
   projectId: string
   importStatus?: string | null
   /** 预填文本：传入后自动跳过选择页，直接开始分析 */
@@ -72,7 +72,6 @@ export default function SmartImportWizard({
         savingTaskState={savingTaskState}
         onReanalyze={() => wizard.setStage('select')}
         onConfirm={() => { void wizard.handleConfirm() }}
-        onConfirmWithGlobalAnalysis={() => { void wizard.handleConfirm(true) }}
       />
 
       <StepMapping

@@ -190,10 +190,6 @@ export function useCreateProjectCharacterAppearance(projectId: string) {
     })
 }
 
-/**
- * 全局资产分析（项目）
- */
-
 export function useConfirmProjectCharacterSelection(projectId: string) {
     const queryClient = useQueryClient()
     const invalidateProjectAssets = () =>

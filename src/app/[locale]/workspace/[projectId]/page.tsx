@@ -236,8 +236,8 @@ export default function ProjectDetailPage() {
   }
 
   // 智能导入 - 完成后刷新数据（数据已由 SmartImportWizard 保存）
-  const handleSmartImportComplete = async (splitEpisodes: SplitEpisode[], triggerGlobalAnalysis?: boolean) => {
-    _ulogInfo('[Page] handleSmartImportComplete 被调用，triggerGlobalAnalysis:', triggerGlobalAnalysis)
+  const handleSmartImportComplete = async (_splitEpisodes: SplitEpisode[]) => {
+    _ulogInfo('[Page] handleSmartImportComplete 被调用')
 
     try {
       // 🔥 刷新项目数据
@@ -251,20 +251,8 @@ export default function ProjectDetailPage() {
 
       // 如果有剧集，进入第一个
       if (newEpisodes.length > 0) {
-        // 如果需要触发全局分析，切换到 assets 阶段并带上参数
-        if (triggerGlobalAnalysis) {
-          _ulogInfo('[Page] 触发全局分析，保留唯一画布入口并带 globalAnalyze=1 参数')
-          // 使用相对路径更新，保留 locale
-          const params = new URLSearchParams()
-          params.set('episode', newEpisodes[0].id)
-          params.set('globalAnalyze', '1')
-          const newUrl = `?${params.toString()}`
-          _ulogInfo('[Page] 跳转到:', newUrl)
-          router.replace(newUrl, { scroll: false })
-        } else {
-          _ulogInfo('[Page] 不触发全局分析，只更新 episode 参数')
-          updateUrlParams({ episode: newEpisodes[0].id })
-        }
+        _ulogInfo('[Page] 更新 episode 参数')
+        updateUrlParams({ episode: newEpisodes[0].id })
       }
     } catch (err: unknown) {
       _ulogError('刷新失败:', err)

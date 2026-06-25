@@ -37,7 +37,7 @@ export async function resetProjectWorkflowState() {
   await prisma.locationImage.deleteMany()
   await prisma.projectCharacter.deleteMany()
   await prisma.projectLocation.deleteMany()
-  await prisma.videoEditorProject.deleteMany()
+  await prisma.projectEpisodeFinalOutput.deleteMany()
   await prisma.projectEpisode.deleteMany()
 }
 

@@ -1,47 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '../keys'
 import {
   invalidateQueryTemplates,
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
-
-type AsyncTaskSubmission = {
-    async: true
-    taskId: string
-    runId?: string | null
-    status?: string | null
-    deduped?: boolean
-}
-
-function isAsyncTaskSubmission(value: unknown): value is AsyncTaskSubmission {
-    if (!value || typeof value !== 'object') return false
-    const payload = value as Record<string, unknown>
-    return payload.async === true && typeof payload.taskId === 'string' && payload.taskId.length > 0
-}
-
-export function useAnalyzeProjectGlobalAssets(projectId: string) {
-    return useMutation({
-        mutationFn: async () => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/analyze-global`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ async: true }),
-                },
-                'Failed to analyze global assets',
-            )
-            const data = await response.json().catch(() => null)
-            if (!isAsyncTaskSubmission(data)) {
-                throw new Error('Failed to submit global asset analysis task')
-            }
-            return data
-        },
-    })
-}
 
 /**
  * 从资产中心复制到项目资产
@@ -126,35 +89,6 @@ export function useUpdateProjectConfig(projectId: string) {
         },
         onSettled: () => {
             invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
-        },
-    })
-}
-
-/**
- * 分析项目资产（异步任务）
- */
-
-export function useAnalyzeProjectAssets(projectId: string) {
-    const queryClient = useQueryClient()
-
-    return useMutation({
-        mutationFn: async ({ episodeId }: { episodeId: string }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/analyze`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ episodeId, async: true }),
-                },
-                'Failed to analyze assets',
-            )
-            return resolveTaskResponse(response)
-        },
-        onSettled: (_, __, variables) => {
-            invalidateQueryTemplates(queryClient, [
-                queryKeys.episodeData(projectId, variables.episodeId),
-                queryKeys.projectAssets.all(projectId),
-            ])
         },
     })
 }

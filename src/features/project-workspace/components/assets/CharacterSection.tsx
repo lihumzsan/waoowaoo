@@ -2,8 +2,6 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import TaskStatusInline from '@/components/task/TaskStatusInline'
-import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 
 /**
@@ -26,7 +24,6 @@ interface CharacterSectionProps {
     activeTaskKeys: Set<string>
     onClearTaskKey: (key: string) => void
     onRegisterTransientTaskKey: (key: string) => void
-    isAnalyzingAssets: boolean
     // 回调函数
     onAddCharacter: () => void
     onDeleteCharacter: (characterId: string) => void
@@ -56,7 +53,6 @@ export default function CharacterSection({
     activeTaskKeys,
     onClearTaskKey,
     onRegisterTransientTaskKey,
-    isAnalyzingAssets,
     onAddCharacter,
     onDeleteCharacter,
     onDeleteAppearance,
@@ -74,14 +70,6 @@ export default function CharacterSection({
     filterIds = null,
 }: CharacterSectionProps) {
     const t = useTranslations('assets')
-    const analyzingAssetsState = isAnalyzingAssets
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'generate',
-            resource: 'image',
-            hasOutput: false,
-        })
-        : null
 
     const { data: assets } = useProjectAssets(projectId)
     const allCharacters: Character[] = useMemo(() => assets?.characters ?? [], [assets?.characters])
@@ -156,11 +144,6 @@ export default function CharacterSection({
                         <AppIcon name="user" className="h-5 w-5" />
                     </span>
                     <h3 className="text-lg font-bold text-[var(--glass-text-primary)]">{t("overview.characterAssets")}</h3>
-                    {isAnalyzingAssets && (
-                        <span className="px-2 py-1 text-xs bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)] rounded-lg flex items-center gap-1">
-                            <TaskStatusInline state={analyzingAssetsState} />
-                        </span>
-                    )}
                     <span className="text-sm text-[var(--glass-text-tertiary)] bg-[var(--glass-bg-muted)]/50 px-2 py-1 rounded-lg">
                         {t("overview.counts", { characterCount: characters.length, appearanceCount: totalAppearances })}
                     </span>

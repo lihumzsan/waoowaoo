@@ -1,8 +1,6 @@
-import { BGM_SCORE_STATUS, type BgmScoreMix, type BgmScoreProjectData } from './types'
+import { BGM_SCORE_STATUS, type BgmScoreMix } from './types'
 
-export type EditorProjectDataRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isBgmScoreRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
@@ -14,29 +12,20 @@ function readNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export function parseEditorProjectData(value: string | null | undefined): EditorProjectDataRecord {
-  if (!value?.trim()) return { schemaVersion: 1 }
+export function parseBgmScoreJson(value: unknown): Record<string, unknown> | null {
+  if (!value) return null
+  if (isBgmScoreRecord(value)) return value
+  if (typeof value !== 'string') return null
+  if (!value.trim()) return null
   const parsed = JSON.parse(value) as unknown
-  return isRecord(parsed) ? parsed : { schemaVersion: 1 }
+  return isBgmScoreRecord(parsed) ? parsed : null
 }
 
-export function mergeBgmScoreProjectData(
-  existing: EditorProjectDataRecord,
-  bgmScore: BgmScoreProjectData,
-): EditorProjectDataRecord {
-  return {
-    ...existing,
-    schemaVersion: typeof existing.schemaVersion === 'number' ? existing.schemaVersion : 1,
-    bgmScore,
-  }
-}
-
-export function readCompletedBgmScoreMix(projectDataJson: string | null | undefined): BgmScoreMix | null {
-  const data = parseEditorProjectData(projectDataJson)
-  const bgmScore = data.bgmScore
-  if (!isRecord(bgmScore) || bgmScore.status !== BGM_SCORE_STATUS.COMPLETED) return null
+export function readCompletedBgmScoreMix(bgmScoreJson: unknown): BgmScoreMix | null {
+  const bgmScore = parseBgmScoreJson(bgmScoreJson)
+  if (!bgmScore || bgmScore.status !== BGM_SCORE_STATUS.COMPLETED) return null
   const mix = bgmScore.mix
-  if (!isRecord(mix)) return null
+  if (!isBgmScoreRecord(mix)) return null
 
   const mediaId = readString(mix.mediaId)
   const url = readString(mix.url)

@@ -11,7 +11,6 @@ interface StepConfirmProps {
   savingTaskState: TaskPresentationState | null
   onReanalyze: () => void
   onConfirm: () => void
-  onConfirmWithGlobalAnalysis: () => void
 }
 
 export default function StepConfirm({
@@ -20,7 +19,6 @@ export default function StepConfirm({
   savingTaskState,
   onReanalyze,
   onConfirm,
-  onConfirmWithGlobalAnalysis,
 }: StepConfirmProps) {
   const t = useTranslations('smartImport')
 
@@ -50,16 +48,6 @@ export default function StepConfirm({
             {saving && <TaskStatusInline state={savingTaskState} className="text-white [&>span]:sr-only [&_svg]:text-white" />}
             {saving ? t('preview.saving') : t('preview.confirm')}
           </button>
-          {episodes.length > 1 && (
-            <button
-              onClick={onConfirmWithGlobalAnalysis}
-              disabled={saving}
-              className="glass-btn-base glass-btn-primary px-5 py-2.5 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {saving && <TaskStatusInline state={savingTaskState} className="text-white [&>span]:sr-only [&_svg]:text-white" />}
-              {t('globalAnalysis.confirmAndAnalyze')}
-            </button>
-          )}
         </div>
       </div>
     </div>

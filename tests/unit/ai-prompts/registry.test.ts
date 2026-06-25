@@ -1,19 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildAiPrompt, getAiPromptTemplate, resolveAiPromptIdFromOperationId } from '@/lib/ai-prompts'
+import { buildAiPrompt, getAiPromptTemplate } from '@/lib/ai-prompts'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 
 describe('ai prompt registry', () => {
-  it('maps workflow operation ids to the same unified template id', () => {
-    expect(resolveAiPromptIdFromOperationId('analyze_characters')).toBe(AI_PROMPT_IDS.CHARACTER_ANALYZE)
-  })
-
-  it('loads unified template content from the new functional directory', () => {
-    const template = getAiPromptTemplate(AI_PROMPT_IDS.PROP_ANALYZE, 'zh')
-
-    expect(template).toContain('关键剧情道具资产分析师')
-    expect(template).toContain('宁缺毋滥')
-  })
-
   it('renders placeholders through the unified prompt builder', () => {
     const prompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.CHARACTER_CREATE,
@@ -43,19 +32,6 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('标题：《旧钟》')
     expect(prompt).toContain('改得更克苏鲁一些')
     expect(prompt).toContain('16:9')
-  })
-
-  it('keeps character analysis style-aware without role or costume tiers', () => {
-    const template = getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_ANALYZE, 'zh')
-
-    expect(template).toContain('示例 1：80/90 年代现实题材')
-    expect(template).toContain('示例 2：科幻外星人片')
-    expect(template).toContain('示例 3：古代武侠/修行题材')
-    expect(template).toContain('剧本背景与 Style Bible 如何共同影响选角')
-    expect(template).not.toContain('"role_level"')
-    expect(template).not.toContain('"costume_tier"')
-    expect(template).not.toContain('【角色重要性 role_level】')
-    expect(template).not.toContain('【服装华丽度 costume_tier】')
   })
 
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {

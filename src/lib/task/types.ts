@@ -62,8 +62,6 @@ export const TASK_TYPE = {
   REGENERATE_GROUP: 'regenerate_group',
   ASSET_HUB_IMAGE: 'asset_hub_image',
   ASSET_HUB_MODIFY: 'asset_hub_modify',
-  ANALYZE_NOVEL: 'analyze_novel',
-  ANALYZE_GLOBAL: 'analyze_global',
   EDIT_SCREENPLAY_GENERATE: 'edit_screenplay_generate',
   EDIT_SCREENPLAY_REVISE: 'edit_screenplay_revise',
   EDIT_DIRECTOR_DECOUPAGE_GENERATE: 'edit_director_decoupage_generate',

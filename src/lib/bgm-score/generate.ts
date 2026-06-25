@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Job } from 'bullmq'
+import { Prisma } from '@prisma/client'
 import { executeAiTextStep, generateMusic } from '@/lib/ai-exec/engine'
 import { prisma } from '@/lib/prisma'
 import { safeParseJsonObject } from '@/lib/json-repair'
@@ -19,7 +20,6 @@ import {
 } from '@/lib/video-compose/final-render-plan'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { buildBgmScorePlanPrompt, buildFinalBgmMusicPrompt } from './prompt'
-import { mergeBgmScoreProjectData, parseEditorProjectData } from './project-data'
 import {
   BGM_SCORE_STATUS,
   bgmScorePlanSchema,
@@ -170,25 +170,18 @@ async function writeBgmScoreProjectData(input: {
   readonly episodeId: string
   readonly bgmScore: BgmScoreProjectData
 }): Promise<void> {
-  const existing = await prisma.videoEditorProject.findUnique({
-    where: { episodeId: input.episodeId },
-    select: { projectData: true },
-  })
-  const projectData = mergeBgmScoreProjectData(
-    parseEditorProjectData(existing?.projectData ?? null),
-    input.bgmScore,
-  )
-  await prisma.videoEditorProject.upsert({
+  const bgmScoreJson = input.bgmScore as unknown as Prisma.InputJsonValue
+  await prisma.projectEpisodeFinalOutput.upsert({
     where: { episodeId: input.episodeId },
     create: {
       episodeId: input.episodeId,
-      projectData: JSON.stringify(projectData),
+      bgmScoreJson,
       renderStatus: null,
       renderTaskId: null,
       outputUrl: null,
     },
     update: {
-      projectData: JSON.stringify(projectData),
+      bgmScoreJson,
     },
   })
 }
