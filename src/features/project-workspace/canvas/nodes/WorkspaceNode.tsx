@@ -16,7 +16,6 @@ import type {
   WorkspaceCanvasEditAssetGroupItem,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
-  WorkspaceCanvasScriptScene,
   WorkspaceCanvasStreamPresentation,
   WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
@@ -26,8 +25,6 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
   switch (kind) {
     case 'analysis':
       return 'chart'
-    case 'scriptClip':
-      return 'bookOpen'
     case 'shot':
       return 'clapperboard'
     case 'imageAsset':
@@ -499,64 +496,8 @@ function renderLines(lines: readonly WorkspaceCanvasTextLine[], labels: ReturnTy
   )
 }
 
-function renderScene(scene: WorkspaceCanvasScriptScene, index: number, labels: ReturnType<typeof useTranslations>) {
-  return (
-    <section key={`${scene.sceneNumber ?? index}-${scene.heading ?? ''}`} className="space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
-      <div className="flex items-center justify-between gap-2">
-        <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
-          {labels('scene', { index: scene.sceneNumber ?? index + 1 })}
-        </p>
-        {scene.heading ? <span className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] text-[var(--glass-text-secondary)]`}>{scene.heading}</span> : null}
-      </div>
-      {renderTextBlock(scene.description)}
-      {renderChips(labels('characters'), scene.characters)}
-      {renderLines(scene.lines, labels)}
-    </section>
-  )
-}
-
 function AnalysisContent({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
   return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-}
-
-function ScriptClipContent({
-  data,
-  labels,
-  expanded,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
-}) {
-  const details = data.scriptDetails
-  if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  if (!expanded) {
-    return (
-      <div className="space-y-2">
-        {renderAssetChips(labels('characters'), details.characters)}
-        {renderChips(labels('locations'), details.locations)}
-        {renderSection(labels('description'), renderSummaryText(details.screenplayText || data.body, 4))}
-      </div>
-    )
-  }
-  return (
-    <div className="space-y-2">
-      {renderAssetChips(labels('characters'), details.characters)}
-      {renderChips(labels('locations'), details.locations)}
-      {renderChips(labels('props'), details.props)}
-      {renderSection(labels('clipMeta'), (
-        <div className="space-y-1">
-          {renderValue(labels('timeRange'), details.timeRange)}
-          {renderValue(labels('duration'), details.duration)}
-          {renderValue(labels('shotCount'), details.shotCount)}
-        </div>
-      ))}
-      {details.scenes.length > 0
-        ? details.scenes.map((scene, index) => renderScene(scene, index, labels))
-        : renderSection(labels('screenplay'), renderTextBlock(details.screenplayText) ?? renderTextBlock(data.body))}
-      {renderSection(labels('originalClip'), renderTextBlock(details.originalText))}
-    </div>
-  )
 }
 
 function ShotContent({
@@ -2354,8 +2295,6 @@ function NodeContent({
   switch (data.kind) {
     case 'analysis':
       return <AnalysisContent data={data} />
-    case 'scriptClip':
-      return <ScriptClipContent data={data} labels={labels} expanded={expanded} />
     case 'shot':
       return <ShotContent data={data} labels={labels} expanded={expanded} />
     case 'imageAsset':

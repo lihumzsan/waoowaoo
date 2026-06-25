@@ -258,9 +258,6 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
               editScriptId: true,
               createdAt: true,
               storyboardTextJson: true,
-              clip: {
-                select: { createdAt: true },
-              },
             },
           },
         },

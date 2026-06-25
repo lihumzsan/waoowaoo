@@ -94,7 +94,6 @@ function artifactRefId(params: {
     || readString(params.output.videoMediaId)
     || readString(params.output.audioMediaId)
     || readString(params.output.panelId)
-    || readString(params.output.clipId)
     || readString(params.output.assetId)
     || params.taskId
     || params.stepKey

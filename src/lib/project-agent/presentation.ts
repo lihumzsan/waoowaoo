@@ -13,7 +13,6 @@ export function buildAssistantProjectContextSnapshot(
     episodeName: context.episodeName,
     selectedScopeRef: context.selectedScopeRef,
     selectedPanelId: context.selectedPanelId,
-    selectedClipId: context.selectedClipId,
     selectedAssetId: context.selectedAssetId,
     activePlanRuns: context.activePlanRuns,
     activeOperationTasks: context.activeOperationTasks,

@@ -875,48 +875,6 @@ describe('workspace node rendering', () => {
     expect(html).toContain('disabled=""')
   })
 
-  it('renders script clip summary by default without internal scroll', () => {
-    const html = renderNode({
-      kind: 'scriptClip',
-      layoutNodeType: 'scriptClip',
-      targetType: 'clip',
-      targetId: 'clip-1',
-      title: 'Script node',
-      eyebrow: 'Script',
-      body: 'screenplay raw',
-      meta: 'clip #1',
-      statusLabel: 'Ready',
-      width: 320,
-      height: 360,
-      indexLabel: 'C1',
-      scriptDetails: {
-        originalText: 'original source text',
-        screenplayText: 'screenplay raw',
-        scenes: [{
-          sceneNumber: 1,
-          heading: 'EXT · Street · Night',
-          description: 'rain street',
-          characters: ['Robot'],
-          lines: [{ kind: 'dialogue', speaker: 'Girl', text: 'hello' }],
-        }],
-        characters: [{ name: 'Robot', appearance: 'Default' }],
-        locations: ['Street'],
-        props: ['Lamp'],
-        timeRange: '1s - 3s',
-        duration: 2,
-        shotCount: 1,
-      },
-    })
-
-    expect(html).toContain('Robot / Default')
-    expect(html).toContain('Street')
-    expect(html).toContain('screenplay raw')
-    expect(html).not.toContain('EXT · Street · Night')
-    expect(html).not.toContain('original source text')
-    expect(html).not.toContain('hello')
-    expect(html).not.toContain('overflow-y-auto')
-  })
-
   it('renders shot, image, video, and final summaries without internal scroll', () => {
     const shotHtml = renderNode({
       kind: 'shot',

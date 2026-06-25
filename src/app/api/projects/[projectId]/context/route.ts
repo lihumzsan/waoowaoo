@@ -14,7 +14,6 @@ export const GET = apiHandler(async (
   const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || null
   const scopeRef = request.nextUrl.searchParams.get('scopeRef')?.trim() || null
   const selectedPanelId = request.nextUrl.searchParams.get('selectedPanelId')?.trim() || null
-  const selectedClipId = request.nextUrl.searchParams.get('selectedClipId')?.trim() || null
   const selectedAssetId = request.nextUrl.searchParams.get('selectedAssetId')?.trim() || null
 
   const projectContext = await executeProjectAgentOperationFromApi({
@@ -29,7 +28,6 @@ export const GET = apiHandler(async (
       detail: 'full',
       ...(scopeRef ? { selectedScopeRef: scopeRef } : {}),
       ...(selectedPanelId ? { selectedPanelId } : {}),
-      ...(selectedClipId ? { selectedClipId } : {}),
       ...(selectedAssetId ? { selectedAssetId } : {}),
     },
     source: 'project-ui',

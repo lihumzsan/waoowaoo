@@ -154,7 +154,7 @@ describe('edit-script storyboard persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.projectCharacter.findMany.mockResolvedValue([])
-    prismaMock.projectStoryboard.create.mockResolvedValue({ id: 'storyboard-1', clipId: null, editScriptId: 'edit-script-1', panels: [] })
+    prismaMock.projectStoryboard.create.mockResolvedValue({ id: 'storyboard-1', editScriptId: 'edit-script-1', panels: [] })
     prismaMock.projectStoryboard.findUnique.mockResolvedValue(null)
     prismaMock.projectStoryboard.update.mockResolvedValue({ panels: [] })
     prismaMock.projectPanel.create.mockResolvedValue({ id: 'panel-1', panelIndex: 0 })
@@ -171,7 +171,6 @@ describe('edit-script storyboard persistence', () => {
 
     expect(storyboard).toEqual(expect.objectContaining({
       id: 'storyboard-1',
-      clipId: null,
       editScriptId: 'edit-script-1',
     }))
     expect(prismaMock.projectStoryboard.findUnique).toHaveBeenCalledWith({

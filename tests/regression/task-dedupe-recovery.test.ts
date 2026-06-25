@@ -25,12 +25,12 @@ describe('regression - task dedupe recovery', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.SCREENPLAY_CONVERT,
+        type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: 'episode-regression-1',
         status: TASK_STATUS.QUEUED,
         payload: { episodeId: 'episode-regression-1' },
-        dedupeKey: 'screenplay_convert:episode-regression-1',
+        dedupeKey: 'edit_screenplay_generate:episode-regression-1',
         queuedAt: new Date(),
       },
     })
@@ -38,14 +38,14 @@ describe('regression - task dedupe recovery', () => {
     const replacement = await createTask({
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.SCREENPLAY_CONVERT,
+      type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
       targetType: 'ProjectEpisode',
       targetId: 'episode-regression-1',
       payload: {
         episodeId: 'episode-regression-1',
         meta: { locale: 'zh' },
       },
-      dedupeKey: 'screenplay_convert:episode-regression-1',
+      dedupeKey: 'edit_screenplay_generate:episode-regression-1',
     })
 
     expect(replacement.deduped).toBe(false)

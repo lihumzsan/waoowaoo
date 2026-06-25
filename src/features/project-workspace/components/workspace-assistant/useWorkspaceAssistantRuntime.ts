@@ -66,7 +66,6 @@ interface UseWorkspaceAssistantRuntimeParams {
   episodeId?: string
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
   assistantPermissionMode: AssistantPermissionMode
 }
@@ -373,7 +372,6 @@ export function useWorkspaceAssistantRuntime({
   episodeId,
   selectedScopeRef,
   selectedPanelId,
-  selectedClipId,
   selectedAssetId,
   assistantPermissionMode,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
@@ -390,9 +388,8 @@ export function useWorkspaceAssistantRuntime({
     episodeId,
     selectedScopeRef,
     selectedPanelId,
-    selectedClipId,
     selectedAssetId,
-  }), [episodeId, locale, projectId, selectedAssetId, selectedClipId, selectedPanelId, selectedScopeRef])
+  }), [episodeId, locale, projectId, selectedAssetId, selectedPanelId, selectedScopeRef])
   const transport = useMemo(() => new AssistantChatTransport({
     api: `/api/projects/${projectId}/assistant/chat`,
     body: {

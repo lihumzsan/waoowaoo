@@ -133,27 +133,6 @@ export interface AssetLibraryLocation {
 // 项目工作流类型
 // ============================================
 
-// Clip 类型
-export interface ProjectClip {
-  id: string
-
-  start?: number
-  end?: number
-  duration?: number
-
-  startText?: string
-  endText?: string
-  shotCount?: number
-
-  // 共用字段
-  summary: string
-  location: string | null
-  characters: string | null
-  props: string | null
-  content: string
-  screenplay?: string | null  // 剧本JSON（Phase 0输出）
-}
-
 export interface ProjectPanel {
   id: string
   storyboardId: string
@@ -199,8 +178,9 @@ export interface ProjectPanel {
 export interface ProjectStoryboard {
   id: string
   episodeId: string
-  clipId: string | null
   editScriptId: string | null
+  createdAt?: string | Date
+  updatedAt?: string | Date
   storyboardTextJson: string | null
   panelCount: number
   storyboardImageUrl: string | null
@@ -500,7 +480,6 @@ export interface ProjectWorkflowData {
   locations?: Location[]
   props?: Prop[]
   episodes?: ProjectEpisodeSummary[]
-  clips?: ProjectClip[]
   storyboards?: ProjectStoryboard[]
   shots?: ProjectShot[]
   videoGroups?: ProjectVideoGroup[]

@@ -19,7 +19,6 @@ export interface ProjectAgentContext {
   currentActivityId?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
 }
 
@@ -249,7 +248,6 @@ export interface ProjectAssistantContextSnapshot {
   episodeName?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
   activePlanRuns: ProjectContextSnapshot['activePlanRuns']
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']

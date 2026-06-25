@@ -315,14 +315,6 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/clips/route.ts',
-    body: { episodeId: 'episode-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.CLIPS_BUILD,
-    expectedTargetType: 'ProjectEpisode',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/episodes/split/route.ts',
     body: { content: 'x'.repeat(120) },
     params: { projectId: 'project-1' },
@@ -336,14 +328,6 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     params: { projectId: 'project-1' },
     expectedTaskType: TASK_TYPE.REFERENCE_TO_CHARACTER,
     expectedTargetType: 'Project',
-    expectedProjectId: 'project-1',
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/screenplay-conversion/route.ts',
-    body: { episodeId: 'episode-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.SCREENPLAY_CONVERT,
-    expectedTargetType: 'ProjectEpisode',
     expectedProjectId: 'project-1',
   },
 ]
@@ -385,7 +369,7 @@ describe('api contract - llm observe routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(ROUTE_CASES.length).toBe(19)
+    expect(ROUTE_CASES.length).toBe(17)
   })
 
   it('marks asset-hub AI routes as force-dynamic to keep app-route build registration stable', async () => {

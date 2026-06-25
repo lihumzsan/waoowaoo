@@ -5,7 +5,6 @@ export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 
 export const projectCanvasNodeTypeSchema = z.enum([
   'analysis',
-  'scriptClip',
   'shot',
   'imageAsset',
   'videoClip',

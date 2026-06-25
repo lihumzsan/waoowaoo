@@ -5,13 +5,15 @@ export type EpisodeArtifactReadiness = {
   hasVideo: boolean
 }
 
-type EpisodeClipLike = {
-  screenplay?: string | null
+type StoryboardPanelLike = {
+  videoUrl?: string | null
   [key: string]: unknown
 }
 
-type StoryboardPanelLike = {
-  videoUrl?: string | null
+type EpisodeScriptLike = {
+  content?: string | null
+  scriptText?: string | null
+  screenplay?: string | null
   [key: string]: unknown
 }
 
@@ -22,7 +24,8 @@ type StoryboardLike = {
 
 type EpisodeLike = {
   novelText?: string | null
-  clips?: unknown[] | null
+  editScript?: EpisodeScriptLike | null
+  editScreenplay?: EpisodeScriptLike | null
   storyboards?: unknown[] | null
 }
 
@@ -30,7 +33,7 @@ function hasNonEmptyText(value: string | null | undefined) {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function isEpisodeClipLike(value: unknown): value is EpisodeClipLike {
+function isEpisodeScriptLike(value: unknown): value is EpisodeScriptLike {
   return typeof value === 'object' && value !== null
 }
 
@@ -42,9 +45,11 @@ function isStoryboardLike(value: unknown): value is StoryboardLike {
   return typeof value === 'object' && value !== null
 }
 
-export function hasScriptArtifacts(clips: unknown[] | null | undefined) {
-  if (!Array.isArray(clips) || clips.length === 0) return false
-  return clips.some((clip) => isEpisodeClipLike(clip) && hasNonEmptyText(clip.screenplay))
+export function hasScriptArtifacts(script: unknown | null | undefined) {
+  if (!isEpisodeScriptLike(script)) return false
+  return hasNonEmptyText(script.content)
+    || hasNonEmptyText(script.scriptText)
+    || hasNonEmptyText(script.screenplay)
 }
 
 export function hasStoryboardArtifacts(storyboards: unknown[] | null | undefined) {
@@ -64,7 +69,7 @@ export function hasVideoArtifacts(storyboards: unknown[] | null | undefined) {
 export function resolveEpisodeArtifactReadiness(episode: EpisodeLike | null | undefined): EpisodeArtifactReadiness {
   return {
     hasStory: hasNonEmptyText(episode?.novelText),
-    hasScript: hasScriptArtifacts(episode?.clips),
+    hasScript: hasScriptArtifacts(episode?.editScript) || hasScriptArtifacts(episode?.editScreenplay),
     hasStoryboard: hasStoryboardArtifacts(episode?.storyboards),
     hasVideo: hasVideoArtifacts(episode?.storyboards),
   }

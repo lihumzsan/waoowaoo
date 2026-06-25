@@ -23,13 +23,11 @@ type VideoPanel = {
 
 type VideoStoryboard = {
   id: string
-  clipId: string | null
   panels: VideoPanel[]
 }
 
 type VideoEpisode = {
   storyboards: VideoStoryboard[]
-  clips: Array<{ id: string }>
 }
 
 async function loadVideoEpisodes(params: { projectId: string; episodeId: string | null }): Promise<VideoEpisode[]> {
@@ -50,16 +48,11 @@ async function loadVideoEpisodes(params: { projectId: string; episodeId: string 
           },
           orderBy: { createdAt: 'asc' },
         },
-        clips: {
-          orderBy: { createdAt: 'asc' },
-          select: { id: true },
-        },
       },
     })
     if (!episode) return []
     return [{
       storyboards: episode.storyboards,
-      clips: episode.clips,
     }]
   }
 
@@ -81,10 +74,6 @@ async function loadVideoEpisodes(params: { projectId: string; episodeId: string 
             },
             orderBy: { createdAt: 'asc' },
           },
-          clips: {
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          },
         },
       },
     },
@@ -92,7 +81,6 @@ async function loadVideoEpisodes(params: { projectId: string; episodeId: string 
 
   return (project?.episodes || []).map((episode) => ({
     storyboards: episode.storyboards,
-    clips: episode.clips,
   }))
 }
 
@@ -124,10 +112,8 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const storyboards: VideoStoryboard[] = []
-        const clips: Array<{ id: string }> = []
         for (const episode of episodes) {
           storyboards.push(...episode.storyboards)
-          clips.push(...episode.clips)
         }
 
         const candidates: Array<{
@@ -139,14 +125,13 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
 
         for (let storyboardIndex = 0; storyboardIndex < storyboards.length; storyboardIndex += 1) {
           const storyboard = storyboards[storyboardIndex]
-          const clipIndex = storyboard.clipId ? clips.findIndex((clip) => clip.id === storyboard.clipId) : -1
           for (const panel of storyboard.panels || []) {
             const videoKey = panel.videoUrl
 
             if (!videoKey) continue
 
             candidates.push({
-              storyboardIndex: clipIndex >= 0 ? clipIndex : clips.length + storyboardIndex,
+              storyboardIndex,
               panelIndex: panel.panelIndex || 0,
               videoKey,
               desc: sanitizeFilenamePart(panel.description || '镜头'),
@@ -246,10 +231,8 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const storyboards: VideoStoryboard[] = []
-        const clips: Array<{ id: string }> = []
         for (const episode of episodes) {
           storyboards.push(...episode.storyboards)
-          clips.push(...episode.clips)
         }
 
         const candidates: Array<{
@@ -261,12 +244,11 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
 
         for (let storyboardIndex = 0; storyboardIndex < storyboards.length; storyboardIndex += 1) {
           const storyboard = storyboards[storyboardIndex]
-          const clipIndex = storyboard.clipId ? clips.findIndex((clip) => clip.id === storyboard.clipId) : -1
           for (const panel of storyboard.panels || []) {
             const videoValue = panel.videoUrl
             if (!videoValue) continue
             candidates.push({
-              storyboardIndex: clipIndex >= 0 ? clipIndex : clips.length + storyboardIndex,
+              storyboardIndex,
               panelIndex: panel.panelIndex || 0,
               videoValue,
               desc: sanitizeFilenamePart(panel.description || '镜头'),

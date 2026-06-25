@@ -256,55 +256,6 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
       },
     }),
 
-    regenerate_storyboard_text: defineOperation({
-      id: 'regenerate_storyboard_text',
-      summary: 'Regenerate storyboard text (async task submission).',
-      intent: 'act',
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: false,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将重生成分镜文本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        storyboardId: z.string().min(1),
-      }).passthrough(),
-      outputSchema: taskSubmitOperationOutputSchema,
-      execute: async (ctx, input) => {
-        const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
-        const analysisModel = projectModelConfig.analysisModel
-        const billingPayload = {
-          ...(toObject(input)),
-          ...(analysisModel ? { analysisModel } : {}),
-        }
-
-        return await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          locale: resolveRequiredTaskLocale(ctx.request, billingPayload),
-          projectId: ctx.projectId,
-          type: TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-          targetType: 'ProjectStoryboard',
-          targetId: input.storyboardId,
-          operationId: 'regenerate_storyboard_text',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload: billingPayload,
-          dedupeKey: `regenerate_storyboard_text:${input.storyboardId}`,
-          billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.REGENERATE_STORYBOARD_TEXT, billingPayload),
-          decoratePayload: false,
-        })
-      },
-    }),
-
     modify_storyboard_image: defineOperation({
       id: 'modify_storyboard_image',
       summary: 'Modify storyboard panel image using edit model (async task submission).',

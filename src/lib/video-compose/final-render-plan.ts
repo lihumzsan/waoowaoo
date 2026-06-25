@@ -20,9 +20,6 @@ export interface FinalRenderStoryboardInput {
   readonly editScriptId?: string | null
   readonly createdAt?: Date | string
   readonly storyboardTextJson?: string | null
-  readonly clip?: {
-    readonly createdAt?: Date | string
-  } | null
 }
 
 export interface FinalRenderPanelInput {
@@ -223,9 +220,6 @@ function sortPanelsForFinalRender(
     const aShot = typeof a.panelNumber === 'number' ? a.panelNumber : Number.POSITIVE_INFINITY
     const bShot = typeof b.panelNumber === 'number' ? b.panelNumber : Number.POSITIVE_INFINITY
     if (aShot !== bShot) return aShot - bShot
-    const aClipAt = readCreatedAtMillis(a.storyboard.clip?.createdAt)
-    const bClipAt = readCreatedAtMillis(b.storyboard.clip?.createdAt)
-    if (aClipAt !== bClipAt) return aClipAt - bClipAt
     const aStoryboardAt = readCreatedAtMillis(a.storyboard.createdAt)
     const bStoryboardAt = readCreatedAtMillis(b.storyboard.createdAt)
     if (aStoryboardAt !== bStoryboardAt) return aStoryboardAt - bStoryboardAt

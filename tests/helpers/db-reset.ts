@@ -34,7 +34,6 @@ export async function resetProjectWorkflowState() {
   await prisma.supplementaryPanel.deleteMany()
   await prisma.projectStoryboard.deleteMany()
   await prisma.projectShot.deleteMany()
-  await prisma.projectClip.deleteMany()
   await prisma.characterAppearance.deleteMany()
   await prisma.locationImage.deleteMany()
   await prisma.projectCharacter.deleteMany()

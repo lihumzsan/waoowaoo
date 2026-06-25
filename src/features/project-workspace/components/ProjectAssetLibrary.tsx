@@ -14,20 +14,14 @@ import { useTranslations } from 'next-intl'
 
 import { useState, useCallback, useMemo } from 'react'
 // 移除了 useRouter 导入，因为不再需要在组件中操作 URL
-import { Character, CharacterAppearance, ProjectClip } from '@/types/project'
+import { Character, CharacterAppearance } from '@/types/project'
 import {
   useAssetActions,
   useGenerateProjectCharacterImage,
   useGenerateProjectLocationImage,
   useAssets,
   useRefreshProjectAssets,
-  useEpisodes,
-  useEpisodeData,
 } from '@/lib/query/hooks'
-import {
-  getAllClipsAssets,
-  fuzzyMatchLocation,
-} from './script-view/clip-asset-utils'
 
 // Hooks
 import { useCharacterActions } from './assets/hooks/useCharacterActions'
@@ -120,61 +114,18 @@ export default function ProjectAssetLibrary({
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null)
   const [kindFilter, setKindFilter] = useState<AssetKindFilter>('all')
-  const [episodeFilter, setEpisodeFilter] = useState<string | null>(null)
-
-  // 获取剧集列表
-  const { episodes } = useEpisodes(projectId)
-  const episodeOptions = useMemo(
-    () => episodes.map((ep) => ({ id: ep.id, episodeNumber: ep.episodeNumber, name: ep.name })),
-    [episodes],
-  )
-
-  // 分集筛选：获取选中集的 clips，解析出该集的资产名称
-  const { data: episodeData } = useEpisodeData(projectId, episodeFilter)
-  const episodeClips = useMemo(() => {
-    if (!episodeFilter || !episodeData) return null
-    return ((episodeData as { clips?: ProjectClip[] }).clips) ?? null
-  }, [episodeFilter, episodeData])
-
-  // 按分集筛选资产 ID 集合
-  const episodeAssetIds = useMemo(() => {
-    if (!episodeClips) return null // null 表示不筛选
-    const { allCharNames, allLocNames, allPropNames } = getAllClipsAssets(episodeClips)
-
-    const charIds = new Set(
-      characters
-        .filter((c) => {
-          const aliases = c.name.split('/').map((a) => a.trim())
-          return aliases.some((alias) => allCharNames.has(alias)) || allCharNames.has(c.name)
-        })
-        .map((c) => c.id),
-    )
-    const locIds = new Set(
-      locations
-        .filter((l) => Array.from(allLocNames).some((clipLocName) => fuzzyMatchLocation(clipLocName, l.name)))
-        .map((l) => l.id),
-    )
-    const propIds = new Set(
-      props
-        .filter((p) => Array.from(allPropNames).some((clipPropName) => clipPropName.toLowerCase() === p.name.toLowerCase()))
-        .map((p) => p.id),
-    )
-
-    return { charIds, locIds, propIds }
-  }, [episodeClips, characters, locations, props])
-
-  // 最终展示的资产列表（先按分集、再按类型筛选）
+  // 最终展示的资产列表（按类型筛选）
   const filteredCharacters = useMemo(
-    () => episodeAssetIds ? characters.filter((c) => episodeAssetIds.charIds.has(c.id)) : characters,
-    [characters, episodeAssetIds],
+    () => characters,
+    [characters],
   )
   const filteredLocations = useMemo(
-    () => episodeAssetIds ? locations.filter((l) => episodeAssetIds.locIds.has(l.id)) : locations,
-    [locations, episodeAssetIds],
+    () => locations,
+    [locations],
   )
   const filteredProps = useMemo(
-    () => episodeAssetIds ? props.filter((p) => episodeAssetIds.propIds.has(p.id)) : props,
-    [props, episodeAssetIds],
+    () => props,
+    [props],
   )
 
   // 筛选后的计数
@@ -346,9 +297,6 @@ export default function ProjectAssetLibrary({
         isAnalyzingAssets={isAnalyzingAssets}
         isGlobalAnalyzing={isGlobalAnalyzing}
         onGlobalAnalyze={handleGlobalAnalyze}
-        episodeId={episodeFilter}
-        onEpisodeChange={setEpisodeFilter}
-        episodes={episodeOptions}
       />
 
       {/* 资产筛选栏 */}
@@ -387,7 +335,7 @@ export default function ProjectAssetLibrary({
             onImageEdit={(charId, appIdx, imgIdx, name) => handleOpenCharacterImageEdit(charId, appIdx, imgIdx, name)}
             onCopyFromGlobal={handleCopyFromGlobal}
             getAppearances={getAppearances}
-            filterIds={episodeAssetIds?.charIds ?? null}
+            filterIds={null}
           />
       )}
       {(kindFilter === 'all' || kindFilter === 'location') && (
@@ -409,7 +357,7 @@ export default function ProjectAssetLibrary({
             onImageClick={setPreviewImage}
             onImageEdit={(locId, imgIdx) => handleOpenLocationImageEdit(locId, imgIdx, 'location')}
             onCopyFromGlobal={handleCopyLocationFromGlobal}
-            filterIds={episodeAssetIds?.locIds ?? null}
+            filterIds={null}
           />
       )}
       {(kindFilter === 'all' || kindFilter === 'prop') && (
@@ -434,7 +382,7 @@ export default function ProjectAssetLibrary({
             onImageClick={setPreviewImage}
             onImageEdit={(propId, imgIdx) => handleOpenLocationImageEdit(propId, imgIdx, 'prop')}
             onCopyFromGlobal={handleCopyPropFromGlobal}
-            filterIds={episodeAssetIds?.propIds ?? null}
+            filterIds={null}
           />
       )}
 

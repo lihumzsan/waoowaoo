@@ -1,6 +1,5 @@
 import type { Project } from '@/types/project'
 import type {
-  ProjectClip,
   ProjectShot,
   ProjectStoryboard,
 } from '@/types/project'
@@ -13,7 +12,6 @@ export interface Episode {
   novelText?: string | null
   audioUrl?: string | null
   srtContent?: string | null
-  clips?: ProjectClip[]
   storyboards?: ProjectStoryboard[]
   shots?: ProjectShot[]
   createdAt: string

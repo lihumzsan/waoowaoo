@@ -100,7 +100,7 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'write_script_01',
-            operationId: 'write_screenplay',
+            operationId: 'generate_edit_screenplay',
           },
         ],
       },
@@ -113,7 +113,7 @@ describe('plan run executor', () => {
       waitingTaskId: 'task-screenplay-1',
     })
     expect(invokeStep).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'write_screenplay',
+      operationId: 'generate_edit_screenplay',
       input: {
         episodeId: 'episode-current',
         confirmed: true,
@@ -138,7 +138,7 @@ describe('plan run executor', () => {
         steps: [
           {
             stepKey: 'write_script_01',
-            operationId: 'write_screenplay',
+            operationId: 'generate_edit_screenplay',
             input: {
               episodeId: 'episode-explicit',
             },
@@ -149,7 +149,7 @@ describe('plan run executor', () => {
     })
 
     expect(invokeStep).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'write_screenplay',
+      operationId: 'generate_edit_screenplay',
       input: {
         episodeId: 'episode-explicit',
         confirmed: true,

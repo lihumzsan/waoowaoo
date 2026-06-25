@@ -61,48 +61,9 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'prop/update-description',
     variableKeys: ['prop_name', 'original_description', 'modify_instruction', 'image_context'],
   },
-  [AI_PROMPT_IDS.SCRIPT_CLIP_SEGMENTS]: {
-    pathStem: 'script/clip-segments',
-    variableKeys: ['input', 'locations_lib_name', 'characters_lib_name', 'props_lib_name', 'characters_introduction'],
-    operationIds: ['split_clips'],
-  },
   [AI_PROMPT_IDS.SCRIPT_EPISODE_SPLIT]: {
     pathStem: 'script/episode-split',
     variableKeys: ['CONTENT'],
-  },
-  [AI_PROMPT_IDS.SCRIPT_GENERATE_SCREENPLAY]: {
-    pathStem: 'script/generate-screenplay',
-    variableKeys: ['clip_content', 'locations_lib_name', 'characters_lib_name', 'props_lib_name', 'characters_introduction', 'clip_id'],
-    operationIds: ['write_screenplay'],
-  },
-  [AI_PROMPT_IDS.STORYBOARD_PLAN]: {
-    pathStem: 'storyboard/plan',
-    variableKeys: [
-      'characters_lib_name',
-      'locations_lib_name',
-      'characters_introduction',
-      'characters_appearance_list',
-      'characters_full_description',
-      'props_description',
-      'clip_json',
-      'clip_content',
-    ],
-    operationIds: ['create_shot_plan'],
-  },
-  [AI_PROMPT_IDS.STORYBOARD_REFINE_CINEMATOGRAPHY]: {
-    pathStem: 'storyboard/refine-cinematography',
-    variableKeys: ['panels_json', 'panel_count', 'locations_description', 'characters_info', 'props_description'],
-    operationIds: ['refine_cinematography'],
-  },
-  [AI_PROMPT_IDS.STORYBOARD_REFINE_ACTING]: {
-    pathStem: 'storyboard/refine-acting',
-    variableKeys: ['panels_json', 'panel_count', 'characters_info'],
-    operationIds: ['refine_acting'],
-  },
-  [AI_PROMPT_IDS.STORYBOARD_REFINE_DETAIL]: {
-    pathStem: 'storyboard/refine-detail',
-    variableKeys: ['panels_json', 'characters_age_gender', 'locations_description', 'props_description'],
-    operationIds: ['finalize_storyboard'],
   },
   [AI_PROMPT_IDS.STORYBOARD_INSERT_PANEL]: {
     pathStem: 'storyboard/insert-panel',

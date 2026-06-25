@@ -1,16 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
-  projectClip: {
-    findMany: vi.fn(),
-  },
-  projectStoryboard: {
-    findMany: vi.fn(),
-  },
   projectPanel: {
     count: vi.fn(),
     findMany: vi.fn(),
-    groupBy: vi.fn(),
   },
 }))
 
@@ -47,8 +40,6 @@ describe('assembleProjectProjectionFull', () => {
         overrides: {},
       },
       progress: {
-        clipCount: 1,
-        screenplayClipCount: 0,
         storyboardCount: 1,
         panelCount: 5,
       },
@@ -82,24 +73,9 @@ describe('assembleProjectProjectionFull', () => {
         createdAt: new Date('2026-04-20T00:00:00.000Z'),
         updatedAt: new Date('2026-04-20T00:00:00.000Z'),
         storyboard: {
-          clipId: 'clip-1',
+          editScriptId: 'edit-script-1',
         },
       },
-    ])
-    prismaMock.projectStoryboard.findMany.mockResolvedValueOnce([
-      {
-        id: 'storyboard-1',
-        clipId: 'clip-1',
-      },
-    ])
-    prismaMock.projectClip.findMany.mockResolvedValueOnce([
-      {
-        id: 'clip-1',
-        summary: 's',
-      },
-    ])
-    prismaMock.projectPanel.groupBy.mockResolvedValueOnce([
-      { storyboardId: 'storyboard-1', _count: { _all: 5 } },
     ])
 
     const result = await assembleProjectProjectionFull({
@@ -112,7 +88,7 @@ describe('assembleProjectProjectionFull', () => {
     expect(result.episodeDetail?.panels).toEqual([
       expect.objectContaining({
         panelId: 'panel-1',
-        clipId: 'clip-1',
+        editScriptId: 'edit-script-1',
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         imagePrompt: 'ip',
@@ -146,8 +122,6 @@ describe('assembleProjectProjectionFull', () => {
         overrides: {},
       },
       progress: {
-        clipCount: 0,
-        screenplayClipCount: 0,
         storyboardCount: 0,
         panelCount: 0,
       },
@@ -166,7 +140,7 @@ describe('assembleProjectProjectionFull', () => {
     expect(prismaMock.projectPanel.findMany).not.toHaveBeenCalled()
   })
 
-  it('[scope panelId] -> restricts storyboard query to panel storyboard and not truncated', async () => {
+  it('[scope panelId] -> restricts panel query and is not truncated', async () => {
     liteMock.assembleProjectProjectionLite.mockResolvedValueOnce({
       projectId: 'project-1',
       projectName: 'p',
@@ -182,8 +156,6 @@ describe('assembleProjectProjectionFull', () => {
         overrides: {},
       },
       progress: {
-        clipCount: 1,
-        screenplayClipCount: 0,
         storyboardCount: 1,
         panelCount: 1,
       },
@@ -217,24 +189,9 @@ describe('assembleProjectProjectionFull', () => {
         createdAt: new Date('2026-04-20T00:00:00.000Z'),
         updatedAt: new Date('2026-04-20T00:00:00.000Z'),
         storyboard: {
-          clipId: 'clip-1',
+          editScriptId: 'edit-script-1',
         },
       },
-    ])
-    prismaMock.projectStoryboard.findMany.mockResolvedValueOnce([
-      {
-        id: 'storyboard-1',
-        clipId: 'clip-1',
-      },
-    ])
-    prismaMock.projectClip.findMany.mockResolvedValueOnce([
-      {
-        id: 'clip-1',
-        summary: 's',
-      },
-    ])
-    prismaMock.projectPanel.groupBy.mockResolvedValueOnce([
-      { storyboardId: 'storyboard-1', _count: { _all: 1 } },
     ])
 
     const result = await assembleProjectProjectionFull({
@@ -245,8 +202,8 @@ describe('assembleProjectProjectionFull', () => {
       scope: { panelId: 'panel-1' },
     })
 
-    expect(prismaMock.projectStoryboard.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'storyboard-1' },
+    expect(prismaMock.projectPanel.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { AND: [{ storyboard: { episodeId: 'episode-1' } }, { id: 'panel-1' }] },
     }))
     expect(result.episodeDetail?.totalPanelCount).toBe(1)
     expect(result.episodeDetail?.truncated).toBe(false)

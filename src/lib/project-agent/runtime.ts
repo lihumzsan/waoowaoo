@@ -139,14 +139,12 @@ function normalizeProjectAgentContext(raw: unknown): ProjectAgentContext {
   const episodeId = typeof record.episodeId === 'string' ? record.episodeId.trim() : ''
   const selectedScopeRef = typeof record.selectedScopeRef === 'string' ? record.selectedScopeRef.trim() : ''
   const selectedPanelId = typeof record.selectedPanelId === 'string' ? record.selectedPanelId.trim() : ''
-  const selectedClipId = typeof record.selectedClipId === 'string' ? record.selectedClipId.trim() : ''
   const selectedAssetId = typeof record.selectedAssetId === 'string' ? record.selectedAssetId.trim() : ''
   return {
     ...(locale ? { locale } : {}),
     ...(episodeId ? { episodeId } : {}),
     ...(selectedScopeRef ? { selectedScopeRef } : {}),
     ...(selectedPanelId ? { selectedPanelId } : {}),
-    ...(selectedClipId ? { selectedClipId } : {}),
     ...(selectedAssetId ? { selectedAssetId } : {}),
   }
 }
@@ -298,8 +296,6 @@ function buildProjectStateVersion(params: {
     workflow.stage,
     workflow.blocking.kind,
     workflow.nextAction?.operationId ?? 'none',
-    String(params.phase.progress.clipCount),
-    String(params.phase.progress.screenplayClipCount),
     String(params.phase.progress.storyboardCount),
     String(params.phase.progress.panelCount),
     params.enabledOperationIds.join('|') || 'none',
@@ -331,8 +327,6 @@ function buildProjectStateInputItem(params: {
     `workflowNextAction=${formatRuntimeStateValue(workflow.nextAction?.operationId)}`,
     `allowedOperationIds=${formatRuntimeStateList(workflow.allowedOperationIds)}`,
     `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
-    `progress.clipCount=${String(params.phase.progress.clipCount)}`,
-    `progress.screenplayClipCount=${String(params.phase.progress.screenplayClipCount)}`,
     `progress.storyboardCount=${String(params.phase.progress.storyboardCount)}`,
     `progress.panelCount=${String(params.phase.progress.panelCount)}`,
     '[/project_state_snapshot]',

@@ -125,7 +125,6 @@ model ProjectEpisode {
   srtContent              String?
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
-  clips                   ProjectClip[]
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   shots                   ProjectShot[]
   storyboards             ProjectStoryboard[]
@@ -330,30 +329,6 @@ model ProjectVideoGroup {
   @@map("project_video_groups")
 }
 
-model ProjectClip {
-  id         String                    @id @default(uuid())
-  episodeId  String
-  start      Int?
-  end        Int?
-  duration   Int?
-  summary    String
-  location   String?
-  content    String
-  createdAt  DateTime                  @default(now())
-  updatedAt  DateTime                  @default(now()) @updatedAt
-  characters String?
-  endText    String?
-  shotCount  Int?
-  startText  String?
-  screenplay String?
-  episode    ProjectEpisode     @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  shots      ProjectShot[]
-  storyboard ProjectStoryboard?
-
-  @@index([episodeId])
-  @@map("project_clips")
-}
-
 model ProjectPanel {
   id                String                    @id @default(uuid())
   storyboardId      String
@@ -407,7 +382,6 @@ model ProjectPanel {
 model ProjectShot {
   id              String                @id @default(uuid())
   episodeId       String
-  clipId          String?
   shotId          String
   srtStart        Int
   srtEnd          Int
@@ -427,10 +401,8 @@ model ProjectShot {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @default(now()) @updatedAt
   pov             String?
-  clip            ProjectClip?   @relation(fields: [clipId], references: [id], onDelete: Cascade)
   episode         ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  @@index([clipId])
   @@index([episodeId])
   @@index([shotId])
   @@index([imageMediaId])
@@ -440,7 +412,6 @@ model ProjectShot {
 model ProjectStoryboard {
   id                  String                @id @default(uuid())
   episodeId           String
-  clipId              String?               @unique
   editScriptId        String?               @unique
   storyboardImageUrl  String?
   createdAt           DateTime              @default(now())
@@ -453,12 +424,10 @@ model ProjectStoryboard {
   photographyPlan     String?
   panels              ProjectPanel[]
   blockingArtifacts   ProjectStoryboardBlockingArtifact[]
-  clip                ProjectClip?   @relation(fields: [clipId], references: [id], onDelete: Cascade)
   editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   supplementaryPanels SupplementaryPanel[]
 
-  @@index([clipId])
   @@index([editScriptId])
   @@index([episodeId])
   @@map("project_storyboards")

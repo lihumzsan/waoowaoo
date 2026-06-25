@@ -75,19 +75,19 @@ function assertNoLegacyArtStyle(input: Record<string, unknown>) {
 }
 
 function resolveStoryboardGroupInsertCreatedAt<T extends { createdAt: Date }>(
-  existingClips: T[],
+  existingStoryboards: T[],
   insertIndex?: number,
 ): Date {
-  const insertAt = insertIndex !== undefined ? insertIndex : existingClips.length
-  if (existingClips.length === 0) return new Date()
-  if (insertAt === 0) return new Date(existingClips[0].createdAt.getTime() - 1000)
-  if (insertAt >= existingClips.length) {
-    return new Date(existingClips[existingClips.length - 1].createdAt.getTime() + 1000)
+  const insertAt = insertIndex !== undefined ? insertIndex : existingStoryboards.length
+  if (existingStoryboards.length === 0) return new Date()
+  if (insertAt === 0) return new Date(existingStoryboards[0].createdAt.getTime() - 1000)
+  if (insertAt >= existingStoryboards.length) {
+    return new Date(existingStoryboards[existingStoryboards.length - 1].createdAt.getTime() + 1000)
   }
 
-  const prevClip = existingClips[insertAt - 1]
-  const nextClip = existingClips[insertAt]
-  return new Date((prevClip.createdAt.getTime() + nextClip.createdAt.getTime()) / 2)
+  const prevStoryboard = existingStoryboards[insertAt - 1]
+  const nextStoryboard = existingStoryboards[insertAt]
+  return new Date((prevStoryboard.createdAt.getTime() + nextStoryboard.createdAt.getTime()) / 2)
 }
 
 export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
@@ -704,41 +704,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
 	      },
 	    }),
-	    update_clip: defineOperation({
-	      id: 'update_clip',
-	      summary: 'Update a clip fields (characters/location/props/content/screenplay).',
-	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
-	      inputSchema: z.object({
-	        clipId: z.string().min(1),
-	        characters: z.string().nullable().optional(),
-	        location: z.string().nullable().optional(),
-        props: z.string().nullable().optional(),
-        content: z.string().optional(),
-        screenplay: z.string().nullable().optional(),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const clip = await prisma.projectClip.findFirst({
-          where: { id: input.clipId, episode: { projectId: ctx.projectId } },
-          select: { id: true },
-        })
-        if (!clip) throw new ApiError('NOT_FOUND')
-
-        const updateData: Record<string, unknown> = {}
-        if (Object.prototype.hasOwnProperty.call(input, 'characters')) updateData.characters = input.characters
-        if (Object.prototype.hasOwnProperty.call(input, 'location')) updateData.location = input.location
-        if (Object.prototype.hasOwnProperty.call(input, 'props')) updateData.props = input.props
-        if (Object.prototype.hasOwnProperty.call(input, 'content')) updateData.content = (input as Record<string, unknown>).content
-        if (Object.prototype.hasOwnProperty.call(input, 'screenplay')) updateData.screenplay = input.screenplay
-
-        const updated = await prisma.projectClip.update({
-          where: { id: input.clipId },
-          data: updateData,
-	        })
-	        return { success: true, clip: updated }
-	      },
-	    }),
 	    get_video_editor_project: defineOperation({
 	      id: 'get_video_editor_project',
 	      summary: 'Get video editor project data for an episode.',
@@ -865,7 +830,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	    }),
     list_storyboards: defineOperation({
       id: 'list_storyboards',
-      summary: 'List storyboards (clip + panels) for an episode.',
+      summary: 'List storyboards and panels for an episode.',
       intent: 'query',
       effects: EFFECTS_QUERY,
       inputSchema: z.object({
@@ -882,7 +847,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const storyboards = await prisma.projectStoryboard.findMany({
           where: { episodeId: input.episodeId },
           include: {
-            clip: true,
             blockingArtifacts: { orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }] },
             panels: { orderBy: { panelIndex: 'asc' } },
           },
@@ -896,7 +860,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     create_storyboard_group: defineOperation({
       id: 'create_storyboard_group',
-      summary: 'Create a storyboard group (clip + storyboard + initial panel) for an episode at an insert index.',
+      summary: 'Create a storyboard group and initial panel for an episode at an insert index.',
       intent: 'act',
       effects: EFFECTS_WRITE,
       inputSchema: z.object({
@@ -908,29 +872,19 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const episode = await prisma.projectEpisode.findFirst({
           where: { id: input.episodeId, projectId: ctx.projectId },
           include: {
-            clips: { orderBy: { createdAt: 'asc' } },
+            storyboards: { orderBy: { createdAt: 'asc' } },
           },
         })
         if (!episode) throw new ApiError('NOT_FOUND')
 
-        const newCreatedAt = resolveStoryboardGroupInsertCreatedAt(episode.clips, input.insertIndex)
+        const newCreatedAt = resolveStoryboardGroupInsertCreatedAt(episode.storyboards, input.insertIndex)
 
         const result = await prisma.$transaction(async (tx) => {
-          const clip = await tx.projectClip.create({
-            data: {
-              episodeId: input.episodeId,
-              summary: '手动添加的分镜组',
-              content: '',
-              location: null,
-              characters: null,
-              createdAt: newCreatedAt,
-            },
-          })
           const storyboard = await tx.projectStoryboard.create({
             data: {
               episodeId: input.episodeId,
-              clipId: clip.id,
               panelCount: 1,
+              createdAt: newCreatedAt,
             },
           })
           const panel = await tx.projectPanel.create({
@@ -944,7 +898,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               characters: '[]',
             },
           })
-          return { clip, storyboard, panel }
+          return { storyboard, panel }
         })
 
         return { success: true, ...result }
@@ -952,7 +906,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     copy_storyboard_group: defineOperation({
       id: 'copy_storyboard_group',
-      summary: 'Copy a storyboard group (clip + storyboard + panels) into the same episode.',
+      summary: 'Copy a storyboard group and panels into the same episode.',
       intent: 'act',
       effects: EFFECTS_WRITE,
       inputSchema: z.object({
@@ -970,55 +924,29 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             },
           },
           include: {
-            clip: true,
             episode: {
               include: {
-                clips: { orderBy: { createdAt: 'asc' } },
+                storyboards: { orderBy: { createdAt: 'asc' } },
               },
             },
             panels: { orderBy: { panelIndex: 'asc' } },
           },
         })
         if (!source) throw new ApiError('NOT_FOUND')
-        if (!source.clip) {
-          throw new ApiError('CONFLICT', {
-            code: 'STORYBOARD_CLIP_REQUIRED',
-            message: 'copy_storyboard_group only supports clip-backed storyboards',
-          })
-        }
-        const sourceClip = source.clip
 
         const includeImages = input.includeImages !== false
-        const newCreatedAt = resolveStoryboardGroupInsertCreatedAt(source.episode.clips, input.insertIndex)
+        const newCreatedAt = resolveStoryboardGroupInsertCreatedAt(source.episode.storyboards, input.insertIndex)
 
         const result = await prisma.$transaction(async (tx) => {
-          const clip = await tx.projectClip.create({
-            data: {
-              episodeId: source.episodeId,
-              start: sourceClip.start,
-              end: sourceClip.end,
-              duration: sourceClip.duration,
-              summary: sourceClip.summary,
-              location: sourceClip.location,
-              content: sourceClip.content,
-              characters: sourceClip.characters,
-              props: sourceClip.props,
-              endText: sourceClip.endText,
-              shotCount: sourceClip.shotCount,
-              startText: sourceClip.startText,
-              screenplay: sourceClip.screenplay,
-              createdAt: newCreatedAt,
-            },
-          })
-
           const storyboard = await tx.projectStoryboard.create({
             data: {
               episodeId: source.episodeId,
-              clipId: clip.id,
               panelCount: source.panels.length,
               storyboardTextJson: source.storyboardTextJson,
               photographyPlan: source.photographyPlan,
               storyboardImageUrl: includeImages ? source.storyboardImageUrl : null,
+              editScriptId: null,
+              createdAt: newCreatedAt,
             },
           })
 
@@ -1053,7 +981,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             })
           }
 
-          return { clip, storyboard, panelCount: source.panels.length }
+          return { storyboard, panelCount: source.panels.length }
         })
 
         return { success: true, ...result }
@@ -1166,46 +1094,46 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     move_storyboard_group: defineOperation({
       id: 'move_storyboard_group',
-      summary: 'Move storyboard group up/down by swapping clip createdAt ordering.',
+      summary: 'Move storyboard group up/down by swapping storyboard createdAt ordering.',
       intent: 'act',
       effects: EFFECTS_WRITE_OVERWRITE,
       inputSchema: z.object({
         episodeId: z.string().min(1),
-        clipId: z.string().min(1),
+        storyboardId: z.string().min(1),
         direction: z.enum(['up', 'down']),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       execute: async (ctx, input) => {
         const episode = await prisma.projectEpisode.findFirst({
           where: { id: input.episodeId, projectId: ctx.projectId },
-          include: { clips: { orderBy: { createdAt: 'asc' } } },
+          include: { storyboards: { orderBy: { createdAt: 'asc' } } },
         })
         if (!episode) throw new ApiError('NOT_FOUND')
 
-        const clips = episode.clips
-        const currentIndex = clips.findIndex((c) => c.id === input.clipId)
+        const storyboards = episode.storyboards
+        const currentIndex = storyboards.findIndex((storyboard) => storyboard.id === input.storyboardId)
         if (currentIndex === -1) throw new ApiError('NOT_FOUND')
 
         const targetIndex = input.direction === 'up' ? currentIndex - 1 : currentIndex + 1
-        if (targetIndex < 0 || targetIndex >= clips.length) throw new ApiError('INVALID_PARAMS')
+        if (targetIndex < 0 || targetIndex >= storyboards.length) throw new ApiError('INVALID_PARAMS')
 
-        const currentClip = clips[currentIndex]
-        const targetClip = clips[targetIndex]
+        const currentStoryboard = storyboards[currentIndex]
+        const targetStoryboard = storyboards[targetIndex]
 
-        const tempTime = currentClip.createdAt.getTime()
-        const targetTime = targetClip.createdAt.getTime()
+        const tempTime = currentStoryboard.createdAt.getTime()
+        const targetTime = targetStoryboard.createdAt.getTime()
 
         await prisma.$transaction(async (tx) => {
-          await tx.projectClip.update({
-            where: { id: currentClip.id },
+          await tx.projectStoryboard.update({
+            where: { id: currentStoryboard.id },
             data: { createdAt: new Date(0) },
           })
-          await tx.projectClip.update({
-            where: { id: targetClip.id },
+          await tx.projectStoryboard.update({
+            where: { id: targetStoryboard.id },
             data: { createdAt: new Date(tempTime) },
           })
-          await tx.projectClip.update({
-            where: { id: currentClip.id },
+          await tx.projectStoryboard.update({
+            where: { id: currentStoryboard.id },
             data: { createdAt: new Date(targetTime) },
           })
         })
@@ -1215,7 +1143,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     delete_storyboard_group: defineOperation({
       id: 'delete_storyboard_group',
-      summary: 'Delete a storyboard group (panels + storyboard + clip).',
+      summary: 'Delete a storyboard group and panels.',
       intent: 'act',
       effects: {
         ...EFFECTS_WRITE_DESTRUCTIVE,
@@ -1224,7 +1152,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       },
       confirmation: {
         required: true,
-        summary: '将删除整个分镜组（Clip/Storyboard/Panels）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除整个分镜组（Storyboard/Panels）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),
@@ -1234,7 +1162,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       execute: async (ctx, input) => {
         const storyboard = await prisma.projectStoryboard.findFirst({
           where: { id: input.storyboardId, episode: { projectId: ctx.projectId } },
-          include: { panels: true, clip: true },
+          include: { panels: true },
         })
         if (!storyboard) throw new ApiError('NOT_FOUND')
 
@@ -1245,11 +1173,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           await tx.projectStoryboard.delete({
             where: { id: input.storyboardId },
           })
-          if (storyboard.clipId) {
-            await tx.projectClip.delete({
-              where: { id: storyboard.clipId },
-            })
-          }
         })
 
         return { success: true }
@@ -1344,7 +1267,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_episode_detail: defineOperation({
       id: 'get_episode_detail',
-      summary: 'Get full episode data with storyboards/clips/shots and update project.lastEpisodeId.',
+      summary: 'Get full episode data with storyboards/shots and update project.lastEpisodeId.',
       intent: 'act',
       effects: EFFECTS_WRITE_OVERWRITE,
       inputSchema: z.object({
@@ -1355,10 +1278,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const episode = await prisma.projectEpisode.findFirst({
           where: { id: input.episodeId, projectId: ctx.projectId },
           include: {
-            clips: { orderBy: { createdAt: 'asc' } },
             storyboards: {
               include: {
-                clip: true,
                 blockingArtifacts: { orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }] },
                 panels: { orderBy: { panelIndex: 'asc' } },
               },

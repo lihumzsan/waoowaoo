@@ -17,8 +17,6 @@ export type ProjectPhase = (typeof PROJECT_PHASE)[keyof typeof PROJECT_PHASE]
 export interface ProjectPhaseSnapshot {
   phase: ProjectPhase
   progress: {
-    clipCount: number
-    screenplayClipCount: number
     storyboardCount: number
     panelCount: number
   }
@@ -73,20 +71,13 @@ async function resolveStaleArtifactsForEpisode(params: {
   progress: ProjectPhaseSnapshot['progress']
 }): Promise<string[]> {
   const episodeId = params.episodeId
-  const [episode, storyClipMax, screenplayClipMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
+  const [episode, editScreenplayMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
     prisma.projectEpisode.findUnique({
       where: { id: episodeId },
       select: { updatedAt: true },
     }),
-    prisma.projectClip.aggregate({
+    prisma.projectEditScreenplay.aggregate({
       where: { episodeId },
-      _max: { updatedAt: true },
-    }),
-    prisma.projectClip.aggregate({
-      where: {
-        episodeId,
-        screenplay: { not: null },
-      },
       _max: { updatedAt: true },
     }),
     prisma.projectEditScript.aggregate({
@@ -109,12 +100,12 @@ async function resolveStaleArtifactsForEpisode(params: {
     }),
   ])
 
-  const storyUpdatedAt = maxDate([episode?.updatedAt ?? null, storyClipMax._max.updatedAt])
-  const scriptUpdatedAt = maxDate([screenplayClipMax._max.updatedAt, editScriptMax._max.updatedAt])
+  const storyUpdatedAt = maxDate([episode?.updatedAt ?? null])
+  const scriptUpdatedAt = maxDate([editScreenplayMax._max.updatedAt, editScriptMax._max.updatedAt])
   const storyboardUpdatedAt = maxDate([storyboardMax._max.updatedAt, panelMax._max.updatedAt])
 
   const stale: string[] = []
-  if (params.progress.screenplayClipCount > 0 && storyUpdatedAt && scriptUpdatedAt && storyUpdatedAt > scriptUpdatedAt) {
+  if (scriptUpdatedAt && storyUpdatedAt && storyUpdatedAt > scriptUpdatedAt) {
     stale.push('screenplay')
   }
   if (
@@ -138,16 +129,7 @@ export async function resolveProjectPhase(params: {
     userId: params.userId,
     episodeId: params.episodeId || null,
   })
-
   const progress = projection.progress
-
-  let phase: ProjectPhase = PROJECT_PHASE.DRAFT
-
-  if (progress.storyboardCount > 0 || progress.panelCount > 0) {
-    phase = PROJECT_PHASE.STORYBOARD_READY
-  } else if (progress.screenplayClipCount > 0) {
-    phase = PROJECT_PHASE.SCRIPT_READY
-  }
 
   const [recentFailedRuns, staleArtifacts, editFirstWorkflow] = await Promise.all([
     listPlanRuns({
@@ -169,6 +151,17 @@ export async function resolveProjectPhase(params: {
       episodeId: projection.episodeId || null,
     }),
   ])
+
+  let phase: ProjectPhase = PROJECT_PHASE.DRAFT
+  if (progress.storyboardCount > 0 || progress.panelCount > 0) {
+    phase = PROJECT_PHASE.STORYBOARD_READY
+  } else if (
+    editFirstWorkflow.stage !== 'not_started'
+    && editFirstWorkflow.stage !== 'ready_to_generate_screenplay'
+    && editFirstWorkflow.stage !== 'screenplay_ready_for_review'
+  ) {
+    phase = PROJECT_PHASE.SCRIPT_READY
+  }
 
   const failedItems = recentFailedRuns
     .slice(0, 3)

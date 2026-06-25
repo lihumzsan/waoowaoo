@@ -146,12 +146,6 @@ function inferTaskContractFromOperation(params: {
         targetType: input.type === 'location' ? 'ProjectLocation' : 'CharacterAppearance',
         targetId: typeof input.id === 'string' ? input.id : 'asset-1',
       }
-    case 'regenerate_storyboard_text':
-      return {
-        type: TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-        targetType: 'ProjectStoryboard',
-        targetId: typeof input.storyboardId === 'string' ? input.storyboardId : 'storyboard-1',
-      }
     case 'insert_storyboard_panel':
       return {
         type: TASK_TYPE.INSERT_PANEL,
@@ -551,16 +545,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   },
 ]
 
-export const DIRECT_TEXT_CASES: ReadonlyArray<DirectRouteCase> = [
-  {
-    routeFile: 'src/app/api/projects/[projectId]/regenerate-storyboard-text/route.ts',
-    body: { storyboardId: 'storyboard-1' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-    expectedTargetType: 'ProjectStoryboard',
-    expectedProjectId: 'project-1',
-  },
-]
+export const DIRECT_TEXT_CASES: ReadonlyArray<DirectRouteCase> = []
 
 export const DIRECT_RUN_CASES: ReadonlyArray<DirectRouteCase> = [
   {

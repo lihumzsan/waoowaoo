@@ -5,7 +5,7 @@ import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-
 
 /**
  * POST /api/projects/[projectId]/storyboard-group
- * 添加一组新的分镜（创建 Clip + Storyboard + 初始 Panel）
+ * 添加一组新的分镜（创建 Storyboard + 初始 Panel）
  */
 export const POST = apiHandler(async (
   request: NextRequest,
@@ -41,7 +41,7 @@ export const POST = apiHandler(async (
 
 /**
  * PUT /api/projects/[projectId]/storyboard-group
- * 调整分镜组顺序（通过修改 clip 的 createdAt）
+ * 调整分镜组顺序（通过修改 storyboard 的 createdAt）
  */
 export const PUT = apiHandler(async (
   request: NextRequest,
@@ -54,9 +54,9 @@ export const PUT = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = await request.json()
-  const { episodeId, clipId, direction } = body // direction: 'up' | 'down'
+  const { episodeId, storyboardId, direction } = body // direction: 'up' | 'down'
 
-  if (!episodeId || !clipId || !direction) {
+  if (!episodeId || !storyboardId || !direction) {
     throw new ApiError('INVALID_PARAMS')
   }
 
@@ -67,7 +67,7 @@ export const PUT = apiHandler(async (
     userId: authResult.session.user.id,
     input: {
       episodeId,
-      clipId,
+      storyboardId,
       direction,
     },
     source: 'project-ui',
@@ -78,7 +78,7 @@ export const PUT = apiHandler(async (
 
 /**
  * DELETE /api/projects/[projectId]/storyboard-group
- * 删除整个分镜组（Clip + Storyboard + 所有 Panels）
+ * 删除整个分镜组（Storyboard + 所有 Panels）
  */
 export const DELETE = apiHandler(async (
   request: NextRequest,

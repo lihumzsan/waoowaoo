@@ -25,7 +25,7 @@ import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/
 function buildJob(): Job<TaskJobData> {
   const data: TaskJobData = {
     taskId: 'task-1',
-    type: TASK_TYPE.SCREENPLAY_CONVERT,
+    type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
     locale: 'zh',
     projectId: 'project-1',
     userId: 'user-1',
@@ -148,7 +148,7 @@ describe('createWorkerLLMStreamCallbacks', () => {
       delta: 'hello',
       seq: 1,
       lane: 'main',
-      step: { id: 'split_clips', attempt: 1, title: 'split', index: 1, total: 1 },
+      step: { id: 'edit_screenplay_generate', attempt: 1, title: 'split', index: 1, total: 1 },
     })
     await callbacks.flush()
 
@@ -160,7 +160,7 @@ describe('createWorkerLLMStreamCallbacks', () => {
         delta: 'hello',
       }),
       expect.objectContaining({
-        stepId: 'split_clips',
+        stepId: 'edit_screenplay_generate',
       }),
     )
   })

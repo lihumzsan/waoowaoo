@@ -95,9 +95,8 @@
   },
   "cards": {
     "projectPhase": "Project Phase",
-    "clips": "Clips {count}",
-    "screenplays": "Screenplays {count}",
     "storyboards": "Storyboards {count}",
+    "panels": "Panels {count}",
     "projectContext": "Project Context",
     "projectLabel": "Project",
     "episodeLabel": "Episode",

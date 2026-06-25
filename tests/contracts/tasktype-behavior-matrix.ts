@@ -18,8 +18,6 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
   }
   if (
     taskType === 'analyze_novel'
-    || taskType === 'clips_build'
-    || taskType === 'screenplay_convert'
     || taskType === 'analyze_global'
     || taskType === 'edit_screenplay_generate'
     || taskType === 'edit_screenplay_revise'
@@ -55,8 +53,6 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
   }
   if (
     taskType === 'analyze_novel'
-    || taskType === 'clips_build'
-    || taskType === 'screenplay_convert'
     || taskType === 'analyze_global'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
@@ -88,12 +84,8 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     || taskType === 'regenerate_group'
     || taskType === 'asset_hub_image'
     || taskType === 'asset_hub_modify'
-    || taskType === 'regenerate_storyboard_text'
   ) {
-    if (
-      taskType === 'insert_panel'
-      || taskType === 'regenerate_storyboard_text'
-    ) {
+    if (taskType === 'insert_panel') {
       return 'tests/integration/api/contract/direct-submit-text-routes.test.ts'
     }
     return 'tests/integration/api/contract/direct-submit-media-routes.test.ts'

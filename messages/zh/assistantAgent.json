@@ -95,9 +95,8 @@
   },
   "cards": {
     "projectPhase": "项目阶段",
-    "clips": "Clips {count}",
-    "screenplays": "剧本 {count}",
     "storyboards": "分镜 {count}",
+    "panels": "镜头 {count}",
     "projectContext": "项目上下文",
     "projectLabel": "项目",
     "episodeLabel": "剧集",

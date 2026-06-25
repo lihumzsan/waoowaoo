@@ -373,27 +373,6 @@ export function useDeleteProjectStoryboardGroup(projectId: string, episodeId?: s
 }
 
 /**
- * 异步重生成文字分镜
- */
-
-export function useRegenerateProjectStoryboardText(projectId: string) {
-    return useMutation({
-        mutationFn: async ({ storyboardId }: { storyboardId: string }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/regenerate-storyboard-text`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ storyboardId, async: true }),
-                },
-                'regenerate storyboard text failed',
-            )
-            return resolveTaskResponse(response)
-        },
-    })
-}
-
-/**
  * 新增 storyboard group
  */
 
@@ -444,7 +423,7 @@ export function useCopyProjectStoryboardGroup(projectId: string, episodeId?: str
 export function useMoveProjectStoryboardGroup(projectId: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (payload: { episodeId: string; clipId: string; direction: 'up' | 'down' }) => {
+        mutationFn: async (payload: { episodeId: string; storyboardId: string; direction: 'up' | 'down' }) => {
             return await requestJsonWithError(`/api/projects/${projectId}/storyboard-group`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },

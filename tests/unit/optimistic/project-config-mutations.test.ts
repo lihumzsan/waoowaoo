@@ -69,7 +69,6 @@ function buildProject(): Project {
     characters: [],
     locations: [],
     props: [],
-    clips: [],
     storyboards: [],
     shots: [],
     videoResolution: null,

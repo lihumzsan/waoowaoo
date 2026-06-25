@@ -52,7 +52,6 @@ export function useProjectContext(projectId: string | null, params?: {
   episodeId?: string | null
   scopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
 }) {
   return useQuery({
@@ -62,7 +61,6 @@ export function useProjectContext(projectId: string | null, params?: {
       [
         params?.scopeRef || '',
         params?.selectedPanelId || '',
-        params?.selectedClipId || '',
         params?.selectedAssetId || '',
       ].join(':'),
     ),
@@ -72,7 +70,6 @@ export function useProjectContext(projectId: string | null, params?: {
       if (params?.episodeId) search.set('episodeId', params.episodeId)
       if (params?.scopeRef) search.set('scopeRef', params.scopeRef)
       if (params?.selectedPanelId) search.set('selectedPanelId', params.selectedPanelId)
-      if (params?.selectedClipId) search.set('selectedClipId', params.selectedClipId)
       if (params?.selectedAssetId) search.set('selectedAssetId', params.selectedAssetId)
       const response = await apiFetch(`/api/projects/${projectId}/context?${search.toString()}`)
       if (!response.ok) {

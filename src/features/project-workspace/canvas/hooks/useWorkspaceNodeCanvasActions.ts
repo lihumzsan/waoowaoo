@@ -8,11 +8,6 @@ export function useWorkspaceNodeCanvasActions() {
   const runtime = useWorkspaceRuntime()
 
   return useCallback(async (action: WorkspaceCanvasNodeAction) => {
-    if (action.type === 'update_clip') {
-      await runtime.onClipUpdate(action.clipId, action.data)
-      return
-    }
-
     if (action.type === 'open_asset_library') {
       runtime.onOpenAssetLibraryForCharacter(action.characterId ?? null)
       return
@@ -39,11 +34,6 @@ export function useWorkspaceNodeCanvasActions() {
 
     if (action.type === 'generate_edit_cinematography_shot_plan') {
       await runtime.onGenerateEditCinematographyShotPlan(action.editScriptId)
-      return
-    }
-
-    if (action.type === 'regenerate_storyboard_text') {
-      await runtime.onRegenerateStoryboardText(action.storyboardId)
       return
     }
 

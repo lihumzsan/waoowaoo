@@ -118,7 +118,6 @@ export async function assembleProjectContext(params: {
   episodeId?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
   const [project, episode, editScreenplay, editScript, runs, latestArtifacts, approvals, activeOperationTasks, recentOperationResults, editFirstWorkflow] = await Promise.all([
@@ -129,31 +128,6 @@ export async function assembleProjectContext(params: {
       ? prisma.projectEpisode.findUnique({
           where: { id: params.episodeId },
           include: {
-            clips: {
-              orderBy: { createdAt: 'asc' },
-              include: {
-                storyboard: {
-                  include: {
-                    panels: {
-                      orderBy: { panelIndex: 'asc' },
-                      select: {
-                        id: true,
-                        panelIndex: true,
-                        description: true,
-                        imagePrompt: true,
-                        imageUrl: true,
-                        imageMediaId: true,
-                        candidateImages: true,
-                        videoPrompt: true,
-                        videoUrl: true,
-                        videoMediaId: true,
-                        updatedAt: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
             storyboards: {
               orderBy: { createdAt: 'asc' },
               include: {
@@ -279,17 +253,9 @@ export async function assembleProjectContext(params: {
     },
   })
 
-  const clipSnapshots = (episode?.clips || []).map((clip) => ({
-    clipId: clip.id,
-    summary: clip.summary,
-    screenplayReady: !!clip.screenplay,
-    storyboardReady: !!clip.storyboard,
-    panelCount: clip.storyboard?.panels.length || 0,
-  }))
   const panelSnapshots = (episode?.storyboards || []).flatMap((storyboard) =>
     storyboard.panels.map((panel) => ({
       panelId: panel.id,
-      clipId: storyboard.clipId,
       editScriptId: storyboard.editScriptId,
       storyboardId: storyboard.id,
       panelIndex: panel.panelIndex,
@@ -306,7 +272,6 @@ export async function assembleProjectContext(params: {
   )
   const storyboardCount = episode?.storyboards.length || 0
   const panelCount = panelSnapshots.length
-  const screenplayClipCount = (episode?.clips || []).filter((clip) => !!clip.screenplay).length
   const videoBlockCounts = countEditScriptVideoBlocks(editScript?.videoBlocksJson ?? null)
 
   return {
@@ -316,7 +281,6 @@ export async function assembleProjectContext(params: {
     episodeName: episode?.name || null,
     selectedScopeRef: params.selectedScopeRef || null,
     selectedPanelId: params.selectedPanelId || null,
-    selectedClipId: params.selectedClipId || null,
     selectedAssetId: params.selectedAssetId || null,
     latestArtifacts,
     activePlanRuns: runs.map((run) => ({
@@ -334,8 +298,6 @@ export async function assembleProjectContext(params: {
       episode: episode
         ? {
             novelText: episode.novelText || null,
-            clipCount: episode.clips.length,
-            screenplayClipCount,
             storyboardCount,
             panelCount,
           }
@@ -365,7 +327,6 @@ export async function assembleProjectContext(params: {
             updatedAt: editScript.updatedAt.toISOString(),
           }
         : null,
-      clips: clipSnapshots,
       panels: panelSnapshots,
       approvals: approvals.map((approval) => ({
         id: approval.id,

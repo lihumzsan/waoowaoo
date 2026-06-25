@@ -1,21 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { ProjectClip, ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
+import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
 
 function t(key: string): string {
   return key
-}
-
-function clip(): ProjectClip {
-  return {
-    id: 'clip-1',
-    summary: 'clip',
-    location: null,
-    characters: null,
-    props: null,
-    content: 'clip',
-    screenplay: null,
-  }
 }
 
 function panel(panelNumber: number): ProjectPanel {
@@ -66,7 +54,6 @@ function storyboard(): ProjectStoryboard {
   return {
     id: 'storyboard-1',
     episodeId: 'episode-1',
-    clipId: null,
     editScriptId: 'edit-script-1',
     storyboardTextJson: null,
     panelCount: panels.length,
@@ -131,7 +118,6 @@ describe('video block arrangement action', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyText: 'story',
-      clips: [clip()],
       storyboards: [storyboard()],
       editScript: editScript(),
       savedLayouts: [],

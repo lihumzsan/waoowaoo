@@ -37,8 +37,6 @@ export interface ProjectContextApprovalSummary {
 
 export interface ProjectContextEpisodeSnapshot {
   novelText: string | null
-  clipCount: number
-  screenplayClipCount: number
   storyboardCount: number
   panelCount: number
 }
@@ -66,17 +64,8 @@ export interface ProjectContextEditScriptSnapshot {
   updatedAt: string
 }
 
-export interface ProjectContextClipSnapshot {
-  clipId: string
-  summary: string
-  screenplayReady: boolean
-  storyboardReady: boolean
-  panelCount: number
-}
-
 export interface ProjectContextPanelSnapshot {
   panelId: string
-  clipId: string | null
   editScriptId: string | null
   storyboardId: string
   panelIndex: number
@@ -95,7 +84,6 @@ export interface ProjectContextEpisodeDetailSnapshot {
   episode: ProjectContextEpisodeSnapshot | null
   editScreenplay: ProjectContextEditScreenplaySnapshot | null
   editScript: ProjectContextEditScriptSnapshot | null
-  clips: ProjectContextClipSnapshot[]
   panels: ProjectContextPanelSnapshot[]
   approvals: ProjectContextApprovalSummary[]
 }
@@ -107,7 +95,6 @@ export interface ProjectContextSnapshot {
   episodeName?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
   latestArtifacts: ProjectContextArtifactSummary[]
   activePlanRuns: ProjectContextRunSummary[]

@@ -17,37 +17,6 @@ export async function cloneEpisodeProjectData(params: {
   readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
-  const clips = await params.tx.projectClip.findMany({
-    where: { episodeId: params.sourceEpisodeId },
-    orderBy: { createdAt: 'asc' },
-  })
-  for (const clip of clips) {
-    const createdClip = await params.tx.projectClip.create({
-      data: {
-        episodeId: params.targetEpisodeId,
-        start: clip.start,
-        end: clip.end,
-        duration: clip.duration,
-        summary: clip.summary,
-        location: clip.location,
-        content: clip.content,
-        characters: clip.characters,
-        props: clip.props,
-        endText: clip.endText,
-        shotCount: clip.shotCount,
-        startText: clip.startText,
-        screenplay: clip.screenplay,
-      },
-      select: { id: true },
-    })
-    mapWorkflowLabId({
-      maps: params.maps,
-      scopedMap: params.maps.clipIds,
-      sourceId: clip.id,
-      targetId: createdClip.id,
-    })
-  }
-
   const shots = await params.tx.projectShot.findMany({
     where: { episodeId: params.sourceEpisodeId },
     orderBy: { createdAt: 'asc' },
@@ -56,7 +25,6 @@ export async function cloneEpisodeProjectData(params: {
     await params.tx.projectShot.create({
       data: {
         episodeId: params.targetEpisodeId,
-        clipId: shot.clipId ? params.maps.clipIds.get(shot.clipId) ?? null : null,
         shotId: shot.shotId,
         srtStart: shot.srtStart,
         srtEnd: shot.srtEnd,

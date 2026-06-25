@@ -100,7 +100,6 @@ const MEASURED_NODE_SIZE_EPSILON = 1
 export interface WorkspaceAssistantSelectionContext {
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
-  selectedClipId?: string | null
   selectedAssetId?: string | null
 }
 
@@ -208,7 +207,7 @@ function ProjectWorkspaceCanvasContent({
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, novelText, clips, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const { episodeName, novelText, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editDirectorDecoupage } = useProjectEditDirectorDecoupage(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
@@ -553,7 +552,6 @@ function ProjectWorkspaceCanvasContent({
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
     storyText: novelText,
-    clips,
     locations,
     storyboards,
     shots,
@@ -811,7 +809,6 @@ function ProjectWorkspaceCanvasContent({
       episodeId,
       episodeName,
       storyText: novelText,
-      clips,
       locations,
       storyboards,
       shots,
@@ -833,7 +830,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, clips, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -861,7 +858,6 @@ function ProjectWorkspaceCanvasContent({
     return {
       selectedScopeRef: `${targetType}:${targetId}`,
       selectedPanelId: targetType === 'panel' ? targetId : null,
-      selectedClipId: targetType === 'clip' ? targetId : null,
       selectedAssetId: null,
     }
   }, [selectedNode])

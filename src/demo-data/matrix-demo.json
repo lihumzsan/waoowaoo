@@ -18,12 +18,10 @@
     "audioUrl": null,
     "srtContent": null
   },
-  "clips": [],
   "storyboards": [
     {
       "id": "f3dab54c-0cf2-4393-b030-2a1af8311f04",
       "episodeId": "40e8617c-9c15-4208-9e85-00f08af03121",
-      "clipId": null,
       "editScriptId": "a37d2191-ed39-4188-a70e-f9e68acaf827",
       "storyboardImageUrl": null,
       "createdAt": "2026-05-20T05:05:14.932Z",

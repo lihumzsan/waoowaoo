@@ -188,63 +188,6 @@ export function useUpdateProjectEpisodeField(projectId: string) {
 }
 
 /**
- * 更新 clip 数据
- */
-export function useUpdateProjectClip(projectId: string) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({
-      clipId,
-      data,
-    }: {
-      clipId: string
-      data: Record<string, unknown>
-      episodeId?: string
-    }) =>
-      await requestJsonWithError(
-        `/api/projects/${projectId}/clips/${clipId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        },
-        'update failed',
-      ),
-    onMutate: async (variables) => {
-      if (!variables.episodeId) return { previousEpisode: null, episodeId: null }
-
-      const episodeQueryKey = queryKeys.episodeData(projectId, variables.episodeId)
-      await queryClient.cancelQueries({ queryKey: episodeQueryKey })
-
-      const previousEpisode = queryClient.getQueryData<Record<string, unknown>>(episodeQueryKey)
-      queryClient.setQueryData<Record<string, unknown> | undefined>(episodeQueryKey, (prev) => {
-        if (!prev) return prev
-        const clips = Array.isArray(prev.clips) ? prev.clips : []
-        return {
-          ...prev,
-          clips: clips.map((clip: Record<string, unknown>) =>
-            clip?.id === variables.clipId ? { ...clip, ...variables.data } : clip,
-          ),
-        }
-      })
-
-      return { previousEpisode, episodeId: variables.episodeId }
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previousEpisode && context.episodeId) {
-        queryClient.setQueryData(queryKeys.episodeData(projectId, context.episodeId), context.previousEpisode)
-      }
-    },
-    onSettled: (_data, _error, variables) => {
-      const queryTemplates: Array<readonly unknown[]> = [queryKeys.projectData(projectId)]
-      if (variables.episodeId) queryTemplates.push(queryKeys.episodeData(projectId, variables.episodeId))
-      invalidateQueryTemplates(queryClient, queryTemplates)
-    },
-  })
-}
-
-/**
  * 下载远程文件 blob（避免组件层直接 fetch）
  */
 export function useDownloadRemoteBlob() {

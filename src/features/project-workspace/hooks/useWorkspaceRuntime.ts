@@ -38,8 +38,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
   handleGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
-  handleRegenerateStoryboardText: (storyboardId: string) => Promise<void>
-  handleUpdateClip: (clipId: string, updates: Record<string, unknown>) => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   handleGenerateStoryboardGridImages: (payload: {
@@ -99,8 +97,6 @@ export function useWorkspaceRuntime({
   handleGenerateEditScreenplay,
   handleGenerateEditDirectorDecoupage,
   handleGenerateEditScript,
-  handleRegenerateStoryboardText,
-  handleUpdateClip,
   openAssetLibrary,
   handleGeneratePanelImage,
   handleGenerateStoryboardGridImages,
@@ -143,13 +139,6 @@ export function useWorkspaceRuntime({
     onGenerateEditScreenplay: handleGenerateEditScreenplay,
     onGenerateEditDirectorDecoupage: handleGenerateEditDirectorDecoupage,
     onGenerateEditScript: handleGenerateEditScript,
-    onRegenerateStoryboardText: handleRegenerateStoryboardText,
-    onClipUpdate: (clipId, data) => {
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('onClipUpdate requires a plain object payload')
-      }
-      return handleUpdateClip(clipId, data as Record<string, unknown>)
-    },
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
     onGenerateStoryboardGridImages: handleGenerateStoryboardGridImages,
@@ -185,13 +174,11 @@ export function useWorkspaceRuntime({
     handleSelectPanelCandidate,
     handleCancelPanelCandidate,
     handleGenerateVideo,
-    handleUpdateClip,
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditScreenplay,
     handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
-    handleRegenerateStoryboardText,
     handleArrangeVideoBlocks,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,

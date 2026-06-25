@@ -13,7 +13,17 @@ interface EpisodeSummary {
   name: string
   episodeNumber?: number
   description?: string | null
-  clips?: unknown[]
+  novelText?: string | null
+  editScript?: {
+    content?: string | null
+    scriptText?: string | null
+    screenplay?: string | null
+  } | null
+  editScreenplay?: {
+    content?: string | null
+    scriptText?: string | null
+    screenplay?: string | null
+  } | null
   storyboards?: Array<{
     panels?: ProjectPanel[] | null
   }>
@@ -167,8 +177,9 @@ export default function WorkspaceHeaderShell({
             projectName={projectName}
             episodes={sorted.map((ep) => {
               const episodeArtifacts = resolveEpisodeArtifactReadiness({
-                novelText: null,
-                clips: ep.clips || [],
+                novelText: ep.novelText ?? null,
+                editScript: ep.editScript ?? null,
+                editScreenplay: ep.editScreenplay ?? null,
                 storyboards: ep.storyboards || [],
               })
               return {

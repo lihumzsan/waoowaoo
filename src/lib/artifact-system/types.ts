@@ -8,12 +8,6 @@ export const ARTIFACT_TYPES = {
   ANALYSIS_CHARACTERS: 'analysis.characters',
   ANALYSIS_LOCATIONS: 'analysis.locations',
   ANALYSIS_PROPS: 'analysis.props',
-  CLIP_SPLIT: 'clip.split',
-  CLIP_SCREENPLAY: 'clip.screenplay',
-  STORYBOARD_PHASE1: 'storyboard.phase1',
-  STORYBOARD_PHASE2_CINEMATOGRAPHY: 'storyboard.phase2.cinematography',
-  STORYBOARD_PHASE2_ACTING: 'storyboard.phase2.acting',
-  STORYBOARD_PHASE3_DETAIL: 'storyboard.phase3.detail',
   STORYBOARD_PANEL_SET: 'storyboard.panel_set',
   PANEL_PROMPT: 'panel.prompt',
   PANEL_IMAGE: 'panel.image',
@@ -22,7 +16,7 @@ export const ARTIFACT_TYPES = {
 
 export type ArtifactType = (typeof ARTIFACT_TYPES)[keyof typeof ARTIFACT_TYPES]
 
-export type ArtifactScopeKind = 'project' | 'episode' | 'clip' | 'panel'
+export type ArtifactScopeKind = 'project' | 'episode' | 'panel'
 
 export interface ArtifactRef {
   scope: ArtifactScopeKind

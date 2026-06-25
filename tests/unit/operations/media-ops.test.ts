@@ -122,19 +122,6 @@ describe('media operations', () => {
     }))
   })
 
-  it('regenerate_storyboard_text -> submits REGENERATE_STORYBOARD_TEXT task', async () => {
-    const ops = createMediaOperations()
-    const ctx = buildCtx()
-    await ops.regenerate_storyboard_text.execute(ctx as never, {
-      storyboardId: 'storyboard-1',
-    })
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-      targetType: 'ProjectStoryboard',
-      targetId: 'storyboard-1',
-    }))
-  })
-
   it('modify_storyboard_image -> submits MODIFY_ASSET_IMAGE task', async () => {
     const ops = createMediaOperations()
     const ctx = buildCtx()

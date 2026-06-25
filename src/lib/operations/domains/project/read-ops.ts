@@ -35,13 +35,9 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function parseProjectionScope(scopeRef: string | undefined): { clipId?: string | null; storyboardId?: string | null; panelId?: string | null } | null {
+function parseProjectionScope(scopeRef: string | undefined): { storyboardId?: string | null; panelId?: string | null } | null {
   const normalized = normalizeString(scopeRef)
   if (!normalized) return null
-  if (normalized.startsWith('clip:')) {
-    const clipId = normalized.slice('clip:'.length).trim()
-    return clipId ? { clipId } : null
-  }
   if (normalized.startsWith('storyboard:')) {
     const storyboardId = normalized.slice('storyboard:'.length).trim()
     return storyboardId ? { storyboardId } : null
@@ -109,7 +105,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
         detail: z.enum(['snapshot', 'full']).optional(),
         selectedScopeRef: z.string().optional(),
         selectedPanelId: z.string().optional(),
-        selectedClipId: z.string().optional(),
         selectedAssetId: z.string().optional(),
       }),
       outputSchema: z.unknown(),
@@ -120,7 +115,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           episodeId: ctx.context.episodeId || null,
           selectedScopeRef: normalizeString(input.selectedScopeRef) || ctx.context.selectedScopeRef || null,
           selectedPanelId: normalizeString(input.selectedPanelId) || ctx.context.selectedPanelId || null,
-          selectedClipId: normalizeString(input.selectedClipId) || ctx.context.selectedClipId || null,
           selectedAssetId: normalizeString(input.selectedAssetId) || ctx.context.selectedAssetId || null,
         })
         const snapshot = buildAssistantProjectContextSnapshot(projectContext)

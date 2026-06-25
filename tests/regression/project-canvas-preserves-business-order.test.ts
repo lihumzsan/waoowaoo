@@ -1,23 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { ProjectClip, ProjectPanel, ProjectStoryboard } from '@/types/project'
+import type { ProjectPanel, ProjectStoryboard } from '@/types/project'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
 
 function t(key: string): string {
   return key
-}
-
-function clip(id: string): ProjectClip {
-  return {
-    id,
-    summary: id,
-    location: null,
-    characters: null,
-    props: null,
-    content: id,
-    screenplay: null,
-  }
 }
 
 function panel(id: string, panelIndex: number): ProjectPanel {
@@ -67,7 +55,6 @@ function storyboard(panels: ProjectPanel[]): ProjectStoryboard {
   return {
     id: 'storyboard-1',
     episodeId: 'episode-1',
-    clipId: 'clip-1',
     editScriptId: null,
     storyboardTextJson: null,
     panelCount: panels.length,
@@ -84,7 +71,6 @@ describe('project canvas preserves business order', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'story',
-      clips: [clip('clip-1')],
       storyboards: [storyboard([panel('panel-2', 1), panel('panel-1', 0)])],
       savedLayouts: [
         {

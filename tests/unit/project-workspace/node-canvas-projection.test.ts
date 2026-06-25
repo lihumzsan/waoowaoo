@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  ProjectClip,
   ProjectEditCinematographyShotPlan,
   ProjectEditDirectorDecoupage,
   ProjectEditScreenplay,
@@ -42,18 +41,6 @@ function streamTarget(input: {
     targetType: input.targetType,
     targetId: input.targetId,
     episodeId: 'episode-1',
-  }
-}
-
-function createClip(id: string, content: string): ProjectClip {
-  return {
-    id,
-    summary: `${id} summary`,
-    location: null,
-    characters: null,
-    props: null,
-    content,
-    screenplay: null,
   }
 }
 
@@ -124,7 +111,6 @@ function createPanel(input: Partial<ProjectPanel> & Pick<ProjectPanel, 'id' | 'p
 
 function createStoryboard(input: {
   readonly id: string
-  readonly clipId?: string | null
   readonly editScriptId?: string | null
   readonly panels: ProjectPanel[]
   readonly photographyPlan?: string | null
@@ -133,7 +119,6 @@ function createStoryboard(input: {
   return {
     id: input.id,
     episodeId: 'episode-1',
-    clipId: input.clipId ?? null,
     editScriptId: input.editScriptId ?? null,
     storyboardTextJson: null,
     panelCount: input.panels.length,
@@ -311,7 +296,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -321,18 +305,13 @@ describe('workspace node canvas projection', () => {
     expect(projection.edges).toEqual([])
   })
 
-  it('projects real story, clips, and shots without old video fallback nodes', () => {
+  it('projects real story and shots without old video fallback nodes', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [
-        createClip('clip-1', 'first clip content'),
-        createClip('clip-2', 'second clip content'),
-      ],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
           panels: [
             createPanel({
               id: 'panel-2',
@@ -366,19 +345,10 @@ describe('workspace node canvas projection', () => {
 
     expect(projection.nodes.map((node) => node.id)).toEqual([
       'analysis:episode-1',
-      'clip:clip-1',
-      'clip:clip-2',
       'shot:panel-1',
       'shot:panel-2',
     ])
-    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('analysis:episode-1->clip:clip-1')
-    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('clip:clip-1->shot:panel-1')
-
-    const clipNode = projection.nodes.find((node) => node.id === 'clip:clip-1')
-    expect(clipNode?.data.action).toEqual({
-      type: 'regenerate_storyboard_text',
-      storyboardId: 'storyboard-1',
-    })
+    expect(projection.edges.map((edge) => `${edge.source}->${edge.target}`)).toContain('analysis:episode-1->shot:panel-1')
 
     const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-1')
     expect(shotNode?.data.action).toEqual({ type: 'generate_image', panelId: 'panel-1' })
@@ -396,7 +366,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editScript,
@@ -454,7 +423,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editScript: null,
@@ -490,7 +458,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       savedLayouts: [],
@@ -515,7 +482,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editDirectorDecoupage,
@@ -577,7 +543,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editScript,
@@ -679,7 +644,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       savedLayouts: [],
@@ -710,7 +674,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editScript,
@@ -732,7 +695,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -782,7 +744,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [],
       storyboards: [],
       editScriptPending: true,
       savedLayouts: [],
@@ -811,7 +772,6 @@ describe('workspace node canvas projection', () => {
     const pendingProjection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editDirectorDecoupage,
@@ -822,7 +782,6 @@ describe('workspace node canvas projection', () => {
     const generatingProjection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editDirectorDecoupage,
@@ -850,7 +809,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [],
       storyboards: [],
       streamTargets: [
         streamTarget({
@@ -878,7 +836,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       editScreenplay,
       editScript,
@@ -915,7 +872,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [],
       storyboards: [],
       streamTargets: [
         streamTarget({
@@ -939,7 +895,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [],
       storyboards: [],
       activeAssistantOperationId: 'generate_edit_screenplay',
       savedLayouts: [],
@@ -958,7 +913,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -1002,7 +956,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -1058,7 +1011,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1110,7 +1062,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1150,7 +1101,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1188,7 +1138,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1292,7 +1241,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1346,7 +1294,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1385,11 +1332,9 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
           panels: [
             createPanel({ id: 'panel-late', panelIndex: 9, panelNumber: 9 }),
             createPanel({ id: 'panel-early', panelIndex: 0, panelNumber: 1 }),
@@ -1426,11 +1371,9 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
           panels,
         }),
       ],
@@ -1451,11 +1394,9 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
           panels: [
             createPanel({ id: 'panel-1', panelIndex: 0 }),
             createPanel({ id: 'panel-2', panelIndex: 1 }),
@@ -1511,7 +1452,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -1557,32 +1497,6 @@ describe('workspace node canvas projection', () => {
   })
 
   it('projects full visual business details into typed node data', () => {
-    const screenplay = JSON.stringify({
-      scenes: [
-        {
-          scene_number: 1,
-          heading: { int_ext: 'EXT', location: '城市街道_雨夜', time: '夜晚' },
-          description: '雨夜街道',
-          characters: ['小机器人', '小女孩'],
-          content: [
-            { type: 'action', text: '小机器人举起发光路灯。' },
-            { type: 'dialogue', character: '小女孩', text: '我们到家了吗？' },
-          ],
-        },
-      ],
-    })
-    const clip: ProjectClip = {
-      ...createClip('clip-rich', 'original clip text'),
-      summary: 'rich summary',
-      location: '["城市街道_雨夜"]',
-      characters: JSON.stringify([{ name: '小机器人', appearance: '初始形象' }]),
-      props: '["发光路灯"]',
-      screenplay,
-      start: 2,
-      end: 8,
-      duration: 6,
-      shotCount: 5,
-    }
     const panel = createPanel({
       id: 'panel-rich',
       panelIndex: 0,
@@ -1624,7 +1538,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'story',
-      clips: [clip],
       storyboards: [{
         ...createStoryboard({ id: 'storyboard-rich', editScriptId: 'edit-rich', panels: [panel] }),
         storyboardTextJson: 'storyboard json',
@@ -1647,18 +1560,6 @@ describe('workspace node canvas projection', () => {
       savedLayouts: [],
       translate: t,
     })
-
-    const clipNode = projection.nodes.find((node) => node.id === 'clip:clip-rich')
-    expect(clipNode?.data.body).toContain('"scenes"')
-    expect(clipNode?.data.scriptDetails?.screenplayText).toBe(screenplay)
-    expect(clipNode?.data.scriptDetails?.originalText).toBe('original clip text')
-    expect(clipNode?.data.scriptDetails?.characters).toEqual([{ name: '小机器人', appearance: '初始形象' }])
-    expect(clipNode?.data.scriptDetails?.locations).toEqual(['城市街道_雨夜'])
-    expect(clipNode?.data.scriptDetails?.props).toEqual(['发光路灯'])
-    expect(clipNode?.data.scriptDetails?.scenes[0]?.lines).toEqual([
-      { kind: 'action', speaker: null, text: '小机器人举起发光路灯。' },
-      { kind: 'dialogue', speaker: '小女孩', text: '我们到家了吗？' },
-    ])
 
     const shotNode = projection.nodes.find((node) => node.id === 'shot:panel-rich')
     expect(shotNode?.data.shotDetails).toMatchObject({
@@ -1722,7 +1623,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -1909,7 +1809,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: 'A real story',
-      clips: [createClip('clip-1', 'clip content')],
       storyboards: [],
       editScript,
       savedLayouts: [],
@@ -2000,7 +1899,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-preview',
@@ -2053,7 +1951,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -2202,7 +2099,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -2292,7 +2188,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -2361,7 +2256,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
@@ -2427,7 +2321,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -2526,7 +2419,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -2561,7 +2453,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -2607,7 +2498,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [],
       savedLayouts: [],
       translate: t,
@@ -2644,7 +2534,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-panel-gen',
@@ -2724,7 +2613,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial',
@@ -2913,7 +2801,7 @@ describe('workspace node canvas projection', () => {
       target: 'space-consistency:storyboard-spatial',
     }))
     expect(projection.edges).toContainEqual(expect.objectContaining({
-      id: 'edge:clip-shot:panel-spatial-1',
+      id: 'edge:storyboard-shot:panel-spatial-1',
       source: 'space-consistency:storyboard-spatial',
       target: 'shot:panel-spatial-1',
     }))
@@ -2923,7 +2811,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-processing',
@@ -2957,7 +2844,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-ready',
@@ -3011,7 +2897,6 @@ describe('workspace node canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyText: '',
-      clips: [],
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-stream',

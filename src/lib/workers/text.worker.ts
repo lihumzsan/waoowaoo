@@ -9,23 +9,11 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import { resolveInsertPanelUserInput } from '@/lib/project-workflow/insert-panel'
 import { buildInsertPanelLocationsDescription } from '@/lib/project-workflow/insert-panel-prompt-context'
-import {
-  executePhase1,
-  executePhase2,
-  executePhase2Acting,
-  executePhase3,
-  type ActingDirection,
-  type CharacterAsset,
-  type LocationAsset,
-  type PhotographyRule,
-} from '@/lib/storyboard-phases'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { reportTaskProgress, reportTaskStreamChunk, withTaskLifecycle } from './shared'
 import { assertTaskActive } from './utils'
 import { handleAssetHubAIDesignTask } from './handlers/asset-hub-ai-design'
-import { handleClipsBuildTask } from './handlers/clips-build'
 import { handleAnalyzeNovelTask } from './handlers/analyze-novel'
-import { handleScreenplayConvertTask } from './handlers/screenplay-convert'
 import { handleEpisodeSplitTask } from './handlers/episode-split'
 import { handleAnalyzeGlobalTask } from './handlers/analyze-global'
 import { handleAssetHubAIModifyTask } from './handlers/asset-hub-ai-modify'
@@ -45,7 +33,6 @@ import {
   handleEditScriptStoryboardCameraPlanTask,
   handleEditScriptStoryboardPrepareTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
-import { canonicalizeStoryboardPanels } from '@/lib/storyboard-character-bindings'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
@@ -251,199 +238,6 @@ function parsePanelProps(panel: Record<string, unknown> | null | undefined): str
   }
 }
 
-async function runStoryboardPhasesForClip(params: {
-  clip: {
-    id: string
-    content: string | null
-    characters: string | null
-    location: string | null
-    props?: string | null
-    screenplay: string | null
-  }
-  projectData: {
-    analysisModel: string
-    characters: CharacterAsset[]
-    locations: LocationAsset[]
-    props?: Array<{ name: string; summary?: string | null }>
-  }
-  projectId: string
-  projectName: string
-  userId: string
-  locale: TaskJobData['locale']
-}) {
-  const session = { user: { id: params.userId, name: 'Worker' } }
-  const phase1 = await executePhase1(
-    params.clip,
-    params.projectData,
-    session,
-    params.projectId,
-    params.projectName,
-    params.locale,
-  )
-  const [phase2, phase2Acting, phase3] = await Promise.all([
-    executePhase2(
-      params.clip,
-      phase1.planPanels || [],
-      params.projectData,
-      session,
-      params.projectId,
-      params.projectName,
-      params.locale,
-    ),
-    executePhase2Acting(
-      params.clip,
-      phase1.planPanels || [],
-      params.projectData,
-      session,
-      params.projectId,
-      params.projectName,
-      params.locale,
-    ),
-    executePhase3(
-      params.clip,
-      phase1.planPanels || [],
-      [],
-      params.projectData,
-      session,
-      params.projectId,
-      params.projectName,
-      params.locale,
-    ),
-  ])
-
-  const photographyRules: PhotographyRule[] = phase2.photographyRules || []
-  const actingDirections: ActingDirection[] = phase2Acting.actingDirections || []
-
-  const finalPanels = canonicalizeStoryboardPanels((phase3.finalPanels || []).map((panel, index) => {
-    const rules = photographyRules.find((r) => r.panel_number === panel.panel_number) || photographyRules[index]
-    const acting = actingDirections.find((a) => a.panel_number === panel.panel_number) || actingDirections[index]
-
-    return {
-      ...panel,
-      ...(rules
-        ? {
-          photographyPlan: {
-            composition: rules.composition,
-            lighting: rules.lighting,
-            colorPalette: rules.color_palette,
-            atmosphere: rules.atmosphere,
-            technicalNotes: rules.technical_notes,
-          },
-        }
-        : {}),
-      ...(acting?.characters ? { actingNotes: acting.characters } : {}),
-    }
-  }), params.projectData.characters || [], `legacy:${params.clip.id || 'clip'}:final`)
-
-  return finalPanels
-}
-
-async function handleRegenerateStoryboardTextTask(job: Job<TaskJobData>) {
-  const payload = (job.data.payload || {}) as AnyObj
-  const projectId = job.data.projectId
-  const storyboardId = typeof payload.storyboardId === 'string' ? payload.storyboardId : job.data.targetId
-  const userId = job.data.userId
-
-  if (!storyboardId) throw new Error('regenerate_storyboard_text requires storyboardId')
-
-  const storyboard = await prisma.projectStoryboard.findUnique({
-    where: { id: storyboardId },
-    include: { clip: true, episode: true },
-  })
-  if (!storyboard) throw new Error('Storyboard not found')
-  if (!storyboard.clip) throw new Error('Storyboard clip not found')
-  const clip = storyboard.clip
-
-  const project = await prisma.project.findUnique({ where: { id: projectId } })
-  if (!project) throw new Error('Project not found')
-
-  const projectWorkflow = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      characters: { include: { appearances: { orderBy: { appearanceIndex: 'asc' } } } },
-      locations: { include: { images: { orderBy: { imageIndex: 'asc' } } } },
-    },
-  })
-  if (!projectWorkflow) throw new Error('Project not found')
-  if (!projectWorkflow.analysisModel) throw new Error('Analysis model not configured')
-  const projectData = {
-    ...projectWorkflow,
-    analysisModel: projectWorkflow.analysisModel,
-    locations: projectWorkflow.locations.filter((item) => readAssetKind(item as unknown as Record<string, unknown>) !== 'prop'),
-    props: projectWorkflow.locations
-      .filter((item) => readAssetKind(item as unknown as Record<string, unknown>) === 'prop')
-      .map((item) => ({ name: item.name, summary: item.summary })),
-  }
-
-  await reportTaskProgress(job, 20, { stage: 'regenerate_storyboard_prepare', storyboardId })
-  const regenerateStreamContext = createWorkerLLMStreamContext(job, 'regenerate_storyboard')
-  const regenerateCallbacks = createWorkerLLMStreamCallbacks(job, regenerateStreamContext)
-
-  const finalPanels = await withInternalLLMStreamCallbacks(
-    regenerateCallbacks,
-    async () =>
-      await runStoryboardPhasesForClip({
-        clip: {
-          ...clip,
-          props: readNullableText(clip as unknown as Record<string, unknown>, 'props'),
-        },
-        projectData,
-        projectId,
-        projectName: project.name,
-        userId,
-        locale: job.data.locale,
-      }),
-  )
-  await regenerateCallbacks.flush()
-
-  await reportTaskProgress(job, 85, { stage: 'regenerate_storyboard_persist', storyboardId })
-
-  await assertTaskActive(job, 'regenerate_storyboard_transaction')
-  await prisma.$transaction(async (tx) => {
-    const panelModel = tx.projectPanel as unknown as {
-      create: (args: { data: Record<string, unknown> }) => Promise<unknown>
-    }
-    await tx.projectPanel.deleteMany({ where: { storyboardId } })
-    await tx.projectStoryboard.update({
-      where: { id: storyboardId },
-      data: { panelCount: finalPanels.length, updatedAt: new Date() },
-    })
-
-    for (let i = 0; i < finalPanels.length; i++) {
-      const panel = finalPanels[i]
-      const srtRange = Array.isArray(panel.srt_range) ? panel.srt_range : []
-      const srtStart = typeof srtRange[0] === 'number' ? srtRange[0] : null
-      const srtEnd = typeof srtRange[1] === 'number' ? srtRange[1] : null
-      await panelModel.create({
-        data: {
-          storyboardId,
-          panelIndex: i,
-          panelNumber: panel.panel_number || i + 1,
-          shotType: panel.shot_type || null,
-          cameraMove: panel.camera_move || null,
-          description: panel.description || null,
-          location: panel.location || null,
-          characters: panel.characters ? JSON.stringify(panel.characters) : null,
-          props: panel.props ? JSON.stringify(panel.props) : null,
-          srtStart,
-          srtEnd,
-          duration: panel.duration || null,
-          videoPrompt: panel.video_prompt || null,
-          sceneType: typeof panel.scene_type === 'string' ? panel.scene_type : null,
-          srtSegment: panel.source_text || null,
-          photographyRules: panel.photographyPlan ? JSON.stringify(panel.photographyPlan) : null,
-          actingNotes: panel.actingNotes ? JSON.stringify(panel.actingNotes) : null,
-        },
-      })
-    }
-  }, { timeout: 30000 })
-
-  return {
-    storyboardId,
-    panelCount: finalPanels.length,
-  }
-}
-
 async function handleInsertPanelTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as AnyObj
   const storyboardId = typeof payload.storyboardId === 'string' ? payload.storyboardId : job.data.targetId
@@ -457,7 +251,6 @@ async function handleInsertPanelTask(job: Job<TaskJobData>) {
   const storyboard = await prisma.projectStoryboard.findUnique({
     where: { id: storyboardId },
     include: {
-      clip: true,
       panels: { orderBy: { panelIndex: 'asc' } },
     },
   })
@@ -671,10 +464,6 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEditScriptStoryboardCameraPlanTask(job)
     case TASK_TYPE.ANALYZE_NOVEL:
       return await handleAnalyzeNovelTask(job)
-    case TASK_TYPE.CLIPS_BUILD:
-      return await handleClipsBuildTask(job)
-    case TASK_TYPE.SCREENPLAY_CONVERT:
-      return await handleScreenplayConvertTask(job)
     case TASK_TYPE.EPISODE_SPLIT_LLM:
       return await handleEpisodeSplitTask(job)
     case TASK_TYPE.ANALYZE_GLOBAL:
@@ -709,8 +498,6 @@ async function processTextTask(job: Job<TaskJobData>) {
     case TASK_TYPE.REFERENCE_TO_CHARACTER:
     case TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER:
       return await handleReferenceToCharacterTask(job)
-    case TASK_TYPE.REGENERATE_STORYBOARD_TEXT:
-      return await handleRegenerateStoryboardTextTask(job)
     case TASK_TYPE.INSERT_PANEL:
       return await handleInsertPanelTask(job)
     default:

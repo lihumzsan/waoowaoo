@@ -144,47 +144,6 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
         })
       },
     }),
-    write_screenplay: defineOperation({
-      id: 'write_screenplay',
-      summary: 'Write screenplay scenes from existing clip artifacts.',
-      intent: 'act',
-      effects: EFFECTS_BILLABLE_LONG_RUNNING,
-      confirmation: {
-        required: true,
-        summary: '将根据片段写成剧本（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        episodeId: z.string().min(1),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const modelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
-        if (!modelConfig.analysisModel) {
-          throw new ApiError('MISSING_CONFIG')
-        }
-        const payload: Record<string, unknown> = {
-          ...(input as unknown as Record<string, unknown>),
-          analysisModel: modelConfig.analysisModel,
-          displayMode: 'detail',
-        }
-        return await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: input.episodeId,
-          type: TASK_TYPE.SCREENPLAY_CONVERT,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-          operationId: 'write_screenplay',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload,
-          dedupeKey: `write_screenplay:${input.episodeId}`,
-          priority: 2,
-        })
-      },
-    }),
     ai_modify_appearance: defineOperation({
       id: 'ai_modify_appearance',
       summary: 'Submit AI modify appearance task.',

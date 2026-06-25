@@ -65,9 +65,6 @@ describe('AssetToolbar', () => {
         isAnalyzingAssets: false,
         isGlobalAnalyzing: false,
         onGlobalAnalyze: () => undefined,
-        episodeId: null,
-        onEpisodeChange: () => undefined,
-        episodes: [],
       }),
     )
 

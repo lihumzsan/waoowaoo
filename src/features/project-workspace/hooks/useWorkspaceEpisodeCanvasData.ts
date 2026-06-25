@@ -1,7 +1,7 @@
 'use client'
 
 import { useEpisodeData } from '@/lib/query/hooks'
-import type { ProjectClip, ProjectEditScript, ProjectFinalVideo, ProjectShot, ProjectStoryboard, ProjectVideoGroup } from '@/types/project'
+import type { ProjectEditScript, ProjectFinalVideo, ProjectShot, ProjectStoryboard, ProjectVideoGroup } from '@/types/project'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 
 interface EpisodeCanvasPayload {
@@ -9,7 +9,6 @@ interface EpisodeCanvasPayload {
   novelText?: string | null
   audioUrl?: string | null
   srtContent?: string | null
-  clips?: ProjectClip[]
   storyboards?: ProjectStoryboard[]
   shots?: ProjectShot[]
   editScript?: ProjectEditScript | null
@@ -27,7 +26,6 @@ export function useWorkspaceEpisodeCanvasData() {
     novelText: payload?.novelText || '',
     audioUrl: payload?.audioUrl || null,
     srtContent: payload?.srtContent || null,
-    clips: payload?.clips || [],
     storyboards: payload?.storyboards || [],
     shots: payload?.shots || [],
     editScript: payload?.editScript || null,

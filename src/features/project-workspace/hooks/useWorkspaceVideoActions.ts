@@ -2,7 +2,7 @@
 
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { useGenerateVideo, useBatchGenerateVideos, useGenerateBgmScore, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
-import { useUpdateProjectPanelVideoPrompt, useUpdateProjectClip, useUpdateProjectConfig } from '@/lib/query/hooks'
+import { useUpdateProjectPanelVideoPrompt, useUpdateProjectConfig } from '@/lib/query/hooks'
 import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
@@ -26,12 +26,6 @@ function getErrorMessage(err: unknown): string {
   return String(err)
 }
 
-function assertClipUpdateData(data: unknown): asserts data is Record<string, unknown> {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new TypeError('Clip update payload must be an object')
-  }
-}
-
 export function useWorkspaceVideoActions({
   projectId,
   episodeId,
@@ -44,7 +38,6 @@ export function useWorkspaceVideoActions({
   const generateBgmScoreMutation = useGenerateBgmScore(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId, episodeId || null)
-  const updateProjectClipMutation = useUpdateProjectClip(projectId)
   const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
 
   const handleGenerateVideo = async (
@@ -163,20 +156,6 @@ export function useWorkspaceVideoActions({
     }
   }
 
-  const handleUpdateClip = async (clipId: string, data: unknown) => {
-    if (!episodeId) {
-      _ulogError('No episode selected for clip update')
-      return
-    }
-    try {
-      assertClipUpdateData(data)
-      await updateProjectClipMutation.mutateAsync({ clipId, data, episodeId })
-    } catch (err: unknown) {
-      _ulogError(`${t('execution.updateFailed')}:`, err)
-      alert(`${t('execution.saveFailed')}: ${getErrorMessage(err)}`)
-    }
-  }
-
   return {
     handleGenerateVideo,
     handleGenerateAllVideos,
@@ -184,6 +163,5 @@ export function useWorkspaceVideoActions({
     handleRenderFinalVideo,
     handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel,
-    handleUpdateClip,
   }
 }

@@ -183,40 +183,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
         })
       },
     }),
-    split_clips: defineOperation({
-      id: 'split_clips',
-      summary: 'Split an episode story into ordered clip artifacts.',
-      intent: 'act',
-      effects: EFFECTS_BILLABLE_LONG_RUNNING,
-      confirmation: {
-        required: true,
-        summary: '将生成 clips（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        episodeId: z.string().min(1),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) =>
-        submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: input.episodeId,
-          type: TASK_TYPE.CLIPS_BUILD,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-          operationId: 'split_clips',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload: {
-            ...(input as unknown as Record<string, unknown>),
-            displayMode: 'detail',
-          },
-          dedupeKey: `split_clips:${input.episodeId}`,
-          priority: 1,
-        }),
-    }),
     episode_split_llm: defineOperation({
       id: 'episode_split_llm',
       summary: 'Submit episode split (LLM) task.',

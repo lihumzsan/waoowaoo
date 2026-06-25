@@ -35,21 +35,12 @@ async function listLatestArtifactsForContext(params: {
 async function resolveEpisodeProgress(episodeId: string | null): Promise<ProjectProjectionProgress> {
   if (!episodeId) {
     return {
-      clipCount: 0,
-      screenplayClipCount: 0,
       storyboardCount: 0,
       panelCount: 0,
     }
   }
 
-  const [clipCount, screenplayClipCount, storyboardCount, panelCount] = await Promise.all([
-    prisma.projectClip.count({ where: { episodeId } }),
-    prisma.projectClip.count({
-      where: {
-        episodeId,
-        screenplay: { not: null },
-      },
-    }),
+  const [storyboardCount, panelCount] = await Promise.all([
     prisma.projectStoryboard.count({
       where: {
         episodeId,
@@ -65,8 +56,6 @@ async function resolveEpisodeProgress(episodeId: string | null): Promise<Project
   ])
 
   return {
-    clipCount,
-    screenplayClipCount,
     storyboardCount,
     panelCount,
   }

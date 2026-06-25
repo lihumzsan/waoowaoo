@@ -6,8 +6,6 @@ import type {
 } from '@/lib/project-context/types'
 
 export interface ProjectProjectionProgress {
-  clipCount: number
-  screenplayClipCount: number
   storyboardCount: number
   panelCount: number
 }
@@ -27,7 +25,6 @@ export interface ProjectProjectionLite {
 
 export interface ProjectProjectionPanelSnapshot {
   panelId: string
-  clipId: string | null
   editScriptId: string | null
   storyboardId: string
   panelIndex: number
@@ -53,12 +50,6 @@ export interface ProjectProjectionPanelSnapshot {
 
 export interface ProjectProjectionFull extends ProjectProjectionLite {
   episodeDetail: null | {
-    clips: Array<{
-      clipId: string
-      summary: string
-      storyboardId: string | null
-      panelCount: number
-    }>
     panels: ProjectProjectionPanelSnapshot[]
     panelLimit: number
     totalPanelCount: number

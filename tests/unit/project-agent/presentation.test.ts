@@ -86,8 +86,6 @@ describe('project agent presentation', () => {
       episodeDetail: {
         episode: {
           novelText: 'text',
-          clipCount: 2,
-          screenplayClipCount: 2,
           storyboardCount: 1,
           panelCount: 3,
         },
@@ -112,19 +110,9 @@ describe('project agent presentation', () => {
           pendingRequirementCount: 1,
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
-        clips: [
-          {
-            clipId: 'clip-1',
-            summary: 'summary',
-            screenplayReady: true,
-            storyboardReady: true,
-            panelCount: 3,
-          },
-        ],
         panels: [
           {
             panelId: 'panel-1',
-            clipId: 'clip-1',
             editScriptId: null,
             storyboardId: 'storyboard-1',
             panelIndex: 0,

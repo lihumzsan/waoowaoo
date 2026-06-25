@@ -106,7 +106,7 @@ describe('api contract - direct submit text routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(DIRECT_TEXT_CASES.length).toBe(1)
+    expect(DIRECT_TEXT_CASES.length).toBe(0)
   })
 
   for (const routeCase of DIRECT_TEXT_CASES) {

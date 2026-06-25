@@ -62,29 +62,25 @@ describe('assembleProjectContext', () => {
       id: 'episode-1',
       name: 'e',
       novelText: null,
-      clips: [
+      storyboards: [
         {
-          id: 'clip-1',
-          summary: 's',
-          screenplay: null,
-          storyboard: {
-            id: 'storyboard-1',
-            panels: [
-              {
-                id: 'panel-1',
-                panelIndex: 0,
-                description: 'd',
-                imagePrompt: 'ip',
-                videoPrompt: null,
-                imageUrl: 'https://img',
-                imageMediaId: 'm1',
-                candidateImages: '[]',
-                videoUrl: 'https://vid',
-                videoMediaId: 'vm1',
-                updatedAt: new Date('2026-04-20T00:00:00.000Z'),
-              },
-            ],
-          },
+          id: 'storyboard-1',
+          editScriptId: null,
+          panels: [
+            {
+              id: 'panel-1',
+              panelIndex: 0,
+              description: 'd',
+              imagePrompt: 'ip',
+              videoPrompt: null,
+              imageUrl: 'https://img',
+              imageMediaId: 'm1',
+              candidateImages: '[]',
+              videoUrl: 'https://vid',
+              videoMediaId: 'vm1',
+              updatedAt: new Date('2026-04-20T00:00:00.000Z'),
+            },
+          ],
         },
       ],
     })
@@ -154,7 +150,7 @@ describe('assembleProjectContext', () => {
     expect(context.episodeDetail?.panels).toEqual([
       {
         panelId: 'panel-1',
-        clipId: 'clip-1',
+        editScriptId: null,
         storyboardId: 'storyboard-1',
         panelIndex: 0,
         description: 'd',

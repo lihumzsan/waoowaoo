@@ -17,21 +17,23 @@ export async function seedMinimalDomainState() {
   const novelProject = await createFixtureNovelProject(project.id)
   const episode = await createFixtureEpisode(novelProject.id)
 
-  const clip = await prisma.projectClip.create({
+  const editScript = await prisma.projectEditScript.create({
     data: {
+      projectId: project.id,
       episodeId: episode.id,
-      summary: 'seed clip',
-      content: 'seed clip content',
-      screenplay: 'seed screenplay',
-      location: 'Office',
-      characters: JSON.stringify(['Narrator']),
+      userPrompt: 'seed prompt',
+      screenplayText: 'seed screenplay',
+      title: 'seed edit script',
+      durationSec: 30,
+      shotCount: 1,
+      shotsJson: [{ shotNumber: 1, durationSec: 3, visibleAction: 'seed panel' }],
     },
   })
 
   const storyboard = await prisma.projectStoryboard.create({
     data: {
       episodeId: episode.id,
-      clipId: clip.id,
+      editScriptId: editScript.id,
       panelCount: 1,
     },
   })
@@ -108,16 +110,6 @@ export async function seedMinimalDomainState() {
   const foreignStoryboard = await prisma.projectStoryboard.create({
     data: {
       episodeId: episode.id,
-      clipId: (await prisma.projectClip.create({
-        data: {
-          episodeId: episode.id,
-          summary: 'foreign clip',
-          content: 'foreign clip content',
-          screenplay: 'foreign screenplay',
-          location: 'Office',
-          characters: JSON.stringify(['Narrator']),
-        },
-      })).id,
       panelCount: 1,
     },
   })
@@ -141,7 +133,7 @@ export async function seedMinimalDomainState() {
     project,
     novelProject,
     episode,
-    clip,
+    editScript,
     storyboard,
     panel,
     secondaryPanel,

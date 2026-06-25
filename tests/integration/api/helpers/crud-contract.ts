@@ -33,11 +33,6 @@ export const prismaMock = {
     updateMany: vi.fn(),
     update: vi.fn(),
   },
-  projectClip: {
-    findFirst: vi.fn(),
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
   projectStoryboard: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -107,14 +102,6 @@ export function resetCrudMocks() {
     id: 'location-1',
     selectedImageId: 'img-1',
   })
-  prismaMock.projectClip.update.mockResolvedValue({
-    id: 'clip-1',
-    characters: JSON.stringify(['Alice']),
-    location: 'Old Town',
-    props: JSON.stringify(['Bronze Dagger']),
-    content: 'clip content',
-    screenplay: JSON.stringify({ scenes: [{ id: 1 }] }),
-  })
   prismaMock.projectStoryboard.findFirst.mockResolvedValue({
     id: 'storyboard-1',
     projectId: 'project-1',
@@ -126,10 +113,6 @@ export function resetCrudMocks() {
   prismaMock.projectStoryboard.update.mockResolvedValue({
     id: 'storyboard-1',
     panelCount: 1,
-  })
-  prismaMock.projectClip.findFirst.mockResolvedValue({
-    id: 'clip-1',
-    episodeId: 'episode-1',
   })
   prismaMock.projectEpisode.findFirst.mockResolvedValue({
     id: 'episode-1',

@@ -130,7 +130,6 @@
     "summary": "{nodes} 个节点 · {edges} 条关系",
     "nodeTypes": {
       "story": "故事",
-      "scriptClip": "剧本",
       "storyboardGroup": "分镜组",
       "panelImage": "图片",
       "videoPanel": "视频",
@@ -138,7 +137,6 @@
     },
     "nodeTitles": {
       "story": "故事",
-      "scriptClip": "第 {index} 段剧本",
       "storyboardGroup": "第 {index} 组分镜",
       "panelImage": "第 {index} 个镜头",
       "videoPanel": "第 {index} 个镜头视频",
@@ -153,8 +151,7 @@
     },
     "nodeDescriptions": {
       "story": "剧集原始素材与创作方向。",
-      "scriptClip": "由故事生成的剧本片段。",
-      "storyboardGroup": "与一个剧本片段对应的分镜组。",
+      "storyboardGroup": "与剪辑先行表对应的分镜组。",
       "panelImage": "图片阶段的镜头节点，下一阶段会迁移操作入口。",
       "videoPanel": "挂在来源图片镜头后的成片节点。",
       "timeline": "生成视频素材最终汇入的成片目标。"
@@ -317,14 +314,12 @@
         "soundFilterPrompt": "声音滤镜",
         "hardBans": "硬禁用项",
         "selectAspectRatio": "选择画面比例",
-        "originalClip": "原始片段",
         "scene": "场景 {index}",
         "characters": "出场角色",
         "scenes": "场景",
         "locations": "场景",
         "location": "场景",
         "props": "道具",
-        "clipMeta": "片段信息",
         "timeRange": "时间",
         "duration": "时长",
         "shotCount": "镜头数",
@@ -513,7 +508,6 @@
         "fields": {
           "summary": "摘要",
           "duration": "时长",
-          "originalClip": "原始片段",
           "screenplay": "剧本 JSON",
           "locations": "场景",
           "characters": "角色",
@@ -691,13 +685,8 @@
         "analysis": {
           "title": "故事结构分析",
           "eyebrow": "业务状态",
-          "body": "已识别 {clips} 段剧本、{storyboards} 组分镜、{panels} 个镜头。",
+          "body": "已识别 {storyboards} 组分镜、{panels} 个镜头。",
           "meta": "人物 / 场景 / 节奏 / 视觉方向"
-        },
-        "clip": {
-          "title": "第 {index} 段剧本",
-          "eyebrow": "剧本片段",
-          "meta": "clip #{index}"
         },
         "shot": {
           "title": "镜头 {index}",
@@ -817,6 +806,130 @@
           "body": "本片需要预生成的角色与场景资产。点击卡片查看详情并单独重新生成，点击图片上的放大按钮查看大图。",
           "meta": "{characters} 个人物 · {locations} 个场景"
         }
+      }
+    }
+  },
+  "rightRailLab": {
+    "meta": {
+      "title": "右栏整高 Agent 布局实验",
+      "subtitle": "Agent 对话贴右边整高占满,资产库从顶部挪到画布侧边",
+      "badge": "独立模拟测试页",
+      "note": "纯前端 mock 数据,不接任何项目接口"
+    },
+    "nav": {
+      "canvas": "画布",
+      "assets": "资产",
+      "timeline": "时间线",
+      "settings": "配置"
+    },
+    "controls": {
+      "assetPlacement": {
+        "label": "资产库位置",
+        "left": "左侧侧栏",
+        "bottom": "底部栏"
+      },
+      "railWidth": {
+        "label": "右栏宽度",
+        "standard": "标准",
+        "wide": "加宽"
+      }
+    },
+    "badges": {
+      "fullHeight": "整高右栏",
+      "edgeToEdge": "贴边无浮窗"
+    },
+    "header": {
+      "project": "示例项目 · 雨夜追踪",
+      "episode": "第 1 集"
+    },
+    "agent": {
+      "title": "项目 Agent",
+      "subtitle": "整高右栏,从顶到底承载完整对话",
+      "contextTitle": "当前上下文",
+      "context": {
+        "scope": {
+          "label": "作用域",
+          "value": "第 1 集 / 资产绑定"
+        },
+        "selection": {
+          "label": "选中",
+          "value": "核心剪辑表"
+        },
+        "mode": {
+          "label": "权限",
+          "value": "执行前确认"
+        }
+      },
+      "messages": {
+        "user": "把资产库从顶部挪走,右侧 agent 占满整个高度。",
+        "assistant": "已切换为整高右栏:顶部只留项目信息,资产库下沉到画布侧边。",
+        "task": "接下来可以对比左侧侧栏与底部栏两种资产库摆法。"
+      },
+      "composer": "这是只读模拟输入框,用于观察整高右栏的空间占用。",
+      "permission": "执行前确认",
+      "send": "发送"
+    },
+    "assetDock": {
+      "title": "资产库",
+      "subtitle": "从顶部入口挪到画布侧边"
+    },
+    "assets": {
+      "lead": {
+        "title": "主角 · 林岚",
+        "meta": "人物 / 3 张参考"
+      },
+      "city": {
+        "title": "雨夜天台",
+        "meta": "场景 / 空间档案"
+      },
+      "device": {
+        "title": "信号解码器",
+        "meta": "道具 / 特写一致性"
+      },
+      "vehicle": {
+        "title": "磁悬浮列车",
+        "meta": "环境 / 运动镜头"
+      }
+    },
+    "canvas": {
+      "viewport": "无限画布视口",
+      "controls": {
+        "plus": "放大",
+        "minus": "缩小",
+        "fit": "适配画布",
+        "reset": "重置画布"
+      }
+    },
+    "nodes": {
+      "story": {
+        "eyebrow": "输入",
+        "title": "短片故事",
+        "meta": "已确认"
+      },
+      "style": {
+        "eyebrow": "风格",
+        "title": "Style Bible",
+        "meta": "唯一风格来源"
+      },
+      "edit": {
+        "eyebrow": "生成中",
+        "title": "核心剪辑表",
+        "meta": "12 镜头 / 写入 8"
+      },
+      "assets": {
+        "eyebrow": "资产",
+        "title": "角色场景绑定",
+        "meta": "4 个就绪"
+      },
+      "storyboard": {
+        "eyebrow": "等待",
+        "title": "分镜面板",
+        "meta": "待生成"
+      },
+      "video": {
+        "eyebrow": "等待",
+        "title": "视频片段",
+        "meta": "等待上游图片"
       }
     }
   }

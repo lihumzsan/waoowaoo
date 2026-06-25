@@ -27,13 +27,11 @@ type ImagePanel = {
 }
 
 type ImageStoryboard = {
-  clipId: string | null
   panels: ImagePanel[]
 }
 
 type ImageEpisode = {
   storyboards: ImageStoryboard[]
-  clips: Array<{ id: string }>
 }
 
 async function loadImageEpisodes(params: { projectId: string; episodeId: string | null }): Promise<ImageEpisode[]> {
@@ -54,16 +52,11 @@ async function loadImageEpisodes(params: { projectId: string; episodeId: string 
           },
           orderBy: { createdAt: 'asc' },
         },
-        clips: {
-          orderBy: { createdAt: 'asc' },
-          select: { id: true },
-        },
       },
     })
     if (!episode) return []
     return [{
       storyboards: episode.storyboards,
-      clips: episode.clips,
     }]
   }
 
@@ -85,10 +78,6 @@ async function loadImageEpisodes(params: { projectId: string; episodeId: string 
             },
             orderBy: { createdAt: 'asc' },
           },
-          clips: {
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          },
         },
       },
     },
@@ -96,7 +85,6 @@ async function loadImageEpisodes(params: { projectId: string; episodeId: string 
 
   return (project?.episodes || []).map((episode) => ({
     storyboards: episode.storyboards,
-    clips: episode.clips,
   }))
 }
 
@@ -127,10 +115,8 @@ export function createDownloadOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const storyboards: ImageStoryboard[] = []
-        const clips: Array<{ id: string }> = []
         for (const episode of episodes) {
           storyboards.push(...episode.storyboards)
-          clips.push(...episode.clips)
         }
 
         const images: Array<{
@@ -142,11 +128,10 @@ export function createDownloadOperations(): ProjectAgentOperationRegistryDraft {
 
         for (let storyboardIndex = 0; storyboardIndex < storyboards.length; storyboardIndex += 1) {
           const storyboard = storyboards[storyboardIndex]
-          const clipIndex = storyboard.clipId ? clips.findIndex((clip) => clip.id === storyboard.clipId) : -1
           for (const panel of storyboard.panels || []) {
             if (!panel.imageUrl) continue
             images.push({
-              storyboardIndex: clipIndex >= 0 ? clipIndex : clips.length + storyboardIndex,
+              storyboardIndex,
               panelIndex: panel.panelIndex || 0,
               desc: sanitizeFilenamePart(panel.description || '镜头'),
               imageValue: panel.imageUrl,

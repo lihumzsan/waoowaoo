@@ -47,8 +47,6 @@ export interface WorkspaceRuntimeValue {
   onGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
   onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
-  onRegenerateStoryboardText: (storyboardId: string) => Promise<void>
-  onClipUpdate: (clipId: string, data: unknown) => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   onGenerateStoryboardGridImages: (payload: {

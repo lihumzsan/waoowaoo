@@ -8,7 +8,6 @@ import {
   type TaskRuntimeTarget,
 } from '@/lib/task/runtime-targets'
 import type {
-  ProjectClip,
   ProjectEditCinematographyShotPlan,
   ProjectEditDirectorDecoupage,
   ProjectEditAssetRequirement,
@@ -32,11 +31,8 @@ import type {
   WorkspaceCanvasNodeActionHandler,
   WorkspaceCanvasNodeData,
   WorkspaceCanvasProjection,
-  WorkspaceCanvasScriptDetails,
-  WorkspaceCanvasScriptScene,
   WorkspaceCanvasShotDetails,
   WorkspaceCanvasStyleBibleDetails,
-  WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
@@ -129,7 +125,6 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly episodeId: string
   readonly episodeName?: string
   readonly storyText: string
-  readonly clips: readonly ProjectClip[]
   readonly locations?: readonly Location[]
   readonly storyboards: readonly ProjectStoryboard[]
   readonly shots?: readonly ProjectShot[]
@@ -306,85 +301,6 @@ function parseAssetRefs(value: string | null | undefined): WorkspaceCanvasAssetR
 function formatTimeRange(start: number | null | undefined, end: number | null | undefined): string | null {
   if (typeof start !== 'number' || typeof end !== 'number') return null
   return `${start}s - ${end}s`
-}
-
-function parseScreenplayScenes(screenplay: string | null | undefined): WorkspaceCanvasScriptScene[] {
-  const parsed = parseJson(screenplay)
-  const scenesValue = isRecord(parsed) ? parsed.scenes : parsed
-  if (!Array.isArray(scenesValue)) return []
-
-  return scenesValue.flatMap((scene): WorkspaceCanvasScriptScene[] => {
-    if (!isRecord(scene)) return []
-    const headingValue = scene.heading
-    const heading = (() => {
-      if (typeof headingValue === 'string') return headingValue
-      if (!isRecord(headingValue)) return null
-      const parts = [
-        stringValue(headingValue.int_ext),
-        stringValue(headingValue.location),
-        stringValue(headingValue.time),
-      ].filter((part): part is string => Boolean(part))
-      return parts.length > 0 ? parts.join(' · ') : null
-    })()
-
-    const rawCharacters = scene.characters
-    const characters = Array.isArray(rawCharacters)
-      ? uniqueStrings(rawCharacters.flatMap((item) => (typeof item === 'string' ? [item] : [])))
-      : []
-
-    const rawContent = scene.content
-    const lines = Array.isArray(rawContent)
-      ? rawContent.flatMap((item): WorkspaceCanvasTextLine[] => {
-        if (typeof item === 'string' && item.trim()) return [{ kind: 'text', text: item.trim() }]
-        if (!isRecord(item)) return []
-        const text = stringValue(item.text)
-        if (!text) return []
-        const type = stringValue(item.type)
-        const kind: WorkspaceCanvasTextLine['kind'] =
-          type === 'dialogue' || type === 'voiceover' || type === 'action' ? type : 'text'
-        return [{
-          kind,
-          speaker: stringValue(item.character),
-          text,
-        }]
-      })
-      : []
-
-    return [{
-      sceneNumber: numberValue(scene.scene_number),
-      heading,
-      description: stringValue(scene.description),
-      characters,
-      lines,
-    }]
-  })
-}
-
-function collectSceneLocations(scenes: readonly WorkspaceCanvasScriptScene[]): string[] {
-  return uniqueStrings(scenes.flatMap((scene) => {
-    if (!scene.heading) return []
-    const parts = scene.heading.split(' · ')
-    return parts.length >= 2 ? [parts[1]] : []
-  }))
-}
-
-function createScriptDetails(clip: ProjectClip): WorkspaceCanvasScriptDetails {
-  const scenes = parseScreenplayScenes(clip.screenplay)
-  const sceneCharacters = scenes.flatMap((scene) => scene.characters).map((name) => ({ name }))
-  const explicitCharacters = parseAssetRefs(clip.characters)
-  const characters = explicitCharacters.length > 0 ? explicitCharacters : sceneCharacters
-  const explicitLocations = parseStringList(clip.location)
-  return {
-    originalText: clip.content,
-    screenplayText: clip.screenplay,
-    scenes,
-    characters,
-    locations: explicitLocations.length > 0 ? explicitLocations : collectSceneLocations(scenes),
-    props: parseStringList(clip.props),
-    timeRange: formatTimeRange(clip.start, clip.end),
-    duration: clip.duration ?? null,
-    shotCount: clip.shotCount ?? null,
-  }
 }
 
 function parseCandidateImages(value: string | null | undefined): string[] {
@@ -872,11 +788,11 @@ function sortPanels(panels: readonly ProjectPanel[]): ProjectPanel[] {
   })
 }
 
-function sortedStoryboards(storyboards: readonly ProjectStoryboard[], clipOrder: ReadonlyMap<string, number>): ProjectStoryboard[] {
+function sortedStoryboards(storyboards: readonly ProjectStoryboard[]): ProjectStoryboard[] {
   return [...storyboards].sort((a, b) => {
-    const aOrder = a.clipId ? clipOrder.get(a.clipId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER
-    const bOrder = b.clipId ? clipOrder.get(b.clipId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER
-    if (aOrder !== bOrder) return aOrder - bOrder
+    const aTime = Date.parse(String(a.createdAt ?? ''))
+    const bTime = Date.parse(String(b.createdAt ?? ''))
+    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime
     return a.id.localeCompare(b.id)
   })
 }
@@ -1145,7 +1061,6 @@ function editPipelineStepState(
 export function buildWorkspaceNodeCanvasProjection({
   episodeId,
   storyText,
-  clips,
   storyboards,
   shots = [],
   editScreenplay,
@@ -1175,8 +1090,7 @@ export function buildWorkspaceNodeCanvasProjection({
   const storyBody = storyText.trim()
   const hasStory = storyBody.length > 0
   const analysisNodeId = workspaceNodeId.analysis(episodeId)
-  const clipOrder = new Map(clips.map((clip, index) => [clip.id, index]))
-  const panelsWithStoryboard = sortedStoryboards(storyboards, clipOrder).flatMap((storyboard) => (
+  const panelsWithStoryboard = sortedStoryboards(storyboards).flatMap((storyboard) => (
     sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
   ))
   const editScriptStoryboards = editScript
@@ -1220,7 +1134,6 @@ export function buildWorkspaceNodeCanvasProjection({
         title: translate('nodes.analysis.title'),
         eyebrow: translate('nodes.analysis.eyebrow'),
         body: translate('nodes.analysis.body', {
-          clips: clips.length,
           storyboards: storyboards.length,
           panels: storyboards.reduce((total, storyboard) => total + (storyboard.panels?.length ?? 0), 0),
         }),
@@ -1811,41 +1724,6 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   }
 
-  const clipNodeIds = new Map<string, string>()
-  clips.forEach((clip, index) => {
-    const nodeId = workspaceNodeId.clip(clip.id)
-    const storyboardForClip = storyboards.find((storyboard) => storyboard.clipId === clip.id) ?? null
-    clipNodeIds.set(clip.id, nodeId)
-    nodes.push(createNode({
-      id: nodeId,
-      fallbackX: STORY_COLUMN_X + COLUMN_GAP,
-      fallbackY: 80 + index * ROW_GAP,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      data: {
-        kind: 'scriptClip',
-        layoutNodeType: 'scriptClip',
-        targetType: 'clip',
-        targetId: clip.id,
-        title: clip.summary || translate('nodes.clip.title', { index: index + 1 }),
-        eyebrow: translate('nodes.clip.eyebrow'),
-        body: compactText(clip.screenplay || clip.content || clip.summary, translate('empty.clip')),
-        meta: translate('nodes.clip.meta', { index: index + 1 }),
-        statusLabel: translate('status.ready'),
-        width: DEFAULT_NODE_WIDTH,
-        height: 360,
-        indexLabel: `C${index + 1}`,
-        scriptDetails: createScriptDetails(clip),
-        actionLabel: storyboardForClip ? translate('actions.generateStoryboard') : undefined,
-        action: storyboardForClip ? { type: 'regenerate_storyboard_text', storyboardId: storyboardForClip.id } : undefined,
-        onAction,
-      },
-    }))
-    if (hasStory) {
-      edges.push(createEdge(`edge:analysis-clip:${clip.id}`, analysisNodeId, nodeId))
-    }
-  })
-
   const hasExistingSpaceConsistencyLayer = spatialBlockingStoryboards.length > 0
   const hasVideoBlocks = editScript?.status === 'ready' && Boolean(editScript.videoBlocks?.length)
   const hasReadyCinematographyShotPlan = Boolean(
@@ -1895,7 +1773,7 @@ export function buildWorkspaceNodeCanvasProjection({
 
   const shotNodeIds = new Map<string, string>()
   const spaceConsistencyNodeIds = new Map<string, string>()
-  sortedStoryboards(spatialBlockingStoryboards, clipOrder).forEach((storyboard, index) => {
+  sortedStoryboards(spatialBlockingStoryboards).forEach((storyboard, index) => {
     const details = createSpaceConsistencyDetails(storyboard)
     const nodeId = workspaceNodeId.spaceConsistency(storyboard.id)
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
@@ -1950,8 +1828,7 @@ export function buildWorkspaceNodeCanvasProjection({
     const editScriptSourceNodeId = editScript && storyboard.editScriptId === editScript.id
       ? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
       : null
-    const clipSourceNodeId = storyboard.clipId ? clipNodeIds.get(storyboard.clipId) ?? null : null
-    const sourceNodeId = editScriptSourceNodeId ?? clipSourceNodeId
+    const sourceNodeId = editScriptSourceNodeId
     if (sourceNodeId) {
       edges.push(createEdge(`edge:space-consistency-source:${storyboard.id}`, sourceNodeId, nodeId))
     }
@@ -2114,10 +1991,9 @@ export function buildWorkspaceNodeCanvasProjection({
     const editScriptSource = editScript && storyboard.editScriptId === editScript.id
       ? spaceSource ?? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
       : null
-    const clipSource = storyboard.clipId ? clipNodeIds.get(storyboard.clipId) ?? null : null
-    const source = editScriptSource ?? clipSource ?? (hasStory ? analysisNodeId : null)
+    const source = editScriptSource ?? (hasStory ? analysisNodeId : null)
     if (source) {
-      edges.push(createEdge(`edge:clip-shot:${panel.id}`, source, nodeId))
+      edges.push(createEdge(`edge:storyboard-shot:${panel.id}`, source, nodeId))
     }
     if (firstPanelIdByStoryboardId.get(storyboard.id) === panel.id) {
       const spaceNodeId = spaceConsistencyNodeIds.get(storyboard.id)
@@ -2533,7 +2409,6 @@ export function useWorkspaceNodeCanvasProjection({
   episodeId,
   episodeName,
   storyText,
-  clips,
   locations,
   storyboards,
   shots,
@@ -2557,7 +2432,6 @@ export function useWorkspaceNodeCanvasProjection({
       episodeId,
       episodeName,
       storyText,
-      clips,
       locations,
       storyboards,
       shots,
@@ -2576,7 +2450,6 @@ export function useWorkspaceNodeCanvasProjection({
       onAction,
     }),
     [
-      clips,
       locations,
       episodeId,
       episodeName,

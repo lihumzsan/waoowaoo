@@ -7,13 +7,11 @@ const {
   generateVideoMutateAsyncMock,
   batchGenerateVideosMutateAsyncMock,
   updateProjectPanelVideoPromptMutateAsyncMock,
-  updateProjectClipMutateAsyncMock,
   updateProjectConfigMutateAsyncMock,
 } = vi.hoisted(() => ({
   generateVideoMutateAsyncMock: vi.fn(),
   batchGenerateVideosMutateAsyncMock: vi.fn(),
   updateProjectPanelVideoPromptMutateAsyncMock: vi.fn(),
-  updateProjectClipMutateAsyncMock: vi.fn(),
   updateProjectConfigMutateAsyncMock: vi.fn(),
 }))
 
@@ -35,9 +33,6 @@ vi.mock('@/lib/query/hooks/useStoryboards', () => ({
 vi.mock('@/lib/query/hooks', () => ({
   useUpdateProjectPanelVideoPrompt: () => ({
     mutateAsync: updateProjectPanelVideoPromptMutateAsyncMock,
-  }),
-  useUpdateProjectClip: () => ({
-    mutateAsync: updateProjectClipMutateAsyncMock,
   }),
   useUpdateProjectConfig: () => ({
     mutateAsync: updateProjectConfigMutateAsyncMock,
@@ -111,7 +106,6 @@ describe('useWorkspaceVideoActions', () => {
     generateVideoMutateAsyncMock.mockReset()
     batchGenerateVideosMutateAsyncMock.mockReset()
     updateProjectPanelVideoPromptMutateAsyncMock.mockReset()
-    updateProjectClipMutateAsyncMock.mockReset()
     updateProjectConfigMutateAsyncMock.mockReset()
     globalThis.alert = vi.fn()
   })

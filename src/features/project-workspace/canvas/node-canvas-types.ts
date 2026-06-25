@@ -8,7 +8,6 @@ import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 
 export type WorkspaceCanvasNodeKind =
   | 'analysis'
-  | 'scriptClip'
   | 'shot'
   | 'imageAsset'
   | 'videoClip'
@@ -28,7 +27,7 @@ export type WorkspaceCanvasNodeKind =
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'clip' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'storyboardPanelGeneration' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'storyboardPanelGeneration' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {
@@ -40,8 +39,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }
-  | { readonly type: 'regenerate_storyboard_text'; readonly storyboardId: string }
-  | { readonly type: 'update_clip'; readonly clipId: string; readonly data: Record<string, unknown> }
   | { readonly type: 'open_asset_library'; readonly characterId?: string | null }
   | {
       readonly type: 'update_panel'
@@ -162,26 +159,6 @@ export interface WorkspaceCanvasTextLine {
   readonly kind: 'action' | 'dialogue' | 'voiceover' | 'text'
   readonly speaker?: string | null
   readonly text: string
-}
-
-export interface WorkspaceCanvasScriptScene {
-  readonly sceneNumber?: number | null
-  readonly heading?: string | null
-  readonly description?: string | null
-  readonly characters: readonly string[]
-  readonly lines: readonly WorkspaceCanvasTextLine[]
-}
-
-export interface WorkspaceCanvasScriptDetails {
-  readonly originalText: string
-  readonly screenplayText?: string | null
-  readonly scenes: readonly WorkspaceCanvasScriptScene[]
-  readonly characters: readonly WorkspaceCanvasAssetRef[]
-  readonly locations: readonly string[]
-  readonly props: readonly string[]
-  readonly timeRange?: string | null
-  readonly duration?: number | null
-  readonly shotCount?: number | null
 }
 
 export interface WorkspaceCanvasShotDetails {
@@ -527,7 +504,6 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly previewDisplayHeight?: number | null
   /** 待生成媒体的加载背景图(用户选中的视觉风格图);无则退回模糊磨砂底 */
   readonly loadingStyleImageUrl?: string | null
-  readonly scriptDetails?: WorkspaceCanvasScriptDetails
   readonly shotDetails?: WorkspaceCanvasShotDetails
   readonly imageDetails?: WorkspaceCanvasImageDetails
   readonly videoDetails?: WorkspaceCanvasVideoDetails

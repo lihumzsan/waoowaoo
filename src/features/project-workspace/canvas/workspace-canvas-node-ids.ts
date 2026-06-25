@@ -7,7 +7,6 @@ export const workspaceNodeId = {
   editScript: (episodeId: string): string => `edit-script:${episodeId}`,
   editAssetGroup: (editScriptId: string): string => `edit-asset-group:${editScriptId}`,
   editCinematographyShotPlan: (editScriptId: string): string => `edit-cinematography-shot-plan:edit-script:${editScriptId}`,
-  clip: (clipId: string): string => `clip:${clipId}`,
   shot: (panelId: string): string => `shot:${panelId}`,
   spaceConsistency: (storyboardId: string): string => `space-consistency:${storyboardId}`,
   storyboardPanelGeneration: (storyboardId: string): string => `storyboard-panel-generation:${storyboardId}`,

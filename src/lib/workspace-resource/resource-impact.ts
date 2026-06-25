@@ -187,7 +187,6 @@ function isGlobalAssetTaskType(taskType: string | null): boolean {
 function isStoryboardTaskType(taskType: string | null): boolean {
   return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE ||
     taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
-    taskType === TASK_TYPE.REGENERATE_STORYBOARD_TEXT ||
     taskType === TASK_TYPE.INSERT_PANEL ||
     taskType === TASK_TYPE.IMAGE_PANEL ||
     taskType === TASK_TYPE.PANEL_VARIANT ||

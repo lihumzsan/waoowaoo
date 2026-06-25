@@ -77,7 +77,6 @@ function estimatedNodeSize(node: WorkspaceCanvasFlowNode): WorkspaceCanvasLayout
 export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind): WorkspaceCanvasLayoutLane {
   switch (kind) {
     case 'analysis':
-    case 'scriptClip':
     case 'editScreenplay':
     case 'editStylePreview':
     case 'editStyleBible':

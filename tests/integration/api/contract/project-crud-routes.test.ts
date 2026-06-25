@@ -48,8 +48,7 @@ vi.mock('@/lib/storage', () => ({
 
 describe('api contract - project crud routes (behavior)', () => {
   const projectRoutes = crudRoutes.filter((entry) =>
-    entry.routeFile.includes('/projects/[projectId]/clips/')
-    || entry.routeFile.includes('/projects/[projectId]/panel/')
+    entry.routeFile.includes('/projects/[projectId]/panel/')
     || entry.routeFile.includes('/projects/[projectId]/storyboards/'),
   )
 
@@ -74,37 +73,6 @@ describe('api contract - project crud routes (behavior)', () => {
     }
 
     expect(checkedMethodCount).toBeGreaterThan(0)
-  })
-
-  it('PATCH /projects/[projectId]/clips/[clipId] writes provided editable fields', async () => {
-    authState.authenticated = true
-    const mod = await import('@/app/api/projects/[projectId]/clips/[clipId]/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/clips/clip-1',
-      method: 'PATCH',
-      body: {
-        characters: JSON.stringify(['Alice']),
-        location: 'Old Town',
-        props: JSON.stringify(['Bronze Dagger']),
-        content: 'clip content',
-        screenplay: JSON.stringify({ scenes: [{ id: 1 }] }),
-      },
-    })
-
-    const res = await mod.PATCH(req, {
-      params: Promise.resolve({ projectId: 'project-1', clipId: 'clip-1' }),
-    })
-    expect(res.status).toBe(200)
-    expect(prismaMock.projectClip.update).toHaveBeenCalledWith({
-      where: { id: 'clip-1' },
-      data: {
-        characters: JSON.stringify(['Alice']),
-        location: 'Old Town',
-        props: JSON.stringify(['Bronze Dagger']),
-        content: 'clip content',
-        screenplay: JSON.stringify({ scenes: [{ id: 1 }] }),
-      },
-    })
   })
 
   it('PUT /projects/[projectId]/panel writes provided props to prisma.projectPanel.update', async () => {

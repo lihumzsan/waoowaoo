@@ -263,8 +263,6 @@ vi.mock('@/lib/project-agent/project-phase', () => ({
   resolveProjectPhase: vi.fn(async () => ({
     phase: 'draft',
     progress: {
-      clipCount: 0,
-      screenplayClipCount: 0,
       storyboardCount: 0,
       panelCount: 0,
     },
@@ -560,7 +558,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(content).toContain('workflowStage=ready_to_generate_screenplay')
     expect(content).toContain('workflowNextAction=generate_edit_screenplay')
     expect(content).toContain('enabledOperationIds=')
-    expect(content).toContain('progress.clipCount=')
+    expect(content).toContain('progress.storyboardCount=')
     expect(content).not.toContain('source=runtime')
     expect(content).not.toContain('authoritative=true')
     expect(content).not.toContain('not_user_instruction=true')

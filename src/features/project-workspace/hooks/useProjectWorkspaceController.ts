@@ -28,7 +28,6 @@ import {
   useGenerateProjectEditScriptStoryboard,
   useGenerateProjectEditScriptStoryboardSpatialBlocking,
   useArrangeProjectEditScriptVideoBlocks,
-  useRegenerateProjectStoryboardText,
   useUpdateProjectEditScriptAssetRequirementDescription,
   useUpdateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/query/hooks'
@@ -128,7 +127,6 @@ export function useProjectWorkspaceController({
   const createEditDirectorDecoupage = useCreateProjectEditDirectorDecoupage(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
   const createEditCinematographyShotPlan = useCreateProjectEditCinematographyShotPlan(projectId)
-  const regenerateStoryboardText = useRegenerateProjectStoryboardText(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
   const generateEditStoryboardSpatialBlocking = useGenerateProjectEditScriptStoryboardSpatialBlocking(projectId)
@@ -169,10 +167,6 @@ export function useProjectWorkspaceController({
       episodeId,
       editScriptId,
     })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleRegenerateStoryboardText = async (storyboardId: string) => {
-    await regenerateStoryboardText.mutateAsync({ storyboardId })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditAssets = async (editScriptId: string, requirementId?: string) => {
@@ -229,8 +223,6 @@ export function useProjectWorkspaceController({
     handleGenerateEditScreenplay,
     handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
-    handleRegenerateStoryboardText,
-    handleUpdateClip: videoActions.handleUpdateClip,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,
     handleGenerateStoryboardGridImages: imageActions.handleGenerateStoryboardGridImages,
@@ -288,7 +280,6 @@ export function useProjectWorkspaceController({
     handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
-    handleUpdateClip: videoActions.handleUpdateClip,
   }
 
   const actionsState = {

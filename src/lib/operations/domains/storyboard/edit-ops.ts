@@ -166,7 +166,7 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const shot = await prisma.projectShot.findFirst({
-          where: { id: input.shotId, clip: { episode: { projectId: ctx.projectId } } },
+          where: { id: input.shotId, episode: { projectId: ctx.projectId } },
           select: { id: true },
         })
         if (!shot) throw new Error('NOT_FOUND')

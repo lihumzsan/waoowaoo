@@ -130,7 +130,6 @@
     "summary": "{nodes} nodes · {edges} edges",
     "nodeTypes": {
       "story": "Story",
-      "scriptClip": "Script",
       "storyboardGroup": "Storyboard",
       "panelImage": "Image",
       "videoPanel": "Video",
@@ -138,7 +137,6 @@
     },
     "nodeTitles": {
       "story": "Story",
-      "scriptClip": "Clip {index}",
       "storyboardGroup": "Storyboard Group {index}",
       "panelImage": "Panel {index}",
       "videoPanel": "Panel {index} Video",
@@ -153,8 +151,7 @@
     },
     "nodeDescriptions": {
       "story": "Episode source material and creative direction.",
-      "scriptClip": "Script segment generated from the story.",
-      "storyboardGroup": "Storyboard group aligned to one script segment.",
+      "storyboardGroup": "Storyboard group aligned to the edit-first table.",
       "panelImage": "Image-stage panel node. Actions migrate here in the next phase.",
       "videoPanel": "Video-stage node attached to its source image panel.",
       "timeline": "Final composition target for generated video material."
@@ -317,14 +314,12 @@
         "soundFilterPrompt": "Sound Filter",
         "hardBans": "Hard Bans",
         "selectAspectRatio": "Choose Aspect Ratio",
-        "originalClip": "Original Clip",
         "scene": "Scene {index}",
         "characters": "Characters",
         "scenes": "Scenes",
         "locations": "Locations",
         "location": "Location",
         "props": "Props",
-        "clipMeta": "Clip Info",
         "timeRange": "Time",
         "duration": "Duration",
         "shotCount": "Shot Count",
@@ -513,7 +508,6 @@
         "fields": {
           "summary": "Summary",
           "duration": "Duration",
-          "originalClip": "Original Clip",
           "screenplay": "Screenplay JSON",
           "locations": "Locations",
           "characters": "Characters",
@@ -691,13 +685,8 @@
         "analysis": {
           "title": "Story Structure Analysis",
           "eyebrow": "Business State",
-          "body": "{clips} clips, {storyboards} storyboards, and {panels} shots detected.",
+          "body": "{storyboards} storyboards and {panels} shots detected.",
           "meta": "Characters / locations / pacing / visual direction"
-        },
-        "clip": {
-          "title": "Clip {index}",
-          "eyebrow": "Script Clip",
-          "meta": "clip #{index}"
         },
         "shot": {
           "title": "Shot {index}",
@@ -817,6 +806,130 @@
           "body": "Characters and scenes to pre-generate for this video. Click a card to view details and regenerate it individually, or use the image zoom button to preview it large.",
           "meta": "{characters} character(s) · {locations} scene(s)"
         }
+      }
+    }
+  },
+  "rightRailLab": {
+    "meta": {
+      "title": "Right Full-Height Agent Layout Lab",
+      "subtitle": "Agent chat pinned full height on the right; asset library moved from the top to the canvas side",
+      "badge": "Standalone mock lab",
+      "note": "Pure front-end mock data, no project APIs"
+    },
+    "nav": {
+      "canvas": "Canvas",
+      "assets": "Assets",
+      "timeline": "Timeline",
+      "settings": "Settings"
+    },
+    "controls": {
+      "assetPlacement": {
+        "label": "Asset library position",
+        "left": "Left sidebar",
+        "bottom": "Bottom bar"
+      },
+      "railWidth": {
+        "label": "Right column width",
+        "standard": "Standard",
+        "wide": "Wide"
+      }
+    },
+    "badges": {
+      "fullHeight": "Full-height column",
+      "edgeToEdge": "Edge-to-edge, no float"
+    },
+    "header": {
+      "project": "Sample project · Rainy Night Chase",
+      "episode": "Episode 1"
+    },
+    "agent": {
+      "title": "Project Agent",
+      "subtitle": "Full-height right column carrying the whole conversation top to bottom",
+      "contextTitle": "Current context",
+      "context": {
+        "scope": {
+          "label": "Scope",
+          "value": "Ep.1 / Asset binding"
+        },
+        "selection": {
+          "label": "Selection",
+          "value": "Core edit sheet"
+        },
+        "mode": {
+          "label": "Permission",
+          "value": "Confirm before run"
+        }
+      },
+      "messages": {
+        "user": "Move the asset library off the top and let the right agent fill the full height.",
+        "assistant": "Switched to a full-height right column: the top keeps only project info and the asset library drops to the canvas side.",
+        "task": "Next, compare the left-sidebar vs bottom-bar placements for the asset library."
+      },
+      "composer": "Read-only mock composer, used to observe how the full-height right column occupies space.",
+      "permission": "Confirm before run",
+      "send": "Send"
+    },
+    "assetDock": {
+      "title": "Asset library",
+      "subtitle": "Moved from the top entry to the canvas side"
+    },
+    "assets": {
+      "lead": {
+        "title": "Lead · Lin Lan",
+        "meta": "Character / 3 refs"
+      },
+      "city": {
+        "title": "Rainy rooftop",
+        "meta": "Scene / spatial profile"
+      },
+      "device": {
+        "title": "Signal decoder",
+        "meta": "Prop / close-up consistency"
+      },
+      "vehicle": {
+        "title": "Maglev train",
+        "meta": "Environment / motion shot"
+      }
+    },
+    "canvas": {
+      "viewport": "Infinite canvas viewport",
+      "controls": {
+        "plus": "Zoom in",
+        "minus": "Zoom out",
+        "fit": "Fit canvas",
+        "reset": "Reset canvas"
+      }
+    },
+    "nodes": {
+      "story": {
+        "eyebrow": "Input",
+        "title": "Short film story",
+        "meta": "Confirmed"
+      },
+      "style": {
+        "eyebrow": "Style",
+        "title": "Style Bible",
+        "meta": "Single style source"
+      },
+      "edit": {
+        "eyebrow": "Generating",
+        "title": "Core edit sheet",
+        "meta": "12 shots / 8 written"
+      },
+      "assets": {
+        "eyebrow": "Assets",
+        "title": "Character & scene binding",
+        "meta": "4 ready"
+      },
+      "storyboard": {
+        "eyebrow": "Waiting",
+        "title": "Storyboard panel",
+        "meta": "Pending"
+      },
+      "video": {
+        "eyebrow": "Waiting",
+        "title": "Video clips",
+        "meta": "Awaiting upstream images"
       }
     }
   }

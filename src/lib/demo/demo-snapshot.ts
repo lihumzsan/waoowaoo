@@ -1,5 +1,4 @@
 import type {
-  ProjectClip,
   ProjectEditScreenplay,
   ProjectEditScript,
   ProjectFinalVideo,
@@ -34,7 +33,6 @@ export interface DemoProjectSnapshot {
     readonly audioUrl: string | null
     readonly srtContent: string | null
   }
-  readonly clips: readonly ProjectClip[]
   readonly storyboards: readonly ProjectStoryboard[]
   readonly shots: readonly ProjectShot[]
   readonly editScreenplay: ProjectEditScreenplay | null

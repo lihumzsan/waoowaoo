@@ -81,8 +81,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/character/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/character/route.ts',
   'src/app/api/projects/[projectId]/cleanup-unselected-images/route.ts',
-  'src/app/api/projects/[projectId]/clips/[clipId]/route.ts',
-  'src/app/api/projects/[projectId]/clips/route.ts',
   'src/app/api/projects/[projectId]/download-images/route.ts',
   'src/app/api/projects/[projectId]/download-videos/route.ts',
   'src/app/api/projects/[projectId]/editor/route.ts',
@@ -116,9 +114,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/photography-plan/route.ts',
   'src/app/api/projects/[projectId]/reference-to-character/route.ts',
   'src/app/api/projects/[projectId]/regenerate-panel-image/route.ts',
-  'src/app/api/projects/[projectId]/regenerate-storyboard-text/route.ts',
   'src/app/api/projects/[projectId]/config/route.ts',
-  'src/app/api/projects/[projectId]/screenplay-conversion/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/copy/route.ts',
   'src/app/api/projects/[projectId]/storyboard-group/route.ts',
   'src/app/api/projects/[projectId]/storyboards/route.ts',
@@ -195,9 +191,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   if (
     routeFile.includes('/ai-')
     || routeFile.includes('/analyze')
-    || routeFile.includes('/screenplay-conversion/')
     || routeFile.includes('/reference-to-character/')
-    || routeFile.endsWith('/clips/route.ts')
     || routeFile.endsWith('/episodes/split/route.ts')
   ) {
     return 'llm-observe-routes'
@@ -213,7 +207,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/modify-storyboard-image/route.ts')
     || routeFile.endsWith('/panel-variant/route.ts')
     || routeFile.endsWith('/regenerate-panel-image/route.ts')
-    || routeFile.endsWith('/regenerate-storyboard-text/route.ts')
   ) {
     return 'direct-submit-routes'
   }

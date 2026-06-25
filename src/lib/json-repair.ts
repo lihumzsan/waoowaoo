@@ -100,7 +100,7 @@ export function safeParseJsonArray(
         )
     }
 
-    // LLM sometimes wraps the array in an object like { "clips": [...] }
+    // LLM sometimes wraps the array in an object keyed by the requested field.
     if (result && typeof result === 'object') {
         const obj = result as Record<string, unknown>
         // Try the explicit fallback key first, then common wrapper keys

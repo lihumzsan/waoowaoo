@@ -4,7 +4,6 @@ import type {
   ProjectEpisodeSummary,
   ProjectWorkflowData,
   Prop,
-  ProjectClip,
   ProjectShot,
   ProjectStoryboard,
   ProjectVideoGroup,
@@ -43,7 +42,6 @@ type ProjectWorkflowSource = {
   characters?: ProjectRecord[]
   locations?: ProjectLocationLike[]
   episodes?: ProjectRecord[]
-  clips?: ProjectRecord[]
   storyboards?: ProjectRecord[]
   shots?: ProjectRecord[]
   videoGroups?: ProjectRecord[]
@@ -82,7 +80,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     locations: assets.locations || [],
     props: assets.props || [],
     episodes: (source.episodes || []) as unknown as ProjectEpisodeSummary[],
-    clips: (source.clips || []) as unknown as ProjectClip[],
     storyboards: (source.storyboards || []) as unknown as ProjectStoryboard[],
     shots: (source.shots || []) as unknown as ProjectShot[],
     videoGroups: (source.videoGroups || []) as unknown as ProjectVideoGroup[],

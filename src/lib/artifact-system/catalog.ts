@@ -46,36 +46,6 @@ const artifactCatalog: Record<ArtifactType, ArtifactDefinition> = {
     scope: 'episode',
     summary: 'Normalized prop analysis output.',
   },
-  [ARTIFACT_TYPES.CLIP_SPLIT]: {
-    type: ARTIFACT_TYPES.CLIP_SPLIT,
-    scope: 'episode',
-    summary: 'Clip split results for the episode.',
-  },
-  [ARTIFACT_TYPES.CLIP_SCREENPLAY]: {
-    type: ARTIFACT_TYPES.CLIP_SCREENPLAY,
-    scope: 'clip',
-    summary: 'Screenplay generated for a clip.',
-  },
-  [ARTIFACT_TYPES.STORYBOARD_PHASE1]: {
-    type: ARTIFACT_TYPES.STORYBOARD_PHASE1,
-    scope: 'clip',
-    summary: 'Phase 1 storyboard plan.',
-  },
-  [ARTIFACT_TYPES.STORYBOARD_PHASE2_CINEMATOGRAPHY]: {
-    type: ARTIFACT_TYPES.STORYBOARD_PHASE2_CINEMATOGRAPHY,
-    scope: 'clip',
-    summary: 'Phase 2 cinematography refinement.',
-  },
-  [ARTIFACT_TYPES.STORYBOARD_PHASE2_ACTING]: {
-    type: ARTIFACT_TYPES.STORYBOARD_PHASE2_ACTING,
-    scope: 'clip',
-    summary: 'Phase 2 acting refinement.',
-  },
-  [ARTIFACT_TYPES.STORYBOARD_PHASE3_DETAIL]: {
-    type: ARTIFACT_TYPES.STORYBOARD_PHASE3_DETAIL,
-    scope: 'clip',
-    summary: 'Phase 3 storyboard detail refinement.',
-  },
   [ARTIFACT_TYPES.STORYBOARD_PANEL_SET]: {
     type: ARTIFACT_TYPES.STORYBOARD_PANEL_SET,
     scope: 'episode',

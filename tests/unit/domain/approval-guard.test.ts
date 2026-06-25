@@ -20,7 +20,7 @@ describe('domain approval guard', () => {
   it('allows mutation when no planId is provided', async () => {
     await expect(assertApprovedDomainMutationContext({
       actor: 'operation',
-      operationId: 'write_screenplay',
+      operationId: 'generate_edit_screenplay',
       runId: 'run-1',
       idempotencyKey: 'run-1:full',
     })).resolves.toBeUndefined()
@@ -33,7 +33,7 @@ describe('domain approval guard', () => {
       requiresApproval: true,
       command: {
         normalizedInput: {
-          operationId: 'write_screenplay',
+          operationId: 'generate_edit_screenplay',
         },
       },
       approvals: [{ status: 'pending' }],
@@ -41,7 +41,7 @@ describe('domain approval guard', () => {
 
     await expect(assertApprovedDomainMutationContext({
       actor: 'operation',
-      operationId: 'write_screenplay',
+      operationId: 'generate_edit_screenplay',
       runId: 'run-1',
       planId: 'plan-1',
       idempotencyKey: 'run-1:full',
@@ -55,7 +55,7 @@ describe('domain approval guard', () => {
       requiresApproval: true,
       command: {
         normalizedInput: {
-          operationId: 'write_screenplay',
+          operationId: 'generate_edit_screenplay',
         },
       },
       approvals: [{ status: 'approved' }],

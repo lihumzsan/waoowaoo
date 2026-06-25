@@ -5,7 +5,6 @@ import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 describe('ai prompt registry', () => {
   it('maps workflow operation ids to the same unified template id', () => {
     expect(resolveAiPromptIdFromOperationId('analyze_characters')).toBe(AI_PROMPT_IDS.CHARACTER_ANALYZE)
-    expect(resolveAiPromptIdFromOperationId('create_shot_plan')).toBe(AI_PROMPT_IDS.STORYBOARD_PLAN)
   })
 
   it('loads unified template content from the new functional directory', () => {
@@ -62,7 +61,6 @@ describe('ai prompt registry', () => {
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const variantTemplate = getAiPromptTemplate(AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE, 'zh')
     const videoBlockTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK, 'zh')
-    const storyboardDetailTemplate = getAiPromptTemplate(AI_PROMPT_IDS.STORYBOARD_REFINE_DETAIL, 'zh')
 
     expect(variantTemplate).toContain('所有会写入画布或给用户展示的提示词字段必须全中文')
     expect(variantTemplate).toContain('❌ video_prompt 使用英文句子（必须中文）')
@@ -73,7 +71,5 @@ describe('ai prompt registry', () => {
     expect(videoBlockTemplate).toContain('安静的路边公交站单镜头')
     expect(videoBlockTemplate).not.toContain('Quiet roadside bus-stop shot')
     expect(videoBlockTemplate).not.toContain('Sound effects only')
-
-    expect(storyboardDetailTemplate).toContain('video_prompt 会显示在画布上')
   })
 })

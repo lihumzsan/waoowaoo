@@ -77,7 +77,6 @@ function panel(input: {
       id: `storyboard-${input.id}`,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       storyboardTextJson: input.storyboardTextJson ?? JSON.stringify({ editScriptId: editScript.id }),
-      clip: { createdAt: new Date('2026-01-01T00:00:00.000Z') },
     },
   }
 }
