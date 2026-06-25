@@ -1574,25 +1574,53 @@ function EditAssetGroupContent({
   const current = details.assets.find((asset) => asset.requirementId === open) ?? null
   const currentPreviewSourceImageUrl = current?.previewImageUrl ?? null
   const currentPreviewDisplayImageUrl = toDisplayImageUrl(currentPreviewSourceImageUrl)
+  const assetGroups = [
+    {
+      key: 'character',
+      title: labels('characters'),
+      assets: details.assets.filter((asset) => asset.kind === 'character'),
+    },
+    {
+      key: 'location',
+      title: labels('locations'),
+      assets: details.assets.filter((asset) => asset.kind === 'location'),
+    },
+  ] satisfies ReadonlyArray<{
+    readonly key: WorkspaceCanvasEditAssetGroupItem['kind']
+    readonly title: string
+    readonly assets: readonly WorkspaceCanvasEditAssetGroupItem[]
+  }>
+  const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       {renderSection(labels('description'), renderTextBlock(data.body))}
-      <div className="grid grid-cols-3 gap-2.5">
-        {details.assets.map((asset) => {
-          const on = open === asset.requirementId
-          const selectAsset = () => setOpen(on ? null : asset.requirementId)
-          return (
-            <EditAssetGroupThumbnailCard
-              key={asset.requirementId}
-              asset={asset}
-              isOpen={on}
-              labels={labels}
-              loadingStyleImageUrl={data.loadingStyleImageUrl}
-              onPreviewImage={onPreviewImage}
-              onSelect={selectAsset}
-            />
-          )
-        })}
+      <div className="space-y-4">
+        {groupedAssets.map((group) => (
+          <section key={group.key} className="space-y-2">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-1.5">
+              <FieldGlyph name={group.key === 'character' ? 'people' : 'pin'} className="h-4 w-4 text-[var(--glass-text-secondary)]" />
+              <span className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>{group.title}</span>
+              <span className={`${SELECTABLE_TEXT_CLASS} text-[11px] text-[var(--glass-text-tertiary)]`}>{group.assets.length}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2.5">
+              {group.assets.map((asset) => {
+                const on = open === asset.requirementId
+                const selectAsset = () => setOpen(on ? null : asset.requirementId)
+                return (
+                  <EditAssetGroupThumbnailCard
+                    key={asset.requirementId}
+                    asset={asset}
+                    isOpen={on}
+                    labels={labels}
+                    loadingStyleImageUrl={data.loadingStyleImageUrl}
+                    onPreviewImage={onPreviewImage}
+                    onSelect={selectAsset}
+                  />
+                )
+              })}
+            </div>
+          </section>
+        ))}
       </div>
       {current ? (
         <section className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
