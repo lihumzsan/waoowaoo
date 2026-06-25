@@ -209,30 +209,6 @@ export interface ProjectStoryboardBlockingArtifact {
   errorMessage: string | null
 }
 
-export interface ProjectShot {
-  id: string
-  shotId: string
-  srtStart: number
-  srtEnd: number
-  srtDuration: number
-  sequence: string | null
-  locations: string | null
-  characters: string | null
-  plot: string | null
-  pov: string | null
-  imagePrompt: string | null
-  scale: string | null
-  module: string | null
-  focus: string | null
-  zhSummarize: string | null
-  imageUrl: string | null
-  media?: MediaRef | null
-  videoUrl?: string | null
-  videoMedia?: MediaRef | null
-  // 任务态字段（由 tasks + hook 派生，不再依赖数据库持久化）
-  imageTaskRunning?: boolean
-}
-
 export type ProjectEditAssetKind = 'character' | 'location'
 export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'failed'
 
@@ -481,7 +457,6 @@ export interface ProjectWorkflowData {
   props?: Prop[]
   episodes?: ProjectEpisodeSummary[]
   storyboards?: ProjectStoryboard[]
-  shots?: ProjectShot[]
   videoGroups?: ProjectVideoGroup[]
 }
 

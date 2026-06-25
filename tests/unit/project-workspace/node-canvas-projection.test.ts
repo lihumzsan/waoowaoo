@@ -5,7 +5,6 @@ import type {
   ProjectEditScreenplay,
   ProjectEditScript,
   ProjectPanel,
-  ProjectShot,
   ProjectStoryboard,
 } from '@/types/project'
 import {
@@ -41,28 +40,6 @@ function streamTarget(input: {
     targetType: input.targetType,
     targetId: input.targetId,
     episodeId: 'episode-1',
-  }
-}
-
-function createShot(id: string, shotId: string): ProjectShot {
-  return {
-    id,
-    shotId,
-    srtStart: 1,
-    srtEnd: 3,
-    srtDuration: 2,
-    sequence: 'prompt sequence',
-    locations: 'prompt location',
-    characters: 'prompt character',
-    plot: 'prompt plot',
-    pov: 'prompt pov',
-    imagePrompt: 'prompt image text',
-    scale: 'medium',
-    module: 'module-a',
-    focus: 'robot light',
-    zhSummarize: 'prompt summary',
-    imageUrl: null,
-    media: null,
   }
 }
 
@@ -1544,7 +1521,6 @@ describe('workspace node canvas projection', () => {
         photographyPlan: 'photography plan',
         lastError: 'storyboard failed',
       }],
-      shots: [createShot('shot-rich', '01')],
       editScript: createSingleVideoEditScript({
         id: 'edit-rich',
         title: 'Rich Detail Script',
@@ -1587,7 +1563,7 @@ describe('workspace node canvas projection', () => {
       errorMessage: 'image failed',
     })
     expect(shotNode?.data.shotDetails?.characters).toEqual([{ name: '小女孩', appearance: '初始形象' }])
-    expect(shotNode?.data.shotDetails?.promptShot?.plot).toBe('prompt plot')
+    expect(shotNode?.data.shotDetails).not.toHaveProperty('promptShot')
 
     expect(shotNode?.data.previewImageUrl).toBe('https://example.com/a.png')
     expect(shotNode?.data.imageDetails).toMatchObject({

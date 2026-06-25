@@ -1,84 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { resolveTaskResponse } from '@/lib/task/client'
 import {
   invalidateQueryTemplates,
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
-
-export function useAiModifyProjectShotPrompt(projectId: string) {
-    return useMutation({
-        mutationFn: async (payload: {
-            currentPrompt: string
-            currentVideoPrompt?: string
-            modifyInstruction: string
-            referencedAssets: Array<{
-                id: string
-                name: string
-                description: string
-                type: 'character' | 'location'
-            }>
-        }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-modify-shot-prompt`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-                'Failed to modify shot prompt',
-            )
-            return await resolveTaskResponse<{
-                modifiedImagePrompt: string
-                modifiedVideoPrompt?: string
-                referencedAssets?: Array<{
-                    id: string
-                    name: string
-                    description: string
-                    type: 'character' | 'location'
-                }>
-            }>(response)
-        },
-    })
-}
-
-/**
- * 分析镜头提示词变体（项目）
- */
-
-export function useAnalyzeProjectShotVariants(projectId: string) {
-    return useMutation({
-        mutationFn: async (payload: { panelId: string }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/analyze-shot-variants`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-                '分析失败',
-            )
-            return await resolveTaskResponse<{
-                success: boolean
-                suggestions: Array<{
-                    id: number
-                    title: string
-                    description: string
-                    shot_type: string
-                    camera_move: string
-                    video_prompt: string
-                    creative_score: number
-                }>
-                panelInfo?: {
-                    panelNumber?: string | number | null
-                    imageUrl?: string | null
-                    description?: string | null
-                }
-            }>(response)
-        },
-    })
-}
 
 /**
  * 更新摄影规则（项目）

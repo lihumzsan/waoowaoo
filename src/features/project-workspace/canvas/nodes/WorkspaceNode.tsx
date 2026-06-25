@@ -511,7 +511,6 @@ function ShotContent({
 }) {
   const details = data.shotDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const promptShot = details.promptShot
   const shouldShowPreview = hasText(data.previewImageUrl)
   if (!expanded) {
     return (
@@ -562,19 +561,6 @@ function ShotContent({
       />
       {renderTextSection(labels('photographyRules'), details.photographyRules)}
       {renderTextSection(labels('actingNotes'), details.actingNotes)}
-      {promptShot ? renderSection(labels('promptShot'), (
-        <div className="space-y-1">
-          {renderValue(labels('sequence'), promptShot.sequence)}
-          {renderValue(labels('locations'), promptShot.locations)}
-          {renderValue(labels('characters'), promptShot.characters)}
-          {renderValue(labels('plot'), promptShot.plot)}
-          {renderValue(labels('pov'), promptShot.pov)}
-          {renderValue(labels('scale'), promptShot.scale)}
-          {renderValue(labels('module'), promptShot.module)}
-          {renderValue(labels('focus'), promptShot.focus)}
-          {renderValue(labels('summary'), promptShot.zhSummarize)}
-        </div>
-      )) : null}
       {renderTextSection(labels('error'), details.errorMessage)}
     </div>
   )

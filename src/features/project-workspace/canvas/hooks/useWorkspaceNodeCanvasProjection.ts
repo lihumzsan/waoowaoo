@@ -16,7 +16,6 @@ import type {
   ProjectFinalVideo,
   Location,
   ProjectPanel,
-  ProjectShot,
   ProjectStoryboard,
   ProjectStoryboardBlockingArtifact,
   ProjectVideoGroup,
@@ -127,7 +126,6 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly storyText: string
   readonly locations?: readonly Location[]
   readonly storyboards: readonly ProjectStoryboard[]
-  readonly shots?: readonly ProjectShot[]
   readonly editScreenplay?: ProjectEditScreenplay | null
   readonly editDirectorDecoupage?: ProjectEditDirectorDecoupage | null
   readonly editScript?: ProjectEditScript | null
@@ -362,16 +360,6 @@ function estimateMediaNodeHeight(baseHeight: number, previewHeight: number): num
   return baseHeight + Math.max(0, previewHeight - DEFAULT_MEDIA_PREVIEW_HEIGHT)
 }
 
-function findPromptShot(panel: ProjectPanel, shots: readonly ProjectShot[]): ProjectShot | null {
-  const panelNumber = panel.panelNumber ?? panel.panelIndex + 1
-  const paddedPanelNumber = String(panelNumber).padStart(2, '0')
-  return shots.find((shot) => (
-    shot.id === panel.id ||
-    shot.shotId === String(panelNumber) ||
-    shot.shotId === paddedPanelNumber
-  )) ?? null
-}
-
 function shotBlockingFromPhotographyRules(photographyRules: string | null | undefined): Record<string, unknown> | null {
   const rules = readJsonRecord(parseJson(photographyRules))
   const consistencyMetadata = readJsonRecord(rules.consistencyMetadata)
@@ -387,9 +375,7 @@ function shotBlockingFromPhotographyRules(photographyRules: string | null | unde
 function createShotDetails(
   panel: ProjectPanel,
   storyboard: ProjectStoryboard,
-  shots: readonly ProjectShot[],
 ): WorkspaceCanvasShotDetails {
-  const promptShot = findPromptShot(panel, shots)
   return {
     shotType: panel.shotType,
     cameraMove: panel.cameraMove,
@@ -407,20 +393,6 @@ function createShotDetails(
     storyboardTextJson: storyboard.storyboardTextJson,
     photographyPlan: storyboard.photographyPlan,
     errorMessage: panel.imageErrorMessage ?? storyboard.lastError,
-    promptShot: promptShot
-      ? {
-          sequence: promptShot.sequence,
-          locations: promptShot.locations,
-          characters: promptShot.characters,
-          plot: promptShot.plot,
-          pov: promptShot.pov,
-          imagePrompt: promptShot.imagePrompt,
-          scale: promptShot.scale,
-          module: promptShot.module,
-          focus: promptShot.focus,
-          zhSummarize: promptShot.zhSummarize,
-        }
-      : null,
   }
 }
 
@@ -1062,7 +1034,6 @@ export function buildWorkspaceNodeCanvasProjection({
   episodeId,
   storyText,
   storyboards,
-  shots = [],
   editScreenplay,
   editDirectorDecoupage,
   editScript,
@@ -1973,7 +1944,7 @@ export function buildWorkspaceNodeCanvasProjection({
         previewImageUrl: primaryPanelImageUrl(panel),
         previewAspectRatio: preview?.aspectRatio ?? null,
         previewDisplayHeight: preview?.height ?? DEFAULT_MEDIA_PREVIEW_HEIGHT,
-        shotDetails: createShotDetails(panel, storyboard, shots),
+        shotDetails: createShotDetails(panel, storyboard),
         imageDetails: createImageDetails(panel),
         actionLabel: panel.imageTaskRunning
           ? undefined
@@ -2411,7 +2382,6 @@ export function useWorkspaceNodeCanvasProjection({
   storyText,
   locations,
   storyboards,
-  shots,
   editScreenplay,
   editDirectorDecoupage,
   editScript,
@@ -2434,7 +2404,6 @@ export function useWorkspaceNodeCanvasProjection({
       storyText,
       locations,
       storyboards,
-      shots,
       editScreenplay,
       editDirectorDecoupage,
       editScript,
@@ -2459,7 +2428,6 @@ export function useWorkspaceNodeCanvasProjection({
       finalVideo,
       videoGroups,
       savedLayouts,
-      shots,
       editCinematographyShotPlan,
       activeAssistantOperationId,
       editDirectorDecoupage,

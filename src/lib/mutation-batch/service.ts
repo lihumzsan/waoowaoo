@@ -84,7 +84,6 @@ function resolveReplayEpisodeId(entries: Array<{ targetType: string }>, episodeI
   const hasEpisodeScopedTarget = entries.some((entry) => (
     entry.targetType === 'ProjectPanel'
     || entry.targetType === 'ProjectStoryboard'
-    || entry.targetType === 'ProjectShot'
     || entry.targetType === 'ProjectEpisode'
   ))
   return hasEpisodeScopedTarget ? episodeId : null

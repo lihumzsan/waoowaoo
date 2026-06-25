@@ -898,9 +898,6 @@ describe('workspace node rendering', () => {
         imagePrompt: 'image prompt',
         photographyRules: 'photo rules',
         actingNotes: 'acting notes',
-        promptShot: {
-          plot: 'prompt plot',
-        },
       },
     })
     const imageHtml = renderNode({

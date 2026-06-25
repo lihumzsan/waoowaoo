@@ -2,7 +2,6 @@ import type {
   ProjectEditScreenplay,
   ProjectEditScript,
   ProjectFinalVideo,
-  ProjectShot,
   ProjectStoryboard,
   ProjectVideoGroup,
 } from '@/types/project'
@@ -34,7 +33,6 @@ export interface DemoProjectSnapshot {
     readonly srtContent: string | null
   }
   readonly storyboards: readonly ProjectStoryboard[]
-  readonly shots: readonly ProjectShot[]
   readonly editScreenplay: ProjectEditScreenplay | null
   readonly editScript: ProjectEditScript | null
   readonly finalVideo: ProjectFinalVideo | null

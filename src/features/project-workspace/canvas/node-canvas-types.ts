@@ -178,18 +178,6 @@ export interface WorkspaceCanvasShotDetails {
   readonly storyboardTextJson?: string | null
   readonly photographyPlan?: string | null
   readonly errorMessage?: string | null
-  readonly promptShot?: {
-    readonly sequence?: string | null
-    readonly locations?: string | null
-    readonly characters?: string | null
-    readonly plot?: string | null
-    readonly pov?: string | null
-    readonly imagePrompt?: string | null
-    readonly scale?: string | null
-    readonly module?: string | null
-    readonly focus?: string | null
-    readonly zhSummarize?: string | null
-  } | null
 }
 
 export interface WorkspaceCanvasImageDetails {

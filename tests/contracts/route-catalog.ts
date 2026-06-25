@@ -120,7 +120,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/storyboards/route.ts',
   'src/app/api/projects/[projectId]/update-appearance/route.ts',
   'src/app/api/projects/[projectId]/update-location/route.ts',
-  'src/app/api/projects/[projectId]/update-prompt/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
   'src/app/api/projects/[projectId]/video-urls/route.ts',
   'src/app/api/projects/[projectId]/workflow-lab/route.ts',

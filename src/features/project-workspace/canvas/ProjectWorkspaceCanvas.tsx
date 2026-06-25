@@ -207,7 +207,7 @@ function ProjectWorkspaceCanvasContent({
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, novelText, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const { episodeName, novelText, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editDirectorDecoupage } = useProjectEditDirectorDecoupage(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
@@ -554,7 +554,6 @@ function ProjectWorkspaceCanvasContent({
     storyText: novelText,
     locations,
     storyboards,
-    shots,
     editScreenplay,
     editDirectorDecoupage,
     editScript: projectedEditScript,
@@ -811,7 +810,6 @@ function ProjectWorkspaceCanvasContent({
       storyText: novelText,
       locations,
       storyboards,
-      shots,
       editScreenplay,
       editDirectorDecoupage,
       editScript: projectedEditScript,
@@ -830,7 +828,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()

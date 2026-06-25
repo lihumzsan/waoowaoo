@@ -17,34 +17,6 @@ export async function cloneEpisodeProjectData(params: {
   readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
-  const shots = await params.tx.projectShot.findMany({
-    where: { episodeId: params.sourceEpisodeId },
-    orderBy: { createdAt: 'asc' },
-  })
-  for (const shot of shots) {
-    await params.tx.projectShot.create({
-      data: {
-        episodeId: params.targetEpisodeId,
-        shotId: shot.shotId,
-        srtStart: shot.srtStart,
-        srtEnd: shot.srtEnd,
-        srtDuration: shot.srtDuration,
-        sequence: shot.sequence,
-        locations: shot.locations,
-        characters: shot.characters,
-        plot: shot.plot,
-        imagePrompt: shot.imagePrompt,
-        scale: shot.scale,
-        module: shot.module,
-        focus: shot.focus,
-        zhSummarize: shot.zhSummarize,
-        imageUrl: shot.imageUrl,
-        imageMediaId: shot.imageMediaId,
-        pov: shot.pov,
-      },
-    })
-  }
-
   if (shouldWorkflowLabCloneStoryboards(params.stage)) {
     await cloneWorkflowLabStoryboards({
       tx: params.tx,

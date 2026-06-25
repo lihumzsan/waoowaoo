@@ -1267,7 +1267,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_episode_detail: defineOperation({
       id: 'get_episode_detail',
-      summary: 'Get full episode data with storyboards/shots and update project.lastEpisodeId.',
+      summary: 'Get full episode data with storyboards and update project.lastEpisodeId.',
       intent: 'act',
       effects: EFFECTS_WRITE_OVERWRITE,
       inputSchema: z.object({
@@ -1285,7 +1285,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               },
               orderBy: { createdAt: 'asc' },
             },
-            shots: { orderBy: { shotId: 'asc' } },
             videoGroups: {
               orderBy: { createdAt: 'asc' },
             },

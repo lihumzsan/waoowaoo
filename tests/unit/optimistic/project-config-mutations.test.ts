@@ -70,7 +70,6 @@ function buildProject(): Project {
     locations: [],
     props: [],
     storyboards: [],
-    shots: [],
     videoResolution: null,
     imageResolution: null,
     lastEpisodeId: null,

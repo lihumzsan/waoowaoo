@@ -204,8 +204,7 @@ function isMediaTaskType(taskType: string | null): boolean {
 
 function isStoryboardTargetType(targetType: string | null): boolean {
   return targetType === 'ProjectPanel' ||
-    targetType === 'ProjectStoryboard' ||
-    targetType === 'ProjectShot'
+    targetType === 'ProjectStoryboard'
 }
 
 function isProjectAssetTargetType(targetType: string | null): boolean {

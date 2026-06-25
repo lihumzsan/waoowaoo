@@ -104,7 +104,6 @@ function DemoProjectCanvasContent({ snapshot }: { readonly snapshot: DemoProject
       episodeName: snapshot.episode.name,
       storyText: snapshot.episode.novelText ?? '',
       storyboards: snapshot.storyboards,
-      shots: snapshot.shots,
       editScreenplay: snapshot.editScreenplay,
       editScript: snapshot.editScript,
       editScriptPending: false,

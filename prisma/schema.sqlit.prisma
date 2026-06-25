@@ -126,7 +126,6 @@ model ProjectEpisode {
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  shots                   ProjectShot[]
   storyboards             ProjectStoryboard[]
   editorProject           VideoEditorProject?
   editScreenplay          ProjectEditScreenplay?
@@ -377,36 +376,6 @@ model ProjectPanel {
   @@index([sketchImageMediaId])
   @@index([previousImageMediaId])
   @@map("project_panels")
-}
-
-model ProjectShot {
-  id              String                @id @default(uuid())
-  episodeId       String
-  shotId          String
-  srtStart        Int
-  srtEnd          Int
-  srtDuration     Float
-  sequence        String?
-  locations       String?
-  characters      String?
-  plot            String?
-  imagePrompt     String?
-  scale           String?
-  module          String?
-  focus           String?
-  zhSummarize     String?
-  imageUrl        String?
-  imageMediaId    String?
-  imageMedia      MediaObject?          @relation("ProjectShotImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @default(now()) @updatedAt
-  pov             String?
-  episode         ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([episodeId])
-  @@index([shotId])
-  @@index([imageMediaId])
-  @@map("project_shots")
 }
 
 model ProjectStoryboard {
@@ -924,7 +893,6 @@ model MediaObject {
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
   projectStoryboardBlockingArtifactImages ProjectStoryboardBlockingArtifact[] @relation("ProjectStoryboardBlockingArtifactImageMedia")
-  projectShotImages              ProjectShot[]        @relation("ProjectShotImageMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")

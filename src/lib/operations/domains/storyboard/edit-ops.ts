@@ -153,30 +153,6 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         return { success: true }
       },
     }),
-    update_shot_prompt: defineOperation({
-      id: 'update_shot_prompt',
-      summary: 'Update a shot prompt field (imagePrompt/videoPrompt).',
-      intent: 'act',
-      effects: EFFECTS_OVERWRITE,
-      inputSchema: z.object({
-        shotId: z.string().min(1),
-        field: z.enum(['imagePrompt', 'videoPrompt']),
-        value: z.string().optional().nullable(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const shot = await prisma.projectShot.findFirst({
-          where: { id: input.shotId, episode: { projectId: ctx.projectId } },
-          select: { id: true },
-        })
-        if (!shot) throw new Error('NOT_FOUND')
-
-        return await prisma.projectShot.update({
-          where: { id: input.shotId },
-          data: { [input.field]: input.value ?? null },
-        })
-      },
-    }),
     cleanup_unselected_images: defineOperation({
       id: 'cleanup_unselected_images',
       summary: 'Clean up unselected images for characters/locations by deleting unchosen objects and normalizing indices.',
