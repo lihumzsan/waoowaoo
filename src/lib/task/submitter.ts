@@ -98,7 +98,6 @@ export async function submitTask(params: {
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
   priority?: number
-  maxAttempts?: number
   billingInfo?: TaskBillingInfo | null
   requestId?: string | null
   operationId?: string | null
@@ -147,7 +146,6 @@ export async function submitTask(params: {
     payload: normalizedPayload,
     dedupeKey: params.dedupeKey || null,
     priority: params.priority,
-    maxAttempts: params.maxAttempts,
     billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,

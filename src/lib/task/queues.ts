@@ -1,4 +1,4 @@
-import { JobsOptions, Queue } from 'bullmq'
+import { Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { createScopedLogger } from '@/lib/logging/core'
 import { QueueType, TaskType, TASK_TYPE, type TaskJobData } from './types'
@@ -10,17 +10,15 @@ export const QUEUE_NAME = {
   TEXT: 'waoowaoo-text',
 } as const
 
-const defaultJobOptions: JobsOptions = {
+const defaultJobOptions = {
   removeOnComplete: 500,
   removeOnFail: 500,
-  attempts: 5,
-  backoff: {
-    type: 'exponential',
-    delay: 2_000,
-  },
 }
 
 type QueueSingleton = Partial<Record<QueueType, Queue<TaskJobData>>>
+type TaskJobOptions = {
+  priority?: number
+}
 
 const globalForQueues = globalThis as typeof globalThis & {
   __waoowaooQueues?: QueueSingleton
@@ -121,7 +119,6 @@ async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, data: Task
         targetType: data.targetType,
         targetId: data.targetId,
         jobState: state,
-        attemptsMade: existing.attemptsMade,
       },
     })
     return
@@ -138,7 +135,6 @@ async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, data: Task
       targetType: data.targetType,
       targetId: data.targetId,
       jobState: state,
-      attemptsMade: existing.attemptsMade,
       failedReason: existing.failedReason || null,
       processedOn: existing.processedOn || null,
       finishedOn: existing.finishedOn || null,
@@ -147,17 +143,14 @@ async function removeTerminalJobWithSameId(queue: Queue<TaskJobData>, data: Task
   await existing.remove()
 }
 
-export async function addTaskJob(data: TaskJobData, opts?: JobsOptions) {
+export async function addTaskJob(data: TaskJobData, opts?: TaskJobOptions) {
   const queueType = getQueueTypeByTaskType(data.type)
   const queue = getQueueByType(queueType)
   const priority = typeof opts?.priority === 'number' ? opts.priority : 0
-  const attempts = typeof opts?.attempts === 'number' ? opts.attempts : undefined
   await removeTerminalJobWithSameId(queue, data)
   return await queue.add(data.type, data, {
     jobId: data.taskId,
     priority,
-    ...(opts || {}),
-    ...(attempts !== undefined ? { attempts } : {}),
   })
 }
 

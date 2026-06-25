@@ -208,7 +208,6 @@ export type CreateTaskInput = {
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
   priority?: number
-  maxAttempts?: number
   billingInfo?: TaskBillingInfo | null
   operationId?: string | null
   operationSource?: string | null

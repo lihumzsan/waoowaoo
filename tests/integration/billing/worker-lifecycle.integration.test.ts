@@ -63,14 +63,6 @@ async function createPreparedMusicTask() {
   const job = {
     data: jobData,
     queueName: 'music',
-    opts: {
-      attempts: 5,
-      backoff: {
-        type: 'exponential',
-        delay: 2_000,
-      },
-    },
-    attemptsMade: 0,
   } as unknown as Job<TaskJobData>
 
   return { taskId, user, project, job }
@@ -108,19 +100,20 @@ describe('billing/worker lifecycle integration', () => {
     expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('rolled_back')
   })
 
-  it('keeps task active for queue retry on retryable worker error', async () => {
+  it('marks task failed immediately even when the normalized error is retryable', async () => {
     const fixture = await createPreparedMusicTask()
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {
         throw new TypeError('terminated')
       }),
-    ).rejects.toBeInstanceOf(TypeError)
+    ).rejects.toBeInstanceOf(UnrecoverableError)
 
     const task = await prisma.task.findUnique({ where: { id: fixture.taskId } })
-    expect(task?.status).toBe('processing')
+    expect(task?.status).toBe('failed')
+    expect(task?.errorCode).toBe('NETWORK_ERROR')
     const billing = task?.billingInfo as TaskBillingInfo
-    expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('frozen')
+    expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('rolled_back')
   })
 
   it('rolls back billing on cancellation path', async () => {

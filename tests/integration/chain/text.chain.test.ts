@@ -132,7 +132,7 @@ describe('chain contract - text queue behavior', () => {
     }))
   })
 
-  it('preserves explicit queue attempts for atomic text tasks', async () => {
+  it('enqueues text tasks without BullMQ retry options', async () => {
     const { addTaskJob, QUEUE_NAME } = await import('@/lib/task/queues')
 
     await addTaskJob({
@@ -145,14 +145,13 @@ describe('chain contract - text queue behavior', () => {
       targetId: 'episode-1',
       payload: { episodeId: 'episode-1' },
       userId: 'user-1',
-    }, { attempts: 5 })
+    })
 
     const calls = queueState.addCallsByQueue.get(QUEUE_NAME.TEXT) || []
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.options).toEqual(expect.objectContaining({
-      jobId: 'task-text-story-1',
-      attempts: 5,
-    }))
+    expect(calls[0]?.options).toEqual(expect.objectContaining({ jobId: 'task-text-story-1' }))
+    expect(calls[0]?.options).not.toHaveProperty('attempts')
+    expect(calls[0]?.options).not.toHaveProperty('backoff')
   })
 
   it('explicit priority is preserved for text queue jobs', async () => {

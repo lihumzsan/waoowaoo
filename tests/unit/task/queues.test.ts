@@ -46,6 +46,13 @@ describe('task queues', () => {
 
     expect(queue).toBeDefined()
     expect(QueueMock).toHaveBeenCalledTimes(1)
+    const options = QueueMock.mock.calls[0]?.[1] as { defaultJobOptions?: Record<string, unknown> } | undefined
+    expect(options?.defaultJobOptions).toEqual({
+      removeOnComplete: 500,
+      removeOnFail: 500,
+    })
+    expect(options?.defaultJobOptions).not.toHaveProperty('attempts')
+    expect(options?.defaultJobOptions).not.toHaveProperty('backoff')
   })
 
   it('routes music generation tasks to the music queue', async () => {

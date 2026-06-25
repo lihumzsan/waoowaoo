@@ -272,7 +272,6 @@ export async function createTask(input: CreateTaskInput) {
     status: TASK_STATUS.QUEUED,
     progress: 0,
     attempt: 0,
-    maxAttempts: input.maxAttempts ?? 5,
     priority: input.priority ?? 0,
     dedupeKey: input.dedupeKey || null,
     operationId: input.operationId || null,

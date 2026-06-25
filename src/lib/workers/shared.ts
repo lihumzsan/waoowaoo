@@ -19,7 +19,6 @@ import { normalizeAnyError } from '@/lib/errors/normalize'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
-import type { NormalizedError } from '@/lib/errors/types'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -143,59 +142,6 @@ async function publishStreamEvent(params: {
     persist: params.persist,
   })
 
-}
-
-function resolveQueueAttempts(job: Job<TaskJobData>): number {
-  const attempts = (job.opts?.attempts ?? 1)
-  const value = typeof attempts === 'number' && Number.isFinite(attempts) ? Math.floor(attempts) : 1
-  return Math.max(1, value)
-}
-
-function resolveAttemptsMade(job: Job<TaskJobData>): number {
-  const attemptsMade = job.attemptsMade
-  const value = typeof attemptsMade === 'number' && Number.isFinite(attemptsMade) ? Math.floor(attemptsMade) : 0
-  return Math.max(0, value)
-}
-
-function resolveNextBackoffMs(job: Job<TaskJobData>, failedAttempt: number): number | null {
-  const backoff = job.opts?.backoff
-  if (typeof backoff === 'number' && Number.isFinite(backoff) && backoff > 0) {
-    return Math.floor(backoff)
-  }
-  if (!backoff || typeof backoff !== 'object') return null
-
-  const backoffRecord = backoff as { type?: unknown; delay?: unknown }
-  const baseDelay = typeof backoffRecord.delay === 'number' && Number.isFinite(backoffRecord.delay)
-    ? Math.max(0, Math.floor(backoffRecord.delay))
-    : 0
-  if (baseDelay <= 0) return null
-
-  const type = typeof backoffRecord.type === 'string' ? backoffRecord.type : 'fixed'
-  if (type === 'exponential') {
-    const exponent = Math.max(0, failedAttempt - 1)
-    return baseDelay * Math.pow(2, exponent)
-  }
-  return baseDelay
-}
-
-function shouldRetryInQueue(params: {
-  job: Job<TaskJobData>
-  normalizedError: NormalizedError
-}): {
-  enabled: boolean
-  failedAttempt: number
-  maxAttempts: number
-  nextBackoffMs: number | null
-} {
-  const maxAttempts = resolveQueueAttempts(params.job)
-  const failedAttempt = resolveAttemptsMade(params.job) + 1
-  const enabled = params.normalizedError.retryable && failedAttempt < maxAttempts
-  return {
-    enabled,
-    failedAttempt,
-    maxAttempts,
-    nextBackoffMs: resolveNextBackoffMs(params.job, failedAttempt),
-  }
 }
 
 function buildErrorCauseChain(input: unknown): Array<{ name: string; message: string }> {
@@ -383,10 +329,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     }
 
     const normalizedError = normalizeAnyError(error, { context: 'worker' })
-    const retryDecision = shouldRetryInQueue({
-      job,
-      normalizedError,
-    })
     const errorCauseChain = buildErrorCauseChain(error)
     const workerFailureLog = {
       action: 'worker.failed',
@@ -418,79 +360,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
             causeChain: errorCauseChain,
           },
     }
-    if (retryDecision.enabled) {
-      logger.error({
-        ...workerFailureLog,
-        action: 'worker.failed.retryable',
-        message: `retryable failure: ${normalizedError.message}`,
-      })
-    } else {
-      logger.error(workerFailureLog)
-    }
-    if (retryDecision.enabled) {
-      logger.error({
-        action: 'worker.retry.scheduled',
-        message: 'retryable worker error, queue retry scheduled',
-        errorCode: normalizedError.code,
-        retryable: normalizedError.retryable,
-        durationMs: Date.now() - startedAt,
-        details: {
-          queue: job.queueName,
-          taskType: data.type,
-          targetType: data.targetType,
-          targetId: data.targetId,
-          failedAttempt: retryDecision.failedAttempt,
-          maxAttempts: retryDecision.maxAttempts,
-          nextBackoffMs: retryDecision.nextBackoffMs,
-        },
-      })
-
-      const retryPayload = withFlowFields(data, {
-        stage: 'retrying',
-        stageLabel: 'progress.runtime.stage.retrying',
-        displayMode: 'detail',
-        error: normalizedError,
-        retry: {
-          failedAttempt: retryDecision.failedAttempt,
-          maxAttempts: retryDecision.maxAttempts,
-          nextBackoffMs: retryDecision.nextBackoffMs,
-        },
-        trace: {
-          requestId: data.trace?.requestId || null,
-        },
-      })
-
-      try {
-        await publishLifecycleEvent({
-          taskId,
-          projectId: data.projectId,
-          userId: data.userId,
-          type: TASK_EVENT_TYPE.PROGRESS,
-          taskType: data.type,
-          targetType: data.targetType,
-          targetId: data.targetId,
-          episodeId: data.episodeId || null,
-          payload: {
-            ...retryPayload,
-            message: `Retry scheduled (${retryDecision.failedAttempt}/${retryDecision.maxAttempts}): ${normalizedError.message}`,
-          },
-          persist: false,
-        })
-      } catch (publishError) {
-        logger.warn({
-          action: 'worker.retry.progress_publish_failed',
-          message: 'failed to publish retry progress event',
-          details: {
-            queue: job.queueName,
-            taskType: data.type,
-            taskId,
-          },
-          error: publishError instanceof Error ? publishError.message : String(publishError),
-        })
-      }
-
-      throw (error instanceof Error ? error : new Error(normalizedError.message || 'Task failed'))
-    }
+    logger.error(workerFailureLog)
 
     if (billingInfo?.billable) {
       billingInfo = (await rollbackTaskBilling({
@@ -537,9 +407,8 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       },
     })
 
-    // Re-throw as UnrecoverableError so BullMQ records the job as failed
-    // (without this, BullMQ thinks the job succeeded and never logs failure)
-    // UnrecoverableError prevents BullMQ auto-retry since we already handle task state in app layer
+    // Re-throw as UnrecoverableError so BullMQ records the job as failed.
+    // Agent-level retry must submit a new operation instead of reusing this job.
     throw new UnrecoverableError(normalizedError.message || 'Task failed')
   } finally {
     clearInterval(heartbeatTimer)

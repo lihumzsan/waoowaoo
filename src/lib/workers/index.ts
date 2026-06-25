@@ -57,7 +57,6 @@ function jobDetails(job: Job<TaskJobData> | undefined | null, extra?: Record<str
     episodeId: job?.data?.episodeId || null,
     targetType: job?.data?.targetType || null,
     targetId: job?.data?.targetId || null,
-    attemptsMade: job?.attemptsMade ?? null,
     failedReason: job?.failedReason || null,
     processedOn: job?.processedOn || null,
     finishedOn: job?.finishedOn || null,

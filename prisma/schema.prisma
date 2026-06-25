@@ -1178,7 +1178,6 @@ model Task {
   status           String    @default("queued")
   progress         Int       @default(0)
   attempt          Int       @default(0)
-  maxAttempts      Int       @default(5)
   priority         Int       @default(0)
   dedupeKey        String?   @unique
   externalId       String?
