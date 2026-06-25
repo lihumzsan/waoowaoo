@@ -208,6 +208,45 @@ describe('executeProjectAgentOperationFromApi', () => {
     })
   })
 
+  it('[execution throws ApiError] -> preserves structured operation details', async () => {
+    registryState.registry = {
+      api_forbidden_op: makeTestOperation({
+        id: 'api_forbidden_op',
+        summary: 'api forbidden',
+        intent: 'act',
+        effects: EFFECTS_WRITE,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: vi.fn(async () => {
+          throw new ApiError('FORBIDDEN', {
+            code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+            field: 'videoModel',
+            message: 'video model is managed by system configuration',
+          })
+        }),
+      }),
+    }
+
+    const promise = executeProjectAgentOperationFromApi({
+      request: buildRequest(),
+      operationId: 'api_forbidden_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      input: {},
+      source: 'project-ui',
+    })
+
+    await expect(promise).rejects.toBeInstanceOf(ApiError)
+    await expect(promise).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: expect.objectContaining({
+        code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+        field: 'videoModel',
+        message: 'video model is managed by system configuration',
+      }),
+    })
+  })
+
   it('[execution throws prisma missing column] -> throws ApiError EXTERNAL_ERROR with schema-mismatch code', async () => {
     registryState.registry = {
       prisma_schema_mismatch: makeTestOperation({

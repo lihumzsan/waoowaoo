@@ -3,8 +3,6 @@ import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import {
-  type ProjectAgentToolError,
-  type ProjectAgentToolErrorCode,
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
 import {
@@ -13,49 +11,11 @@ import {
 } from '@/lib/project-agent/permission-mode'
 import type { ProjectAgentContext } from '@/lib/project-agent/types'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
-
-function toMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    return message || 'PROJECT_AGENT_OPERATION_FAILED'
-  }
-  if (typeof error === 'string' && error.trim()) return error.trim()
-  try {
-    const serialized = JSON.stringify(error)
-    if (typeof serialized === 'string' && serialized.trim()) return serialized.trim()
-    return 'PROJECT_AGENT_OPERATION_FAILED'
-  } catch {
-    return 'PROJECT_AGENT_OPERATION_FAILED'
-  }
-}
-
-function buildToolError(params: {
-  code: ProjectAgentToolErrorCode
-  message: string
-  operationId: string
-  details?: Record<string, unknown> | null
-  issues?: unknown
-}): ProjectAgentToolError {
-  return {
-    code: params.code,
-    message: params.message,
-    operationId: params.operationId,
-    details: params.details ?? null,
-    ...(params.issues !== undefined ? { issues: params.issues } : {}),
-  }
-}
-
-function withOperationErrorDetails(
-  operation: { agentFlow?: { interruptsFor?: 'approval' | 'choice' | null } },
-  details?: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  const interruptsFor = operation.agentFlow?.interruptsFor ?? null
-  if (!interruptsFor) return details ?? null
-  return {
-    ...(details ?? {}),
-    interruptsFor,
-  }
-}
+import {
+  buildToolError,
+  normalizeOperationExecutionToolError,
+  withOperationErrorDetails,
+} from '@/lib/adapters/operation-error-normalizer'
 
 export async function executeProjectAgentOperationFromTool(params: {
   request: NextRequest
@@ -173,14 +133,10 @@ export async function executeProjectAgentOperationFromTool(params: {
   } catch (error) {
     return {
       ok: false,
-      error: buildToolError({
-        code: 'OPERATION_EXECUTION_FAILED',
-        message: toMessage(error),
+      error: normalizeOperationExecutionToolError({
+        error,
+        operation,
         operationId: params.operationId,
-        details: withOperationErrorDetails(
-          operation,
-          error instanceof Error && error.cause ? { cause: error.cause } : null,
-        ),
       }),
     }
   }

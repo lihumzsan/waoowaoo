@@ -284,6 +284,7 @@ export function buildTaskFollowUpInputItem(
     `status=${followUp.terminalStatus}`,
     `total=${String(followUp.total)} succeeded=${String(followUp.successCount)} failed=${String(followUp.failedCount)}`,
     ...(followUp.failedTaskIds.length > 0 ? [`failedTaskIds=${followUp.failedTaskIds.join(',')}`] : []),
+    ...(followUp.failedTasks.length > 0 ? [`failedTasks=${JSON.stringify(followUp.failedTasks)}`] : []),
     buildTaskFollowUpInstruction(locale),
   ]
   return {
@@ -478,7 +479,7 @@ async function maybeCreateProjectAgentWait(params: {
     return null
   }
   const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, params.stopPart.operationIds)
-  await createProjectAgentWait({
+  const waitId = await createProjectAgentWait({
     runId: params.runId,
     projectId: params.projectId,
     userId: params.userId,
@@ -488,6 +489,9 @@ async function maybeCreateProjectAgentWait(params: {
     taskIds: params.stopPart.taskIds,
     followUpMode,
   })
+  if (!waitId) {
+    throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED runId=${params.runId}`)
+  }
   return followUpMode
 }
 
@@ -936,7 +940,8 @@ export async function createProjectAgentChatResponse(input: {
         }
 
         const approvalItem = result.interruptions[0] ?? result.state.getInterruptions()[0] ?? null
-        if (approvalItem) {
+        const shouldPersistApprovalInterruption = !!approvalItem && latestStopPart?.reason !== 'awaiting_external_task'
+        if (approvalItem && shouldPersistApprovalInterruption) {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
           const interruptionId = await createProjectAgentApprovalInterruption({
@@ -982,19 +987,41 @@ export async function createProjectAgentChatResponse(input: {
           await clearProjectAgentInterruptionRunState(approvalInterruption.id)
         }
 
-        const waitFollowUpMode = await maybeCreateProjectAgentWait({
-          stopPart: latestStopPart,
-          registry: operations,
-          runId: input.run.id,
-          projectId: input.projectId,
-          userId: input.userId,
-          episodeId: context.episodeId || null,
-        })
+        let waitFollowUpMode: ProjectAgentWaitFollowUpMode | null = null
+        try {
+          waitFollowUpMode = await maybeCreateProjectAgentWait({
+            stopPart: latestStopPart,
+            registry: operations,
+            runId: input.run.id,
+            projectId: input.projectId,
+            userId: input.userId,
+            episodeId: context.episodeId || null,
+          })
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          chunks.push(...await settleTaskFollowUpActivity('failed', error))
+          await updateProjectAgentRunStatus({
+            runId: input.run.id,
+            status: 'failed',
+            stopReason: 'wait_binding_failed',
+            errorCode: 'PROJECT_AGENT_WAIT_BINDING_FAILED',
+            errorMessage,
+          })
+          chunks.push(createAgentRunStatusChunk({
+            runId: input.run.id,
+            requestId,
+            status: 'failed',
+            controlKind: input.run.controlKind,
+            stopReason: 'wait_binding_failed',
+          }))
+          runStatusFinalized = true
+          return chunks
+        }
         if (latestStopPart) {
           chunks.push(createDataChunk('data-agent-stop', latestStopPart))
         }
 
-        if (completionError && !approvalItem) {
+        if (completionError && !shouldPersistApprovalInterruption) {
           chunks.push(...await settleTaskFollowUpActivity('failed', completionError))
           await updateProjectAgentRunStatus({
             runId: input.run.id,
@@ -1013,7 +1040,7 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
           throw completionError
         }
-        if (!approvalItem) {
+        if (!shouldPersistApprovalInterruption) {
           chunks.push(...await settleTaskFollowUpActivity('completed'))
           if (latestStopPart?.reason === 'awaiting_external_task') {
             await updateProjectAgentRunStatus({

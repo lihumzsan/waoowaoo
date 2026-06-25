@@ -2,40 +2,11 @@ import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function toMessage(error: unknown): string {
-  if (error instanceof Error) return error.message?.trim() || 'OPERATION_FAILED'
-  if (typeof error === 'string') return error.trim() || 'OPERATION_FAILED'
-  try {
-    const serialized = JSON.stringify(error)
-    if (typeof serialized === 'string' && serialized.trim()) return serialized.trim()
-    return 'OPERATION_FAILED'
-  } catch {
-    return 'OPERATION_FAILED'
-  }
-}
-
-function extractPrismaMissingColumn(error: unknown): string | null {
-  if (!isRecord(error)) return null
-  if (error.code !== 'P2022') return null
-  const meta = isRecord(error.meta) ? error.meta : null
-  const column = typeof meta?.column === 'string' ? meta.column.trim() : ''
-  return column || null
-}
-
-function inferApiErrorCodeFromMessage(message: string): 'NOT_FOUND' | 'INVALID_PARAMS' | 'FORBIDDEN' | 'UNAUTHORIZED' | 'CONFLICT' | null {
-  const lower = message.toLowerCase()
-  if (lower.includes('unauthorized') || lower.includes('need login') || lower.includes('not authenticated')) return 'UNAUTHORIZED'
-  if (lower.includes('forbidden') || lower.includes('permission denied')) return 'FORBIDDEN'
-  if (lower.includes('not found') || lower.includes('不存在') || lower.includes('missing record') || lower.includes('not_found')) return 'NOT_FOUND'
-  if (lower.includes('conflict') || lower.includes('already exists') || lower.includes('duplicate')) return 'CONFLICT'
-  if (lower.includes('invalid') || lower.includes('missing') || lower.includes('required') || lower.includes('bad request')) return 'INVALID_PARAMS'
-  return null
-}
+import {
+  extractPrismaMissingColumn,
+  inferApiErrorCodeFromMessage,
+  toOperationErrorMessage,
+} from '@/lib/adapters/operation-error-normalizer'
 
 export async function executeProjectAgentOperationFromApi(params: {
   request: NextRequest
@@ -111,7 +82,7 @@ export async function executeProjectAgentOperationFromApi(params: {
         message: `database schema mismatch: missing column ${missingColumn}; run the latest Prisma migration before starting the app`,
       })
     }
-    const message = toMessage(error)
+    const message = toOperationErrorMessage(error, 'OPERATION_FAILED')
     const inferred = inferApiErrorCodeFromMessage(message)
     if (inferred) {
       throw new ApiError(inferred, { message })

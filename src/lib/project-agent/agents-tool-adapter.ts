@@ -5,6 +5,7 @@ import {
   type Tool,
 } from '@openai/agents'
 import type { NextRequest } from 'next/server'
+import { buildToolError } from '@/lib/adapters/operation-error-normalizer'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import { writeOperationDataPart } from '@/lib/operations/types'
@@ -18,6 +19,7 @@ import {
   type AssistantPermissionMode,
 } from './permission-mode'
 import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
+import { normalizeOperationRuntimeSignal } from './runtime-signal'
 import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
 
 type UnknownObject = { [key: string]: unknown }
@@ -83,6 +85,34 @@ function isInterruptingOperation(agentFlow: OperationAgentFlow | undefined): boo
   return agentFlow?.interruptsFor === 'choice' || agentFlow?.interruptsFor === 'approval'
 }
 
+function isNoopToolResult(result: ProjectAgentToolResult<unknown>): boolean {
+  return result.ok && isRecord(result.data) && result.data.noop === true
+}
+
+function enforceLongRunningTaskSignal(
+  operation: ProjectAgentOperationDefinition,
+  result: ProjectAgentToolResult<unknown>,
+): ProjectAgentToolResult<unknown> {
+  if (!result.ok || !operation.effects.longRunning) return result
+  const signal = normalizeOperationRuntimeSignal({
+    toolName: operation.id,
+    output: result,
+  })
+  if (signal.kind === 'await_task' || isNoopToolResult(result)) return result
+  return {
+    ok: false,
+    error: buildToolError({
+      code: 'OPERATION_OUTPUT_INVALID',
+      message: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
+      operationId: operation.id,
+      details: {
+        expected: 'async_task_signal',
+        reasonCode: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
+      },
+    }),
+  }
+}
+
 export interface CreateProjectAgentOperationToolParams {
   request: NextRequest
   operation: ProjectAgentOperationDefinition
@@ -127,7 +157,7 @@ export function createProjectAgentOperationTool(
       const normalizedInput = injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval)
       if (isInterruptingOperation(params.operation.agentFlow)) {
         try {
-          return await executeProjectAgentOperationFromTool({
+          const result = await executeProjectAgentOperationFromTool({
             request: params.request,
             operationId: params.operation.id,
             projectId: params.projectId,
@@ -139,6 +169,7 @@ export function createProjectAgentOperationTool(
             input: normalizedInput,
             toolCallId,
           })
+          return enforceLongRunningTaskSignal(params.operation, result)
         } finally {
           params.onExecutionSettled?.()
         }
@@ -184,7 +215,7 @@ export function createProjectAgentOperationTool(
         })
       }
       try {
-        const result = await executeProjectAgentOperationFromTool({
+        const rawResult = await executeProjectAgentOperationFromTool({
           request: params.request,
           operationId: params.operation.id,
           projectId: params.projectId,
@@ -196,6 +227,7 @@ export function createProjectAgentOperationTool(
           input: normalizedInput,
           toolCallId,
         })
+        const result = enforceLongRunningTaskSignal(params.operation, rawResult)
         const settledActivity = await appendProjectAgentEvents({
           scope: {
             projectId: params.projectId,

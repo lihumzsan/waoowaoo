@@ -286,7 +286,17 @@ vi.mock('@/lib/project-workflow/edit-first', async () => {
 })
 
 vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
-  executeProjectAgentOperationFromTool: vi.fn(async () => ({ ok: true, data: {} })),
+  executeProjectAgentOperationFromTool: vi.fn(async () => ({
+    ok: true,
+    data: {
+      success: true,
+      async: true,
+      taskId: 'task-generated-1',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+    },
+  })),
 }))
 
 vi.mock('@/lib/operations/registry', () => ({
@@ -331,6 +341,7 @@ vi.mock('@/lib/project-agent/event', () => ({
 
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
+import { createProjectAgentWait } from '@/lib/project-agent/waits'
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
   kind: 'user_turn',
@@ -777,6 +788,59 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
+  })
+
+  it('binds async task waits after approval resume instead of returning to awaiting approval', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('approval_response'),
+      control: {
+        kind: 'approval',
+        interruption: {
+          id: 'interruption-1',
+          runId: 'run-approval_response',
+          activityId: 'activity-approval-1',
+          type: 'approval',
+          status: 'consumed',
+          operationId: 'generate_edit_screenplay',
+          approvalId: 'approval-1',
+          toolCallId: 'tool-generate-screenplay-1',
+          runState: 'serialized-state',
+        },
+        approved: true,
+        reason: null,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '继续生成剧本' }] },
+      ],
+    })
+    await drainCapturedResponseStream()
+
+    expect(response.status).toBe(200)
+    expect(createProjectAgentWait).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-approval_response',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      operationId: 'generate_edit_screenplay',
+      taskIds: ['task-generated-1'],
+    }))
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-approval_response',
+      status: 'awaiting_task',
+      stopReason: 'awaiting_task',
+    }))
+    expect(runState.safelyUpdateProjectAgentRunStatus).not.toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-approval_response',
+      status: 'awaiting_approval',
+    }))
   })
 
   it('keeps screenplay review card available after screenplay generation', async () => {

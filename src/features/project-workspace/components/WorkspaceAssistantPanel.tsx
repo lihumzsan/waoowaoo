@@ -66,6 +66,15 @@ interface ProjectAgentWaitFollowUp {
   operationId: string
   taskIds: string[]
   failedTaskIds: string[]
+  failedTasks: Array<{
+    taskId: string
+    taskType: string | null
+    targetType: string | null
+    targetId: string | null
+    status: string | null
+    errorCode: string | null
+    errorMessage: string | null
+  }>
   terminalStatus: 'completed' | 'failed'
   total: number
   successCount: number

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
+import { ApiError } from '@/lib/api-errors'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import { makeTestOperation, EFFECTS_NONE, EFFECTS_WRITE } from '../../helpers/project-agent-operations'
 
@@ -178,6 +179,51 @@ describe('executeProjectAgentOperationFromTool', () => {
     if (result.ok) return
     expect(result.error.code).toBe('OPERATION_EXECUTION_FAILED')
     expect(result.error.message).toBe('boom')
+  })
+
+  it('[execution ApiError] -> preserves structured details for the model', async () => {
+    registryState.registry = {
+      forbidden_op: makeTestOperation({
+        id: 'forbidden_op',
+        summary: 'forbidden',
+        intent: 'act',
+        effects: EFFECTS_WRITE,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: vi.fn(async () => {
+          throw new ApiError('FORBIDDEN', {
+            code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+            field: 'videoModel',
+            message: 'video model is managed by system configuration',
+          })
+        }),
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'forbidden_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'auto',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('OPERATION_EXECUTION_FAILED')
+    expect(result.error.message).toBe('video model is managed by system configuration')
+    expect(result.error.details).toEqual(expect.objectContaining({
+      apiErrorCode: 'FORBIDDEN',
+      httpStatus: 403,
+      code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+      reasonCode: 'TASK_MODEL_MANAGED_BY_CONFIG',
+      field: 'videoModel',
+      message: 'video model is managed by system configuration',
+    }))
   })
 
   it('[interrupting operation error] -> marks the failed interaction boundary in details', async () => {

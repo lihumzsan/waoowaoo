@@ -64,6 +64,29 @@ describe('project agent business stop signals', () => {
     })
   })
 
+  it('[data task submitted part] -> emits external task wait stop data', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([{
+      toolName: 'generate_episode_videos',
+      output: {
+        type: 'data-task-submitted',
+        data: {
+          operationId: 'generate_episode_videos',
+          taskId: 'task-video-1',
+          status: 'queued',
+        },
+      },
+    }])
+
+    expect(stopPart).toEqual({
+      reason: 'awaiting_external_task',
+      stepCount: 1,
+      operationIds: ['generate_episode_videos'],
+      taskIds: ['task-video-1'],
+      phases: [],
+    })
+  })
+
   it('[task status active] -> remains an observation so the agent can answer without creating a wait', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([{

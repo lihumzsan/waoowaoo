@@ -9,7 +9,15 @@ import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choic
 import { EFFECTS_BILLABLE, EFFECTS_NONE } from '../../helpers/project-agent-operations'
 
 const executeState = vi.hoisted(() => ({
-  executeProjectAgentOperationFromTool: vi.fn(async () => ({ ok: true, data: { success: true } })),
+  executeProjectAgentOperationFromTool: vi.fn(async (): Promise<unknown> => ({
+    ok: true,
+    data: {
+      success: true,
+      async: true,
+      taskId: 'task-1',
+      status: 'queued',
+    },
+  })),
 }))
 
 const eventState = vi.hoisted(() => ({
@@ -76,6 +84,15 @@ function buildOperation(
 describe('createProjectAgentOperationTool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    executeState.executeProjectAgentOperationFromTool.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        async: true,
+        taskId: 'task-1',
+        status: 'queued',
+      },
+    })
   })
 
   it('maps confirmation requirements to Agents SDK approval and preserves execution path', async () => {
@@ -280,5 +297,54 @@ describe('createProjectAgentOperationTool', () => {
         episodeId: 'episode-1',
       },
     }))
+  })
+
+  it('fails long-running assistant operations that do not return an async task signal', async () => {
+    executeState.executeProjectAgentOperationFromTool.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        success: true,
+      },
+    })
+    const tool = createProjectAgentOperationTool({
+      request: new Request('http://localhost') as unknown as NextRequest,
+      operation: buildOperation(),
+      description: 'Generate images',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        episodeId: 'episode-1',
+        runId: 'run-1',
+      },
+      assistantPermissionMode: 'auto',
+      writer: {
+        write: vi.fn(),
+        merge: vi.fn(),
+        onError: (error) => (error instanceof Error ? error.message : String(error)),
+      },
+    })
+
+    expect(tool.type).toBe('function')
+    if (tool.type !== 'function') throw new Error('EXPECTED_FUNCTION_TOOL')
+    const result = await tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'generate_storyboard_grid_images',
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'OPERATION_OUTPUT_INVALID',
+        message: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
+        details: {
+          expected: 'async_task_signal',
+          reasonCode: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
+        },
+      },
+    })
   })
 })

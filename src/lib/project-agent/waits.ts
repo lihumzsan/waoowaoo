@@ -59,9 +59,29 @@ interface ProjectAgentWaitRow {
   resolvedAt: Date | null
 }
 
+interface ProjectAgentWaitFailedTaskRow {
+  id: string
+  type: string | null
+  targetType: string | null
+  targetId: string | null
+  status: string | null
+  errorCode: string | null
+  errorMessage: string | null
+}
+
 export interface ProjectAgentWaitTaskSnapshot {
   id: string
   status: string
+}
+
+export interface ProjectAgentWaitFailedTask {
+  taskId: string
+  taskType: string | null
+  targetType: string | null
+  targetId: string | null
+  status: string | null
+  errorCode: string | null
+  errorMessage: string | null
 }
 
 export interface ProjectAgentWaitFollowUp {
@@ -73,6 +93,7 @@ export interface ProjectAgentWaitFollowUp {
   operationId: string
   taskIds: string[]
   failedTaskIds: string[]
+  failedTasks: ProjectAgentWaitFailedTask[]
   terminalStatus: ProjectAgentWaitTerminalStatus
   total: number
   successCount: number
@@ -153,6 +174,69 @@ function parseStringArray(value: unknown): string[] {
     return parseStringArray(parsed)
   } catch {
     return []
+  }
+}
+
+async function readFailedTaskDetails(input: {
+  projectId: string
+  userId: string
+  failedTaskIds: string[]
+}): Promise<ProjectAgentWaitFailedTask[]> {
+  const failedTaskIds = normalizeTaskIds(input.failedTaskIds)
+  if (failedTaskIds.length === 0) return []
+  const rows = await prisma.$queryRaw<ProjectAgentWaitFailedTaskRow[]>(Prisma.sql`
+    SELECT id, type, targetType, targetId, status, errorCode, errorMessage
+    FROM tasks
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND id IN (${Prisma.join(failedTaskIds)})
+  `)
+  const rowById = new Map(rows.map((row) => [row.id, row]))
+  return failedTaskIds.map((taskId) => {
+    const row = rowById.get(taskId)
+    return {
+      taskId,
+      taskType: row?.type ?? null,
+      targetType: row?.targetType ?? null,
+      targetId: row?.targetId ?? null,
+      status: row?.status ?? null,
+      errorCode: row?.errorCode ?? null,
+      errorMessage: row?.errorMessage ?? null,
+    }
+  })
+}
+
+async function buildWaitFollowUpFromRow(
+  row: ProjectAgentWaitRow,
+  params: {
+    claimId?: string | null
+    followUpActivityId: string | null
+  },
+): Promise<ProjectAgentWaitFollowUp | null> {
+  if (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') return null
+  if (!row.followUpKey) return null
+  const taskIds = parseStringArray(row.taskIds)
+  const failedTaskIds = parseStringArray(row.failedTaskIds)
+  const failedTasks = await readFailedTaskDetails({
+    projectId: row.projectId,
+    userId: row.userId,
+    failedTaskIds,
+  })
+  return {
+    runId: row.runId,
+    activityId: row.activityId,
+    followUpActivityId: params.followUpActivityId,
+    waitId: row.id,
+    followUpKey: row.followUpKey,
+    operationId: row.operationId,
+    taskIds,
+    failedTaskIds,
+    failedTasks,
+    terminalStatus: row.terminalStatus,
+    total: taskIds.length,
+    successCount: Math.max(taskIds.length - failedTaskIds.length, 0),
+    failedCount: failedTaskIds.length,
+    claimId: params.claimId ?? row.claimId ?? '',
   }
 }
 
@@ -599,6 +683,7 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
       terminalTaskIds,
       failedTaskIds,
       followUpKey,
+      claimId,
       followedAt,
       createdAt,
       resolvedAt
@@ -614,27 +699,15 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
     LIMIT ${limit}
   `)
 
-  return rows.flatMap((row) => {
-    if (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') return []
-    if (!row.followUpKey) return []
-    const taskIds = parseStringArray(row.taskIds)
-    const failedTaskIds = parseStringArray(row.failedTaskIds)
-    return [{
-      runId: row.runId,
-      activityId: row.activityId,
+  const followUps: ProjectAgentWaitFollowUp[] = []
+  for (const row of rows) {
+    const followUp = await buildWaitFollowUpFromRow(row, {
+      claimId: row.claimId,
       followUpActivityId: null,
-      waitId: row.id,
-      followUpKey: row.followUpKey,
-      operationId: row.operationId,
-      taskIds,
-      failedTaskIds,
-      terminalStatus: row.terminalStatus,
-      total: taskIds.length,
-      successCount: Math.max(taskIds.length - failedTaskIds.length, 0),
-      failedCount: failedTaskIds.length,
-      claimId: row.claimId ?? '',
-    }]
-  })
+    })
+    if (followUp) followUps.push(followUp)
+  }
+  return followUps
 }
 
 export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeInput & {
@@ -774,27 +847,16 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
     ORDER BY resolvedAt ASC
   `
 
-  return rows.flatMap((row) => {
-    if (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') return []
-    if (!row.followUpKey || !row.claimId) return []
-    const taskIds = parseStringArray(row.taskIds)
-    const failedTaskIds = parseStringArray(row.failedTaskIds)
-    return [{
-      runId: row.runId,
-      activityId: row.activityId,
-      followUpActivityId: null,
-      waitId: row.id,
-      followUpKey: row.followUpKey,
-      operationId: row.operationId,
-      taskIds,
-      failedTaskIds,
-      terminalStatus: row.terminalStatus,
-      total: taskIds.length,
-      successCount: Math.max(taskIds.length - failedTaskIds.length, 0),
-      failedCount: failedTaskIds.length,
+  const followUps: ProjectAgentWaitFollowUp[] = []
+  for (const row of rows) {
+    if (!row.claimId) continue
+    const followUp = await buildWaitFollowUpFromRow(row, {
       claimId: row.claimId,
-    }]
-  })
+      followUpActivityId: null,
+    })
+    if (followUp) followUps.push(followUp)
+  }
+  return followUps
 }
 
 /**
@@ -879,21 +941,8 @@ export async function consumeProjectAgentWaitFollowUp(input: {
       },
     ],
   })
-  const taskIds = parseStringArray(row.taskIds)
-  const failedTaskIds = parseStringArray(row.failedTaskIds)
-  return {
-    runId: row.runId,
-    activityId: row.activityId,
-    followUpActivityId,
-    waitId: row.id,
-    followUpKey: row.followUpKey,
-    operationId: row.operationId,
-    taskIds,
-    failedTaskIds,
-    terminalStatus: row.terminalStatus,
-    total: taskIds.length,
-    successCount: Math.max(taskIds.length - failedTaskIds.length, 0),
-    failedCount: failedTaskIds.length,
+  return await buildWaitFollowUpFromRow(row, {
     claimId: input.claimId,
-  }
+    followUpActivityId,
+  })
 }

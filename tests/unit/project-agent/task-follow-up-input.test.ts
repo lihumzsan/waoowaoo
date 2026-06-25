@@ -12,6 +12,7 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     operationId: 'generate_edit_script_storyboard',
     taskIds: ['task-1'],
     failedTaskIds: [],
+    failedTasks: [],
     terminalStatus: 'completed',
     total: 1,
     successCount: 1,
@@ -46,12 +47,24 @@ describe('project agent task follow-up input', () => {
     const content = readContent(buildTaskFollowUpInputItem(followUp({
       terminalStatus: 'failed',
       failedTaskIds: ['task-failed-1'],
+      failedTasks: [{
+        taskId: 'task-failed-1',
+        taskType: 'video_group',
+        targetType: 'ProjectVideoGroup',
+        targetId: 'group-1',
+        status: 'failed',
+        errorCode: 'INTERNAL_ERROR',
+        errorMessage: 'output video may be related to copyright restrictions',
+      }],
       successCount: 0,
       failedCount: 1,
     }), 'en'))
 
     expect(content).toContain('status=failed')
     expect(content).toContain('failedTaskIds=task-failed-1')
+    expect(content).toContain('failedTasks=')
+    expect(content).toContain('INTERNAL_ERROR')
+    expect(content).toContain('copyright restrictions')
     expect(content).toContain('before any tool call, first output a visible natural-language message')
     expect(content).toContain('Do not start this turn with a tool call')
     expect(content).toContain('when they expose exactly one executable next operation')
