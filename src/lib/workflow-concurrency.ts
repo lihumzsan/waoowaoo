@@ -1,11 +1,17 @@
 export const DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY = 5
-export const DEFAULT_IMAGE_WORKFLOW_CONCURRENCY = 5
+export const DEFAULT_IMAGE_WORKFLOW_CONCURRENCY = 20
 export const DEFAULT_VIDEO_WORKFLOW_CONCURRENCY = 10
 
 export interface WorkflowConcurrencyConfig {
   analysis: number
   image: number
   video: number
+}
+
+export const DEFAULT_WORKFLOW_CONCURRENCY_CONFIG: WorkflowConcurrencyConfig = {
+  analysis: DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
+  image: DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,
+  video: DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
 }
 
 function toPositiveInt(value: unknown): number | null {
@@ -24,19 +30,20 @@ export function normalizeWorkflowConcurrencyValue(value: unknown, fallback: numb
 
 export function normalizeWorkflowConcurrencyConfig(
   value: Partial<Record<keyof WorkflowConcurrencyConfig, unknown>> | null | undefined,
+  fallback: WorkflowConcurrencyConfig = DEFAULT_WORKFLOW_CONCURRENCY_CONFIG,
 ): WorkflowConcurrencyConfig {
   return {
     analysis: normalizeWorkflowConcurrencyValue(
       value?.analysis,
-      DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
+      fallback.analysis,
     ),
     image: normalizeWorkflowConcurrencyValue(
       value?.image,
-      DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,
+      fallback.image,
     ),
     video: normalizeWorkflowConcurrencyValue(
       value?.video,
-      DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
+      fallback.video,
     ),
   }
 }

@@ -11,13 +11,19 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-import { getProjectModelConfig } from '@/lib/config-service'
+import {
+  getProjectModelConfig,
+  getUserWorkflowConcurrencyConfig,
+} from '@/lib/config-service'
 
 const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
   'PROVIDER_CREDENTIAL_MODE',
   'BILLING_MODE',
   'PLATFORM_VIDEO_RESOLUTION',
+  'DEFAULT_WORKFLOW_CONCURRENCY_ANALYSIS',
+  'DEFAULT_WORKFLOW_CONCURRENCY_IMAGE',
+  'DEFAULT_WORKFLOW_CONCURRENCY_VIDEO',
 ] as const
 
 const ORIGINAL_ENV: Partial<Record<(typeof ENV_KEYS)[number], string>> = {}
@@ -44,6 +50,9 @@ describe('cloud platform runtime project config', () => {
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
     process.env.PLATFORM_VIDEO_RESOLUTION = '480p'
+    process.env.DEFAULT_WORKFLOW_CONCURRENCY_ANALYSIS = '6'
+    process.env.DEFAULT_WORKFLOW_CONCURRENCY_IMAGE = '20'
+    process.env.DEFAULT_WORKFLOW_CONCURRENCY_VIDEO = '12'
   })
 
   afterEach(() => restoreEnv())
@@ -94,5 +103,37 @@ describe('cloud platform runtime project config', () => {
       capabilityOverrides: {},
     })
     expect(prismaMock.userPreference.findUnique.mock.calls).toEqual([])
+  })
+
+  it('uses env defaults for cloud user workflow concurrency when the user has no override', async () => {
+    prismaMock.userPreference.findUnique.mockResolvedValue(null)
+
+    await expect(getUserWorkflowConcurrencyConfig('user-1')).resolves.toEqual({
+      analysis: 6,
+      image: 20,
+      video: 12,
+    })
+    expect(prismaMock.userPreference.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      select: {
+        analysisConcurrency: true,
+        imageConcurrency: true,
+        videoConcurrency: true,
+      },
+    })
+  })
+
+  it('keeps explicit user workflow concurrency ahead of env defaults', async () => {
+    prismaMock.userPreference.findUnique.mockResolvedValue({
+      analysisConcurrency: 2,
+      imageConcurrency: 3,
+      videoConcurrency: 4,
+    })
+
+    await expect(getUserWorkflowConcurrencyConfig('user-1')).resolves.toEqual({
+      analysis: 2,
+      image: 3,
+      video: 4,
+    })
   })
 })

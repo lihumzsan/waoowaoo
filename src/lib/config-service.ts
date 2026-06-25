@@ -25,6 +25,7 @@ import {
   type WorkflowConcurrencyConfig,
   normalizeWorkflowConcurrencyConfig,
 } from '@/lib/workflow-concurrency'
+import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
 import { buildImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
 
 export type ParsedModelKey = { provider: string, modelId: string }
@@ -133,6 +134,7 @@ export interface UserModelConfig {
 export async function getUserWorkflowConcurrencyConfig(
   userId: string,
 ): Promise<WorkflowConcurrencyConfig> {
+  const defaultConcurrency = getDefaultWorkflowConcurrencyConfig()
   const userPref = await prisma.userPreference.findUnique({
     where: { userId },
     select: {
@@ -146,7 +148,7 @@ export async function getUserWorkflowConcurrencyConfig(
     analysis: userPref?.analysisConcurrency,
     image: userPref?.imageConcurrency,
     video: userPref?.videoConcurrency,
-  })
+  }, defaultConcurrency)
 }
 
 /**
