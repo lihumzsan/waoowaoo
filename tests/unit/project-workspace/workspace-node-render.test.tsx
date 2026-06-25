@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
 import WorkspaceNode, {
   dispatchNodeAction,
-  editAssetThumbnailAspectRatio,
+  imageThumbnailAspectRatio,
   nodeFreezesMeasurementWhileRunning,
   nodeNeedsActualHeightMeasurement,
   videoElementAspectRatio,
@@ -115,10 +115,10 @@ describe('workspace node rendering', () => {
     expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
   })
 
-  it('derives edit asset thumbnail containers from image dimensions', () => {
-    expect(editAssetThumbnailAspectRatio({ naturalWidth: 1920, naturalHeight: 1080 })).toBe('1920 / 1080')
-    expect(editAssetThumbnailAspectRatio({ naturalWidth: 1024, naturalHeight: 1536 })).toBe('1024 / 1536')
-    expect(editAssetThumbnailAspectRatio({ naturalWidth: 0, naturalHeight: 1080 })).toBeNull()
+  it('derives image thumbnail containers from image dimensions', () => {
+    expect(imageThumbnailAspectRatio({ naturalWidth: 1920, naturalHeight: 1080 })).toBe('1920 / 1080')
+    expect(imageThumbnailAspectRatio({ naturalWidth: 1024, naturalHeight: 1536 })).toBe('1024 / 1536')
+    expect(imageThumbnailAspectRatio({ naturalWidth: 0, naturalHeight: 1080 })).toBeNull()
   })
 
   it('uses the running card emphasis for focus highlights without changing ready status', () => {
@@ -1181,7 +1181,9 @@ describe('workspace node rendering', () => {
     expect(videoPlanHtml).not.toContain('videoPlanPendingVideo')
     expect(videoPlanHtml).not.toContain('linkedShots')
     expect(videoPlanHtml).toContain('grid grid-cols-2')
-    expect(videoPlanHtml).toContain('block h-28 w-full cursor-zoom-in overflow-hidden')
+    expect(videoPlanHtml).toContain('block h-full w-full cursor-zoom-in overflow-hidden')
+    expect(videoPlanHtml).toContain('aspect-ratio:1.7777777777777777')
+    expect(videoPlanHtml).not.toContain('h-28')
     expect(videoPlanHtml).toContain('h-full w-full object-contain')
     expect(videoPlanHtml).not.toContain('overflow-x-auto')
   })

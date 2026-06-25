@@ -99,6 +99,7 @@ function PreviewableImage({
   buttonClassName,
   imageClassName,
   imageStyle,
+  onImageLoad,
 }: {
   readonly sourceImageUrl: string
   readonly displayImageUrl?: string
@@ -106,13 +107,14 @@ function PreviewableImage({
   readonly buttonClassName: string
   readonly imageClassName: string
   readonly imageStyle?: React.CSSProperties
+  readonly onImageLoad?: React.ReactEventHandler<HTMLImageElement>
 }) {
   const onPreviewImage = useContext(WorkspaceNodeImagePreviewContext)
   const resolvedDisplayImageUrl = displayImageUrl ?? toDisplayImageUrl(sourceImageUrl) ?? sourceImageUrl
 
   if (!onPreviewImage) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={resolvedDisplayImageUrl} alt={alt} style={imageStyle} className={imageClassName} />
+    return <img src={resolvedDisplayImageUrl} alt={alt} style={imageStyle} className={imageClassName} onLoad={onImageLoad} />
   }
 
   return (
@@ -131,6 +133,7 @@ function PreviewableImage({
         alt={alt}
         style={imageStyle}
         className={imageClassName}
+        onLoad={onImageLoad}
       />
     </button>
   )
@@ -1460,13 +1463,19 @@ function EditCinematographyContent({
   )
 }
 
-const EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO = '16 / 9'
+const IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO = '16 / 9'
 
-export function editAssetThumbnailAspectRatio(image: Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'>): string | null {
+export function imageThumbnailAspectRatio(image: Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'>): string | null {
   const { naturalWidth, naturalHeight } = image
   if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return null
   if (naturalWidth <= 0 || naturalHeight <= 0) return null
   return `${naturalWidth} / ${naturalHeight}`
+}
+
+function numericAspectRatioStyleValue(aspectRatio: number | null | undefined): string | null {
+  if (typeof aspectRatio !== 'number') return null
+  if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) return null
+  return String(aspectRatio)
 }
 
 function EditAssetGroupThumbnailCard({
@@ -1484,17 +1493,17 @@ function EditAssetGroupThumbnailCard({
   readonly onPreviewImage: ImagePreviewHandler | null
   readonly onSelect: () => void
 }) {
-  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO)
+  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO)
   const previewSourceImageUrl = asset.previewImageUrl ?? null
   const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
   const loadingSize = 64
 
   useEffect(() => {
-    setThumbnailAspectRatio(EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO)
+    setThumbnailAspectRatio(IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO)
   }, [previewSourceImageUrl])
 
   const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    const nextAspectRatio = editAssetThumbnailAspectRatio(event.currentTarget)
+    const nextAspectRatio = imageThumbnailAspectRatio(event.currentTarget)
     if (!nextAspectRatio) return
     setThumbnailAspectRatio(nextAspectRatio)
   }
@@ -1925,6 +1934,60 @@ function EditAssetContent({
   )
 }
 
+function VideoPlanReferenceThumbnail({
+  sourceImageUrl,
+  displayImageUrl,
+  alt,
+  label,
+  initialAspectRatio,
+}: {
+  readonly sourceImageUrl?: string | null
+  readonly displayImageUrl?: string | null
+  readonly alt: string
+  readonly label: string
+  readonly initialAspectRatio?: number | null
+}) {
+  const initialAspectRatioStyle = numericAspectRatioStyleValue(initialAspectRatio) ?? IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO
+  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(initialAspectRatioStyle)
+
+  useEffect(() => {
+    setThumbnailAspectRatio(initialAspectRatioStyle)
+  }, [initialAspectRatioStyle, sourceImageUrl])
+
+  const handleImageLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
+    const nextAspectRatio = imageThumbnailAspectRatio(event.currentTarget)
+    if (!nextAspectRatio) return
+    setThumbnailAspectRatio(nextAspectRatio)
+  }
+
+  if (!sourceImageUrl) {
+    return (
+      <div
+        className="flex w-full items-center justify-center rounded-[10px] bg-slate-50 text-sm font-semibold text-slate-400 ring-1 ring-slate-200"
+        style={{ aspectRatio: thumbnailAspectRatio }}
+      >
+        {label}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="overflow-hidden rounded-[10px] bg-slate-50 ring-1 ring-slate-200"
+      style={{ aspectRatio: thumbnailAspectRatio }}
+    >
+      <PreviewableImage
+        sourceImageUrl={sourceImageUrl}
+        displayImageUrl={displayImageUrl ?? undefined}
+        alt={alt}
+        buttonClassName="block h-full w-full cursor-zoom-in overflow-hidden"
+        imageClassName="h-full w-full object-contain"
+        onImageLoad={handleImageLoad}
+      />
+    </div>
+  )
+}
+
 function VideoPlanContent({
   data,
   labels,
@@ -2070,25 +2133,18 @@ function VideoPlanContent({
                 const imageUrl = item.imageUrl
                 const key = 'id' in item ? item.id : `shot:${item.shotNumber}`
                 const alt = 'name' in item ? item.name : labels('videoPlanShotAlt', { shot: item.shotNumber })
-                if (!imageUrl) {
-                  const label = 'name' in item ? item.name : String(item.shotNumber)
-                  return (
-                    <div key={key} className="flex h-28 items-center justify-center rounded-[10px] bg-slate-50 text-sm font-semibold text-slate-400 ring-1 ring-slate-200">
-                      {label}
-                    </div>
-                  )
-                }
-                const displayImageUrl = toDisplayImageUrl(imageUrl) ?? imageUrl
+                const label = 'name' in item ? item.name : String(item.shotNumber)
+                const displayImageUrl = imageUrl ? toDisplayImageUrl(imageUrl) ?? imageUrl : null
+                const referenceAspectRatio = 'aspectRatio' in item ? item.aspectRatio : null
                 return (
-                  <div key={key} className="overflow-hidden rounded-[10px] bg-slate-50 ring-1 ring-slate-200">
-                    <PreviewableImage
-                      sourceImageUrl={imageUrl}
-                      displayImageUrl={displayImageUrl}
-                      alt={alt}
-                      buttonClassName="block h-28 w-full cursor-zoom-in overflow-hidden"
-                      imageClassName="h-full w-full object-contain"
-                    />
-                  </div>
+                  <VideoPlanReferenceThumbnail
+                    key={key}
+                    sourceImageUrl={imageUrl}
+                    displayImageUrl={displayImageUrl}
+                    alt={alt}
+                    label={label}
+                    initialAspectRatio={referenceAspectRatio}
+                  />
                 )
               })}
             </div>
