@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
 import WorkspaceNode, {
   dispatchNodeAction,
+  editAssetThumbnailAspectRatio,
   nodeFreezesMeasurementWhileRunning,
   nodeNeedsActualHeightMeasurement,
   videoElementAspectRatio,
@@ -114,6 +115,12 @@ describe('workspace node rendering', () => {
     expect(videoElementAspectRatio({ videoWidth: 0, videoHeight: 1080 })).toBeNull()
   })
 
+  it('derives edit asset thumbnail containers from image dimensions', () => {
+    expect(editAssetThumbnailAspectRatio({ naturalWidth: 1920, naturalHeight: 1080 })).toBe('1920 / 1080')
+    expect(editAssetThumbnailAspectRatio({ naturalWidth: 1024, naturalHeight: 1536 })).toBe('1024 / 1536')
+    expect(editAssetThumbnailAspectRatio({ naturalWidth: 0, naturalHeight: 1080 })).toBeNull()
+  })
+
   it('uses the running card emphasis for focus highlights without changing ready status', () => {
     const html = renderNode({
       kind: 'editStyleBible',
@@ -222,8 +229,9 @@ describe('workspace node rendering', () => {
 
     expect(html).toContain('data-media-image-with-loading="true"')
     expect(html).toContain('https://example.com/pilot.png')
-    expect(html).toContain('h-[240px]')
+    expect(html).toContain('aspect-ratio:16 / 9')
     expect(html).toContain('object-contain')
+    expect(html).not.toContain('h-[240px]')
     expect(html).not.toContain('aspect-square')
     expect(html).not.toContain('object-cover')
     expect(html).toContain('role="button"')

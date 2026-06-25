@@ -1460,6 +1460,103 @@ function EditCinematographyContent({
   )
 }
 
+const EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO = '16 / 9'
+
+export function editAssetThumbnailAspectRatio(image: Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'>): string | null {
+  const { naturalWidth, naturalHeight } = image
+  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return null
+  if (naturalWidth <= 0 || naturalHeight <= 0) return null
+  return `${naturalWidth} / ${naturalHeight}`
+}
+
+function EditAssetGroupThumbnailCard({
+  asset,
+  isOpen,
+  labels,
+  loadingStyleImageUrl,
+  onPreviewImage,
+  onSelect,
+}: {
+  readonly asset: WorkspaceCanvasEditAssetGroupItem
+  readonly isOpen: boolean
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly loadingStyleImageUrl?: string | null
+  readonly onPreviewImage: ImagePreviewHandler | null
+  readonly onSelect: () => void
+}) {
+  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO)
+  const previewSourceImageUrl = asset.previewImageUrl ?? null
+  const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
+  const loadingSize = 64
+
+  useEffect(() => {
+    setThumbnailAspectRatio(EDIT_ASSET_GROUP_THUMBNAIL_FALLBACK_ASPECT_RATIO)
+  }, [previewSourceImageUrl])
+
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const nextAspectRatio = editAssetThumbnailAspectRatio(event.currentTarget)
+    if (!nextAspectRatio) return
+    setThumbnailAspectRatio(nextAspectRatio)
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isOpen}
+      className={`nodrag cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${isOpen ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+      onClick={(event) => { event.stopPropagation(); onSelect() }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        onSelect()
+      }}
+    >
+      <div
+        className="relative flex w-full items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]"
+        style={{ aspectRatio: thumbnailAspectRatio }}
+      >
+        {imageUrl ? (
+          <MediaImageWithLoading
+            src={imageUrl}
+            alt={asset.name}
+            containerClassName="h-full w-full bg-slate-100"
+            className="h-full w-full object-contain"
+            onLoad={handleImageLoad}
+          />
+        ) : asset.isRunning ? null : (
+          <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
+        )}
+        <MediaGenerationLoading
+          taskState={asset.taskProgress}
+          styleImageUrl={loadingStyleImageUrl}
+          size={loadingSize}
+        />
+        {previewSourceImageUrl && imageUrl && onPreviewImage ? (
+          <button
+            type="button"
+            className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
+            aria-label={`${labels('previewLarge')}: ${asset.name}`}
+            title={labels('previewLarge')}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onPreviewImage(previewSourceImageUrl)
+            }}
+          >
+            <AppIcon name="searchPlus" className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+      <div className="px-2.5 py-1.5">
+        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
+        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
+      </div>
+    </div>
+  )
+}
+
 // 资产需求：合并为一张卡，网格展示各资产缩略图，点开看详情并可单独重新生成
 function EditAssetGroupContent({
   data,
@@ -1483,62 +1580,17 @@ function EditAssetGroupContent({
       <div className="grid grid-cols-3 gap-2.5">
         {details.assets.map((asset) => {
           const on = open === asset.requirementId
-          const previewSourceImageUrl = asset.previewImageUrl ?? null
-          const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
-          const loadingSize = 64
           const selectAsset = () => setOpen(on ? null : asset.requirementId)
           return (
-            <div
+            <EditAssetGroupThumbnailCard
               key={asset.requirementId}
-              role="button"
-              tabIndex={0}
-              aria-pressed={on}
-              className={`nodrag cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
-              onClick={(event) => { event.stopPropagation(); selectAsset() }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
-                event.preventDefault()
-                event.stopPropagation()
-                selectAsset()
-              }}
-            >
-              <div className="relative flex h-[240px] items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]">
-                {imageUrl ? (
-                  <MediaImageWithLoading
-                    src={imageUrl}
-                    alt={asset.name}
-                    containerClassName="h-full w-full bg-slate-100"
-                    className="h-full w-full object-contain"
-                  />
-                ) : asset.isRunning ? null : (
-                  <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
-                )}
-                <MediaGenerationLoading
-                  taskState={asset.taskProgress}
-                  styleImageUrl={data.loadingStyleImageUrl}
-                  size={loadingSize}
-                />
-                {previewSourceImageUrl && imageUrl && onPreviewImage ? (
-                  <button
-                    type="button"
-                    className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={`${labels('previewLarge')}: ${asset.name}`}
-                    title={labels('previewLarge')}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onPreviewImage(previewSourceImageUrl)
-                    }}
-                  >
-                    <AppIcon name="searchPlus" className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </div>
-              <div className="px-2.5 py-1.5">
-                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
-                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
-              </div>
-            </div>
+              asset={asset}
+              isOpen={on}
+              labels={labels}
+              loadingStyleImageUrl={data.loadingStyleImageUrl}
+              onPreviewImage={onPreviewImage}
+              onSelect={selectAsset}
+            />
           )
         })}
       </div>
