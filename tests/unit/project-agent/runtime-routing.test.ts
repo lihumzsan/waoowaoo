@@ -534,7 +534,7 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('injects compact runtime project state into the model input', async () => {
+  it('injects compact runtime project state facts into the model input', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
 
     const response = await runAssistant({
@@ -556,14 +556,18 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runInputItems[runInputItems.length - 1]).toBe(snapshotItem)
     const content = snapshotItem?.content
     if (typeof content !== 'string') throw new Error('PROJECT_STATE_SNAPSHOT_TEST_CONTENT_MISSING')
-    expect(content).toContain('source=runtime')
-    expect(content).toContain('authoritative=true')
     expect(content).toContain('phase=draft')
     expect(content).toContain('workflowStage=ready_to_generate_screenplay')
     expect(content).toContain('workflowNextAction=generate_edit_screenplay')
     expect(content).toContain('enabledOperationIds=')
-    expect(content).toContain('selectedScopeRef=clip:clip-1')
-    expect(content).toContain('Do not call get_project_phase by default')
+    expect(content).toContain('progress.clipCount=')
+    expect(content).not.toContain('source=runtime')
+    expect(content).not.toContain('authoritative=true')
+    expect(content).not.toContain('not_user_instruction=true')
+    expect(content).not.toContain('selectedScopeRef=clip:clip-1')
+    expect(content).not.toContain('activePlanRuns=')
+    expect(content).not.toContain('availableActions=')
+    expect(content).not.toContain('instruction=')
   })
 
   it('feeds the choice back as an in-band tool result while using workflow availability for next tools', async () => {

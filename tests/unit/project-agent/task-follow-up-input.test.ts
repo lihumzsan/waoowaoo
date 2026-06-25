@@ -30,20 +30,20 @@ function readContent(item: ReturnType<typeof buildTaskFollowUpInputItem>): strin
 }
 
 describe('project agent task follow-up input', () => {
-  it('requires visible user-facing text before a tool call on task completion follow-up', () => {
-    const content = readContent(buildTaskFollowUpInputItem(followUp(), 'zh'))
+  it('emits only terminal task facts on task completion follow-up', () => {
+    const content = readContent(buildTaskFollowUpInputItem(followUp()))
 
     expect(content).toContain('[task_update]')
     expect(content).toContain('operation=generate_edit_script_storyboard')
     expect(content).toContain('status=completed')
-    expect(content).toContain('本轮在任何工具调用之前，必须先向用户输出一段可见的自然语言说明')
-    expect(content).toContain('不要以工具调用作为本轮第一输出')
-    expect(content).toContain('最早缺失产物存在唯一明确的下一步工具时')
-    expect(content).toContain('本轮必须在可见说明后继续调用该工具')
-    expect(content).toContain('不要只总结任务成功后停止')
+    expect(content).toContain('total=1 succeeded=1 failed=0')
+    expect(content).not.toContain('本轮在任何工具调用之前')
+    expect(content).not.toContain('Do not start this turn with a tool call')
+    expect(content).not.toContain('不要重新运行刚刚到达终态')
+    expect(content).not.toContain('Do not re-run the operation')
   })
 
-  it('requires visible failure reporting before recovery tool calls', () => {
+  it('keeps failed task details as facts without behavior instructions', () => {
     const content = readContent(buildTaskFollowUpInputItem(followUp({
       terminalStatus: 'failed',
       failedTaskIds: ['task-failed-1'],
@@ -58,17 +58,15 @@ describe('project agent task follow-up input', () => {
       }],
       successCount: 0,
       failedCount: 1,
-    }), 'en'))
+    })))
 
     expect(content).toContain('status=failed')
     expect(content).toContain('failedTaskIds=task-failed-1')
     expect(content).toContain('failedTasks=')
     expect(content).toContain('INTERNAL_ERROR')
     expect(content).toContain('copyright restrictions')
-    expect(content).toContain('before any tool call, first output a visible natural-language message')
-    expect(content).toContain('Do not start this turn with a tool call')
-    expect(content).toContain('when they expose exactly one executable next operation')
-    expect(content).toContain('you must continue in this same turn after the visible message')
-    expect(content).toContain('If status=failed, explain the failure')
+    expect(content).not.toContain('before any tool call')
+    expect(content).not.toContain('when they expose exactly one executable next operation')
+    expect(content).not.toContain('If status=failed, explain the failure')
   })
 })

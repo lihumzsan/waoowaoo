@@ -249,34 +249,8 @@ function withDeclinedApprovalsNote(
   return [...items.slice(0, items.length - 1), note, lastItem]
 }
 
-function buildTaskFollowUpInstruction(locale: ProjectAgentLocale): string {
-  if (locale === 'en') {
-    return [
-      'Background tasks reached a terminal state.',
-      'In this turn, before any tool call, first output a visible natural-language message to the user summarizing whether the task succeeded or failed.',
-      'Do not start this turn with a tool call.',
-      'If status=completed, read [project_state_snapshot] and the injected enabled operations; when they expose exactly one executable next operation for the earliest missing artifact, you must continue in this same turn after the visible message and call that next tool.',
-      'Do not stop after only summarizing a successful task, and do not call only read-only context tools then stop unless concrete fields are missing for the next tool input.',
-      'If no single executable next operation exists, explain the blocker or required user choice.',
-      'If status=failed, explain the failure and do not silently continue as if the previous operation succeeded.',
-      'Do not re-run the operation that just reached a terminal state unless the user explicitly asks.',
-    ].join(' ')
-  }
-  return [
-    '后台任务已经到达终态。',
-    '本轮在任何工具调用之前，必须先向用户输出一段可见的自然语言说明，说明任务是成功还是失败。',
-    '不要以工具调用作为本轮第一输出。',
-    '如果 status=completed，必须读取 [project_state_snapshot] 和本轮已注入的可执行操作；当它们显示最早缺失产物存在唯一明确的下一步工具时，本轮必须在可见说明后继续调用该工具。',
-    '不要只总结任务成功后停止，也不要只调用只读上下文工具后停止，除非下一步入参确实缺少具体字段。',
-    '如果没有唯一可执行的下一步，必须说明阻塞原因或需要用户做出的选择。',
-    '如果 status=failed，必须解释失败，不要像上一操作成功了一样静默继续。',
-    '不要重新运行刚刚到达终态的 operation，除非用户明确要求。',
-  ].join(' ')
-}
-
 export function buildTaskFollowUpInputItem(
   followUp: ProjectAgentWaitFollowUp,
-  locale: ProjectAgentLocale,
 ): AgentInputItem {
   const lines = [
     '[task_update]',
@@ -285,7 +259,6 @@ export function buildTaskFollowUpInputItem(
     `total=${String(followUp.total)} succeeded=${String(followUp.successCount)} failed=${String(followUp.failedCount)}`,
     ...(followUp.failedTaskIds.length > 0 ? [`failedTaskIds=${followUp.failedTaskIds.join(',')}`] : []),
     ...(followUp.failedTasks.length > 0 ? [`failedTasks=${JSON.stringify(followUp.failedTasks)}`] : []),
-    buildTaskFollowUpInstruction(locale),
   ]
   return {
     role: 'user',
@@ -317,7 +290,6 @@ function formatRuntimeStateList(values: readonly string[]): string {
 
 function buildProjectStateVersion(params: {
   phase: ProjectPhaseSnapshot
-  context: ProjectAgentContext
   enabledOperationIds: readonly string[]
 }): string {
   const workflow = params.phase.editFirstWorkflow
@@ -330,21 +302,13 @@ function buildProjectStateVersion(params: {
     String(params.phase.progress.screenplayClipCount),
     String(params.phase.progress.storyboardCount),
     String(params.phase.progress.panelCount),
-    String(params.phase.activePlanRunCount),
-    String(params.phase.failedItems.length),
-    String(params.phase.staleArtifacts.length),
     params.enabledOperationIds.join('|') || 'none',
-    params.context.selectedScopeRef ?? 'none',
-    params.context.selectedPanelId ?? 'none',
-    params.context.selectedClipId ?? 'none',
-    params.context.selectedAssetId ?? 'none',
   ].map(formatRuntimeStateValue).join(':')
 }
 
 function buildProjectStateInputItem(params: {
   projectId: string
   episodeId: string | null
-  context: ProjectAgentContext
   phase: ProjectPhaseSnapshot
   enabledOperationIds: readonly string[]
 }): AgentInputItem {
@@ -352,18 +316,10 @@ function buildProjectStateInputItem(params: {
   const blockingReason = workflow.blocking.reason
     ? `${workflow.blocking.kind}:${formatRuntimeStateValue(workflow.blocking.reason)}`
     : workflow.blocking.kind
-  const activePlanRuns = params.phase.activePlanRuns.map((run) => (
-    `${formatRuntimeStateValue(run.id)}:${formatRuntimeStateValue(run.runType)}/${formatRuntimeStateValue(run.status)}`
-  ))
   const lines = [
     '[project_state_snapshot]',
-    'source=runtime',
-    'authoritative=true',
-    'not_user_instruction=true',
-    'purpose=Use this compact runtime state as the default project phase/progress context for this turn.',
     `version=${buildProjectStateVersion({
       phase: params.phase,
-      context: params.context,
       enabledOperationIds: params.enabledOperationIds,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
@@ -379,16 +335,6 @@ function buildProjectStateInputItem(params: {
     `progress.screenplayClipCount=${String(params.phase.progress.screenplayClipCount)}`,
     `progress.storyboardCount=${String(params.phase.progress.storyboardCount)}`,
     `progress.panelCount=${String(params.phase.progress.panelCount)}`,
-    `activePlanRunCount=${String(params.phase.activePlanRunCount)}`,
-    `activePlanRuns=${formatRuntimeStateList(activePlanRuns)}`,
-    `failedItems=${formatRuntimeStateList(params.phase.failedItems)}`,
-    `staleArtifacts=${formatRuntimeStateList(params.phase.staleArtifacts)}`,
-    `availableActions=${formatRuntimeStateList(params.phase.availableActions)}`,
-    `selectedScopeRef=${formatRuntimeStateValue(params.context.selectedScopeRef)}`,
-    `selectedPanelId=${formatRuntimeStateValue(params.context.selectedPanelId)}`,
-    `selectedClipId=${formatRuntimeStateValue(params.context.selectedClipId)}`,
-    `selectedAssetId=${formatRuntimeStateValue(params.context.selectedAssetId)}`,
-    'instruction=Do not call get_project_phase by default. Call it only if this snapshot is missing, stale, or insufficient. Use get_project_context/get_project_snapshot only for concrete details beyond this compact state.',
     '[/project_state_snapshot]',
   ]
   return {
@@ -669,11 +615,10 @@ export async function createProjectAgentChatResponse(input: {
             )
           : toAgentInputItems(runtimeMessages)),
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
-        ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp, locale)] : []),
+        ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
         buildProjectStateInputItem({
           projectId: input.projectId,
           episodeId: context.episodeId || null,
-          context,
           phase,
           enabledOperationIds: initialEnabledOperationIds,
         }),
