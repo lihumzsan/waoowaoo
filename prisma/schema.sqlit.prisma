@@ -233,6 +233,7 @@ model ProjectEditScript {
   episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   cinematographyShotPlan ProjectEditCinematographyShotPlan?
   requirements   ProjectEditAssetRequirement[]
+  storyboard      ProjectStoryboard?
 
   @@index([projectId])
   @@index([episodeId])
@@ -439,7 +440,8 @@ model ProjectShot {
 model ProjectStoryboard {
   id                  String                @id @default(uuid())
   episodeId           String
-  clipId              String                @unique
+  clipId              String?               @unique
+  editScriptId        String?               @unique
   storyboardImageUrl  String?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @default(now()) @updatedAt
@@ -451,11 +453,13 @@ model ProjectStoryboard {
   photographyPlan     String?
   panels              ProjectPanel[]
   blockingArtifacts   ProjectStoryboardBlockingArtifact[]
-  clip                ProjectClip    @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  clip                ProjectClip?   @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   supplementaryPanels SupplementaryPanel[]
 
   @@index([clipId])
+  @@index([editScriptId])
   @@index([episodeId])
   @@map("project_storyboards")
 }

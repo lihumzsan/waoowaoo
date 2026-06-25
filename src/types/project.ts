@@ -199,7 +199,8 @@ export interface ProjectPanel {
 export interface ProjectStoryboard {
   id: string
   episodeId: string
-  clipId: string
+  clipId: string | null
+  editScriptId: string | null
   storyboardTextJson: string | null
   panelCount: number
   storyboardImageUrl: string | null

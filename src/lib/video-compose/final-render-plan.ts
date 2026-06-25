@@ -17,6 +17,7 @@ export interface FinalRenderMediaRefInput {
 
 export interface FinalRenderStoryboardInput {
   readonly id: string
+  readonly editScriptId?: string | null
   readonly createdAt?: Date | string
   readonly storyboardTextJson?: string | null
   readonly clip?: {
@@ -178,6 +179,7 @@ function shotDescriptionForGroup(shotNumbers: readonly number[], editScript: Fin
 }
 
 function storyboardReferencesEditScript(storyboard: FinalRenderStoryboardInput, editScriptId: string): boolean {
+  if (storyboard.editScriptId === editScriptId) return true
   const raw = normalizeString(storyboard.storyboardTextJson)
   if (!raw) return false
   return raw.includes(editScriptId)

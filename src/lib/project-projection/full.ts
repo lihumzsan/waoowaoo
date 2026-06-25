@@ -94,6 +94,7 @@ export async function assembleProjectProjectionFull(params: {
         storyboard: {
           select: {
             clipId: true,
+            editScriptId: true,
           },
         },
       },
@@ -105,6 +106,7 @@ export async function assembleProjectProjectionFull(params: {
     panels.push({
       panelId: panel.id,
       clipId: panel.storyboard.clipId,
+      editScriptId: panel.storyboard.editScriptId,
       storyboardId: panel.storyboardId,
       panelIndex: panel.panelIndex,
       panelNumber: panel.panelNumber ?? null,
@@ -146,11 +148,13 @@ export async function assembleProjectProjectionFull(params: {
         select: {
           id: true,
           clipId: true,
+          editScriptId: true,
         },
       })
     : []
 
-  const clipIds = Array.from(new Set(storyboards.map((storyboard) => storyboard.clipId)))
+  const storyboardClipIds = storyboards.flatMap((storyboard) => storyboard.clipId ? [storyboard.clipId] : [])
+  const clipIds = Array.from(new Set(storyboardClipIds))
   const clips = clipIds.length === 0
     ? []
     : await prisma.projectClip.findMany({
@@ -177,12 +181,15 @@ export async function assembleProjectProjectionFull(params: {
       )
 
   const clipSummaryById = new Map(clips.map((clip) => [clip.id, clip.summary]))
-  const clipList = storyboards.map((storyboard) => ({
-    clipId: storyboard.clipId,
-    summary: clipSummaryById.get(storyboard.clipId) || '',
-    storyboardId: storyboard.id,
-    panelCount: panelCountByStoryboard.get(storyboard.id) || 0,
-  }))
+  const clipList = storyboards.flatMap((storyboard) => {
+    if (!storyboard.clipId) return []
+    return [{
+      clipId: storyboard.clipId,
+      summary: clipSummaryById.get(storyboard.clipId) || '',
+      storyboardId: storyboard.id,
+      panelCount: panelCountByStoryboard.get(storyboard.id) || 0,
+    }]
+  })
 
   const truncated = matchingPanelCount > panels.length
 

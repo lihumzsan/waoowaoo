@@ -145,6 +145,7 @@ function state(params: {
 
 type StoryboardSpatialCandidate = {
   readonly id: string
+  readonly editScriptId: string | null
   readonly photographyPlan: string | null
 }
 
@@ -188,8 +189,8 @@ function resolveStoryboardPlanStageSummary(input: {
     }
   }
   const matching = input.storyboards.flatMap((storyboard) => {
+    if (storyboard.editScriptId !== input.editScriptId) return []
     const plan = parseJsonRecord(storyboard.photographyPlan)
-    if (readString(plan.sourceEditScriptId) !== input.editScriptId) return []
     return [{
       id: storyboard.id,
       stage: readString(plan.currentStage),
@@ -598,6 +599,7 @@ export async function resolveEditFirstWorkflowState(params: {
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
+        editScriptId: true,
         photographyPlan: true,
       },
     }),
@@ -609,6 +611,7 @@ export async function resolveEditFirstWorkflowState(params: {
       },
       select: {
         id: true,
+        storyboardId: true,
         imageUrl: true,
         imageMediaId: true,
       },
@@ -650,11 +653,13 @@ export async function resolveEditFirstWorkflowState(params: {
         }
       }),
   )
-  const storyboardImageReadiness = resolveStoryboardImageReadiness(panels)
   const storyboardPlanStageSummary = resolveStoryboardPlanStageSummary({
     editScriptId: editScript?.id ?? null,
     storyboards,
   })
+  const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
+  const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
+  const storyboardImageReadiness = resolveStoryboardImageReadiness(editScriptPanels)
   const activeSpatialBlockingTaskCount = editScript?.id
     ? await prisma.task.count({
       where: {
@@ -679,7 +684,7 @@ export async function resolveEditFirstWorkflowState(params: {
       },
     })
     : 0
-  const panelIds = panels.map((panel) => panel.id)
+  const panelIds = editScriptPanels.map((panel) => panel.id)
   const activeStoryboardImageTaskCount = panelIds.length > 0
     ? await prisma.task.count({
       where: {
@@ -725,7 +730,7 @@ export async function resolveEditFirstWorkflowState(params: {
     readyLocationSpatialProfileCount: locationSpatialProfileReadiness.readyCount,
     hasCinematographyShotPlan: Boolean(cinematographyShotPlan),
     cinematographyShotPlanStatus: cinematographyShotPlan?.status ?? null,
-    storyboardCount: storyboards.length,
+    storyboardCount: editScriptStoryboardIds.size,
     spatialBlockingReady: storyboardPlanStageSummary.spatialBlockingReady,
     spatialBlockingFailed: storyboardPlanStageSummary.spatialBlockingFailed,
     activeSpatialBlockingTaskCount,

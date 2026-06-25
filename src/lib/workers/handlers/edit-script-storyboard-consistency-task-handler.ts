@@ -13,7 +13,7 @@ import {
   type StoryboardPanelPromptDraft,
 } from '@/lib/edit-script/storyboard-consistency/types'
 import {
-  upsertEditScriptStoryboardShell,
+  upsertEditScriptStoryboard,
   upsertStoryboardPanelsFromPrompts,
 } from '@/lib/edit-script/storyboard-consistency/persistence'
 
@@ -85,7 +85,7 @@ function buildPhotographyPlan(input: {
     sourceType: 'editScriptStoryboard',
     consistencyMode: 'spatial_text_blocking',
     currentStage: input.stage,
-    sourceEditScriptId: input.sourceSnapshot.sourceEditScriptId,
+    editScriptId: input.sourceSnapshot.editScript.id,
     modelConfigSnapshot: input.modelConfigSnapshot,
     cameraPlanOutput: input.cameraPlanOutput ?? null,
     errorMessage: input.errorMessage ?? null,
@@ -218,7 +218,7 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
   await reportTaskProgress(job, 12, { stage: 'edit_script_storyboard_prepare' })
   let storyboardId: string | null = null
   try {
-    const storyboard = await upsertEditScriptStoryboardShell({
+    const storyboard = await upsertEditScriptStoryboard({
       snapshot: parsed.sourceSnapshot,
       photographyPlan: buildPhotographyPlan({
         stage: 'preparing',

@@ -27,7 +27,8 @@ export interface ProjectProjectionLite {
 
 export interface ProjectProjectionPanelSnapshot {
   panelId: string
-  clipId: string
+  clipId: string | null
+  editScriptId: string | null
   storyboardId: string
   panelIndex: number
   panelNumber: number | null

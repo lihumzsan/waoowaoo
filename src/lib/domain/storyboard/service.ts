@@ -87,6 +87,9 @@ async function replaceStoryboards(params: {
       panels.push(created)
     }
 
+    if (!storyboard.clipId) {
+      throw new DomainValidationError(`storyboard clipId missing for clip workflow: ${storyboard.id}`)
+    }
     persisted.push({
       storyboardId: storyboard.id,
       clipId: storyboard.clipId,

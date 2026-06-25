@@ -124,7 +124,8 @@ function createPanel(input: Partial<ProjectPanel> & Pick<ProjectPanel, 'id' | 'p
 
 function createStoryboard(input: {
   readonly id: string
-  readonly clipId: string
+  readonly clipId?: string | null
+  readonly editScriptId?: string | null
   readonly panels: ProjectPanel[]
   readonly photographyPlan?: string | null
   readonly blockingArtifacts?: ProjectStoryboard['blockingArtifacts']
@@ -132,7 +133,8 @@ function createStoryboard(input: {
   return {
     id: input.id,
     episodeId: 'episode-1',
-    clipId: input.clipId,
+    clipId: input.clipId ?? null,
+    editScriptId: input.editScriptId ?? null,
     storyboardTextJson: null,
     panelCount: input.panels.length,
     storyboardImageUrl: null,
@@ -734,7 +736,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1060,7 +1062,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1112,7 +1114,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1152,7 +1154,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1190,7 +1192,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1294,7 +1296,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1348,7 +1350,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-video',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -1513,7 +1515,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-tall-video',
           panels,
         }),
       ],
@@ -1624,7 +1626,7 @@ describe('workspace node canvas projection', () => {
       storyText: 'story',
       clips: [clip],
       storyboards: [{
-        ...createStoryboard({ id: 'storyboard-rich', clipId: 'clip-rich', panels: [panel] }),
+        ...createStoryboard({ id: 'storyboard-rich', editScriptId: 'edit-rich', panels: [panel] }),
         storyboardTextJson: 'storyboard json',
         photographyPlan: 'photography plan',
         lastError: 'storyboard failed',
@@ -2002,7 +2004,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-preview',
-          clipId: 'clip-preview',
+          editScriptId: 'edit-preview',
           panels: [
             createPanel({
               id: 'panel-preview-1',
@@ -2055,7 +2057,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-2',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -2175,7 +2177,6 @@ describe('workspace node canvas projection', () => {
     expect(videoPlanNode?.data.statusLabel).toBe('status.ready')
     expect(videoPlanNode?.data.action).toEqual({
       type: 'generate_video_group',
-      videoModel: 'ark::sequence-project-model',
       gridMode: '2x2',
       shotNumbers: [1, 2],
     })
@@ -2205,7 +2206,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-3',
           panels: [
             createPanel({
               id: 'panel-1',
@@ -2295,7 +2296,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-single',
           panels: [
             createPanel({ id: 'panel-1', panelIndex: 0, panelNumber: 1, imageUrl: 'https://example.com/shot-1.png' }),
           ],
@@ -2351,7 +2352,6 @@ describe('workspace node canvas projection', () => {
       storyboardId: 'storyboard-1',
       panelIndex: 0,
       panelId: 'panel-1',
-      videoModel: 'google::veo-test',
     })
     expect(videoPlanNode?.data.videoPlanDetails?.prompt).toBe('Edit-first single shot prompt.')
     expect(projection.nodes.some((node) => node.id.startsWith('video:'))).toBe(false)
@@ -2365,7 +2365,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-1',
-          clipId: 'clip-1',
+          editScriptId: 'edit-image-pending',
           panels: [
             createPanel({ id: 'panel-image-pending', panelIndex: 0, panelNumber: 1 }),
           ],
@@ -2648,7 +2648,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-panel-gen',
-          clipId: 'clip-panel-gen',
+          editScriptId: 'edit-panel-gen',
           panels: [],
           photographyPlan: JSON.stringify({
             consistencyMode: 'spatial_text_blocking',
@@ -2728,7 +2728,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial',
-          clipId: 'clip-spatial',
+          editScriptId: 'edit-spatial',
           panels: [
             createPanel({ id: 'panel-spatial-1', storyboardId: 'storyboard-spatial', panelIndex: 0, panelNumber: 1 }),
           ],
@@ -2912,7 +2912,11 @@ describe('workspace node canvas projection', () => {
       source: 'edit-cinematography-shot-plan:edit-script:edit-spatial',
       target: 'space-consistency:storyboard-spatial',
     }))
-    expect(projection.edges.some((edge) => edge.id === 'edge:space-consistency-shot:storyboard-spatial')).toBe(true)
+    expect(projection.edges).toContainEqual(expect.objectContaining({
+      id: 'edge:clip-shot:panel-spatial-1',
+      source: 'space-consistency:storyboard-spatial',
+      target: 'shot:panel-spatial-1',
+    }))
   })
 
   it('does not treat persisted space consistency stages as live running task state', () => {
@@ -2923,7 +2927,7 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-processing',
-          clipId: 'clip-spatial',
+          editScriptId: 'edit-spatial-processing',
           panels: [],
           photographyPlan: JSON.stringify({
             consistencyMode: 'spatial_text_blocking',
@@ -2933,6 +2937,15 @@ describe('workspace node canvas projection', () => {
       ],
       savedLayouts: [],
       translate: t,
+      editScript: createSingleVideoEditScript({
+        id: 'edit-spatial-processing',
+        status: 'ready',
+        requirements: [],
+      }),
+      editCinematographyShotPlan: createCinematographyShotPlan({
+        id: 'cinematography-spatial-processing',
+        editScriptId: 'edit-spatial-processing',
+      }),
     })
 
     const spaceNode = projection.nodes.find((node) => node.id === 'space-consistency:storyboard-spatial-processing')
@@ -2948,12 +2961,12 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-ready',
-          clipId: 'clip-spatial',
+          editScriptId: 'edit-spatial-ready',
           panels: [],
           photographyPlan: JSON.stringify({
             consistencyMode: 'spatial_text_blocking',
             currentStage: 'spatial_profile_ready',
-            sourceEditScriptId: 'edit-spatial-ready',
+            editScriptId: 'edit-spatial-ready',
           }),
         }),
       ],
@@ -3002,12 +3015,12 @@ describe('workspace node canvas projection', () => {
       storyboards: [
         createStoryboard({
           id: 'storyboard-spatial-stream',
-          clipId: 'clip-spatial',
+          editScriptId: 'edit-spatial-stream',
           panels: [],
           photographyPlan: JSON.stringify({
             consistencyMode: 'spatial_text_blocking',
             currentStage: 'spatial_profile_ready',
-            sourceEditScriptId: 'edit-spatial-stream',
+            editScriptId: 'edit-spatial-stream',
           }),
         }),
       ],

@@ -154,6 +154,27 @@ export async function assembleProjectContext(params: {
                 },
               },
             },
+            storyboards: {
+              orderBy: { createdAt: 'asc' },
+              include: {
+                panels: {
+                  orderBy: { panelIndex: 'asc' },
+                  select: {
+                    id: true,
+                    panelIndex: true,
+                    description: true,
+                    imagePrompt: true,
+                    imageUrl: true,
+                    imageMediaId: true,
+                    candidateImages: true,
+                    videoPrompt: true,
+                    videoUrl: true,
+                    videoMediaId: true,
+                    updatedAt: true,
+                  },
+                },
+              },
+            },
           },
         })
       : Promise.resolve(null),
@@ -265,11 +286,12 @@ export async function assembleProjectContext(params: {
     storyboardReady: !!clip.storyboard,
     panelCount: clip.storyboard?.panels.length || 0,
   }))
-  const panelSnapshots = (episode?.clips || []).flatMap((clip) =>
-    (clip.storyboard?.panels || []).map((panel) => ({
+  const panelSnapshots = (episode?.storyboards || []).flatMap((storyboard) =>
+    storyboard.panels.map((panel) => ({
       panelId: panel.id,
-      clipId: clip.id,
-      storyboardId: clip.storyboard?.id || '',
+      clipId: storyboard.clipId,
+      editScriptId: storyboard.editScriptId,
+      storyboardId: storyboard.id,
       panelIndex: panel.panelIndex,
       description: panel.description,
       imagePrompt: panel.imagePrompt ?? null,
@@ -282,7 +304,7 @@ export async function assembleProjectContext(params: {
       updatedAt: panel.updatedAt.toISOString(),
     })),
   )
-  const storyboardCount = (episode?.clips || []).filter((clip) => !!clip.storyboard).length
+  const storyboardCount = episode?.storyboards.length || 0
   const panelCount = panelSnapshots.length
   const screenplayClipCount = (episode?.clips || []).filter((clip) => !!clip.screenplay).length
   const videoBlockCounts = countEditScriptVideoBlocks(editScript?.videoBlocksJson ?? null)

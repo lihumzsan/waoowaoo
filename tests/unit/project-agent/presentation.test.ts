@@ -125,6 +125,7 @@ describe('project agent presentation', () => {
           {
             panelId: 'panel-1',
             clipId: 'clip-1',
+            editScriptId: null,
             storyboardId: 'storyboard-1',
             panelIndex: 0,
             description: 'panel',

@@ -250,6 +250,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
           storyboard: {
             select: {
               id: true,
+              editScriptId: true,
               createdAt: true,
               storyboardTextJson: true,
               clip: { select: { createdAt: true } },

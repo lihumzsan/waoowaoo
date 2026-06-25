@@ -39,13 +39,6 @@ interface PanelDraft {
   readonly sourceVideoBlockId: string
 }
 
-function buildEditStoryboardMarker(editScriptId: string): string {
-  return JSON.stringify({
-    source: 'edit_script',
-    editScriptId,
-  })
-}
-
 function editStoryboardPanelSourceToJson(source: Record<string, unknown>): string {
   return JSON.stringify({
     source: 'edit_script',
@@ -144,40 +137,17 @@ function buildVideoBlockBindings(input: {
   })
 }
 
-export async function upsertEditScriptStoryboardShell(input: {
+export async function upsertEditScriptStoryboard(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly photographyPlan: Record<string, unknown>
 }) {
-  const editScriptId = input.snapshot.sourceEditScriptId
-  const marker = buildEditStoryboardMarker(editScriptId)
-  const markerNeedle = `"editScriptId":"${editScriptId}"`
-  const existing = await prisma.projectStoryboard.findFirst({
-    where: {
-      episodeId: input.snapshot.episodeId,
-      clip: {
-        screenplay: {
-          contains: markerNeedle,
-        },
-      },
+  const editScriptId = input.snapshot.editScript.id
+  const existing = await prisma.projectStoryboard.findUnique({
+    where: { editScriptId },
+    include: {
+      panels: { orderBy: { panelIndex: 'asc' } },
     },
-    include: { clip: true },
   })
-
-  const commonClipData = {
-    end: input.snapshot.editScript.durationSec,
-    duration: input.snapshot.editScript.durationSec,
-    summary: input.snapshot.editScript.title,
-    location: input.snapshot.assets
-      .filter((asset) => asset.kind === 'location')
-      .map((asset) => asset.name)
-      .join('、') || null,
-    characters: JSON.stringify(input.snapshot.assets
-      .filter((asset) => asset.kind === 'character')
-      .map((asset) => asset.name)),
-    content: input.snapshot.editScript.logline || input.snapshot.editScript.userPrompt || input.snapshot.editScript.title,
-    shotCount: input.snapshot.editScript.shotCount,
-    screenplay: marker,
-  }
 
   const storyboardTextJson = JSON.stringify({
     source: 'edit_script',
@@ -189,10 +159,6 @@ export async function upsertEditScriptStoryboardShell(input: {
   })
 
   if (existing) {
-    await prisma.projectClip.update({
-      where: { id: existing.clipId },
-      data: commonClipData,
-    })
     return await prisma.projectStoryboard.update({
       where: { id: existing.id },
       data: {
@@ -206,27 +172,17 @@ export async function upsertEditScriptStoryboardShell(input: {
     })
   }
 
-  return await prisma.$transaction(async (tx) => {
-    const clip = await tx.projectClip.create({
-      data: {
-        episodeId: input.snapshot.episodeId,
-        start: 0,
-        ...commonClipData,
-        props: null,
-      },
-    })
-    return await tx.projectStoryboard.create({
-      data: {
-        episodeId: input.snapshot.episodeId,
-        clipId: clip.id,
-        panelCount: input.snapshot.shots.length,
-        storyboardTextJson,
-        photographyPlan: JSON.stringify(input.photographyPlan),
-      },
-      include: {
-        panels: { orderBy: { panelIndex: 'asc' } },
-      },
-    })
+  return await prisma.projectStoryboard.create({
+    data: {
+      episode: { connect: { id: input.snapshot.episodeId } },
+      editScript: { connect: { id: editScriptId } },
+      panelCount: input.snapshot.shots.length,
+      storyboardTextJson,
+      photographyPlan: JSON.stringify(input.photographyPlan),
+    },
+    include: {
+      panels: { orderBy: { panelIndex: 'asc' } },
+    },
   })
 }
 
@@ -252,7 +208,7 @@ function buildPanelDrafts(input: {
     if (!generated) throw new Error(`EDIT_SCRIPT_STORYBOARD_FINAL_PROMPT_MISSING:${shot.shotNumber}`)
     const source = {
       sourceType: 'editScriptShot',
-      editScriptId: input.snapshot.sourceEditScriptId,
+      editScriptId: input.snapshot.editScript.id,
       sourceShotNumber: shot.shotNumber,
       sourceVideoBlockId: block.sourceVideoBlockId,
       sourceVideoBlockIndex: block.blockIndex,
@@ -305,7 +261,7 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
   const storyboardTextJson = JSON.stringify({
     source: 'edit_script',
     sourceType: 'editScriptStoryboard',
-    editScriptId: input.snapshot.sourceEditScriptId,
+    editScriptId: input.snapshot.editScript.id,
     title: input.snapshot.editScript.title,
     shots: input.snapshot.shots,
     videoBlocks: videoBlockBindings,

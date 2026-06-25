@@ -25,7 +25,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
     schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
-    sourceEditScriptId: 'edit-1',
     project: {
       videoRatio: '16:9',
     },

@@ -338,7 +338,6 @@ export async function buildStoryboardConsistencySource(input: {
       schemaVersion: 1,
       projectId: input.projectId,
       episodeId: input.episodeId,
-      sourceEditScriptId: editScript.id,
       project: {
         videoRatio: project.videoRatio,
       },

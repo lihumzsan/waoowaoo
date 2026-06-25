@@ -28,7 +28,6 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly schemaVersion: 1
   readonly projectId: string
   readonly episodeId: string
-  readonly sourceEditScriptId: string
   readonly project: {
     readonly videoRatio: string
   }
@@ -128,7 +127,6 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   projectId: z.string().min(1),
   episodeId: z.string().min(1),
-  sourceEditScriptId: z.string().min(1),
   project: z.object({
     videoRatio: z.string().min(1),
   }),

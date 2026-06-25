@@ -10,6 +10,8 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
   },
   projectStoryboard: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
     update: vi.fn(),
   },
   projectPanel: {
@@ -45,7 +47,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
     schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
-    sourceEditScriptId: 'edit-script-1',
     project: {
       videoRatio: '16:9',
     },
@@ -153,8 +154,46 @@ describe('edit-script storyboard persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.projectCharacter.findMany.mockResolvedValue([])
+    prismaMock.projectStoryboard.create.mockResolvedValue({ id: 'storyboard-1', clipId: null, editScriptId: 'edit-script-1', panels: [] })
+    prismaMock.projectStoryboard.findUnique.mockResolvedValue(null)
     prismaMock.projectStoryboard.update.mockResolvedValue({ panels: [] })
     prismaMock.projectPanel.create.mockResolvedValue({ id: 'panel-1', panelIndex: 0 })
+  })
+
+  it('creates edit-first storyboard through editScript without a bridge clip', async () => {
+    const { upsertEditScriptStoryboard } = await import('@/lib/edit-script/storyboard-consistency/persistence')
+    const storyboard = await upsertEditScriptStoryboard({
+      snapshot: buildSourceSnapshot(),
+      photographyPlan: {
+        currentStage: 'preparing',
+      },
+    })
+
+    expect(storyboard).toEqual(expect.objectContaining({
+      id: 'storyboard-1',
+      clipId: null,
+      editScriptId: 'edit-script-1',
+    }))
+    expect(prismaMock.projectStoryboard.findUnique).toHaveBeenCalledWith({
+      where: { editScriptId: 'edit-script-1' },
+      include: {
+        panels: { orderBy: { panelIndex: 'asc' } },
+      },
+    })
+    const createInput = prismaMock.projectStoryboard.create.mock.calls[0]?.[0]
+    expect(createInput?.data).toEqual(expect.objectContaining({
+      episode: { connect: { id: 'episode-1' } },
+      editScript: { connect: { id: 'edit-script-1' } },
+      panelCount: 1,
+      photographyPlan: JSON.stringify({ currentStage: 'preparing' }),
+    }))
+    expect(createInput?.data).not.toHaveProperty('clipId')
+    expect(JSON.parse(String(createInput?.data.storyboardTextJson))).toEqual(expect.objectContaining({
+      source: 'edit_script',
+      sourceType: 'editScriptStoryboard',
+      editScriptId: 'edit-script-1',
+      title: 'Temple Lesson',
+    }))
   })
 
   it('persists shotBlocking into panel photographyRules.cameraPlan', async () => {

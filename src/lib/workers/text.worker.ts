@@ -352,6 +352,7 @@ async function handleRegenerateStoryboardTextTask(job: Job<TaskJobData>) {
   })
   if (!storyboard) throw new Error('Storyboard not found')
   if (!storyboard.clip) throw new Error('Storyboard clip not found')
+  const clip = storyboard.clip
 
   const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project) throw new Error('Project not found')
@@ -383,8 +384,8 @@ async function handleRegenerateStoryboardTextTask(job: Job<TaskJobData>) {
     async () =>
       await runStoryboardPhasesForClip({
         clip: {
-          ...storyboard.clip,
-          props: readNullableText(storyboard.clip as unknown as Record<string, unknown>, 'props'),
+          ...clip,
+          props: readNullableText(clip as unknown as Record<string, unknown>, 'props'),
         },
         projectData,
         projectId,

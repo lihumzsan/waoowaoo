@@ -874,8 +874,8 @@ function sortPanels(panels: readonly ProjectPanel[]): ProjectPanel[] {
 
 function sortedStoryboards(storyboards: readonly ProjectStoryboard[], clipOrder: ReadonlyMap<string, number>): ProjectStoryboard[] {
   return [...storyboards].sort((a, b) => {
-    const aOrder = clipOrder.get(a.clipId) ?? Number.MAX_SAFE_INTEGER
-    const bOrder = clipOrder.get(b.clipId) ?? Number.MAX_SAFE_INTEGER
+    const aOrder = a.clipId ? clipOrder.get(a.clipId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER
+    const bOrder = b.clipId ? clipOrder.get(b.clipId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER
     if (aOrder !== bOrder) return aOrder - bOrder
     return a.id.localeCompare(b.id)
   })
@@ -1179,7 +1179,14 @@ export function buildWorkspaceNodeCanvasProjection({
   const panelsWithStoryboard = sortedStoryboards(storyboards, clipOrder).flatMap((storyboard) => (
     sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
   ))
-  const hasStoryboardPanels = panelsWithStoryboard.length > 0
+  const editScriptStoryboards = editScript
+    ? storyboards.filter((storyboard) => storyboard.editScriptId === editScript.id)
+    : []
+  const editScriptPanelsWithStoryboard = editScript
+    ? panelsWithStoryboard.filter(({ storyboard }) => storyboard.editScriptId === editScript.id)
+    : []
+  const hasEditScriptStoryboardPanels = editScriptPanelsWithStoryboard.length > 0
+  const spatialBlockingStoryboards = editScriptStoryboards.filter(storyboardUsesSpatialBlocking)
   const directorDecoupageRunning = activeAssistantOperationId === 'generate_edit_director_decoupage'
   const cinematographyShotPlanRunning = activeAssistantOperationId === 'generate_edit_cinematography_shot_plan'
   const spatialBlockingRunning = activeAssistantOperationId === 'generate_edit_script_storyboard_spatial_blocking'
@@ -1194,7 +1201,7 @@ export function buildWorkspaceNodeCanvasProjection({
       .map((target) => target.targetId),
   )
   const panelByShotNumberForVideoPlan = new Map<number, ProjectPanel>()
-  panelsWithStoryboard.forEach(({ panel }) => {
+  editScriptPanelsWithStoryboard.forEach(({ panel }) => {
     const shotNumber = panel.panelNumber ?? panel.panelIndex + 1
     panelByShotNumberForVideoPlan.set(shotNumber, panel)
   })
@@ -1471,15 +1478,14 @@ export function buildWorkspaceNodeCanvasProjection({
     editScriptCanvasCenterY = editScriptFallbackY + editScriptHeight / 2
     const assetsToGenerate = editScript.requirements.some((asset) => !editAssetHasPreview(asset))
     const completedAssets = editScript.requirements.filter((asset) => asset.status === 'completed').length
-    const hasStoryboardPanels = storyboards.some((storyboard) => (storyboard.panels?.length ?? 0) > 0)
     const locationReferenceReady = hasReadyLocationReference(editScript)
-    const spatialBlockingReady = storyboards.some(storyboardSpatialBlockingReady)
+    const spatialBlockingReady = editScriptStoryboards.some(storyboardSpatialBlockingReady)
     const cinematographyShotPlanReady = editCinematographyShotPlan?.status === 'ready' && editCinematographyShotPlan.editScriptId === editScript.id
     const editScriptAction = !editScriptIsReady
       ? null
       : assetsToGenerate
       ? { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
-      : hasStoryboardPanels
+      : hasEditScriptStoryboardPanels
         ? null
         : cinematographyShotPlanRunning
           ? null
@@ -1840,18 +1846,18 @@ export function buildWorkspaceNodeCanvasProjection({
     }
   })
 
-  const hasExistingSpaceConsistencyLayer = storyboards.some(storyboardUsesSpatialBlocking)
+  const hasExistingSpaceConsistencyLayer = spatialBlockingStoryboards.length > 0
   const hasVideoBlocks = editScript?.status === 'ready' && Boolean(editScript.videoBlocks?.length)
   const hasReadyCinematographyShotPlan = Boolean(
     editScript
       && editCinematographyShotPlan?.status === 'ready'
       && editCinematographyShotPlan.editScriptId === editScript.id,
   )
-  const canShowVideoPlanLayer = hasVideoBlocks && hasStoryboardPanels
+  const canShowVideoPlanLayer = hasVideoBlocks && hasEditScriptStoryboardPanels
   const shouldShowPendingSpaceConsistencyLayer = editScript?.status === 'ready'
     && hasVideoBlocks
     && hasReadyCinematographyShotPlan
-    && !hasStoryboardPanels
+    && !hasEditScriptStoryboardPanels
     && !hasExistingSpaceConsistencyLayer
   const shouldRouteThroughSpaceConsistency = Boolean(editScript && (hasExistingSpaceConsistencyLayer || shouldShowPendingSpaceConsistencyLayer))
   const spaceConsistencyBaseX = editCinematographyCanvasRightX !== null
@@ -1889,7 +1895,7 @@ export function buildWorkspaceNodeCanvasProjection({
 
   const shotNodeIds = new Map<string, string>()
   const spaceConsistencyNodeIds = new Map<string, string>()
-  sortedStoryboards(storyboards, clipOrder).filter(storyboardUsesSpatialBlocking).forEach((storyboard, index) => {
+  sortedStoryboards(spatialBlockingStoryboards, clipOrder).forEach((storyboard, index) => {
     const details = createSpaceConsistencyDetails(storyboard)
     const nodeId = workspaceNodeId.spaceConsistency(storyboard.id)
     spaceConsistencyNodeIds.set(storyboard.id, nodeId)
@@ -1941,8 +1947,10 @@ export function buildWorkspaceNodeCanvasProjection({
         onAction,
       },
     }))
-    const editScriptSourceNodeId = editCinematographyShotPlanNodeId ?? (editScript ? workspaceNodeId.editScript(episodeId) : null)
-    const clipSourceNodeId = clipNodeIds.get(storyboard.clipId) ?? null
+    const editScriptSourceNodeId = editScript && storyboard.editScriptId === editScript.id
+      ? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
+      : null
+    const clipSourceNodeId = storyboard.clipId ? clipNodeIds.get(storyboard.clipId) ?? null : null
     const sourceNodeId = editScriptSourceNodeId ?? clipSourceNodeId
     if (sourceNodeId) {
       edges.push(createEdge(`edge:space-consistency-source:${storyboard.id}`, sourceNodeId, nodeId))
@@ -2102,13 +2110,18 @@ export function buildWorkspaceNodeCanvasProjection({
       },
     }))
 
-    const source = clipNodeIds.get(storyboard.clipId) ?? analysisNodeId
-    if (clipNodeIds.has(storyboard.clipId) || hasStory) {
+    const spaceSource = spaceConsistencyNodeIds.get(storyboard.id) ?? null
+    const editScriptSource = editScript && storyboard.editScriptId === editScript.id
+      ? spaceSource ?? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
+      : null
+    const clipSource = storyboard.clipId ? clipNodeIds.get(storyboard.clipId) ?? null : null
+    const source = editScriptSource ?? clipSource ?? (hasStory ? analysisNodeId : null)
+    if (source) {
       edges.push(createEdge(`edge:clip-shot:${panel.id}`, source, nodeId))
     }
     if (firstPanelIdByStoryboardId.get(storyboard.id) === panel.id) {
       const spaceNodeId = spaceConsistencyNodeIds.get(storyboard.id)
-      if (spaceNodeId) edges.push(createEdge(`edge:space-consistency-shot:${storyboard.id}`, spaceNodeId, nodeId))
+      if (spaceNodeId && source !== spaceNodeId) edges.push(createEdge(`edge:space-consistency-shot:${storyboard.id}`, spaceNodeId, nodeId))
     }
   })
 

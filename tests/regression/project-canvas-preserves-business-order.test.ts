@@ -68,6 +68,7 @@ function storyboard(panels: ProjectPanel[]): ProjectStoryboard {
     id: 'storyboard-1',
     episodeId: 'episode-1',
     clipId: 'clip-1',
+    editScriptId: null,
     storyboardTextJson: null,
     panelCount: panels.length,
     storyboardImageUrl: null,

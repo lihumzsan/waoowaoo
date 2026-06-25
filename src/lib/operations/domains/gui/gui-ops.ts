@@ -980,6 +980,13 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           },
         })
         if (!source) throw new ApiError('NOT_FOUND')
+        if (!source.clip) {
+          throw new ApiError('CONFLICT', {
+            code: 'STORYBOARD_CLIP_REQUIRED',
+            message: 'copy_storyboard_group only supports clip-backed storyboards',
+          })
+        }
+        const sourceClip = source.clip
 
         const includeImages = input.includeImages !== false
         const newCreatedAt = resolveStoryboardGroupInsertCreatedAt(source.episode.clips, input.insertIndex)
@@ -988,18 +995,18 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           const clip = await tx.projectClip.create({
             data: {
               episodeId: source.episodeId,
-              start: source.clip.start,
-              end: source.clip.end,
-              duration: source.clip.duration,
-              summary: source.clip.summary,
-              location: source.clip.location,
-              content: source.clip.content,
-              characters: source.clip.characters,
-              props: source.clip.props,
-              endText: source.clip.endText,
-              shotCount: source.clip.shotCount,
-              startText: source.clip.startText,
-              screenplay: source.clip.screenplay,
+              start: sourceClip.start,
+              end: sourceClip.end,
+              duration: sourceClip.duration,
+              summary: sourceClip.summary,
+              location: sourceClip.location,
+              content: sourceClip.content,
+              characters: sourceClip.characters,
+              props: sourceClip.props,
+              endText: sourceClip.endText,
+              shotCount: sourceClip.shotCount,
+              startText: sourceClip.startText,
+              screenplay: sourceClip.screenplay,
               createdAt: newCreatedAt,
             },
           })

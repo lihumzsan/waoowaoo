@@ -73,7 +73,7 @@ async function resolveStaleArtifactsForEpisode(params: {
   progress: ProjectPhaseSnapshot['progress']
 }): Promise<string[]> {
   const episodeId = params.episodeId
-  const [episode, storyClipMax, screenplayClipMax, storyboardMax, panelMax] = await Promise.all([
+  const [episode, storyClipMax, screenplayClipMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
     prisma.projectEpisode.findUnique({
       where: { id: episodeId },
       select: { updatedAt: true },
@@ -89,16 +89,20 @@ async function resolveStaleArtifactsForEpisode(params: {
       },
       _max: { updatedAt: true },
     }),
+    prisma.projectEditScript.aggregate({
+      where: { episodeId },
+      _max: { updatedAt: true },
+    }),
     prisma.projectStoryboard.aggregate({
       where: {
-        clip: { episodeId },
+        episodeId,
       },
       _max: { updatedAt: true },
     }),
     prisma.projectPanel.aggregate({
       where: {
         storyboard: {
-          clip: { episodeId },
+          episodeId,
         },
       },
       _max: { updatedAt: true },
@@ -106,7 +110,7 @@ async function resolveStaleArtifactsForEpisode(params: {
   ])
 
   const storyUpdatedAt = maxDate([episode?.updatedAt ?? null, storyClipMax._max.updatedAt])
-  const scriptUpdatedAt = screenplayClipMax._max.updatedAt ?? null
+  const scriptUpdatedAt = maxDate([screenplayClipMax._max.updatedAt, editScriptMax._max.updatedAt])
   const storyboardUpdatedAt = maxDate([storyboardMax._max.updatedAt, panelMax._max.updatedAt])
 
   const stale: string[] = []

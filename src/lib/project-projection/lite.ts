@@ -52,13 +52,13 @@ async function resolveEpisodeProgress(episodeId: string | null): Promise<Project
     }),
     prisma.projectStoryboard.count({
       where: {
-        clip: { episodeId },
+        episodeId,
       },
     }),
     prisma.projectPanel.count({
       where: {
         storyboard: {
-          clip: { episodeId },
+          episodeId,
         },
       },
     }),

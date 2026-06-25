@@ -96,9 +96,10 @@ export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpa
 
 export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlockingStoryboardInput) {
   const editScriptId = await resolveEditScriptId(input)
-  const storyboards = await prisma.projectStoryboard.findMany({
+  const storyboard = await prisma.projectStoryboard.findFirst({
     where: {
       episodeId: input.episodeId,
+      editScriptId,
       episode: {
         projectId: input.projectId,
       },
@@ -109,14 +110,8 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
       photographyPlan: true,
     },
   })
-  const matchingStoryboards = storyboards.flatMap((storyboard) => {
-    const plan = parseJsonRecord(storyboard.photographyPlan)
-    const sourceEditScriptId = readString(plan.sourceEditScriptId)
-    if (sourceEditScriptId !== editScriptId) return []
-    return [{ storyboardId: storyboard.id, plan }]
-  })
-  const ready = matchingStoryboards.find((item) => isStoryboardSpatialProfileStageReady(readString(item.plan.currentStage)))
-  if (!ready) {
+  const plan = parseJsonRecord(storyboard?.photographyPlan ?? null)
+  if (!storyboard || !isStoryboardSpatialProfileStageReady(readString(plan.currentStage))) {
     throw new ApiError('CONFLICT', {
       code: 'STORYBOARD_SPATIAL_BLOCKING_REQUIRED',
       message: 'Ready storyboard spatial blocking is required before generating storyboard panels',
@@ -135,7 +130,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     episodeId: input.episodeId,
     type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
     targetType: 'ProjectStoryboard',
-    targetId: ready.storyboardId,
+    targetId: storyboard.id,
     operationId: 'generate_edit_script_storyboard',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
@@ -144,15 +139,15 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
       userId: input.userId,
       payload: {
         editScriptId,
-        storyboardId: ready.storyboardId,
+        storyboardId: storyboard.id,
         sourceSnapshot,
         modelConfigSnapshot,
       },
     }),
-    dedupeKey: `edit_script_storyboard_camera_plan:${ready.storyboardId}`,
+    dedupeKey: `edit_script_storyboard_camera_plan:${storyboard.id}`,
   })
   return {
     ...submitted,
-    storyboardId: ready.storyboardId,
+    storyboardId: storyboard.id,
   }
 }

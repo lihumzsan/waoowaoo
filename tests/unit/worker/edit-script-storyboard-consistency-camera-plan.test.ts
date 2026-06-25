@@ -20,7 +20,7 @@ const modelGenerationMock = vi.hoisted(() => ({
 }))
 
 const persistenceMock = vi.hoisted(() => ({
-  upsertEditScriptStoryboardShell: vi.fn(),
+  upsertEditScriptStoryboard: vi.fn(),
   upsertStoryboardPanelsFromPrompts: vi.fn(),
 }))
 
@@ -83,7 +83,6 @@ function buildSourceSnapshot() {
     schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
-    sourceEditScriptId: 'edit-script-1',
     project: {
       videoRatio: '16:9',
     },
@@ -228,7 +227,7 @@ describe('edit script storyboard camera plan handler', () => {
       id: 'storyboard-1',
       photographyPlan: JSON.stringify({
         currentStage: 'spatial_profile_ready',
-        sourceEditScriptId: sourceSnapshot.sourceEditScriptId,
+        editScriptId: sourceSnapshot.editScript.id,
         modelConfigSnapshot: {
           analysisModel: 'analysis-model-1',
           storyboardModel: 'storyboard-model-1',
@@ -321,7 +320,7 @@ describe('edit script storyboard camera plan handler', () => {
       '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
     )
     const sourceSnapshot = buildSourceSnapshotWithLocation()
-    persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
+    persistenceMock.upsertEditScriptStoryboard.mockResolvedValue({
       id: 'storyboard-prepare-1',
     })
     const job = {
@@ -360,10 +359,10 @@ describe('edit script storyboard camera plan handler', () => {
         }),
       })],
     })
-    const shellPlan = persistenceMock.upsertEditScriptStoryboardShell.mock.calls[0]?.[0]?.photographyPlan as Record<string, unknown>
+    const shellPlan = persistenceMock.upsertEditScriptStoryboard.mock.calls[0]?.[0]?.photographyPlan as Record<string, unknown>
     expect(shellPlan).toMatchObject({
       currentStage: 'preparing',
-      sourceEditScriptId: 'edit-script-1',
+      editScriptId: 'edit-script-1',
     })
     expect(shellPlan).not.toHaveProperty('sourceSnapshot')
     expect(shellPlan).not.toHaveProperty('strategyOutput')
@@ -375,7 +374,7 @@ describe('edit script storyboard camera plan handler', () => {
     const updatePlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan)) as Record<string, unknown>
     expect(updatePlan).toMatchObject({
       currentStage: 'spatial_profile_ready',
-      sourceEditScriptId: 'edit-script-1',
+      editScriptId: 'edit-script-1',
     })
     expect(updatePlan).not.toHaveProperty('sourceSnapshot')
     expect(updatePlan).not.toHaveProperty('strategyOutput')
@@ -386,7 +385,7 @@ describe('edit script storyboard camera plan handler', () => {
       '@/lib/workers/handlers/edit-script-storyboard-consistency-task-handler'
     )
     const sourceSnapshot = buildSourceSnapshotWithLocation()
-    persistenceMock.upsertEditScriptStoryboardShell.mockResolvedValue({
+    persistenceMock.upsertEditScriptStoryboard.mockResolvedValue({
       id: 'storyboard-prepare-1',
     })
     const job = {

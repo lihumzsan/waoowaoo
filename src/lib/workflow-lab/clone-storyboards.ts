@@ -29,11 +29,15 @@ export async function cloneWorkflowLabStoryboards(params: {
   })
 
   for (const storyboard of storyboards) {
-    const targetClipId = readMappedId(params.maps.clipIds, storyboard.clipId)
+    const targetClipId = storyboard.clipId ? readMappedId(params.maps.clipIds, storyboard.clipId) : null
+    const targetEditScriptId = storyboard.editScriptId ? readMappedId(params.maps.editScriptIds, storyboard.editScriptId) : null
+    if ((targetClipId && targetEditScriptId) || (!targetClipId && !targetEditScriptId)) {
+      throw new Error(`WORKFLOW_LAB_STORYBOARD_SOURCE_INVALID:${storyboard.id}`)
+    }
     const createdStoryboard = await params.tx.projectStoryboard.create({
       data: {
         episodeId: params.targetEpisodeId,
-        clipId: targetClipId,
+        ...(targetClipId ? { clipId: targetClipId } : { editScriptId: targetEditScriptId }),
         storyboardImageUrl: storyboard.storyboardImageUrl,
         panelCount: storyboard.panelCount,
         storyboardTextJson: storyboard.storyboardTextJson,

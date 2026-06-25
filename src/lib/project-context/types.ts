@@ -76,7 +76,8 @@ export interface ProjectContextClipSnapshot {
 
 export interface ProjectContextPanelSnapshot {
   panelId: string
-  clipId: string
+  clipId: string | null
+  editScriptId: string | null
   storyboardId: string
   panelIndex: number
   description: string | null

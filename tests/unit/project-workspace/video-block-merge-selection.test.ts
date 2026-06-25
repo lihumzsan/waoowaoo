@@ -66,7 +66,8 @@ function storyboard(): ProjectStoryboard {
   return {
     id: 'storyboard-1',
     episodeId: 'episode-1',
-    clipId: 'clip-1',
+    clipId: null,
+    editScriptId: 'edit-script-1',
     storyboardTextJson: null,
     panelCount: panels.length,
     storyboardImageUrl: null,

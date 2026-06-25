@@ -5,7 +5,7 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
   },
   projectStoryboard: {
-    findMany: vi.fn(),
+    findFirst: vi.fn(),
   },
 }))
 
@@ -35,7 +35,7 @@ describe('edit-script storyboard panel service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.projectEditScript.findFirst.mockResolvedValue({ id: 'edit-1' })
-    prismaMock.projectStoryboard.findMany.mockResolvedValue([])
+    prismaMock.projectStoryboard.findFirst.mockResolvedValue(null)
     submitterMock.submitTask.mockResolvedValue({
       success: true,
       async: true,
@@ -107,13 +107,12 @@ describe('edit-script storyboard panel service', () => {
   })
 
   it('submits storyboard panels with text billing model fields', async () => {
-    prismaMock.projectStoryboard.findMany.mockResolvedValueOnce([{
+    prismaMock.projectStoryboard.findFirst.mockResolvedValueOnce({
       id: 'storyboard-1',
       photographyPlan: JSON.stringify({
-        sourceEditScriptId: 'edit-1',
         currentStage: 'spatial_profile_ready',
       }),
-    }])
+    })
 
     const result = await submitEditScriptStoryboardPanels({
       projectId: 'project-1',
