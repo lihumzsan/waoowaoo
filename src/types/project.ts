@@ -366,7 +366,6 @@ export interface ProjectBgmScorePlan {
   virtualLayers: ProjectBgmScoreVirtualLayer[]
   promptSections: ProjectBgmScoreTimedTextSection[]
   finalPrompt: string
-  negativePrompt?: string | null
 }
 
 export interface ProjectBgmScore {

@@ -937,7 +937,6 @@ function BgmScoreContent({
   ) : null
   const promptSections = expanded ? renderTimedSectionList(details.promptSections, labels('promptSections')) : null
   const finalPromptSection = expanded ? renderTextSection(labels('finalMusicPrompt'), details.finalPrompt) : null
-  const negativePromptSection = expanded ? renderTextSection(labels('negativePrompt'), details.negativePrompt) : null
   const errorSection = renderTextSection(labels('error'), details.errorMessage)
 
   if (wideExpanded) {
@@ -958,7 +957,6 @@ function BgmScoreContent({
           <div className="space-y-2">
             {promptSections}
             {finalPromptSection}
-            {negativePromptSection}
           </div>
         </div>
       </div>
@@ -975,7 +973,6 @@ function BgmScoreContent({
       {virtualLayerSections}
       {promptSections}
       {finalPromptSection}
-      {negativePromptSection}
       {errorSection}
     </div>
   )

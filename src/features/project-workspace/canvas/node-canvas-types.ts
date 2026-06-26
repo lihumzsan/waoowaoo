@@ -231,7 +231,6 @@ export interface WorkspaceCanvasBgmScoreDetails {
     readonly content: string
   }[]
   readonly finalPrompt?: string | null
-  readonly negativePrompt?: string | null
 }
 
 export interface WorkspaceCanvasBgmScoreTimedTextSection {

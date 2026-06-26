@@ -195,7 +195,6 @@ function buildValidPlanText(): string {
       },
     ],
     finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 3 seconds. Minimal suspense drama underscore in D minor, sparse low strings and air pad, restrained harmonic movement, tiny swell near 2.4 seconds, no literal sound effects, leave space for native video dialogue and sound.',
-    negativePrompt: 'no vocals, no lyrics, no dialogue, no Foley, no literal sound effects, no whoosh, no footsteps',
   })
 }
 

@@ -33,7 +33,6 @@ describe('final video summary normalization', () => {
           virtualLayers: [{ name: 'wide pad', purpose: 'internal color', content: 'not rendered separately' }],
           promptSections: [{ title: 'Main prompt', content: 'Generate one final cue.' }],
           finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 57 seconds.',
-          negativePrompt: 'no vocals',
         },
         mix: {
           mediaId: 'mix-media-1',

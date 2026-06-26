@@ -2280,7 +2280,6 @@ export function buildWorkspaceNodeCanvasProjection({
             content: layer.content,
           })),
           finalPrompt: bgmScorePlan?.finalPrompt ?? null,
-          negativePrompt: bgmScorePlan?.negativePrompt ?? null,
         },
         actionLabel: isBgmScoreRunning ? translate('actions.generatingBgm') : translate('actions.generateBgmScore'),
         action: { type: 'generate_bgm_score' },

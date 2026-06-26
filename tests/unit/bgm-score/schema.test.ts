@@ -47,7 +47,6 @@ const basePlan = {
     },
   ],
   finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 30 seconds. Noir crime drama underscore, restrained tension, sparse low piano and soft strings, slow implied tempo, one subtle dissonant swell at 18 seconds, then return to quiet restraint, leave space for dialogue and native video sound.',
-  negativePrompt: 'no vocals, no lyrics, no dialogue, no Foley, no literal ambience, no footsteps, no object sounds',
 }
 
 describe('bgm score plan schema', () => {

@@ -746,7 +746,6 @@ function buildBgmRuntimeEntry(
           content: layer.content,
         })),
         finalPrompt: null,
-        negativePrompt: null,
       },
     },
   })

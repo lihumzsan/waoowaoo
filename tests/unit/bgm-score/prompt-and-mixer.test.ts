@@ -70,7 +70,7 @@ describe('bgm score prompt builder', () => {
 
     expect(prompt).toContain('所有会显示在画布上的字段值必须使用中文自然语言')
     expect(prompt).toContain('finalPrompt')
-    expect(prompt).toContain('negativePrompt')
+    expect(prompt).not.toContain('negativePrompt')
     expect(prompt).toContain('生成一条 57 秒完整连续的纯器乐电影背景配乐')
     expect(prompt).not.toContain('Generate one complete continuous instrumental cinematic BGM track')
 
@@ -106,12 +106,12 @@ describe('bgm score prompt builder', () => {
         content: '在揭示处逐渐打开和声。',
       }],
       finalPrompt: '生成一条 12 秒完整连续的纯器乐电影背景配乐，科幻剧情，从冷峻压迫转向温暖揭示，编曲克制，给原生视频声音留空间。',
-      negativePrompt: '不要人声、不要歌词、不要拟音',
     }, { locale: 'zh' })
 
     expect(providerPrompt).toContain('生成单条最终配乐时必须遵守的作曲设计说明')
     expect(providerPrompt).toContain('宽阔和声铺底')
-    expect(providerPrompt).toContain('负向提示词：不要人声、不要歌词、不要拟音')
+    expect(providerPrompt).not.toContain('负向提示词')
+    expect(providerPrompt).not.toContain('negativePrompt')
     expect(providerPrompt).not.toContain('Composer design notes')
   })
 
@@ -148,13 +148,13 @@ describe('bgm score prompt builder', () => {
         content: 'Gradual harmonic opening at the reveal.',
       }],
       finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 12 seconds, sci-fi drama, cold pressure into warm reveal, restrained orchestration, leave space for native video sound.',
-      negativePrompt: 'no vocals, no lyrics, no Foley',
     })
 
     expect(providerPrompt).toContain('Generate one complete continuous instrumental cinematic BGM track')
     expect(providerPrompt).toContain('Composer design notes')
     expect(providerPrompt).toContain('wide harmonic pad')
     expect(providerPrompt).toContain('Render exactly one coherent instrumental BGM track')
-    expect(providerPrompt).toContain('Negative prompt: no vocals, no lyrics, no Foley')
+    expect(providerPrompt).not.toContain('Negative prompt:')
+    expect(providerPrompt).not.toContain('negativePrompt')
   })
 })

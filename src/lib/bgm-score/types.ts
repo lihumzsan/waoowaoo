@@ -63,7 +63,6 @@ export const bgmScorePlanSchema = z.object({
   virtualLayers: z.array(bgmScoreVirtualLayerSchema).min(1).max(16),
   promptSections: z.array(bgmScorePromptSectionSchema).min(1).max(32),
   finalPrompt: z.string().trim().min(80),
-  negativePrompt: z.string().trim().min(1).optional().nullable(),
 }).superRefine((plan, ctx) => {
   const checkTimedSection = (
     path: Array<string | number>,

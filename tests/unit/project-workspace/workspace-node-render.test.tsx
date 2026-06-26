@@ -1195,7 +1195,6 @@ describe('workspace node rendering', () => {
           },
         ],
         finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 12 seconds.',
-        negativePrompt: 'no vocals',
       },
     })
 
@@ -1240,7 +1239,6 @@ describe('workspace node rendering', () => {
         virtualLayers: [],
         promptSections: [],
         finalPrompt: null,
-        negativePrompt: null,
       },
     })
 

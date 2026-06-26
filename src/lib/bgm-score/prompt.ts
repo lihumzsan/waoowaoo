@@ -87,14 +87,14 @@ export function buildBgmScorePlanPrompt(input: {
       '只包含真正服务本条配乐的设计段落，不要强行覆盖所有类别。',
       '',
       '规则：',
-      '1. 为完整时长生成一条连贯背景音乐。音乐供应商只会收到 finalPrompt 和 negativePrompt。',
+      '1. 为完整时长生成一条连贯背景音乐。音乐供应商会收到 finalPrompt 和作曲设计说明。',
       '2. scoreDesign.sections 是给 UI 展示的动态专业设计说明；类别和标题要贴合影片，不要使用固定清单。',
       '3. virtualLayers 是文本说明层，用来解释单条最终配乐内部如何运作，不会独立渲染。',
       '4. promptSections 是文本提示词积木，用来说明 finalPrompt 压缩前的音乐逻辑。',
       '5. finalPrompt 必须是一段自洽的单条纯器乐电影背景音乐提示词，包含时长、风格、情绪弧线、有用时的速度/调性、配乐段落、关键击点、编曲/配器和混音约束。',
       '6. 为视频对白和原生视频声音留出空间，避免过度配乐和全频拥挤。',
       '7. 不要人声、歌词、对白、拟音、脚步声、物件声、字面环境声替代、转场音效或独立音效。',
-      '8. 所有会显示在画布上的字段值必须使用中文自然语言，包括 creativeBrief、scoreDesign.sections、virtualLayers、promptSections、finalPrompt 和 negativePrompt；除专有名词、模型字段名和原文台词外，不要输出英文句子。',
+      '8. 所有会显示在画布上的字段值必须使用中文自然语言，包括 creativeBrief、scoreDesign.sections、virtualLayers、promptSections 和 finalPrompt；除专有名词、模型字段名和原文台词外，不要输出英文句子。',
       '9. 只返回严格 JSON。不要 markdown、注释或 JSON 外文字。',
       '',
       'Required JSON shape:',
@@ -136,7 +136,6 @@ export function buildBgmScorePlanPrompt(input: {
           },
         ],
         finalPrompt: '生成一条 57 秒完整连续的纯器乐电影背景配乐……',
-        negativePrompt: '不要人声、不要歌词、不要对白、不要拟音、不要字面音效、不要全频拥挤',
       }),
       '',
       'Edit script JSON:',
@@ -161,7 +160,7 @@ export function buildBgmScorePlanPrompt(input: {
     'Only include design sections that actually help this cue. Do not force every category to appear.',
     '',
     'Rules:',
-    '1. Generate one coherent BGM cue for the full duration. The music provider will receive only finalPrompt and negativePrompt.',
+    '1. Generate one coherent BGM cue for the full duration. The music provider will receive finalPrompt and composer design notes.',
     '2. scoreDesign.sections must be dynamic professional notes for the UI; use categories and titles that match the film, not a fixed list.',
     '3. virtualLayers are text-only arrangement layers that explain how the single final cue should internally behave. They are not rendered independently.',
     '4. promptSections are text-only prompt building blocks. They should explain the musical logic that finalPrompt compresses.',
@@ -209,7 +208,6 @@ export function buildBgmScorePlanPrompt(input: {
         },
       ],
       finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 57 seconds...',
-      negativePrompt: 'no vocals, no lyrics, no dialogue, no Foley, no literal sound effects, no full-range clutter',
     }),
     '',
     'Edit script JSON:',
@@ -224,7 +222,6 @@ export function buildBgmScorePlanPrompt(input: {
 }
 
 export function buildFinalBgmMusicPrompt(plan: BgmScorePlan, options: { readonly locale?: Locale } = {}): string {
-  const negativePrompt = plan.negativePrompt?.trim()
   if (options.locale === 'zh') {
     return [
       plan.finalPrompt.trim(),
@@ -238,7 +235,6 @@ export function buildFinalBgmMusicPrompt(plan: BgmScorePlan, options: { readonly
       '请精确渲染一条连贯的纯器乐背景音乐，不要输出分轨，也不要做孤立乐器片段演示。',
       '让配乐贯穿完整时间线，同时为视频对白、原生声音和事件音频留出空间。',
       '避免字面音效，避免拥挤的全频编曲，除非设计明确要求密集度。',
-      negativePrompt ? `负向提示词：${negativePrompt}` : '',
     ].filter(Boolean).join('\n')
   }
 
@@ -254,6 +250,5 @@ export function buildFinalBgmMusicPrompt(plan: BgmScorePlan, options: { readonly
     'Render exactly one coherent instrumental BGM track, not separate stems, not a demo of isolated parts.',
     'Keep the score continuous across the full timeline while leaving space for video dialogue, native sound, and event audio.',
     'Avoid literal sound effects and avoid cluttered full-range arrangement unless the design explicitly calls for density.',
-    negativePrompt ? `Negative prompt: ${negativePrompt}` : '',
   ].filter(Boolean).join('\n')
 }

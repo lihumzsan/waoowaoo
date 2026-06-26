@@ -1178,7 +1178,6 @@ describe('workspace node canvas projection', () => {
               },
             ],
             finalPrompt: 'Generate one complete continuous instrumental cinematic BGM track for 2 seconds.',
-            negativePrompt: 'no vocals',
           },
           mix: {
             mediaId: 'media-mix',
