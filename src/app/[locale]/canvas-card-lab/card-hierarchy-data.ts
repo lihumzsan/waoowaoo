@@ -29,7 +29,6 @@ export const REAL = {
         "colorPrompt": "A minimalist, high-contrast palette of deep ink black, cold midnight blue, and a sharp, toxic yellow accent.",
         "texturePrompt": "Heavy ink washes, scratchy cross-hatching lines, charcoal dust textures, and rough watercolor paper grain.",
         "lightingPrompt": "Stark, graphic lighting. Solid black shadows clashing with cold indigo washes, pierced by scratchy, hand-drawn yellow ink highlights.",
-        "negativePrompt": "live-action realism, realistic actors, 3D render, photorealism, smooth gradients, pastel colors, glossy commercial lighting",
         "compositionPrompt": "Expressionistic and flat compositions, utilizing sharp diagonals, frames within frames, and overwhelming black negative space.",
         "imageFilterPrompt": "high-contrast dark graphic ink illustration filter, sharp gothic silhouettes, cold indigo and scratchy yellow"
       },

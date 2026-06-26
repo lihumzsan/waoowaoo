@@ -14,7 +14,6 @@ Hard style requirements:
 - Every shots[].videoPrompt must explicitly include executable style language. Do not only write "follow the Bible style".
 - Every videoBlock.prompt must explicitly include unified video style, image filter, sound filter, lighting, color, video rhythm, action continuity, and aspect ratio.
 - You must prioritize styleBible.stylePolicy.visual.imageFilterPrompt, lightingPrompt, and colorPrompt as the video visual strategy. Rewrite texturePrompt and compositionPrompt only when the current shot truly needs material or composition constraints; do not mechanically stuff every field into the prompt.
-- You must use styleBible.stylePolicy.visual.negativePrompt as the negative visual constraint and rewrite it into the "avoid / banned" part of the prompt; do not rely only on default bans.
 - You must use styleBible.stylePolicy.visual.imageFilterPrompt; the image filter must appear as part of the video prompt.
 - You must use styleBible.stylePolicy.sound.soundFilterPrompt; the sound filter must appear as part of the video prompt style, and it only controls the whole-film sound texture.
 - Reuse styleBible.stylePolicy.camera and styleBible.stylePolicy.sound as needed to control camera movement, lens/depth, video rhythm, and sound filter. Action and acting must come only from the screenplay, edit structure table, and asset context, not from the Style Bible.

@@ -202,7 +202,7 @@ function parseScreenplay(text: string) {
   return { summary, characters, scenes }
 }
 const STYLE_GROUPS = [
-  { key: 'visual', name: '视觉', glyph: 'eye', fields: [['色彩', REAL.styleBible.stylePolicy.visual.colorPrompt], ['光线', REAL.styleBible.stylePolicy.visual.lightingPrompt], ['质感', REAL.styleBible.stylePolicy.visual.texturePrompt], ['构图', REAL.styleBible.stylePolicy.visual.compositionPrompt], ['滤镜', REAL.styleBible.stylePolicy.visual.imageFilterPrompt], ['负向', REAL.styleBible.stylePolicy.visual.negativePrompt]] },
+  { key: 'visual', name: '视觉', glyph: 'eye', fields: [['色彩', REAL.styleBible.stylePolicy.visual.colorPrompt], ['光线', REAL.styleBible.stylePolicy.visual.lightingPrompt], ['质感', REAL.styleBible.stylePolicy.visual.texturePrompt], ['构图', REAL.styleBible.stylePolicy.visual.compositionPrompt], ['滤镜', REAL.styleBible.stylePolicy.visual.imageFilterPrompt]] },
   { key: 'camera', name: '镜头', glyph: 'camera', fields: [['运镜', REAL.styleBible.stylePolicy.camera.movementPrompt], ['景深焦点', REAL.styleBible.stylePolicy.camera.lensAndDepthPrompt], ['视频节奏', REAL.styleBible.stylePolicy.camera.videoRhythmPrompt]] },
   { key: 'directing', name: '导演', glyph: 'clapper', fields: [['节奏', REAL.styleBible.stylePolicy.directing.rhythmPrompt], ['表演', REAL.styleBible.stylePolicy.directing.performancePrompt], ['视角', REAL.styleBible.stylePolicy.directing.pointOfViewPrompt], ['信息释放', REAL.styleBible.stylePolicy.directing.informationReleasePrompt]] },
   { key: 'sound', name: '声音', glyph: 'sound', fields: [['声音滤镜', REAL.styleBible.stylePolicy.sound.soundFilterPrompt]] },

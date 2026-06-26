@@ -56,7 +56,6 @@ const styleBible: EditScriptStyleBible = {
   styleSummary: '低饱和银灰色、硬质冷光、干净宽频、克制高光的冷峻科幻质感。',
   stylePolicy: {
     visual: {
-      negativePrompt: '不要塑料感，不要霓虹赛博感，不要商业广告锐度。',
       imageFilterPrompt: '低饱和银灰色，硬质冷光，干净未来材质，克制高光',
       lightingPrompt: '硬质冷光，阴影边缘清楚但不过度高反差。',
       colorPrompt: '银灰、冷白和少量红色状态灯。',
@@ -104,7 +103,7 @@ describe('edit script asset design', () => {
     expect(parsed.styleBible.stylePolicy.visual.imageFilterPrompt).toBe('低饱和银灰色，硬质冷光，干净未来材质，克制高光')
     expect(parsed.asset).toMatchObject({ kind: 'character', name: '冷静研究员' })
     expect(parsed.constraints).toContain('Use styleBible.stylePolicy.visual as the only asset-level visual policy.')
-    expect(parsed.constraints).toContain('The asset description must include stable lighting, color palette, material texture, composition, image-filter traits, and visual bans from the Style Bible that can directly guide image generation.')
+    expect(parsed.constraints).toContain('The asset description must include stable lighting, color palette, material texture, composition, and image-filter traits from the Style Bible that can directly guide image generation.')
     expect(parsed.linkedShots).toEqual([
       expect.objectContaining({
         shotNumber: 1,

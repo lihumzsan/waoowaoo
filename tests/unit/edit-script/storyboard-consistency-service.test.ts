@@ -9,7 +9,6 @@ function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
     styleSummary: 'Restrained naturalistic temple visual style.',
     stylePolicy: {
       visual: {
-        negativePrompt: 'No commercial gloss or over-sharpened contrast.',
         imageFilterPrompt: 'soft natural light, low contrast, quiet temple textures',
         lightingPrompt: 'Soft diffused daylight.',
         colorPrompt: 'Muted stone, wood, and gray green.',

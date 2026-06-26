@@ -7,7 +7,6 @@ export function buildZenStyleBibleFixture(): EditScriptStyleBible {
     styleSummary: '禅意电影感，安静、克制、自然。',
     stylePolicy: {
       visual: {
-        negativePrompt: '避免商业广告感，避免高反差大片感，避免炫技运镜。',
         imageFilterPrompt: '轻微柔焦，35mm镜头，克制高光。',
         lightingPrompt: '清晨漫射光，阴影柔软，不过曝。',
         colorPrompt: '低饱和，自然灰绿、木色、石灰色。',

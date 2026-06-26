@@ -158,7 +158,6 @@ const mockStyleBible = {
   styleSummary: 'quiet realistic sci-fi',
   stylePolicy: {
     visual: {
-      negativePrompt: '不要廉价塑料科幻感，不要过度锐化。',
       imageFilterPrompt: 'low contrast, clean futuristic texture, subtle bloom, 35mm lens',
       lightingPrompt: 'cold practical lights and restrained bloom',
       colorPrompt: 'cool blue gray',

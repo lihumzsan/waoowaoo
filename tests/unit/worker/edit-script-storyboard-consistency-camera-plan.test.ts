@@ -92,7 +92,6 @@ function buildSourceSnapshot() {
       styleSummary: 'quiet temple style',
       stylePolicy: {
         visual: {
-          negativePrompt: 'no glossy commercial look',
           imageFilterPrompt: 'soft natural light',
           lightingPrompt: 'soft light',
           colorPrompt: 'muted colors',

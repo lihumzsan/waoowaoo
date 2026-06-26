@@ -231,7 +231,6 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
     rawUserStyle: stringValue(value.rawUserStyle),
     styleSummary: stringValue(value.styleSummary),
     visual: {
-      negativePrompt: stringValue(visual.negativePrompt),
       imageFilterPrompt: stringValue(visual.imageFilterPrompt),
       lightingPrompt: stringValue(visual.lightingPrompt),
       colorPrompt: stringValue(visual.colorPrompt),

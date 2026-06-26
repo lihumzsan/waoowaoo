@@ -145,7 +145,6 @@ describe('workspace node rendering', () => {
           texturePrompt: null,
           compositionPrompt: null,
           imageFilterPrompt: null,
-          negativePrompt: null,
         },
         camera: {
           movementPrompt: null,

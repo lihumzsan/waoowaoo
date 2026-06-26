@@ -1679,7 +1679,6 @@ function StyleBibleContent({
         { label: labels('texturePrompt'), value: details.visual.texturePrompt },
         { label: labels('compositionPrompt'), value: details.visual.compositionPrompt },
         { label: labels('imageFilterPrompt'), value: details.visual.imageFilterPrompt },
-        { label: labels('negativePrompt'), value: details.visual.negativePrompt },
       ],
     },
     {

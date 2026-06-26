@@ -5,19 +5,18 @@ Core rules:
 - Do not preserve director names, film titles, genre labels, or period labels as labels. Convert them into executable lighting, color, texture, composition, camera, and sound-filter rules.
 - If the user explicitly specifies a style, obey it first. If not, infer one unified style from the user subject, mood, genre, duration tier, and project style inputs.
 - Test-launch hard constraint: the Style Bible must not use or imply real-person, live-action real human, human actor, photorealistic human, real public figure, celebrity, face likeness, actor casting, real-person 3D, photorealistic 3D humans, digital humans, CG-rendered real humans, CGI real humans, or any 3D/CG depiction of real-person likeness. 3D/CG is allowed as anime 3D, stylized 3D, non-real-person character/object/creature-led CG, or other non-real-person art media, but it must not drift toward real-person, photorealistic human, or real-person likeness.
-- Do not output a broad positive visual style field. Split visual style into image filter, lighting, color, texture, composition, and visual negative constraints.
+- Do not output a broad positive visual style field. Split visual style into image filter, lighting, color, texture, and composition.
 - Split directing style into viewpoint, performance, information release, and rhythm. Do not write concrete shots or change plot facts.
-- visual.negativePrompt should only describe style drift and visual-quality problems. Do not write absolute bans that can override story facts, in-frame props, book text, screen content, subtitles, or signage.
 - visual.imageFilterPrompt must be one phrase that can be inserted directly into image or video prompts.
 - camera.videoRhythmPrompt should only describe video rhythm, long takes, fast/slow editing, pauses, and cut tendency. Do not repeat camera movement or lens details there.
-- sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not include negative sound constraints; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
+- sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not include a sound exclusion list; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
 
 Field usage:
 - styleSummary is for human and upstream-model orientation only. It is not normally appended to final image/video prompts.
 - stylePolicy.directing is reused by director decoupage to constrain audience viewpoint, performance, information release, and rhythm.
 - stylePolicy.visual is reused by asset images, storyboard images, and video prompts as needed.
 - stylePolicy.camera is reused by storyboard images and video prompts as needed.
-- stylePolicy.sound is reused by video prompts and sound strategy as needed. Keep only the sound filter, not sound negative constraints.
+- stylePolicy.sound is reused by video prompts and sound strategy as needed. Keep only the sound filter, not a sound exclusion list.
 
 stylePolicy examples, for field-writing style only. Do not copy their story:
 
@@ -30,7 +29,6 @@ Example 1 | Zen East Asian arthouse film
     "rhythmPrompt": "slow rhythm, long pauses, few cuts, restrained editing that lets actions and breaths complete naturally"
   },
   "visual": {
-    "negativePrompt": "avoid commercial advertising look, avoid high-contrast blockbuster look, avoid oversharpening, avoid neon cyberpunk look, avoid plastic texture",
     "imageFilterPrompt": "soft natural light, low contrast, slight soft focus, clear air, subtle film texture, 35mm lens, restrained highlights",
     "lightingPrompt": "morning or overcast diffuse natural light, low lighting ratio, soft shadows, no blown highlights",
     "colorPrompt": "low-saturation natural gray-green, wood, and limewash stone, pale overall palette",
@@ -56,7 +54,6 @@ Example 2 | Retro suspense short
     "rhythmPrompt": "slow suspense buildup, held pauses before suspense beats, precise cuts after turning points"
   },
   "visual": {
-    "negativePrompt": "avoid modern advertising sharpness, avoid saturated neon, avoid blockbuster teal-orange contrast, avoid clean digital texture",
     "imageFilterPrompt": "old-film low contrast, soft-focus lens, blooming highlights, faded film grain",
     "lightingPrompt": "low-key practical light, soft but oppressive shadows",
     "colorPrompt": "faded warm yellow, smoke gray, dark green, and old wood",
@@ -97,7 +94,6 @@ Return JSON only. No markdown, no explanations. Schema:
         "rhythmPrompt": "string"
       },
       "visual": {
-        "negativePrompt": "string",
         "imageFilterPrompt": "string",
         "lightingPrompt": "string",
         "colorPrompt": "string",

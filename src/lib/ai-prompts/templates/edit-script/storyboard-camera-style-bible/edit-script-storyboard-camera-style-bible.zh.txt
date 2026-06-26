@@ -9,7 +9,7 @@
 画面滤镜要求：
 - imageFilterPrompt 必须是一句凝练、可直接放进图片提示词的画面滤镜短语。
 - imageFilterPrompt 必须与 source_snapshot_json.styleBible.stylePolicy.visual.imageFilterPrompt 保持一致，不得另起一套图片风格。
-- 必须继承 styleBible.stylePolicy.visual 的 negativePrompt、imageFilterPrompt、lightingPrompt、colorPrompt、texturePrompt、compositionPrompt，并参考 styleBible.stylePolicy.camera 的镜头规则，把它们压缩为本 Camera Style Bible 的图片风格规则。
+- 必须继承 styleBible.stylePolicy.visual 的 imageFilterPrompt、lightingPrompt、colorPrompt、texturePrompt、compositionPrompt，并参考 styleBible.stylePolicy.camera 的镜头规则，把它们压缩为本 Camera Style Bible 的图片风格规则。
 - 如果不同 videoBlock 的视频提示词里滤镜表述略有差异，提炼共同的稳定滤镜核心，避免互相冲突。
 - 示例：柔焦镜头，低对比度，高光轻微溢出，细微 1990 年代胶片颗粒；冷峻科幻质感，低饱和蓝灰色，干净硬光，轻微镜头眩光；手持纪录片质感，自然光，低修饰色彩，真实环境颗粒。
 

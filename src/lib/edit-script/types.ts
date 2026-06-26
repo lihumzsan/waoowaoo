@@ -345,7 +345,6 @@ export const editScriptStylePolicySchema = z.object({
     rhythmPrompt: z.string().trim().min(1),
   }),
   visual: z.object({
-    negativePrompt: z.string().trim().min(1),
     imageFilterPrompt: z.string().trim().min(1),
     lightingPrompt: z.string().trim().min(1),
     colorPrompt: z.string().trim().min(1),

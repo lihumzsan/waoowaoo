@@ -7,7 +7,6 @@ const styleBibleJson = JSON.stringify({
   styleSummary: '安静克制的东方自然主义禅修影像。',
   stylePolicy: {
     visual: {
-      negativePrompt: '不要商业广告感，不要高反差大片感，不要炫技运镜。',
       imageFilterPrompt: '柔和自然光，低对比度，轻微柔焦，清澈空气感，淡雅胶片质感',
       lightingPrompt: '晨间漫射自然光，低光比。',
       colorPrompt: '低饱和自然灰绿、木色、石灰色。',
@@ -105,8 +104,9 @@ describe('edit script block-first prompt flow', () => {
     expect(styleBiblePrompt).toContain('Style Bible 不得使用或暗示真人类型')
     expect(styleBiblePrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
     expect(styleBiblePrompt).toContain('3D/CG 可作为动漫 3D、风格化 3D、非真人角色/物体/生物主导 CG')
-    expect(styleBiblePrompt).toContain('visual.negativePrompt 只写风格偏差与视觉质量问题')
-    expect(styleBiblePrompt).toContain('不要写会覆盖剧情事实、画面内道具、书籍文字、屏幕内容、字幕或招牌的绝对禁用项')
+    expect(styleBiblePrompt).not.toContain('visual.negativePrompt')
+    expect(styleBiblePrompt).not.toContain('"negativePrompt"')
+    expect(styleBiblePrompt).not.toContain('视觉负向约束')
     expect(styleBiblePrompt).not.toContain('hardBans')
     expect(styleBiblePrompt).not.toContain('必须改写成非真人且非 3D')
 
@@ -135,8 +135,8 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
     expect(stylePreviewPrompt).toContain('3D/CG 可以作为非真人美术媒介')
     expect(stylePreviewPrompt).toContain('动漫 3D、风格化 3D/CG')
-    expect(stylePreviewPrompt).toContain('visual.negativePrompt 只写风格偏差与视觉质量问题')
-    expect(stylePreviewPrompt).toContain('不要写会覆盖剧情事实、画面内道具、书籍文字、屏幕内容、字幕或招牌的绝对禁用项')
+    expect(stylePreviewPrompt).not.toContain('visual.negativePrompt')
+    expect(stylePreviewPrompt).not.toContain('"negativePrompt"')
     expect(stylePreviewPrompt).not.toContain('hardBans')
     expect(stylePreviewPrompt).toContain('aspectRatio 字段只是 schema 必填的技术占位值')
     expect(stylePreviewPrompt).toContain('最终影片画幅不由风格候选决定')
@@ -222,7 +222,7 @@ describe('edit script block-first prompt flow', () => {
 
     expect(videoPromptBlock).toContain('严格遵守 Style Bible')
     expect(videoPromptBlock).toContain('user_request 或 styleBible.rawUserStyle')
-    expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.negativePrompt')
+    expect(videoPromptBlock).not.toContain('styleBible.stylePolicy.visual.negativePrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.imageFilterPrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.sound.soundFilterPrompt')
     expect(videoPromptBlock).toContain('画面滤镜')
@@ -320,8 +320,9 @@ describe('edit script block-first prompt flow', () => {
     expect(englishStyleBiblePrompt).toContain('Style Bible must not use or imply real-person')
     expect(englishStyleBiblePrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
     expect(englishStyleBiblePrompt).toContain('3D/CG is allowed as anime 3D, stylized 3D')
-    expect(englishStyleBiblePrompt).toContain('visual.negativePrompt should only describe style drift and visual-quality problems')
-    expect(englishStyleBiblePrompt).toContain('Do not write absolute bans that can override story facts')
+    expect(englishStyleBiblePrompt).not.toContain('visual.negativePrompt')
+    expect(englishStyleBiblePrompt).not.toContain('"negativePrompt"')
+    expect(englishStyleBiblePrompt).not.toContain('visual negative constraints')
     expect(englishStyleBiblePrompt).not.toContain('hardBans')
     expect(englishStyleBiblePrompt).not.toContain('rewrite it into a non-real-person and non-3D')
 
@@ -341,7 +342,8 @@ describe('edit script block-first prompt flow', () => {
     expect(englishStylePreviewPrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
     expect(englishStylePreviewPrompt).toContain('3D/CG is allowed as a non-real-person art medium')
     expect(englishStylePreviewPrompt).toContain('anime 3D, stylized 3D/CG')
-    expect(englishStylePreviewPrompt).toContain('visual.negativePrompt should only describe style drift and visual-quality problems')
+    expect(englishStylePreviewPrompt).not.toContain('visual.negativePrompt')
+    expect(englishStylePreviewPrompt).not.toContain('"negativePrompt"')
     expect(englishStylePreviewPrompt).not.toContain('hardBans')
     expect(englishStylePreviewPrompt).not.toContain('Stylized 3D is also prohibited')
     expect(englishStylePreviewPrompt).not.toContain('non-3D')

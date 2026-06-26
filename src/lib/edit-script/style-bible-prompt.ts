@@ -123,7 +123,6 @@ function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale, usa
       `Color: ${visual.colorPrompt}`,
       usage === 'assetImage' ? `Texture: ${visual.texturePrompt}` : null,
       usage === 'video' ? null : `Composition: ${visual.compositionPrompt}`,
-      `Negative constraints: ${visual.negativePrompt}`,
     ]
     return base.filter((line): line is string => typeof line === 'string')
   }
@@ -133,7 +132,6 @@ function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale, usa
     `色彩：${visual.colorPrompt}`,
     usage === 'assetImage' ? `质感：${visual.texturePrompt}` : null,
     usage === 'video' ? null : `构图：${visual.compositionPrompt}`,
-    `负向约束：${visual.negativePrompt}`,
   ]
   return base.filter((line): line is string => typeof line === 'string')
 }

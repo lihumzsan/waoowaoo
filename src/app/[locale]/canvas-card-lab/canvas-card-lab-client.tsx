@@ -800,7 +800,6 @@ const MOCK_STYLE_GROUPS = [
       { label: '光线', value: 'dramatic chiaroscuro, single-source stark lighting, expressive colorful rim lights' },
       { label: '质感', value: 'visible paint strokes, comic book halftone dots, hand-drawn cross-hatching, textured paper grain' },
       { label: '构图', value: 'highly graphic compositions, bold silhouettes against bright backgrounds, dynamic negative space' },
-      { label: '负向提示', value: 'photorealistic, real human, live action, realistic 3D, CGI realist' },
     ],
   },
   {

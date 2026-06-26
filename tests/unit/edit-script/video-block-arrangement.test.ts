@@ -67,7 +67,6 @@ function buildStyleBibleJson() {
     styleSummary: 'Cinematic realism.',
     stylePolicy: {
       visual: {
-        negativePrompt: 'No distortion or unreadable frames.',
         imageFilterPrompt: 'Clean cinematic image.',
         lightingPrompt: 'Soft contrast lighting.',
         colorPrompt: 'Cool neutral palette.',

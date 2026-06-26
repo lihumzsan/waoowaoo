@@ -115,7 +115,6 @@ function createStyleBible(): Record<string, unknown> {
     styleSummary: '低饱和自然光禅意电影质感。',
     stylePolicy: {
       visual: {
-        negativePrompt: '避免商业广告感，避免高反差大片感。',
         imageFilterPrompt: '清澈空气感，35mm 镜头，克制高光。',
         lightingPrompt: '柔和自然光。',
         colorPrompt: '自然灰绿、木色、石灰色。',

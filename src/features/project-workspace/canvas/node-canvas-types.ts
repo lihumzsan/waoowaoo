@@ -298,7 +298,6 @@ export interface WorkspaceCanvasEditScreenplayDetails {
 }
 
 export interface WorkspaceCanvasStyleBibleVisualPolicy {
-  readonly negativePrompt?: string | null
   readonly imageFilterPrompt?: string | null
   readonly lightingPrompt?: string | null
   readonly colorPrompt?: string | null

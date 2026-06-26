@@ -16,7 +16,6 @@
 - 九宫格每格必须来自剧本不同关键时刻或情绪阶段，覆盖开端、推进、转折、结尾落点；但不得承诺最终镜头编号、不得写镜头表。
 - 不要输出导演名、影片名、工作室/品牌名、流派名或年代标签本身；必须转写成可执行的美术媒介、画风、光线、色彩、质感、构图、镜头和声音滤镜规则。
 - visual.imageFilterPrompt 必须是一句可直接塞进图片或视频提示词的画面滤镜短语。
-- visual.negativePrompt 只写风格偏差与视觉质量问题，不要写会覆盖剧情事实、画面内道具、书籍文字、屏幕内容、字幕或招牌的绝对禁用项。
 - sound.soundFilterPrompt 只写一句声音质感滤镜，不得写具体声源或音效。
 
 候选风格默认结构（只输出请求数量对应的前 N 项）：
@@ -53,7 +52,6 @@
             "rhythmPrompt": "string"
           },
           "visual": {
-            "negativePrompt": "string",
             "imageFilterPrompt": "string",
             "lightingPrompt": "string",
             "colorPrompt": "string",

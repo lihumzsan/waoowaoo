@@ -43,7 +43,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
       styleSummary: 'Restrained naturalistic temple visual style.',
       stylePolicy: {
         visual: {
-          negativePrompt: 'No glossy commercial look.',
           imageFilterPrompt: 'soft natural light',
           lightingPrompt: 'soft daylight',
           colorPrompt: 'muted stone and wood',

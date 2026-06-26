@@ -15,7 +15,6 @@
 - 每个 shots[].videoPrompt 必须显式写入可执行风格，不得只写“按 Bible 风格”。
 - 每个 videoBlock.prompt 必须显式写入统一视频风格、画面滤镜、声音滤镜、光线、色彩、视频节奏、动作连续性和画幅。
 - 必须优先使用 styleBible.stylePolicy.visual.imageFilterPrompt、lightingPrompt、colorPrompt 作为视频视觉策略；texturePrompt 与 compositionPrompt 只在当前镜头确实需要材质或构图约束时按需转写，不要机械塞满。
-- 必须使用 styleBible.stylePolicy.visual.negativePrompt 作为负向视觉约束，把它转写进 prompt 的“避免/禁止”部分；不要只依赖默认禁用项。
 - 必须使用 styleBible.stylePolicy.visual.imageFilterPrompt；画面滤镜要作为视频提示词的一部分出现。
 - 必须使用 styleBible.stylePolicy.sound.soundFilterPrompt；声音滤镜要作为视频提示词风格的一部分出现，并且只约束整片声音质感。
 - 必须按需使用 styleBible.stylePolicy.camera 和 styleBible.stylePolicy.sound 的字段来控制运镜、镜头景深、视频节奏和声音滤镜；动作与表演只来自剧本、剪辑结构表和资产上下文，不从 Style Bible 读取。
