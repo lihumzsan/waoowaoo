@@ -283,7 +283,6 @@ export interface ProjectEditDirectorDecoupage {
   userPrompt: string
   status: string
   shots: ProjectEditScriptShot[]
-  hardBans: string[]
 }
 
 export interface ProjectEditCinematographyShotPlan {
@@ -307,7 +306,6 @@ export interface ProjectEditCinematographyShotPlan {
     continuityIn: string
     continuityOut: string
   }[]
-  hardBans: string[]
 }
 
 export interface ProjectEditScript {

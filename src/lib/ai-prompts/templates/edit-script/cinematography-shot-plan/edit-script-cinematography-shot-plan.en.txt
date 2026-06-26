@@ -7,7 +7,7 @@ Core rules:
 - This stage must output concrete cinematography parameters: shot scale, lens, depth of field, camera position, height, angle, movement, composition, lighting, axis/eyeline, and continuity.
 - Later storyboard blocks may run in parallel, so this stage must cover all shots in one pass to preserve cross-block continuity.
 - Do not output image prompts or video prompts.
-- In the English flow, every string value in shots[].* and hardBans must be English natural language. Aside from Schema field keys, numbers, units such as mm, and exact proper names or source dialogue that cannot be translated, do not output Chinese words or Chinese sentences.
+- In the English flow, every string value in shots[].* must be English natural language. Aside from Schema field keys, numbers, units such as mm, and exact proper names or source dialogue that cannot be translated, do not output Chinese words or Chinese sentences.
 - Shot scale, composition, movement, art style, and cinematography terms must be written in English. Do not append localized labels in parentheses.
 - The Schema below is the contract, not an example to paraphrase. Return exactly the top-level keys shown there, and each shot object must use exactly the shot keys shown there.
 - Every shot object must include the complete field set. Field names must exactly match the English keys in the Schema. Do not omit fields, add fields, rename fields, or use aliases.
@@ -47,9 +47,8 @@ Return JSON only. No markdown, no explanations. Schema:
       "composition": "composition plan",
       "lighting": "execution based on real spatial lighting",
       "axisAndEyeline": "axis, eyeline, and direction continuity",
-      "continuityIn": "cinematography continuity from previous shot",
-      "continuityOut": "cinematography continuity to next shot"
-    }
-  ],
-  "hardBans": ["string"]
-}
+	      "continuityIn": "cinematography continuity from previous shot",
+	      "continuityOut": "cinematography continuity to next shot"
+	    }
+	  ]
+	}

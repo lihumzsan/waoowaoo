@@ -23,11 +23,11 @@ describe('edit script director decoupage', () => {
           sound: 'Footsteps stop and a low tone comes from inside the room.',
         },
       ],
-      hardBans: ['Do not reveal the room interior early.'],
     })
 
     expect(parsed.shots[0]?.viewpoint).toBe('Restricted protagonist viewpoint.')
     expect(parsed.shots[0]?.continuityOut).toContain('eyeline')
+    expect(Object.prototype.hasOwnProperty.call(parsed, 'hardBans')).toBe(false)
   })
 
   it('rejects director decoupage that omits audience focus', () => {
@@ -49,7 +49,6 @@ describe('edit script director decoupage', () => {
           sound: 'Low room tone.',
         },
       ],
-      hardBans: [],
     })
 
     expect(result.success).toBe(false)
@@ -62,7 +61,7 @@ describe('edit script director decoupage', () => {
       variables: {
         user_request: 'Create a restrained suspense short.',
         screenplay_text: 'A protagonist approaches a closed door.',
-        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {}, hardBans: [] } }),
+        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {} } }),
         duration_guidance: 'Short duration tier, around 30 seconds. Keep it to one compact event; the final total duration may naturally land around 20-40 seconds instead of mechanically matching an exact second count.',
         aspect_ratio: '9:16',
       },
@@ -73,5 +72,6 @@ describe('edit script director decoupage', () => {
     expect(prompt).toContain('audienceFocus')
     expect(prompt).toContain('continuityIn')
     expect(prompt).toContain('must not output lens, camera position, depth of field, concrete composition')
+    expect(prompt).not.toContain('hardBans')
   })
 })

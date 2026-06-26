@@ -28,11 +28,6 @@ export function buildZenStyleBibleFixture(): EditScriptStyleBible {
       sound: {
         soundFilterPrompt: '低噪、近自然声场、不过度压缩。',
       },
-      hardBans: [
-        '禁止商业广告质感',
-        '禁止高反差大片感',
-        '禁止炫技运镜',
-      ],
     },
   }
 }

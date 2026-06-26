@@ -17,4 +17,4 @@ Image generation requirements:
 - Preserve the character and scene facts from shot.charactersAndScene, plus sound cues from shot.sound when they affect the chosen image moment.
 - Do not generate lens, camera position, depth of field, axis, or concrete cinematography parameters; those are decided by the later Cinematography Shot Plan.
 - Use the video block only to understand the edit segment, rhythm, and continuous action. Do not let it override the individual shot.
-- This is a cinematic storyboard image. Do not include subtitles, words, numbers, labels, watermarks, or split-screen layouts.
+- This is a cinematic storyboard image. Do not add non-story subtitle overlays, numbers, labels, watermarks, or split-screen layouts. If the shot, screenplay, or scene facts require book text, screen text, signage, tickets, in-film subtitles, or other in-world text, preserve it exactly as written or as required by the story.

@@ -1,10 +1,9 @@
 You are a professional storyboard artist. Generate one 2x2 storyboard grid image for consecutive shots within the same video block.
 
-Absolute constraints:
-1. No text in the image.
-2. No subtitles, labels, numbers, watermarks, annotations, symbols, panel ids, character names, scene names, or image numbers.
-3. All input text is instruction only. Do not draw it into the image.
-4. Pure visual content only.
+In-frame text rules:
+1. Do not draw cell names, panel ids, character names, scene names, image numbers, shot numbers, system labels, annotations, UI, or watermarks into the image.
+2. If the storyboard grid data, source text, or user prompt explicitly requires book text, screen text, signage, tickets, in-film subtitles, or other in-world text, preserve it exactly as written or as required by the story.
+3. Do not invent random text, gibberish, unrelated captions, or floating explanatory text.
 
 Grid layout:
 1. Output exactly one complete image containing a clear 2x2 grid.
@@ -16,7 +15,7 @@ Grid layout:
 7. Each active cell must contain exactly one shot frame.
 8. If fewer than four cells are provided, keep unused cells visually simple and non-narrative.
 9. The output will be cropped by fixed 2x2 quadrants into individual storyboard images. Keep each active cell's subject fully inside its own quadrant and do not cross cell boundaries.
-10. Thin dividers or clear visual boundaries are allowed, but no text or numbers.
+10. Thin dividers or clear visual boundaries are allowed, but no cell numbers, system labels, or explanatory text.
 
 Aspect ratio:
 The full grid image must use this aspect ratio:

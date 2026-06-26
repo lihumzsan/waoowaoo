@@ -24,11 +24,11 @@ describe('edit script cinematography shot plan', () => {
           continuityOut: 'Continue along the protagonist eyeline.',
         },
       ],
-      hardBans: ['No unmotivated showy camera movement.'],
     })
 
     expect(parsed.shots[0]?.lens).toBe('50mm')
     expect(parsed.shots[0]?.axisAndEyeline).toContain('screen left')
+    expect(Object.prototype.hasOwnProperty.call(parsed, 'hardBans')).toBe(false)
   })
 
   it('rejects shot plans without lens and axis continuity', () => {
@@ -50,7 +50,6 @@ describe('edit script cinematography shot plan', () => {
           continuityOut: 'Continue to next shot.',
         },
       ],
-      hardBans: [],
     })
 
     expect(result.success).toBe(false)
@@ -61,7 +60,7 @@ describe('edit script cinematography shot plan', () => {
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
       locale: 'en',
       variables: {
-        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {}, hardBans: [] } }),
+        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {} } }),
         director_decoupage_json: JSON.stringify({ shots: [{ shotNumber: 1, visibleAction: 'A protagonist waits.' }] }),
         edit_script_json: JSON.stringify({ shots: [{ shotNumber: 1 }], videoBlocks: [] }),
         asset_context_json: JSON.stringify({ assets: [] }),
@@ -79,7 +78,8 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).toContain('Do not replace movement with cameraMovement, cameraMove, move, or localized field names')
     expect(prompt).toContain('"lighting" is the only valid lighting field key')
     expect(prompt).toContain('Do not output lightning, light, lightingPrompt, or localized field names')
-    expect(prompt).toContain('every string value in shots[].* and hardBans must be English natural language')
+    expect(prompt).toContain('every string value in shots[].* must be English natural language')
+    expect(prompt).not.toContain('hardBans')
     expect(prompt).toContain('do not output Chinese words or Chinese sentences')
     expect(prompt).toContain('Do not append localized labels in parentheses')
     expect(prompt).toContain('Before returning, validate every shot has these fields')
@@ -92,7 +92,7 @@ describe('edit script cinematography shot plan', () => {
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN,
       locale: 'zh',
       variables: {
-        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {}, hardBans: [] } }),
+        style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {} } }),
         director_decoupage_json: JSON.stringify({ shots: [{ shotNumber: 4, visibleAction: '角色在床边抚摸狗狗。' }] }),
         edit_script_json: JSON.stringify({ shots: [{ shotNumber: 4 }], videoBlocks: [] }),
         asset_context_json: JSON.stringify({ assets: [] }),

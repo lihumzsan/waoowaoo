@@ -819,8 +819,6 @@ const MOCK_STYLE_GROUPS = [
   },
 ]
 
-const MOCK_STYLE_CONSTRAINTS = ['photorealistic', 'real human', 'live action', 'realistic 3D', 'photograph', 'actor casting', 'digital human', 'CGI realist', 'text', 'watermark', 'logo', 'subtitles', 'celebrity likeness']
-
 function StyleFieldRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="grid grid-cols-[4.5rem_1fr] gap-3 text-[11px] leading-4">
@@ -860,23 +858,15 @@ function StyleBibleGrouped() {
           </section>
         ))}
 
-        <section>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-rose-500">硬性约束（负向）</p>
-          <div className="flex flex-wrap gap-1.5">
-            {MOCK_STYLE_CONSTRAINTS.map((c) => (
-              <span key={c} className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600">{c}</span>
-            ))}
-          </div>
-        </section>
       </div>
     </CardShell>
   )
 }
 
-// 思路 2 · 标签页分组（视觉 / 镜头 / 声音 / 约束）
+// 思路 2 · 标签页分组（视觉 / 镜头 / 声音）
 function StyleBibleTabs() {
   const [tab, setTab] = useState<string>('visual')
-  const tabs = [...MOCK_STYLE_GROUPS.map((g) => ({ key: g.key, label: g.label })), { key: 'constraints', label: '约束' }]
+  const tabs = MOCK_STYLE_GROUPS.map((g) => ({ key: g.key, label: g.label }))
   const group = MOCK_STYLE_GROUPS.find((g) => g.key === tab)
   return (
     <CardShell eyebrow="风格圣经" title="Style Bible" meta="标签页" width={460}>
@@ -907,13 +897,7 @@ function StyleBibleTabs() {
             ))}
           </div>
         </div>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {MOCK_STYLE_CONSTRAINTS.map((c) => (
-            <span key={c} className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600">{c}</span>
-          ))}
-        </div>
-      )}
+      ) : null}
     </CardShell>
   )
 }

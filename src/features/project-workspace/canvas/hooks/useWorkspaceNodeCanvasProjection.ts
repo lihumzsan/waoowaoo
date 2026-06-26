@@ -215,10 +215,10 @@ function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boo
   return [
     details.rawUserStyle,
     details.styleSummary,
-    ...visualValues,
-    ...cameraValues,
-    ...soundValues,
-  ].some((value) => typeof value === 'string' && value.trim().length > 0) || details.hardBans.length > 0
+	    ...visualValues,
+	    ...cameraValues,
+	    ...soundValues,
+	  ].some((value) => typeof value === 'string' && value.trim().length > 0)
 }
 
 function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetails | null {
@@ -243,11 +243,10 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
       lensAndDepthPrompt: stringValue(camera.lensAndDepthPrompt),
       videoRhythmPrompt: stringValue(camera.videoRhythmPrompt),
     },
-    sound: {
-      soundFilterPrompt: stringValue(sound.soundFilterPrompt),
-    },
-    hardBans: readStringArray(stylePolicy.hardBans),
-  }
+	    sound: {
+	      soundFilterPrompt: stringValue(sound.soundFilterPrompt),
+	    },
+	  }
   return styleBibleHasPolicyText(details) ? details : null
 }
 

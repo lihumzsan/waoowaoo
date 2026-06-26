@@ -88,7 +88,6 @@ function buildStyleBibleJson() {
       sound: {
         soundFilterPrompt: 'Clean room tone.',
       },
-      hardBans: ['No subtitles.'],
     },
   }
 }

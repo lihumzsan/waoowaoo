@@ -43,7 +43,7 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
       styleSummary: 'Restrained naturalistic temple visual style.',
       stylePolicy: {
         visual: {
-          negativePrompt: 'No subtitles.',
+          negativePrompt: 'No glossy commercial look.',
           imageFilterPrompt: 'soft natural light',
           lightingPrompt: 'soft daylight',
           colorPrompt: 'muted stone and wood',
@@ -64,7 +64,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         sound: {
           soundFilterPrompt: 'quiet wind',
         },
-        hardBans: ['No subtitles.'],
       },
     },
     shots: [{
@@ -96,7 +95,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         charactersAndScene: 'Temple courtyard',
         sound: 'wind',
       }],
-      hardBans: ['no text'],
     },
     cinematographyShotPlan: {
       shots: [{
@@ -114,7 +112,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         continuityIn: 'test continuity in',
         continuityOut: 'test continuity out',
       }],
-      hardBans: ['no text'],
     },
     videoBlocks: [{
       kind: 'single',

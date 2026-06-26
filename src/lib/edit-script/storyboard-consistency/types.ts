@@ -36,11 +36,9 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly shots: readonly EditScriptShot[]
   readonly directorDecoupage: {
     readonly shots: readonly EditDirectorDecoupageShot[]
-    readonly hardBans: readonly string[]
   }
   readonly cinematographyShotPlan: {
     readonly shots: readonly EditCinematographyShot[]
-    readonly hardBans: readonly string[]
   }
   readonly videoBlocks: readonly StoryboardConsistencySourceVideoBlock[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
@@ -143,11 +141,9 @@ export const storyboardConsistencySourceSnapshotSchema = z.object({
   shots: z.array(sourceShotSchema).min(1),
   directorDecoupage: z.object({
     shots: z.array(directorShotSchema).min(1),
-    hardBans: z.array(z.string()),
   }),
   cinematographyShotPlan: z.object({
     shots: z.array(cinematographyShotSchema).min(1),
-    hardBans: z.array(z.string()),
   }),
   videoBlocks: z.array(sourceVideoBlockSchema).min(1),
   assets: z.array(sourceAssetSchema),

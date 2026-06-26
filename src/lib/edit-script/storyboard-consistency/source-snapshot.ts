@@ -354,11 +354,9 @@ export async function buildStoryboardConsistencySource(input: {
       shots: editScript.shots,
       directorDecoupage: {
         shots: parsedDirectorDecoupage.shots,
-        hardBans: parsedDirectorDecoupage.hardBans,
       },
       cinematographyShotPlan: {
         shots: parsedCinematographyShotPlan.shots,
-        hardBans: parsedCinematographyShotPlan.hardBans,
       },
       videoBlocks,
       assets,

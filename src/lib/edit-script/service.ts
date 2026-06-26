@@ -415,7 +415,6 @@ function parseCinematographyShotPlanJson(value: Prisma.JsonValue): Omit<EditCine
       continuityIn: shot.continuityIn.trim(),
       continuityOut: shot.continuityOut.trim(),
     })).sort((left, right) => left.shotNumber - right.shotNumber),
-    hardBans: parsed.hardBans.map((item) => item.trim()),
   }
 }
 
@@ -837,7 +836,6 @@ function mapPersistedEditDirectorDecoupage(decoupage: PersistedEditDirectorDecou
     screenplayText: decoupage.editScreenplay?.screenplayText ?? '',
     status: decoupage.status,
     shots: parsed.shots,
-    hardBans: parsed.hardBans,
   }
 }
 
@@ -850,7 +848,6 @@ function mapPersistedEditCinematographyShotPlan(plan: PersistedEditCinematograph
     editScriptId: plan.editScriptId,
     status: plan.status,
     shots: parsed.shots,
-    hardBans: parsed.hardBans,
   }
 }
 
@@ -2104,7 +2101,6 @@ export async function generateProjectEditCinematographyShotPlan(input: GenerateE
     strategy: 'cinematography_shot_plan',
     schemaVersion: 1,
     shots: parsed.shots,
-    hardBans: parsed.hardBans,
   }
   const saved = await prisma.projectEditCinematographyShotPlan.upsert({
     where: { episodeId: input.episodeId },

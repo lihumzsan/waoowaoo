@@ -7,11 +7,10 @@ Core rules:
 - Test-launch hard constraint: the Style Bible must not use or imply real-person, live-action real human, human actor, photorealistic human, real public figure, celebrity, face likeness, actor casting, real-person 3D, photorealistic 3D humans, digital humans, CG-rendered real humans, CGI real humans, or any 3D/CG depiction of real-person likeness. 3D/CG is allowed as anime 3D, stylized 3D, non-real-person character/object/creature-led CG, or other non-real-person art media, but it must not drift toward real-person, photorealistic human, or real-person likeness.
 - Do not output a broad positive visual style field. Split visual style into image filter, lighting, color, texture, composition, and visual negative constraints.
 - Split directing style into viewpoint, performance, information release, and rhythm. Do not write concrete shots or change plot facts.
-- visual.negativePrompt should only describe style drift and visual-quality problems. Do not repeat subtitles, watermarks, or logos there; absolute bans belong in hardBans.
+- visual.negativePrompt should only describe style drift and visual-quality problems. Do not write absolute bans that can override story facts, in-frame props, book text, screen content, subtitles, or signage.
 - visual.imageFilterPrompt must be one phrase that can be inserted directly into image or video prompts.
 - camera.videoRhythmPrompt should only describe video rhythm, long takes, fast/slow editing, pauses, and cut tendency. Do not repeat camera movement or lens details there.
 - sound.soundFilterPrompt must be one concise phrase that can be inserted directly into video-prompt style sections; it may only describe sound texture, frequency response, dynamic range, spatial feel, clarity, period feel, and mix tendency; it must not include negative sound constraints; it must not name concrete sources or effects that depend on image elements, such as footsteps, fabric, door hinges, rain, machines, animals, or object impacts.
-- hardBans are whole-chain hard bans and must cover text, subtitles, watermarks, logos, real-person category, live-action real humans, photorealistic humans, real public figures, celebrities, face likeness, actor casting, real-person 3D, photorealistic 3D humans, digital humans, CG-rendered real humans, CGI real humans, and strong style conflicts.
 
 Field usage:
 - styleSummary is for human and upstream-model orientation only. It is not normally appended to final image/video prompts.
@@ -19,7 +18,6 @@ Field usage:
 - stylePolicy.visual is reused by asset images, storyboard images, and video prompts as needed.
 - stylePolicy.camera is reused by storyboard images and video prompts as needed.
 - stylePolicy.sound is reused by video prompts and sound strategy as needed. Keep only the sound filter, not sound negative constraints.
-- stylePolicy.hardBans is reused by all image, storyboard, and video prompts.
 
 stylePolicy examples, for field-writing style only. Do not copy their story:
 
@@ -46,8 +44,7 @@ Example 1 | Zen East Asian arthouse film
   },
   "sound": {
     "soundFilterPrompt": "soft low dynamics, natural air, clear without excessive sharpness, subtle environmental layers preserved"
-  },
-  "hardBans": ["no subtitles", "no watermarks", "no logos", "no real-person category", "no real-person 3D/CG rendering", "no commercial advertising texture", "no high-contrast blockbuster look"]
+  }
 }
 
 Example 2 | Retro suspense short
@@ -73,8 +70,7 @@ Example 2 | Retro suspense short
   },
   "sound": {
     "soundFilterPrompt": "narrow-band old-film sound, slight low-pass, muffled low-mid warmth, reduced treble, subtle tape hiss, short effects with natural decay"
-  },
-  "hardBans": ["no subtitles", "no watermarks", "no logos", "no real-person category", "no real-person 3D/CG rendering", "no modern commercial advertising look"]
+  }
 }
 
 User original request:
@@ -115,8 +111,7 @@ Return JSON only. No markdown, no explanations. Schema:
       },
       "sound": {
         "soundFilterPrompt": "string"
-      },
-      "hardBans": ["string"]
+      }
     }
   }
 }

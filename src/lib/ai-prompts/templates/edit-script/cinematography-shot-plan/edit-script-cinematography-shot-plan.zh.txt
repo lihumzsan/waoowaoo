@@ -7,7 +7,7 @@
 - 本阶段必须输出具体摄影参数：景别、焦段、景深、机位、高度、角度、运动、构图、光线、轴线/视线和连续性。
 - 后续 storyboard block 会并行执行；因此本阶段必须一次性覆盖所有 shots，保证跨 block 连续性。
 - 不输出图片 prompt 或视频 prompt。
-- 中文流程中，shots[].* 与 hardBans 的所有字段值必须整体使用中文自然语言；除 Schema 字段名、数字、单位（如 mm）和用户原文中无法翻译的专有名称外，不得输出英文单词或英文句子。
+- 中文流程中，shots[].* 的所有字段值必须整体使用中文自然语言；除 Schema 字段名、数字、单位（如 mm）和用户原文中无法翻译的专有名称外，不得输出英文单词或英文句子。
 - 景别、构图、运镜、美术风格和摄影术语必须翻译成中文，不要附加括号英文译名，例如不要输出“全景 (Full Shot)”或“retro game”。
 - 下面的 Schema 是输出契约，不是可以改写的示例。顶层只能返回 Schema 展示的字段；每个 shot 对象也只能使用 Schema 展示的 shot 字段。
 - 每个 shot 对象都必须包含完整字段，字段名必须精确使用 Schema 中的英文 key，不得漏字段、不得新增字段、不得改名、不得使用别名。
@@ -47,9 +47,8 @@ Spatial Profiles：
       "composition": "具体构图安排",
       "lighting": "基于真实空间光线的执行方式",
       "axisAndEyeline": "轴线、视线和方向连续性",
-      "continuityIn": "与上一个 shot 的摄影连续性",
-      "continuityOut": "与下一个 shot 的摄影连续性"
-    }
-  ],
-  "hardBans": ["string"]
-}
+	      "continuityIn": "与上一个 shot 的摄影连续性",
+	      "continuityOut": "与下一个 shot 的摄影连续性"
+	    }
+	  ]
+	}

@@ -77,7 +77,6 @@ const styleBible: EditScriptStyleBible = {
     sound: {
       soundFilterPrompt: '干净宽频，低动态，轻微空间混响',
     },
-    hardBans: ['不要字幕', '不要水印', '不要logo'],
   },
 }
 

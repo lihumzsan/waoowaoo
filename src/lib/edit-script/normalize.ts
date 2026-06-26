@@ -189,7 +189,6 @@ export function normalizeDirectorDecoupage(raw: unknown) {
     strategy: parsed.strategy,
     schemaVersion: parsed.schemaVersion,
     shots,
-    hardBans: parsed.hardBans.map((item) => item.trim()),
   }
 }
 

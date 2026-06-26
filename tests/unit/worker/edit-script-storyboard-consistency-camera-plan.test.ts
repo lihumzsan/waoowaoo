@@ -92,7 +92,7 @@ function buildSourceSnapshot() {
       styleSummary: 'quiet temple style',
       stylePolicy: {
         visual: {
-          negativePrompt: 'no text',
+          negativePrompt: 'no glossy commercial look',
           imageFilterPrompt: 'soft natural light',
           lightingPrompt: 'soft light',
           colorPrompt: 'muted colors',
@@ -113,7 +113,6 @@ function buildSourceSnapshot() {
         sound: {
           soundFilterPrompt: 'quiet wind',
         },
-        hardBans: ['no text'],
       },
     },
     editScript: {
@@ -154,7 +153,6 @@ function buildSourceSnapshot() {
         charactersAndScene: 'Temple courtyard',
         sound: 'wind',
       }],
-      hardBans: ['no text'],
     },
     cinematographyShotPlan: {
       shots: [{
@@ -172,7 +170,6 @@ function buildSourceSnapshot() {
         continuityIn: 'test continuity in',
         continuityOut: 'test continuity out',
       }],
-      hardBans: ['no text'],
     },
     videoBlocks: [{
       kind: 'single',

@@ -108,7 +108,6 @@ export interface EditDirectorDecoupagePayload {
   readonly screenplayText: string
   readonly status: string
   readonly shots: readonly EditDirectorDecoupageShot[]
-  readonly hardBans: readonly string[]
 }
 
 export interface EditScriptShot {
@@ -253,7 +252,6 @@ export interface EditCinematographyShotPlanPayload {
   readonly editScriptId: string
   readonly status: string
   readonly shots: readonly EditCinematographyShot[]
-  readonly hardBans: readonly string[]
 }
 
 export const editScriptShotSchema = z.object({
@@ -317,7 +315,6 @@ export const editDirectorDecoupageSchema = z.object({
   strategy: z.literal('director_decoupage'),
   schemaVersion: z.literal(1),
   shots: z.array(editScriptShotSchema).min(1).max(60),
-  hardBans: z.array(z.string().trim().min(1)).min(1),
 })
 
 export const editCinematographyShotPlanSchema = z.object({
@@ -338,7 +335,6 @@ export const editCinematographyShotPlanSchema = z.object({
     continuityIn: z.string().trim().min(1),
     continuityOut: z.string().trim().min(1),
   })).min(1).max(60),
-  hardBans: z.array(z.string().trim().min(1)).min(1),
 })
 
 export const editScriptStylePolicySchema = z.object({
@@ -364,7 +360,6 @@ export const editScriptStylePolicySchema = z.object({
   sound: z.object({
     soundFilterPrompt: z.string().trim().min(1),
   }),
-  hardBans: z.array(z.string().trim().min(1)).min(1),
 })
 
 export const editScriptStyleBibleSchema = z.object({

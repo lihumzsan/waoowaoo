@@ -155,7 +155,6 @@ describe('workspace node rendering', () => {
         sound: {
           soundFilterPrompt: null,
         },
-        hardBans: [],
       },
     })
 

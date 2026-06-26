@@ -65,7 +65,7 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
       styleSummary: 'quiet temple style',
       stylePolicy: {
         visual: {
-          negativePrompt: 'no text',
+          negativePrompt: 'no glossy commercial look',
           imageFilterPrompt: 'soft natural light',
           lightingPrompt: 'soft light',
           colorPrompt: 'muted colors',
@@ -86,7 +86,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         sound: {
           soundFilterPrompt: 'quiet wind',
         },
-        hardBans: ['no text'],
       },
     },
     shots: [{
@@ -118,7 +117,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         charactersAndScene: 'Temple courtyard',
         sound: 'wind',
       }],
-      hardBans: ['no text'],
     },
     cinematographyShotPlan: {
       shots: [{
@@ -136,7 +134,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
         continuityIn: 'enter calm space',
         continuityOut: 'hold the same axis',
       }],
-      hardBans: ['no text'],
     },
     videoBlocks: [{
       kind: 'single',

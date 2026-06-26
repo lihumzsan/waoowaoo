@@ -158,7 +158,7 @@ const mockStyleBible = {
   styleSummary: 'quiet realistic sci-fi',
   stylePolicy: {
     visual: {
-      negativePrompt: '不要字幕，不要水印，不要廉价塑料科幻感。',
+      negativePrompt: '不要廉价塑料科幻感，不要过度锐化。',
       imageFilterPrompt: 'low contrast, clean futuristic texture, subtle bloom, 35mm lens',
       lightingPrompt: 'cold practical lights and restrained bloom',
       colorPrompt: 'cool blue gray',
@@ -179,7 +179,6 @@ const mockStyleBible = {
     sound: {
       soundFilterPrompt: 'clean modern sci-fi sound, wide-band clarity, low mechanical hum, restrained spatial reverb',
     },
-    hardBans: ['no subtitles'],
   },
 }
 
@@ -345,7 +344,6 @@ describe('edit script generation status persistence', () => {
             sound: 'low electrical hum',
           },
         ],
-        hardBans: ['no subtitles'],
       },
       status: 'ready',
     })

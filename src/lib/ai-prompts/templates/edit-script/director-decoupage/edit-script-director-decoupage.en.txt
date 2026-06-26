@@ -24,7 +24,6 @@ Output requirements:
 - shots must follow screenplay event order. shotNumber starts at 1 and increases continuously.
 - Sum of durationSec should fit the selected duration tier, allowing natural narrative variation, but must not exceed 120 seconds.
 - Every shot must include continuityIn and continuityOut. The first continuityIn establishes the opening; the last continuityOut resolves the ending.
-- hardBans must merge Style Bible directing bans, visual/camera bans, and screenplay-fact bans.
 
 Return JSON only. No markdown, no explanations. Schema:
 {
@@ -42,9 +41,8 @@ Return JSON only. No markdown, no explanations. Schema:
       "performanceBeat": "performance beat",
       "continuityIn": "how this shot connects from the previous shot or opening",
       "continuityOut": "how this shot leads to the next shot or resolves",
-      "charactersAndScene": "characters, location, props, and spatial relations",
-      "sound": "sound events, dialogue/narration/voiceover, and sound bridge"
-    }
-  ],
-  "hardBans": ["string"]
-}
+	      "charactersAndScene": "characters, location, props, and spatial relations",
+	      "sound": "sound events, dialogue/narration/voiceover, and sound bridge"
+	    }
+	  ]
+	}

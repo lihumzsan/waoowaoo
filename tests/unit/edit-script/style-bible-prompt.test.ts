@@ -21,6 +21,7 @@ describe('style-bible-prompt', () => {
     expect(prompt).toContain('用途：资产图生成')
     expect(prompt).toContain('画面滤镜：轻微柔焦，35mm镜头，克制高光。')
     expect(prompt).toContain('负向约束：避免商业广告感，避免高反差大片感，避免炫技运镜。')
+    expect(prompt).not.toContain('硬禁用项')
     expect(prompt).not.toContain('镜头节奏：')
     expect(prompt).not.toContain('声音正向风格：')
   })

@@ -9,7 +9,7 @@ function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
     styleSummary: 'Restrained naturalistic temple visual style.',
     stylePolicy: {
       visual: {
-        negativePrompt: 'No subtitles, no logos, no commercial gloss.',
+        negativePrompt: 'No commercial gloss or over-sharpened contrast.',
         imageFilterPrompt: 'soft natural light, low contrast, quiet temple textures',
         lightingPrompt: 'Soft diffused daylight.',
         colorPrompt: 'Muted stone, wood, and gray green.',
@@ -30,7 +30,6 @@ function buildStyleBible(): StoryboardConsistencySourceSnapshot['styleBible'] {
       sound: {
         soundFilterPrompt: 'soft natural low dynamic sound',
       },
-      hardBans: ['No subtitles.', 'No watermark.', 'No logo.'],
     },
   }
 }
@@ -114,7 +113,6 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
           sound: 'soft reply',
         },
       ],
-      hardBans: ['no text'],
     },
     cinematographyShotPlan: {
       shots: [
@@ -149,7 +147,6 @@ function buildSourceSnapshot(overrides: Partial<StoryboardConsistencySourceSnaps
           continuityOut: 'test continuity out',
         },
       ],
-      hardBans: ['no text'],
     },
     videoBlocks: [
       {

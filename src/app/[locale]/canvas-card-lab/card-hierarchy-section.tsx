@@ -250,7 +250,6 @@ function StyleBibleCard() {
         <Section title="风格总结" glyph="info"><p className={`text-xs leading-5 ${T2}`}>{sb.styleSummary}</p></Section>
         <Section title="视觉策略" glyph="eye"><div className="space-y-1.5"><ValueRow label="色彩" value={p.visual.colorPrompt} /><ValueRow label="光线" value={p.visual.lightingPrompt} /><ValueRow label="质感" value={p.visual.texturePrompt} /><ValueRow label="构图" value={p.visual.compositionPrompt} /></div></Section>
         <Section title="镜头策略" glyph="camera"><div className="space-y-1.5"><ValueRow label="运镜" value={p.camera.movementPrompt} /><ValueRow label="景深" value={p.camera.lensAndDepthPrompt} /></div></Section>
-        <div><p className={`mb-1.5 text-[10px] font-semibold uppercase ${T3}`}>硬性约束</p><Chips items={p.hardBans} /></div>
       </div>
     </SystemCard>
   )
@@ -282,7 +281,6 @@ function StyleBibleGrid() {
             <div className="grid gap-2 sm:grid-cols-2">{cur.fields.map(([l, v]) => <IconField key={l} label={l} value={v} />)}</div>
           </Section>
         ) : null}
-        <div><p className={`mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase ${T3}`}><Glyph name="ban" className="h-3 w-3" />硬性约束</p><Chips items={REAL.styleBible.stylePolicy.hardBans} /></div>
       </div>
     </SystemCard>
   )
@@ -299,7 +297,6 @@ function StyleBiblePoster() {
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3"><p className="line-clamp-2 text-[11px] leading-4 text-white">{REAL.styleBible.styleSummary}</p></div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">{flat.map(([l, v]) => <IconField key={l} label={l} value={v} />)}</div>
-        <div><p className={`mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase ${T3}`}><Glyph name="ban" className="h-3 w-3" />硬性约束</p><Chips items={REAL.styleBible.stylePolicy.hardBans} /></div>
       </div>
     </SystemCard>
   )

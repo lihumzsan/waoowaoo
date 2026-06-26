@@ -28,7 +28,6 @@ const styleBibleJson = JSON.stringify({
     sound: {
       soundFilterPrompt: '柔和低动态，自然空气感，清晰但不过度锐利',
     },
-    hardBans: ['不要字幕', '不要水印', '不要logo'],
   },
 })
 const durationGuidance = '中时长档位，约 60 秒。允许完整起承转合，最终总时长可按叙事自然落在约 45-75 秒，不要机械凑满固定秒数。'
@@ -106,8 +105,9 @@ describe('edit script block-first prompt flow', () => {
     expect(styleBiblePrompt).toContain('Style Bible 不得使用或暗示真人类型')
     expect(styleBiblePrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
     expect(styleBiblePrompt).toContain('3D/CG 可作为动漫 3D、风格化 3D、非真人角色/物体/生物主导 CG')
-    expect(styleBiblePrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
-    expect(styleBiblePrompt).toContain('不要真人3D/CG渲染')
+    expect(styleBiblePrompt).toContain('visual.negativePrompt 只写风格偏差与视觉质量问题')
+    expect(styleBiblePrompt).toContain('不要写会覆盖剧情事实、画面内道具、书籍文字、屏幕内容、字幕或招牌的绝对禁用项')
+    expect(styleBiblePrompt).not.toContain('hardBans')
     expect(styleBiblePrompt).not.toContain('必须改写成非真人且非 3D')
 
     const stylePreviewPrompt = buildAiPrompt({
@@ -135,7 +135,9 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
     expect(stylePreviewPrompt).toContain('3D/CG 可以作为非真人美术媒介')
     expect(stylePreviewPrompt).toContain('动漫 3D、风格化 3D/CG')
-    expect(stylePreviewPrompt).toContain('hardBans 是全链路硬禁用项，必须覆盖文字、字幕、水印、logo、真人类型')
+    expect(stylePreviewPrompt).toContain('visual.negativePrompt 只写风格偏差与视觉质量问题')
+    expect(stylePreviewPrompt).toContain('不要写会覆盖剧情事实、画面内道具、书籍文字、屏幕内容、字幕或招牌的绝对禁用项')
+    expect(stylePreviewPrompt).not.toContain('hardBans')
     expect(stylePreviewPrompt).toContain('aspectRatio 字段只是 schema 必填的技术占位值')
     expect(stylePreviewPrompt).toContain('最终影片画幅不由风格候选决定')
     expect(stylePreviewPrompt).toContain('九宫格')
@@ -152,7 +154,8 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).toContain('style_a')
     expect(stylePreviewPrompt).toContain('style_b')
     expect(stylePreviewPrompt).toContain('style_c')
-    expect(stylePreviewPrompt).toContain('no text; no subtitles; no logo; no watermark')
+    expect(stylePreviewPrompt).toContain('no non-story overlay text')
+    expect(stylePreviewPrompt).toContain('preserve story-required in-world text if present')
     expect(stylePreviewPrompt).not.toContain('每格按该候选 aspectRatio')
     expect(stylePreviewPrompt).not.toContain('项目风格输入')
     expect(stylePreviewPrompt).not.toContain('project_style_json')
@@ -317,7 +320,9 @@ describe('edit script block-first prompt flow', () => {
     expect(englishStyleBiblePrompt).toContain('Style Bible must not use or imply real-person')
     expect(englishStyleBiblePrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
     expect(englishStyleBiblePrompt).toContain('3D/CG is allowed as anime 3D, stylized 3D')
-    expect(englishStyleBiblePrompt).toContain('no real-person 3D/CG rendering')
+    expect(englishStyleBiblePrompt).toContain('visual.negativePrompt should only describe style drift and visual-quality problems')
+    expect(englishStyleBiblePrompt).toContain('Do not write absolute bans that can override story facts')
+    expect(englishStyleBiblePrompt).not.toContain('hardBans')
     expect(englishStyleBiblePrompt).not.toContain('rewrite it into a non-real-person and non-3D')
 
     const englishStylePreviewPrompt = buildAiPrompt({
@@ -336,7 +341,8 @@ describe('edit script block-first prompt flow', () => {
     expect(englishStylePreviewPrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
     expect(englishStylePreviewPrompt).toContain('3D/CG is allowed as a non-real-person art medium')
     expect(englishStylePreviewPrompt).toContain('anime 3D, stylized 3D/CG')
-    expect(englishStylePreviewPrompt).toContain('hardBans are chain-wide hard bans')
+    expect(englishStylePreviewPrompt).toContain('visual.negativePrompt should only describe style drift and visual-quality problems')
+    expect(englishStylePreviewPrompt).not.toContain('hardBans')
     expect(englishStylePreviewPrompt).not.toContain('Stylized 3D is also prohibited')
     expect(englishStylePreviewPrompt).not.toContain('non-3D')
   })

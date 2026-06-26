@@ -322,7 +322,6 @@ export interface WorkspaceCanvasStyleBibleDetails {
   readonly visual: WorkspaceCanvasStyleBibleVisualPolicy
   readonly camera: WorkspaceCanvasStyleBibleCameraPolicy
   readonly sound: WorkspaceCanvasStyleBibleSoundPolicy
-  readonly hardBans: readonly string[]
 }
 
 export interface WorkspaceCanvasVideoPlanDetails {

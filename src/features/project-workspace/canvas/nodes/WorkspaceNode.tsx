@@ -1670,7 +1670,7 @@ function StyleBibleContent({
     )
   }
 
-  // 二级（展开）：预览图 + 总结 + 分组属性网格 + 硬禁用
+  // 二级（展开）：预览图 + 总结 + 分组属性网格
   const groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] = [
     {
       name: labels('visualPolicy'), glyph: 'eye', fields: [
@@ -1701,7 +1701,6 @@ function StyleBibleContent({
       {renderTextSection(labels('styleSummary'), details.styleSummary)}
       {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
       <StyleBibleGroups groups={groups} />
-      {renderChips(labels('hardBans'), details.hardBans)}
     </div>
   )
 }

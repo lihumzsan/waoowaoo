@@ -29,24 +29,10 @@ export const REAL = {
         "colorPrompt": "A minimalist, high-contrast palette of deep ink black, cold midnight blue, and a sharp, toxic yellow accent.",
         "texturePrompt": "Heavy ink washes, scratchy cross-hatching lines, charcoal dust textures, and rough watercolor paper grain.",
         "lightingPrompt": "Stark, graphic lighting. Solid black shadows clashing with cold indigo washes, pierced by scratchy, hand-drawn yellow ink highlights.",
-        "negativePrompt": "live-action, real human, realistic actors, 3D render, photorealism, smooth gradients, pastel colors, text, subtitles, watermark, logo",
+        "negativePrompt": "live-action realism, realistic actors, 3D render, photorealism, smooth gradients, pastel colors, glossy commercial lighting",
         "compositionPrompt": "Expressionistic and flat compositions, utilizing sharp diagonals, frames within frames, and overwhelming black negative space.",
         "imageFilterPrompt": "high-contrast dark graphic ink illustration filter, sharp gothic silhouettes, cold indigo and scratchy yellow"
       },
-      "hardBans": [
-        "text",
-        "subtitles",
-        "watermark",
-        "logo",
-        "live-action",
-        "real actors",
-        "realistic humans",
-        "likeness",
-        "casting",
-        "3D rendering",
-        "photorealism",
-        "bright warm colors"
-      ],
       "directing": {
         "rhythmPrompt": "Dynamic, graphic transitions where shapes collide and merge, creating a poetic yet terrifying visual flow.",
         "performancePrompt": "Fluid, ink-like morphing for the shadow; sudden, sharp, angular transformations and jagged line-art changes for the doll.",
