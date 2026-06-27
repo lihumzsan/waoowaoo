@@ -22,8 +22,6 @@ import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspace
 import { apiFetch } from '@/lib/api-fetch'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
-import { WorkspaceAssistantCollapseHandle } from './workspace-assistant/WorkspaceAssistantCollapseHandle'
-import { WorkspaceAssistantPanelRail } from './workspace-assistant/WorkspaceAssistantPanelRail'
 import {
   buildWorkspaceAssistantPanelLayout,
   clampWorkspaceAssistantPanelWidth,
@@ -94,8 +92,6 @@ interface WorkspaceAssistantPanelProps {
   autoStartMessage?: string | null
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void
-  isCollapsed: boolean
-  onToggleCollapsed: () => void
   onActiveOperationChange?: (operationId: string | null) => void
   onStyleBibleConfirmed?: () => void
 }
@@ -245,8 +241,6 @@ export default function WorkspaceAssistantPanel({
   autoStartMessage,
   autoStartKey,
   onAutoStartConsumed,
-  isCollapsed,
-  onToggleCollapsed,
   onActiveOperationChange,
   onStyleBibleConfirmed,
 }: WorkspaceAssistantPanelProps) {
@@ -262,7 +256,7 @@ export default function WorkspaceAssistantPanel({
     startWidth: number
     currentWidth: number
   } | null>(null)
-  const layout = buildWorkspaceAssistantPanelLayout(isCollapsed, assistantPanelWidth)
+  const layout = buildWorkspaceAssistantPanelLayout(assistantPanelWidth)
   const [composerText, setComposerText] = useState('')
   const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
@@ -636,7 +630,6 @@ export default function WorkspaceAssistantPanel({
     awaitingExternalTask,
   })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (isCollapsed) return
     event.preventDefault()
     resizeStateRef.current = {
       startX: event.clientX,
@@ -644,7 +637,7 @@ export default function WorkspaceAssistantPanel({
       currentWidth: assistantPanelWidth,
     }
     setIsResizing(true)
-  }, [assistantPanelWidth, isCollapsed])
+  }, [assistantPanelWidth])
 
   useEffect(() => {
     if (!isResizing) return
@@ -696,24 +689,15 @@ export default function WorkspaceAssistantPanel({
         }}
         data-state={layout.state}
       >
-        {!isCollapsed ? (
-          <WorkspaceAssistantCollapseHandle
-            collapseLabel={t('panel.collapse')}
-            onCollapse={onToggleCollapsed}
-          />
-        ) : null}
-        {!isCollapsed ? (
-          <button
-            type="button"
-            aria-label={t('panel.resize')}
-            title={t('panel.resize')}
-            className="absolute inset-y-0 left-0 z-30 w-2 cursor-ew-resize bg-transparent"
-            onPointerDown={handleResizePointerDown}
-          />
-        ) : null}
+        <button
+          type="button"
+          aria-label={t('panel.resize')}
+          title={t('panel.resize')}
+          className="absolute inset-y-0 left-0 z-30 w-2 cursor-ew-resize bg-transparent"
+          onPointerDown={handleResizePointerDown}
+        />
         <div
-          className={`h-full transition-opacity duration-200 ${isCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
-          aria-hidden={isCollapsed}
+          className="h-full transition-opacity duration-200 opacity-100"
         >
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
@@ -723,7 +707,6 @@ export default function WorkspaceAssistantPanel({
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 <div>
-                  {!isCollapsed ? <div aria-hidden="true" className="float-right h-14 w-14" /> : null}
                   <div className="space-y-3">
                     <ThreadPrimitive.Messages>
                       {() => (
@@ -809,15 +792,6 @@ export default function WorkspaceAssistantPanel({
               </div>
             </ThreadPrimitive.Root>
           </AssistantRuntimeProvider>
-        </div>
-        <div
-          className={`absolute inset-y-0 right-0 transition-opacity duration-200 ${isCollapsed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          aria-hidden={!isCollapsed}
-        >
-          <WorkspaceAssistantPanelRail
-            expandLabel={t('panel.expand')}
-            onExpand={onToggleCollapsed}
-          />
         </div>
       </div>
       {previewImageUrl ? (

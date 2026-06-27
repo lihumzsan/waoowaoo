@@ -3,7 +3,6 @@
 import { useCallback } from 'react'
 import { EpisodeSelector } from '@/components/ui/CapsuleNav'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
-import WorkspaceTopActions from './WorkspaceTopActions'
 import type { ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
@@ -73,13 +72,7 @@ interface WorkspaceHeaderShellProps {
   onEpisodeRename?: (episodeId: string, newName: string) => void
   onEpisodeDelete?: (episodeId: string) => void
   onProjectRename?: (newName: string) => void | Promise<void>
-  onOpenAssetLibrary: () => void
-  onOpenSettingsModal: () => void
   projectConfigurable: boolean
-  onRefresh: () => void
-  assetLibraryLabel: string
-  settingsLabel: string
-  refreshTitle: string
 }
 
 export default function WorkspaceHeaderShell({
@@ -111,13 +104,7 @@ export default function WorkspaceHeaderShell({
   onEpisodeRename,
   onEpisodeDelete,
   onProjectRename,
-  onOpenAssetLibrary,
-  onOpenSettingsModal,
   projectConfigurable,
-  onRefresh,
-  assetLibraryLabel,
-  settingsLabel,
-  refreshTitle,
 }: WorkspaceHeaderShellProps) {
   const handleCapabilityOverridesChange = useCallback((value: CapabilitySelections) => {
     void onUpdateConfig('capabilityOverrides', value)
@@ -202,15 +189,6 @@ export default function WorkspaceHeaderShell({
         )
       })()}
 
-      <WorkspaceTopActions
-        onOpenAssetLibrary={onOpenAssetLibrary}
-        onOpenSettings={onOpenSettingsModal}
-        showSettings={projectConfigurable}
-        onRefresh={onRefresh}
-        assetLibraryLabel={assetLibraryLabel}
-        settingsLabel={settingsLabel}
-        refreshTitle={refreshTitle}
-      />
     </>
   )
 }

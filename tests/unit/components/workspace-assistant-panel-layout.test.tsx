@@ -6,8 +6,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
 import { createTranslator } from 'use-intl/core'
-import { WorkspaceAssistantCollapseHandle } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantCollapseHandle'
-import { WorkspaceAssistantPanelRail } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPanelRail'
 import {
   resolveWorkspaceAssistantExternalTaskOperationId,
   shouldSuppressWorkspaceAssistantOperationRunCard,
@@ -33,7 +31,6 @@ import {
   WORKSPACE_ASSISTANT_PANEL_MAX_WIDTH_PX,
   WORKSPACE_ASSISTANT_PANEL_MIN_WIDTH_PX,
   WORKSPACE_ASSISTANT_PANEL_WIDTH_PX,
-  WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
 } from '@/features/project-workspace/components/workspace-assistant/panel-layout'
 
 type ProgressTranslator = Parameters<typeof resolveProgressStageLabel>[1]
@@ -136,20 +133,18 @@ function renderAssistantToolCallCard(props: Record<string, unknown>): string {
 
 describe('workspace assistant panel layout', () => {
   it('returns expanded width when panel is visible', () => {
-    expect(buildWorkspaceAssistantPanelLayout(false)).toEqual({
+    expect(buildWorkspaceAssistantPanelLayout()).toEqual({
       occupiedWidthPx: 0,
       panelWidthPx: WORKSPACE_ASSISTANT_PANEL_WIDTH_PX,
-      railWidthPx: WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
       translateXPx: 0,
       state: 'expanded',
     })
   })
 
   it('clamps custom expanded width into the supported resize range', () => {
-    expect(buildWorkspaceAssistantPanelLayout(false, 640)).toEqual({
+    expect(buildWorkspaceAssistantPanelLayout(640)).toEqual({
       occupiedWidthPx: 0,
       panelWidthPx: 640,
-      railWidthPx: WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
       translateXPx: 0,
       state: 'expanded',
     })
@@ -157,55 +152,22 @@ describe('workspace assistant panel layout', () => {
     expect(clampWorkspaceAssistantPanelWidth(1200)).toBe(WORKSPACE_ASSISTANT_PANEL_MAX_WIDTH_PX)
   })
 
-  it('keeps the right-side overlay out of canvas layout when collapsed', () => {
-    expect(buildWorkspaceAssistantPanelLayout(true)).toEqual({
-      occupiedWidthPx: 0,
-      panelWidthPx: WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
-      railWidthPx: WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
-      translateXPx: 0,
-      state: 'collapsed',
-    })
-  })
-
-  it('renders explicit floating collapse and expand controls for the sidebar rail', () => {
-    const collapseHandleHtml = renderToStaticMarkup(
-      createElement(WorkspaceAssistantCollapseHandle, {
-        collapseLabel: 'Collapse AI assistant sidebar',
-        onCollapse: () => undefined,
-      }),
+  it('keeps the assistant panel fixed open without collapse rail controls', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
     )
-    const railHtml = renderToStaticMarkup(
-      createElement(WorkspaceAssistantPanelRail, {
-        expandLabel: 'Expand AI assistant sidebar',
-        onExpand: () => undefined,
-      }),
+    const layoutSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/panel-layout.ts'),
+      'utf8',
     )
 
-    expect(collapseHandleHtml).toContain('Collapse AI assistant sidebar')
-    expect(collapseHandleHtml).toContain('lucide-chevron-right')
-    expect(collapseHandleHtml).toContain('absolute')
-    expect(collapseHandleHtml).toContain('right-4')
-    expect(collapseHandleHtml).toContain('top-4')
-    expect(collapseHandleHtml).toContain('h-10 w-10')
-    expect(collapseHandleHtml).toContain('rounded-2xl')
-    expect(collapseHandleHtml).not.toContain('fixed')
-    expect(collapseHandleHtml).not.toContain('right:calc')
-    expect(collapseHandleHtml).not.toContain('top:calc')
-    expect(collapseHandleHtml).not.toContain('pointer-events-auto')
-    expect(collapseHandleHtml).not.toContain('shrink-0')
-    expect(collapseHandleHtml).not.toContain('h-14 w-6')
-    expect(collapseHandleHtml).not.toContain('Workspace Chat')
-    expect(collapseHandleHtml).not.toContain('View full raw context')
-    expect(collapseHandleHtml).not.toContain('Download Log')
-    expect(collapseHandleHtml).not.toContain('lucide-file-text')
-    expect(collapseHandleHtml).not.toContain('lucide-download')
-    expect(collapseHandleHtml).not.toContain('sticky')
-    expect(collapseHandleHtml).not.toContain('top-0')
-    expect(collapseHandleHtml).not.toContain('z-10')
-    expect(railHtml).toContain('Expand AI assistant sidebar')
-    expect(railHtml).toContain('lucide-chevron-left')
-    expect(railHtml).not.toContain('Workspace Chat')
-    expect(railHtml).not.toContain('lucide-sparkles')
+    expect(panelSource).not.toContain('WorkspaceAssistantCollapseHandle')
+    expect(panelSource).not.toContain('WorkspaceAssistantPanelRail')
+    expect(panelSource).not.toContain('onToggleCollapsed')
+    expect(panelSource).not.toContain('isCollapsed')
+    expect(layoutSource).not.toContain('WORKSPACE_ASSISTANT_RAIL_WIDTH_PX')
+    expect(layoutSource).not.toContain("'collapsed'")
   })
 
   it('keeps user messages as flat gray bubbles without border or shadow', () => {
@@ -222,13 +184,13 @@ describe('workspace assistant panel layout', () => {
     expect(WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE.WebkitMaskImage).toBe(WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE.maskImage)
   })
 
-  it('reserves only the inline area around the collapse control', () => {
+  it('does not reserve inline space for a collapse control', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
       'utf8',
     )
 
-    expect(panelSource).toContain('float-right h-14 w-14')
+    expect(panelSource).not.toContain('float-right h-14 w-14')
     expect(panelSource).not.toContain('pr-16')
   })
 

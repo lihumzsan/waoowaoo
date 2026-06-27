@@ -29,7 +29,6 @@ function isDeploymentPayload(value: unknown): value is DeploymentPayload {
 
 function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const vm = useProjectWorkspaceController(props)
-  const [isAssistantPanelCollapsed, setIsAssistantPanelCollapsed] = useState(false)
   const [assistantSelection, setAssistantSelection] = useState<WorkspaceAssistantSelectionContext>({})
   const [activeAssistantOperationId, setActiveAssistantOperationId] = useState<string | null>(null)
   const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
@@ -103,13 +102,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onEpisodeRename={onEpisodeRename}
         onEpisodeDelete={onEpisodeDelete}
         onProjectRename={onProjectRename}
-        onOpenAssetLibrary={() => vm.ui.openAssetLibrary()}
-        onOpenSettingsModal={() => vm.ui.setIsSettingsModalOpen(true)}
         projectConfigurable={projectConfigurable}
-        onRefresh={() => vm.ui.onRefresh({ mode: 'full' })}
-        assetLibraryLabel={vm.i18n.t('buttons.assetLibrary')}
-        settingsLabel={vm.i18n.t('buttons.settings')}
-        refreshTitle={vm.i18n.t('buttons.refreshData')}
       />
 
       <div className={isEpisodeWorkspace ? 'h-full min-h-0 overflow-hidden' : undefined}>
@@ -121,8 +114,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             autoStartMessage={props.assistantAutoStartMessage ?? null}
             autoStartKey={props.assistantAutoStartKey ?? null}
             onAutoStartConsumed={props.onAssistantAutoStartConsumed}
-            isCollapsed={isAssistantPanelCollapsed}
-            onToggleCollapsed={() => setIsAssistantPanelCollapsed((current) => !current)}
             onActiveOperationChange={setActiveAssistantOperationId}
             onStyleBibleConfirmed={() => setStyleBibleFocusRequestId((current) => current + 1)}
           />
