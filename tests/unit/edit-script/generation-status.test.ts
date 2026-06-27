@@ -610,6 +610,7 @@ describe('edit script generation status persistence', () => {
       data: expect.objectContaining({
         styleKey: 'style_a',
         aspectRatio: '9:16',
+        imagePrompt: mockStylePreviewOptions.stylePreviews[0].gridImagePrompt,
       }),
     }))
     expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
@@ -626,6 +627,7 @@ describe('edit script generation status persistence', () => {
       targetType: 'ProjectEditStylePreview',
       targetId: 'style-preview-style_a',
       payload: expect.objectContaining({
+        prompt: mockStylePreviewOptions.stylePreviews[0].gridImagePrompt,
         generationOptions: {
           aspectRatio: '16:9',
         },
