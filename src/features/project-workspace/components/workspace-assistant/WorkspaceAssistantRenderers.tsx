@@ -26,6 +26,7 @@ import type {
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
+import type { OperationPlanView } from '@/lib/operations/planning'
 import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
@@ -201,16 +202,33 @@ export function ConfirmationActionCard(props: {
   operationId: string
   title: string
   subtitle: string
+  operationPlan?: OperationPlanView | null
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
   confirmPending: boolean
   cancelPending: boolean
 }) {
   const t = useTranslations('assistantAgent')
+  const quote = props.operationPlan?.quote ?? null
+  const quoteText = quote?.billable === true && quote.mediaTaskCount > 0
+    ? quote.showCredits && typeof quote.totalMaxFrozenCost === 'number'
+      ? t('cards.billingQuoteWithCredits', {
+        count: quote.mediaTaskCount,
+        cost: quote.totalMaxFrozenCost,
+      })
+      : t('cards.billingQuoteWithoutCredits', {
+        count: quote.mediaTaskCount,
+      })
+    : null
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
+      {quoteText ? (
+        <div className="mt-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2.5 py-2 leading-5 text-[var(--glass-text-primary)]">
+          {quoteText}
+        </div>
+      ) : null}
       <div className="mt-3 flex gap-2">
         <button
           type="button"
@@ -610,6 +628,11 @@ function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartD
     const raw = taskState?.stageLabel || taskState?.stage || null
     return resolveProgressStageLabel(raw, progressT)
   }, [progressT, taskState?.stage, taskState?.stageLabel])
+  const receiptText = data.billingReceipt?.billable === true
+    ? data.billingReceipt.showCredits && typeof data.billingReceipt.maxFrozenCost === 'number'
+      ? t('cards.billingReceiptWithCredits', { cost: data.billingReceipt.maxFrozenCost })
+      : t('cards.billingReceiptWithoutCredits')
+    : null
 
   return (
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
@@ -633,6 +656,7 @@ function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartD
         ) : null}
         {data.runId ? <div>{t('cards.runIdLabel')}: {data.runId}</div> : null}
         {typeof data.deduped === 'boolean' ? <div>{t('cards.dedupedLabel')}: {String(data.deduped)}</div> : null}
+        {receiptText ? <div>{receiptText}</div> : null}
       </div>
     </details>
   )
@@ -645,6 +669,11 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   const countLabel = typeof targetTotal === 'number' && targetTotal !== taskTotal
     ? t('cards.batchTaskAndTargetTotals', { tasks: taskTotal, targets: targetTotal })
     : t('cards.totalLabelWithCount', { count: data.total })
+  const receiptText = data.billingReceipt?.billable === true
+    ? data.billingReceipt.showCredits && typeof data.billingReceipt.maxFrozenCost === 'number'
+      ? t('cards.billingReceiptWithCredits', { cost: data.billingReceipt.maxFrozenCost })
+      : t('cards.billingReceiptWithoutCredits')
+    : null
 
   return (
     <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
@@ -658,6 +687,7 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
           <div key={taskId}>{taskId}</div>
         ))}
         {(data.taskIds || []).length > 8 ? <div>…</div> : null}
+        {receiptText ? <div className="font-sans text-[var(--glass-text-secondary)]">{receiptText}</div> : null}
       </div>
     </details>
   )

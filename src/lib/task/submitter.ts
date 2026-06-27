@@ -21,6 +21,7 @@ import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
+import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -33,6 +34,17 @@ export function isActiveTaskStatus(status: string | null | undefined) {
 
 export function shouldAttachNewTaskToReusableRun(reusableRunTaskStatus: string | null | undefined) {
   return !isActiveTaskStatus(reusableRunTaskStatus)
+}
+
+export interface SubmitTaskResult {
+  [key: string]: unknown
+  success: boolean
+  async: boolean
+  taskId: string
+  runId: string | null
+  status: string
+  deduped: boolean
+  billingReceiptView?: BillingReceiptView | null
 }
 
 export function normalizeTaskPayload(type: TaskType, payload?: Record<string, unknown> | null) {
@@ -99,12 +111,13 @@ export async function submitTask(params: {
   dedupeKey?: string | null
   priority?: number
   billingInfo?: TaskBillingInfo | null
+  billingInfoSource?: 'auto' | 'planned'
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
   operationConfirmed?: boolean | null
   operationRequestId?: string | null
-}) {
+}): Promise<SubmitTaskResult> {
   const logger = createScopedLogger({
     module: 'task.submitter',
     action: 'task.submit',
@@ -133,7 +146,9 @@ export async function submitTask(params: {
   const computedBillingInfo = isBillableTaskType(params.type)
     ? buildDefaultTaskBillingInfo(params.type, normalizedPayload)
     : null
-  const resolvedBillingInfo = computedBillingInfo || params.billingInfo || null
+  const resolvedBillingInfo = params.billingInfoSource === 'planned'
+    ? params.billingInfo || computedBillingInfo || null
+    : computedBillingInfo || params.billingInfo || null
 
   const { task, deduped } = await createTask({
     userId: params.userId,
@@ -321,5 +336,6 @@ export async function submitTask(params: {
     runId,
     status: task.status,
     deduped,
+    billingReceiptView: await buildBillingReceiptView(preparedBillingInfo),
   }
 }

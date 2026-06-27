@@ -1,6 +1,7 @@
 'use client'
 
 import type { UIMessage } from 'ai'
+import type { OperationPlanView } from '@/lib/operations/planning'
 
 /**
  * Display-only parsing of interruption data parts streamed by the server.
@@ -13,6 +14,7 @@ export interface WorkspaceAssistantPendingInterruption {
   interruptionId: string
   approvalId: string
   operationId: string
+  operationPlan?: OperationPlanView | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -21,6 +23,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readOperationPlanView(value: unknown): OperationPlanView | null {
+  if (!isRecord(value)) return null
+  if (value.kind !== 'task_submission') return null
+  if (typeof value.operationId !== 'string') return null
+  if (typeof value.taskCount !== 'number') return null
+  if (!isRecord(value.quote)) return null
+  if (!Array.isArray(value.tasks)) return null
+  return value as unknown as OperationPlanView
 }
 
 function readInterruptionPart(part: unknown): WorkspaceAssistantPendingInterruption | null {
@@ -37,6 +49,7 @@ function readInterruptionPart(part: unknown): WorkspaceAssistantPendingInterrupt
     interruptionId,
     approvalId,
     operationId,
+    operationPlan: readOperationPlanView(data.operationPlan),
   }
 }
 

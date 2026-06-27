@@ -34,6 +34,7 @@ export const POST = apiHandler(async (
       insertAfterPanelId,
       sourcePanelId,
       variant,
+      ...(typeof body?.confirmedMaxCost === 'number' ? { confirmedMaxCost: body.confirmedMaxCost } : {}),
     },
     source: 'project-ui',
   })

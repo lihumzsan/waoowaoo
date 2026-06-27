@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import { apiFetch } from '@/lib/api-fetch'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -11,8 +10,8 @@ import {
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
-    requestTaskResponseWithError,
 } from './mutation-shared'
+import { useConfirmMediaOperationPlan } from '../use-confirm-media-operation-plan'
 
 function invalidateStoryboardMutationCaches(
     queryClient: ReturnType<typeof useQueryClient>,
@@ -32,6 +31,7 @@ function invalidateStoryboardMutationCaches(
 
 export function useRegenerateProjectPanelImage(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async ({
             panelId,
@@ -48,16 +48,21 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
             extraImageUrls?: string[]
             referenceImageNotes?: unknown[]
         }) => {
+            const requestBody = {
+                panelId,
+                count: count ?? 1,
+                ...(referenceMode ? { referenceMode } : {}),
+                ...(referencePanelIds && referencePanelIds.length > 0 ? { referencePanelIds } : {}),
+                ...(extraImageUrls && extraImageUrls.length > 0 ? { extraImageUrls } : {}),
+                ...(referenceImageNotes && referenceImageNotes.length > 0 ? { referenceImageNotes } : {}),
+            }
+            const confirmedMaxCost = await confirmMediaOperationPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    panelId,
-                    count: count ?? 1,
-                    ...(referenceMode ? { referenceMode } : {}),
-                    ...(referencePanelIds && referencePanelIds.length > 0 ? { referencePanelIds } : {}),
-                    ...(extraImageUrls && extraImageUrls.length > 0 ? { extraImageUrls } : {}),
-                    ...(referenceImageNotes && referenceImageNotes.length > 0 ? { referenceImageNotes } : {}),
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
                 }),
             })
             if (!res.ok) {
@@ -122,6 +127,7 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
 
 export function useGenerateStoryboardGridImages(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async (payload: {
             episodeId: string
@@ -129,10 +135,19 @@ export function useGenerateStoryboardGridImages(projectId: string, episodeId?: s
             sourceVideoBlockId: string
             panelIds: readonly string[]
         }) => {
+            const confirmedMaxCost = await confirmMediaOperationPlan('generate_storyboard_grid_images', {
+                episodeId: payload.episodeId,
+                editScriptId: payload.editScriptId,
+                sourceVideoBlockId: payload.sourceVideoBlockId,
+                panelIds: [...payload.panelIds],
+            })
             const res = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/images/block-grid/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({
+                    ...payload,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
             })
             if (!res.ok) {
                 const error = await res.json().catch(() => ({}))
@@ -462,6 +477,7 @@ export function useInsertProjectPanel(projectId: string, episodeId?: string | nu
 
 export function useCreateProjectPanelVariant(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async (payload: {
             storyboardId: string
@@ -477,10 +493,19 @@ export function useCreateProjectPanelVariant(projectId: string, episodeId?: stri
             includeCharacterAssets: boolean
             includeLocationAsset: boolean
         }) => {
+            const confirmedMaxCost = await confirmMediaOperationPlan('panel_variant', {
+                storyboardId: payload.storyboardId,
+                insertAfterPanelId: payload.insertAfterPanelId,
+                sourcePanelId: payload.sourcePanelId,
+                variant: payload.variant,
+            })
             return await requestJsonWithError<{ panelId: string }>(`/api/projects/${projectId}/panel-variant`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({
+                    ...payload,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
             }, '生成变体失败')
         },
         onSettled: () => {

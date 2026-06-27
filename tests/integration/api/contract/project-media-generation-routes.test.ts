@@ -9,6 +9,10 @@ const apiAdapterMock = vi.hoisted(() => ({
   executeProjectAgentOperationFromApi: vi.fn(),
 }))
 
+const planningMock = vi.hoisted(() => ({
+  planProjectAgentOperationFromApi: vi.fn(),
+}))
+
 vi.mock('@/lib/api-auth', () => {
   const unauthorized = () => new Response(
     JSON.stringify({ error: { code: 'UNAUTHORIZED' } }),
@@ -28,16 +32,71 @@ vi.mock('@/lib/api-auth', () => {
 })
 
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
+vi.mock('@/lib/operations/planning', () => planningMock)
 
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
 import { POST as generateStoryboardGridImagesPost } from '@/app/api/projects/[projectId]/edit-script/storyboard/images/block-grid/generate/route'
+import { POST as operationPlanPost } from '@/app/api/projects/[projectId]/operations/[operationId]/plan/route'
 
 describe('api contract - project media generation routes (operation adapter)', () => {
   beforeEach(() => {
     authState.authenticated = true
     vi.clearAllMocks()
+  })
+
+  it('POST /api/projects/[projectId]/operations/[operationId]/plan -> delegates to the planning runtime', async () => {
+    planningMock.planProjectAgentOperationFromApi.mockResolvedValueOnce({
+      operationId: 'regenerate_panel_image',
+      kind: 'task_submission',
+      taskCount: 1,
+      quote: {
+        showCredits: true,
+        billingMode: 'ENFORCE',
+        billable: true,
+        taskCount: 1,
+        mediaTaskCount: 1,
+        totalMaxFrozenCost: 3,
+        currency: 'credits',
+        items: [],
+      },
+      tasks: [],
+    })
+
+    const res = await operationPlanPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/operations/regenerate_panel_image/plan',
+        method: 'POST',
+        body: {
+          input: { panelId: 'panel-1' },
+          context: {
+            locale: 'zh',
+            episodeId: 'episode-1',
+            selectedPanelId: 'panel-1',
+          },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', operationId: 'regenerate_panel_image' }) },
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.quote.totalMaxFrozenCost).toBe(3)
+    expect(planningMock.planProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'regenerate_panel_image',
+      projectId: 'project-1',
+      userId: 'user-1',
+      input: { panelId: 'panel-1' },
+      source: 'project-ui',
+      context: {
+        locale: 'zh',
+        episodeId: 'episode-1',
+        selectedScopeRef: null,
+        selectedPanelId: 'panel-1',
+        selectedAssetId: null,
+      },
+    }))
   })
 
   it('POST /api/projects/[projectId]/regenerate-panel-image -> forwards reference image usage notes', async () => {

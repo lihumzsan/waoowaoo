@@ -102,6 +102,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/location/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/location/route.ts',
   'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
+  'src/app/api/projects/[projectId]/operations/[operationId]/plan/route.ts',
   'src/app/api/projects/[projectId]/panel-link/route.ts',
   'src/app/api/projects/[projectId]/panel-variant/route.ts',
   'src/app/api/projects/[projectId]/panel/copy/route.ts',
@@ -199,6 +200,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/final-video-render/route.ts')
     || routeFile.endsWith('/generate/route.ts')
     || routeFile.endsWith('/modify-render/route.ts')
+    || routeFile.endsWith('/operations/[operationId]/plan/route.ts')
     || routeFile.endsWith('/insert-panel/route.ts')
     || routeFile.endsWith('/modify-storyboard-image/route.ts')
     || routeFile.endsWith('/panel-variant/route.ts')

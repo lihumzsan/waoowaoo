@@ -31,6 +31,7 @@ import {
   type EditFirstWorkflowState,
 } from '@/lib/project-workflow/edit-first'
 import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
+import type { OperationPlanView } from '@/lib/operations/planning'
 
 interface ProjectAgentSessionScopeInput {
   projectId: string
@@ -56,6 +57,7 @@ export type ProjectAgentSessionPendingInteraction =
     approvalId: string
     operationId: string
     toolCallId: string | null
+    operationPlan?: OperationPlanView | null
   }
   | {
     kind: 'choice'
@@ -106,6 +108,16 @@ function resolveCurrentRun(runs: readonly ProjectAgentRunRecord[]): ProjectAgent
 function readRecord(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, Prisma.JsonValue>
+}
+
+function readOperationPlanView(value: Prisma.JsonValue | undefined): OperationPlanView | null {
+  const record = readRecord(value ?? null)
+  if (record.kind !== 'task_submission') return null
+  if (typeof record.operationId !== 'string') return null
+  if (typeof record.taskCount !== 'number') return null
+  if (!record.quote || typeof record.quote !== 'object' || Array.isArray(record.quote)) return null
+  if (!Array.isArray(record.tasks)) return null
+  return record as unknown as OperationPlanView
 }
 
 function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
@@ -162,6 +174,7 @@ async function buildPendingInteraction(params: {
   if (!params.interruption) return null
   if (params.interruption.type === 'approval') {
     if (!params.interruption.runId) throw new Error('PROJECT_AGENT_PENDING_APPROVAL_RUN_ID_MISSING')
+    const payload = readRecord(params.interruption.payload)
     return {
       kind: 'approval',
       runId: params.interruption.runId,
@@ -169,6 +182,7 @@ async function buildPendingInteraction(params: {
       approvalId: params.interruption.approvalId,
       operationId: params.interruption.operationId,
       toolCallId: params.interruption.toolCallId,
+      operationPlan: readOperationPlanView(payload.operationPlan),
     }
   }
   if (params.interruption.type === 'choice') {

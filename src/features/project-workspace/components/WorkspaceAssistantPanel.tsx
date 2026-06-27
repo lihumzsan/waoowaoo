@@ -726,6 +726,7 @@ export default function WorkspaceAssistantPanel({
                         operationId={serverPendingApproval.operationId}
                         title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
                         subtitle={t('cards.confirmationRequired')}
+                        operationPlan={serverPendingApproval.operationPlan}
                         onConfirm={async () => handleRespondRunApproval({
                           ...serverPendingApproval,
                           approved: true,

@@ -7,6 +7,8 @@ import type {
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { AssistantPermissionMode } from './permission-mode'
+import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
+import type { OperationPlanView } from '@/lib/operations/planning'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -20,6 +22,7 @@ export interface ProjectAgentContext {
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedAssetId?: string | null
+  confirmedMaxCostByOperationId?: Record<string, number>
 }
 
 export interface ProjectAgentRunPartData {
@@ -87,6 +90,7 @@ export interface ProjectAgentInterruptionPartData {
     title: string
     description: string
   }
+  operationPlan?: OperationPlanView | null
 }
 
 export type ProjectAgentInterruptionOutcome = 'approved' | 'rejected' | 'superseded'
@@ -200,6 +204,7 @@ export interface TaskSubmittedPartData {
   status: string
   runId?: string | null
   deduped?: boolean
+  billingReceipt?: BillingReceiptView | null
   mutationBatchId?: string | null
   projectId?: string
   episodeId?: string | null
@@ -220,7 +225,9 @@ export interface TaskBatchSubmittedPartData {
     taskType?: string
     targetType?: string
     targetId?: string
+    billingReceipt?: BillingReceiptView | null
   }>
+  billingReceipt?: BillingReceiptView | null
   mutationBatchId?: string | null
 }
 

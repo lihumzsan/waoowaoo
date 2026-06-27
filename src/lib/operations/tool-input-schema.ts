@@ -70,7 +70,7 @@ function readProperties(schema: JsonObject): Record<string, JsonValue> {
   if (!isRecord(value) || Array.isArray(value)) return {}
   const out: Record<string, JsonValue> = {}
   for (const [key, property] of Object.entries(value)) {
-    if (key === 'confirmed') continue
+    if (key === 'confirmed' || key === 'confirmedMaxCost') continue
     if (isNeverSchema(property)) continue
     out[key] = toJsonValue(property)
   }
@@ -189,8 +189,14 @@ function assertNoForbiddenToolSchemaSurface(params: {
   if (!isRecord(value)) return
 
   const properties = value.properties
-  if (isRecord(properties) && Object.prototype.hasOwnProperty.call(properties, 'confirmed')) {
-    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_CONFIRMED_EXPOSED:${operationId}:${path}`)
+  if (
+    isRecord(properties)
+    && (
+      Object.prototype.hasOwnProperty.call(properties, 'confirmed')
+      || Object.prototype.hasOwnProperty.call(properties, 'confirmedMaxCost')
+    )
+  ) {
+    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_INTERNAL_CONFIRMATION_EXPOSED:${operationId}:${path}`)
   }
   if (isRecord(properties)) {
     for (const [propertyKey, propertySchema] of Object.entries(properties)) {

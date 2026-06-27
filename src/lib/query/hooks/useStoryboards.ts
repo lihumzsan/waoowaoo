@@ -7,6 +7,7 @@ import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
+import { useConfirmMediaOperationPlan } from '../use-confirm-media-operation-plan'
 
 // ============ 类型定义 ============
 export interface PanelCandidate {
@@ -57,6 +58,20 @@ interface BatchVideoGenerationParams {
     referenceImageUrls?: readonly string[]
 }
 
+function resolveVideoGenerationOperationId(params: {
+    all?: boolean
+    mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
+}) {
+    if (params.mode === 'auto') return 'generate_episode_videos_auto'
+    if (params.mode === 'asset-reference') {
+        return params.all === true ? 'generate_episode_asset_reference_videos' : 'generate_asset_reference_video'
+    }
+    if (params.mode === 'grid') {
+        return params.all === true ? 'generate_episode_video_groups' : 'generate_video_group'
+    }
+    return params.all === true ? 'generate_episode_videos' : 'generate_panel_video'
+}
+
 // ============ 查询 Hooks ============
 
 /**
@@ -83,14 +98,20 @@ export function useStoryboards(projectId: string | null, episodeId: string | nul
  */
 export function useRegeneratePanelImage(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async ({ panelId }: { panelId: string }) => {
             if (!projectId) throw new Error('Project ID is required')
+            const requestBody = { panelId }
+            const confirmedMaxCost = await confirmMediaOperationPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ panelId }),
+                body: JSON.stringify({
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
             })
             if (!res.ok) {
                 const error = await res.json()
@@ -167,6 +188,7 @@ export function useModifyPanelImage(projectId: string | null, episodeId: string 
  */
 export function useGenerateVideo(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async (params: {
@@ -210,10 +232,16 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 requestBody.generationOptions = params.generationOptions
             }
 
+            const confirmedMaxCost = await confirmMediaOperationPlan('generate_panel_video', {
+                ...requestBody,
+            })
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
+                body: JSON.stringify({
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
             })
             // 🔥 使用统一错误处理
             await checkApiResponse(res)
@@ -256,6 +284,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
  */
 export function useBatchGenerateVideos(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
+    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async (params: BatchVideoGenerationParams) => {
@@ -295,10 +324,20 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                 requestBody.generationOptions = params.generationOptions
             }
 
+            const operationId = resolveVideoGenerationOperationId({
+                all: requestBody.all,
+                mode: requestBody.mode,
+            })
+            const confirmedMaxCost = await confirmMediaOperationPlan(operationId, {
+                ...requestBody,
+            })
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
+                body: JSON.stringify({
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
             })
             // 🔥 使用统一错误处理
             await checkApiResponse(res)

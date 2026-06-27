@@ -17,6 +17,20 @@ import {
   withOperationErrorDetails,
 } from '@/lib/adapters/operation-error-normalizer'
 
+function attachConfirmedMaxCost(input: unknown, confirmedMaxCost: number | undefined): unknown {
+  if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) return input
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return {
+      value: input,
+      confirmedMaxCost,
+    }
+  }
+  return {
+    ...(input as Record<string, unknown>),
+    confirmedMaxCost,
+  }
+}
+
 export async function executeProjectAgentOperationFromTool(params: {
   request: NextRequest
   operationId: string
@@ -56,9 +70,11 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
+  const confirmedMaxCost = params.context.confirmedMaxCostByOperationId?.[params.operationId]
+  const parsedInput = attachConfirmedMaxCost(parsed.data, confirmedMaxCost)
   const contextEpisodeId = typeof params.context.episodeId === 'string' ? params.context.episodeId.trim() : ''
   const inputEpisodeId = (() => {
-    const data = parsed.data
+    const data = parsedInput
     if (!data || typeof data !== 'object' || Array.isArray(data)) return ''
     const record = data as Record<string, unknown>
     const value = record.episodeId
@@ -129,7 +145,7 @@ export async function executeProjectAgentOperationFromTool(params: {
       source: params.source,
       writer: params.writer,
       toolCallId: params.toolCallId,
-    }, parsed.data)
+    }, parsedInput)
   } catch (error) {
     return {
       ok: false,

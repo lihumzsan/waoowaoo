@@ -13,6 +13,7 @@ import {
   type RunToolApprovalItem,
   type Tool,
 } from '@openai/agents'
+import type { Prisma } from '@prisma/client'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
@@ -85,6 +86,7 @@ import {
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
+import { planOperation, toOperationPlanView, type OperationPlanView } from '@/lib/operations/planning'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -376,6 +378,64 @@ function readApprovalToolCallId(item: RunToolApprovalItem): string | null {
   return readApprovalString(item.rawItem, 'callId') ?? readApprovalString(item.rawItem, 'id')
 }
 
+function readApprovalInput(item: RunToolApprovalItem): unknown {
+  const rawItem: Record<string, unknown> = isRecord(item.rawItem) ? item.rawItem : {}
+  const candidates = [
+    rawItem.arguments,
+    rawItem.args,
+    rawItem.input,
+  ]
+  for (const candidate of candidates) {
+    if (isRecord(candidate)) return candidate
+    if (typeof candidate === 'string' && candidate.trim()) {
+      const parsed: unknown = JSON.parse(candidate)
+      if (isRecord(parsed)) return parsed
+    }
+  }
+  return null
+}
+
+function readConfirmedMaxCostFromInterruptionPayload(value: unknown): number | null {
+  if (!isRecord(value)) return null
+  const operationPlan = value.operationPlan
+  if (!isRecord(operationPlan)) return null
+  const quote = operationPlan.quote
+  if (!isRecord(quote)) return null
+  const cost = quote.totalMaxFrozenCost
+  return typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+}
+
+async function buildApprovalOperationPlanView(params: {
+  request: NextRequest
+  item: RunToolApprovalItem
+  operation: ProjectAgentOperationRegistry[string] | undefined
+  projectId: string
+  userId: string
+  context: ProjectAgentContext
+  toolCallId: string | null
+}): Promise<OperationPlanView | null> {
+  if (!params.operation?.plan) return null
+  const rawInput = readApprovalInput(params.item)
+  const parsed = params.operation.inputSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    throw new Error(`PROJECT_AGENT_APPROVAL_PLAN_INPUT_INVALID:${params.operation.id}`)
+  }
+  const plan = await planOperation({
+    operation: params.operation,
+    ctx: {
+      request: params.request,
+      userId: params.userId,
+      projectId: params.projectId,
+      context: params.context,
+      source: 'assistant-panel',
+      writer: null,
+      toolCallId: params.toolCallId,
+    },
+    input: parsed.data,
+  })
+  return await toOperationPlanView(plan)
+}
+
 function matchesApprovalItem(item: RunToolApprovalItem, approvalId: string): boolean {
   return readApprovalString(item.rawItem, 'id') === approvalId
     || readApprovalString(item.rawItem, 'callId') === approvalId
@@ -525,10 +585,16 @@ export async function createProjectAgentChatResponse(input: {
 
   const control = input.control
   const contextBase = normalizeProjectAgentContext(input.context)
+  const approvedConfirmedMaxCost = control.kind === 'approval' && control.approved
+    ? readConfirmedMaxCostFromInterruptionPayload(control.interruption.payload)
+    : null
   const context: ProjectAgentContext = {
     ...contextBase,
     runId: input.run.id,
     currentActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
+    ...(approvedConfirmedMaxCost !== null && control.kind === 'approval'
+      ? { confirmedMaxCostByOperationId: { [control.interruption.operationId]: approvedConfirmedMaxCost } }
+      : {}),
   }
   const phase = await resolveProjectPhase({
     projectId: input.projectId,
@@ -883,6 +949,16 @@ export async function createProjectAgentChatResponse(input: {
         if (approvalItem && shouldPersistApprovalInterruption) {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
+          const approvalToolCallId = readApprovalToolCallId(approvalItem)
+          const operationPlan = await buildApprovalOperationPlanView({
+            request: input.request,
+            item: approvalItem,
+            operation: operations[operationId],
+            projectId: input.projectId,
+            userId: input.userId,
+            context,
+            toolCallId: approvalToolCallId,
+          })
           const interruptionId = await createProjectAgentApprovalInterruption({
             runId: input.run.id,
             projectId: input.projectId,
@@ -891,8 +967,11 @@ export async function createProjectAgentChatResponse(input: {
             assistantId: 'workspace-command',
             operationId,
             approvalId,
-            toolCallId: readApprovalToolCallId(approvalItem),
+            toolCallId: approvalToolCallId,
             runState: result.state.toString(),
+            payload: {
+              ...(operationPlan ? { operationPlan } : {}),
+            } as Prisma.InputJsonValue,
             previousActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
           })
           chunks.push(createDataChunk('data-agent-interruption', {
@@ -901,11 +980,12 @@ export async function createProjectAgentChatResponse(input: {
             interruptionId,
             approvalId,
             operationId,
-            toolCallId: readApprovalToolCallId(approvalItem),
+            toolCallId: approvalToolCallId,
             display: {
               title: localizeProjectAgentOperationTitle(operationId, normalizeProjectAgentLocale(locale)),
               description: toolDescriptions.get(operationId) ?? operationId,
             },
+            operationPlan,
           } satisfies ProjectAgentInterruptionPartData))
           await updateProjectAgentRunStatus({
             runId: input.run.id,

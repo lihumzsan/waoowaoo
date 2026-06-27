@@ -27,6 +27,7 @@ export async function submitOperationTask(params: {
   priority?: number
   locale?: Locale
   billingInfo?: TaskBillingInfo | null
+  billingInfoSource?: 'auto' | 'planned'
   decoratePayload?: boolean
 }) {
   const locale = params.locale ?? resolveRequiredTaskLocale(params.request, params.payload)
@@ -59,6 +60,7 @@ export async function submitOperationTask(params: {
     dedupeKey: params.dedupeKey || null,
     priority: params.priority ?? 0,
     billingInfo,
+    billingInfoSource: params.billingInfoSource,
     operationId: params.operationId,
     operationSource: params.source,
     operationConfirmed: params.confirmed,

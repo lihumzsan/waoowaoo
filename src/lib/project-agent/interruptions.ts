@@ -25,6 +25,7 @@ export interface ProjectAgentApprovalInterruptionRecord {
   operationId: string
   approvalId: string
   toolCallId: string | null
+  payload?: Prisma.JsonValue
   runState: string
 }
 
@@ -274,6 +275,7 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
     operationId: record.operationId,
     approvalId: record.approvalId,
     toolCallId: record.toolCallId,
+    payload: record.payload,
     runState: record.runState,
   }
 }
@@ -302,6 +304,7 @@ export async function getPendingProjectAgentApprovalInterruption(params: Project
       operationId: true,
       approvalId: true,
       toolCallId: true,
+      payload: true,
     },
   })
   if (!record) return null
@@ -314,6 +317,7 @@ export async function getPendingProjectAgentApprovalInterruption(params: Project
     operationId: record.operationId,
     approvalId: record.approvalId,
     toolCallId: record.toolCallId,
+    payload: record.payload,
   }
 }
 

@@ -2,6 +2,7 @@ import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { FlexibleSchema } from '@ai-sdk/provider-utils'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentContext, WorkspaceAssistantPartType } from '@/lib/project-agent/types'
+import type { OperationPlan } from './planning'
 
 export type ProjectAgentOperationId = string
 
@@ -22,6 +23,14 @@ export interface ProjectAgentOperationContext {
 
 type BivariantOperationExecute<Input, Output> = {
   bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<Output>
+}['bivarianceHack']
+
+type BivariantOperationPlan<Input> = {
+  bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<OperationPlan>
+}['bivarianceHack']
+
+type BivariantOperationCommit<Input, Output> = {
+  bivarianceHack(context: ProjectAgentOperationContext, input: Input, plan: OperationPlan): Promise<Output>
 }['bivarianceHack']
 
 export type OperationIntent = 'query' | 'plan' | 'act'
@@ -145,6 +154,8 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   toolInputSchema?: ProjectAgentToolInputSchema
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
+  plan?: BivariantOperationPlan<Input>
+  commit?: BivariantOperationCommit<Input, Output>
   execute: BivariantOperationExecute<Input, Output>
 }
 

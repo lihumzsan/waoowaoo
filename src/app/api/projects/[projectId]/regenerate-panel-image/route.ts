@@ -36,6 +36,7 @@ export const POST = apiHandler(async (
       ...(Array.isArray(body?.referencePanelIds) ? { referencePanelIds: body.referencePanelIds } : {}),
       ...(Array.isArray(body?.extraImageUrls) ? { extraImageUrls: body.extraImageUrls } : {}),
       ...(Array.isArray(body?.referenceImageNotes) ? { referenceImageNotes: body.referenceImageNotes } : {}),
+      ...(typeof body?.confirmedMaxCost === 'number' ? { confirmedMaxCost: body.confirmedMaxCost } : {}),
     },
     source: 'project-ui',
   })

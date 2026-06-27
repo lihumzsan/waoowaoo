@@ -1,13 +1,14 @@
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { TASK_TYPE } from '@/lib/task/types'
+import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { BillingOperationError } from '@/lib/billing/errors'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { createMutationBatch } from '@/lib/mutation-batch/service'
-import { hasPanelVideoOutput, hasVideoGroupOutput } from '@/lib/task/has-output'
+import { hasPanelVideoOutput } from '@/lib/task/has-output'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
@@ -26,7 +27,15 @@ import type {
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import {
+  assertOperationPlanConfirmedCost,
+  resolveConfirmedMaxCostForExecution,
+  submitPlannedOperationTask,
+  type OperationPlan,
+  type PlannedTask,
+} from '@/lib/operations/planning'
+import { cancelTask } from '@/lib/task/service'
+import { removeTaskJob } from '@/lib/task/queues'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -308,6 +317,57 @@ function buildVideoGroupBillingInfoOrThrow(payload: unknown) {
   }
 }
 
+function requireVideoTaskBillingInfo(taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP, payload: Record<string, unknown>): TaskBillingInfo {
+  const billingInfo = taskType === TASK_TYPE.VIDEO_PANEL
+    ? buildVideoPanelBillingInfoOrThrow(payload)
+    : buildVideoGroupBillingInfoOrThrow(payload)
+  if (!billingInfo || billingInfo.billable !== true) {
+    throw new Error(`PROJECT_AGENT_VIDEO_BILLING_INFO_REQUIRED:${taskType}`)
+  }
+  return billingInfo
+}
+
+function createVideoPlannedTask(params: {
+  id: string
+  taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP
+  targetType: string
+  targetId: string
+  payload: Record<string, unknown>
+  billingInfo: TaskBillingInfo
+  locale: PlannedTask['locale']
+  episodeId?: string | null
+  dedupeKey?: string | null
+}): PlannedTask {
+  return {
+    id: params.id,
+    taskType: params.taskType,
+    target: {
+      targetType: params.targetType,
+      targetId: params.targetId,
+    },
+    payload: params.payload,
+    billingInfo: params.billingInfo,
+    locale: params.locale,
+    episodeId: params.episodeId ?? null,
+    dedupeKey: params.dedupeKey ?? null,
+  }
+}
+
+async function compensateSubmittedVideoTasks(taskIds: readonly string[]): Promise<void> {
+  const failed: string[] = []
+  for (const taskId of taskIds) {
+    try {
+      await cancelTask(taskId, 'Operation batch submit failed before completion')
+      await removeTaskJob(taskId).catch(() => false)
+    } catch {
+      failed.push(taskId)
+    }
+  }
+  if (failed.length > 0) {
+    throw new Error(`PROJECT_AGENT_VIDEO_BATCH_TASK_COMPENSATION_FAILED:${failed.join(',')}`)
+  }
+}
+
 function buildVideoTaskPayload(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
@@ -322,6 +382,7 @@ function buildVideoTaskPayload(params: {
     },
   }
   delete payload.confirmed
+  delete payload.confirmedMaxCost
 
   return {
     payload,
@@ -373,8 +434,25 @@ async function executeGenerateEpisodeVideosOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateEpisodeVideosOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateEpisodeVideosPlan({ ...params, plan })
+}
+
+async function planGenerateEpisodeVideosOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
-  const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
+  const { payload } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
 
   const episodeId = normalizeString(payload.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) {
@@ -397,54 +475,102 @@ async function executeGenerateEpisodeVideosOperation(params: {
 
   if (panels.length === 0) {
     return {
+      kind: 'task_submission',
+      operationId: params.operationId,
+      projectId: params.ctx.projectId,
+      userId: params.ctx.userId,
+      tasks: [],
+      metadata: {
+        noop: true,
+        episodeId,
+        panels: [],
+      },
+    }
+  }
+
+  const panelPlans = await Promise.all(panels.map(async (panel) => {
+    const panelPlan = await planGeneratePanelVideoOperation({
+      ctx: params.ctx,
+      input: {
+        ...payload,
+        panelId: panel.id,
+      },
+      operationId: params.operationId,
+    })
+    return {
+      panel,
+      plan: panelPlan,
+      metadata: readPlannedPanelVideoMetadata(panelPlan),
+    }
+  }))
+
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: panelPlans.flatMap((item) => item.plan.tasks),
+    metadata: {
+      episodeId,
+      panels: panelPlans.map((item) => ({
+        panelId: item.metadata.panelId,
+        previousVideoUrl: item.metadata.previousVideoUrl,
+        previousLastVideoGenerationOptions: item.metadata.previousLastVideoGenerationOptions,
+      })),
+    },
+  }
+}
+
+async function commitGenerateEpisodeVideosPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const episodeId = isRecord(params.plan.metadata) && typeof params.plan.metadata.episodeId === 'string'
+    ? params.plan.metadata.episodeId
+    : normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
+  const panelMetadata = isRecord(params.plan.metadata) && Array.isArray(params.plan.metadata.panels)
+    ? params.plan.metadata.panels.flatMap((item) => {
+      if (!isRecord(item)) return []
+      const panelId = normalizeString(item.panelId)
+      return panelId ? [{
+        panelId,
+        previousVideoUrl: normalizeString(item.previousVideoUrl) || null,
+        previousLastVideoGenerationOptions: item.previousLastVideoGenerationOptions,
+      }] : []
+    })
+    : []
+  if (params.plan.tasks.length === 0) {
+    return {
       success: true,
       async: true,
       total: 0,
       taskIds: [],
       results: [],
       noop: true,
-      reason: '没有需要生成的视频分镜（可能是已生成或缺少图片）',
+      reason: 'NO_PANEL_VIDEOS_TO_GENERATE',
     }
   }
-
-  const tasks = await Promise.all(
-    panels.map(async (panel) => {
-      const panelPayload: UnknownObject = {
-        ...payload,
-        meta: isRecord(payload.meta) ? { ...payload.meta } : payload.meta,
-      }
-      applySystemVideoDuration(panelPayload, requirePanelSystemVideoDurationSec(panel.id, panel.duration))
-      await validateVideoTaskPayloadOrThrow({
-        payload: panelPayload,
-        projectId: params.ctx.projectId,
-        userId: params.ctx.userId,
-        modelPurpose: 'single-shot-video',
-        lastVideoGenerationOptions: panel.lastVideoGenerationOptions,
-      })
-
-      return submitOperationTask({
-        request: params.ctx.request,
-        userId: params.ctx.userId,
-        locale: localeForTask,
-        projectId: params.ctx.projectId,
-        episodeId,
-        type: TASK_TYPE.VIDEO_PANEL,
-        targetType: 'ProjectPanel',
-        targetId: panel.id,
+  const submitted: Array<{
+    task: PlannedTask
+    result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
+  }> = []
+  try {
+    for (const task of params.plan.tasks) {
+      const result = await submitPlannedOperationTask({
+        ctx: params.ctx,
+        task,
         operationId: params.operationId,
-        source: params.ctx.source,
         confirmed: params.input.confirmed === true,
-        payload: withTaskUiPayload(panelPayload, {
-          hasOutputAtStart: await hasPanelVideoOutput(panel.id),
-        }),
-        dedupeKey: `video_panel:${panel.id}`,
-        billingInfo: buildVideoPanelBillingInfoOrThrow(panelPayload),
-        decoratePayload: false,
       })
-    }),
-  )
-
-  const taskIds = tasks.map((task) => task.taskId)
+      submitted.push({ task, result })
+    }
+  } catch (error) {
+    await compensateSubmittedVideoTasks(submitted.map((item) => item.result.taskId))
+    throw error
+  }
+  const taskIds = submitted.map((item) => item.result.taskId)
   const mutationBatch = await createMutationBatch({
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
@@ -452,26 +578,27 @@ async function executeGenerateEpisodeVideosOperation(params: {
     operationId: params.operationId,
     episodeId,
     summary: `${params.operationId}:${episodeId}:batch`,
-    entries: panels.map((panel) => ({
+    entries: panelMetadata.map((panel) => ({
       kind: 'panel_video_restore',
       targetType: 'ProjectPanel',
-      targetId: panel.id,
+      targetId: panel.panelId,
       payload: {
-        previousVideoUrl: panel.videoUrl ?? null,
-        previousLastVideoGenerationOptions: panel.lastVideoGenerationOptions ?? null,
+        previousVideoUrl: panel.previousVideoUrl,
+        previousLastVideoGenerationOptions: panel.previousLastVideoGenerationOptions,
       },
     })),
   })
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
     operationId: params.operationId,
-    total: tasks.length,
+    total: submitted.length,
     taskIds,
-    results: panels.map((panel, index) => ({
-      refId: panel.id,
+    results: submitted.map((item, index) => ({
+      refId: item.task.target.targetId,
       taskId: taskIds[index] || '',
       taskType: TASK_TYPE.VIDEO_PANEL,
       targetType: 'ProjectPanel',
-      targetId: panel.id,
+      targetId: item.task.target.targetId,
+      billingReceipt: item.result.billingReceiptView,
     })),
     mutationBatchId: mutationBatch.id,
   })
@@ -479,15 +606,15 @@ async function executeGenerateEpisodeVideosOperation(params: {
   return {
     success: true,
     async: true,
-    tasks,
-    total: tasks.length,
+    tasks: submitted.map((item) => item.result),
+    total: submitted.length,
     taskIds,
-    results: panels.map((panel, index) => ({
-      refId: panel.id,
+    results: submitted.map((item, index) => ({
+      refId: item.task.target.targetId,
       taskId: taskIds[index] || '',
       taskType: TASK_TYPE.VIDEO_PANEL,
       targetType: 'ProjectPanel',
-      targetId: panel.id,
+      targetId: item.task.target.targetId,
     })),
     mutationBatchId: mutationBatch.id,
   }
@@ -521,6 +648,8 @@ async function findExistingVideoGroup(params: {
       taskId: true,
       errorCode: true,
       errorMessage: true,
+      durationSec: true,
+      prompt: true,
       referenceImageUrl: true,
       referenceImageMediaId: true,
       videoUrl: true,
@@ -675,50 +804,6 @@ async function resolveVideoGroupInput(params: {
   }
 }
 
-async function upsertVideoGroupForTask(params: {
-  projectId: string
-  episodeId: string
-  gridMode: string
-  shotNumbers: readonly number[]
-  durationSec: number
-  clearReferenceImage?: boolean
-}) {
-  const existing = await findExistingVideoGroup({
-    episodeId: params.episodeId,
-    gridMode: params.gridMode,
-    shotNumbers: params.shotNumbers,
-  })
-  if (existing) {
-    await prisma.projectVideoGroup.update({
-      where: { id: existing.id },
-      data: {
-        durationSec: params.durationSec,
-        status: 'queued',
-        taskId: null,
-        errorCode: null,
-        errorMessage: null,
-        ...(params.clearReferenceImage ? {
-          referenceImageUrl: null,
-          referenceImageMediaId: null,
-        } : {}),
-      },
-    })
-    return { groupId: existing.id, previous: existing }
-  }
-  const created = await prisma.projectVideoGroup.create({
-    data: {
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      gridMode: params.gridMode,
-      shotNumbers: params.shotNumbers as unknown as Prisma.InputJsonValue,
-      durationSec: params.durationSec,
-      status: 'queued',
-    },
-    select: { id: true },
-  })
-  return { groupId: created.id, previous: null }
-}
-
 function validateAssetReferenceShotNumbers(shotNumbers: readonly number[]): number[] {
   const normalized = shotNumbers.map((value) => Number(value))
   if (normalized.some((value) => !Number.isInteger(value) || value <= 0)) {
@@ -743,24 +828,168 @@ function gridModeForAssetReferenceItem(item: VideoBlockPlanItem): string {
   return ASSET_REFERENCE_GRID_MODE
 }
 
-async function submitAssetReferenceVideoBlockTask(params: {
+function readStoryboardVideoGridMode(value: unknown): VideoGridMode {
+  return value === '3x3' ? '3x3' : '2x2'
+}
+
+type ExistingVideoGroupRecord = NonNullable<Awaited<ReturnType<typeof findExistingVideoGroup>>>
+
+type PlannedVideoGroupTaskMetadata = {
+  planTaskId: string
+  projectId: string
+  groupId: string
+  episodeId: string
+  gridMode: string
+  shotNumbers: number[]
+  durationSec: number
+  previous: ExistingVideoGroupRecord | null
+  sourceMode?: 'asset_reference' | null
+  prompt?: string | null
+  referenceImageUrls?: string[]
+  blockIndex?: number
+}
+
+type CommittedVideoGroupTask = {
+  metadata: PlannedVideoGroupTaskMetadata
+  result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
+}
+
+function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTaskMetadata {
+  if (!isRecord(value)) throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
+  const planTaskId = normalizeString(value.planTaskId)
+  const projectId = normalizeString(value.projectId)
+  const groupId = normalizeString(value.groupId)
+  const episodeId = normalizeString(value.episodeId)
+  const gridMode = normalizeString(value.gridMode)
+  const shotNumbers = parseShotNumbersJson(value.shotNumbers)
+  const durationSec = Number(value.durationSec)
+  if (!planTaskId || !projectId || !groupId || !episodeId || !gridMode || shotNumbers.length === 0 || !Number.isInteger(durationSec) || durationSec <= 0) {
+    throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
+  }
+  return {
+    planTaskId,
+    projectId,
+    groupId,
+    episodeId,
+    gridMode,
+    shotNumbers,
+    durationSec,
+    previous: isRecord(value.previous) ? value.previous as ExistingVideoGroupRecord : null,
+    sourceMode: value.sourceMode === 'asset_reference' ? 'asset_reference' : null,
+    prompt: normalizeString(value.prompt) || null,
+    referenceImageUrls: normalizeStringList(value.referenceImageUrls),
+    blockIndex: typeof value.blockIndex === 'number' && Number.isInteger(value.blockIndex) ? value.blockIndex : undefined,
+  }
+}
+
+function readPlannedVideoGroupMetadataList(plan: OperationPlan): PlannedVideoGroupTaskMetadata[] {
+  const metadata = isRecord(plan.metadata) ? plan.metadata : {}
+  const groups = Array.isArray(metadata.videoGroups) ? metadata.videoGroups : []
+  return groups.map(readPlannedVideoGroupTaskMetadata)
+}
+
+function readPlannedVideoGroupMetadataByTaskId(plan: OperationPlan): Map<string, PlannedVideoGroupTaskMetadata> {
+  return new Map(readPlannedVideoGroupMetadataList(plan).map((metadata) => [metadata.planTaskId, metadata]))
+}
+
+async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMetadata): Promise<void> {
+  const resetReferenceImage = metadata.sourceMode === 'asset_reference'
+  if (metadata.previous) {
+    await prisma.projectVideoGroup.update({
+      where: { id: metadata.groupId },
+      data: {
+        durationSec: metadata.durationSec,
+        status: 'queued',
+        taskId: null,
+        errorCode: null,
+        errorMessage: null,
+        ...(resetReferenceImage ? {
+          referenceImageUrl: null,
+          referenceImageMediaId: null,
+        } : {}),
+      },
+    })
+    return
+  }
+
+  await prisma.projectVideoGroup.create({
+    data: {
+      id: metadata.groupId,
+      projectId: metadata.projectId,
+      episodeId: metadata.episodeId,
+      gridMode: metadata.gridMode,
+      shotNumbers: metadata.shotNumbers as unknown as Prisma.InputJsonValue,
+      durationSec: metadata.durationSec,
+      status: 'queued',
+    },
+  })
+}
+
+async function rollbackVideoGroupTaskRecord(params: {
+  groupId: string
+  previous: ExistingVideoGroupRecord | null
+}) {
+  try {
+    if (!params.previous) {
+      await prisma.projectVideoGroup.delete({ where: { id: params.groupId } })
+      return
+    }
+    await prisma.projectVideoGroup.update({
+      where: { id: params.groupId },
+      data: {
+        status: params.previous.status,
+        taskId: params.previous.taskId,
+        errorCode: params.previous.errorCode,
+        errorMessage: params.previous.errorMessage,
+        durationSec: params.previous.durationSec,
+        prompt: params.previous.prompt,
+        referenceImageUrl: params.previous.referenceImageUrl,
+        referenceImageMediaId: params.previous.referenceImageMediaId,
+        videoUrl: params.previous.videoUrl,
+        videoMediaId: params.previous.videoMediaId,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`PROJECT_AGENT_VIDEO_GROUP_RECORD_ROLLBACK_FAILED:${params.groupId}:${message}`)
+  }
+}
+
+async function rollbackCommittedVideoGroups(committed: readonly CommittedVideoGroupTask[]): Promise<void> {
+  const failures: string[] = []
+  for (const item of committed) {
+    try {
+      await rollbackVideoGroupTaskRecord({
+        groupId: item.metadata.groupId,
+        previous: item.metadata.previous,
+      })
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`PROJECT_AGENT_VIDEO_GROUP_BATCH_RECORD_ROLLBACK_FAILED:${failures.join(';')}`)
+  }
+}
+
+async function planAssetReferenceVideoBlockTask(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
   operationId: string
   episodeId: string
   item: VideoBlockPlanItem
-  shots?: readonly VideoGroupShot[]
-}) {
+  shots: readonly VideoGroupShot[]
+  blockIndex?: number
+}): Promise<{
+  task: PlannedTask
+  metadata: PlannedVideoGroupTaskMetadata
+}> {
   const referenceImageUrls = normalizeStringList(params.input.referenceImageUrls)
   if (referenceImageUrls.length === 0) {
     throw new Error('PROJECT_AGENT_ASSET_REFERENCE_IMAGES_REQUIRED')
   }
   const shotNumbers = validateAssetReferenceShotNumbers(params.item.shotNumbers)
-  const shots = params.shots ?? (await buildEpisodeVideoBlockPlan({
-    ctx: params.ctx,
-    episodeId: params.episodeId,
-  })).shots
-  const durationSec = durationForShotNumbers(shots, shotNumbers)
+  const durationSec = durationForShotNumbers(params.shots, shotNumbers)
   if (durationSec < 1 || durationSec > 15) {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_DURATION_UNSUPPORTED:${durationSec}`)
   }
@@ -782,88 +1011,57 @@ async function submitAssetReferenceVideoBlockTask(params: {
     modelPurpose: 'sequence-video',
   })
 
-  const { groupId, previous } = await upsertVideoGroupForTask({
-    projectId: params.ctx.projectId,
+  const gridMode = String(payload.gridMode)
+  const previous = await findExistingVideoGroup({
     episodeId: params.episodeId,
-    gridMode: String(payload.gridMode),
+    gridMode,
     shotNumbers,
-    durationSec,
-    clearReferenceImage: true,
   })
-
-  try {
-    const result = await submitOperationTask({
-      request: params.ctx.request,
-      userId: params.ctx.userId,
-      locale: localeForTask,
-      projectId: params.ctx.projectId,
-      episodeId: params.episodeId,
-      type: TASK_TYPE.VIDEO_GROUP,
+  const groupId = previous?.id ?? randomUUID()
+  const planTaskId = `${params.operationId}:asset_reference:${params.blockIndex ?? shotNumbers.join('-')}:${groupId}`
+  const billingInfo = requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_GROUP, payload)
+  return {
+    task: createVideoPlannedTask({
+      id: planTaskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       targetId: groupId,
-      operationId: params.operationId,
-      source: params.ctx.source,
-      confirmed: params.input.confirmed === true,
+      locale: localeForTask,
+      episodeId: params.episodeId,
       payload: withTaskUiPayload(payload, {
-        hasOutputAtStart: await hasVideoGroupOutput(groupId),
+        hasOutputAtStart: Boolean(previous?.videoUrl || previous?.videoMediaId),
       }),
       dedupeKey: `video_group:${groupId}`,
-      billingInfo: buildVideoGroupBillingInfoOrThrow(payload),
-      decoratePayload: false,
-    })
-    await prisma.projectVideoGroup.update({
-      where: { id: groupId },
-      data: {
-        taskId: result.taskId,
-        status: result.status,
-        prompt: params.item.prompt,
-        referenceImageUrl: referenceImageUrls[0] ?? null,
-        referenceImageMediaId: null,
-      },
-    })
-    return {
-      result,
+      billingInfo,
+    }),
+    metadata: {
+      planTaskId,
+      projectId: params.ctx.projectId,
       groupId,
-      durationSec,
+      episodeId: params.episodeId,
+      gridMode,
       shotNumbers,
-    }
-  } catch (error) {
-    await rollbackVideoGroupTaskRecord({ groupId, previous })
-    throw error
-  }
-}
-
-async function rollbackVideoGroupTaskRecord(params: {
-  groupId: string
-  previous: Awaited<ReturnType<typeof findExistingVideoGroup>> | null
-}) {
-  if (!params.previous) {
-    await prisma.projectVideoGroup.delete({ where: { id: params.groupId } }).catch(() => undefined)
-    return
-  }
-  await prisma.projectVideoGroup.update({
-    where: { id: params.groupId },
-    data: {
-      status: params.previous.status,
-      taskId: params.previous.taskId,
-      errorCode: params.previous.errorCode,
-      errorMessage: params.previous.errorMessage,
-      referenceImageUrl: params.previous.referenceImageUrl,
-      referenceImageMediaId: params.previous.referenceImageMediaId,
-      videoUrl: params.previous.videoUrl,
-      videoMediaId: params.previous.videoMediaId,
+      durationSec,
+      previous,
+      sourceMode: 'asset_reference',
+      prompt: params.item.prompt,
+      referenceImageUrls,
+      blockIndex: params.blockIndex,
     },
-  }).catch(() => undefined)
+  }
 }
 
-async function submitVideoGroupTask(params: {
+async function planVideoGroupTask(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
   operationId: string
   episodeId: string
   gridMode: VideoGridMode
   shotNumbers: readonly number[]
-}) {
+}): Promise<{
+  task: PlannedTask
+  metadata: PlannedVideoGroupTaskMetadata
+}> {
   const resolved = await resolveVideoGroupInput({
     projectId: params.ctx.projectId,
     episodeId: params.episodeId,
@@ -885,51 +1083,121 @@ async function submitVideoGroupTask(params: {
     modelPurpose: 'sequence-video',
   })
 
-  const { groupId, previous } = await upsertVideoGroupForTask({
-    projectId: params.ctx.projectId,
+  const previous = await findExistingVideoGroup({
     episodeId: params.episodeId,
     gridMode: params.gridMode,
     shotNumbers: resolved.shotNumbers,
-    durationSec,
   })
-
-  try {
-    const result = await submitOperationTask({
-      request: params.ctx.request,
-      userId: params.ctx.userId,
-      locale: localeForTask,
-      projectId: params.ctx.projectId,
-      episodeId: params.episodeId,
-      type: TASK_TYPE.VIDEO_GROUP,
+  const groupId = previous?.id ?? randomUUID()
+  const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotNumbers.join('-')}:${groupId}`
+  const billingInfo = requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_GROUP, payload)
+  return {
+    task: createVideoPlannedTask({
+      id: planTaskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       targetId: groupId,
-      operationId: params.operationId,
-      source: params.ctx.source,
-      confirmed: params.input.confirmed === true,
+      locale: localeForTask,
+      episodeId: params.episodeId,
       payload: withTaskUiPayload(payload, {
-        hasOutputAtStart: await hasVideoGroupOutput(groupId),
+        hasOutputAtStart: Boolean(previous?.videoUrl || previous?.videoMediaId),
       }),
       dedupeKey: `video_group:${groupId}`,
-      billingInfo: buildVideoGroupBillingInfoOrThrow(payload),
-      decoratePayload: false,
+      billingInfo,
+    }),
+    metadata: {
+      planTaskId,
+      projectId: params.ctx.projectId,
+      groupId,
+      episodeId: params.episodeId,
+      gridMode: params.gridMode,
+      shotNumbers: resolved.shotNumbers,
+      durationSec,
+      previous,
+    },
+  }
+}
+
+async function commitPlannedVideoGroupTask(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  task: PlannedTask
+  metadata: PlannedVideoGroupTaskMetadata
+}): Promise<CommittedVideoGroupTask> {
+  await prepareVideoGroupRecordForPlan(params.metadata)
+  let submittedTaskId: string | null = null
+  try {
+    const result = await submitPlannedOperationTask({
+      ctx: params.ctx,
+      task: params.task,
+      operationId: params.operationId,
+      confirmed: params.input.confirmed === true,
     })
+    submittedTaskId = result.taskId
     await prisma.projectVideoGroup.update({
-      where: { id: groupId },
+      where: { id: params.metadata.groupId },
       data: {
         taskId: result.taskId,
         status: result.status,
+        ...(params.metadata.sourceMode === 'asset_reference' ? {
+          prompt: params.metadata.prompt ?? null,
+          referenceImageUrl: params.metadata.referenceImageUrls?.[0] ?? null,
+          referenceImageMediaId: null,
+        } : {}),
       },
     })
     return {
+      metadata: params.metadata,
       result,
-      groupId,
-      durationSec,
-      shotNumbers: resolved.shotNumbers,
     }
   } catch (error) {
-    await rollbackVideoGroupTaskRecord({ groupId, previous })
+    if (submittedTaskId) {
+      await compensateSubmittedVideoTasks([submittedTaskId])
+    }
+    await rollbackVideoGroupTaskRecord({
+      groupId: params.metadata.groupId,
+      previous: params.metadata.previous,
+    })
     throw error
   }
+}
+
+async function commitPlannedVideoGroupBatch(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}): Promise<CommittedVideoGroupTask[]> {
+  const metadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
+  const committed: CommittedVideoGroupTask[] = []
+  try {
+    for (const task of params.plan.tasks) {
+      const metadata = metadataByTaskId.get(task.id)
+      if (!metadata) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PLAN_TASK_METADATA_MISSING:${task.id}`)
+      committed.push(await commitPlannedVideoGroupTask({
+        ctx: params.ctx,
+        input: params.input,
+        operationId: params.operationId,
+        task,
+        metadata,
+      }))
+    }
+  } catch (error) {
+    const failures: string[] = []
+    await compensateSubmittedVideoTasks(committed.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
+      failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
+    })
+    await rollbackCommittedVideoGroups(committed).catch((rollbackError: unknown) => {
+      failures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
+    })
+    if (failures.length > 0) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`PROJECT_AGENT_VIDEO_GROUP_BATCH_COMPENSATION_FAILED:${message}:${failures.join(';')}`)
+    }
+    throw error
+  }
+  return committed
 }
 
 async function executeGenerateVideoGroupOperation(params: {
@@ -937,6 +1205,23 @@ async function executeGenerateVideoGroupOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateVideoGroupOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateVideoGroupPlan({ ...params, plan })
+}
+
+async function planGenerateVideoGroupOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
@@ -944,7 +1229,7 @@ async function executeGenerateVideoGroupOperation(params: {
   const shotNumbers = Array.isArray(params.input.shotNumbers)
     ? params.input.shotNumbers.map((value) => Number(value))
     : []
-  const submitted = await submitVideoGroupTask({
+  const planned = await planVideoGroupTask({
     ctx: params.ctx,
     input: params.input,
     operationId: params.operationId,
@@ -952,28 +1237,60 @@ async function executeGenerateVideoGroupOperation(params: {
     gridMode,
     shotNumbers,
   })
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: [planned.task],
+    metadata: {
+      episodeId,
+      gridMode,
+      videoGroups: [planned.metadata],
+    },
+  }
+}
+
+async function commitGenerateVideoGroupPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const task = params.plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const metadata = readPlannedVideoGroupMetadataList(params.plan)[0]
+  if (!metadata) throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_MISSING')
+  const submitted = await commitPlannedVideoGroupTask({
+    ctx: params.ctx,
+    input: params.input,
+    operationId: params.operationId,
+    task,
+    metadata,
+  })
   writeOperationDataPart<TaskSubmittedPartData>(params.ctx.writer, 'data-task-submitted', {
     operationId: params.operationId,
     taskId: submitted.result.taskId,
     status: submitted.result.status,
     runId: submitted.result.runId || null,
     deduped: submitted.result.deduped,
+    billingReceipt: submitted.result.billingReceiptView,
     projectId: params.ctx.projectId,
-    episodeId,
+    episodeId: submitted.metadata.episodeId,
     taskType: TASK_TYPE.VIDEO_GROUP,
     targetType: 'ProjectVideoGroup',
-    targetId: submitted.groupId,
+    targetId: submitted.metadata.groupId,
   })
   return {
     ...submitted.result,
-    groupId: submitted.groupId,
+    groupId: submitted.metadata.groupId,
     taskType: TASK_TYPE.VIDEO_GROUP,
     targetType: 'ProjectVideoGroup',
-    targetId: submitted.groupId,
-    episodeId,
-    gridMode,
-    shotNumbers: submitted.shotNumbers,
-    durationSec: submitted.durationSec,
+    targetId: submitted.metadata.groupId,
+    episodeId: submitted.metadata.episodeId,
+    gridMode: readStoryboardVideoGridMode(submitted.metadata.gridMode),
+    shotNumbers: submitted.metadata.shotNumbers,
+    durationSec: submitted.metadata.durationSec,
   }
 }
 
@@ -982,6 +1299,23 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateEpisodeVideoGroupsOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateEpisodeVideoGroupsPlan({ ...params, plan })
+}
+
+async function planGenerateEpisodeVideoGroupsOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
@@ -998,20 +1332,24 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
   })
   if (chunks.length === 0) {
     return {
-      success: true,
-      async: true,
-      total: 0,
-      taskIds: [],
-      results: [],
-      noop: true,
-      reason: '没有足够镜头组成连续视频片段',
-      gridMode,
+      kind: 'task_submission',
+      operationId: params.operationId,
+      projectId: params.ctx.projectId,
+      userId: params.ctx.userId,
+      tasks: [],
+      metadata: {
+        noop: true,
+        reason: 'NO_VIDEO_GROUPS_TO_GENERATE',
+        episodeId,
+        gridMode,
+        videoGroups: [],
+      },
     }
   }
 
-  const submitted = []
+  const planned = []
   for (const shotNumbers of chunks) {
-    submitted.push(await submitVideoGroupTask({
+    planned.push(await planVideoGroupTask({
       ctx: params.ctx,
       input: params.input,
       operationId: params.operationId,
@@ -1020,17 +1358,53 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
       shotNumbers,
     }))
   }
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: planned.map((item) => item.task),
+    metadata: {
+      episodeId,
+      gridMode,
+      videoGroups: planned.map((item) => item.metadata),
+    },
+  }
+}
+
+async function commitGenerateEpisodeVideoGroupsPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
+  const gridMode: VideoGridMode = readStoryboardVideoGridMode(metadata.gridMode)
+  if (params.plan.tasks.length === 0) {
+    return {
+      success: true,
+      async: true,
+      total: 0,
+      taskIds: [],
+      results: [],
+      noop: true,
+      reason: normalizeString(metadata.reason) || 'NO_VIDEO_GROUPS_TO_GENERATE',
+      gridMode,
+    }
+  }
+  const submitted = await commitPlannedVideoGroupBatch(params)
   const taskIds = submitted.map((item) => item.result.taskId)
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
     results: submitted.map((item) => ({
-      refId: item.groupId,
+      refId: item.metadata.groupId,
       taskId: item.result.taskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
-      targetId: item.groupId,
+      targetId: item.metadata.groupId,
+      billingReceipt: item.result.billingReceiptView,
     })),
   })
   return {
@@ -1039,13 +1413,13 @@ async function executeGenerateEpisodeVideoGroupsOperation(params: {
     total: submitted.length,
     taskIds,
     results: submitted.map((item) => ({
-      refId: item.groupId,
+      refId: item.metadata.groupId,
       taskId: item.result.taskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
-      targetId: item.groupId,
-      shotNumbers: item.shotNumbers,
-      durationSec: item.durationSec,
+      targetId: item.metadata.groupId,
+      shotNumbers: item.metadata.shotNumbers,
+      durationSec: item.metadata.durationSec,
     })),
     gridMode,
   }
@@ -1056,6 +1430,23 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateEpisodeVideosAutoOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateEpisodeVideosAutoPlan({ ...params, plan })
+}
+
+async function planGenerateEpisodeVideosAutoOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
@@ -1077,17 +1468,18 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     episodeId,
   })
 
-  const submitted: Array<{
-    readonly refId: string
-    readonly taskId: string
-    readonly taskType: string
-    readonly targetType: string
-    readonly targetId: string
+  const tasks: PlannedTask[] = []
+  const items: Array<{
+    readonly planTaskId: string
     readonly kind: VideoBlockPlanItem['kind']
+    readonly refId: string
+    readonly taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP
+    readonly targetType: 'ProjectPanel' | 'ProjectVideoGroup'
     readonly shotNumbers: number[]
     readonly durationSec?: number
   }> = []
-  const taskIds: string[] = []
+  const panelMetadata: Array<PlannedPanelVideoMetadata & { planTaskId: string }> = []
+  const videoGroups: PlannedVideoGroupTaskMetadata[] = []
 
   for (const item of planned.plan.items) {
     if (item.kind === 'single') {
@@ -1095,7 +1487,7 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
         episodeId,
         shotNumber: item.shotNumbers[0],
       })
-      const singleResult = await executeGeneratePanelVideoOperation({
+      const panelPlan = await planGeneratePanelVideoOperation({
         ctx: params.ctx,
         input: {
           confirmed: params.input.confirmed,
@@ -1105,14 +1497,19 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
         },
         operationId: params.operationId,
       })
-      const taskId = normalizeString(singleResult.taskId)
-      taskIds.push(taskId)
-      submitted.push({
+      const task = panelPlan.tasks[0]
+      if (!task) throw new Error('PROJECT_AGENT_AUTO_VIDEO_PANEL_PLAN_EMPTY')
+      tasks.push(task)
+      const metadata = readPlannedPanelVideoMetadata(panelPlan)
+      panelMetadata.push({
+        ...metadata,
+        planTaskId: task.id,
+      })
+      items.push({
+        planTaskId: task.id,
         refId: panelId,
-        taskId,
         taskType: TASK_TYPE.VIDEO_PANEL,
         targetType: 'ProjectPanel',
-        targetId: panelId,
         kind: 'single',
         shotNumbers: [...item.shotNumbers],
       })
@@ -1120,10 +1517,11 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     }
 
     if (!item.gridMode) throw new Error('PROJECT_AGENT_AUTO_VIDEO_GROUP_GRID_MODE_REQUIRED')
-    const groupResult = await submitVideoGroupTask({
+    const groupPlan = await planVideoGroupTask({
       ctx: params.ctx,
       input: {
         confirmed: params.input.confirmed,
+        confirmedMaxCost: params.input.confirmedMaxCost,
         generationOptions: params.input.generationOptions,
       },
       operationId: params.operationId,
@@ -1131,30 +1529,189 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
       gridMode: item.gridMode,
       shotNumbers: item.shotNumbers,
     })
-    taskIds.push(groupResult.result.taskId)
-    submitted.push({
-      refId: groupResult.groupId,
-      taskId: groupResult.result.taskId,
+    tasks.push(groupPlan.task)
+    videoGroups.push(groupPlan.metadata)
+    items.push({
+      planTaskId: groupPlan.task.id,
+      refId: groupPlan.metadata.groupId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
-      targetId: groupResult.groupId,
       kind: 'group',
-      shotNumbers: [...groupResult.shotNumbers],
-      durationSec: groupResult.durationSec,
+      shotNumbers: [...groupPlan.metadata.shotNumbers],
+      durationSec: groupPlan.metadata.durationSec,
     })
   }
+
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks,
+    metadata: {
+      episodeId,
+      items,
+      panels: panelMetadata,
+      videoGroups,
+      videoBlockItems: planned.plan.items.map((item) => ({
+        ...item,
+        shotNumbers: [...item.shotNumbers],
+      })),
+      singleVideoModel,
+      groupVideoModel,
+    },
+  }
+}
+
+async function commitGenerateEpisodeVideosAutoPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
+  const episodeId = normalizeString(metadata.episodeId) || normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
+  const rawItems = Array.isArray(metadata.items) ? metadata.items : []
+  const items = rawItems.flatMap((item) => {
+    if (!isRecord(item)) return []
+    const planTaskId = normalizeString(item.planTaskId)
+    const refId = normalizeString(item.refId)
+    const kind: 'single' | 'group' = item.kind === 'group' ? 'group' : 'single'
+    const targetType = item.targetType === 'ProjectVideoGroup' ? 'ProjectVideoGroup' : 'ProjectPanel'
+    const taskType = item.taskType === TASK_TYPE.VIDEO_GROUP ? TASK_TYPE.VIDEO_GROUP : TASK_TYPE.VIDEO_PANEL
+    if (!planTaskId || !refId) return []
+    return [{
+      planTaskId,
+      refId,
+      kind,
+      targetType,
+      taskType,
+      shotNumbers: parseShotNumbersJson(item.shotNumbers),
+      durationSec: typeof item.durationSec === 'number' && Number.isInteger(item.durationSec) ? item.durationSec : undefined,
+    }]
+  })
+  const itemByTaskId = new Map(items.map((item) => [item.planTaskId, item]))
+  const videoBlockItems: Array<{
+    kind: 'single' | 'group'
+    shotNumbers: number[]
+    reason: string
+    prompt: string
+    gridMode?: VideoGridMode
+  }> = Array.isArray(metadata.videoBlockItems)
+    ? metadata.videoBlockItems.flatMap((item) => {
+      if (!isRecord(item)) return []
+      const kind: 'single' | 'group' = item.kind === 'group' ? 'group' : 'single'
+      const shotNumbers = parseShotNumbersJson(item.shotNumbers)
+      const reason = normalizeString(item.reason)
+      const prompt = normalizeString(item.prompt)
+      const gridMode = item.gridMode === '2x2' || item.gridMode === '3x3' ? item.gridMode : undefined
+      if (shotNumbers.length === 0 || !reason || !prompt) return []
+      return [{
+        kind,
+        shotNumbers,
+        reason,
+        prompt,
+        ...(gridMode ? { gridMode } : {}),
+      }]
+    })
+    : []
+  const panelMetadata = Array.isArray(metadata.panels)
+    ? metadata.panels.flatMap((item) => {
+      if (!isRecord(item)) return []
+      const panelId = normalizeString(item.panelId)
+      const planTaskId = normalizeString(item.planTaskId)
+      return panelId && planTaskId ? [{
+        planTaskId,
+        panelId,
+        previousVideoUrl: normalizeString(item.previousVideoUrl) || null,
+        previousLastVideoGenerationOptions: item.previousLastVideoGenerationOptions,
+      }] : []
+    })
+    : []
+  const videoGroupMetadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
+  const submitted: Array<{
+    task: PlannedTask
+    result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
+  }> = []
+  const committedGroups: CommittedVideoGroupTask[] = []
+  try {
+    for (const task of params.plan.tasks) {
+      const item = itemByTaskId.get(task.id)
+      if (!item) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PLAN_ITEM_MISSING:${task.id}`)
+      if (item.taskType === TASK_TYPE.VIDEO_GROUP) {
+        const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
+        if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
+        const committed = await commitPlannedVideoGroupTask({
+          ctx: params.ctx,
+          input: params.input,
+          operationId: params.operationId,
+          task,
+          metadata: groupMetadata,
+        })
+        committedGroups.push(committed)
+        submitted.push({ task, result: committed.result })
+        continue
+      }
+      const result = await submitPlannedOperationTask({
+        ctx: params.ctx,
+        task,
+        operationId: params.operationId,
+        confirmed: params.input.confirmed === true,
+      })
+      submitted.push({ task, result })
+    }
+  } catch (error) {
+    const failures: string[] = []
+    await compensateSubmittedVideoTasks(submitted.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
+      failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
+    })
+    await rollbackCommittedVideoGroups(committedGroups).catch((rollbackError: unknown) => {
+      failures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
+    })
+    if (failures.length > 0) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`PROJECT_AGENT_AUTO_VIDEO_BATCH_COMPENSATION_FAILED:${message}:${failures.join(';')}`)
+    }
+    throw error
+  }
+
+  const taskIds = submitted.map((item) => item.result.taskId)
+  const mutationBatch = panelMetadata.length > 0
+    ? await createMutationBatch({
+      projectId: params.ctx.projectId,
+      userId: params.ctx.userId,
+      source: params.ctx.source,
+      operationId: params.operationId,
+      episodeId,
+      summary: `${params.operationId}:${episodeId}:auto`,
+      entries: panelMetadata.map((panel) => ({
+        kind: 'panel_video_restore',
+        targetType: 'ProjectPanel',
+        targetId: panel.panelId,
+        payload: {
+          previousVideoUrl: panel.previousVideoUrl,
+          previousLastVideoGenerationOptions: panel.previousLastVideoGenerationOptions,
+        },
+      })),
+    })
+    : null
 
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
-    results: submitted.map((item) => ({
-      refId: item.refId,
-      taskId: item.taskId,
-      taskType: TASK_TYPE.VIDEO_GROUP,
-      targetType: 'ProjectVideoGroup',
-      targetId: item.refId,
-    })),
+    results: submitted.map((item, index) => {
+      const plannedItem = itemByTaskId.get(item.task.id)
+      return {
+        refId: plannedItem?.refId ?? item.task.target.targetId,
+        taskId: taskIds[index] || '',
+        taskType: item.task.taskType,
+        targetType: item.task.target.targetType,
+        targetId: item.task.target.targetId,
+        billingReceipt: item.result.billingReceiptView,
+      }
+    }),
+    mutationBatchId: mutationBatch?.id ?? null,
   })
 
   return {
@@ -1162,15 +1719,25 @@ async function executeGenerateEpisodeVideosAutoOperation(params: {
     async: true,
     total: submitted.length,
     taskIds,
-    results: submitted,
+    results: submitted.map((item, index) => {
+      const plannedItem = itemByTaskId.get(item.task.id)
+      return {
+        refId: plannedItem?.refId ?? item.task.target.targetId,
+        taskId: taskIds[index] || '',
+        taskType: item.task.taskType,
+        targetType: item.task.target.targetType,
+        targetId: item.task.target.targetId,
+        kind: plannedItem?.kind ?? ('single' as const),
+        shotNumbers: plannedItem?.shotNumbers ?? [],
+        durationSec: plannedItem?.durationSec,
+      }
+    }),
     plan: {
-      items: planned.plan.items.map((item) => ({
-        ...item,
-        shotNumbers: [...item.shotNumbers],
-      })),
+      items: videoBlockItems,
     },
-    singleVideoModel,
-    groupVideoModel,
+    singleVideoModel: normalizeString(metadata.singleVideoModel),
+    groupVideoModel: normalizeString(metadata.groupVideoModel),
+    mutationBatchId: mutationBatch?.id ?? undefined,
   }
 }
 
@@ -1179,6 +1746,23 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateAssetReferenceVideoOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateAssetReferenceVideoPlan({ ...params, plan })
+}
+
+async function planGenerateAssetReferenceVideoOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
@@ -1193,13 +1777,50 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
   const item = planned.plan.items[blockIndex]
   if (!item) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_BLOCK_NOT_FOUND:${blockIndex}`)
 
-  const submitted = await submitAssetReferenceVideoBlockTask({
+  const plannedTask = await planAssetReferenceVideoBlockTask({
     ctx: params.ctx,
     input: params.input,
     operationId: params.operationId,
     episodeId,
     item,
     shots: planned.shots,
+    blockIndex,
+  })
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: [plannedTask.task],
+    metadata: {
+      episodeId,
+      sourceMode: 'asset_reference',
+      blockIndex,
+      videoGroups: [plannedTask.metadata],
+    },
+  }
+}
+
+async function commitGenerateAssetReferenceVideoPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
+  const blockIndex = typeof metadata.blockIndex === 'number' && Number.isInteger(metadata.blockIndex)
+    ? metadata.blockIndex
+    : -1
+  const task = params.plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const groupMetadata = readPlannedVideoGroupMetadataList(params.plan)[0]
+  if (!groupMetadata) throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_MISSING')
+  const submitted = await commitPlannedVideoGroupTask({
+    ctx: params.ctx,
+    input: params.input,
+    operationId: params.operationId,
+    task,
+    metadata: groupMetadata,
   })
   writeOperationDataPart<TaskSubmittedPartData>(params.ctx.writer, 'data-task-submitted', {
     operationId: params.operationId,
@@ -1207,23 +1828,24 @@ async function executeGenerateAssetReferenceVideoOperation(params: {
     status: submitted.result.status,
     runId: submitted.result.runId || null,
     deduped: submitted.result.deduped,
+    billingReceipt: submitted.result.billingReceiptView,
     projectId: params.ctx.projectId,
-    episodeId,
+    episodeId: groupMetadata.episodeId,
     taskType: TASK_TYPE.VIDEO_GROUP,
     targetType: 'ProjectVideoGroup',
-    targetId: submitted.groupId,
+    targetId: groupMetadata.groupId,
   })
   return {
     ...submitted.result,
-    groupId: submitted.groupId,
+    groupId: groupMetadata.groupId,
     taskType: TASK_TYPE.VIDEO_GROUP,
     targetType: 'ProjectVideoGroup',
-    targetId: submitted.groupId,
-    episodeId,
+    targetId: groupMetadata.groupId,
+    episodeId: groupMetadata.episodeId,
     sourceMode: 'asset_reference' as const,
     blockIndex,
-    shotNumbers: submitted.shotNumbers,
-    durationSec: submitted.durationSec,
+    shotNumbers: groupMetadata.shotNumbers,
+    durationSec: groupMetadata.durationSec,
   }
 }
 
@@ -1232,6 +1854,23 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
   input: UnknownObject
   operationId: string
 }) {
+  const plan = await planGenerateEpisodeAssetReferenceVideosOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateEpisodeAssetReferenceVideosPlan({ ...params, plan })
+}
+
+async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
@@ -1240,28 +1879,51 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
     episodeId,
   })
 
-  const submitted = []
-  for (const item of planned.plan.items) {
-    submitted.push(await submitAssetReferenceVideoBlockTask({
+  const plannedTasks = []
+  for (const [blockIndex, item] of planned.plan.items.entries()) {
+    plannedTasks.push(await planAssetReferenceVideoBlockTask({
       ctx: params.ctx,
       input: params.input,
       operationId: params.operationId,
       episodeId,
       item,
       shots: planned.shots,
+      blockIndex,
     }))
   }
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: plannedTasks.map((item) => item.task),
+    metadata: {
+      episodeId,
+      sourceMode: 'asset_reference',
+      videoGroups: plannedTasks.map((item) => item.metadata),
+    },
+  }
+}
+
+async function commitGenerateEpisodeAssetReferenceVideosPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const submitted = await commitPlannedVideoGroupBatch(params)
   const taskIds = submitted.map((item) => item.result.taskId)
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
     operationId: params.operationId,
     total: submitted.length,
     taskIds,
     results: submitted.map((item) => ({
-      refId: item.groupId,
+      refId: item.metadata.groupId,
       taskId: item.result.taskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
-      targetId: item.groupId,
+      targetId: item.metadata.groupId,
+      billingReceipt: item.result.billingReceiptView,
     })),
   })
 
@@ -1271,23 +1933,42 @@ async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
     total: submitted.length,
     taskIds,
     results: submitted.map((item) => ({
-      refId: item.groupId,
+      refId: item.metadata.groupId,
       taskId: item.result.taskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
-      targetId: item.groupId,
-      shotNumbers: item.shotNumbers,
-      durationSec: item.durationSec,
+      targetId: item.metadata.groupId,
+      shotNumbers: item.metadata.shotNumbers,
+      durationSec: item.metadata.durationSec,
     })),
     sourceMode: 'asset_reference' as const,
   }
 }
 
-async function executeGeneratePanelVideoOperation(params: {
+type PlannedPanelVideoMetadata = {
+  panelId: string
+  episodeId: string | null
+  previousVideoUrl: string | null
+  previousLastVideoGenerationOptions: unknown
+}
+
+function readPlannedPanelVideoMetadata(plan: OperationPlan): PlannedPanelVideoMetadata {
+  const metadata = isRecord(plan.metadata) ? plan.metadata : {}
+  const panelId = normalizeString(metadata.panelId)
+  if (!panelId) throw new Error('PROJECT_AGENT_PANEL_VIDEO_PLAN_METADATA_INVALID')
+  return {
+    panelId,
+    episodeId: normalizeString(metadata.episodeId) || null,
+    previousVideoUrl: normalizeString(metadata.previousVideoUrl) || null,
+    previousLastVideoGenerationOptions: metadata.previousLastVideoGenerationOptions,
+  }
+}
+
+async function planGeneratePanelVideoOperation(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
   operationId: string
-}) {
+}): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
   const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
   let panelId = normalizeString(payload.panelId)
@@ -1335,23 +2016,49 @@ async function executeGeneratePanelVideoOperation(params: {
     lastVideoGenerationOptions: previousLastVideoGenerationOptions,
   })
 
-  const result = await submitOperationTask({
-    request: params.ctx.request,
-    userId: params.ctx.userId,
-    locale: localeForTask,
-    projectId: params.ctx.projectId,
-    type: TASK_TYPE.VIDEO_PANEL,
-    targetType: 'ProjectPanel',
-    targetId: panelId,
+  return {
+    kind: 'task_submission',
     operationId: params.operationId,
-    source: params.ctx.source,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: [
+      createVideoPlannedTask({
+        id: `${params.operationId}:${panelId}`,
+        taskType: TASK_TYPE.VIDEO_PANEL,
+        targetType: 'ProjectPanel',
+        targetId: panelId,
+        locale: localeForTask,
+        episodeId,
+        payload: withTaskUiPayload(payload, {
+          hasOutputAtStart: await hasPanelVideoOutput(panelId),
+        }),
+        dedupeKey: `video_panel:${panelId}`,
+        billingInfo: requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, payload),
+      }),
+    ],
+    metadata: {
+      panelId,
+      episodeId,
+      previousVideoUrl,
+      previousLastVideoGenerationOptions,
+    },
+  }
+}
+
+async function commitGeneratePanelVideoPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const task = params.plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const metadata = readPlannedPanelVideoMetadata(params.plan)
+  const result = await submitPlannedOperationTask({
+    ctx: params.ctx,
+    task,
+    operationId: params.operationId,
     confirmed: params.input.confirmed === true,
-    payload: withTaskUiPayload(payload, {
-      hasOutputAtStart: await hasPanelVideoOutput(panelId),
-    }),
-    dedupeKey: `video_panel:${panelId}`,
-    billingInfo: buildVideoPanelBillingInfoOrThrow(payload),
-    decoratePayload: false,
   })
 
   const mutationBatch = await createMutationBatch({
@@ -1359,16 +2066,16 @@ async function executeGeneratePanelVideoOperation(params: {
     userId: params.ctx.userId,
     source: params.ctx.source,
     operationId: params.operationId,
-    episodeId,
-    summary: `${params.operationId}:${panelId}`,
+    episodeId: metadata.episodeId,
+    summary: `${params.operationId}:${metadata.panelId}`,
     entries: [
       {
         kind: 'panel_video_restore',
         targetType: 'ProjectPanel',
-        targetId: panelId,
+        targetId: metadata.panelId,
         payload: {
-          previousVideoUrl,
-          previousLastVideoGenerationOptions,
+          previousVideoUrl: metadata.previousVideoUrl,
+          previousLastVideoGenerationOptions: metadata.previousLastVideoGenerationOptions,
         },
       },
     ],
@@ -1380,26 +2087,45 @@ async function executeGeneratePanelVideoOperation(params: {
     status: result.status,
     runId: result.runId || null,
     deduped: result.deduped,
+    billingReceipt: result.billingReceiptView,
     mutationBatchId: mutationBatch.id,
     projectId: params.ctx.projectId,
-    episodeId,
+    episodeId: metadata.episodeId,
     taskType: TASK_TYPE.VIDEO_PANEL,
     targetType: 'ProjectPanel',
-    targetId: panelId,
+    targetId: metadata.panelId,
   })
 
   return {
     ...result,
-    panelId,
+    panelId: metadata.panelId,
     taskType: TASK_TYPE.VIDEO_PANEL,
     targetType: 'ProjectPanel',
-    targetId: panelId,
+    targetId: metadata.panelId,
     mutationBatchId: mutationBatch.id,
   }
 }
 
+async function executeGeneratePanelVideoOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}) {
+  const plan = await planGeneratePanelVideoOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGeneratePanelVideoPlan({ ...params, plan })
+}
+
 const generatePanelVideoInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   panelId: z.string().min(1).optional(),
   storyboardId: z.string().min(1).optional(),
   panelIndex: z.number().int().min(0).max(2000).optional(),
@@ -1412,6 +2138,7 @@ const generatePanelVideoInputSchema = z.object({
 
 const generateEpisodeVideosInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   limit: z.number().int().positive().max(50).optional(),
   firstLastFrame: z.unknown().optional(),
@@ -1420,6 +2147,7 @@ const generateEpisodeVideosInputSchema = z.object({
 
 const generateVideoGroupInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
   shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
@@ -1428,6 +2156,7 @@ const generateVideoGroupInputSchema = z.object({
 
 const generateEpisodeVideoGroupsInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
@@ -1435,12 +2164,14 @@ const generateEpisodeVideoGroupsInputSchema = z.object({
 
 const generateEpisodeVideosAutoInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 const generateAssetReferenceVideoInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   blockIndex: z.number().int().min(0).max(59),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
@@ -1449,6 +2180,7 @@ const generateAssetReferenceVideoInputSchema = z.object({
 
 const generateEpisodeAssetReferenceVideosInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
@@ -1559,6 +2291,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generatePanelVideoInputSchema,
       outputSchema: generatePanelVideoOutputSchema,
+      plan: async (ctx, input) => planGeneratePanelVideoOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_panel_video',
+      }),
+      commit: async (ctx, input, plan) => commitGeneratePanelVideoPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_panel_video',
+        plan,
+      }),
       execute: async (ctx, input) => executeGeneratePanelVideoOperation({
         ctx,
         input: input as UnknownObject,
@@ -1586,6 +2329,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateEpisodeVideosInputSchema,
       outputSchema: generateEpisodeVideosOutputSchema,
+      plan: async (ctx, input) => planGenerateEpisodeVideosOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_videos',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_videos',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateEpisodeVideosOperation({
         ctx,
         input: input as UnknownObject,
@@ -1613,6 +2367,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateVideoGroupInputSchema,
       outputSchema: generateVideoGroupOutputSchema,
+      plan: async (ctx, input) => planGenerateVideoGroupOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_video_group',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateVideoGroupPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_video_group',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateVideoGroupOperation({
         ctx,
         input: input as UnknownObject,
@@ -1640,6 +2405,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateEpisodeVideoGroupsInputSchema,
       outputSchema: generateEpisodeVideoGroupsOutputSchema,
+      plan: async (ctx, input) => planGenerateEpisodeVideoGroupsOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_video_groups',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeVideoGroupsPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_video_groups',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateEpisodeVideoGroupsOperation({
         ctx,
         input: input as UnknownObject,
@@ -1667,6 +2443,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateEpisodeVideosAutoInputSchema,
       outputSchema: generateEpisodeVideosAutoOutputSchema,
+      plan: async (ctx, input) => planGenerateEpisodeVideosAutoOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_videos_auto',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosAutoPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_videos_auto',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateEpisodeVideosAutoOperation({
         ctx,
         input: input as UnknownObject,
@@ -1694,6 +2481,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateAssetReferenceVideoInputSchema,
       outputSchema: generateAssetReferenceVideoOutputSchema,
+      plan: async (ctx, input) => planGenerateAssetReferenceVideoOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_asset_reference_video',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateAssetReferenceVideoPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_asset_reference_video',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateAssetReferenceVideoOperation({
         ctx,
         input: input as UnknownObject,
@@ -1721,6 +2519,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: generateEpisodeAssetReferenceVideosInputSchema,
       outputSchema: generateEpisodeAssetReferenceVideosOutputSchema,
+      plan: async (ctx, input) => planGenerateEpisodeAssetReferenceVideosOperation({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_asset_reference_videos',
+      }),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeAssetReferenceVideosPlan({
+        ctx,
+        input: input as UnknownObject,
+        operationId: 'generate_episode_asset_reference_videos',
+        plan,
+      }),
       execute: async (ctx, input) => executeGenerateEpisodeAssetReferenceVideosOperation({
         ctx,
         input: input as UnknownObject,
