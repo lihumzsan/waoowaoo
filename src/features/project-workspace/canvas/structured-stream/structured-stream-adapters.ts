@@ -122,7 +122,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   {
     key: 'editScript.shots',
     taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY],
+    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE],
     mode: 'array',
     path: ['shots'],
     parseItem: (value) => ({

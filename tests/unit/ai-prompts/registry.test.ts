@@ -15,7 +15,7 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('创建一个阴郁的老管家')
   })
 
-  it('loads the edit-first screenplay revision template', () => {
+  it('loads the screenplay revision template', () => {
     const prompt = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
       locale: 'zh',
@@ -28,7 +28,7 @@ describe('ai prompt registry', () => {
       },
     })
 
-    expect(prompt).toContain('剧本修改模块')
+    expect(prompt).toContain('短片剧本改写 AI')
     expect(prompt).toContain('标题：《旧钟》')
     expect(prompt).toContain('改得更克苏鲁一些')
     expect(prompt).toContain('16:9')
@@ -43,7 +43,7 @@ describe('ai prompt registry', () => {
     expect(variantTemplate).not.toContain('必须英文')
     expect(variantTemplate).not.toContain('POV shot of a smartphone screen')
 
-    expect(videoBlockTemplate).toContain('字段值必须整体使用中文自然语言')
+    expect(videoBlockTemplate).toContain('shots[].videoPrompt 与 videoBlock.prompt 必须整体使用中文自然语言')
     expect(videoBlockTemplate).toContain('安静的路边公交站单镜头')
     expect(videoBlockTemplate).not.toContain('Quiet roadside bus-stop shot')
     expect(videoBlockTemplate).not.toContain('Sound effects only')

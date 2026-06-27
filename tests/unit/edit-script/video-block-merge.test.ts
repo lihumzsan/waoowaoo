@@ -56,7 +56,7 @@ const billingMock = vi.hoisted(() => ({
 
 const aiPromptsMock = vi.hoisted(() => ({
   AI_PROMPT_IDS: {
-    EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'edit-script-video-block-merge',
+    EDIT_SCRIPT_VIDEO_BLOCK_MERGE: 'video-block-merge',
   },
   buildAiPrompt: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
   buildAiPromptContent: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
@@ -76,7 +76,6 @@ import { AI_PROMPT_IDS } from '@/lib/ai-prompts'
 
 function buildStyleBibleJson() {
   return {
-    strategy: 'style_bible',
     rawUserStyle: null,
     styleSummary: 'Cinematic realism.',
     stylePolicy: {

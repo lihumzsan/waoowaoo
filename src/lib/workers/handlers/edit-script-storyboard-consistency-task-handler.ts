@@ -92,7 +92,7 @@ function buildPhotographyPlan(input: {
   }
 }
 
-function buildSpatialProfileStrategyOutput(snapshot: StoryboardConsistencySourceSnapshot): Record<string, unknown> {
+function buildSpatialProfileOutput(snapshot: StoryboardConsistencySourceSnapshot): Record<string, unknown> {
   const locations = snapshot.assets
     .filter((asset) => asset.kind === 'location')
     .map((asset) => {
@@ -110,7 +110,6 @@ function buildSpatialProfileStrategyOutput(snapshot: StoryboardConsistencySource
     })
   if (locations.length === 0) throw new Error('LOCATION_SPATIAL_PROFILE_REQUIRED')
   return {
-    strategy: 'spatial_text_blocking',
     locations,
   }
 }
@@ -121,9 +120,9 @@ function toPrismaJson(value: unknown): Prisma.InputJsonValue {
 
 function buildSpatialProfileArtifactRows(input: {
   readonly storyboardId: string
-  readonly strategyOutput: Record<string, unknown>
+  readonly spatialProfileOutput: Record<string, unknown>
 }): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] {
-  const locations = Array.isArray(input.strategyOutput.locations) ? input.strategyOutput.locations : []
+  const locations = Array.isArray(input.spatialProfileOutput.locations) ? input.spatialProfileOutput.locations : []
   return locations.flatMap((location, index): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] => {
     if (!location || typeof location !== 'object' || Array.isArray(location)) return []
     return [{
@@ -174,7 +173,6 @@ function compactCameraPlanOutputForStorage(value: unknown): Record<string, unkno
       })
     : []
   return {
-    strategy: 'spatial_text_blocking',
     panels,
   }
 }
@@ -227,10 +225,10 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
       }),
     })
     storyboardId = storyboard.id
-    const strategyOutput = buildSpatialProfileStrategyOutput(parsed.sourceSnapshot)
+    const spatialProfileOutput = buildSpatialProfileOutput(parsed.sourceSnapshot)
     const spatialProfileArtifactRows = buildSpatialProfileArtifactRows({
       storyboardId: storyboard.id,
-      strategyOutput,
+      spatialProfileOutput,
     })
     await prisma.$transaction(async (tx) => {
       await tx.projectStoryboardBlockingArtifact.deleteMany({ where: { storyboardId: storyboard.id } })
@@ -279,7 +277,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
   const snapshot = parsed.sourceSnapshot
   const modelConfig = parsed.modelConfigSnapshot
   const plan = readRecord(parseJson(storyboard.photographyPlan))
-  const strategyOutput = buildSpatialProfileStrategyOutput(snapshot)
+  const spatialProfileOutput = buildSpatialProfileOutput(snapshot)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_camera_plan' })
   const streamContext = createWorkerLLMStreamContext(job, 'edit_script_storyboard_camera_plan')
   const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
@@ -292,7 +290,7 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
         model: modelConfig.analysisModel,
         locale: job.data.locale,
         snapshot,
-        spatialProfileStrategyOutput: strategyOutput,
+        spatialProfileOutput,
       }),
     )
     const panels = await persistGeneratedPanels({

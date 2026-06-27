@@ -111,7 +111,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_BIBLE]: {
     pathStem: 'edit-script/style-bible',
-    variableKeys: ['user_request', 'duration_guidance', 'aspect_ratio', 'project_style_json'],
+    variableKeys: ['user_request', 'duration_guidance', 'aspect_ratio', 'style_context_json'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS]: {
     pathStem: 'edit-script/style-preview-options',
@@ -129,8 +129,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/director-decoupage',
     variableKeys: ['user_request', 'screenplay_text', 'style_bible_json', 'duration_guidance', 'aspect_ratio'],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY]: {
-    pathStem: 'edit-script/primary',
+  [AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE]: {
+    pathStem: 'edit-script/structure',
     variableKeys: [
       'user_request',
       'screenplay_text',
@@ -142,7 +142,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT]: {
     pathStem: 'edit-script/asset-extract',
-    variableKeys: ['edit_script_json'],
+    variableKeys: ['structure_json'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK]: {
     pathStem: 'edit-script/video-prompt-block',
@@ -199,7 +199,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: [
       'style_bible_json',
       'director_decoupage_json',
-      'edit_script_json',
+      'structure_json',
       'asset_context_json',
       'spatial_profiles_json',
     ],
@@ -208,7 +208,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/storyboard-camera-style-bible',
     variableKeys: [
       'source_snapshot_json',
-      'spatial_profile_strategy_output_json',
+      'spatial_profile_output_json',
     ],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK]: {
@@ -216,12 +216,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: [
       'director_decoupage_json',
       'cinematography_shot_plan_json',
-      'full_edit_script_json',
+      'full_structure_json',
       'source_snapshot_json',
-      'spatial_profile_strategy_output_json',
+      'spatial_profile_output_json',
       'video_block_json',
       'block_shots_json',
-      'adjacent_blocks_json',
       'previous_block_json',
       'next_block_json',
       'panel_contract_json',

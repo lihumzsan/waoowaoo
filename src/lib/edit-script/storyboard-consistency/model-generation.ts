@@ -117,7 +117,6 @@ function cameraPlanMetadata(
   const shot = cinematographyShotFor(snapshot, shotNumber)
   return {
     source: 'camera_plan',
-    strategy: 'spatial_text_blocking',
     cameraPlan: {
       shotScale: shot.shotScale,
       cameraPosition: shot.cameraPosition,
@@ -171,24 +170,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function spatialProfileStrategyOutputForCameraPlan(
-  spatialProfileStrategyOutput: unknown,
+function spatialProfileOutputForCameraPlan(
+  spatialProfileOutput: unknown,
   sourceVideoBlockId: string | null,
 ): Record<string, unknown> {
-  const base = isRecord(spatialProfileStrategyOutput) ? spatialProfileStrategyOutput : {}
+  const base = isRecord(spatialProfileOutput) ? spatialProfileOutput : {}
   return {
     ...base,
-    strategy: 'spatial_text_blocking',
     sourceVideoBlockId,
   }
 }
 
 export async function generateStoryboardPanelFinalPrompts(input: GenerationContext & {
   readonly snapshot: StoryboardConsistencySourceSnapshot
-  readonly spatialProfileStrategyOutput: unknown
+  readonly spatialProfileOutput: unknown
 }): Promise<{
   readonly cameraPlanOutput: {
-    readonly strategy: 'spatial_text_blocking'
     readonly panels: readonly Record<string, unknown>[]
   }
   readonly panels: readonly StoryboardPanelPromptDraft[]
@@ -197,23 +194,22 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
   const blockOutputs = await Promise.all(input.snapshot.videoBlocks.map(async (block) => {
     const contract = panelContractForBlock(input.snapshot, block)
     const adjacent = adjacentBlocks(input.snapshot, block.blockIndex)
-    const blockSpatialProfileOutput = spatialProfileStrategyOutputForCameraPlan(input.spatialProfileStrategyOutput, block.sourceVideoBlockId)
+    const blockSpatialProfileOutput = spatialProfileOutputForCameraPlan(input.spatialProfileOutput, block.sourceVideoBlockId)
     const raw = await runTextJsonStep({
       ...input,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK,
       variables: {
         director_decoupage_json: stringifyForPrompt(input.snapshot.directorDecoupage),
         cinematography_shot_plan_json: stringifyForPrompt(input.snapshot.cinematographyShotPlan),
-        full_edit_script_json: stringifyForPrompt({
+        full_structure_json: stringifyForPrompt({
           ...input.snapshot.editScript,
           shots: input.snapshot.shots,
           videoBlocks: input.snapshot.videoBlocks,
         }),
         source_snapshot_json: stringifyForPrompt(input.snapshot),
-        spatial_profile_strategy_output_json: stringifyForPrompt(blockSpatialProfileOutput),
+        spatial_profile_output_json: stringifyForPrompt(blockSpatialProfileOutput),
         video_block_json: stringifyForPrompt(block),
         block_shots_json: stringifyForPrompt(shotsForBlock(input.snapshot, block)),
-        adjacent_blocks_json: stringifyForPrompt(adjacent),
         previous_block_json: stringifyForPrompt(adjacent.previous),
         next_block_json: stringifyForPrompt(adjacent.next),
         panel_contract_json: stringifyForPrompt(contract),
@@ -245,7 +241,6 @@ export async function generateStoryboardPanelFinalPrompts(input: GenerationConte
       metadata: cameraPlanMetadata(input.snapshot, panel.sourceShotNumber, panel.shotBlocking),
     }))
   const cameraPlanOutput = {
-    strategy: 'spatial_text_blocking' as const,
     panels: panelContract(input.snapshot).map((panel) => {
       const shot = cinematographyShotFor(input.snapshot, panel.sourceShotNumber)
       const generatedPanel = finalPanelByKey.get(panelKey(panel))

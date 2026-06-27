@@ -5,8 +5,6 @@ import { editCinematographyShotPlanSchema } from '@/lib/edit-script/types'
 describe('edit script cinematography shot plan', () => {
   it('accepts concrete per-shot cinematography parameters', () => {
     const parsed = editCinematographyShotPlanSchema.parse({
-      strategy: 'cinematography_shot_plan',
-      schemaVersion: 1,
       shots: [
         {
           shotNumber: 1,
@@ -33,8 +31,6 @@ describe('edit script cinematography shot plan', () => {
 
   it('rejects shot plans without lens and axis continuity', () => {
     const result = editCinematographyShotPlanSchema.safeParse({
-      strategy: 'cinematography_shot_plan',
-      schemaVersion: 1,
       shots: [
         {
           shotNumber: 1,
@@ -62,7 +58,7 @@ describe('edit script cinematography shot plan', () => {
       variables: {
         style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {} } }),
         director_decoupage_json: JSON.stringify({ shots: [{ shotNumber: 1, visibleAction: 'A protagonist waits.' }] }),
-        edit_script_json: JSON.stringify({ shots: [{ shotNumber: 1 }], videoBlocks: [] }),
+        structure_json: JSON.stringify({ shots: [{ shotNumber: 1 }], videoBlocks: [] }),
         asset_context_json: JSON.stringify({ assets: [] }),
         spatial_profiles_json: JSON.stringify({ locations: [] }),
       },
@@ -73,7 +69,7 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).toContain('lens')
     expect(prompt).toContain('axisAndEyeline')
     expect(prompt).toContain('"movement" is required')
-    expect(prompt).toContain('The Schema below is the contract, not an example to paraphrase')
+    expect(prompt).toContain('The Schema is the contract, not an example to paraphrase')
     expect(prompt).toContain('Do not omit fields, add fields, rename fields, or use aliases')
     expect(prompt).toContain('Do not replace movement with cameraMovement, cameraMove, move, or localized field names')
     expect(prompt).toContain('"lighting" is the only valid lighting field key')
@@ -82,9 +78,9 @@ describe('edit script cinematography shot plan', () => {
     expect(prompt).not.toContain('hardBans')
     expect(prompt).toContain('do not output Chinese words or Chinese sentences')
     expect(prompt).toContain('Do not append localized labels in parentheses')
-    expect(prompt).toContain('Before returning, validate every shot has these fields')
+    expect(prompt).toContain('Does every shot include shotScale, lens, depthOfField')
     expect(prompt).toContain('cameraAngle, movement, composition')
-    expect(prompt).toContain('must cover all shots in one pass')
+    expect(prompt).toContain('Cover all shots')
   })
 
   it('regresses Chinese cinematography prompts to ban English values in shot plan output', () => {
@@ -94,23 +90,21 @@ describe('edit script cinematography shot plan', () => {
       variables: {
         style_bible_json: JSON.stringify({ stylePolicy: { directing: {}, camera: {}, visual: {}, sound: {} } }),
         director_decoupage_json: JSON.stringify({ shots: [{ shotNumber: 4, visibleAction: '角色在床边抚摸狗狗。' }] }),
-        edit_script_json: JSON.stringify({ shots: [{ shotNumber: 4 }], videoBlocks: [] }),
+        structure_json: JSON.stringify({ shots: [{ shotNumber: 4 }], videoBlocks: [] }),
         asset_context_json: JSON.stringify({ assets: [] }),
         spatial_profiles_json: JSON.stringify({ locations: [] }),
       },
     })
 
-    expect(prompt).toContain('"movement" 是必填字段')
-    expect(prompt).toContain('下面的 Schema 是输出契约，不是可以改写的示例')
-    expect(prompt).toContain('不得漏字段、不得新增字段、不得改名、不得使用别名')
-    expect(prompt).toContain('禁止用 cameraMovement、cameraMove、move 或中文字段名替代 movement')
-    expect(prompt).toContain('"lighting" 是唯一合法的光线字段名')
-    expect(prompt).toContain('禁止输出 lightning、light、lightingPrompt 或中文字段名')
-    expect(prompt).toContain('所有字段值必须整体使用中文自然语言')
-    expect(prompt).toContain('不得输出英文单词或英文句子')
-    expect(prompt).toContain('不要附加括号英文译名')
-    expect(prompt).toContain('不要输出“全景 (Full Shot)”或“retro game”')
-    expect(prompt).toContain('输出前逐个检查每个 shot 是否都有这些字段')
+    expect(prompt).toContain('movement 是必填字段')
+    expect(prompt).toContain('Schema 是输出契约，不是可改写示例')
+    expect(prompt).toContain('不得新增字段、漏字段、改名或使用别名')
+    expect(prompt).toContain('是否没有输出 cameraMovement、cameraMove、move、light、lightning、lightingPrompt 或中文字段名替代合法字段')
+    expect(prompt).toContain('lighting 是唯一合法的光线字段名')
+    expect(prompt).toContain('shots[].* 的所有字段值必须整体使用中文自然语言')
+    expect(prompt).toContain('不输出英文单词或英文句子')
+    expect(prompt).toContain('不附加括号英文译名')
+    expect(prompt).toContain('是否每个 shot 都包含 shotScale、lens、depthOfField')
     expect(prompt).toContain('cameraAngle、movement、composition')
   })
 })

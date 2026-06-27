@@ -46,7 +46,6 @@ describe('edit-script storyboard panel service', () => {
     })
     sourceSnapshotMock.buildStoryboardConsistencySource.mockResolvedValue({
       sourceSnapshot: {
-        schemaVersion: 1,
         shots: [{ shotNumber: 1 }],
       },
       modelConfigSnapshot: {

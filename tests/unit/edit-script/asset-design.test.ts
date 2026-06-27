@@ -51,7 +51,6 @@ const requirements: readonly EditAssetRequirement[] = [
 ]
 
 const styleBible: EditScriptStyleBible = {
-  strategy: 'style_bible',
   rawUserStyle: '冷峻科幻风格',
   styleSummary: '低饱和银灰色、硬质冷光、干净宽频、克制高光的冷峻科幻质感。',
   stylePolicy: {

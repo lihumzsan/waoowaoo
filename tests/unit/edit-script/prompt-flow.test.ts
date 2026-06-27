@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 
 const styleBibleJson = JSON.stringify({
-  strategy: 'style_bible',
   rawUserStyle: '禅修短片',
   styleSummary: '安静克制的东方自然主义禅修影像。',
   stylePolicy: {
@@ -54,21 +53,20 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(screenplayPrompt).toContain('AI 可控短片剧本')
-    expect(screenplayPrompt).toContain('剧本必须适配不超过 120 秒的短片')
-    expect(screenplayPrompt).toContain('禁止真人类型')
-    expect(screenplayPrompt).toContain('最终画面比例：16:9')
+    expect(screenplayPrompt).toContain('短片编剧 AI')
+    expect(screenplayPrompt).toContain('剧情容量是否适配所选时长档位且不超过 120 秒')
+    expect(screenplayPrompt).toContain('角色必须是虚构角色')
+    expect(screenplayPrompt).toContain('最终画面比例：')
+    expect(screenplayPrompt).toContain('16:9')
     expect(screenplayPrompt).not.toContain('aspect_ratio')
     expect(screenplayPrompt).toContain('不要机械凑满固定秒数')
-    expect(screenplayPrompt).toContain('这里只写剧情内容，不写镜头语言、景别、构图、运镜、剪辑节奏、group/single、视频生成提示词、音效、BGM 或后期说明')
-    expect(screenplayPrompt).toContain('这里只写剧情事实，不生成剧本、场景、人物的任何风格提示词')
-    expect(screenplayPrompt).toContain('禁止输出或固化视觉风格、画风、美术媒介、材质质感、色彩风格、光影风格、镜头风格、声音风格、Style Bible、image prompt、video prompt')
-    expect(screenplayPrompt).toContain('如果用户原始需求包含风格、画风、美术媒介或视觉效果要求，不要把它写进剧本文本')
+    expect(screenplayPrompt).toContain('只写剧情事实和可见、可表演的动作，不写镜头语言')
+    expect(screenplayPrompt).toContain('用户需求中的风格、画风、美术媒介或视觉效果要求不写入剧本文本')
     expect(screenplayPrompt).toContain('角色名：2-3 个客观、剧情识别所需的稳定外观/状态特征')
-    expect(screenplayPrompt).toContain('动作段落里的场景、道具和人物只允许写剧情事实与空间事实')
-    expect(screenplayPrompt).toContain('不要出现“镜头”“特写”“推镜”“剪切”“CUT TO”')
+    expect(screenplayPrompt).toContain('动作段落是否只写剧情事实、空间事实和可见动作')
+    expect(screenplayPrompt).toContain('是否没有写入镜头、特写、推镜、剪切、CUT TO')
     expect(screenplayPrompt).not.toContain('项目风格输入')
-    expect(screenplayPrompt).not.toContain('project_style_json')
+    expect(screenplayPrompt).not.toContain('style_context_json')
     expect(screenplayPrompt).not.toContain('Style Bible（唯一风格来源）')
     expect(screenplayPrompt).not.toContain('柔和自然光，低对比度，轻微柔焦')
 
@@ -84,10 +82,10 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(revisionPrompt).toContain('这里只写剧情事实，不生成剧本、场景、人物的任何风格提示词')
-    expect(revisionPrompt).toContain('如果用户修改要求包含视觉风格、画风、美术媒介或视觉效果变化，不要把它写进剧本文本')
-    expect(revisionPrompt).toContain('剧本修改阶段只能吸收其中非视觉的剧情、情绪或主题意图')
-    expect(revisionPrompt).toContain('动作段落里的场景、道具和人物只允许写剧情事实与空间事实')
+    expect(revisionPrompt).toContain('用户修改要求中的视觉风格、画风、美术媒介或视觉效果变化不写入剧本文本')
+    expect(revisionPrompt).toContain('只吸收其中非视觉的剧情、情绪或主题意图')
+    expect(revisionPrompt).toContain('只写剧情事实和可见、可表演的动作，不写镜头语言')
+    expect(revisionPrompt).toContain('动作段落是否只写剧情事实、空间事实和可见动作')
     expect(revisionPrompt).not.toContain('如果用户要求风格、主题、氛围或剧情方向变化')
 
     const styleBiblePrompt = buildAiPrompt({
@@ -97,13 +95,13 @@ describe('edit script block-first prompt flow', () => {
         user_request: '生成一条风格化 3D 短片',
         duration_guidance: durationGuidance,
         aspect_ratio: '16:9',
-        project_style_json: JSON.stringify({ style: '风格化 3D' }),
+        style_context_json: JSON.stringify({ style: '风格化 3D' }),
       },
     })
 
     expect(styleBiblePrompt).toContain('Style Bible 不得使用或暗示真人类型')
     expect(styleBiblePrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
-    expect(styleBiblePrompt).toContain('3D/CG 可作为动漫 3D、风格化 3D、非真人角色/物体/生物主导 CG')
+    expect(styleBiblePrompt).toContain('3D/CG 可以作为动漫 3D、风格化 3D、非真人角色/物体/生物主导 CG')
     expect(styleBiblePrompt).not.toContain('visual.negativePrompt')
     expect(styleBiblePrompt).not.toContain('"negativePrompt"')
     expect(styleBiblePrompt).not.toContain('视觉负向约束')
@@ -122,15 +120,14 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(stylePreviewPrompt).toContain('基于同一份剧本生成 2 个可供用户选择的 Style Bible 候选')
+    expect(stylePreviewPrompt).toContain('设计 1-3 套可供选择的影片风格方案')
     expect(stylePreviewPrompt).toContain('候选数量必须严格等于 2')
-    expect(stylePreviewPrompt).toContain('用户本轮风格调整方向：更黑暗一些')
-    expect(stylePreviewPrompt).toContain('所有候选必须都忠于用户需求和剧本事实')
-    expect(stylePreviewPrompt).toContain('画面风格/影片基调')
-    expect(stylePreviewPrompt).toContain('美术媒介/画风')
-    expect(stylePreviewPrompt).toContain('用户最终只选一个候选')
+    expect(stylePreviewPrompt).toContain('风格调整方向：')
+    expect(stylePreviewPrompt).toContain('更黑暗一些')
+    expect(stylePreviewPrompt).toContain('所有方案都必须忠于同一份剧本事实')
+    expect(stylePreviewPrompt).toContain('美术媒介、画面质感、光影色彩、构图镜头和声音气质')
     expect(stylePreviewPrompt).toContain('至少两个候选必须采用明显不同的非真人美术媒介/画风')
-    expect(stylePreviewPrompt).toContain('不要把多个候选只做成同一画风下的调色、明暗、颗粒或镜头滤镜变化')
+    expect(stylePreviewPrompt).toContain('而不是只改变调色、明暗、颗粒或镜头滤镜')
     expect(stylePreviewPrompt).toContain('候选风格不得是真人类型、实拍真人、真人演员、写实真人')
     expect(stylePreviewPrompt).toContain('真人 3D、写实真人 3D、数字人、CG 真人、CGI 真人')
     expect(stylePreviewPrompt).toContain('3D/CG 可以作为非真人美术媒介')
@@ -138,29 +135,27 @@ describe('edit script block-first prompt flow', () => {
     expect(stylePreviewPrompt).not.toContain('visual.negativePrompt')
     expect(stylePreviewPrompt).not.toContain('"negativePrompt"')
     expect(stylePreviewPrompt).not.toContain('hardBans')
-    expect(stylePreviewPrompt).toContain('aspectRatio 字段只是 schema 必填的技术占位值')
-    expect(stylePreviewPrompt).toContain('最终影片画幅不由风格候选决定')
-    expect(stylePreviewPrompt).toContain('每个候选都必须包含 gridImagePrompt')
+    expect(stylePreviewPrompt).toContain('每个候选必须包含完整 styleBible')
+    expect(stylePreviewPrompt).toContain('gridImagePrompt 只负责预览图本身')
     expect(stylePreviewPrompt).toContain('九宫格 contact sheet')
-    expect(stylePreviewPrompt).toContain('它必须使用同一个候选的 styleBible 作为唯一风格来源')
+    expect(stylePreviewPrompt).toContain('它必须使用同一候选的 styleBible 作为唯一风格来源')
     expect(stylePreviewPrompt).toContain('不得新增、替换、扩展、弱化或硬化 styleBible 里的风格规则')
     expect(stylePreviewPrompt).toContain('不得另写一套风格负面约束')
-    expect(stylePreviewPrompt).toContain('aspectRatio')
-    expect(stylePreviewPrompt).toContain('"16:9"')
+    expect(stylePreviewPrompt).not.toContain('aspectRatio')
     expect(stylePreviewPrompt).toContain('style_a')
     expect(stylePreviewPrompt).toContain('style_b')
     expect(stylePreviewPrompt).toContain('style_c')
     expect(stylePreviewPrompt).toContain('"gridImagePrompt"')
     expect(stylePreviewPrompt).not.toContain('每格按该候选 aspectRatio')
     expect(stylePreviewPrompt).not.toContain('项目风格输入')
-    expect(stylePreviewPrompt).not.toContain('project_style_json')
+    expect(stylePreviewPrompt).not.toContain('style_context_json')
     expect(stylePreviewPrompt).not.toContain('春夏秋冬又一春')
     expect(stylePreviewPrompt).not.toContain('金基德')
     expect(stylePreviewPrompt).not.toContain('即便是“风格化 3D”也不允许')
     expect(stylePreviewPrompt).not.toContain('非真人且非 3D')
 
     const primaryPrompt = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
       locale: 'zh',
       variables: {
         user_request: '生成一条连续短片',
@@ -172,16 +167,16 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(primaryPrompt).toContain('剪辑结构整理器')
-    expect(primaryPrompt).toContain('Style Bible 是唯一风格来源')
+    expect(primaryPrompt).toContain('短片剪辑结构规划 AI')
+    expect(primaryPrompt).toContain('Style Bible 是风格事实')
     expect(primaryPrompt).toContain('Director Decoupage 是 shot 创作事实')
-    expect(primaryPrompt).toContain('剪辑先行表总时长不得超过 120 秒')
+    expect(primaryPrompt).toContain('剪辑结构总时长不得超过 120 秒')
     expect(primaryPrompt).toContain('不得引入真人类型、实拍真人、真人演员、写实真人')
-    expect(primaryPrompt).toContain('顶层 durationSec 必须符合所选时长档位的范围')
-    expect(primaryPrompt).toContain('videoBlocks 是技术生成主结构')
-    expect(primaryPrompt).toContain('本阶段只做结构整理、时长合法化和 videoBlock 分组')
-    expect(primaryPrompt).toContain('禁止输出 camera、shotScale、lens、cameraPosition、depthOfField、imagePrompt、videoPrompt')
-    expect(primaryPrompt).toContain('15 秒是 group 的最高优先级硬上限')
+    expect(primaryPrompt).toContain('顶层 durationSec 必须符合所选时长档位范围')
+    expect(primaryPrompt).toContain('videoBlock：视频模型的一次生成单元')
+    expect(primaryPrompt).toContain('你不重新创作镜头，也不改变镜头含义')
+    expect(primaryPrompt).toContain('本任务不输出 camera、shotScale、lens、cameraPosition、depthOfField、imagePrompt、videoPrompt')
+    expect(primaryPrompt).toContain('15 秒是 group 的硬上限')
     expect(primaryPrompt).toContain('group 是默认优先结构')
     expect(primaryPrompt).not.toContain('timeline_json')
     expect(primaryPrompt).not.toContain('visual_action_json')
@@ -192,13 +187,14 @@ describe('edit script block-first prompt flow', () => {
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT,
       locale: 'zh',
       variables: {
-        edit_script_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        structure_json: JSON.stringify({ shots: [], videoBlocks: [] }),
       },
     })
 
     expect(assetExtractPrompt).toContain('"kind": "character"')
-    expect(assetExtractPrompt).toContain('"description": "用于图片生成的视觉描述"')
-    expect(assetExtractPrompt).toContain('第一阶段不要提取道具、音频、分镜图、视频')
+    expect(assetExtractPrompt).toContain('"description": "需要生成该人物资产的识别依据"')
+    expect(assetExtractPrompt).toContain('description 是否是资产识别依据，而不是最终图片生成提示词')
+    expect(assetExtractPrompt).toContain('只提取 character 和 location，不提取道具、音频、分镜图或视频')
 
     const videoPromptBlock = buildAiPrompt({
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK,
@@ -215,7 +211,7 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(videoPromptBlock).toContain('严格遵守 Style Bible')
+    expect(videoPromptBlock).toContain('Style Bible 是唯一风格来源')
     expect(videoPromptBlock).toContain('user_request 或 styleBible.rawUserStyle')
     expect(videoPromptBlock).not.toContain('styleBible.stylePolicy.visual.negativePrompt')
     expect(videoPromptBlock).toContain('styleBible.stylePolicy.visual.imageFilterPrompt')
@@ -230,32 +226,31 @@ describe('edit script block-first prompt flow', () => {
       variables: {
         director_decoupage_json: JSON.stringify({ shots: [] }),
         cinematography_shot_plan_json: JSON.stringify({ shots: [] }),
-        full_edit_script_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        full_structure_json: JSON.stringify({ shots: [], videoBlocks: [] }),
         source_snapshot_json: JSON.stringify({ shots: [], videoBlocks: [] }),
-        spatial_profile_strategy_output_json: JSON.stringify({ strategy: 'spatial_text_blocking', locations: [] }),
+        spatial_profile_output_json: JSON.stringify({ locations: [] }),
         video_block_json: JSON.stringify({ sourceVideoBlockId: 'block-1' }),
         block_shots_json: JSON.stringify([{ shotNumber: 1 }]),
-        adjacent_blocks_json: JSON.stringify({ previous: null, next: null }),
         previous_block_json: JSON.stringify(null),
         next_block_json: JSON.stringify(null),
         panel_contract_json: JSON.stringify([{ panelIndex: 0, sourceShotNumber: 1 }]),
       },
     })
 
-    expect(panelFinalPromptBlock).toContain('edit-first 分镜执行 Agent')
+    expect(panelFinalPromptBlock).toContain('分镜画面执行 AI')
     expect(panelFinalPromptBlock).toContain('Director Decoupage 决定 shot 的戏剧目的')
     expect(panelFinalPromptBlock).toContain('Cinematography Shot Plan 决定 shot 的景别、焦段、景深、机位')
-    expect(panelFinalPromptBlock).toContain('不能重新发明镜头')
+    expect(panelFinalPromptBlock).toContain('不重新发明镜头')
     expect(panelFinalPromptBlock).toContain('每个 panel 必须输出 shotBlocking')
-    expect(panelFinalPromptBlock).toContain('shotBlocking 只能包含 JSON 示例中的字段')
+    expect(panelFinalPromptBlock).toContain('shotBlocking 只包含 JSON 示例中的字段')
     expect(panelFinalPromptBlock).toContain('禁止在 shotBlocking 中输出 lighting、lens、shotScale')
-    expect(panelFinalPromptBlock).toContain('必须转写进 finalPanelPrompt / finalVideoPrompt')
+    expect(panelFinalPromptBlock).toContain('转写进 finalPanelPrompt / finalVideoPrompt')
     expect(panelFinalPromptBlock).toContain('"absolutePosition"')
     expect(panelFinalPromptBlock).toContain('"relativePosition"')
     expect(panelFinalPromptBlock).toContain('"screenPosition"')
     expect(panelFinalPromptBlock).toContain('"characterPlacements"')
-    expect(panelFinalPromptBlock).toContain('finalPanelPrompt 必须是可直接交给图片模型的单张电影分镜图提示词')
-    expect(panelFinalPromptBlock).toContain('finalVideoPrompt 必须是可直接交给视频模型的当前 shot 视频提示词')
+    expect(panelFinalPromptBlock).toContain('finalPanelPrompt 是可直接交给图片模型的单张电影分镜图提示词')
+    expect(panelFinalPromptBlock).toContain('finalVideoPrompt 是可直接交给视频模型的目标 shot 视频提示词')
     expect(panelFinalPromptBlock).toContain('panelFinalPromptBlockOutput')
     expect(panelFinalPromptBlock).not.toContain('panelVisualPlanBlockOutput')
     expect(panelFinalPromptBlock).not.toContain('cameraPlanBlockOutput')
@@ -266,12 +261,11 @@ describe('edit script block-first prompt flow', () => {
       variables: {
         director_decoupage_json: JSON.stringify({ shots: [] }),
         cinematography_shot_plan_json: JSON.stringify({ shots: [] }),
-        full_edit_script_json: JSON.stringify({ shots: [], videoBlocks: [] }),
+        full_structure_json: JSON.stringify({ shots: [], videoBlocks: [] }),
         source_snapshot_json: JSON.stringify({ shots: [], videoBlocks: [] }),
-        spatial_profile_strategy_output_json: JSON.stringify({ strategy: 'spatial_text_blocking', locations: [] }),
+        spatial_profile_output_json: JSON.stringify({ locations: [] }),
         video_block_json: JSON.stringify({ sourceVideoBlockId: 'block-1' }),
         block_shots_json: JSON.stringify([{ shotNumber: 1 }]),
-        adjacent_blocks_json: JSON.stringify({ previous: null, next: null }),
         previous_block_json: JSON.stringify(null),
         next_block_json: JSON.stringify(null),
         panel_contract_json: JSON.stringify([{ panelIndex: 0, sourceShotNumber: 1 }]),
@@ -283,7 +277,7 @@ describe('edit script block-first prompt flow', () => {
     expect(englishPanelFinalPromptBlock).toContain('must be rewritten into finalPanelPrompt / finalVideoPrompt')
 
     const englishPrimaryPrompt = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
       locale: 'en',
       variables: {
         user_request: 'Create a continuous short film',
@@ -295,10 +289,10 @@ describe('edit script block-first prompt flow', () => {
       },
     })
 
-    expect(englishPrimaryPrompt).toContain('Style Bible is the only style source')
-    expect(englishPrimaryPrompt).toContain('edit script total duration must not exceed 120 seconds')
-    expect(englishPrimaryPrompt).toContain('do not introduce real-person, live-action real human, human actor')
-    expect(englishPrimaryPrompt).toContain('The 15-second group limit is the highest-priority hard ceiling')
+    expect(englishPrimaryPrompt).toContain('The Style Bible is style truth')
+    expect(englishPrimaryPrompt).toContain('Cut structure total duration must not exceed 120 seconds')
+    expect(englishPrimaryPrompt).toContain('must not introduce real-person, live-action real human, human actor')
+    expect(englishPrimaryPrompt).toContain('The 15-second group limit is a hard ceiling')
     expect(englishPrimaryPrompt).toContain('Director Decoupage is the shot creation truth')
 
     const englishStyleBiblePrompt = buildAiPrompt({
@@ -308,7 +302,7 @@ describe('edit script block-first prompt flow', () => {
         user_request: 'Create a stylized 3D short film',
         duration_guidance: englishDurationGuidance,
         aspect_ratio: '16:9',
-        project_style_json: JSON.stringify({ style: 'stylized 3D' }),
+        style_context_json: JSON.stringify({ style: 'stylized 3D' }),
       },
     })
 
@@ -335,13 +329,13 @@ describe('edit script block-first prompt flow', () => {
 
     expect(englishStylePreviewPrompt).toContain('non-real-person art medium')
     expect(englishStylePreviewPrompt).toContain('real-person 3D, photorealistic 3D humans, digital humans')
-    expect(englishStylePreviewPrompt).toContain('3D/CG is allowed as a non-real-person art medium')
+    expect(englishStylePreviewPrompt).toContain('3D/CG may be used as a non-real-person art medium')
     expect(englishStylePreviewPrompt).toContain('anime 3D, stylized 3D/CG')
     expect(englishStylePreviewPrompt).not.toContain('visual.negativePrompt')
     expect(englishStylePreviewPrompt).not.toContain('"negativePrompt"')
-    expect(englishStylePreviewPrompt).toContain('Each candidate must include gridImagePrompt')
+    expect(englishStylePreviewPrompt).toContain('Every candidate must include a complete styleBible')
     expect(englishStylePreviewPrompt).toContain("use the same candidate's styleBible as the only style source")
-    expect(englishStylePreviewPrompt).toContain('do not write a separate set of negative style constraints')
+    expect(englishStylePreviewPrompt).toContain('must not write a separate set of negative style constraints')
     expect(englishStylePreviewPrompt).toContain('"gridImagePrompt"')
     expect(englishStylePreviewPrompt).not.toContain('hardBans')
     expect(englishStylePreviewPrompt).not.toContain('Stylized 3D is also prohibited')

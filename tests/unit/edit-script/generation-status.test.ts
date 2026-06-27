@@ -121,14 +121,14 @@ vi.mock('@/lib/storage', () => ({
 const structuredUserPrompt = [
   '做一个科幻短片',
   '',
-  '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+  '短片结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
 ].join('\n')
 
 const structuredRevisedUserPrompt = [
   '做一个60秒 16:9 科幻短片',
   '',
   '剧本修改要求：改得更克苏鲁一些',
-  '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+  '短片结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
 ].join('\n')
 
 import {
@@ -153,7 +153,6 @@ function createRequest(): NextRequest {
 }
 
 const mockStyleBible = {
-  strategy: 'style_bible',
   rawUserStyle: '科幻短片',
   styleSummary: 'quiet realistic sci-fi',
   stylePolicy: {
@@ -185,7 +184,6 @@ const mockStylePreviewOptions = {
   stylePreviews: [
     {
       styleKey: 'style_a',
-      aspectRatio: '9:16',
       title: '静冷科幻',
       summary: '冷色、克制、空间感强。',
       styleBible: mockStyleBible,
@@ -193,7 +191,6 @@ const mockStylePreviewOptions = {
     },
     {
       styleKey: 'style_b',
-      aspectRatio: '16:9',
       title: '暖色悬疑',
       summary: '暖光、阴影、悬疑节奏。',
       styleBible: {
@@ -204,7 +201,6 @@ const mockStylePreviewOptions = {
     },
     {
       styleKey: 'style_c',
-      aspectRatio: '21:9',
       title: '硬朗工业',
       summary: '工业质感、强结构、低饱和。',
       styleBible: {
@@ -241,7 +237,7 @@ function mockSuccessfulAiSteps() {
         ],
         videoBlocks: [
           {
-            type: 'single',
+            kind: 'single',
             shotNumbers: [1],
             reason: 'Single establishing shot.',
           },
@@ -325,8 +321,6 @@ describe('edit script generation status persistence', () => {
       editScreenplayId: 'screenplay-1',
       userPrompt: structuredUserPrompt,
       decoupageJson: {
-        strategy: 'director_decoupage',
-        schemaVersion: 1,
         shots: [
           {
             shotNumber: 1,
@@ -504,7 +498,7 @@ describe('edit script generation status persistence', () => {
         userPrompt: [
           '做一个60秒 16:9 科幻短片',
           '',
-          '剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
+          '短片结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。',
         ].join('\n'),
         styleBibleJson: null,
         screenplayText: '标题：《科幻短片》\n\n故事梗概：一条安静信号唤醒空间站。',
@@ -609,7 +603,7 @@ describe('edit script generation status persistence', () => {
     expect(txMock.projectEditStylePreview.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
       data: expect.objectContaining({
         styleKey: 'style_a',
-        aspectRatio: '9:16',
+        aspectRatio: '16:9',
         imagePrompt: mockStylePreviewOptions.stylePreviews[0].gridImagePrompt,
       }),
     }))
@@ -672,7 +666,7 @@ describe('edit script generation status persistence', () => {
       action: AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
       messages: expect.arrayContaining([
         expect.objectContaining({
-          content: expect.stringContaining('用户本轮风格调整方向：更黑暗一些，低照度，强阴影'),
+          content: expect.stringContaining('风格调整方向：\n更黑暗一些，低照度，强阴影'),
         }),
       ]),
     }))
@@ -752,7 +746,7 @@ describe('edit script generation status persistence', () => {
           episodeId: 'episode-1',
           editScreenplayId: 'screenplay-1',
           styleKey: preview.styleKey,
-          aspectRatio: preview.aspectRatio,
+          aspectRatio: '16:9',
           title: preview.title,
           summary: preview.summary,
           styleBibleJson: preview.styleBible,
@@ -778,7 +772,7 @@ describe('edit script generation status persistence', () => {
         episodeId: 'episode-1',
         editScreenplayId: 'screenplay-1',
         styleKey: preview.styleKey,
-        aspectRatio: preview.aspectRatio,
+        aspectRatio: '16:9',
         title: preview.title,
         summary: preview.summary,
         styleBibleJson: preview.styleBible,
@@ -839,7 +833,7 @@ describe('edit script generation status persistence', () => {
       episodeId: 'episode-1',
       editScreenplayId: 'screenplay-1',
       styleKey: preview.styleKey,
-      aspectRatio: preview.aspectRatio,
+      aspectRatio: '16:9',
       title: preview.title,
       summary: preview.summary,
       styleBibleJson: preview.styleBible,
@@ -1298,9 +1292,9 @@ describe('edit script generation status persistence', () => {
     )
     expect(aiExecMock.executeAiTextStep).toHaveBeenCalledTimes(2)
     expect(aiExecMock.executeAiTextStep).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      action: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+      action: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
       meta: expect.objectContaining({
-        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+        stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
         stepIndex: 1,
         stepTotal: 2,
       }),

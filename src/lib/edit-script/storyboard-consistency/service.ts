@@ -50,12 +50,6 @@ async function resolveEditScriptId(input: Pick<SubmitSpatialBlockingStoryboardIn
   return editScript.id
 }
 
-export function assertRequiredLocationPreviews(input: {
-  readonly sourceSnapshot: Awaited<ReturnType<typeof buildStoryboardConsistencySource>>['sourceSnapshot']
-}) {
-  if (input.sourceSnapshot.schemaVersion !== 1) throw new Error('EDIT_SCRIPT_STORYBOARD_SOURCE_SNAPSHOT_INVALID')
-}
-
 export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpatialBlockingStoryboardInput) {
   const editScriptId = await resolveEditScriptId(input)
   const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({
@@ -64,7 +58,6 @@ export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpa
     editScriptId,
     userId: input.userId,
   })
-  assertRequiredLocationPreviews({ sourceSnapshot })
   const submitted = await submitTask({
     userId: input.userId,
     locale: input.locale,

@@ -2,7 +2,6 @@ import type { EditScriptStyleBible } from '@/lib/edit-script/types'
 
 export function buildZenStyleBibleFixture(): EditScriptStyleBible {
   return {
-    strategy: 'style_bible',
     rawUserStyle: '禅修短片',
     styleSummary: '禅意电影感，安静、克制、自然。',
     stylePolicy: {

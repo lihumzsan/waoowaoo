@@ -5,8 +5,6 @@ import { editDirectorDecoupageSchema } from '@/lib/edit-script/types'
 describe('edit script director decoupage', () => {
   it('accepts a complete director shot list with continuity and viewpoint fields', () => {
     const parsed = editDirectorDecoupageSchema.parse({
-      strategy: 'director_decoupage',
-      schemaVersion: 1,
       shots: [
         {
           shotNumber: 1,
@@ -32,8 +30,6 @@ describe('edit script director decoupage', () => {
 
   it('rejects director decoupage that omits audience focus', () => {
     const result = editDirectorDecoupageSchema.safeParse({
-      strategy: 'director_decoupage',
-      schemaVersion: 1,
       shots: [
         {
           shotNumber: 1,
@@ -71,7 +67,7 @@ describe('edit script director decoupage', () => {
     expect(prompt).toContain('dramaticPurpose')
     expect(prompt).toContain('audienceFocus')
     expect(prompt).toContain('continuityIn')
-    expect(prompt).toContain('must not output lens, camera position, depth of field, concrete composition')
+    expect(prompt).toContain('Do not output lens, camera position, depth of field, concrete composition')
     expect(prompt).not.toContain('hardBans')
   })
 })

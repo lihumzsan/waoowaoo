@@ -277,8 +277,7 @@ export const editScriptCoreSchema = z.object({
   durationSec: z.number().int().positive(),
   shots: z.array(editScriptShotSchema).min(1).max(60),
   videoBlocks: z.array(z.object({
-    type: z.enum(['single', 'group']).optional(),
-    kind: z.enum(['single', 'group']).optional(),
+    kind: z.enum(['single', 'group']),
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
     gridMode: z.enum(['2x2', '3x3']).optional(),
     reason: z.string().trim().min(1),
@@ -292,8 +291,7 @@ export const editScriptStructureSchema = z.object({
   durationSec: z.number().int().positive(),
   shots: z.array(editScriptStructureShotSchema).min(1).max(60),
   videoBlocks: z.array(z.object({
-    type: z.enum(['single', 'group']).optional(),
-    kind: z.enum(['single', 'group']).optional(),
+    kind: z.enum(['single', 'group']),
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
     gridMode: z.enum(['2x2', '3x3']).optional(),
     reason: z.string().trim().min(1),
@@ -312,14 +310,10 @@ export const editScriptVideoPromptSchema = z.object({
 })
 
 export const editDirectorDecoupageSchema = z.object({
-  strategy: z.literal('director_decoupage'),
-  schemaVersion: z.literal(1),
   shots: z.array(editScriptShotSchema).min(1).max(60),
 })
 
 export const editCinematographyShotPlanSchema = z.object({
-  strategy: z.literal('cinematography_shot_plan'),
-  schemaVersion: z.literal(1),
   shots: z.array(z.object({
     shotNumber: z.number().int().positive(),
     shotScale: z.string().trim().min(1),
@@ -363,7 +357,6 @@ export const editScriptStylePolicySchema = z.object({
 
 export const editScriptStyleBibleSchema = z.object({
   styleBible: z.object({
-    strategy: z.literal('style_bible'),
     rawUserStyle: z.string().trim().nullable(),
     styleSummary: z.string().trim().min(1),
     stylePolicy: editScriptStylePolicySchema,
@@ -372,7 +365,6 @@ export const editScriptStyleBibleSchema = z.object({
 
 export const editStylePreviewOptionSchema = z.object({
   styleKey: z.enum(EDIT_STYLE_PREVIEW_KEYS),
-  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   styleBible: editScriptStyleBibleSchema.shape.styleBible,

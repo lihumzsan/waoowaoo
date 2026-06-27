@@ -54,13 +54,13 @@ describe('incremental structured JSON parser', () => {
 
   it('emits a single object path only after the object closes', () => {
     let state = createStructuredStreamObjectParseState(['styleBible'])
-    let result = appendStructuredJsonChunk(state, '{"styleBible":{"strategy":"style_bible",')
+    let result = appendStructuredJsonChunk(state, '{"styleBible":{"styleSummary":')
     expect(result.items).toEqual([])
 
     state = result.state
-    result = appendStructuredJsonChunk(state, '"styleSummary":"quiet noir"}}')
+    result = appendStructuredJsonChunk(state, '"quiet noir"}}')
 
-    expect(result.items).toEqual([{ strategy: 'style_bible', styleSummary: 'quiet noir' }])
+    expect(result.items).toEqual([{ styleSummary: 'quiet noir' }])
     expect(result.state.complete).toBe(true)
   })
 })

@@ -7,9 +7,9 @@ describe('video block plan validator', () => {
       allShotNumbers: [1, 2, 3, 4, 5],
       response: {
         items: [
-          { type: 'single', shotNumbers: [1], reason: 'static product shot', prompt: 'single prompt 1' },
-          { type: 'group', shotNumbers: [2, 3, 4], gridMode: '2x2', reason: 'continuous fight movement', prompt: 'group prompt 2-4' },
-          { type: 'single', shotNumbers: [5], reason: 'space jumps', prompt: 'single prompt 5' },
+          { kind: 'single', shotNumbers: [1], reason: 'static product shot', prompt: 'single prompt 1' },
+          { kind: 'group', shotNumbers: [2, 3, 4], gridMode: '2x2', reason: 'continuous fight movement', prompt: 'group prompt 2-4' },
+          { kind: 'single', shotNumbers: [5], reason: 'space jumps', prompt: 'single prompt 5' },
         ],
       },
     })
@@ -26,8 +26,8 @@ describe('video block plan validator', () => {
       allShotNumbers: [1, 2, 3],
       response: {
         items: [
-          { type: 'single', shotNumbers: [1], reason: 'ok', prompt: 'prompt 1' },
-          { type: 'single', shotNumbers: [3], reason: 'skip', prompt: 'prompt 3' },
+          { kind: 'single', shotNumbers: [1], reason: 'ok', prompt: 'prompt 1' },
+          { kind: 'single', shotNumbers: [3], reason: 'skip', prompt: 'prompt 3' },
         ],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
@@ -36,9 +36,9 @@ describe('video block plan validator', () => {
       allShotNumbers: [1, 2, 3],
       response: {
         items: [
-          { type: 'single', shotNumbers: [1], reason: 'ok', prompt: 'prompt 1' },
-          { type: 'single', shotNumbers: [3], reason: 'wrong order', prompt: 'prompt 3' },
-          { type: 'single', shotNumbers: [2], reason: 'wrong order', prompt: 'prompt 2' },
+          { kind: 'single', shotNumbers: [1], reason: 'ok', prompt: 'prompt 1' },
+          { kind: 'single', shotNumbers: [3], reason: 'wrong order', prompt: 'prompt 3' },
+          { kind: 'single', shotNumbers: [2], reason: 'wrong order', prompt: 'prompt 2' },
         ],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
@@ -55,8 +55,8 @@ describe('video block plan validator', () => {
       enforceSingleMinDuration: false,
       response: {
         items: [
-          { type: 'group', shotNumbers: [1, 2], reason: 'manual adjacency', prompt: 'manual group prompt' },
-          { type: 'single', shotNumbers: [3], reason: 'remaining beat', prompt: 'single prompt' },
+          { kind: 'group', shotNumbers: [1, 2], reason: 'manual adjacency', prompt: 'manual group prompt' },
+          { kind: 'single', shotNumbers: [3], reason: 'remaining beat', prompt: 'single prompt' },
         ],
       },
     })
@@ -71,7 +71,7 @@ describe('video block plan validator', () => {
     expect(() => normalizeVideoBlockPlanResponse({
       allShotNumbers: [1],
       response: {
-        items: [{ type: 'single', shotNumbers: [1], reason: 'missing prompt' }],
+        items: [{ kind: 'single', shotNumbers: [1], reason: 'missing prompt' }],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_PROMPT_REQUIRED')
   })
@@ -80,14 +80,14 @@ describe('video block plan validator', () => {
     expect(() => normalizeVideoBlockPlanResponse({
       allShotNumbers: [1],
       response: {
-        items: [{ type: 'group', shotNumbers: [1], gridMode: '2x2', reason: 'too short', prompt: 'group prompt' }],
+        items: [{ kind: 'group', shotNumbers: [1], gridMode: '2x2', reason: 'too short', prompt: 'group prompt' }],
       },
     })).toThrow('VIDEO_GROUP_SHOT_COUNT_UNSUPPORTED')
 
     expect(() => normalizeVideoBlockPlanResponse({
       allShotNumbers: [1, 2, 3, 4, 5],
       response: {
-        items: [{ type: 'group', shotNumbers: [1, 2, 3, 4, 5], gridMode: '2x2', reason: 'wrong grid', prompt: 'group prompt' }],
+        items: [{ kind: 'group', shotNumbers: [1, 2, 3, 4, 5], gridMode: '2x2', reason: 'wrong grid', prompt: 'group prompt' }],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_GRID_MODE_MISMATCH')
   })
@@ -97,7 +97,7 @@ describe('video block plan validator', () => {
       allShotNumbers: [1],
       shots: [{ shotNumber: 1, durationSec: 3 }],
       response: {
-        items: [{ type: 'single', shotNumbers: [1], reason: 'isolated beat is too short for video generation', prompt: 'single prompt' }],
+        items: [{ kind: 'single', shotNumbers: [1], reason: 'isolated beat is too short for video generation', prompt: 'single prompt' }],
       },
     })).toThrow('VIDEO_BLOCK_PLAN_SINGLE_DURATION_UNSUPPORTED:3')
 
@@ -110,7 +110,7 @@ describe('video block plan validator', () => {
         { shotNumber: 4, durationSec: 1 },
       ],
       response: {
-        items: [{ type: 'group', shotNumbers: [1, 2, 3, 4], reason: 'fast continuous action beats', prompt: 'group prompt' }],
+        items: [{ kind: 'group', shotNumbers: [1, 2, 3, 4], reason: 'fast continuous action beats', prompt: 'group prompt' }],
       },
     })
 

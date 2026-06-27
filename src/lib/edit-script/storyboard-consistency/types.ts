@@ -25,7 +25,6 @@ export interface StoryboardConsistencySourceVideoBlock extends EditScriptVideoBl
 }
 
 export interface StoryboardConsistencySourceSnapshot {
-  readonly schemaVersion: 1
   readonly projectId: string
   readonly episodeId: string
   readonly project: {
@@ -122,7 +121,6 @@ const sourceAssetSchema = z.object({
 })
 
 export const storyboardConsistencySourceSnapshotSchema = z.object({
-  schemaVersion: z.literal(1),
   projectId: z.string().min(1),
   episodeId: z.string().min(1),
   project: z.object({
@@ -199,7 +197,6 @@ export const cameraPlanPanelSchema = z.object({
 
 export const cameraPlanModelOutputSchema = z.object({
   cameraPlanOutput: z.object({
-    strategy: z.literal('spatial_text_blocking'),
     cameraStyleBible: z.unknown().optional(),
     blocks: z.array(z.unknown()).optional(),
     panels: z.array(cameraPlanPanelSchema).min(1),
@@ -208,7 +205,6 @@ export const cameraPlanModelOutputSchema = z.object({
 
 export const cameraStyleBibleModelOutputSchema = z.object({
   cameraStyleBible: z.object({
-    strategy: z.literal('camera_style_bible'),
     imageFilterPrompt: z.string().trim().min(1),
   }).passthrough(),
 })

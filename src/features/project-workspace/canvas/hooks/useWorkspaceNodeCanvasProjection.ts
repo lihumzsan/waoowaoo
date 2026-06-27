@@ -642,10 +642,10 @@ function storyboardSpatialBlockingReady(storyboard: ProjectStoryboard): boolean 
   return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
 }
 
-function spatialProfilesFromStrategyOutput(
-  strategyOutput: unknown,
+function spatialProfilesFromProfileOutput(
+  profileOutput: unknown,
 ): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>['spatialProfiles'] {
-  const output = readJsonRecord(strategyOutput)
+  const output = readJsonRecord(profileOutput)
   const locations = output.locations
   if (!Array.isArray(locations)) return []
   return locations.flatMap((location) => {
@@ -689,7 +689,7 @@ function spatialProfilesFromStrategyOutput(
   })
 }
 
-function spatialProfileStrategyOutputFromArtifacts(
+function spatialProfileOutputFromArtifacts(
   artifacts: readonly ProjectStoryboardBlockingArtifact[] | null | undefined,
 ): Record<string, unknown> {
   const locations = (artifacts ?? [])
@@ -700,7 +700,6 @@ function spatialProfileStrategyOutputFromArtifacts(
       return Object.keys(metadata).length > 0 ? [metadata] : []
     })
   return {
-    strategy: 'spatial_text_blocking',
     locations,
   }
 }
@@ -734,7 +733,7 @@ function cameraPlansFromValue(cameraPlanOutput: unknown): NonNullable<WorkspaceC
 function createSpaceConsistencyDetails(storyboard: ProjectStoryboard): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']> {
   const plan = readJsonRecord(parseJson(storyboard.photographyPlan))
   const cameraPlans = cameraPlansFromValue(plan.cameraPlanOutput)
-  const spatialProfiles = spatialProfilesFromStrategyOutput(spatialProfileStrategyOutputFromArtifacts(storyboard.blockingArtifacts))
+  const spatialProfiles = spatialProfilesFromProfileOutput(spatialProfileOutputFromArtifacts(storyboard.blockingArtifacts))
   return {
     storyboardId: storyboard.id,
     stage: stringValue(plan.currentStage),

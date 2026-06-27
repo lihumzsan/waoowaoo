@@ -204,7 +204,7 @@ describe('final render plan', () => {
     const blocks = parseFinalRenderEditScriptVideoBlocks({
       value: [
         {
-          type: 'group',
+          kind: 'group',
           shotNumbers: [1, 2],
           gridMode: '2x2',
           reason: 'continuous rooftop movement',

@@ -57,7 +57,7 @@ describe('style-bible-prompt', () => {
   })
 
   it('invalid non-null Style Bible json fails explicitly', () => {
-    expect(() => parseNullableEditScriptStyleBible({ strategy: 'style_bible' }))
+    expect(() => parseNullableEditScriptStyleBible({ styleSummary: 'missing style policy' }))
       .toThrow('EDIT_SCRIPT_STYLE_BIBLE_INVALID')
   })
 })

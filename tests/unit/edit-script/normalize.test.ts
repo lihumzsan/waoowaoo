@@ -46,7 +46,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'continuous corridor movement', prompt: 'final continuous corridor prompt' },
+        { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'continuous corridor movement', prompt: 'final continuous corridor prompt' },
       ],
     })
 
@@ -106,7 +106,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'group', shotNumbers: [1, 3], gridMode: '2x2', reason: 'invalid gap should fail earlier', prompt: 'invalid gap prompt' },
+        { kind: 'group', shotNumbers: [1, 3], gridMode: '2x2', reason: 'invalid gap should fail earlier', prompt: 'invalid gap prompt' },
       ],
     })).toThrow('EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS')
   })
@@ -132,7 +132,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'single', shotNumbers: [1], reason: 'single long shot', prompt: 'single long prompt' },
+        { kind: 'single', shotNumbers: [1], reason: 'single long shot', prompt: 'single long prompt' },
       ],
     })).toThrow()
   })
@@ -200,7 +200,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'group', shotNumbers: [1, 2, 3, 4], gridMode: '2x2', reason: 'too long for one Seedance segment', prompt: 'too long group prompt' },
+        { kind: 'group', shotNumbers: [1, 2, 3, 4], gridMode: '2x2', reason: 'too long for one Seedance segment', prompt: 'too long group prompt' },
       ],
     })).toThrow('VIDEO_BLOCK_PLAN_GROUP_DURATION_UNSUPPORTED:17')
   })
@@ -240,7 +240,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'shared dock motion', prompt: 'shared dock prompt' },
+        { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'shared dock motion', prompt: 'shared dock prompt' },
       ],
     }).shots
 
@@ -304,7 +304,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'single', shotNumbers: [1], reason: 'single beat', prompt: 'single prompt' },
+        { kind: 'single', shotNumbers: [1], reason: 'single beat', prompt: 'single prompt' },
       ],
     }).shots
 
@@ -361,7 +361,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'group', shotNumbers: [1, 2], reason: 'continuous dock movement' },
+        { kind: 'group', shotNumbers: [1, 2], reason: 'continuous dock movement' },
       ],
     })
 
@@ -405,7 +405,7 @@ describe('edit script normalization', () => {
         },
       ],
       videoBlocks: [
-        { type: 'single', shotNumbers: [1], reason: 'isolated beat' },
+        { kind: 'single', shotNumbers: [1], reason: 'isolated beat' },
       ],
     })
 
@@ -423,9 +423,9 @@ describe('edit script normalization', () => {
     expect(readEditFirstDurationTierFromText('make it 300 seconds')).toBeNull()
   })
 
-  it('requires a persisted duration tier before downstream edit-first generation', () => {
+  it('requires a persisted duration tier before downstream generation', () => {
     expect(() => requireEditFirstDurationSpecFromPrompt('给我一个库布里克风格科幻短片')).toThrow('EDIT_FIRST_DURATION_TIER_REQUIRED')
-    expect(requireEditFirstDurationSpecFromPrompt('剪辑先行结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。')).toMatchObject({
+    expect(requireEditFirstDurationSpecFromPrompt('短片结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。')).toMatchObject({
       tier: 'medium',
       targetSeconds: 60,
     })

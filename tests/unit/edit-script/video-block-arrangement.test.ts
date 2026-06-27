@@ -43,7 +43,7 @@ const billingMock = vi.hoisted(() => ({
 
 const aiPromptsMock = vi.hoisted(() => ({
   AI_PROMPT_IDS: {
-    EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT: 'edit-script-video-block-arrangement',
+    EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT: 'video-block-arrangement',
   },
   buildAiPrompt: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
   buildAiPromptContent: vi.fn((input: PromptBuildInput) => Object.values(input.variables ?? {}).join('\n')),
@@ -62,7 +62,6 @@ import { arrangeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-blo
 
 function buildStyleBibleJson() {
   return {
-    strategy: 'style_bible',
     rawUserStyle: null,
     styleSummary: 'Cinematic realism.',
     stylePolicy: {

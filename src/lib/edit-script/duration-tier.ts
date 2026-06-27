@@ -49,8 +49,8 @@ const EDIT_FIRST_DURATION_SPECS: Record<EditFirstDurationTier, EditFirstDuration
 }
 
 const STRUCTURED_PARAMETER_PREFIXES = [
-  '剪辑先行结构化参数：',
-  'Structured edit-first parameters:',
+  '短片结构化参数：',
+  'Structured short-film parameters:',
 ] as const
 
 function parseNumberedDurationSeconds(text: string): number | null {
@@ -130,8 +130,8 @@ export function buildEditFirstStructuredUserPrompt(input: {
   const basePrompt = stripEditFirstStructuredParameters(input.prompt)
   const spec = resolveEditFirstDurationSpec(input.durationTier)
   const structuredLine = input.locale === 'en'
-    ? `Structured edit-first parameters: duration tier ${spec.tier} (${spec.enLabel}, around ${String(spec.targetSeconds)} seconds); final aspect ratio ${input.aspectRatio}.`
-    : `剪辑先行结构化参数：时长档位 ${spec.tier}（${spec.zhLabel}，约 ${String(spec.targetSeconds)} 秒）；最终画面比例 ${input.aspectRatio}。`
+    ? `Structured short-film parameters: duration tier ${spec.tier} (${spec.enLabel}, around ${String(spec.targetSeconds)} seconds); final aspect ratio ${input.aspectRatio}.`
+    : `短片结构化参数：时长档位 ${spec.tier}（${spec.zhLabel}，约 ${String(spec.targetSeconds)} 秒）；最终画面比例 ${input.aspectRatio}。`
   return [basePrompt, '', structuredLine].join('\n')
 }
 

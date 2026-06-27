@@ -186,8 +186,6 @@ export function normalizeDirectorDecoupage(raw: unknown) {
     }
   })
   return {
-    strategy: parsed.strategy,
-    schemaVersion: parsed.schemaVersion,
     shots,
   }
 }

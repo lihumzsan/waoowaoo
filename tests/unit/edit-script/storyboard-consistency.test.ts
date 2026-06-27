@@ -12,8 +12,8 @@ const aiExecMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/ai-prompts', () => ({
   AI_PROMPT_IDS: {
-    EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'edit-script-storyboard-camera-style-bible',
-    EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK: 'edit-script-storyboard-panel-final-prompt-block',
+    EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE: 'storyboard-camera-style-bible',
+    EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK: 'storyboard-panel-final-prompt-block',
   },
   buildAiPromptContent: promptMock.buildAiPromptContent,
 }))
@@ -22,7 +22,6 @@ vi.mock('@/lib/ai-exec/engine', () => aiExecMock)
 
 function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
   return {
-    schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
     project: {
@@ -38,7 +37,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
       screenplayText: null,
     },
     styleBible: {
-      strategy: 'style_bible',
       rawUserStyle: 'temple lesson',
       styleSummary: 'Restrained naturalistic temple visual style.',
       stylePolicy: {
@@ -189,8 +187,7 @@ describe('edit-script storyboard spatial text blocking generation', () => {
   })
 
   it('plans camera blocking from spatial profiles without x/y coordinate inputs', async () => {
-    const spatialProfileStrategyOutput = {
-      strategy: 'spatial_text_blocking',
+    const spatialProfileOutput = {
       locations: [{
         requirementId: 'loc-1',
         targetId: 'location-1',
@@ -206,10 +203,9 @@ describe('edit-script storyboard spatial text blocking generation', () => {
       model: 'analysis-model-1',
       locale: 'zh',
       snapshot: buildSourceSnapshot(),
-      spatialProfileStrategyOutput,
+      spatialProfileOutput,
     })
 
-    expect(result.cameraPlanOutput.strategy).toBe('spatial_text_blocking')
     expect(result.cameraPlanOutput.panels[0]?.cameraPosition).toBe('front of courtyard')
     expect(result.cameraPlanOutput.panels[0]?.shotBlocking).toMatchObject({
       absolutePosition: '老和尚和弟子位于香炉前方的中景空地',
@@ -219,14 +215,13 @@ describe('edit-script storyboard spatial text blocking generation', () => {
     expect(result.panels[0]?.shotBlocking).toMatchObject(cameraPanel.shotBlocking)
     expect(result.panels[0]?.metadata).toMatchObject({
       source: 'camera_plan',
-      strategy: 'spatial_text_blocking',
       cameraPlan: {
         shotBlocking: cameraPanel.shotBlocking,
       },
     })
     const promptCalls = promptMock.buildAiPromptContent.mock.calls.map((call) => call[0])
-    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).toContain('左侧木门')
-    expect(promptCalls[0]?.variables.spatial_profile_strategy_output_json).not.toContain('placementZones')
+    expect(promptCalls[0]?.variables.spatial_profile_output_json).toContain('左侧木门')
+    expect(promptCalls[0]?.variables.spatial_profile_output_json).not.toContain('placementZones')
     expect(promptCalls[0]?.variables.video_block_json).toContain('edit-1:videoBlock:1')
     const deprecatedVariableKey = ['coordinate', 'strategy', 'output', 'json'].join('_')
     expect(promptCalls[0]?.variables).not.toHaveProperty(deprecatedVariableKey)

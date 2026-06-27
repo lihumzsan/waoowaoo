@@ -17,7 +17,7 @@ describe('structured stream adapters', () => {
   it('maps edit script stream metadata to the core shot adapter', () => {
     const adapters = findStructuredStreamAdapters({
       taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
     })
 
     expect(adapters.map((adapter) => adapter.key)).toContain('editScript.shots')

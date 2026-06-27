@@ -33,9 +33,9 @@ function readShotNumbers(value: unknown): number[] {
 }
 
 function readKind(value: Record<string, unknown>): VideoBlockPlanItemKind {
-  const raw = readString(value.type) || readString(value.kind)
+  const raw = readString(value.kind)
   if (raw === 'single' || raw === 'group') return raw
-  throw new Error('VIDEO_BLOCK_PLAN_ITEM_TYPE_INVALID')
+  throw new Error('VIDEO_BLOCK_PLAN_ITEM_KIND_INVALID')
 }
 
 function normalizePlanGridMode(value: unknown): VideoGridMode | null {

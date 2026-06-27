@@ -44,7 +44,6 @@ function buildShotBlocking(): ShotBlocking {
 
 function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
   return {
-    schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
     project: {
@@ -60,7 +59,6 @@ function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
       screenplayText: null,
     },
     styleBible: {
-      strategy: 'style_bible',
       rawUserStyle: 'temple lesson',
       styleSummary: 'quiet temple style',
       stylePolicy: {
@@ -203,7 +201,6 @@ describe('edit-script storyboard persistence', () => {
       shotBlocking,
       metadata: {
         source: 'camera_plan',
-        strategy: 'spatial_text_blocking',
         cameraPlan: {
           shotScale: 'medium shot',
           cameraPosition: 'front of courtyard',

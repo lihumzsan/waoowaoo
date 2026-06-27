@@ -166,7 +166,7 @@ type PromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE
-  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY
+  | typeof AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK
   | typeof AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN
@@ -441,14 +441,14 @@ function buildRevisedEditScreenplayUserPrompt(input: {
       normalizedOriginal,
       '',
       `Revision instruction: ${normalizedInstruction}`,
-      `Structured edit-first parameters: duration tier ${spec.tier} (${spec.enLabel}, around ${String(spec.targetSeconds)} seconds); final aspect ratio ${input.aspectRatio}.`,
+      `Structured short-film parameters: duration tier ${spec.tier} (${spec.enLabel}, around ${String(spec.targetSeconds)} seconds); final aspect ratio ${input.aspectRatio}.`,
     ].join('\n')
   }
   return [
     normalizedOriginal,
     '',
     `剧本修改要求：${normalizedInstruction}`,
-    `剪辑先行结构化参数：时长档位 ${spec.tier}（${spec.zhLabel}，约 ${String(spec.targetSeconds)} 秒）；最终画面比例 ${input.aspectRatio}。`,
+    `短片结构化参数：时长档位 ${spec.tier}（${spec.zhLabel}，约 ${String(spec.targetSeconds)} 秒）；最终画面比例 ${input.aspectRatio}。`,
   ].join('\n')
 }
 
@@ -1635,7 +1635,7 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
             episodeId: input.episodeId,
             editScreenplayId: screenplay.id,
             styleKey,
-            aspectRatio: option.aspectRatio,
+            aspectRatio: EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO,
             title: option.title,
             summary: option.summary,
             styleBibleJson: styleBibleToJsonValue(option.styleBible),
@@ -1857,7 +1857,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       projectId: input.projectId,
       model,
       locale,
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_PRIMARY,
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
       variables: {
         user_request: userPrompt,
         screenplay_text: screenplayText,
@@ -1895,7 +1895,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       locale,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT,
       variables: {
-        edit_script_json: stringifyForPrompt(structure),
+        structure_json: stringifyForPrompt(structure),
       },
       stepTitle: 'Edit required assets',
       stepIndex: 2,
@@ -2065,7 +2065,7 @@ export async function generateProjectEditCinematographyShotPlan(input: GenerateE
     variables: {
       style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
       director_decoupage_json: stringifyForPrompt(parseDirectorDecoupageJson(directorDecoupage.decoupageJson)),
-      edit_script_json: stringifyForPrompt({
+      structure_json: stringifyForPrompt({
         id: mappedEditScript.id,
         title: mappedEditScript.title,
         logline: mappedEditScript.logline,
@@ -2098,8 +2098,6 @@ export async function generateProjectEditCinematographyShotPlan(input: GenerateE
     throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_COVERAGE_INVALID')
   }
   const shotPlanJson = {
-    strategy: 'cinematography_shot_plan',
-    schemaVersion: 1,
     shots: parsed.shots,
   }
   const saved = await prisma.projectEditCinematographyShotPlan.upsert({

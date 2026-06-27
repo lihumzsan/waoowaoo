@@ -80,14 +80,12 @@ function buildJob(): Job<TaskJobData> {
 
 function buildSourceSnapshot() {
   return {
-    schemaVersion: 1,
     projectId: 'project-1',
     episodeId: 'episode-1',
     project: {
       videoRatio: '16:9',
     },
     styleBible: {
-      strategy: 'style_bible',
       rawUserStyle: 'temple lesson',
       styleSummary: 'quiet temple style',
       stylePolicy: {
@@ -233,7 +231,6 @@ describe('edit script storyboard camera plan handler', () => {
     })
     modelGenerationMock.generateStoryboardPanelFinalPrompts.mockResolvedValue({
       cameraPlanOutput: {
-        strategy: 'spatial_text_blocking',
         blocks: [{
           sourceVideoBlockId: 'edit-script-1:videoBlock:1',
           panels: [{
@@ -350,6 +347,7 @@ describe('edit script storyboard camera plan handler', () => {
         metadataJson: expect.objectContaining({
           name: 'Temple courtyard',
           spatialProfile: expect.objectContaining({
+            schemaVersion: 1,
             sceneSummary: '左后方是木门，中景有香炉。',
           }),
         }),
@@ -361,7 +359,7 @@ describe('edit script storyboard camera plan handler', () => {
       editScriptId: 'edit-script-1',
     })
     expect(shellPlan).not.toHaveProperty('sourceSnapshot')
-    expect(shellPlan).not.toHaveProperty('strategyOutput')
+    expect(shellPlan).not.toHaveProperty('spatialProfileOutput')
     const updateCalls = prismaMock.projectStoryboard.update.mock.calls as unknown as Array<[{
       readonly data?: {
         readonly photographyPlan?: string
@@ -373,7 +371,7 @@ describe('edit script storyboard camera plan handler', () => {
       editScriptId: 'edit-script-1',
     })
     expect(updatePlan).not.toHaveProperty('sourceSnapshot')
-    expect(updatePlan).not.toHaveProperty('strategyOutput')
+    expect(updatePlan).not.toHaveProperty('spatialProfileOutput')
   })
 
   it('does not enqueue a hidden panel prompt task during spatial prepare', async () => {
@@ -436,7 +434,6 @@ describe('edit script storyboard camera plan handler', () => {
     }]>
     const storedPlan = JSON.parse(String(updateCalls[0]?.[0].data?.photographyPlan))
     expect(storedPlan.cameraPlanOutput).toEqual({
-      strategy: 'spatial_text_blocking',
       panels: [{
         panelIndex: 0,
         sourceShotNumber: 1,
