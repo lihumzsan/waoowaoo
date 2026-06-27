@@ -30,17 +30,6 @@ const COMMAND_OPERATIONS: Record<CommandOperationId, CommandOperationDefinition>
     invalidates: [ARTIFACT_TYPES.PANEL_VIDEO],
     mutationKind: 'generate',
   },
-  regenerate_storyboard_text: {
-    id: 'regenerate_storyboard_text',
-    name: 'Regenerate Storyboard Text',
-    summary: 'Regenerate text content for an existing storyboard item.',
-    riskLevel: 'medium',
-    requiresApproval: true,
-    inputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET],
-    outputArtifacts: [ARTIFACT_TYPES.STORYBOARD_PANEL_SET],
-    invalidates: [ARTIFACT_TYPES.PANEL_PROMPT, ARTIFACT_TYPES.PANEL_IMAGE, ARTIFACT_TYPES.PANEL_VIDEO],
-    mutationKind: 'generate',
-  },
   modify_shot_prompt: {
     id: 'modify_shot_prompt',
     name: 'Modify Shot Prompt',

@@ -161,7 +161,6 @@ export function normalizeCommandEnvelope(params: {
     if (
       operationIdRaw !== 'insert_panel'
       && operationIdRaw !== 'panel_variant'
-      && operationIdRaw !== 'regenerate_storyboard_text'
       && operationIdRaw !== 'modify_shot_prompt'
     ) {
       throw new Error('operationId is invalid')
@@ -259,8 +258,6 @@ function taskTypeForCommand(command: CommandEnvelope): TaskType {
       return TASK_TYPE.INSERT_PANEL
     case 'panel_variant':
       return TASK_TYPE.PANEL_VARIANT
-    case 'regenerate_storyboard_text':
-      return TASK_TYPE.REGENERATE_STORYBOARD_TEXT
     case 'modify_shot_prompt':
       return TASK_TYPE.AI_MODIFY_SHOT_PROMPT
     default:

@@ -24,7 +24,6 @@ export interface CommandEnvelopeBase {
 export type CommandOperationId =
   | 'insert_panel'
   | 'panel_variant'
-  | 'regenerate_storyboard_text'
   | 'modify_shot_prompt'
 
 export type OperationRiskLevel = 'low' | 'medium' | 'high'
