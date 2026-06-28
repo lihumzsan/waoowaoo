@@ -14,6 +14,8 @@ import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
 import { type VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { getProviderKey } from '@/lib/user-api/api-config-shared'
 
 type StoredModelType = UnifiedModelType | string
 
@@ -146,6 +148,13 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
   return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
 }
 
+function isStoredProviderRuntimeReady(provider: StoredProvider): boolean {
+  const providerId = typeof provider.id === 'string' ? provider.id.trim() : ''
+  if (!providerId) return false
+  if (getProviderKey(providerId) === CODEX_PROVIDER_KEY) return true
+  return hasStoredProviderApiKey(provider)
+}
+
 async function resolveModelSource(userId: string): Promise<{
   deploymentMode: 'platform-key' | 'user-key'
   models: StoredModel[]
@@ -192,15 +201,16 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
       execute: async (ctx) => {
         const modelSource = await resolveModelSource(ctx.userId)
         const providerNameMap = new Map<string, string>()
-        const providerIdsWithApiKey = new Set<string>()
+        const runtimeReadyProviderKeys = new Set<string>()
         modelSource.providers.forEach((provider) => {
           const providerId = typeof provider?.id === 'string' ? provider.id.trim() : ''
           if (!providerId) return
+          const providerKey = getProviderKey(providerId)
 
           if (provider?.name && typeof provider.name === 'string') {
-            providerNameMap.set(providerId, provider.name)
+            providerNameMap.set(providerKey, provider.name)
           }
-          if (hasStoredProviderApiKey(provider)) providerIdsWithApiKey.add(providerId)
+          if (isStoredProviderRuntimeReady(provider)) runtimeReadyProviderKeys.add(providerKey)
         })
 
         const grouped: UserModelsPayload = {
@@ -219,13 +229,14 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
 
           const provider = toProvider(model)
           if (!provider) continue
-          if (modelSource.deploymentMode !== 'platform-key' && !providerIdsWithApiKey.has(provider)) continue
+          const providerKey = getProviderKey(provider)
+          if (modelSource.deploymentMode !== 'platform-key' && !runtimeReadyProviderKeys.has(providerKey)) continue
           const modelId = toModelId(model)
           const option: UserModelOption = {
             value: modelKey,
             label: toDisplayLabel(model, modelId || modelKey),
             provider,
-            providerName: provider ? providerNameMap.get(provider) : undefined,
+            providerName: providerNameMap.get(providerKey),
           }
 
           if (provider && modelId) {

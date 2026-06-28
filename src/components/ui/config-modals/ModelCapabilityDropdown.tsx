@@ -318,7 +318,11 @@ export function ModelCapabilityDropdown({
                 >
                     {/* Model list */}
                     <div className="px-2 pb-2 min-h-0 flex-1 overflow-y-auto app-scrollbar">
-                        {providerGroups.map(([providerLabel, groupModels]) => (
+                        {providerGroups.length === 0 ? (
+                            <div className="px-4 py-5 text-center text-[12px] leading-relaxed text-[var(--glass-text-tertiary)]">
+                                {t('noModelOptions')}
+                            </div>
+                        ) : providerGroups.map(([providerLabel, groupModels]) => (
                             <div
                                 key={providerLabel}
                                 ref={providerLabel === selectedProviderLabel ? selectedProviderGroupRef : undefined}
