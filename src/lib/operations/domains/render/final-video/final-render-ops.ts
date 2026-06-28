@@ -59,7 +59,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
-        billable: true,
+        billable: false,
         destructive: false,
         overwrite: true,
         bulk: true,
@@ -68,7 +68,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       },
       confirmation: {
         required: true,
-        summary: '将使用已生成的连续 BGM 与视频原声导出最终成片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用已生成的连续 BGM 与视频原声导出最终成片。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: finalRenderInputSchema,
       outputSchema: taskSubmitOutput,

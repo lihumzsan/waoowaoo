@@ -3,11 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
+import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
-import { cancelTask } from '@/lib/task/service'
-import { removeTaskJob } from '@/lib/task/queues'
 import {
   buildImageBillingPayload,
   getProjectModelConfig,
@@ -22,6 +19,9 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   assertOperationPlanConfirmedCost,
+  compensateSubmittedTasks,
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
   resolveConfirmedMaxCostForExecution,
   submitPlannedOperationTask,
   type OperationPlan,
@@ -131,55 +131,6 @@ function createPanelVariantId(): string {
     return randomUUID()
   } catch {
     return `panel-variant-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-  }
-}
-
-function requireTaskBillingInfo(taskType: typeof TASK_TYPE.IMAGE_PANEL | typeof TASK_TYPE.PANEL_VARIANT, payload: Record<string, unknown>): TaskBillingInfo {
-  const billingInfo = buildDefaultTaskBillingInfo(taskType, payload)
-  if (!billingInfo || billingInfo.billable !== true) {
-    throw new Error(`PROJECT_AGENT_MEDIA_BILLING_INFO_REQUIRED:${taskType}`)
-  }
-  return billingInfo
-}
-
-function createPlannedTask(params: {
-  id: string
-  taskType: typeof TASK_TYPE.IMAGE_PANEL | typeof TASK_TYPE.PANEL_VARIANT
-  targetType: string
-  targetId: string
-  payload: Record<string, unknown>
-  billingInfo: TaskBillingInfo
-  locale: PlannedTask['locale']
-  episodeId?: string | null
-  dedupeKey?: string | null
-}): PlannedTask {
-  return {
-    id: params.id,
-    taskType: params.taskType,
-    target: {
-      targetType: params.targetType,
-      targetId: params.targetId,
-    },
-    payload: params.payload,
-    billingInfo: params.billingInfo,
-    locale: params.locale,
-    episodeId: params.episodeId ?? null,
-    dedupeKey: params.dedupeKey ?? null,
-  }
-}
-
-async function compensateSubmittedTasks(taskIds: readonly string[]): Promise<void> {
-  const failed: string[] = []
-  for (const taskId of taskIds) {
-    try {
-      await cancelTask(taskId, 'Operation batch submit failed before completion')
-      await removeTaskJob(taskId).catch(() => false)
-    } catch {
-      failed.push(taskId)
-    }
-  }
-  if (failed.length > 0) {
-    throw new Error(`PROJECT_AGENT_BATCH_TASK_COMPENSATION_FAILED:${failed.join(',')}`)
   }
 }
 
@@ -386,7 +337,7 @@ async function planRegeneratePanelImageOperation(
           hasOutputAtStart,
         }),
         dedupeKey: `image_panel:${panelId}:${candidateCount}:${styleBibleSignature}:${referenceSignature}`,
-        billingInfo: requireTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload),
+        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
       }),
     ],
     metadata: {
@@ -570,7 +521,7 @@ async function planGenerateStoryboardGridImagesOperation(
           panelIds,
           styleBibleSignature,
         }),
-        billingInfo: requireTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload),
+        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
       }),
     ],
     metadata: {
@@ -786,7 +737,7 @@ async function planGenerateEditScriptStoryboardImagesOperation(
           styleBibleSignature,
         })
         : `edit_first_panel_image:${primaryPanel.id}:${styleBibleSignature}`,
-      billingInfo: requireTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, billingPayload),
+      billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
     }))
     groups.push({
       planTaskId,
@@ -1091,7 +1042,7 @@ async function planPanelVariantOperation(
         episodeId: storyboard.episodeId,
         payload: billingPayload,
         dedupeKey: `panel_variant:${storyboardId}:${insertAfterPanelId}:${sourcePanelId}:${styleBibleSignature}`,
-        billingInfo: requireTaskBillingInfo(TASK_TYPE.PANEL_VARIANT, billingPayload),
+        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.PANEL_VARIANT, payload: billingPayload, allowedApiTypes: ['image'] }),
       }),
     ],
     metadata: {

@@ -37,7 +37,7 @@ vi.mock('@/lib/model-access/system-model-resolver', () => ({
   resolveSystemModelKey: resolveSystemModelKeyMock,
 }))
 
-import { createVideoGenerationOperations } from '@/lib/operations/domains/media/video-generation-ops'
+import { createVideoGenerationOperations } from '@/lib/operations/domains/storyboard/generation/video-generation-ops'
 
 const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
@@ -103,6 +103,7 @@ describe('cloud video generation runtime options', () => {
   it('uses platform video model and runtime options when submitting a panel video task', async () => {
     const result = await createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
       confirmed: true,
+      confirmedMaxCost: 999,
       panelId: 'panel-1',
       generationOptions: {
         resolution: '480p',

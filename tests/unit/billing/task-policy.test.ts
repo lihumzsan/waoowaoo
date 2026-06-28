@@ -83,8 +83,19 @@ describe('billing/task-policy', () => {
     expect(info.quantity).toBe(3000)
   })
 
+  it('builds backend text billing info for edit script generation without making it a fixed-price media quote', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {
+      analysisModel: 'anthropic/claude-sonnet-4',
+    }))
+    expect(info.apiType).toBe('text')
+    expect(info.taskType).toBe(TASK_TYPE.EDIT_SCRIPT_GENERATE)
+    expect(info.model).toBe('anthropic/claude-sonnet-4')
+    expect(info.unit).toBe('token')
+  })
+
   it('returns null for missing required models in text/image/video tasks', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCREENPLAY_GENERATE, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()

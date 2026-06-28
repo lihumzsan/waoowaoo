@@ -119,7 +119,7 @@ describe('project agent operation registry', () => {
     expect(operation.confirmation.required).toBe(false)
   })
 
-  it('registers final video render as a confirmed assistant-callable operation', () => {
+  it('registers final video render as a confirmed but non-billable assistant-callable operation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.render_final_video
 
@@ -130,7 +130,7 @@ describe('project agent operation registry', () => {
     expect(operation.prerequisites.episodeId).toBe('required')
     expect(operation.effects).toEqual({
       writes: true,
-      billable: true,
+      billable: false,
       destructive: false,
       overwrite: true,
       bulk: true,

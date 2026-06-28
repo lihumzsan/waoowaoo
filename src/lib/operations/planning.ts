@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
-import { getBillingMode } from '@/lib/billing'
+import { buildDefaultTaskBillingInfo, getBillingMode } from '@/lib/billing'
 import type { BillingMode, TaskBillingInfo, TaskType } from '@/lib/task/types'
 import type { Locale } from '@/i18n/routing'
 import { shouldExposeBillingCredits } from '@/lib/billing/task-billing-view'
+import { cancelTask } from '@/lib/task/service'
+import { removeTaskJob } from '@/lib/task/queues'
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
@@ -46,10 +48,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video'
+  apiType: 'image' | 'video' | 'music'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'second' | 'call'
+  unit: 'image' | 'video' | 'music' | 'second' | 'call'
   maxFrozenCost?: number
 }
 
@@ -81,10 +83,17 @@ function shouldExposeCredits(): boolean {
   return shouldExposeBillingCredits()
 }
 
+type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
+type FixedPriceMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'music'>
+
 function isFixedPriceMediaBillingInfo(
   info: TaskBillingInfo | null | undefined,
-): info is Extract<TaskBillingInfo, { billable: true }> & { apiType: 'image' | 'video' } {
-  return info?.billable === true && (info.apiType === 'image' || info.apiType === 'video')
+): info is BillableTaskBillingInfo & { apiType: FixedPriceMediaApiType } {
+  return info?.billable === true && (
+    info.apiType === 'image'
+    || info.apiType === 'video'
+    || info.apiType === 'music'
+  )
 }
 
 function toPositiveMoney(value: number): number {
@@ -112,7 +121,7 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
       currency: 'credits' as const,
     } : {}),
     items: mediaTasks.map((task) => {
-      const info = task.billingInfo as Extract<TaskBillingInfo, { billable: true }> & { apiType: 'image' | 'video' }
+      const info = task.billingInfo as BillableTaskBillingInfo & { apiType: FixedPriceMediaApiType }
       return {
         id: task.id,
         taskType: task.taskType,
@@ -127,6 +136,64 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
         ...(showCredits ? { maxFrozenCost: info.maxFrozenCost } : {}),
       }
     }),
+  }
+}
+
+export function createPlannedTask(params: {
+  id: string
+  taskType: TaskType
+  targetType: string
+  targetId: string
+  payload: Record<string, unknown>
+  billingInfo: TaskBillingInfo
+  locale: PlannedTask['locale']
+  episodeId?: string | null
+  dedupeKey?: string | null
+  priority?: number
+}): PlannedTask {
+  return {
+    id: params.id,
+    taskType: params.taskType,
+    target: {
+      targetType: params.targetType,
+      targetId: params.targetId,
+    },
+    payload: params.payload,
+    billingInfo: params.billingInfo,
+    locale: params.locale,
+    episodeId: params.episodeId ?? null,
+    dedupeKey: params.dedupeKey ?? null,
+    priority: params.priority,
+  }
+}
+
+export function requirePlannedTaskBillingInfo(params: {
+  taskType: TaskType
+  payload: Record<string, unknown>
+  allowedApiTypes?: readonly BillableTaskBillingInfo['apiType'][]
+}): TaskBillingInfo {
+  const billingInfo = buildDefaultTaskBillingInfo(params.taskType, params.payload)
+  if (!billingInfo || billingInfo.billable !== true) {
+    throw new Error(`PROJECT_AGENT_PLANNED_TASK_BILLING_INFO_REQUIRED:${params.taskType}`)
+  }
+  if (params.allowedApiTypes && !params.allowedApiTypes.includes(billingInfo.apiType)) {
+    throw new Error(`PROJECT_AGENT_PLANNED_TASK_BILLING_API_TYPE_INVALID:${params.taskType}:${billingInfo.apiType}`)
+  }
+  return billingInfo
+}
+
+export async function compensateSubmittedTasks(taskIds: readonly string[], reason = 'Operation batch submit failed before completion'): Promise<void> {
+  const failed: string[] = []
+  for (const taskId of taskIds) {
+    try {
+      await cancelTask(taskId, reason)
+      await removeTaskJob(taskId).catch(() => false)
+    } catch {
+      failed.push(taskId)
+    }
+  }
+  if (failed.length > 0) {
+    throw new Error(`PROJECT_AGENT_BATCH_TASK_COMPENSATION_FAILED:${failed.join(',')}`)
   }
 }
 
@@ -156,7 +223,7 @@ export async function assertOperationPlanConfirmedCost(params: {
   if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'OPERATION_CONFIRMED_MAX_COST_REQUIRED',
-      message: 'confirmedMaxCost is required for billable media operations',
+      message: 'confirmedMaxCost is required for billable fixed-price media operations',
     })
   }
   const actual = quote.totalMaxFrozenCost ?? 0

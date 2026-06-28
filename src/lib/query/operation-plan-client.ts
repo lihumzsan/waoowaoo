@@ -29,6 +29,26 @@ export async function fetchOperationPlanView(params: {
   return await response.json() as OperationPlanView
 }
 
+export async function fetchAssetOperationPlanView(params: {
+  assetId: string
+  action: 'generate' | 'modify-render'
+  input: Record<string, unknown>
+}): Promise<OperationPlanView> {
+  const response = await apiFetch(`/api/assets/${params.assetId}/${params.action}/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params.input),
+  })
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => ({}))
+    const message = isRecord(payload) && typeof payload.message === 'string'
+      ? payload.message
+      : 'OPERATION_PLAN_FAILED'
+    throw new Error(message)
+  }
+  return await response.json() as OperationPlanView
+}
+
 export function readPlanConfirmedMaxCost(plan: OperationPlanView): number | null {
   const value = plan.quote.totalMaxFrozenCost
   return typeof value === 'number' && Number.isFinite(value) ? value : null

@@ -59,7 +59,19 @@ vi.mock('@/lib/edit-script/style-bible-prompt', () => ({
   resolveEditScriptStyleBibleSignatureForTask: vi.fn(async () => 'style-signature-1'),
 }))
 vi.mock('@/lib/billing', () => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ units: 1 })),
+  getBillingMode: vi.fn(async () => 'OFF'),
+  buildDefaultTaskBillingInfo: vi.fn((taskType: string) => ({
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'image',
+    model: 'storyboard-model-1',
+    quantity: 1,
+    unit: 'image',
+    maxFrozenCost: 1,
+    action: taskType,
+    status: 'quoted',
+  })),
 }))
 vi.mock('@/lib/operations/types', async () => {
   const actual = await vi.importActual<typeof import('@/lib/operations/types')>('@/lib/operations/types')
@@ -69,7 +81,7 @@ vi.mock('@/lib/operations/types', async () => {
   }
 })
 
-import { createStoryboardPanelImageOperations } from '@/lib/operations/domains/storyboard/panel-image-ops'
+import { createStoryboardPanelImageOperations } from '@/lib/operations/domains/storyboard/generation/panel-image-ops'
 
 function buildContext(): ProjectAgentOperationContext {
   return {

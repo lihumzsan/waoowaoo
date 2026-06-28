@@ -3,9 +3,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { BillingOperationError } from '@/lib/billing/errors'
+import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { createMutationBatch } from '@/lib/mutation-batch/service'
 import { hasPanelVideoOutput } from '@/lib/task/has-output'
@@ -29,13 +27,14 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   assertOperationPlanConfirmedCost,
+  compensateSubmittedTasks,
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
   resolveConfirmedMaxCostForExecution,
   submitPlannedOperationTask,
   type OperationPlan,
   type PlannedTask,
 } from '@/lib/operations/planning'
-import { cancelTask } from '@/lib/task/service'
-import { removeTaskJob } from '@/lib/task/queues'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -277,97 +276,6 @@ async function resolveVideoCapabilityOptions(input: {
   return resolvedOptions
 }
 
-function buildVideoPanelBillingInfoOrThrow(payload: unknown) {
-  try {
-    return buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, isRecord(payload) ? payload : null)
-  } catch (error) {
-    if (
-      error instanceof BillingOperationError
-      && (
-        error.code === 'BILLING_UNKNOWN_VIDEO_CAPABILITY_COMBINATION'
-        || error.code === 'BILLING_UNKNOWN_VIDEO_RESOLUTION'
-      )
-    ) {
-      throw new Error('PROJECT_AGENT_VIDEO_CAPABILITY_COMBINATION_UNSUPPORTED')
-    }
-    if (error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      return null
-    }
-    throw error
-  }
-}
-
-function buildVideoGroupBillingInfoOrThrow(payload: unknown) {
-  try {
-    return buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_GROUP, isRecord(payload) ? payload : null)
-  } catch (error) {
-    if (
-      error instanceof BillingOperationError
-      && (
-        error.code === 'BILLING_UNKNOWN_VIDEO_CAPABILITY_COMBINATION'
-        || error.code === 'BILLING_UNKNOWN_VIDEO_RESOLUTION'
-      )
-    ) {
-      throw new Error('PROJECT_AGENT_VIDEO_CAPABILITY_COMBINATION_UNSUPPORTED')
-    }
-    if (error instanceof BillingOperationError && error.code === 'BILLING_UNKNOWN_MODEL') {
-      return null
-    }
-    throw error
-  }
-}
-
-function requireVideoTaskBillingInfo(taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP, payload: Record<string, unknown>): TaskBillingInfo {
-  const billingInfo = taskType === TASK_TYPE.VIDEO_PANEL
-    ? buildVideoPanelBillingInfoOrThrow(payload)
-    : buildVideoGroupBillingInfoOrThrow(payload)
-  if (!billingInfo || billingInfo.billable !== true) {
-    throw new Error(`PROJECT_AGENT_VIDEO_BILLING_INFO_REQUIRED:${taskType}`)
-  }
-  return billingInfo
-}
-
-function createVideoPlannedTask(params: {
-  id: string
-  taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP
-  targetType: string
-  targetId: string
-  payload: Record<string, unknown>
-  billingInfo: TaskBillingInfo
-  locale: PlannedTask['locale']
-  episodeId?: string | null
-  dedupeKey?: string | null
-}): PlannedTask {
-  return {
-    id: params.id,
-    taskType: params.taskType,
-    target: {
-      targetType: params.targetType,
-      targetId: params.targetId,
-    },
-    payload: params.payload,
-    billingInfo: params.billingInfo,
-    locale: params.locale,
-    episodeId: params.episodeId ?? null,
-    dedupeKey: params.dedupeKey ?? null,
-  }
-}
-
-async function compensateSubmittedVideoTasks(taskIds: readonly string[]): Promise<void> {
-  const failed: string[] = []
-  for (const taskId of taskIds) {
-    try {
-      await cancelTask(taskId, 'Operation batch submit failed before completion')
-      await removeTaskJob(taskId).catch(() => false)
-    } catch {
-      failed.push(taskId)
-    }
-  }
-  if (failed.length > 0) {
-    throw new Error(`PROJECT_AGENT_VIDEO_BATCH_TASK_COMPENSATION_FAILED:${failed.join(',')}`)
-  }
-}
-
 function buildVideoTaskPayload(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
@@ -567,7 +475,7 @@ async function commitGenerateEpisodeVideosPlan(params: {
       submitted.push({ task, result })
     }
   } catch (error) {
-    await compensateSubmittedVideoTasks(submitted.map((item) => item.result.taskId))
+    await compensateSubmittedTasks(submitted.map((item) => item.result.taskId))
     throw error
   }
   const taskIds = submitted.map((item) => item.result.taskId)
@@ -1019,9 +927,9 @@ async function planAssetReferenceVideoBlockTask(params: {
   })
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:asset_reference:${params.blockIndex ?? shotNumbers.join('-')}:${groupId}`
-  const billingInfo = requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_GROUP, payload)
+  const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
   return {
-    task: createVideoPlannedTask({
+    task: createPlannedTask({
       id: planTaskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
@@ -1090,9 +998,9 @@ async function planVideoGroupTask(params: {
   })
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotNumbers.join('-')}:${groupId}`
-  const billingInfo = requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_GROUP, payload)
+  const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
   return {
-    task: createVideoPlannedTask({
+    task: createPlannedTask({
       id: planTaskId,
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
@@ -1153,7 +1061,7 @@ async function commitPlannedVideoGroupTask(params: {
     }
   } catch (error) {
     if (submittedTaskId) {
-      await compensateSubmittedVideoTasks([submittedTaskId])
+      await compensateSubmittedTasks([submittedTaskId])
     }
     await rollbackVideoGroupTaskRecord({
       groupId: params.metadata.groupId,
@@ -1185,7 +1093,7 @@ async function commitPlannedVideoGroupBatch(params: {
     }
   } catch (error) {
     const failures: string[] = []
-    await compensateSubmittedVideoTasks(committed.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
+    await compensateSubmittedTasks(committed.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
       failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
     })
     await rollbackCommittedVideoGroups(committed).catch((rollbackError: unknown) => {
@@ -1662,7 +1570,7 @@ async function commitGenerateEpisodeVideosAutoPlan(params: {
     }
   } catch (error) {
     const failures: string[] = []
-    await compensateSubmittedVideoTasks(submitted.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
+    await compensateSubmittedTasks(submitted.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
       failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
     })
     await rollbackCommittedVideoGroups(committedGroups).catch((rollbackError: unknown) => {
@@ -2022,7 +1930,7 @@ async function planGeneratePanelVideoOperation(params: {
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
     tasks: [
-      createVideoPlannedTask({
+      createPlannedTask({
         id: `${params.operationId}:${panelId}`,
         taskType: TASK_TYPE.VIDEO_PANEL,
         targetType: 'ProjectPanel',
@@ -2033,7 +1941,7 @@ async function planGeneratePanelVideoOperation(params: {
           hasOutputAtStart: await hasPanelVideoOutput(panelId),
         }),
         dedupeKey: `video_panel:${panelId}`,
-        billingInfo: requireVideoTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, payload),
+        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_PANEL, payload, allowedApiTypes: ['video'] }),
       }),
     ],
     metadata: {

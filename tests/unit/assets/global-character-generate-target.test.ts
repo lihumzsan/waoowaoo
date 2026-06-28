@@ -6,6 +6,9 @@ const prismaMock = vi.hoisted(() => ({
   globalCharacterAppearance: {
     findFirst: vi.fn(),
   },
+  globalLocationImage: {
+    createMany: vi.fn(),
+  },
 }))
 
 const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
@@ -19,12 +22,23 @@ const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
 
 const configMock = vi.hoisted(() => ({
   getUserModelConfig: vi.fn(async () => ({
-    characterModel: 'character-model-1',
-    locationModel: 'location-model-1',
+    characterModel: 'fal::gpt-image-2',
+    locationModel: 'fal::gpt-image-2',
   })),
   getProjectModelConfig: vi.fn(),
   buildImageBillingPayload: vi.fn(),
-  buildImageBillingPayloadFromUserConfig: vi.fn(({ basePayload }) => basePayload),
+  buildImageBillingPayloadFromUserConfig: vi.fn((input: {
+    imageModel: string | null
+    basePayload: Record<string, unknown>
+  }) => ({
+    ...input.basePayload,
+    imageModel: input.imageModel,
+    generationOptions: {
+      resolution: '1K',
+      aspectRatio: '1:1',
+      quality: 'medium',
+    },
+  })),
 }))
 
 const hasOutputMock = vi.hoisted(() => ({
@@ -89,5 +103,33 @@ describe('global character generate task target', () => {
         appearanceIndex: 0,
       }),
     }))
+  })
+
+  it('plans global location generation without creating image slots', async () => {
+    const { planAssetGenerateTask } = await import('@/lib/assets/services/asset-actions')
+
+    const plan = await planAssetGenerateTask({
+      request: new Request('http://localhost/api/assets/location-1/generate') as unknown as NextRequest,
+      kind: 'location',
+      assetId: 'location-1',
+      body: {
+        scope: 'global',
+        kind: 'location',
+        count: 2,
+        meta: { locale: 'zh' },
+      },
+      access: {
+        scope: 'global',
+        userId: 'user-1',
+      },
+    })
+
+    expect(plan.task.taskType).toBe(TASK_TYPE.ASSET_HUB_IMAGE)
+    expect(plan.task.target).toEqual({
+      targetType: 'GlobalLocation',
+      targetId: 'location-1',
+    })
+    expect(prismaMock.globalLocationImage.createMany).not.toHaveBeenCalled()
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 })

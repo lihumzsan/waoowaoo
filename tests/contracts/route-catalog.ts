@@ -47,7 +47,9 @@ const ROUTE_FILES = [
   'src/app/api/asset-hub/upload-image/route.ts',
   'src/app/api/asset-hub/upload-temp/route.ts',
   'src/app/api/assets/[assetId]/copy/route.ts',
+  'src/app/api/assets/[assetId]/generate/plan/route.ts',
   'src/app/api/assets/[assetId]/generate/route.ts',
+  'src/app/api/assets/[assetId]/modify-render/plan/route.ts',
   'src/app/api/assets/[assetId]/modify-render/route.ts',
   'src/app/api/assets/[assetId]/revert-render/route.ts',
   'src/app/api/assets/[assetId]/route.ts',
@@ -200,6 +202,8 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/final-video-render/route.ts')
     || routeFile.endsWith('/generate/route.ts')
     || routeFile.endsWith('/modify-render/route.ts')
+    || routeFile.endsWith('/generate/plan/route.ts')
+    || routeFile.endsWith('/modify-render/plan/route.ts')
     || routeFile.endsWith('/operations/[operationId]/plan/route.ts')
     || routeFile.endsWith('/insert-panel/route.ts')
     || routeFile.endsWith('/modify-storyboard-image/route.ts')

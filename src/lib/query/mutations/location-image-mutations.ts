@@ -13,6 +13,7 @@ import {
     requestTaskResponseWithError,
 } from './mutation-shared'
 import { resolveTaskResponse } from '@/lib/task/client'
+import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
 
 interface SelectProjectLocationImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -70,6 +71,7 @@ function applyLocationSelectionToProject(
 
 export function useGenerateProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -83,15 +85,20 @@ export function useGenerateProjectLocationImage(projectId: string) {
             imageIndex?: number
             count?: number
         }) => {
+            const requestBody = buildProjectLocationGenerateImageBody({
+                projectId,
+                locationId,
+                imageIndex,
+                count,
+            })
+            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(buildProjectLocationGenerateImageBody({
-                    projectId,
-                    locationId,
-                    imageIndex,
-                    count,
-                }))
+                body: JSON.stringify({
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                })
             }, 'Failed to generate image')
         },
         onMutate: ({ locationId }) => {
@@ -167,6 +174,7 @@ export function useUploadProjectLocationImage(projectId: string) {
 
 export function useModifyProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssetAndProjectData = () =>
         invalidateQueryTemplates(queryClient, [
             queryKeys.projectAssets.all(projectId),
@@ -180,14 +188,19 @@ export function useModifyProjectLocationImage(projectId: string) {
             modifyPrompt: string
             extraImageUrls?: string[]
         }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'location',
+                projectId,
+                ...params,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(params.locationId, 'modify-render', requestBody)
             const response = await requestTaskResponseWithError(`/api/assets/${params.locationId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'location',
-                    projectId,
-                    ...params,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 }),
             }, 'Failed to modify image')
             return await resolveTaskResponse(response)
@@ -217,19 +230,25 @@ export function useModifyProjectLocationImage(projectId: string) {
 
 export function useRegenerateLocationGroup(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ locationId, count }: { locationId: string; count?: number }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'location',
+                projectId,
+                count,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'location',
-                    projectId,
-                    count,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 })
             }, 'Failed to regenerate group')
         },
@@ -258,19 +277,25 @@ export function useRegenerateLocationGroup(projectId: string) {
 
 export function useRegenerateSingleLocationImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ locationId, imageIndex }: { locationId: string; imageIndex: number }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'location',
+                projectId,
+                imageIndex,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'location',
-                    projectId,
-                    imageIndex,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 })
             }, 'Failed to regenerate image')
         },

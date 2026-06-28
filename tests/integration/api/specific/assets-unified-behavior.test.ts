@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { buildMockRequest } from '../../../helpers/request'
+import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 
 const authMock = vi.hoisted(() => ({
   requireUserAuth: vi.fn(async () => ({
@@ -19,6 +20,8 @@ const authMock = vi.hoisted(() => ({
 
 const readAssetsMock = vi.hoisted(() => vi.fn())
 const submitAssetGenerateTaskMock = vi.hoisted(() => vi.fn())
+const executeProjectAgentOperationFromApiMock = vi.hoisted(() => vi.fn())
+const planProjectAgentOperationFromApiMock = vi.hoisted(() => vi.fn())
 const copyAssetFromGlobalMock = vi.hoisted(() => vi.fn())
 const createAssetMock = vi.hoisted(() => vi.fn())
 const updateAssetMock = vi.hoisted(() => vi.fn())
@@ -35,13 +38,21 @@ vi.mock('@/lib/assets/services/read-assets', () => ({
 vi.mock('@/lib/assets/services/asset-actions', () => ({
   createAsset: createAssetMock,
   submitAssetGenerateTask: submitAssetGenerateTaskMock,
+  planAssetGenerateTask: vi.fn(),
   copyAssetFromGlobal: copyAssetFromGlobalMock,
   updateAsset: updateAssetMock,
   removeAsset: removeAssetMock,
   updateAssetVariant: updateAssetVariantMock,
   submitAssetModifyTask: vi.fn(),
+  planAssetModifyTask: vi.fn(),
   selectAssetRender: selectAssetRenderMock,
   revertAssetRender: revertAssetRenderMock,
+}))
+vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => ({
+  executeProjectAgentOperationFromApi: executeProjectAgentOperationFromApiMock,
+}))
+vi.mock('@/lib/operations/planning', () => ({
+  planProjectAgentOperationFromApi: planProjectAgentOperationFromApiMock,
 }))
 vi.mock('@/lib/assets/services/project-upload-render', () => ({
   uploadProjectAssetRender: uploadProjectAssetRenderMock,
@@ -55,11 +66,132 @@ function buildFormRequest(path: string, formData: FormData) {
   })
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function readKind(value: unknown): AssetKind {
+  if (value === 'character' || value === 'location' || value === 'prop') return value
+  throw new Error('TEST_ASSET_KIND_REQUIRED')
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function omitKeys(input: Record<string, unknown>, keys: ReadonlyArray<string>): Record<string, unknown> {
+  const output: Record<string, unknown> = { ...input }
+  for (const key of keys) {
+    delete output[key]
+  }
+  return output
+}
+
 describe('api specific - unified assets routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readAssetsMock.mockResolvedValue([{ id: 'asset-1', kind: 'character' }])
     submitAssetGenerateTaskMock.mockResolvedValue({ success: true, taskId: 'task-1' })
+    executeProjectAgentOperationFromApiMock.mockImplementation(async (params: {
+      request: Request
+      operationId: string
+      projectId: string
+      userId: string
+      input: unknown
+    }) => {
+      const input = asRecord(params.input)
+      const scope = input.scope === 'global' || input.scope === 'project' ? input.scope : 'project'
+      const kind = readKind(input.kind)
+      const assetId = readString(input.assetId)
+      const projectId = readString(input.projectId) || params.projectId
+      const access = scope === 'project'
+        ? { scope, userId: params.userId, projectId }
+        : { scope, userId: params.userId }
+
+      if (params.operationId === 'api_assets_read') {
+        const readArgs = {
+          scope,
+          projectId: scope === 'project' ? projectId : null,
+          folderId: typeof input.folderId === 'string' && input.folderId.trim() ? input.folderId : null,
+          kind: input.kind ?? null,
+        }
+        const assets = scope === 'global'
+          ? await readAssetsMock(readArgs, { userId: params.userId })
+          : await readAssetsMock(readArgs)
+        return { assets }
+      }
+      if (params.operationId === 'api_assets_create') {
+        return await createAssetMock({ kind, body: input, access })
+      }
+      if (params.operationId === 'api_assets_update') {
+        return await updateAssetMock({ kind, assetId, body: omitKeys(input, ['assetId']), access })
+      }
+      if (params.operationId === 'api_assets_remove') {
+        return await removeAssetMock({ kind, assetId, access })
+      }
+      if (params.operationId === 'api_assets_generate') {
+        return { success: true, taskId: 'task-1' }
+      }
+      if (params.operationId === 'api_assets_modify_render') {
+        return { success: true, taskId: 'task-1' }
+      }
+      if (params.operationId === 'api_assets_update_variant') {
+        return await updateAssetVariantMock({
+          kind,
+          assetId,
+          variantId: readString(input.variantId),
+          body: omitKeys(input, ['assetId', 'variantId']),
+          access,
+        })
+      }
+      if (params.operationId === 'api_assets_select_render') {
+        return await selectAssetRenderMock({ kind, assetId, body: omitKeys(input, ['assetId']), access })
+      }
+      if (params.operationId === 'api_assets_revert_render') {
+        return await revertAssetRenderMock({ kind, assetId, body: omitKeys(input, ['assetId']), access })
+      }
+      if (params.operationId === 'api_assets_copy_from_global') {
+        return await copyAssetFromGlobalMock({
+          kind,
+          targetId: assetId,
+          globalAssetId: readString(input.globalAssetId),
+          access: {
+            userId: params.userId,
+            projectId,
+          },
+        })
+      }
+      if (params.operationId === 'api_assets_upload_render') {
+        const file = input.file instanceof Blob ? input.file : new Blob([])
+        return await uploadProjectAssetRenderMock({
+          userId: params.userId,
+          projectId,
+          kind,
+          assetId,
+          imageBuffer: Buffer.from(await file.arrayBuffer()),
+          locale: 'zh',
+          ...(typeof input.appearanceId === 'string' ? { appearanceId: input.appearanceId } : {}),
+          ...(typeof input.imageIndex === 'number' ? { imageIndex: input.imageIndex } : {}),
+        })
+      }
+      throw new Error(`TEST_OPERATION_UNHANDLED:${params.operationId}`)
+    })
+    planProjectAgentOperationFromApiMock.mockResolvedValue({
+      operationId: 'api_assets_generate',
+      kind: 'task_submission',
+      taskCount: 1,
+      quote: {
+        showCredits: true,
+        billingMode: 'ENFORCE',
+        billable: true,
+        taskCount: 1,
+        mediaTaskCount: 1,
+        totalMaxFrozenCost: 1,
+        currency: 'credits',
+        items: [],
+      },
+      tasks: [],
+    })
     copyAssetFromGlobalMock.mockResolvedValue({ success: true })
     createAssetMock.mockResolvedValue({ success: true, assetId: 'prop-1' })
     updateAssetMock.mockResolvedValue({ success: true })
@@ -220,7 +352,7 @@ describe('api specific - unified assets routes', () => {
     expect(body).toEqual({ success: true })
   })
 
-  it('POST /api/assets/[assetId]/generate forwards project asset generation to the unified service', async () => {
+  it('POST /api/assets/[assetId]/generate forwards project asset generation to the operation runtime', async () => {
     const mod = await import('@/app/api/assets/[assetId]/generate/route')
     const req = buildMockRequest({
       path: '/api/assets/asset-1/generate',
@@ -242,11 +374,13 @@ describe('api specific - unified assets routes', () => {
 
     expect(res.status).toBe(200)
     expect(authMock.requireProjectAuthLight).toHaveBeenCalledWith('project-1')
-    expect(submitAssetGenerateTaskMock).toHaveBeenCalledWith({
+    expect(executeProjectAgentOperationFromApiMock).toHaveBeenCalledWith({
       request: req,
-      kind: 'character',
-      assetId: 'asset-1',
-      body: {
+      operationId: 'api_assets_generate',
+      projectId: 'project-1',
+      userId: 'user-1',
+      input: {
+        assetId: 'asset-1',
         scope: 'project',
         kind: 'character',
         projectId: 'project-1',
@@ -254,14 +388,103 @@ describe('api specific - unified assets routes', () => {
         appearanceId: 'appearance-1',
         count: 2,
       },
-      episodeId: 'episode-1',
-      access: {
-        scope: 'project',
-        userId: 'user-1',
-        projectId: 'project-1',
-      },
+      source: 'project-ui',
     })
     expect(body).toEqual({ success: true, taskId: 'task-1' })
+  })
+
+  it('POST /api/assets/[assetId]/generate/plan returns a project asset operation plan without submitting', async () => {
+    const mod = await import('@/app/api/assets/[assetId]/generate/plan/route')
+    const req = buildMockRequest({
+      path: '/api/assets/asset-1/generate/plan',
+      method: 'POST',
+      body: {
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
+        appearanceId: 'appearance-1',
+      },
+    })
+
+    const res = await mod.POST(req, {
+      params: Promise.resolve({ assetId: 'asset-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(authMock.requireProjectAuthLight).toHaveBeenCalledWith('project-1')
+    expect(planProjectAgentOperationFromApiMock).toHaveBeenCalledWith({
+      request: req,
+      operationId: 'api_assets_generate',
+      projectId: 'project-1',
+      userId: 'user-1',
+      input: {
+        assetId: 'asset-1',
+        scope: 'project',
+        kind: 'character',
+        projectId: 'project-1',
+        appearanceId: 'appearance-1',
+      },
+      source: 'project-ui',
+    })
+    expect(executeProjectAgentOperationFromApiMock).not.toHaveBeenCalled()
+    expect(body.quote.mediaTaskCount).toBe(1)
+  })
+
+  it('POST /api/assets/[assetId]/modify-render/plan returns a global asset operation plan without submitting', async () => {
+    planProjectAgentOperationFromApiMock.mockResolvedValueOnce({
+      operationId: 'api_assets_modify_render',
+      kind: 'task_submission',
+      taskCount: 1,
+      quote: {
+        showCredits: true,
+        billingMode: 'ENFORCE',
+        billable: true,
+        taskCount: 1,
+        mediaTaskCount: 1,
+        totalMaxFrozenCost: 1,
+        currency: 'credits',
+        items: [],
+      },
+      tasks: [],
+    })
+    const mod = await import('@/app/api/assets/[assetId]/modify-render/plan/route')
+    const req = buildMockRequest({
+      path: '/api/assets/asset-1/modify-render/plan',
+      method: 'POST',
+      body: {
+        scope: 'global',
+        kind: 'character',
+        appearanceIndex: 0,
+        imageIndex: 0,
+        modifyPrompt: 'make it brighter',
+      },
+    })
+
+    const res = await mod.POST(req, {
+      params: Promise.resolve({ assetId: 'asset-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(authMock.requireUserAuth).toHaveBeenCalled()
+    expect(planProjectAgentOperationFromApiMock).toHaveBeenCalledWith({
+      request: req,
+      operationId: 'api_assets_modify_render',
+      projectId: 'global-asset-hub',
+      userId: 'user-1',
+      input: {
+        assetId: 'asset-1',
+        scope: 'global',
+        kind: 'character',
+        appearanceIndex: 0,
+        imageIndex: 0,
+        modifyPrompt: 'make it brighter',
+      },
+      source: 'project-ui',
+    })
+    expect(executeProjectAgentOperationFromApiMock).not.toHaveBeenCalled()
+    expect(body.operationId).toBe('api_assets_modify_render')
   })
 
   it('PATCH /api/assets/[assetId]/variants/[variantId] updates a prop variant through the unified route', async () => {

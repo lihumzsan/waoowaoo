@@ -5,7 +5,6 @@ import { ApiError, getRequestId } from '@/lib/api-errors'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { getProjectModelConfig, getUserModelConfig, buildImageBillingPayload, buildImageBillingPayloadFromUserConfig } from '@/lib/config-service'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -28,6 +27,11 @@ import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 import {
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
+  type PlannedTask,
+} from '@/lib/operations/planning'
+import {
   createGlobalLocationBackedAsset,
   createProjectLocationBackedAsset,
   deleteGlobalLocationBackedAsset,
@@ -48,11 +52,17 @@ type AssetActionTarget = {
   assetId: string
 }
 
-type AssetGenerateInput = AssetActionTarget & {
+export type AssetGenerateInput = AssetActionTarget & {
   request: NextRequest
   body: Record<string, unknown>
   access: AssetWriteAccess
   episodeId?: string | null
+}
+
+type PlannedAssetTask = {
+  userId: string
+  projectId: string
+  task: PlannedTask
 }
 
 type AssetModifyInput = AssetActionTarget & {
@@ -164,22 +174,45 @@ function requireLocationBackedKind(kind: AssetKind): LocationBackedAssetKind {
   return kind
 }
 
-export async function submitAssetGenerateTask(input: AssetGenerateInput) {
-  return input.access.scope === 'global'
-    ? submitGlobalAssetGenerateTask(input)
-    : submitProjectAssetGenerateTask(input)
+async function submitAssetPlannedTask(input: PlannedAssetTask, request: NextRequest) {
+  return await submitTask({
+    userId: input.userId,
+    locale: input.task.locale,
+    requestId: getRequestId(request),
+    projectId: input.projectId,
+    episodeId: input.task.episodeId ?? null,
+    type: input.task.taskType,
+    targetType: input.task.target.targetType,
+    targetId: input.task.target.targetId,
+    payload: input.task.payload,
+    dedupeKey: input.task.dedupeKey ?? null,
+    priority: input.task.priority,
+    billingInfo: input.task.billingInfo,
+    billingInfoSource: 'planned',
+  })
 }
 
-async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
-  assertNoLegacyArtStyle(input.body)
-  const locale = resolveRequiredTaskLocale(input.request, input.body)
-  const appearanceIndex = toNumber(input.body.appearanceIndex) ?? PRIMARY_APPEARANCE_INDEX
+export async function planAssetGenerateTask(input: AssetGenerateInput): Promise<PlannedAssetTask> {
+  return input.access.scope === 'global'
+    ? planGlobalAssetGenerateTask(input)
+    : planProjectAssetGenerateTask(input)
+}
+
+export async function submitAssetGenerateTask(input: AssetGenerateInput) {
+  const planned = await planAssetGenerateTask(input)
+  await ensureAssetGenerateCommitReady(input)
+  return await submitAssetPlannedTask(planned, input.request)
+}
+
+export async function ensureAssetGenerateCommitReady(input: AssetGenerateInput): Promise<void> {
   const normalizedKind = normalizeLocationBackedKind(input.kind)
+  if (normalizedKind !== 'location') return
+
   const imageIndex = toNumber(input.body.imageIndex)
-  const count = normalizedKind === 'character'
-    ? (imageIndex === null ? resolveGroupedCharacterGenerateCount(input.body.count) : normalizeImageGenerationCount('character', input.body.count))
-    : (imageIndex === null ? resolveGroupedLocationGenerateCount(input.body.count) : normalizeImageGenerationCount('location', input.body.count))
-  if (normalizedKind === 'location' && imageIndex === null) {
+  if (imageIndex !== null) return
+
+  const count = resolveGroupedLocationGenerateCount(input.body.count)
+  if (input.access.scope === 'global') {
     const location = await prisma.globalLocation.findFirst({
       where: { id: input.assetId, userId: input.access.userId },
       select: {
@@ -207,8 +240,51 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
         })
         : location.summary || location.name,
     })
+    return
   }
 
+  const projectId = requireProjectId(input.access)
+  const location = await prisma.projectLocation.findFirst({
+    where: {
+      id: input.assetId,
+      projectId,
+    },
+    select: {
+      name: true,
+      summary: true,
+      assetKind: true,
+      images: {
+        orderBy: { imageIndex: 'asc' },
+        take: 1,
+        select: { description: true },
+      },
+    },
+  })
+  if (!location) {
+    throw new ApiError('NOT_FOUND')
+  }
+  await ensureProjectLocationImageSlots({
+    locationId: input.assetId,
+    count,
+    fallbackDescription: location.assetKind === 'prop'
+      ? resolvePropVisualDescription({
+        name: location.name,
+        summary: location.summary,
+        description: location.images[0]?.description ?? null,
+      })
+      : location.summary || location.name,
+  })
+}
+
+async function planGlobalAssetGenerateTask(input: AssetGenerateInput): Promise<PlannedAssetTask> {
+  assertNoLegacyArtStyle(input.body)
+  const locale = resolveRequiredTaskLocale(input.request, input.body)
+  const appearanceIndex = toNumber(input.body.appearanceIndex) ?? PRIMARY_APPEARANCE_INDEX
+  const normalizedKind = normalizeLocationBackedKind(input.kind)
+  const imageIndex = toNumber(input.body.imageIndex)
+  const count = normalizedKind === 'character'
+    ? (imageIndex === null ? resolveGroupedCharacterGenerateCount(input.body.count) : normalizeImageGenerationCount('character', input.body.count))
+    : (imageIndex === null ? resolveGroupedLocationGenerateCount(input.body.count) : normalizeImageGenerationCount('location', input.body.count))
   let characterAppearanceId: string | null = null
   if (normalizedKind === 'character') {
     const requestedAppearanceId = normalizeString(input.body.appearanceId)
@@ -275,22 +351,29 @@ async function submitGlobalAssetGenerateTask(input: AssetGenerateInput) {
     throw new ApiError('INVALID_PARAMS', { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
-  return submitTask({
+  const projectId = 'global-asset-hub'
+  return {
     userId: input.access.userId,
-    locale,
-    requestId: getRequestId(input.request),
-    projectId: 'global-asset-hub',
-    episodeId: input.episodeId ?? null,
-    type: TASK_TYPE.ASSET_HUB_IMAGE,
-    targetType,
-    targetId,
-    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
-    dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${targetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${imageIndex === null ? count : `single:${imageIndex}`}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_IMAGE, billingPayload),
-  })
+    projectId,
+    task: createPlannedTask({
+      id: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${targetId}`,
+      taskType: TASK_TYPE.ASSET_HUB_IMAGE,
+      targetType,
+      targetId,
+      payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+      locale,
+      episodeId: input.episodeId ?? null,
+      dedupeKey: `${TASK_TYPE.ASSET_HUB_IMAGE}:${targetType}:${targetId}:${normalizedKind === 'character' ? appearanceIndex : 'na'}:${imageIndex === null ? count : `single:${imageIndex}`}`,
+      billingInfo: requirePlannedTaskBillingInfo({
+        taskType: TASK_TYPE.ASSET_HUB_IMAGE,
+        payload: billingPayload,
+        allowedApiTypes: ['image'],
+      }),
+    }),
+  }
 }
 
-async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
+async function planProjectAssetGenerateTask(input: AssetGenerateInput): Promise<PlannedAssetTask> {
   assertNoLegacyArtStyle(input.body)
   const projectId = requireProjectId(input.access)
   const locale = resolveRequiredTaskLocale(input.request, input.body)
@@ -300,36 +383,6 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
   const count = normalizedKind === 'character'
     ? (imageIndex === null ? resolveGroupedCharacterGenerateCount(input.body.count) : normalizeImageGenerationCount('character', input.body.count))
     : (imageIndex === null ? resolveGroupedLocationGenerateCount(input.body.count) : normalizeImageGenerationCount('location', input.body.count))
-
-  if (normalizedKind === 'location' && imageIndex === null) {
-    const location = await prisma.projectLocation.findUnique({
-      where: { id: input.assetId },
-      select: {
-        name: true,
-        summary: true,
-        assetKind: true,
-        images: {
-          orderBy: { imageIndex: 'asc' },
-          take: 1,
-          select: { description: true },
-        },
-      },
-    })
-    if (!location) {
-      throw new ApiError('NOT_FOUND')
-    }
-    await ensureProjectLocationImageSlots({
-      locationId: input.assetId,
-      count,
-      fallbackDescription: location.assetKind === 'prop'
-        ? resolvePropVisualDescription({
-          name: location.name,
-          summary: location.summary,
-          description: location.images[0]?.description ?? null,
-        })
-        : location.summary || location.name,
-    })
-  }
 
   const taskType = normalizedKind === 'character' ? TASK_TYPE.IMAGE_CHARACTER : TASK_TYPE.IMAGE_LOCATION
   const targetType = normalizedKind === 'character' ? 'CharacterAppearance' : 'LocationImage'
@@ -372,28 +425,39 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     throw new ApiError('INVALID_PARAMS', { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
-  return submitTask({
+  return {
     userId: input.access.userId,
-    locale,
-    requestId: getRequestId(input.request),
     projectId,
-    episodeId: input.episodeId ?? null,
-    type: taskType,
-    targetType,
-    targetId,
-    payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
-    dedupeKey: `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}:${styleBibleSignature}`,
-    billingInfo: buildDefaultTaskBillingInfo(taskType, billingPayload),
-  })
+    task: createPlannedTask({
+      id: `${taskType}:${targetType}:${targetId}`,
+      taskType,
+      targetType,
+      targetId,
+      payload: withTaskUiPayload(billingPayload, { hasOutputAtStart }),
+      locale,
+      episodeId: input.episodeId ?? null,
+      dedupeKey: `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}:${styleBibleSignature}`,
+      billingInfo: requirePlannedTaskBillingInfo({
+        taskType,
+        payload: billingPayload,
+        allowedApiTypes: ['image'],
+      }),
+    }),
+  }
 }
 
 export async function submitAssetModifyTask(input: AssetModifyInput) {
-  return input.access.scope === 'global'
-    ? submitGlobalAssetModifyTask(input)
-    : submitProjectAssetModifyTask(input)
+  const planned = await planAssetModifyTask(input)
+  return await submitAssetPlannedTask(planned, input.request)
 }
 
-async function submitGlobalAssetModifyTask(input: AssetModifyInput) {
+export async function planAssetModifyTask(input: AssetModifyInput): Promise<PlannedAssetTask> {
+  return input.access.scope === 'global'
+    ? planGlobalAssetModifyTask(input)
+    : planProjectAssetModifyTask(input)
+}
+
+async function planGlobalAssetModifyTask(input: AssetModifyInput): Promise<PlannedAssetTask> {
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const modifyPrompt = normalizeString(input.body.modifyPrompt)
   if (!modifyPrompt) {
@@ -450,21 +514,28 @@ async function submitGlobalAssetModifyTask(input: AssetModifyInput) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
     throw new ApiError('INVALID_PARAMS', { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
-  return submitTask({
+  const projectId = 'global-asset-hub'
+  return {
     userId: input.access.userId,
-    locale,
-    requestId: getRequestId(input.request),
-    projectId: 'global-asset-hub',
-    type: TASK_TYPE.ASSET_HUB_MODIFY,
-    targetType,
-    targetId,
-    payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
-    dedupeKey: `${TASK_TYPE.ASSET_HUB_MODIFY}:${targetId}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.ASSET_HUB_MODIFY, billingPayload),
-  })
+    projectId,
+    task: createPlannedTask({
+      id: `${TASK_TYPE.ASSET_HUB_MODIFY}:${targetId}`,
+      taskType: TASK_TYPE.ASSET_HUB_MODIFY,
+      targetType,
+      targetId,
+      payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
+      locale,
+      dedupeKey: `${TASK_TYPE.ASSET_HUB_MODIFY}:${targetId}`,
+      billingInfo: requirePlannedTaskBillingInfo({
+        taskType: TASK_TYPE.ASSET_HUB_MODIFY,
+        payload: billingPayload,
+        allowedApiTypes: ['image'],
+      }),
+    }),
+  }
 }
 
-async function submitProjectAssetModifyTask(input: AssetModifyInput) {
+async function planProjectAssetModifyTask(input: AssetModifyInput): Promise<PlannedAssetTask> {
   const projectId = requireProjectId(input.access)
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const modifyPrompt = normalizeString(input.body.modifyPrompt)
@@ -523,18 +594,24 @@ async function submitProjectAssetModifyTask(input: AssetModifyInput) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
     throw new ApiError('INVALID_PARAMS', { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
-  return submitTask({
+  return {
     userId: input.access.userId,
-    locale,
-    requestId: getRequestId(input.request),
     projectId,
-    type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-    targetType,
-    targetId,
-    payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
-    dedupeKey: `modify_asset_image:${targetType}:${targetId}:${input.body.imageIndex ?? 'na'}`,
-    billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.MODIFY_ASSET_IMAGE, billingPayload),
-  })
+    task: createPlannedTask({
+      id: `${TASK_TYPE.MODIFY_ASSET_IMAGE}:${targetType}:${targetId}`,
+      taskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
+      targetType,
+      targetId,
+      payload: withTaskUiPayload(billingPayload, { intent: 'modify', hasOutputAtStart }),
+      locale,
+      dedupeKey: `modify_asset_image:${targetType}:${targetId}:${input.body.imageIndex ?? 'na'}`,
+      billingInfo: requirePlannedTaskBillingInfo({
+        taskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
+        payload: billingPayload,
+        allowedApiTypes: ['image'],
+      }),
+    }),
+  }
 }
 
 export async function selectAssetRender(input: AssetSelectInput) {

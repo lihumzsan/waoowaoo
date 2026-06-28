@@ -4,14 +4,22 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
+import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import {
+  assertOperationPlanConfirmedCost,
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
+  resolveConfirmedMaxCostForExecution,
+  submitPlannedOperationTask,
+  type OperationPlan,
+} from '@/lib/operations/planning'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
@@ -22,6 +30,7 @@ const outputFormatSchema = z.enum(['mp3', 'wav'])
 
 const musicGenerationInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   musicModel: z.string().min(1).optional(),
   prompt: z.string().min(1),
   durationSeconds: z.number().int().min(1).max(600),
@@ -36,6 +45,7 @@ type MusicGenerationInput = z.infer<typeof musicGenerationInputSchema>
 
 const bgmScoreGenerationInputSchema = z.object({
   confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1),
   musicModel: z.string().min(1).optional(),
   outputFormat: outputFormatSchema.optional(),
@@ -168,6 +178,190 @@ async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectI
   return Math.max(1, Math.ceil(duration))
 }
 
+async function planGenerateProjectMusicOperation(
+  ctx: ProjectAgentOperationContext,
+  input: MusicGenerationInput,
+): Promise<OperationPlan> {
+  const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
+  const episodeId = normalizeString((input as Record<string, unknown>).episodeId) || null
+  const durationSeconds = isCloudDeployment()
+    ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
+    : input.durationSeconds
+  const outputFormat = isCloudDeployment()
+    ? resolveCloudMusicOption('outputFormat', input.outputFormat)
+    : input.outputFormat
+  const payload: Record<string, unknown> = {
+    prompt: input.prompt.trim(),
+    durationSeconds,
+    musicModel,
+    ...(input.vocalMode ? { vocalMode: input.vocalMode } : {}),
+    ...(input.genre ? { genre: input.genre.trim() } : {}),
+    ...(input.mood ? { mood: input.mood.trim() } : {}),
+    ...(typeof input.bpm === 'number' ? { bpm: input.bpm } : {}),
+    ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
+  }
+
+  return {
+    kind: 'task_submission',
+    operationId: 'generate_project_music',
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    tasks: [
+      createPlannedTask({
+        id: `generate_project_music:${ctx.projectId}`,
+        taskType: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: ctx.projectId,
+        payload,
+        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        episodeId,
+        dedupeKey: `music_generate:${ctx.projectId}:${hashPayload(payload)}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.MUSIC_GENERATE,
+          payload,
+          allowedApiTypes: ['music'],
+        }),
+      }),
+    ],
+    metadata: {
+      episodeId,
+      musicModel,
+    },
+  }
+}
+
+async function commitGenerateProjectMusicOperation(
+  ctx: ProjectAgentOperationContext,
+  input: MusicGenerationInput,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const musicModel = typeof plan.metadata?.musicModel === 'string'
+    ? plan.metadata.musicModel
+    : ''
+  const episodeId = typeof plan.metadata?.episodeId === 'string'
+    ? plan.metadata.episodeId
+    : null
+  const result = await submitPlannedOperationTask({
+    ctx,
+    task,
+    operationId: 'generate_project_music',
+    confirmed: input.confirmed === true,
+  })
+
+  writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+    operationId: 'generate_project_music',
+    taskId: result.taskId,
+    status: result.status,
+    runId: result.runId || null,
+    deduped: result.deduped,
+    billingReceipt: result.billingReceiptView,
+    projectId: ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.MUSIC_GENERATE,
+    targetType: 'Project',
+    targetId: ctx.projectId,
+  })
+
+  return {
+    ...result,
+    episodeId,
+    musicModel,
+    taskType: TASK_TYPE.MUSIC_GENERATE,
+    targetType: 'Project',
+    targetId: ctx.projectId,
+  }
+}
+
+async function planGenerateEpisodeBgmScoreOperation(
+  ctx: ProjectAgentOperationContext,
+  input: BgmScoreGenerationInput,
+): Promise<OperationPlan> {
+  const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
+  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(input.episodeId, ctx.projectId)
+  const outputFormat = isCloudDeployment()
+    ? resolveCloudMusicOption('outputFormat', input.outputFormat)
+    : input.outputFormat
+  const payload: Record<string, unknown> = {
+    episodeId: input.episodeId,
+    durationSeconds,
+    musicModel,
+    ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
+  }
+
+  return {
+    kind: 'task_submission',
+    operationId: 'generate_episode_bgm_score',
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    tasks: [
+      createPlannedTask({
+        id: `generate_episode_bgm_score:${input.episodeId}`,
+        taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+        targetType: 'ProjectEpisode',
+        targetId: input.episodeId,
+        payload,
+        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        episodeId: input.episodeId,
+        dedupeKey: `bgm_score_generate:${ctx.projectId}:${input.episodeId}:${hashPayload(payload)}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+          payload,
+          allowedApiTypes: ['music'],
+        }),
+      }),
+    ],
+    metadata: {
+      episodeId: input.episodeId,
+      musicModel,
+    },
+  }
+}
+
+async function commitGenerateEpisodeBgmScoreOperation(
+  ctx: ProjectAgentOperationContext,
+  input: BgmScoreGenerationInput,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const musicModel = typeof plan.metadata?.musicModel === 'string'
+    ? plan.metadata.musicModel
+    : ''
+  const episodeId = typeof plan.metadata?.episodeId === 'string'
+    ? plan.metadata.episodeId
+    : input.episodeId
+  const result = await submitPlannedOperationTask({
+    ctx,
+    task,
+    operationId: 'generate_episode_bgm_score',
+    confirmed: input.confirmed === true,
+  })
+
+  writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+    operationId: 'generate_episode_bgm_score',
+    taskId: result.taskId,
+    status: result.status,
+    runId: result.runId || null,
+    deduped: result.deduped,
+    billingReceipt: result.billingReceiptView,
+    projectId: ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  })
+
+  return {
+    ...result,
+    musicModel,
+    taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  }
+}
+
 export function createMusicGenerationOperations(): ProjectAgentOperationRegistryDraft {
   const taskSubmitOutput = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
@@ -195,61 +389,15 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: musicGenerationInputSchema,
       outputSchema: taskSubmitOutput,
+      plan: async (ctx, input) => planGenerateProjectMusicOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitGenerateProjectMusicOperation(ctx, input, plan),
       execute: async (ctx, input) => {
-        const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
-        const episodeId = normalizeString(input.episodeId) || null
-        const durationSeconds = isCloudDeployment()
-          ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
-          : input.durationSeconds
-        const outputFormat = isCloudDeployment()
-          ? resolveCloudMusicOption('outputFormat', input.outputFormat)
-          : input.outputFormat
-        const payload: Record<string, unknown> = {
-          prompt: input.prompt.trim(),
-          durationSeconds,
-          musicModel,
-          ...(input.vocalMode ? { vocalMode: input.vocalMode } : {}),
-          ...(input.genre ? { genre: input.genre.trim() } : {}),
-          ...(input.mood ? { mood: input.mood.trim() } : {}),
-          ...(typeof input.bpm === 'number' ? { bpm: input.bpm } : {}),
-          ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
-        }
-
-        const result = await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          type: TASK_TYPE.MUSIC_GENERATE,
-          targetType: 'Project',
-          targetId: ctx.projectId,
-          operationId: 'generate_project_music',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload,
-          dedupeKey: `music_generate:${ctx.projectId}:${hashPayload(payload)}`,
+        const plan = await planGenerateProjectMusicOperation(ctx, input)
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_project_music',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId,
-          taskType: TASK_TYPE.MUSIC_GENERATE,
-          targetType: 'Project',
-          targetId: ctx.projectId,
-        })
-
-        return {
-          ...result,
-          episodeId,
-          musicModel,
-          taskType: TASK_TYPE.MUSIC_GENERATE,
-          targetType: 'Project',
-          targetId: ctx.projectId,
-        }
+        return await commitGenerateProjectMusicOperation(ctx, input, plan)
       },
     }),
     generate_episode_bgm_score: defineOperation({
@@ -272,54 +420,15 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       },
       inputSchema: bgmScoreGenerationInputSchema,
       outputSchema: taskSubmitOutput,
+      plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeBgmScoreOperation(ctx, input, plan),
       execute: async (ctx, input) => {
-        const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
-        const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(input.episodeId, ctx.projectId)
-        const outputFormat = isCloudDeployment()
-          ? resolveCloudMusicOption('outputFormat', input.outputFormat)
-          : input.outputFormat
-        const payload: Record<string, unknown> = {
-          episodeId: input.episodeId,
-          durationSeconds,
-          musicModel,
-          ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
-        }
-
-        const result = await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: input.episodeId,
-          type: TASK_TYPE.BGM_SCORE_GENERATE,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-          operationId: 'generate_episode_bgm_score',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload,
-          dedupeKey: `bgm_score_generate:${ctx.projectId}:${input.episodeId}:${hashPayload(payload)}`,
+        const plan = await planGenerateEpisodeBgmScoreOperation(ctx, input)
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_episode_bgm_score',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId: input.episodeId,
-          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-        })
-
-        return {
-          ...result,
-          musicModel,
-          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
-          targetType: 'ProjectEpisode',
-          targetId: input.episodeId,
-        }
+        return await commitGenerateEpisodeBgmScoreOperation(ctx, input, plan)
       },
     }),
   }

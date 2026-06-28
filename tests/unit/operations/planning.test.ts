@@ -12,11 +12,11 @@ const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
 const originalBillingMode = process.env.BILLING_MODE
 
 function mediaBillingInfo(params: {
-  taskType: typeof TASK_TYPE.IMAGE_PANEL | typeof TASK_TYPE.VIDEO_PANEL
-  apiType: 'image' | 'video'
+  taskType: typeof TASK_TYPE.IMAGE_PANEL | typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.MUSIC_GENERATE
+  apiType: 'image' | 'video' | 'music'
   model: string
   maxFrozenCost: number
-  unit: 'image' | 'video' | 'second'
+  unit: 'image' | 'video' | 'second' | 'call'
 }): TaskBillingInfo {
   return {
     billable: true,
@@ -90,6 +90,20 @@ function buildPlan(): OperationPlan {
         billingInfo: textBillingInfo(),
         locale: 'zh',
       },
+      {
+        id: 'music-task',
+        taskType: TASK_TYPE.MUSIC_GENERATE,
+        target: { targetType: 'Project', targetId: 'project-1' },
+        payload: { model: 'payload-music-model' },
+        billingInfo: mediaBillingInfo({
+          taskType: TASK_TYPE.MUSIC_GENERATE,
+          apiType: 'music',
+          model: 'planned-music-model',
+          maxFrozenCost: 2.5,
+          unit: 'call',
+        }),
+        locale: 'zh',
+      },
     ],
   }
 }
@@ -117,12 +131,13 @@ describe('operation planning billing quote', () => {
     const quote = await quoteOperationPlan(buildPlan())
 
     expect(quote.showCredits).toBe(true)
-    expect(quote.taskCount).toBe(3)
-    expect(quote.mediaTaskCount).toBe(2)
-    expect(quote.totalMaxFrozenCost).toBe(9.75)
+    expect(quote.taskCount).toBe(4)
+    expect(quote.mediaTaskCount).toBe(3)
+    expect(quote.totalMaxFrozenCost).toBe(12.25)
     expect(quote.items.map((item) => item.model)).toEqual([
       'planned-image-model',
       'planned-video-model',
+      'planned-music-model',
     ])
   })
 
@@ -133,7 +148,7 @@ describe('operation planning billing quote', () => {
     const view = await toOperationPlanView(buildPlan())
 
     expect(view.quote.showCredits).toBe(false)
-    expect(view.quote.mediaTaskCount).toBe(2)
+    expect(view.quote.mediaTaskCount).toBe(3)
     expect(Object.prototype.hasOwnProperty.call(view.quote, 'totalMaxFrozenCost')).toBe(false)
     expect(view.quote.items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'maxFrozenCost'))).toBe(true)
   })
@@ -141,13 +156,13 @@ describe('operation planning billing quote', () => {
   it('rejects commit when the planned media cost exceeds the confirmed maximum', async () => {
     await expect(assertOperationPlanConfirmedCost({
       plan: buildPlan(),
-      confirmedMaxCost: 9.74,
+      confirmedMaxCost: 12.24,
     })).rejects.toMatchObject({
       code: 'CONFLICT',
       details: {
         code: 'OPERATION_QUOTE_EXCEEDED_CONFIRMED_MAX_COST',
-        actual: 9.75,
-        confirmedMaxCost: 9.74,
+        actual: 12.25,
+        confirmedMaxCost: 12.24,
       },
     })
   })
@@ -166,6 +181,14 @@ describe('operation planning billing quote', () => {
       'generate_episode_videos_auto',
       'generate_asset_reference_video',
       'generate_episode_asset_reference_videos',
+      'generate_project_music',
+      'generate_episode_bgm_score',
+      'generate_character_image',
+      'generate_location_image',
+      'modify_character_image',
+      'modify_location_image',
+      'api_assets_generate',
+      'api_assets_modify_render',
     ]
 
     for (const operationId of mediaOperationIds) {

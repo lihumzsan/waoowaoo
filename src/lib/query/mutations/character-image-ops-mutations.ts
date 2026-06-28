@@ -11,9 +11,11 @@ import {
     requestTaskResponseWithError,
 } from './mutation-shared'
 import { resolveTaskResponse } from '@/lib/task/client'
+import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
 
 export function useModifyProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssetAndProjectData = () =>
         invalidateQueryTemplates(queryClient, [
             queryKeys.projectAssets.all(projectId),
@@ -28,14 +30,19 @@ export function useModifyProjectCharacterImage(projectId: string) {
             modifyPrompt: string
             extraImageUrls?: string[]
         }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'character',
+                projectId,
+                ...params,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(params.characterId, 'modify-render', requestBody)
             const response = await requestTaskResponseWithError(`/api/assets/${params.characterId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'character',
-                    projectId,
-                    ...params,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 }),
             }, 'Failed to modify image')
             return await resolveTaskResponse(response)
@@ -65,6 +72,7 @@ export function useModifyProjectCharacterImage(projectId: string) {
 
 export function useRegenerateCharacterGroup(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -78,15 +86,20 @@ export function useRegenerateCharacterGroup(projectId: string) {
             appearanceId: string
             count?: number
         }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'character',
+                projectId,
+                appearanceId,
+                count,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'character',
-                    projectId,
-                    appearanceId,
-                    count,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 })
             }, 'Failed to regenerate group')
         },
@@ -115,6 +128,7 @@ export function useRegenerateCharacterGroup(projectId: string) {
 
 export function useRegenerateSingleCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -128,15 +142,20 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
             appearanceId: string
             imageIndex: number
         }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'character',
+                projectId,
+                appearanceId,
+                imageIndex,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'character',
-                    projectId,
-                    appearanceId,
-                    imageIndex,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 })
             }, 'Failed to regenerate image')
         },
@@ -198,22 +217,28 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
 
 export function useBatchGenerateCharacterImages(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
 
     return useMutation({
         mutationFn: async (items: Array<{ characterId: string; appearanceId: string }>) => {
             const results = await Promise.allSettled(
-                items.map(item =>
-                    apiFetch(`/api/assets/${item.characterId}/generate`, {
+                items.map(async (item) => {
+                    const requestBody = {
+                        scope: 'project',
+                        kind: 'character',
+                        projectId,
+                        appearanceId: item.appearanceId,
+                    }
+                    const confirmedMaxCost = await confirmAssetOperationPlan(item.characterId, 'generate', requestBody)
+                    return await apiFetch(`/api/assets/${item.characterId}/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            scope: 'project',
-                            kind: 'character',
-                            projectId,
-                            appearanceId: item.appearanceId
+                            ...requestBody,
+                            ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                         })
                     })
-                )
+                })
             )
             return results
         },

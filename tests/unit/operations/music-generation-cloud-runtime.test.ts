@@ -16,7 +16,7 @@ vi.mock('@/lib/model-access/system-model-resolver', () => ({
   resolveSystemModelKey: resolveSystemModelKeyMock,
 }))
 
-import { createMusicGenerationOperations } from '@/lib/operations/domains/media/music-generation-ops'
+import { createMusicGenerationOperations } from '@/lib/operations/domains/music/generation/music-generation-ops'
 
 const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
@@ -44,7 +44,9 @@ function restoreEnv(): void {
 
 function buildContext(): ProjectAgentOperationContext {
   return {
-    request: new Request('http://localhost/api/projects/project-1/assistant') as unknown as NextRequest,
+    request: new Request('http://localhost/api/projects/project-1/assistant', {
+      headers: { 'accept-language': 'zh' },
+    }) as unknown as NextRequest,
     userId: 'user-1',
     projectId: 'project-1',
     context: { episodeId: 'episode-1', locale: 'zh' },
@@ -67,6 +69,7 @@ describe('cloud music generation runtime options', () => {
   it('uses platform music model and platform output format when submitting a task', async () => {
     const result = await createMusicGenerationOperations().generate_project_music.execute(buildContext(), {
       confirmed: true,
+      confirmedMaxCost: 999,
       prompt: 'quiet tension cue',
       durationSeconds: 30,
     })

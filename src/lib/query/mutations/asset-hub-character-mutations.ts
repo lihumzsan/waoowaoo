@@ -15,6 +15,7 @@ import {
   GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalCharacters,
 } from './asset-hub-mutations-shared'
+import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
 
 interface SelectCharacterImageContext {
   previousQueries: Array<{
@@ -198,6 +199,7 @@ function restoreUnifiedQuerySnapshots(
 
 export function useGenerateCharacterImage() {
   const queryClient = useQueryClient()
+  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
   const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
@@ -212,15 +214,20 @@ export function useGenerateCharacterImage() {
       appearanceIndex: number
       count?: number
     }) => {
+      const requestBody = {
+        scope: 'global',
+        kind: 'character',
+        appearanceId,
+        appearanceIndex,
+        count,
+      }
+      const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
       return await requestJsonWithError<GenerateCharacterImageResponse>(`/api/assets/${characterId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scope: 'global',
-          kind: 'character',
-          appearanceId,
-          appearanceIndex,
-          count,
+          ...requestBody,
+          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
         }),
       }, 'Failed to generate image')
     },
@@ -300,6 +307,7 @@ export function useGenerateCharacterImage() {
 
 export function useModifyCharacterImage() {
   const queryClient = useQueryClient()
+  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
   const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
@@ -316,16 +324,21 @@ export function useModifyCharacterImage() {
       modifyPrompt: string
       extraImageUrls?: string[]
     }) => {
+      const requestBody = {
+        scope: 'global',
+        kind: 'character',
+        appearanceIndex,
+        imageIndex,
+        modifyPrompt,
+        extraImageUrls,
+      }
+      const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'modify-render', requestBody)
       return await requestJsonWithError(`/api/assets/${characterId}/modify-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scope: 'global',
-          kind: 'character',
-          appearanceIndex,
-          imageIndex,
-          modifyPrompt,
-          extraImageUrls,
+          ...requestBody,
+          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
         }),
       }, 'Failed to modify image')
     },

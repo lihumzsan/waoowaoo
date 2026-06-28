@@ -12,6 +12,7 @@ import {
     requestJsonWithError,
     requestVoidWithError,
 } from './mutation-shared'
+import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
 
 interface SelectProjectCharacterImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -103,6 +104,7 @@ function removeCharacterFromProject(
 
 export function useGenerateProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
+    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -116,15 +118,20 @@ export function useGenerateProjectCharacterImage(projectId: string) {
             appearanceId: string
             count?: number
         }) => {
+            const requestBody = {
+                scope: 'project',
+                kind: 'character',
+                projectId,
+                appearanceId,
+                count,
+            }
+            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    scope: 'project',
-                    kind: 'character',
-                    projectId,
-                    appearanceId,
-                    count,
+                    ...requestBody,
+                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
                 })
             }, 'Failed to generate image')
         },

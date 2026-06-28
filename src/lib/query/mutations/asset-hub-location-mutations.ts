@@ -15,6 +15,7 @@ import {
   GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
+import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
 
 interface SelectLocationImageContext {
   previousQueries: Array<{
@@ -127,6 +128,7 @@ function restoreUnifiedQuerySnapshots(
 
 export function useGenerateLocationImage() {
   const queryClient = useQueryClient()
+  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
   const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
@@ -137,13 +139,18 @@ export function useGenerateLocationImage() {
       locationId: string
       count?: number
     }) => {
+      const requestBody = {
+        scope: 'global',
+        kind: 'location',
+        count,
+      }
+      const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
       return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scope: 'global',
-          kind: 'location',
-          count,
+          ...requestBody,
+          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
         }),
       }, 'Failed to generate image')
     },
@@ -168,6 +175,7 @@ export function useGenerateLocationImage() {
 
 export function useModifyLocationImage() {
   const queryClient = useQueryClient()
+  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
   const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
@@ -182,15 +190,20 @@ export function useModifyLocationImage() {
       modifyPrompt: string
       extraImageUrls?: string[]
     }) => {
+      const requestBody = {
+        scope: 'global',
+        kind: 'location',
+        imageIndex,
+        modifyPrompt,
+        extraImageUrls,
+      }
+      const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'modify-render', requestBody)
       return await requestJsonWithError(`/api/assets/${locationId}/modify-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scope: 'global',
-          kind: 'location',
-          imageIndex,
-          modifyPrompt,
-          extraImageUrls,
+          ...requestBody,
+          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
         }),
       }, 'Failed to modify image')
     },

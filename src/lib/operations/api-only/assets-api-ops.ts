@@ -1,13 +1,19 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { createAsset, copyAssetFromGlobal, removeAsset, revertAssetRender, selectAssetRender, submitAssetGenerateTask, submitAssetModifyTask, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
+import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, planAssetModifyTask, removeAsset, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
 import { uploadProjectAssetRender } from '@/lib/assets/services/project-upload-render'
 import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import {
+  assertOperationPlanConfirmedCost,
+  resolveConfirmedMaxCostForExecution,
+  submitPlannedOperationTask,
+  type OperationPlan,
+} from '@/lib/operations/planning'
 
 const ASSET_SCOPES = ['global', 'project'] as const
 const ASSET_KINDS = ['character', 'location', 'prop'] as const
@@ -51,7 +57,7 @@ const EFFECTS_WRITE_OVERWRITE = {
 
 const EFFECTS_LONG_RUNNING = {
   writes: true,
-  billable: false,
+  billable: true,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -98,6 +104,110 @@ function isProjectUploadRenderInput(value: unknown): value is ProjectUploadRende
     && (record.kind === 'character' || record.kind === 'location')
     && typeof record.projectId === 'string'
     && !!record.file
+}
+
+async function planAssetGenerateOperation(
+  ctx: ProjectAgentOperationContext,
+  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
+): Promise<OperationPlan> {
+  const projectId = requireProjectId(input.scope, input.projectId)
+  const episodeId = readOptionalEpisodeId(input.episodeId)
+  const body = omitBodyKeys(input, ['assetId'])
+  const planned = await planAssetGenerateTask({
+    request: ctx.request,
+    kind: input.kind,
+    assetId: input.assetId,
+    body,
+    episodeId,
+    access: input.scope === 'project'
+      ? { scope: 'project', userId: ctx.userId, projectId }
+      : { scope: 'global', userId: ctx.userId },
+  })
+  return {
+    kind: 'task_submission',
+    operationId: 'api_assets_generate',
+    projectId: planned.projectId,
+    userId: planned.userId,
+    tasks: [planned.task],
+  }
+}
+
+async function commitAssetGenerateOperation(
+  ctx: ProjectAgentOperationContext,
+  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const projectId = requireProjectId(input.scope, input.projectId)
+  const episodeId = readOptionalEpisodeId(input.episodeId)
+  const body = omitBodyKeys(input, ['assetId'])
+  await ensureAssetGenerateCommitReady({
+    request: ctx.request,
+    kind: input.kind,
+    assetId: input.assetId,
+    body,
+    episodeId,
+    access: input.scope === 'project'
+      ? { scope: 'project', userId: ctx.userId, projectId }
+      : { scope: 'global', userId: ctx.userId },
+  })
+  return await submitPlannedOperationTask({
+    ctx,
+    task,
+    operationId: 'api_assets_generate',
+    confirmed: input.confirmed === true,
+  })
+}
+
+async function planAssetModifyRenderOperation(
+  ctx: ProjectAgentOperationContext,
+  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
+): Promise<OperationPlan> {
+  const projectId = requireProjectId(input.scope, input.projectId)
+  const body = omitBodyKeys(input, ['assetId'])
+  const planned = await planAssetModifyTask({
+    request: ctx.request,
+    kind: input.kind,
+    assetId: input.assetId,
+    body,
+    access: input.scope === 'project'
+      ? { scope: 'project', userId: ctx.userId, projectId }
+      : { scope: 'global', userId: ctx.userId },
+  })
+  return {
+    kind: 'task_submission',
+    operationId: 'api_assets_modify_render',
+    projectId: planned.projectId,
+    userId: planned.userId,
+    tasks: [planned.task],
+  }
+}
+
+async function commitAssetModifyRenderOperation(
+  ctx: ProjectAgentOperationContext,
+  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  return await submitPlannedOperationTask({
+    ctx,
+    task,
+    operationId: 'api_assets_modify_render',
+    confirmed: input.confirmed === true,
+  })
+}
+
+function buildAssetGenerateSchema() {
+  return z.object({
+    confirmed: z.boolean().optional(),
+    confirmedMaxCost: z.number().nonnegative().optional(),
+    assetId: z.string().min(1),
+    scope: scopeSchema,
+    kind: mutableKindSchema,
+    projectId: z.string().optional(),
+  }).passthrough()
 }
 
 export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft {
@@ -210,27 +320,17 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       summary: 'API-only: Submit asset generate task (global or project scope).',
       intent: 'act',
       effects: EFFECTS_LONG_RUNNING,
-      inputSchema: z.object({
-        assetId: z.string().min(1),
-        scope: scopeSchema,
-        kind: mutableKindSchema,
-        projectId: z.string().optional(),
-      }).passthrough(),
+      inputSchema: buildAssetGenerateSchema(),
       outputSchema: z.unknown(),
+      plan: async (ctx, input) => planAssetGenerateOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitAssetGenerateOperation(ctx, input, plan),
       execute: async (ctx, input) => {
-        const projectId = requireProjectId(input.scope, input.projectId)
-        const episodeId = readOptionalEpisodeId(input.episodeId)
-        const body = omitBodyKeys(input, ['assetId'])
-        return await submitAssetGenerateTask({
-          request: ctx.request,
-          kind: input.kind,
-          assetId: input.assetId,
-          body,
-          episodeId,
-          access: input.scope === 'project'
-            ? { scope: 'project', userId: ctx.userId, projectId }
-            : { scope: 'global', userId: ctx.userId },
+        const plan = await planAssetGenerateOperation(ctx, input)
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
+        return await commitAssetGenerateOperation(ctx, input, plan)
       },
     }),
 
@@ -239,25 +339,17 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       summary: 'API-only: Submit asset modify-render task (global or project scope).',
       intent: 'act',
       effects: EFFECTS_LONG_RUNNING,
-      inputSchema: z.object({
-        assetId: z.string().min(1),
-        scope: scopeSchema,
-        kind: mutableKindSchema,
-        projectId: z.string().optional(),
-      }).passthrough(),
+      inputSchema: buildAssetGenerateSchema(),
       outputSchema: z.unknown(),
+      plan: async (ctx, input) => planAssetModifyRenderOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitAssetModifyRenderOperation(ctx, input, plan),
       execute: async (ctx, input) => {
-        const projectId = requireProjectId(input.scope, input.projectId)
-        const body = omitBodyKeys(input, ['assetId'])
-        return await submitAssetModifyTask({
-          request: ctx.request,
-          kind: input.kind,
-          assetId: input.assetId,
-          body,
-          access: input.scope === 'project'
-            ? { scope: 'project', userId: ctx.userId, projectId }
-            : { scope: 'global', userId: ctx.userId },
+        const plan = await planAssetModifyRenderOperation(ctx, input)
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
+        return await commitAssetModifyRenderOperation(ctx, input, plan)
       },
     }),
 
