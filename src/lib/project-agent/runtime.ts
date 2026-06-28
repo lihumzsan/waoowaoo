@@ -41,6 +41,7 @@ import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
 import {
   createProjectAgentWait,
+  releaseProjectAgentWaitFollowUpForRetry,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
@@ -58,6 +59,7 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
+  failRunningProjectAgentRun,
   safelyUpdateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
@@ -76,6 +78,8 @@ import {
   createProjectAgentStopController,
 } from './stop-conditions'
 import {
+  PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_ERROR_CODE,
+  PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_MS,
   createDataChunk,
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
@@ -706,6 +710,28 @@ export async function createProjectAgentChatResponse(input: {
       })()
     : agentInput
 
+  const failRunningRunFromStreamClosure = async (params: {
+    stopReason: string
+    errorCode: string
+    errorMessage: string
+  }) => {
+    const failed = await failRunningProjectAgentRun({
+      runId: input.run.id,
+      stopReason: params.stopReason,
+      errorCode: params.errorCode,
+      errorMessage: params.errorMessage,
+    })
+    if (!failed || control.kind !== 'task_follow_up') return
+    await releaseProjectAgentWaitFollowUpForRetry({
+      runId: input.run.id,
+      waitId: control.followUp.waitId,
+      projectId: input.projectId,
+      userId: input.userId,
+      errorCode: params.errorCode,
+      errorMessage: params.errorMessage,
+    })
+  }
+
   try {
     const result = await run(agent, runInput, {
       stream: true,
@@ -718,6 +744,7 @@ export async function createProjectAgentChatResponse(input: {
       initialChunks,
       toolNames: operationIds,
       drainChunks: drainSideChannelChunks,
+      readIdleTimeoutMs: PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_MS,
       beforeFinish: async () => {
         const chunks: ProjectAgentUiChunk[] = []
         let completionError: unknown = null
@@ -817,6 +844,24 @@ export async function createProjectAgentChatResponse(input: {
           }
         }
         return chunks
+      },
+      onStreamError: async (error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        const errorCode = message === PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_ERROR_CODE
+          ? PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_ERROR_CODE
+          : 'PROJECT_AGENT_UI_STREAM_FAILED'
+        await failRunningRunFromStreamClosure({
+          stopReason: 'stream_error',
+          errorCode,
+          errorMessage: message,
+        })
+      },
+      onCancel: async () => {
+        await failRunningRunFromStreamClosure({
+          stopReason: 'stream_cancelled',
+          errorCode: 'PROJECT_AGENT_UI_STREAM_CANCELLED',
+          errorMessage: 'Project agent UI stream was cancelled before it reached a terminal state.',
+        })
       },
       onSettled: releaseRunLockOnce,
     })

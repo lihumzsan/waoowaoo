@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessageChunk } from 'ai'
 
 const streamState = vi.hoisted(() => ({
   chunks: [] as UIMessageChunk[],
+  hangAfterChunks: false,
+  cancelCount: 0,
 }))
 
 vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
@@ -11,7 +13,11 @@ vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
       for (const chunk of streamState.chunks) {
         controller.enqueue(chunk)
       }
+      if (streamState.hangAfterChunks) return
       controller.close()
+    },
+    cancel() {
+      streamState.cancelCount += 1
     },
   })),
 }))
@@ -29,6 +35,13 @@ async function readChunks(stream: ReadableStream<UIMessageChunk>): Promise<UIMes
 }
 
 describe('createProjectAgentUiMessageStream', () => {
+  beforeEach(() => {
+    streamState.chunks = []
+    streamState.hangAfterChunks = false
+    streamState.cancelCount = 0
+    vi.clearAllMocks()
+  })
+
   it('synthesizes a dynamic tool invocation before an approval request when the adapter omits it', async () => {
     streamState.chunks = [
       {
@@ -133,5 +146,47 @@ describe('createProjectAgentUiMessageStream', () => {
         output: { ok: true },
       }),
     ])
+  })
+
+  it('fails and settles when the converted stream stays idle past the timeout', async () => {
+    streamState.hangAfterChunks = true
+    const onStreamError = vi.fn(async () => undefined)
+    const onSettled = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      readIdleTimeoutMs: 1,
+      beforeFinish: async () => [],
+      onStreamError,
+      onSettled,
+    })
+
+    const reader = stream.getReader()
+    await expect(reader.read()).rejects.toThrow('PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT')
+    expect(onStreamError).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT',
+    }))
+    expect(onSettled).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs cancellation cleanup before settling the stream', async () => {
+    streamState.hangAfterChunks = true
+    const onCancel = vi.fn(async () => undefined)
+    const onSettled = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish: async () => [],
+      onCancel,
+      onSettled,
+    })
+
+    await stream.cancel()
+
+    expect(streamState.cancelCount).toBe(1)
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onSettled).toHaveBeenCalledTimes(1)
   })
 })

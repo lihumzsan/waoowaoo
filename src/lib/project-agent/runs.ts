@@ -239,6 +239,7 @@ export async function reconcileStaleRunningProjectAgentRunsForScope(params: Proj
 export async function updateProjectAgentRunStatus(params: {
   runId: string
   status: ProjectAgentRunStatus
+  controlKind?: ProjectAgentRunControlKind
   stopReason?: string | null
   errorCode?: string | null
   errorMessage?: string | null
@@ -248,6 +249,7 @@ export async function updateProjectAgentRunStatus(params: {
     where: { id: params.runId },
     data: {
       status: params.status,
+      ...(params.controlKind ? { controlKind: params.controlKind } : {}),
       stopReason: params.stopReason ?? null,
       errorCode: params.errorCode ?? null,
       errorMessage: params.errorMessage ?? null,
@@ -261,6 +263,7 @@ export async function updateProjectAgentRunStatus(params: {
 export async function safelyUpdateProjectAgentRunStatus(params: {
   runId: string | null | undefined
   status: ProjectAgentRunStatus
+  controlKind?: ProjectAgentRunControlKind
   stopReason?: string | null
   errorCode?: string | null
   errorMessage?: string | null
@@ -270,6 +273,7 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
     await updateProjectAgentRunStatus({
       runId: params.runId,
       status: params.status,
+      controlKind: params.controlKind,
       stopReason: params.stopReason,
       errorCode: params.errorCode,
       errorMessage: params.errorMessage,
@@ -285,6 +289,28 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
       },
     })
   }
+}
+
+export async function failRunningProjectAgentRun(params: {
+  runId: string
+  stopReason: string
+  errorCode: string
+  errorMessage: string
+}): Promise<boolean> {
+  const result = await prisma.projectAgentRun.updateMany({
+    where: {
+      id: params.runId,
+      status: 'running',
+    },
+    data: {
+      status: 'failed',
+      stopReason: params.stopReason,
+      errorCode: params.errorCode,
+      errorMessage: params.errorMessage,
+      failedAt: new Date(),
+    },
+  })
+  return result.count === 1
 }
 
 export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): Promise<string[]> {

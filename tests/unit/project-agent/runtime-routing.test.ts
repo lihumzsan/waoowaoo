@@ -378,6 +378,7 @@ function createRegistry(): ProjectAgentOperationRegistry {
 async function flushAsyncWork() {
   await Promise.resolve()
   await Promise.resolve()
+  await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 async function runAssistant(params: {

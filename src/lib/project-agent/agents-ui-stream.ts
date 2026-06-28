@@ -3,6 +3,9 @@ import { createAiSdkUiMessageStream } from '@openai/agents-extensions/ai-sdk-ui'
 
 export type ProjectAgentUiChunk = UIMessageChunk
 
+export const PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+export const PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_ERROR_CODE = 'PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT'
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -17,6 +20,33 @@ function readChunkString(chunk: ProjectAgentUiChunk, key: string): string | null
 function isFinishChunk(chunk: ProjectAgentUiChunk): boolean {
   const candidate = chunk as { type?: unknown }
   return candidate.type === 'finish'
+}
+
+function normalizeReadIdleTimeoutMs(value: number | undefined): number | null {
+  if (value === undefined) return null
+  if (!Number.isFinite(value)) return null
+  const normalized = Math.floor(value)
+  return normalized > 0 ? normalized : null
+}
+
+async function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<ProjectAgentUiChunk>,
+  readIdleTimeoutMs: number | null,
+): Promise<ReadableStreamReadResult<ProjectAgentUiChunk>> {
+  if (!readIdleTimeoutMs) return await reader.read()
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<ReadableStreamReadResult<ProjectAgentUiChunk>>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(PROJECT_AGENT_UI_STREAM_IDLE_TIMEOUT_ERROR_CODE))
+        }, readIdleTimeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
 }
 
 function isToolInputChunk(chunk: ProjectAgentUiChunk): boolean {
@@ -76,14 +106,26 @@ export function createProjectAgentUiMessageStream(params: {
   initialChunks: ProjectAgentUiChunk[]
   toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
+  readIdleTimeoutMs?: number
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
+  onStreamError?: (error: unknown) => Promise<void>
+  onCancel?: () => Promise<void>
   onSettled: () => Promise<void>
 }): ReadableStream<ProjectAgentUiChunk> {
   const converted = createAiSdkUiMessageStream(params.source) as ReadableStream<ProjectAgentUiChunk>
+  const readIdleTimeoutMs = normalizeReadIdleTimeoutMs(params.readIdleTimeoutMs)
+  let reader: ReadableStreamDefaultReader<ProjectAgentUiChunk> | null = null
+  let cancelled = false
+  let settled = false
+  const settleOnce = async () => {
+    if (settled) return
+    settled = true
+    await params.onSettled()
+  }
 
   return new ReadableStream<ProjectAgentUiChunk>({
     async start(controller) {
-      const reader = converted.getReader()
+      reader = converted.getReader()
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
       const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
@@ -109,7 +151,7 @@ export function createProjectAgentUiMessageStream(params: {
           for (const chunk of params.drainChunks?.() ?? []) {
             enqueueChunk(chunk)
           }
-          const read = await reader.read()
+          const read = await readWithIdleTimeout(reader, readIdleTimeoutMs)
           if (read.done) break
           if (isFinishChunk(read.value)) {
             finishChunk = read.value
@@ -124,6 +166,7 @@ export function createProjectAgentUiMessageStream(params: {
         for (const chunk of params.drainChunks?.() ?? []) {
           enqueueChunk(chunk)
         }
+        if (cancelled) return
         const trailingChunks = await params.beforeFinish()
         for (const chunk of trailingChunks) {
           enqueueChunk(chunk)
@@ -133,14 +176,28 @@ export function createProjectAgentUiMessageStream(params: {
         }
         controller.close()
       } catch (error) {
+        await reader.cancel().catch(() => undefined)
+        await params.onStreamError?.(error)
         controller.error(error)
       } finally {
-        await params.onSettled()
+        await settleOnce()
       }
     },
     async cancel() {
-      await converted.cancel()
-      await params.onSettled()
+      cancelled = true
+      let cancelError: unknown = null
+      try {
+        await params.onCancel?.()
+      } catch (error) {
+        cancelError = error
+      }
+      if (reader) {
+        await reader.cancel().catch(() => undefined)
+      } else {
+        await converted.cancel().catch(() => undefined)
+      }
+      await settleOnce()
+      if (cancelError) throw cancelError
     },
   })
 }

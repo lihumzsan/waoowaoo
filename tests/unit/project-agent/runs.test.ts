@@ -15,6 +15,7 @@ vi.mock('@/lib/logging/core', () => ({
 }))
 
 import {
+  failRunningProjectAgentRun,
   PROJECT_AGENT_STALE_RUNNING_RECONCILE_MS,
   reconcileStaleRunningProjectAgentRunsForScope,
 } from '@/lib/project-agent/runs'
@@ -95,5 +96,44 @@ describe('project agent runs', () => {
 
     expect(reconciledIds).toEqual([])
     expect(prismaMock.projectAgentRun.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('marks a running run as failed with a guarded status update', async () => {
+    prismaMock.projectAgentRun.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    const failed = await failRunningProjectAgentRun({
+      runId: 'run-1',
+      stopReason: 'stream_error',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      errorMessage: 'stream failed',
+    })
+
+    expect(failed).toBe(true)
+    expect(prismaMock.projectAgentRun.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'run-1',
+        status: 'running',
+      },
+      data: {
+        status: 'failed',
+        stopReason: 'stream_error',
+        errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+        errorMessage: 'stream failed',
+        failedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('does not overwrite a run that already left running state', async () => {
+    prismaMock.projectAgentRun.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    const failed = await failRunningProjectAgentRun({
+      runId: 'run-1',
+      stopReason: 'stream_error',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      errorMessage: 'stream failed',
+    })
+
+    expect(failed).toBe(false)
   })
 })

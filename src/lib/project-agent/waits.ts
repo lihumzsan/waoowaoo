@@ -92,6 +92,7 @@ export interface ProjectAgentSessionWait {
 }
 
 const WAIT_CLAIM_TTL_MS = 2 * 60 * 1000
+export const PROJECT_AGENT_WAIT_FOLLOW_UP_MAX_ATTEMPTS = 2
 
 const projectAgentWaitLogger = createScopedLogger({
   module: 'project-agent.waits',
@@ -735,6 +736,10 @@ export async function consumeProjectAgentWaitFollowUp(input: {
   const affected = await prisma.$executeRaw`
     UPDATE project_agent_waits
     SET status = 'followed',
+        followUpAttemptCount = followUpAttemptCount + 1,
+        followUpLastErrorCode = NULL,
+        followUpLastErrorMessage = NULL,
+        followUpFailedAt = NULL,
         followedAt = NOW(3),
         updatedAt = NOW(3)
     WHERE id = ${input.waitId}
@@ -792,4 +797,60 @@ export async function consumeProjectAgentWaitFollowUp(input: {
     failedCount: failedTaskIds.length,
     claimId: input.claimId,
   }
+}
+
+export type ProjectAgentWaitFollowUpRetryReleaseResult =
+  | { status: 'requeued' }
+  | { status: 'exhausted' }
+  | { status: 'not_found' }
+
+export async function releaseProjectAgentWaitFollowUpForRetry(input: {
+  runId: string
+  waitId: string
+  projectId: string
+  userId: string
+  errorCode: string
+  errorMessage: string
+  maxAttempts?: number
+}): Promise<ProjectAgentWaitFollowUpRetryReleaseResult> {
+  const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? PROJECT_AGENT_WAIT_FOLLOW_UP_MAX_ATTEMPTS))
+  const requeued = await prisma.$executeRaw`
+    UPDATE project_agent_waits
+    SET status = 'resolved',
+        claimId = NULL,
+        claimedAt = NULL,
+        claimExpiresAt = NULL,
+        followedAt = NULL,
+        followUpLastErrorCode = ${input.errorCode},
+        followUpLastErrorMessage = ${input.errorMessage},
+        followUpFailedAt = NULL,
+        updatedAt = NOW(3)
+    WHERE id = ${input.waitId}
+      AND runId = ${input.runId}
+      AND projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND status = 'followed'
+      AND followUpMode = 'resume_agent'
+      AND followUpKey IS NOT NULL
+      AND followUpAttemptCount < ${maxAttempts}
+  `
+  if (requeued === 1) return { status: 'requeued' }
+
+  const exhausted = await prisma.$executeRaw`
+    UPDATE project_agent_waits
+    SET followUpLastErrorCode = ${input.errorCode},
+        followUpLastErrorMessage = ${input.errorMessage},
+        followUpFailedAt = NOW(3),
+        updatedAt = NOW(3)
+    WHERE id = ${input.waitId}
+      AND runId = ${input.runId}
+      AND projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND status = 'followed'
+      AND followUpMode = 'resume_agent'
+      AND followUpKey IS NOT NULL
+      AND followUpAttemptCount >= ${maxAttempts}
+  `
+  if (exhausted === 1) return { status: 'exhausted' }
+  return { status: 'not_found' }
 }

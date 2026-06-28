@@ -607,6 +607,10 @@ describe('project assistant chat route', () => {
       claimId: 'claim-1',
     }))
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      run: expect.objectContaining({
+        status: 'running',
+        controlKind: 'task_follow_up',
+      }),
       control: expect.objectContaining({
         kind: 'task_follow_up',
       }),

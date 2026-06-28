@@ -37,6 +37,7 @@ import {
   getProjectAgentRun,
   safelyUpdateProjectAgentRunStatus,
   supersedePendingRunsInScope,
+  type ProjectAgentRunControlKind,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
 
@@ -338,12 +339,24 @@ async function resolveProjectAgentRunForRequest(params: {
       message: 'the agent run is not available for this control action',
     })
   }
+  const controlKind = resolveProjectAgentRunControlKind(params.controlAction)
   await safelyUpdateProjectAgentRunStatus({
     runId: run.id,
     status: 'running',
+    controlKind,
     stopReason: params.controlAction.type,
   })
-  return run
+  return {
+    ...run,
+    status: 'running',
+    controlKind,
+  }
+}
+
+function resolveProjectAgentRunControlKind(action: ProjectAgentControlAction): ProjectAgentRunControlKind {
+  if (action.type === 'approval_response') return 'approval_response'
+  if (action.type === 'choice_response') return 'choice_response'
+  return 'task_follow_up'
 }
 
 export const PUT = apiHandler(async (
