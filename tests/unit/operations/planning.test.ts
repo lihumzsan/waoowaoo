@@ -214,7 +214,7 @@ describe('operation planning billing quote', () => {
       expect(operation?.commit).toBeTypeOf('function')
     }
 
-    expect(registry.generate_edit_script_storyboard_spatial_blocking?.plan).toBeUndefined()
+    expect(registry.generate_edit_shot_execution_plan?.plan).toBeUndefined()
     expect(registry.generate_edit_script_storyboard?.plan).toBeUndefined()
   })
 })

@@ -423,8 +423,8 @@ describe('workspace assistant panel layout', () => {
       type: 'waiting_task',
       status: 'waiting',
       operationId: null,
-      sourceOperationId: 'generate_edit_director_decoupage',
-    }))).toBe('generate_edit_director_decoupage')
+      sourceOperationId: 'generate_edit_shot_execution_plan',
+    }))).toBe('generate_edit_shot_execution_plan')
     expect(resolveWorkspaceAssistantExternalTaskOperationId(buildActivity({
       type: 'operation',
       status: 'running',

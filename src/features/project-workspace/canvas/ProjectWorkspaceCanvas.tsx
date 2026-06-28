@@ -27,7 +27,7 @@ import {
 } from '@/lib/task/runtime-targets'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectEditCinematographyShotPlan, useProjectEditDirectorDecoupage, useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
+import { useProjectEditScreenplay, useProjectEditScript, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
@@ -65,14 +65,14 @@ import type {
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
 } from './node-canvas-types'
-import VideoBlockArrangementModal from './VideoBlockArrangementModal'
+import GenerationSegmentArrangementModal from './GenerationSegmentArrangementModal'
 import {
   getWorkspaceCanvasNodePresentationProfile,
   resolveWorkspaceCanvasMeasuredNodeHeight,
   resolveWorkspaceCanvasNodeSize,
 } from './node-presentation-profiles'
 import {
-  alignSpaceConsistencyNodesToMeasuredEditScript,
+  alignExecutionPlanNodesToMeasuredEditScript,
   preserveWorkspaceNodePositions,
   type WorkspaceNodeDynamicLayoutOptions,
 } from './layout/workspace-node-auto-layout'
@@ -252,9 +252,8 @@ function ProjectWorkspaceCanvasContent({
   const runtime = useWorkspaceRuntime()
   const { episodeName, novelText, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
-  const { data: editDirectorDecoupage } = useProjectEditDirectorDecoupage(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
-  const { data: editCinematographyShotPlan } = useProjectEditCinematographyShotPlan(projectId, episodeId ?? null)
+  const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const { data: projectAssets } = useProjectAssets(projectId)
   const locations = projectAssets.locations
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
@@ -264,7 +263,7 @@ function ProjectWorkspaceCanvasContent({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
-  const [videoBlockArrangementInitialBlockIndex, setVideoBlockArrangementInitialBlockIndex] = useState<number | null>(null)
+  const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -433,7 +432,7 @@ function ProjectWorkspaceCanvasContent({
   }, [clearFocusHighlightedNode])
   const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
     if (action.type === 'open_video_block_arrangement') {
-      setVideoBlockArrangementInitialBlockIndex(action.blockIndex)
+      setGenerationSegmentArrangementInitialIndex(action.segmentIndex)
       return
     }
 
@@ -514,7 +513,7 @@ function ProjectWorkspaceCanvasContent({
         measuredNodePosition,
       )
       const alignOptions = { preservedNodeIds: preservedNodeIdSet(preservedNodePositions) }
-      const alignedNodes = alignSpaceConsistencyNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
+      const alignedNodes = alignExecutionPlanNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
       const baseAlignedNodes = measuredKind === 'editScript'
         ? captureLayoutBasePositions(alignedNodes)
         : alignedNodes
@@ -598,9 +597,8 @@ function ProjectWorkspaceCanvasContent({
     locations,
     storyboards,
     editScreenplay,
-    editDirectorDecoupage,
     editScript: projectedEditScript,
-    editCinematographyShotPlan,
+    editShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,
@@ -878,9 +876,8 @@ function ProjectWorkspaceCanvasContent({
       locations,
       storyboards,
       editScreenplay,
-      editDirectorDecoupage,
       editScript: projectedEditScript,
-      editCinematographyShotPlan,
+      editShotExecutionPlan,
       activeAssistantOperationId,
       editScriptPending: effectiveEditScriptPending,
       finalVideo,
@@ -895,7 +892,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -931,10 +928,10 @@ function ProjectWorkspaceCanvasContent({
     onAssistantSelectionChange?.(assistantSelection)
   }, [assistantSelection, onAssistantSelectionChange])
 
-  const handleArrangeVideoBlocks = useCallback(async (blocks: readonly { readonly shotNumbers: readonly number[] }[]) => {
+  const handleArrangeGenerationSegments = useCallback(async (segments: readonly { readonly shotNumbers: readonly number[]; readonly continuity: string }[]) => {
     if (!projectedEditScript) throw new Error('EDIT_SCRIPT_REQUIRED')
-    await runtime.onArrangeVideoBlocks(projectedEditScript.id, blocks)
-    setVideoBlockArrangementInitialBlockIndex(null)
+    await runtime.onArrangeGenerationSegments(projectedEditScript.id, segments)
+    setGenerationSegmentArrangementInitialIndex(null)
   }, [projectedEditScript, runtime])
 
   if (!episodeId) return null
@@ -1023,13 +1020,13 @@ function ProjectWorkspaceCanvasContent({
           ) : null}
         </ReactFlow>
       </div>
-      {projectedEditScript && videoBlockArrangementInitialBlockIndex !== null ? (
-        <VideoBlockArrangementModal
+      {projectedEditScript && generationSegmentArrangementInitialIndex !== null ? (
+        <GenerationSegmentArrangementModal
           editScript={projectedEditScript}
           storyboards={storyboards}
-          initialBlockIndex={videoBlockArrangementInitialBlockIndex}
-          onClose={() => setVideoBlockArrangementInitialBlockIndex(null)}
-          onSubmit={handleArrangeVideoBlocks}
+          initialSegmentIndex={generationSegmentArrangementInitialIndex}
+          onClose={() => setGenerationSegmentArrangementInitialIndex(null)}
+          onSubmit={handleArrangeGenerationSegments}
         />
       ) : null}
     </div>

@@ -102,12 +102,10 @@ export const queryKeys = {
             ['project', projectId, 'assistant-thread', episodeId ?? ''] as const,
         editScreenplay: (projectId: string, episodeId: string) =>
             ['project', projectId, 'edit-screenplay', episodeId] as const,
-        editDirectorDecoupage: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-director-decoupage', episodeId] as const,
         editScript: (projectId: string, episodeId: string) =>
             ['project', projectId, 'edit-script', episodeId] as const,
-        editCinematographyShotPlan: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-cinematography-shot-plan', episodeId] as const,
+        editShotExecutionPlan: (projectId: string, episodeId: string) =>
+            ['project', projectId, 'edit-shot-execution-plan', episodeId] as const,
     },
 
     // ============ 顶层便捷函数 ============

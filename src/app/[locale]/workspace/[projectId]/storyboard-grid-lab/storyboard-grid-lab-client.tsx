@@ -24,12 +24,11 @@ type ComparePanel = {
 }
 
 type CompareBlock = {
-  readonly blockIndex: number
-  readonly sourceVideoBlockId: string
+  readonly segmentIndex: number
+  readonly sourceGenerationSegmentId: string
   readonly kind: 'single' | 'group'
   readonly shotNumbers: readonly number[]
-  readonly reason: string
-  readonly prompt: string
+  readonly continuity: string
   readonly panels: readonly ComparePanel[]
 }
 
@@ -49,7 +48,7 @@ type SubmitResponse = {
   readonly success: boolean
   readonly mode: 'single_parallel' | 'grid_2x2'
   readonly episodeId: string
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
   readonly omittedFields: readonly StoryboardPromptFieldId[]
   readonly tasks: readonly SubmittedTask[]
 }
@@ -95,8 +94,8 @@ type RunPair = {
 }
 
 type SerialBlockRun = {
-  readonly sourceVideoBlockId: string
-  readonly blockIndex: number
+  readonly sourceGenerationSegmentId: string
+  readonly segmentIndex: number
   readonly block: CompareBlock
   readonly previousGridImageUrl: string | null
   readonly run: RunState
@@ -162,10 +161,10 @@ const COPY: Record<Locale, {
     single: '单张并行',
     grid: '四宫格并行',
     serial: '四宫格串行套图',
-    serialHint: '从当前 block 开始，最多连续提交后续 4 个多镜头 block；每个 block 会等待上一张完整四宫格完成后，再把它作为参考图输入下一张。',
+    serialHint: '从当前生成分段开始，最多连续提交后续 4 个多镜头生成分段；每个分段会等待上一张完整四宫格完成后，再把它作为参考图输入下一张。',
     previousGridReference: '参考上一张四宫格',
-    selectBlock: '选择 block',
-    empty: '没有可测试的多镜头 block',
+    selectBlock: '选择生成分段',
+    empty: '没有可测试的多镜头生成分段',
     task: '任务',
     gridImage: '完整四宫格',
     noImage: '暂无图片',
@@ -191,7 +190,7 @@ const COPY: Record<Locale, {
   },
   en: {
     title: 'Storyboard Grid Comparison Lab',
-    subtitle: 'Paste a workspace URL or suffix, then submit single-panel parallel generation and 2x2 grid generation for the same real storyboard block. Results are displayed here only.',
+    subtitle: 'Paste a workspace URL or suffix, then submit single-panel parallel generation and 2x2 grid generation for the same real storyboard segment. Results are displayed here only.',
     targetLabel: 'workspace URL / suffix',
     targetPlaceholder: '/en/workspace/project-id?episode=episode-id',
     load: 'Load',
@@ -202,10 +201,10 @@ const COPY: Record<Locale, {
     single: 'Single Parallel',
     grid: '2x2 Grid Parallel',
     serial: 'Serial 2x2 Grid Set',
-    serialHint: 'Starting from the selected block, submit up to 4 following multi-panel blocks. Each block waits for the previous complete grid and uses that grid as the next reference image.',
+    serialHint: 'Starting from the selected segment, submit up to 4 following multi-panel segments. Each segment waits for the previous complete grid and uses that grid as the next reference image.',
     previousGridReference: 'Previous grid reference',
-    selectBlock: 'Select Block',
-    empty: 'No multi-panel block available',
+    selectBlock: 'Select Segment',
+    empty: 'No multi-panel segment available',
     task: 'Task',
     gridImage: 'Full Grid',
     noImage: 'No image',
@@ -629,7 +628,7 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
 
   const selectedBlock = useMemo(() => {
     const blocks = source?.blocks ?? []
-    return blocks.find((block) => block.sourceVideoBlockId === selectedBlockId) ?? blocks[0] ?? null
+    return blocks.find((block) => block.sourceGenerationSegmentId === selectedBlockId) ?? blocks[0] ?? null
   }, [selectedBlockId, source])
 
   const loadSource = useCallback(async () => {
@@ -646,7 +645,7 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
       const params = new URLSearchParams({ episodeId: target.episodeId })
       const nextSource = await readJson<CompareSource>(await fetch(`/api/projects/${target.projectId}/debug/storyboard-grid-compare/source?${params.toString()}`))
       setSource(nextSource)
-      setSelectedBlockId(nextSource.blocks[0]?.sourceVideoBlockId ?? '')
+      setSelectedBlockId(nextSource.blocks[0]?.sourceGenerationSegmentId ?? '')
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'LOAD_FAILED')
     } finally {
@@ -686,7 +685,7 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
         mode,
         omittedFields: fieldsToOmit,
         ...(previousGridImageUrl ? { previousGridImageUrl } : {}),
-        sourceVideoBlockId: block.sourceVideoBlockId,
+        sourceGenerationSegmentId: block.sourceGenerationSegmentId,
         panelIds: block.panels.map((panel) => panel.id),
       }),
     })
@@ -743,7 +742,7 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
               episodeId,
               omittedFields: selectedOmittedFields,
               mode: 'grid_2x2',
-              sourceVideoBlockId: selectedBlock.sourceVideoBlockId,
+              sourceGenerationSegmentId: selectedBlock.sourceGenerationSegmentId,
               panelIds: selectedBlock.panels.map((panel) => panel.id),
             }),
           })
@@ -794,14 +793,14 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
 
   const runSerialGridSet = useCallback(async () => {
     if (!source || !selectedBlock || serialSubmitting) return
-    const startIndex = source.blocks.findIndex((block) => block.sourceVideoBlockId === selectedBlock.sourceVideoBlockId)
+    const startIndex = source.blocks.findIndex((block) => block.sourceGenerationSegmentId === selectedBlock.sourceGenerationSegmentId)
     const serialBlocks = source.blocks.slice(Math.max(0, startIndex)).slice(0, 4)
     if (serialBlocks.length === 0) return
 
     setSerialSubmitting(true)
     setError(null)
     const fieldsToOmit = selectedOmittedFields
-    const serialRunId = `${Date.now()}:${selectedBlock.sourceVideoBlockId}`
+    const serialRunId = `${Date.now()}:${selectedBlock.sourceGenerationSegmentId}`
     const serialRunIndex = serialRuns.length + 1
     setSerialRuns((current) => [{
       id: serialRunId,
@@ -820,8 +819,8 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
               blocks: [
                 ...item.blocks,
                 {
-                  sourceVideoBlockId: block.sourceVideoBlockId,
-                  blockIndex: block.blockIndex,
+                  sourceGenerationSegmentId: block.sourceGenerationSegmentId,
+                  segmentIndex: block.segmentIndex,
                   block,
                   previousGridImageUrl,
                   run,
@@ -920,14 +919,14 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
           <label className="flex min-w-80 flex-1 flex-col gap-1 text-xs font-semibold text-slate-600">
             <span>{copy.selectBlock}</span>
             <select
-              value={selectedBlock?.sourceVideoBlockId ?? ''}
+              value={selectedBlock?.sourceGenerationSegmentId ?? ''}
               onChange={(event) => setSelectedBlockId(event.target.value)}
               className="h-10 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-950 outline-none focus:border-slate-500"
             >
               {blockOptions.length === 0 ? <option value="">{copy.empty}</option> : null}
               {blockOptions.map((block) => (
-                <option key={block.sourceVideoBlockId} value={block.sourceVideoBlockId}>
-                  #{block.blockIndex + 1} · {block.shotNumbers.join(', ')} · {block.panels.length}
+                <option key={block.sourceGenerationSegmentId} value={block.sourceGenerationSegmentId}>
+                  #{block.segmentIndex + 1} · {block.shotNumbers.join(', ')} · {block.panels.length}
                 </option>
               ))}
             </select>
@@ -990,14 +989,14 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">Block #{selectedBlock.blockIndex + 1}</h2>
-                <p className="mt-1 text-xs text-slate-500">{selectedBlock.sourceVideoBlockId}</p>
+                <h2 className="text-sm font-semibold text-slate-950">Segment #{selectedBlock.segmentIndex + 1}</h2>
+                <p className="mt-1 text-xs text-slate-500">{selectedBlock.sourceGenerationSegmentId}</p>
               </div>
               <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                 {selectedBlock.shotNumbers.join(', ')}
               </span>
             </div>
-            <p className="text-sm leading-6 text-slate-700">{selectedBlock.prompt}</p>
+            <p className="text-sm leading-6 text-slate-700">{selectedBlock.continuity}</p>
           </section>
         ) : null}
 
@@ -1031,10 +1030,10 @@ export default function StoryboardGridLabClient({ locale, initialProjectId, init
                   </div>
                   <div className="grid gap-5 xl:grid-cols-2">
                     {serialRun.blocks.map((blockRun, index) => (
-                      <div key={`${serialRun.id}:${blockRun.sourceVideoBlockId}`} className="rounded-lg border border-slate-200 p-3">
+                      <div key={`${serialRun.id}:${blockRun.sourceGenerationSegmentId}`} className="rounded-lg border border-slate-200 p-3">
                         <div className="mb-3 space-y-1">
-                          <h3 className="text-xs font-semibold text-slate-950">Block #{blockRun.blockIndex + 1}</h3>
-                          <p className="text-[11px] leading-4 text-slate-500">{blockRun.sourceVideoBlockId}</p>
+                          <h3 className="text-xs font-semibold text-slate-950">Segment #{blockRun.segmentIndex + 1}</h3>
+                          <p className="text-[11px] leading-4 text-slate-500">{blockRun.sourceGenerationSegmentId}</p>
                           <p className="text-[11px] leading-4 text-indigo-700">
                             {copy.previousGridReference}: {index === 0 || !blockRun.previousGridImageUrl ? '-' : blockRun.previousGridImageUrl}
                           </p>

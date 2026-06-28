@@ -7,17 +7,19 @@ import { TASK_TYPE } from '@/lib/task/types'
 import {
   readProjectEditScript,
   updateProjectEditScriptAssetRequirementDescription,
-  updateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/edit-script/service'
-import { arrangeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-arrangement'
-import { mergeProjectEditScriptVideoBlocks } from '@/lib/edit-script/video-block-merge'
 import {
-  arrangeEditScriptVideoBlocksRequestSchema,
+  arrangeProjectEditScriptGenerationSegments,
+  mergeProjectEditScriptGenerationSegments,
+  updateProjectEditScriptGenerationSegmentContinuity,
+} from '@/lib/edit-script/generation-segments'
+import {
+  arrangeEditScriptGenerationSegmentsRequestSchema,
   createEditScriptRequestSchema,
   getEditScriptRequestSchema,
-  mergeEditScriptVideoBlocksRequestSchema,
+  mergeEditScriptGenerationSegmentsRequestSchema,
   updateEditScriptAssetRequirementDescriptionRequestSchema,
-  updateEditScriptVideoBlockPromptRequestSchema,
+  updateEditScriptGenerationSegmentContinuityRequestSchema,
 } from '@/lib/edit-script/types'
 
 export const GET = apiHandler(async (
@@ -98,37 +100,33 @@ export const PATCH = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = await request.json().catch(() => ({})) as unknown
-  const parsed = updateEditScriptVideoBlockPromptRequestSchema
+  const parsed = updateEditScriptGenerationSegmentContinuityRequestSchema
     .or(updateEditScriptAssetRequirementDescriptionRequestSchema)
-    .or(arrangeEditScriptVideoBlocksRequestSchema)
-    .or(mergeEditScriptVideoBlocksRequestSchema)
+    .or(arrangeEditScriptGenerationSegmentsRequestSchema)
+    .or(mergeEditScriptGenerationSegmentsRequestSchema)
     .safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
   }
 
-  if ('operation' in parsed.data && parsed.data.operation === 'arrangeVideoBlocks') {
-    const editScript = await arrangeProjectEditScriptVideoBlocks({
+  if ('operation' in parsed.data && parsed.data.operation === 'arrangeGenerationSegments') {
+    const editScript = await arrangeProjectEditScriptGenerationSegments({
       projectId,
       episodeId: parsed.data.episodeId,
       editScriptId: parsed.data.editScriptId,
-      blocks: parsed.data.blocks,
-      userId: authResult.session.user.id,
-      locale: resolveRequiredTaskLocale(request, body),
+      segments: parsed.data.segments,
     })
 
     return NextResponse.json({ editScript })
   }
 
-  if ('operation' in parsed.data && parsed.data.operation === 'mergeVideoBlocks') {
-    const editScript = await mergeProjectEditScriptVideoBlocks({
+  if ('operation' in parsed.data && parsed.data.operation === 'mergeGenerationSegments') {
+    const editScript = await mergeProjectEditScriptGenerationSegments({
       projectId,
       episodeId: parsed.data.episodeId,
       editScriptId: parsed.data.editScriptId,
-      leftBlockIndex: parsed.data.leftBlockIndex,
-      rightBlockIndex: parsed.data.rightBlockIndex,
-      userId: authResult.session.user.id,
-      locale: resolveRequiredTaskLocale(request, body),
+      leftSegmentIndex: parsed.data.leftSegmentIndex,
+      rightSegmentIndex: parsed.data.rightSegmentIndex,
     })
 
     return NextResponse.json({ editScript })
@@ -146,12 +144,12 @@ export const PATCH = apiHandler(async (
     return NextResponse.json({ editScript })
   }
 
-  const editScript = await updateProjectEditScriptVideoBlockPrompt({
+  const editScript = await updateProjectEditScriptGenerationSegmentContinuity({
     projectId,
     episodeId: parsed.data.episodeId,
     editScriptId: parsed.data.editScriptId,
-    blockIndex: parsed.data.blockIndex,
-    prompt: parsed.data.prompt,
+    segmentIndex: parsed.data.segmentIndex,
+    continuity: parsed.data.continuity,
   })
 
   return NextResponse.json({ editScript })

@@ -1,16 +1,12 @@
 import { type Job } from 'bullmq'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '../shared'
-import { generateStoryboardPanelFinalPrompts } from '@/lib/edit-script/storyboard-consistency/model-generation'
-import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
+import { generateStoryboardPanelPrompts } from '@/lib/edit-script/storyboard-consistency/model-generation'
 import {
   storyboardConsistencySourceSnapshotSchema,
   type StoryboardConsistencyModelConfigSnapshot,
   type StoryboardConsistencySourceSnapshot,
-  type StoryboardPanelPromptDraft,
 } from '@/lib/edit-script/storyboard-consistency/types'
 import {
   upsertEditScriptStoryboard,
@@ -21,16 +17,6 @@ interface ParsedPayload {
   readonly editScriptId: string
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
-}
-
-export async function runStoryboardConsistencyItemsInParallel<T>(
-  items: readonly T[],
-  worker: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-  const results = await Promise.allSettled(items.map((item, index) => worker(item, index)))
-  const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-  if (!failed) return
-  throw failed.reason instanceof Error ? failed.reason : new Error(String(failed.reason))
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -64,189 +50,59 @@ function parsePayload(job: Job<TaskJobData>): ParsedPayload {
   }
 }
 
-function parseJson(value: string | null): unknown {
-  if (!value) return {}
-  try {
-    return JSON.parse(value)
-  } catch {
-    throw new Error('EDIT_SCRIPT_STORYBOARD_PHOTOGRAPHY_PLAN_INVALID')
-  }
-}
-
 function buildPhotographyPlan(input: {
   readonly stage: string
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
-  readonly cameraPlanOutput?: unknown
   readonly errorMessage?: string | null
 }) {
   return {
     source: 'edit_script',
     sourceType: 'editScriptStoryboard',
-    consistencyMode: 'spatial_text_blocking',
+    consistencyMode: 'shot_execution_plan',
     currentStage: input.stage,
     editScriptId: input.sourceSnapshot.editScript.id,
     modelConfigSnapshot: input.modelConfigSnapshot,
-    cameraPlanOutput: input.cameraPlanOutput ?? null,
+    executionShotCount: input.sourceSnapshot.shotExecutionPlan.shots.length,
+    generationSegmentCount: input.sourceSnapshot.generationSegments.length,
     errorMessage: input.errorMessage ?? null,
   }
 }
 
-function buildSpatialProfileOutput(snapshot: StoryboardConsistencySourceSnapshot): Record<string, unknown> {
-  const locations = snapshot.assets
-    .filter((asset) => asset.kind === 'location')
-    .map((asset) => {
-      if (!asset.spatialProfile) {
-        throw new Error(`LOCATION_SPATIAL_PROFILE_REQUIRED:${asset.name}`)
-      }
-      return {
-        requirementId: asset.requirementId,
-        targetId: asset.targetId,
-        name: asset.name,
-        description: asset.description,
-        shotNumbers: asset.shotNumbers,
-        spatialProfile: asset.spatialProfile,
-      }
-    })
-  if (locations.length === 0) throw new Error('LOCATION_SPATIAL_PROFILE_REQUIRED')
-  return {
-    locations,
-  }
-}
-
-function toPrismaJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
-function buildSpatialProfileArtifactRows(input: {
-  readonly storyboardId: string
-  readonly spatialProfileOutput: Record<string, unknown>
-}): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] {
-  const locations = Array.isArray(input.spatialProfileOutput.locations) ? input.spatialProfileOutput.locations : []
-  return locations.flatMap((location, index): Prisma.ProjectStoryboardBlockingArtifactCreateManyInput[] => {
-    if (!location || typeof location !== 'object' || Array.isArray(location)) return []
-    return [{
-      storyboardId: input.storyboardId,
-      kind: 'spatial_profile',
-      sourceVideoBlockId: null,
-      groupIndex: index,
-      prompt: null,
-      imageUrl: null,
-      candidateImages: null,
-      metadataJson: toPrismaJson(location),
-      status: 'completed',
-      errorMessage: null,
-    }]
-  })
-}
-
-function compactCameraPlanPanelForStorage(value: unknown): Record<string, unknown> | null {
-  const panel = readRecord(value)
-  const panelIndex = typeof panel.panelIndex === 'number' ? panel.panelIndex : null
-  const sourceShotNumber = typeof panel.sourceShotNumber === 'number' ? panel.sourceShotNumber : null
-  const sourceVideoBlockId = readString(panel.sourceVideoBlockId)
-  if (panelIndex === null || sourceShotNumber === null || !sourceVideoBlockId) return null
-  return {
-    panelIndex,
-    sourceShotNumber,
-    sourceVideoBlockId,
-    shotScale: readString(panel.shotScale),
-    cameraPosition: readString(panel.cameraPosition),
-    cameraHeight: readString(panel.cameraHeight),
-    cameraAngle: readString(panel.cameraAngle),
-    composition: readString(panel.composition),
-    cameraMovement: readString(panel.cameraMovement),
-    lensAndDepth: readString(panel.lensAndDepth),
-    screenDirection: readString(panel.screenDirection),
-    aestheticIntent: readString(panel.aestheticIntent),
-    emotionalEffect: readString(panel.emotionalEffect),
-    continuityNote: readString(panel.continuityNote),
-  }
-}
-
-function compactCameraPlanOutputForStorage(value: unknown): Record<string, unknown> {
-  const output = readRecord(value)
-  const panels = Array.isArray(output.panels)
-    ? output.panels.flatMap((panel) => {
-        const compact = compactCameraPlanPanelForStorage(panel)
-        return compact ? [compact] : []
-      })
-    : []
-  return {
-    panels,
-  }
-}
-
-async function loadStoryboardWithArtifacts(storyboardId: string, projectId: string) {
-  return await prisma.projectStoryboard.findFirst({
-    where: {
-      id: storyboardId,
-      episode: {
-        projectId,
-      },
-    },
-    include: {
-      blockingArtifacts: {
-        orderBy: [
-          { createdAt: 'asc' },
-          { groupIndex: 'asc' },
-        ],
-      },
-    },
-  })
-}
-
-async function persistGeneratedPanels(params: {
-  readonly locale: TaskJobData['locale']
-  readonly storyboardId: string
-  readonly snapshot: StoryboardConsistencySourceSnapshot
-  readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
-}) {
-  const panels = await upsertStoryboardPanelsFromPrompts({
-    storyboardId: params.storyboardId,
-    snapshot: params.snapshot,
-    generatedPanels: params.generatedPanels,
-    locale: params.locale,
-  })
-  return panels
-}
-
-export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData>) {
+export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobData>) {
   const parsed = parsePayload(job)
-  await reportTaskProgress(job, 12, { stage: 'edit_script_storyboard_prepare' })
+  await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_build_facts' })
   let storyboardId: string | null = null
   try {
     const storyboard = await upsertEditScriptStoryboard({
       snapshot: parsed.sourceSnapshot,
       photographyPlan: buildPhotographyPlan({
-        stage: 'preparing',
+        stage: 'building_panel_facts',
         sourceSnapshot: parsed.sourceSnapshot,
         modelConfigSnapshot: parsed.modelConfigSnapshot,
       }),
     })
     storyboardId = storyboard.id
-    const spatialProfileOutput = buildSpatialProfileOutput(parsed.sourceSnapshot)
-    const spatialProfileArtifactRows = buildSpatialProfileArtifactRows({
+    const generatedPanels = generateStoryboardPanelPrompts({
+      snapshot: parsed.sourceSnapshot,
+    })
+    const panels = await upsertStoryboardPanelsFromPrompts({
       storyboardId: storyboard.id,
-      spatialProfileOutput,
+      snapshot: parsed.sourceSnapshot,
+      generatedPanels,
     })
-    await prisma.$transaction(async (tx) => {
-      await tx.projectStoryboardBlockingArtifact.deleteMany({ where: { storyboardId: storyboard.id } })
-      if (spatialProfileArtifactRows.length > 0) {
-        await tx.projectStoryboardBlockingArtifact.createMany({ data: spatialProfileArtifactRows })
-      }
-      await tx.projectStoryboard.update({
-        where: { id: storyboard.id },
-        data: {
-          photographyPlan: JSON.stringify(buildPhotographyPlan({
-            stage: 'spatial_profile_ready',
-            sourceSnapshot: parsed.sourceSnapshot,
-            modelConfigSnapshot: parsed.modelConfigSnapshot,
-          })),
-        },
-      })
+    await prisma.projectStoryboard.update({
+      where: { id: storyboard.id },
+      data: {
+        photographyPlan: JSON.stringify(buildPhotographyPlan({
+          stage: 'panel_prompts_ready',
+          sourceSnapshot: parsed.sourceSnapshot,
+          modelConfigSnapshot: parsed.modelConfigSnapshot,
+        })),
+        lastError: null,
+      },
     })
-    return { storyboardId: storyboard.id, spatialProfileCount: parsed.sourceSnapshot.assets.filter((asset) => asset.kind === 'location').length }
+    return { storyboardId: storyboard.id, panelCount: panels.length }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (storyboardId) {
@@ -255,7 +111,7 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
         data: {
           lastError: message,
           photographyPlan: JSON.stringify(buildPhotographyPlan({
-            stage: 'spatial_profile_failed',
+            stage: 'panel_prompts_failed',
             sourceSnapshot: parsed.sourceSnapshot,
             modelConfigSnapshot: parsed.modelConfigSnapshot,
             errorMessage: message,
@@ -264,69 +120,5 @@ export async function handleEditScriptStoryboardPrepareTask(job: Job<TaskJobData
       }).catch(() => undefined)
     }
     throw error
-  }
-}
-
-export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobData>) {
-  const payload = readRecord(job.data.payload)
-  const storyboardId = readString(payload.storyboardId) || job.data.targetId
-  if (!storyboardId) throw new Error('EDIT_SCRIPT_STORYBOARD_ID_REQUIRED')
-  const storyboard = await loadStoryboardWithArtifacts(storyboardId, job.data.projectId)
-  if (!storyboard) throw new Error('EDIT_SCRIPT_STORYBOARD_NOT_FOUND')
-  const parsed = parsePayload(job)
-  const snapshot = parsed.sourceSnapshot
-  const modelConfig = parsed.modelConfigSnapshot
-  const plan = readRecord(parseJson(storyboard.photographyPlan))
-  const spatialProfileOutput = buildSpatialProfileOutput(snapshot)
-  await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_camera_plan' })
-  const streamContext = createWorkerLLMStreamContext(job, 'edit_script_storyboard_camera_plan')
-  const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
-  try {
-    const generated = await withInternalLLMStreamCallbacks(
-      streamCallbacks,
-      async () => await generateStoryboardPanelFinalPrompts({
-        userId: job.data.userId,
-        projectId: job.data.projectId,
-        model: modelConfig.analysisModel,
-        locale: job.data.locale,
-        snapshot,
-        spatialProfileOutput,
-      }),
-    )
-    const panels = await persistGeneratedPanels({
-      locale: job.data.locale,
-      storyboardId: storyboard.id,
-      snapshot,
-      generatedPanels: generated.panels,
-    })
-    await prisma.projectStoryboard.update({
-      where: { id: storyboard.id },
-      data: {
-        photographyPlan: JSON.stringify({
-          ...plan,
-          currentStage: 'panel_prompts_ready',
-          cameraPlanOutput: compactCameraPlanOutputForStorage(generated.cameraPlanOutput),
-          errorMessage: null,
-        }),
-        lastError: null,
-      },
-    })
-    return { storyboardId: storyboard.id, panelCount: panels.length }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await prisma.projectStoryboard.update({
-      where: { id: storyboard.id },
-      data: {
-        lastError: message,
-        photographyPlan: JSON.stringify({
-          ...plan,
-          currentStage: 'panel_prompts_failed',
-          errorMessage: message,
-        }),
-      },
-    }).catch(() => undefined)
-    throw error
-  } finally {
-    await streamCallbacks.flush()
   }
 }

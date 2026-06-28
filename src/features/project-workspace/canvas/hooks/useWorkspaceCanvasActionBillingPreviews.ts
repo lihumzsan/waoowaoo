@@ -77,7 +77,7 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
     const input = {
       episodeId: params.action.episodeId,
       editScriptId: params.action.editScriptId,
-      sourceVideoBlockId: params.action.sourceVideoBlockId,
+      sourceGenerationSegmentId: params.action.sourceGenerationSegmentId,
       panelIds: [...params.action.panelIds],
     }
     return {
@@ -158,7 +158,7 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
       episodeId: params.episodeId,
       generationOptions: params.action.generationOptions,
       mode: 'asset-reference',
-      blockIndex: params.action.blockIndex,
+      segmentIndex: params.action.segmentIndex,
       referenceImageUrls: params.action.referenceImageUrls,
     })
     return {

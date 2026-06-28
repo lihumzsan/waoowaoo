@@ -353,7 +353,7 @@ describe('project assistant chat route', () => {
       runId: 'run-1',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_director_decoupage',
+      operationId: 'generate_edit_shot_execution_plan',
       approvalId: 'approval-1',
       toolCallId: 'tool-call-1',
     })
@@ -391,7 +391,7 @@ describe('project assistant chat route', () => {
       pendingApproval: {
         interruptionId: 'interruption-1',
         approvalId: 'approval-1',
-        operationId: 'generate_edit_director_decoupage',
+        operationId: 'generate_edit_shot_execution_plan',
         toolCallId: 'tool-call-1',
       },
     }))

@@ -64,17 +64,9 @@ describe('invalidateByTarget', () => {
     expect(hasInvalidation(testClient, (arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.project.editDirectorDecoupage('project-1', 'episode-1')[0]
+        && key[0] === queryKeys.project.editShotExecutionPlan('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
-        && key[2] === 'edit-director-decoupage'
-        && key[3] === 'episode-1'
-    })).toBe(true)
-    expect(hasInvalidation(testClient, (arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.project.editCinematographyShotPlan('project-1', 'episode-1')[0]
-        && key[1] === 'project-1'
-        && key[2] === 'edit-cinematography-shot-plan'
+        && key[2] === 'edit-shot-execution-plan'
         && key[3] === 'episode-1'
     })).toBe(true)
   })

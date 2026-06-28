@@ -87,6 +87,35 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   } as unknown as Job<TaskJobData>
 }
 
+function buildCorePlan(sound: string = 'native video sound only') {
+  return {
+    shots: [
+      {
+        shotNumber: 1,
+        durationSec: 3,
+        scene: { name: 'A room' },
+        action: 'A shot',
+        characters: [
+          {
+            name: 'Hero',
+            visibility: 'visible',
+            role: 'focus',
+            performance: 'holds still',
+          },
+        ],
+        keyObjects: [],
+        sound,
+      },
+    ],
+    generationSegments: [
+      {
+        shotNumbers: [1],
+        continuity: 'A single continuous shot',
+      },
+    ],
+  }
+}
+
 function mockReadyProject(): void {
   prismaMock.project.findUnique.mockResolvedValue({
     analysisModel: 'openai::gpt-4.1',
@@ -99,25 +128,12 @@ function mockReadyProject(): void {
   prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
   prismaMock.projectEditScript.findUnique.mockResolvedValue({
     id: 'edit-script-1',
-    userPrompt: 'test',
-    title: 'Test',
-    logline: 'Test logline',
     durationSec: 3,
-    shotsJson: [{
-      shotNumber: 1,
-      durationSec: 3,
-      dramaticPurpose: 'test dramatic purpose',
-      visibleAction: 'A shot',
-      audienceFocus: 'test audience focus',
-      viewpoint: 'test viewpoint',
-      revealPlan: 'test reveal plan',
-      performanceBeat: 'test performance beat',
-      continuityIn: 'test continuity in',
-      continuityOut: 'test continuity out',
-      charactersAndScene: 'A room',
-      sound: 'native video sound only',
-    }],
-    videoBlocksJson: [],
+    editScreenplay: {
+      userPrompt: 'test',
+      styleBibleJson: null,
+    },
+    corePlanJson: buildCorePlan(),
   })
 }
 
@@ -131,7 +147,8 @@ function mockCompleteTimeline(): void {
       description: 'panel 1',
       videoUrl: 'https://example.com/panel-1.mp4',
       videoMedia: null,
-      photographyRules: JSON.stringify({ editScriptId: 'edit-script-1' }),
+      sourceShotNumber: 1,
+      sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       storyboard: {
         id: 'storyboard-1',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -215,12 +232,13 @@ describe('bgm score worker', () => {
         id: 'panel-1',
         panelIndex: 0,
         panelNumber: 1,
-        duration: 3,
-        description: 'panel 1',
-        videoUrl: null,
-        videoMedia: null,
-        photographyRules: JSON.stringify({ editScriptId: 'edit-script-1' }),
-        storyboard: {
+      duration: 3,
+      description: 'panel 1',
+      videoUrl: null,
+      videoMedia: null,
+      sourceShotNumber: 1,
+      sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
+      storyboard: {
           id: 'storyboard-1',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
           storyboardTextJson: JSON.stringify({ editScriptId: 'edit-script-1' }),

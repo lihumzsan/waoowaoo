@@ -1,158 +1,133 @@
-import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Job } from 'bullmq'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { handleEditShotExecutionPlanGenerateTask } from '@/lib/workers/handlers/edit-script-structured-generate'
+import { generateProjectEditShotExecutionPlan } from '@/lib/edit-script/service'
+import { reportTaskProgress } from '@/lib/workers/shared'
+import { assertTaskActive } from '@/lib/workers/utils'
 
-const serviceMock = vi.hoisted(() => ({
-  generateProjectEditDirectorDecoupage: vi.fn(async () => ({
-    id: 'director-decoupage-1',
-    screenplayId: 'screenplay-1',
-    shots: [
-      {
-        shotNumber: 1,
-        durationSec: 3,
-      },
-    ],
-  })),
-  generateProjectEditCinematographyShotPlan: vi.fn(async () => ({
-    id: 'cinematography-shot-plan-1',
-    editScriptId: 'edit-script-1',
-    shots: [
-      {
-        shotNumber: 1,
-      },
-      {
-        shotNumber: 2,
-      },
-    ],
-  })),
+vi.mock('@/lib/edit-script/service', () => ({
+  generateProjectEditShotExecutionPlan: vi.fn(),
 }))
 
-const workerMock = vi.hoisted(() => ({
-  reportTaskProgress: vi.fn(async () => undefined),
-  assertTaskActive: vi.fn(async () => undefined),
+vi.mock('@/lib/workers/shared', () => ({
+  reportTaskProgress: vi.fn(),
+  reportTaskStreamChunk: vi.fn(),
 }))
 
-const streamMock = vi.hoisted(() => ({
-  flush: vi.fn(async () => undefined),
+vi.mock('@/lib/workers/utils', () => ({
+  assertTaskActive: vi.fn(),
 }))
 
-vi.mock('@/lib/edit-script/service', () => serviceMock)
-vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: workerMock.reportTaskProgress }))
-vi.mock('@/lib/workers/utils', () => ({ assertTaskActive: workerMock.assertTaskActive }))
-vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
-  withInternalLLMStreamCallbacks: vi.fn(async (_callbacks: unknown, fn: () => Promise<unknown>) => await fn()),
-}))
-vi.mock('@/lib/workers/handlers/llm-stream', () => ({
-  createWorkerLLMStreamContext: vi.fn(() => ({ streamRunId: 'run-1', nextSeqByStepLane: {} })),
-  createWorkerLLMStreamCallbacks: vi.fn(() => streamMock),
+vi.mock('@/lib/task/service', () => ({
+  isTaskActive: vi.fn(async () => true),
 }))
 
-import {
-  handleEditCinematographyShotPlanGenerateTask,
-  handleEditDirectorDecoupageGenerateTask,
-} from '@/lib/workers/handlers/edit-script-structured-generate'
-
-function buildJob(input: {
-  readonly type: typeof TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE | typeof TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE
-  readonly targetType: 'ProjectEditScreenplay' | 'ProjectEditScript'
-  readonly targetId: string
-  readonly payload?: Record<string, unknown>
-  readonly episodeId?: string | null
+function buildJob(payload: Record<string, unknown> | null = {
+  episodeId: 'episode-1',
+  editScriptId: 'script-1',
 }): Job<TaskJobData> {
   return {
     data: {
-      taskId: 'task-structured-1',
-      type: input.type,
+      taskId: 'task-1',
+      type: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
       locale: 'zh',
       projectId: 'project-1',
-      episodeId: input.episodeId ?? 'episode-1',
-      targetType: input.targetType,
-      targetId: input.targetId,
-      payload: input.payload ?? null,
+      episodeId: 'episode-1',
+      targetType: 'EditScript',
+      targetId: 'script-1',
+      payload,
       userId: 'user-1',
       trace: { requestId: 'request-1' },
     },
-  } as unknown as Job<TaskJobData>
+  } as Job<TaskJobData>
 }
 
-describe('worker edit-script structured generation behavior', () => {
+describe('handleEditShotExecutionPlanGenerateTask', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.mocked(generateProjectEditShotExecutionPlan).mockReset()
+    vi.mocked(reportTaskProgress).mockReset()
+    vi.mocked(assertTaskActive).mockReset()
   })
 
-  it('generates director decoupage from a ProjectEditScreenplay task target', async () => {
-    const result = await handleEditDirectorDecoupageGenerateTask(buildJob({
-      type: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
-      targetType: 'ProjectEditScreenplay',
-      targetId: 'screenplay-1',
-      payload: { episodeId: 'episode-1' },
-    }))
+  it('calls the shot execution plan service with task payload ids', async () => {
+    vi.mocked(generateProjectEditShotExecutionPlan).mockResolvedValue({
+      id: 'execution-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'script-1',
+      status: 'ready',
+      shots: [
+        {
+          shotNumber: 1,
+          camera: {
+            shotScale: 'medium',
+            lens: '35mm',
+            focus: 'chair',
+            height: 'eye level',
+            position: 'doorway',
+            angle: 'frontal',
+            movement: 'locked',
+            composition: 'centered chair',
+            lighting: 'top light',
+          },
+          blocking: {
+            axis: {
+              type: 'subject_line',
+              subjects: ['Anna', 'Chair'],
+              screenDirection: 'Anna left, chair center',
+            },
+            characters: [
+              {
+                name: 'Anna',
+                visibility: 'visible',
+                position: 'doorway',
+                screenPosition: 'left',
+                facing: 'chair',
+                eyeline: 'chair',
+              },
+            ],
+            objects: [
+              {
+                name: 'Chair',
+                position: 'center',
+                screenPosition: 'center',
+              },
+            ],
+            spatialNote: 'same room',
+          },
+        },
+      ],
+    })
 
-    expect(serviceMock.generateProjectEditDirectorDecoupage).toHaveBeenCalledWith(expect.objectContaining({
+    const result = await handleEditShotExecutionPlanGenerateTask(buildJob())
+
+    expect(generateProjectEditShotExecutionPlan).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      screenplayId: 'screenplay-1',
+      editScriptId: 'script-1',
       locale: 'zh',
     }))
-    expect(workerMock.reportTaskProgress).toHaveBeenCalledWith(expect.anything(), 12, expect.objectContaining({
-      stage: 'edit_director_decoupage_prepare',
-    }))
-    expect(workerMock.reportTaskProgress).toHaveBeenCalledWith(expect.anything(), 96, expect.objectContaining({
-      stage: 'edit_director_decoupage_persist',
-    }))
-    expect(streamMock.flush).toHaveBeenCalled()
     expect(result).toEqual({
-      directorDecoupageId: 'director-decoupage-1',
+      shotExecutionPlanId: 'execution-1',
       episodeId: 'episode-1',
-      screenplayId: 'screenplay-1',
+      editScriptId: 'script-1',
       shotCount: 1,
     })
+    expect(reportTaskProgress).toHaveBeenCalledWith(expect.any(Object), 12, expect.objectContaining({
+      stage: 'edit_shot_execution_plan_prepare',
+    }))
+    expect(reportTaskProgress).toHaveBeenCalledWith(expect.any(Object), 96, expect.objectContaining({
+      stage: 'edit_shot_execution_plan_persist',
+    }))
   })
 
-  it('generates cinematography shot plan from a ProjectEditScript task target', async () => {
-    const result = await handleEditCinematographyShotPlanGenerateTask(buildJob({
-      type: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
-      targetType: 'ProjectEditScript',
-      targetId: 'edit-script-1',
-      payload: { episodeId: 'episode-1' },
-    }))
+  it('fails explicitly when editScriptId is missing', async () => {
+    const job = buildJob({ episodeId: 'episode-1' })
+    job.data.targetId = ''
 
-    expect(serviceMock.generateProjectEditCinematographyShotPlan).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      editScriptId: 'edit-script-1',
-      locale: 'zh',
-    }))
-    expect(workerMock.reportTaskProgress).toHaveBeenCalledWith(expect.anything(), 12, expect.objectContaining({
-      stage: 'edit_cinematography_shot_plan_prepare',
-    }))
-    expect(workerMock.reportTaskProgress).toHaveBeenCalledWith(expect.anything(), 96, expect.objectContaining({
-      stage: 'edit_cinematography_shot_plan_persist',
-    }))
-    expect(streamMock.flush).toHaveBeenCalled()
-    expect(result).toEqual({
-      cinematographyShotPlanId: 'cinematography-shot-plan-1',
-      episodeId: 'episode-1',
-      editScriptId: 'edit-script-1',
-      shotCount: 2,
-    })
-  })
-
-  it('fails explicitly when stable target ids are missing', async () => {
-    await expect(handleEditDirectorDecoupageGenerateTask(buildJob({
-      type: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
-      targetType: 'ProjectEditScreenplay',
-      targetId: '',
-      payload: { episodeId: 'episode-1' },
-    }))).rejects.toThrow('screenplayId is required')
-
-    await expect(handleEditCinematographyShotPlanGenerateTask(buildJob({
-      type: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
-      targetType: 'ProjectEditScript',
-      targetId: '',
-      payload: { episodeId: 'episode-1' },
-    }))).rejects.toThrow('editScriptId is required')
+    await expect(handleEditShotExecutionPlanGenerateTask(job))
+      .rejects.toThrow('editScriptId is required')
   })
 })

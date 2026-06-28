@@ -10,8 +10,7 @@ import { buildEditFirstStructuredUserPrompt, type EditFirstDurationTier } from '
 import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from './types'
 import { buildEditFirstTextTaskPayload, buildEditFirstTextTaskPayloadFromAnalysisModel } from './task-billing'
 import {
-  resolveEditCinematographyShotPlanTaskTarget,
-  resolveEditDirectorDecoupageTaskTarget,
+  resolveEditShotExecutionPlanTaskTarget,
 } from './service'
 
 type OperationTaskSubmitResult = Awaited<ReturnType<typeof submitOperationTask>>
@@ -36,18 +35,10 @@ export type EditScreenplayTaskSubmitResult = OperationTaskSubmitResult & {
   readonly targetId: string
 }
 
-export type EditDirectorDecoupageTaskSubmitResult = OperationTaskSubmitResult & {
-  readonly episodeId: string
-  readonly screenplayId: string
-  readonly taskType: typeof TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE
-  readonly targetType: 'ProjectEditScreenplay'
-  readonly targetId: string
-}
-
-export type EditCinematographyShotPlanTaskSubmitResult = OperationTaskSubmitResult & {
+export type EditShotExecutionPlanTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
   readonly editScriptId: string
-  readonly taskType: typeof TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE
+  readonly taskType: typeof TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
   readonly targetType: 'ProjectEditScript'
   readonly targetId: string
 }
@@ -490,56 +481,7 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
   }
 }
 
-export async function submitProjectEditDirectorDecoupageTask(input: {
-  readonly request: NextRequest
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly screenplayId?: string
-  readonly source: string
-  readonly confirmed: boolean
-  readonly locale: Locale
-}): Promise<EditDirectorDecoupageTaskSubmitResult> {
-  const target = await resolveEditDirectorDecoupageTaskTarget({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-  })
-  const result = await submitOperationTask({
-    request: input.request,
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: target.episodeId,
-    type: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
-    operationId: 'generate_edit_director_decoupage',
-    source: input.source,
-    confirmed: input.confirmed,
-    payload: await buildEditFirstTextTaskPayload({
-      projectId: input.projectId,
-      userId: input.userId,
-      payload: {
-        episodeId: target.episodeId,
-        screenplayId: target.screenplayId,
-        displayMode: 'detail',
-      },
-    }),
-    dedupeKey: `edit_director_decoupage_generate:${input.projectId}:${target.screenplayId}`,
-    locale: input.locale,
-  })
-
-  return {
-    ...result,
-    episodeId: target.episodeId,
-    screenplayId: target.screenplayId,
-    taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
-  }
-}
-
-export async function submitProjectEditCinematographyShotPlanTask(input: {
+export async function submitProjectEditShotExecutionPlanTask(input: {
   readonly request: NextRequest
   readonly projectId: string
   readonly userId: string
@@ -548,8 +490,8 @@ export async function submitProjectEditCinematographyShotPlanTask(input: {
   readonly source: string
   readonly confirmed: boolean
   readonly locale: Locale
-}): Promise<EditCinematographyShotPlanTaskSubmitResult> {
-  const target = await resolveEditCinematographyShotPlanTaskTarget({
+}): Promise<EditShotExecutionPlanTaskSubmitResult> {
+  const target = await resolveEditShotExecutionPlanTaskTarget({
     projectId: input.projectId,
     episodeId: input.episodeId,
     ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
@@ -559,10 +501,10 @@ export async function submitProjectEditCinematographyShotPlanTask(input: {
     projectId: input.projectId,
     userId: input.userId,
     episodeId: target.episodeId,
-    type: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+    type: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
     targetType: 'ProjectEditScript',
     targetId: target.editScriptId,
-    operationId: 'generate_edit_cinematography_shot_plan',
+    operationId: 'generate_edit_shot_execution_plan',
     source: input.source,
     confirmed: input.confirmed,
     payload: await buildEditFirstTextTaskPayload({
@@ -574,7 +516,7 @@ export async function submitProjectEditCinematographyShotPlanTask(input: {
         displayMode: 'detail',
       },
     }),
-    dedupeKey: `edit_cinematography_shot_plan_generate:${input.projectId}:${target.editScriptId}`,
+    dedupeKey: `edit_shot_execution_plan_generate:${input.projectId}:${target.editScriptId}`,
     locale: input.locale,
   })
 
@@ -582,7 +524,7 @@ export async function submitProjectEditCinematographyShotPlanTask(input: {
     ...result,
     episodeId: target.episodeId,
     editScriptId: target.editScriptId,
-    taskType: TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE,
+    taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
     targetType: 'ProjectEditScript',
     targetId: target.editScriptId,
   }

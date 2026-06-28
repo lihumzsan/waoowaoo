@@ -104,7 +104,7 @@ describe('workspace assistant async task follow-up', () => {
           type: 'data-agent-stop',
           data: {
             reason: 'awaiting_external_task',
-            operationIds: ['generate_edit_director_decoupage'],
+            operationIds: ['generate_edit_shot_execution_plan'],
             taskIds: ['task-2'],
             phases: ['processing'],
           },
@@ -113,7 +113,7 @@ describe('workspace assistant async task follow-up', () => {
     ])
 
     expect(wait).toEqual({
-      operationId: 'generate_edit_director_decoupage',
+      operationId: 'generate_edit_shot_execution_plan',
       taskIds: ['task-2'],
     })
   })

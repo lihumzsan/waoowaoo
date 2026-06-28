@@ -122,14 +122,14 @@ describe('generate_storyboard_grid_images operation', () => {
     const result = await operation.execute(buildContext(), {
       episodeId: 'episode-1',
       editScriptId: 'edit-script-1',
-      sourceVideoBlockId: 'edit-script-1:video-block:1',
+      sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       panelIds: ['panel-1', 'panel-2'],
     })
 
     expect(result).toMatchObject({
       taskId: 'task-grid-1',
       episodeId: 'episode-1',
-      sourceVideoBlockId: 'edit-script-1:video-block:1',
+      sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       panelIds: ['panel-1', 'panel-2'],
       mutationBatchId: 'mutation-batch-grid-1',
     })
@@ -143,7 +143,7 @@ describe('generate_storyboard_grid_images operation', () => {
         referenceMode: 'asset',
         storyboardGrid: {
           mode: '2x2',
-          sourceVideoBlockId: 'edit-script-1:video-block:1',
+          sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
           panelIds: ['panel-1', 'panel-2'],
         },
         imageModel: 'storyboard-model-1',
@@ -176,11 +176,7 @@ describe('generate_edit_script_storyboard_images operation', () => {
         panelIndex: 0,
         imageUrl: null,
         imageMediaId: null,
-        photographyRules: JSON.stringify({
-          source: 'edit_script',
-          sourceVideoBlockKind: 'group',
-          sourceVideoBlockId: 'edit-script-1:video-block:1',
-        }),
+        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       },
       {
         id: 'panel-2',
@@ -188,11 +184,7 @@ describe('generate_edit_script_storyboard_images operation', () => {
         panelIndex: 1,
         imageUrl: null,
         imageMediaId: null,
-        photographyRules: JSON.stringify({
-          source: 'edit_script',
-          sourceVideoBlockKind: 'group',
-          sourceVideoBlockId: 'edit-script-1:video-block:1',
-        }),
+        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       },
     ])
   })

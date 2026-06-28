@@ -167,7 +167,10 @@ export interface ProjectPanel {
   sketchImageMedia?: MediaRef | null
   previousImageUrl?: string | null
   previousImageMedia?: MediaRef | null
-  photographyRules: string | null  // 单镜头摄影规则JSON
+  sourceShotNumber?: number | null
+  sourceGenerationSegmentId?: string | null
+  executionSnapshotJson?: unknown | null
+  renderFactsJson?: unknown | null
   actingNotes: string | null        // 演技指导数据JSON
   // 任务态字段（由 tasks + hook 派生，不再依赖数据库持久化）
   imageTaskRunning?: boolean
@@ -190,23 +193,6 @@ export interface ProjectStoryboard {
   lastError?: string | null  // 最后一次生成失败的错误信息
   photographyPlan?: string | null  // 摄影方案JSON
   panels?: ProjectPanel[]
-  blockingArtifacts?: ProjectStoryboardBlockingArtifact[]
-}
-
-export interface ProjectStoryboardBlockingArtifact {
-  id: string
-  storyboardId: string
-  kind: string
-  sourceVideoBlockId: string | null
-  groupIndex: number | null
-  prompt: string | null
-  imageUrl: string | null
-  imageMediaId?: string | null
-  media?: MediaRef | null
-  candidateImages: string | null
-  metadataJson: unknown
-  status: string
-  errorMessage: string | null
 }
 
 export type ProjectEditAssetKind = 'character' | 'location'
@@ -215,15 +201,18 @@ export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'f
 export interface ProjectEditScriptShot {
   shotNumber: number
   durationSec: number
-  dramaticPurpose: string
-  visibleAction: string
-  audienceFocus: string
-  viewpoint: string
-  revealPlan: string
-  performanceBeat: string
-  continuityIn: string
-  continuityOut: string
-  charactersAndScene: string
+  scene: { name: string }
+  action: string
+  characters: Array<{
+    name: string
+    visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
+    role: 'focus' | 'supporting' | 'listener' | 'hidden_subject' | 'background'
+    performance: string
+  }>
+  keyObjects: Array<{
+    name: string
+    role: string
+  }>
   sound: string
 }
 
@@ -275,17 +264,7 @@ export interface ProjectEditStylePreview {
   errorMessage: string | null
 }
 
-export interface ProjectEditDirectorDecoupage {
-  id: string
-  projectId: string
-  episodeId: string
-  screenplayId: string
-  userPrompt: string
-  status: string
-  shots: ProjectEditScriptShot[]
-}
-
-export interface ProjectEditCinematographyShotPlan {
+export interface ProjectEditShotExecutionPlan {
   id: string
   projectId: string
   episodeId: string
@@ -293,18 +272,38 @@ export interface ProjectEditCinematographyShotPlan {
   status: string
   shots: {
     shotNumber: number
-    shotScale: string
-    lens: string
-    depthOfField: string
-    cameraPosition: string
-    cameraHeight: string
-    cameraAngle: string
-    movement: string
-    composition: string
-    lighting: string
-    axisAndEyeline: string
-    continuityIn: string
-    continuityOut: string
+    camera: {
+      shotScale: string
+      lens: string
+      focus: string
+      height: string
+      position: string
+      angle: string
+      movement: string
+      composition: string
+      lighting: string
+    }
+    blocking: {
+      axis: {
+        type: string
+        subjects: string[]
+        screenDirection: string
+      }
+      characters: Array<{
+        name: string
+        visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
+        position: string
+        screenPosition: string
+        facing: string
+        eyeline: string
+      }>
+      objects: Array<{
+        name: string
+        position: string
+        screenPosition: string
+      }>
+      spatialNote: string
+    }
   }[]
 }
 
@@ -312,26 +311,22 @@ export interface ProjectEditScript {
   id: string
   projectId: string
   episodeId: string
-  userPrompt: string
+  screenplayId?: string
+  userPrompt?: string
   styleBible?: unknown
   screenplayText?: string | null
-  title: string
-  logline: string | null
   durationSec: number
   shotCount: number
   status: string
   assetReviewStatus: 'pending' | 'approved'
   shots: ProjectEditScriptShot[]
-  videoBlocks: ProjectEditScriptVideoBlock[]
+  generationSegments: ProjectEditScriptGenerationSegment[]
   requirements: ProjectEditAssetRequirement[]
 }
 
-export interface ProjectEditScriptVideoBlock {
-  kind: 'single' | 'group'
+export interface ProjectEditScriptGenerationSegment {
   shotNumbers: number[]
-  gridMode?: '2x2' | '3x3'
-  reason: string
-  prompt: string
+  continuity: string
 }
 
 export type ProjectBgmScoreStatus = 'pending' | 'generating' | 'completed' | 'failed'

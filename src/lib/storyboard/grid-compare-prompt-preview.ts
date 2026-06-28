@@ -2,20 +2,11 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import type { Locale } from '@/i18n/routing'
 import {
-  appendStyleBiblePromptBlock,
-  resolveEditScriptStyleBibleForStoryboardTask,
-} from '@/lib/edit-script/style-bible-prompt'
-import {
   collectPanelReferenceImageItemsWithDiagnostics,
   normalizeReferenceImageItemsForGeneration,
   type ReferenceImageItem,
   resolveNovelData,
 } from '@/lib/workers/handlers/image-task-handler-shared'
-import {
-  buildPanelGridPrompt,
-  buildPanelPrompt,
-  buildPanelPromptContext,
-} from '@/lib/workers/handlers/panel-image-prompt'
 import {
   buildGridPromptContext,
   type GridPanel,
@@ -31,7 +22,7 @@ export type StoryboardGridComparePromptPreviewInput = {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
   readonly panelIds: readonly string[]
   readonly locale: Locale
   readonly omittedFields: readonly StoryboardPromptFieldId[]
@@ -55,6 +46,19 @@ export type StoryboardGridComparePanelPromptPreview = StoryboardGridCompareSingl
 }
 
 type PreviewPanel = GridPanel
+
+function requirePanelPrompt(panel: PreviewPanel): string {
+  const prompt = typeof panel.imagePrompt === 'string' ? panel.imagePrompt.trim() : ''
+  if (!prompt) throw new ApiError('INVALID_PARAMS', { code: 'STORYBOARD_GRID_COMPARE_PANEL_PROMPT_MISSING' })
+  return prompt
+}
+
+function requirePanelRenderFacts(panel: PreviewPanel): unknown {
+  if (panel.renderFactsJson === null || panel.renderFactsJson === undefined) {
+    throw new ApiError('INVALID_PARAMS', { code: 'STORYBOARD_GRID_COMPARE_PANEL_FACTS_MISSING' })
+  }
+  return panel.renderFactsJson
+}
 
 async function collectReferencePreview(input: {
   readonly projectData: Awaited<ReturnType<typeof resolveNovelData>>
@@ -110,47 +114,10 @@ async function buildSinglePromptPreview(input: {
     locale: input.locale,
     scope: 'panel-image.prompt-preview.refs',
   })
-  const promptContext = buildPanelPromptContext({
-    panel: {
-      id: input.panel.id,
-      shotType: input.panel.shotType,
-      cameraMove: input.panel.cameraMove,
-      description: input.panel.description,
-      imagePrompt: input.panel.imagePrompt,
-      videoPrompt: input.panel.videoPrompt,
-      location: input.panel.location,
-      characters: input.panel.characters,
-      srtSegment: input.panel.srtSegment,
-      photographyRules: input.panel.photographyRules,
-      actingNotes: input.panel.actingNotes,
-    },
-    projectData: input.projectData,
-    referenceImagesMap: references.referenceImagesMap,
-  })
+  const promptContext = requirePanelRenderFacts(input.panel)
   const contextJson = JSON.stringify(applyPanelPromptFieldOmissions(promptContext, input.omittedFields), null, 2)
-  const sourceText = input.omittedFields.includes('panel.source_text')
-    ? ''
-    : input.panel.srtSegment || input.panel.description || ''
-  const promptBase = buildPanelPrompt({
-    locale: input.locale,
-    aspectRatio: input.projectData.videoRatio || '',
-    styleText: '',
-    sourceText,
-    contextJson,
-  })
-  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    storyboardId: input.panel.storyboardId,
-  })
-  const prompt = input.omittedFields.includes('style_bible')
-    ? promptBase
-    : appendStyleBiblePromptBlock({
-      prompt: promptBase,
-      styleBible,
-      usage: 'storyboardImage',
-      locale: input.locale,
-    })
+  const sourceText = ''
+  const prompt = input.omittedFields.length > 0 ? contextJson : requirePanelPrompt(input.panel)
   return {
     panelId: input.panel.id,
     prompt,
@@ -164,9 +131,7 @@ async function buildGridPromptPreview(input: {
   readonly panels: readonly PreviewPanel[]
   readonly projectData: Awaited<ReturnType<typeof resolveNovelData>>
   readonly locale: Locale
-  readonly projectId: string
-  readonly episodeId: string
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
   readonly omittedFields: readonly StoryboardPromptFieldId[]
 }): Promise<StoryboardGridCompareSinglePromptPreview> {
   const references = await collectReferencePreview({
@@ -177,35 +142,18 @@ async function buildGridPromptPreview(input: {
   })
   const promptContext = buildGridPromptContext({
     panels: input.panels,
-    projectData: input.projectData,
     referenceImageNotes: [],
     referenceImagesMap: references.referenceImagesMap,
-    sourceVideoBlockId: input.sourceVideoBlockId,
+    sourceGenerationSegmentId: input.sourceGenerationSegmentId,
   })
   const contextJson = JSON.stringify(applyGridPromptFieldOmissions(promptContext, input.omittedFields), null, 2)
-  const sourceText = input.omittedFields.includes('panel.source_text')
-    ? ''
-    : input.panels.map((panel) => panel.srtSegment || panel.description || '').filter(Boolean).join('\n')
-  const promptBase = buildPanelGridPrompt({
-    locale: input.locale,
-    aspectRatio: input.projectData.videoRatio || '',
-    sourceText,
+  const sourceText = ''
+  const prompt = [
+    'GLOBAL TASK',
+    'Generate a storyboard grid from the structured render facts. Preserve shared scene graph, blocking, character presence, prop continuity, axis, lighting, and per-cell shot deltas.',
+    '',
     contextJson,
-    styleText: '',
-  })
-  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    storyboardId: input.panels[0]?.storyboardId || null,
-  })
-  const prompt = input.omittedFields.includes('style_bible')
-    ? promptBase
-    : appendStyleBiblePromptBlock({
-      prompt: promptBase,
-      styleBible,
-      usage: 'storyboardImage',
-      locale: input.locale,
-    })
+  ].join('\n')
   return {
     prompt,
     contextJson,
@@ -246,9 +194,7 @@ export async function buildStoryboardGridComparePromptPreview(
     panels,
     projectData,
     locale: input.locale,
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    sourceVideoBlockId: input.sourceVideoBlockId,
+    sourceGenerationSegmentId: input.sourceGenerationSegmentId,
     omittedFields,
   })
 

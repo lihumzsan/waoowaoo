@@ -20,9 +20,8 @@ describe('resource-change-events', () => {
       projectId: 'project-1',
       affectedResources: [
         { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
-        { kind: 'editDirectorDecoupage', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
-        { kind: 'editCinematographyShotPlan', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editShotExecutionPlan', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },

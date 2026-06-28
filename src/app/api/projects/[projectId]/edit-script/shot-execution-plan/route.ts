@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { readProjectEditShotExecutionPlan } from '@/lib/edit-script/service'
+import { submitProjectEditShotExecutionPlanTask } from '@/lib/edit-script/task-submission'
 import {
-  readProjectEditDirectorDecoupage,
-} from '@/lib/edit-script/service'
-import { submitProjectEditDirectorDecoupageTask } from '@/lib/edit-script/task-submission'
-import {
-  createEditDirectorDecoupageRequestSchema,
-  getEditDirectorDecoupageRequestSchema,
+  createEditShotExecutionPlanRequestSchema,
+  getEditShotExecutionPlanRequestSchema,
 } from '@/lib/edit-script/types'
 
 export const GET = apiHandler(async (
@@ -20,16 +18,16 @@ export const GET = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const { searchParams } = new URL(request.url)
-  const parsed = getEditDirectorDecoupageRequestSchema.safeParse({
+  const parsed = getEditShotExecutionPlanRequestSchema.safeParse({
     episodeId: searchParams.get('episodeId'),
   })
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const directorDecoupage = await readProjectEditDirectorDecoupage({
+  const shotExecutionPlan = await readProjectEditShotExecutionPlan({
     projectId,
     episodeId: parsed.data.episodeId,
   })
-  return NextResponse.json({ directorDecoupage })
+  return NextResponse.json({ shotExecutionPlan })
 })
 
 export const POST = apiHandler(async (
@@ -41,10 +39,10 @@ export const POST = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = await request.json().catch(() => ({})) as unknown
-  const parsed = createEditDirectorDecoupageRequestSchema.safeParse(body)
+  const parsed = createEditShotExecutionPlanRequestSchema.safeParse(body)
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const result = await submitProjectEditDirectorDecoupageTask({
+  const result = await submitProjectEditShotExecutionPlanTask({
     request,
     projectId,
     episodeId: parsed.data.episodeId,
@@ -52,7 +50,7 @@ export const POST = apiHandler(async (
     source: 'project-ui',
     confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
-    ...(parsed.data.screenplayId ? { screenplayId: parsed.data.screenplayId } : {}),
+    ...(parsed.data.editScriptId ? { editScriptId: parsed.data.editScriptId } : {}),
   })
 
   return NextResponse.json(result)

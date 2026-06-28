@@ -69,7 +69,7 @@ describe('workspace canvas focus follow', () => {
 
   it('focuses storyboard panel generation before falling back to generated shot nodes', () => {
     const nodes = [
-      workspaceNode('space-consistency:storyboard-1', 'spaceConsistency', false),
+      workspaceNode('edit-shot-execution-plan:edit-script:script-1', 'editShotExecutionPlan', false),
       workspaceNode('storyboard-panel-generation:storyboard-1', 'storyboardPanelGeneration', false),
       workspaceNode('shot:panel-1', 'shot', false),
     ]

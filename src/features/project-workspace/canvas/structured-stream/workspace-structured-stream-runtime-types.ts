@@ -2,9 +2,8 @@ import type { WorkspaceCanvasNodeData } from '../node-canvas-types'
 
 export type WorkspaceCanvasStreamKind =
   | 'editScreenplay'
-  | 'editDirectorDecoupage'
   | 'editScript'
-  | 'editCinematographyShotPlan'
+  | 'editShotExecutionPlan'
   | 'storyboardPanelGeneration'
   | 'bgmScore'
 

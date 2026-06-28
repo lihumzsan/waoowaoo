@@ -95,29 +95,6 @@ function syncActingNotesJson(
   })
 }
 
-function syncPhotographyRulesJson(
-  photographyRulesJson: string | null | undefined,
-  keepNames: ReadonlySet<string>,
-): string | null | undefined {
-  if (photographyRulesJson === undefined) return undefined
-  const parsed = normalizeStructuredJsonInput(photographyRulesJson, 'photographyRules')
-  assertStructuredJsonValue(parsed, 'photographyRules')
-  if (parsed === null) return null
-  assert(isJsonRecord(parsed), 'photographyRules must be a JSON object')
-
-  const maybeCharacters = parsed.characters
-  if (maybeCharacters === undefined) {
-    return JSON.stringify(parsed)
-  }
-
-  assert(Array.isArray(maybeCharacters), 'photographyRules.characters must be an array')
-  const filtered = filterNamedRecordsBySet(maybeCharacters, keepNames, 'photographyRules.characters')
-  return JSON.stringify({
-    ...parsed,
-    characters: filtered,
-  })
-}
-
 export function serializeStructuredJsonField(value: unknown, fieldName: string): string | null {
   const normalized = normalizeStructuredJsonInput(value, fieldName)
   assertStructuredJsonValue(normalized, fieldName)
@@ -128,20 +105,17 @@ export interface SyncPanelCharacterDependentJsonInput {
   characters: PanelCharacterRef[]
   removeIndex: number
   actingNotesJson?: string | null
-  photographyRulesJson?: string | null
 }
 
 export interface SyncPanelCharacterDependentJsonResult {
   characters: PanelCharacterRef[]
   actingNotesJson?: string | null
-  photographyRulesJson?: string | null
 }
 
 export function syncPanelCharacterDependentJson({
   characters,
   removeIndex,
   actingNotesJson,
-  photographyRulesJson,
 }: SyncPanelCharacterDependentJsonInput): SyncPanelCharacterDependentJsonResult {
   const nextCharacters = characters.filter((_, index) => index !== removeIndex)
   const keepNames = new Set(nextCharacters.map((character) => character.name))
@@ -149,6 +123,5 @@ export function syncPanelCharacterDependentJson({
   return {
     characters: nextCharacters,
     actingNotesJson: syncActingNotesJson(actingNotesJson, keepNames),
-    photographyRulesJson: syncPhotographyRulesJson(photographyRulesJson, keepNames),
   }
 }

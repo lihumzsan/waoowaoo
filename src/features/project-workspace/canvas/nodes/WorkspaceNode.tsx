@@ -39,18 +39,14 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'image'
     case 'editStyleBible':
       return 'sparklesAlt'
-    case 'editDirectorDecoupage':
-      return 'clapperboard'
     case 'editPipelineStep':
       return 'chart'
     case 'editProcessGroup':
       return 'grid'
     case 'editScript':
       return 'clipboardCheck'
-    case 'editCinematographyShotPlan':
+    case 'editShotExecutionPlan':
       return 'image'
-    case 'spaceConsistency':
-      return 'chart'
     case 'storyboardPanelGeneration':
       return 'clapperboard'
     case 'videoPlan':
@@ -352,7 +348,7 @@ function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
 }
 
 function nodeCanToggleDetails(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind !== 'analysis' && kind !== 'editScript' && kind !== 'editCinematographyShotPlan' && kind !== 'editAssetGroup'
+  return kind !== 'analysis' && kind !== 'editScript' && kind !== 'editShotExecutionPlan' && kind !== 'editAssetGroup'
 }
 
 function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -369,7 +365,7 @@ function nodeBillingQuoteLabels(data: WorkspaceCanvasFlowNode['data']): readonly
 }
 
 export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'editCinematographyShotPlan' || kind === 'editProcessGroup' || kind === 'editAssetGroup' || kind === 'videoPlan' || kind === 'bgmScore'
+  return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'editShotExecutionPlan' || kind === 'editProcessGroup' || kind === 'editAssetGroup' || kind === 'videoPlan' || kind === 'bgmScore'
 }
 
 export function nodeFreezesMeasurementWhileRunning(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -407,8 +403,8 @@ function videoPlanPromptSaveHandler(data: WorkspaceCanvasFlowNode['data']): ((ne
     await dispatchNodeAction(data, {
       type: 'update_video_plan_prompt',
       editScriptId: details.editScriptId,
-      blockIndex: details.blockIndex,
-      prompt: nextValue,
+      segmentIndex: details.segmentIndex,
+      continuity: nextValue,
     })
   }
 }
@@ -552,7 +548,8 @@ function ShotContent({
       {renderChips(labels('props'), details.props)}
       {renderTextSection(labels('description'), data.body)}
       {renderTextSection(labels('srtSegment'), details.srtSegment)}
-      {details.shotBlocking ? renderSection(labels('shotBlocking'), renderJsonBlock(details.shotBlocking)) : null}
+      {details.executionSnapshot ? renderSection(labels('executionSnapshot'), renderJsonBlock(details.executionSnapshot)) : null}
+      {details.renderFacts ? renderSection(labels('renderFacts'), renderJsonBlock(details.renderFacts)) : null}
       {renderTextSection(labels('fullFinalPrompt'), details.imagePrompt)}
       <EditablePromptSection
         title={labels('imagePrompt')}
@@ -568,7 +565,6 @@ function ShotContent({
         labels={labels}
         onSave={panelPromptSaveHandler(data, 'videoPrompt')}
       />
-      {renderTextSection(labels('photographyRules'), details.photographyRules)}
       {renderTextSection(labels('actingNotes'), details.actingNotes)}
       {renderTextSection(labels('error'), details.errorMessage)}
     </div>
@@ -1045,7 +1041,7 @@ function EditPipelineStepContent({
 }
 
 const PROCESS_STEP_GLYPHS: Record<string, string> = {
-  timeline: 'clock', visibleAction: 'motion', camera: 'target', audio: 'sound', primaryTable: 'film', assetExtract: 'people',
+  timeline: 'clock', action: 'motion', camera: 'target', audio: 'sound', primaryTable: 'film', assetExtract: 'people',
 }
 
 // 生成过程：步骤网格（点步骤看其逐镜内容）。把 P1–P6 收纳进一张卡，默认折叠。
@@ -1281,20 +1277,17 @@ function EditScriptContent({
     key: String(shot.shotNumber),
     badge: shot.shotNumber,
     duration: `${shot.durationSec}s`,
-    title: shot.dramaticPurpose,
-    subtitle: shot.visibleAction,
+    title: shot.sceneName,
+    subtitle: shot.action,
     detail: shotDetailSections([
       {
-        name: labels('dramaticPurpose'),
+        name: labels('shotCore'),
         glyph: 'target',
         fields: [
-          { label: labels('dramaticPurpose'), value: shot.dramaticPurpose },
-          { label: labels('visibleAction'), value: shot.visibleAction },
-          { label: labels('audienceFocus'), value: shot.audienceFocus },
-          { label: labels('viewpoint'), value: shot.viewpoint },
-          { label: labels('revealPlan'), value: shot.revealPlan },
-          { label: labels('performanceBeat'), value: shot.performanceBeat },
-          { label: labels('charactersAndScene'), value: shot.charactersAndScene },
+          { label: labels('scene'), value: shot.sceneName },
+          { label: labels('action'), value: shot.action },
+          { label: labels('characters'), value: shot.characters.join('\n') },
+          { label: labels('keyObjects'), value: shot.keyObjects.join('\n') },
         ],
       },
       {
@@ -1303,14 +1296,6 @@ function EditScriptContent({
         fields: [
           { label: labels('duration'), value: `${shot.durationSec}s` },
           { label: labels('sound'), value: shot.sound },
-        ],
-      },
-      {
-        name: labels('continuityIn'),
-        glyph: 'link',
-        fields: [
-          { label: labels('continuityIn'), value: shot.continuityIn },
-          { label: labels('continuityOut'), value: shot.continuityOut },
         ],
       },
     ]),
@@ -1347,51 +1332,6 @@ function EditScriptContent({
         ? renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 8))
         : null}
       <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
-    </div>
-  )
-}
-
-function EditCinematographyContent({
-  data,
-  labels,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly labels: ReturnType<typeof useTranslations>
-}) {
-  const details = data.editPipelineStepDetails
-  if (data.__running === true && !details) {
-    return (
-      <div className="space-y-4">
-        <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-        <div className="workspace-node-loading-surface h-[280px] rounded-[18px] border border-slate-200 bg-slate-100" />
-      </div>
-    )
-  }
-  if (!details || details.items.length === 0) {
-    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  }
-  const cards: ShotGridCard[] = details.items.map((item, index) => {
-    const movement = item.fields[6]?.value ?? item.fields[1]?.value
-    return {
-      key: item.chips?.[0] ?? String(index + 1),
-      badge: item.chips?.[0] ?? index + 1,
-      title: item.fields[0]?.value ?? item.title,
-      subtitle: movement,
-      subtitle2: item.fields[1]?.value,
-      detail: (
-        <>
-          {shotDetailIconGrid(item.fields)}
-          {hasText(item.body) ? (
-            <div className="mt-2">{shotIconField({ label: '构图', value: item.body })}</div>
-          ) : null}
-        </>
-      ),
-    }
-  })
-  return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {renderSection(labels('description'), renderTextBlock(data.body))}
-      <ShotGrid cards={cards} accent="cyan" streamPresentation={data.streamPresentation} />
     </div>
   )
 }
@@ -1607,48 +1547,6 @@ function EditAssetGroupContent({
           </div>
         </section>
       ) : null}
-    </div>
-  )
-}
-
-// 导演拆镜：镜头网格 + 整行展开（与核心剪辑表一致的设计语言）。collapsed 仅显示摘要。
-function EditDirectorDecoupageContent({
-  data,
-  labels,
-  expanded,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
-}) {
-  const details = data.editPipelineStepDetails
-  if (!details || details.items.length === 0) {
-    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  }
-  if (!expanded) {
-    return (
-      <div className="space-y-2">
-        {renderSection(labels('description'), renderSummaryText(data.body, 3))}
-      </div>
-    )
-  }
-  const cards: ShotGridCard[] = details.items.map((item, index) => ({
-    key: String(index + 1),
-    badge: index + 1,
-    title: item.fields[1]?.value ?? item.fields[0]?.value ?? item.title,
-    subtitle: item.body ?? undefined,
-    subtitle2: item.fields[0]?.value,
-    detail: (
-      <>
-        {shotDetailIconGrid(item.fields)}
-        {hasText(item.body) ? <div className="mt-2">{shotIconField({ label: labels('visibleAction'), value: item.body })}</div> : null}
-      </>
-    ),
-  }))
-  return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {renderSection(labels('description'), renderTextBlock(data.body))}
-      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
     </div>
   )
 }
@@ -1996,7 +1894,7 @@ function VideoPlanContent({
     if (generationMode === 'asset-reference') {
       void dispatchNodeAction(data, {
         type: 'generate_asset_reference_video',
-        blockIndex: details.blockIndex,
+        segmentIndex: details.segmentIndex,
         referenceImageUrls: assetReferenceImageUrls,
         generationOptions: videoPlanGenerationOptions(data),
       })
@@ -2141,123 +2039,8 @@ function VideoPlanContent({
           onSave={videoPlanPromptSaveHandler(data)}
         />
       ) : null}
-      {expanded ? renderSection(labels('reason'), renderTextBlock(details.reason)) : null}
       {details.errorMessage ? renderSection(labels('error'), renderTextBlock(details.errorMessage)) : null}
       {details.validationMessage ? renderSection(labels('error'), renderTextBlock(details.validationMessage)) : null}
-    </div>
-  )
-}
-
-function SpaceConsistencyContent({
-  data,
-  labels,
-  expanded,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
-}) {
-  const details = data.spaceConsistencyDetails
-  if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-
-  if (!expanded) {
-    return (
-      <div className="space-y-3">
-        <MediaPreview data={data} />
-        {renderSection(labels('spaceConsistencyStats'), (
-          <div className="space-y-1">
-            {renderValue(labels('status'), details.stage ?? data.statusLabel)}
-            {renderValue(labels('spatialProfileCount'), details.spatialProfileCount)}
-            {renderValue(labels('cameraPlanCount'), details.cameraPlanCount)}
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      <MediaPreview data={data} />
-      {renderSection(labels('spaceConsistencyStats'), (
-        <div className="space-y-1">
-          {renderValue(labels('status'), details.stage ?? data.statusLabel)}
-          {renderValue(labels('spatialProfileCount'), details.spatialProfileCount)}
-          {renderValue(labels('cameraPlanCount'), details.cameraPlanCount)}
-        </div>
-      ))}
-      {details.cameraPlans.length > 0 ? (
-        <div className="space-y-1.5">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="pin" className="h-3 w-3" />{labels('cameraPlans')}</p>
-          <SpaceCameraGrid details={details} />
-        </div>
-      ) : renderTextSection(labels('reason'), data.body)}
-      {details.spatialProfiles.length > 0 ? (
-        <div className="space-y-1.5">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="grid" className="h-3 w-3" />{labels('spatialProfiles')}</p>
-          {details.spatialProfiles.map((profile, index) => (
-            <section key={`${profile.targetId ?? profile.requirementId ?? 'profile'}:${index}`} className="space-y-1.5 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
-              <div className="flex items-center justify-between gap-2">
-                <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{profile.name ?? labels('location')}</p>
-                <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200`}>{profile.shotNumbers.length > 0 ? profile.shotNumbers.join(', ') : labels('unknown')}</span>
-              </div>
-              {profile.sceneSummary ? renderTextBlock(profile.sceneSummary) : null}
-              {profile.anchors.length > 0 ? renderSubsection(labels('anchors'), (
-                <div className="space-y-1.5">
-                  {profile.anchors.map((anchor, anchorIndex) => (
-                    <div key={`${profile.targetId ?? profile.name ?? 'anchor'}:${anchor.label ?? anchorIndex}`} className="space-y-1 rounded-[10px] bg-white p-2 ring-1 ring-slate-100">
-                      {renderValue(labels('anchor'), anchor.label)}
-                      {renderValue(labels('screenArea'), anchor.screenArea)}
-                      {renderValue(labels('depthLayer'), anchor.depthLayer)}
-                      {anchor.spatialRelations.length > 0 ? renderChips(labels('spatialRelations'), anchor.spatialRelations) : null}
-                    </div>
-                  ))}
-                </div>
-              )) : null}
-              {profile.depthLayout ? renderSubsection(labels('depthLayout'), (
-                <div className="space-y-1">
-                  {renderValue(labels('foreground'), profile.depthLayout.foreground)}
-                  {renderValue(labels('midground'), profile.depthLayout.midground)}
-                  {renderValue(labels('background'), profile.depthLayout.background)}
-                </div>
-              )) : null}
-              {profile.lightingDirection ? renderSubsection(labels('lightingDirection'), renderTextBlock(profile.lightingDirection)) : null}
-            </section>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-// 空间一致性：机位状态网格（每镜一格，点开看机位详情）
-function SpaceCameraGrid({ details }: { readonly details: NonNullable<WorkspaceCanvasFlowNode['data']['spaceConsistencyDetails']> }) {
-  const plans = details.cameraPlans
-  const [open, setOpen] = useState<number | null>(null)
-  const cur = open === null ? null : plans[open]
-  return (
-    <div className="space-y-2.5">
-      <div className="grid grid-cols-4 gap-2">
-        {plans.map((plan, index) => {
-          const on = open === index
-          return (
-            <button key={`${plan.sourceShotNumber ?? index}:${plan.sourceVideoBlockId ?? 'c'}`} type="button" className={`nodrag flex flex-col items-center rounded-[12px] border p-2 transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`} onClick={(e) => { e.stopPropagation(); setOpen(on ? null : index) }}>
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">{plan.sourceShotNumber ?? index + 1}</span>
-              <FieldGlyph name="pin" className="mt-1 h-4 w-4 text-[var(--glass-text-tertiary)]" />
-              <span className="mt-1 inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-600"><AppIcon name="check" className="h-2.5 w-2.5" />OK</span>
-            </button>
-          )
-        })}
-      </div>
-      {cur ? shotDetailIconGrid([
-        { label: '运镜', value: cur.cameraMovement },
-        { label: '景别', value: cur.shotScale },
-        { label: '机位', value: cur.cameraPosition },
-        { label: '机位高度', value: cur.cameraHeight },
-        { label: '拍摄角度', value: cur.cameraAngle },
-        { label: '镜头景深', value: cur.lensAndDepth },
-        { label: '构图', value: cur.composition },
-        { label: '美学意图', value: cur.aestheticIntent },
-      ]) : null}
     </div>
   )
 }
@@ -2301,18 +2084,14 @@ function NodeContent({
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editStyleBible':
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
-    case 'editDirectorDecoupage':
-      return <EditDirectorDecoupageContent data={data} labels={labels} expanded={expanded} />
     case 'editPipelineStep':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'editProcessGroup':
       return <ProcessGroupContent data={data} labels={labels} expanded={expanded} />
     case 'editScript':
       return <EditScriptContent data={data} labels={labels} />
-    case 'editCinematographyShotPlan':
-      return <EditCinematographyContent data={data} labels={labels} />
-    case 'spaceConsistency':
-      return <SpaceConsistencyContent data={data} labels={labels} expanded={expanded} />
+    case 'editShotExecutionPlan':
+      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'storyboardPanelGeneration':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':
@@ -2344,7 +2123,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
   const showDetailsToggle = canToggleDetails && Boolean(data.onToggleExpanded)
-  const showHeaderAction = Boolean(action && data.actionLabel && (data.kind === 'spaceConsistency' || data.kind === 'editRequiredAsset'))
+  const showHeaderAction = Boolean(action && data.actionLabel && data.kind === 'editRequiredAsset')
   const showLargeTitle = data.kind !== 'shot'
   const isFocusHighlighted = data.focusHighlighted === true
   const isVisuallyEmphasized = isRunning || isFocusHighlighted

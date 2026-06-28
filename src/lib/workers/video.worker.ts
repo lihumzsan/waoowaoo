@@ -23,11 +23,8 @@ import { handleFinalVideoRenderTask } from './final-video-render'
 import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import type { VideoGridMode, VideoGroupShot } from '@/lib/video-groups/types'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import {
-  appendStyleBiblePromptBlock,
-  parseNullableEditScriptStyleBible,
-  resolveEditScriptStyleBibleForStoryboardTask,
-} from '@/lib/edit-script/style-bible-prompt'
+import { buildStoryboardVideoSegmentPromptFacts } from '@/lib/edit-script/prompt-builders'
+import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
@@ -131,21 +128,11 @@ async function generateVideoForPanel(
   const firstLastCustomPrompt = typeof firstLastFramePayload?.customPrompt === 'string' ? firstLastFramePayload.customPrompt : null
   const persistedFirstLastPrompt = firstLastFramePayload ? panel.firstLastFramePrompt : null
   const customPrompt = typeof payload.customPrompt === 'string' ? payload.customPrompt : null
-  const prompt = firstLastCustomPrompt || persistedFirstLastPrompt || customPrompt || panel.videoPrompt || panel.description
+  const prompt = firstLastCustomPrompt || persistedFirstLastPrompt || customPrompt || panel.videoPrompt
   if (!prompt) {
     throw new Error(`Panel ${panel.id} has no video prompt`)
   }
-  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
-    projectId: job.data.projectId,
-    episodeId: job.data.episodeId,
-    storyboardId: panel.storyboardId,
-  })
-  const generationPrompt = appendStyleBiblePromptBlock({
-    prompt,
-    styleBible,
-    usage: 'video',
-    locale: job.data.locale,
-  })
+  const generationPrompt = prompt
 
   const sourceImageUrl = toSignedUrlIfCos(panel.imageUrl, 3600)
   if (!sourceImageUrl) {
@@ -313,15 +300,13 @@ function parseEditScriptShots(value: unknown): VideoGroupShot[] {
     return {
       shotNumber,
       durationSec,
-      dramaticPurpose: normalizeString(record.dramaticPurpose),
-      visibleAction: normalizeString(record.visibleAction),
-      audienceFocus: normalizeString(record.audienceFocus),
-      viewpoint: normalizeString(record.viewpoint),
-      revealPlan: normalizeString(record.revealPlan),
-      performanceBeat: normalizeString(record.performanceBeat),
-      continuityIn: normalizeString(record.continuityIn),
-      continuityOut: normalizeString(record.continuityOut),
-      charactersAndScene: normalizeString(record.charactersAndScene),
+      action: normalizeString(record.action),
+      sceneName: isJsonRecord(record.scene) ? normalizeString(record.scene.name) : '',
+      characters: Array.isArray(record.characters)
+        ? record.characters.map((character) => (
+            isJsonRecord(character) ? normalizeString(character.name) : ''
+          )).filter(Boolean)
+        : [],
       sound: normalizeString(record.sound),
     }
   })
@@ -336,24 +321,53 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
   return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
-function readVideoBlockShotNumbers(value: unknown): number[] {
-  if (!Array.isArray(value)) return []
-  return value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0)
-}
-
-function resolveStoredVideoGroupPrompt(input: {
-  readonly videoBlocksJson: unknown
+async function buildVideoGroupPromptFromSource(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly userId: string
   readonly shotNumbers: readonly number[]
-}): string {
-  if (!Array.isArray(input.videoBlocksJson)) throw new Error('VIDEO_GROUP_VIDEO_BLOCKS_REQUIRED')
-  const block = input.videoBlocksJson.find((item) => {
-    if (!isJsonRecord(item)) return false
-    return sameShotNumbers(readVideoBlockShotNumbers(item.shotNumbers), input.shotNumbers)
+}): Promise<{ readonly prompt: string; readonly durationSec: number }> {
+  const editScript = await prisma.projectEditScript.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      status: 'ready',
+    },
+    select: { id: true },
   })
-  if (!isJsonRecord(block)) throw new Error(`VIDEO_GROUP_VIDEO_BLOCK_NOT_FOUND:${input.shotNumbers.join(',')}`)
-  const prompt = normalizeString(block.prompt)
-  if (!prompt) throw new Error(`VIDEO_GROUP_PROMPT_REQUIRED:${input.shotNumbers.join(',')}`)
-  return prompt
+  if (!editScript) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_REQUIRED')
+  const { sourceSnapshot } = await buildStoryboardConsistencySource({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    editScriptId: editScript.id,
+    userId: input.userId,
+  })
+  const segment = sourceSnapshot.generationSegments.find((candidate) => (
+    sameShotNumbers(candidate.shotNumbers, input.shotNumbers)
+  ))
+  if (!segment) throw new Error(`VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotNumbers.join(',')}`)
+  const shots = input.shotNumbers.map((shotNumber) => {
+    const shot = sourceSnapshot.shots.find((candidate) => candidate.shotNumber === shotNumber)
+    if (!shot) throw new Error(`VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
+    return shot
+  })
+  const executions = input.shotNumbers.map((shotNumber) => {
+    const execution = sourceSnapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shotNumber)
+    if (!execution) throw new Error(`VIDEO_GROUP_EXECUTION_SHOT_NOT_FOUND:${shotNumber}`)
+    return execution
+  })
+  const built = buildStoryboardVideoSegmentPromptFacts({
+    segment,
+    sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
+    shots,
+    executions,
+    assets: sourceSnapshot.assets,
+    styleBible: sourceSnapshot.styleBible,
+  })
+  return {
+    prompt: built.prompt,
+    durationSec: totalVideoGroupDuration(shots),
+  }
 }
 
 function buildAssetReferencePrompt(params: {
@@ -408,16 +422,14 @@ async function handleAssetReferenceVideoGroupTask(params: {
     prisma.projectEditScript.findFirst({
       where: { projectId: job.data.projectId, episodeId: job.data.episodeId || normalizeString(payload.episodeId) },
       select: {
-        shotsJson: true,
-        videoBlocksJson: true,
-        styleBibleJson: true,
+        corePlanJson: true,
       },
     }),
   ])
   if (!project) throw new Error('ASSET_REFERENCE_VIDEO_PROJECT_NOT_FOUND')
   if (!editScript) throw new Error('ASSET_REFERENCE_VIDEO_EDIT_SCRIPT_REQUIRED')
 
-  const allShots = parseEditScriptShots(editScript.shotsJson)
+  const allShots = parseEditScriptShots(Array.isArray(editScript.corePlanJson) ? editScript.corePlanJson : isJsonRecord(editScript.corePlanJson) ? editScript.corePlanJson.shots : null)
   const shots = shotNumbers.map((shotNumber) => {
     const shot = allShots.find((item) => item.shotNumber === shotNumber)
     if (!shot) throw new Error(`ASSET_REFERENCE_VIDEO_SHOT_NOT_FOUND:${shotNumber}`)
@@ -428,18 +440,17 @@ async function handleAssetReferenceVideoGroupTask(params: {
     throw new Error(`ASSET_REFERENCE_VIDEO_DURATION_UNSUPPORTED:${durationSec}`)
   }
   const payloadPrompt = normalizeString(payload.prompt)
-  const prompt = payloadPrompt || resolveStoredVideoGroupPrompt({
-    videoBlocksJson: editScript.videoBlocksJson,
-    shotNumbers,
-  })
-  const styleBible = parseNullableEditScriptStyleBible(editScript.styleBibleJson)
-  const generationPrompt = appendStyleBiblePromptBlock({
-    prompt,
-    styleBible,
-    usage: 'video',
-    locale: job.data.locale,
-  })
-
+  const builtPrompt = payloadPrompt
+    ? null
+    : await buildVideoGroupPromptFromSource({
+      projectId: job.data.projectId,
+      episodeId: job.data.episodeId || normalizeString(payload.episodeId),
+      userId: job.data.userId,
+      shotNumbers,
+    })
+  const prompt = payloadPrompt || builtPrompt?.prompt
+  if (!prompt) throw new Error(`ASSET_REFERENCE_VIDEO_PROMPT_REQUIRED:${shotNumbers.join(',')}`)
+  const generationPrompt = prompt
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
     data: {
@@ -572,9 +583,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     prisma.projectEditScript.findFirst({
       where: { projectId: job.data.projectId, episodeId: job.data.episodeId || normalizeString(payload.episodeId) },
       select: {
-        shotsJson: true,
-        videoBlocksJson: true,
-        styleBibleJson: true,
+        corePlanJson: true,
       },
     }),
     prisma.projectPanel.findMany({
@@ -590,7 +599,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   if (!project) throw new Error('VIDEO_GROUP_PROJECT_NOT_FOUND')
   if (!editScript) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_REQUIRED')
 
-  const allShots = parseEditScriptShots(editScript.shotsJson)
+  const allShots = parseEditScriptShots(Array.isArray(editScript.corePlanJson) ? editScript.corePlanJson : isJsonRecord(editScript.corePlanJson) ? editScript.corePlanJson.shots : null)
   const shots = shotNumbers.map((shotNumber) => {
     const shot = allShots.find((item) => item.shotNumber === shotNumber)
     if (!shot) throw new Error(`VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
@@ -618,17 +627,14 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   })
 
   await reportTaskProgress(job, 26, { stage: 'video_group_prompt', groupId })
-  const prompt = resolveStoredVideoGroupPrompt({
-    videoBlocksJson: editScript.videoBlocksJson,
+  const builtPrompt = await buildVideoGroupPromptFromSource({
+    projectId: job.data.projectId,
+    episodeId: job.data.episodeId || normalizeString(payload.episodeId),
+    userId: job.data.userId,
     shotNumbers,
   })
-  const styleBible = parseNullableEditScriptStyleBible(editScript.styleBibleJson)
-  const generationPrompt = appendStyleBiblePromptBlock({
-    prompt,
-    styleBible,
-    usage: 'video',
-    locale: job.data.locale,
-  })
+  const prompt = builtPrompt.prompt
+  const generationPrompt = prompt
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
     data: { prompt },

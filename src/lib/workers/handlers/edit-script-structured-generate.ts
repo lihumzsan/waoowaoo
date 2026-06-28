@@ -1,8 +1,7 @@
 import type { Job } from 'bullmq'
 import type { NextRequest } from 'next/server'
 import {
-  generateProjectEditCinematographyShotPlan,
-  generateProjectEditDirectorDecoupage,
+  generateProjectEditShotExecutionPlan,
 } from '@/lib/edit-script/service'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import type { TaskJobData } from '@/lib/task/types'
@@ -24,54 +23,7 @@ function createWorkerRequest(job: Job<TaskJobData>, path: string): NextRequest {
   }) as NextRequest
 }
 
-export async function handleEditDirectorDecoupageGenerateTask(job: Job<TaskJobData>) {
-  const payload = job.data.payload || {}
-  const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
-  const screenplayId = readText(payload.screenplayId) || readText(job.data.targetId)
-  if (!episodeId) throw new Error('episodeId is required')
-  if (!screenplayId) throw new Error('screenplayId is required')
-
-  await reportTaskProgress(job, 12, {
-    stage: 'edit_director_decoupage_prepare',
-    stageLabel: 'progress.stage.editScriptPrepare',
-    displayMode: 'detail',
-  })
-  await assertTaskActive(job, 'edit_director_decoupage_prepare')
-
-  const streamContext = createWorkerLLMStreamContext(job, 'edit_director_decoupage_generate')
-  const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
-  try {
-    const directorDecoupage = await withInternalLLMStreamCallbacks(
-      streamCallbacks,
-      async () => await generateProjectEditDirectorDecoupage({
-        request: createWorkerRequest(job, 'edit-director-decoupage-generate'),
-        projectId: job.data.projectId,
-        userId: job.data.userId,
-        episodeId,
-        screenplayId,
-        locale: job.data.locale,
-      }),
-    )
-
-    await reportTaskProgress(job, 96, {
-      stage: 'edit_director_decoupage_persist',
-      stageLabel: 'progress.stage.editScriptPersist',
-      displayMode: 'detail',
-    })
-    await assertTaskActive(job, 'edit_director_decoupage_persist')
-
-    return {
-      directorDecoupageId: directorDecoupage.id,
-      episodeId,
-      screenplayId: directorDecoupage.screenplayId,
-      shotCount: directorDecoupage.shots.length,
-    }
-  } finally {
-    await streamCallbacks.flush()
-  }
-}
-
-export async function handleEditCinematographyShotPlanGenerateTask(job: Job<TaskJobData>) {
+export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
   const editScriptId = readText(payload.editScriptId) || readText(job.data.targetId)
@@ -79,19 +31,19 @@ export async function handleEditCinematographyShotPlanGenerateTask(job: Job<Task
   if (!editScriptId) throw new Error('editScriptId is required')
 
   await reportTaskProgress(job, 12, {
-    stage: 'edit_cinematography_shot_plan_prepare',
+    stage: 'edit_shot_execution_plan_prepare',
     stageLabel: 'progress.stage.editScriptPrepare',
     displayMode: 'detail',
   })
-  await assertTaskActive(job, 'edit_cinematography_shot_plan_prepare')
+  await assertTaskActive(job, 'edit_shot_execution_plan_prepare')
 
-  const streamContext = createWorkerLLMStreamContext(job, 'edit_cinematography_shot_plan_generate')
+  const streamContext = createWorkerLLMStreamContext(job, 'edit_shot_execution_plan_generate')
   const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
   try {
-    const cinematographyShotPlan = await withInternalLLMStreamCallbacks(
+    const shotExecutionPlan = await withInternalLLMStreamCallbacks(
       streamCallbacks,
-      async () => await generateProjectEditCinematographyShotPlan({
-        request: createWorkerRequest(job, 'edit-cinematography-shot-plan-generate'),
+      async () => await generateProjectEditShotExecutionPlan({
+        request: createWorkerRequest(job, 'edit-shot-execution-plan-generate'),
         projectId: job.data.projectId,
         userId: job.data.userId,
         episodeId,
@@ -101,17 +53,17 @@ export async function handleEditCinematographyShotPlanGenerateTask(job: Job<Task
     )
 
     await reportTaskProgress(job, 96, {
-      stage: 'edit_cinematography_shot_plan_persist',
+      stage: 'edit_shot_execution_plan_persist',
       stageLabel: 'progress.stage.editScriptPersist',
       displayMode: 'detail',
     })
-    await assertTaskActive(job, 'edit_cinematography_shot_plan_persist')
+    await assertTaskActive(job, 'edit_shot_execution_plan_persist')
 
     return {
-      cinematographyShotPlanId: cinematographyShotPlan.id,
+      shotExecutionPlanId: shotExecutionPlan.id,
       episodeId,
-      editScriptId: cinematographyShotPlan.editScriptId,
-      shotCount: cinematographyShotPlan.shots.length,
+      editScriptId: shotExecutionPlan.editScriptId,
+      shotCount: shotExecutionPlan.shots.length,
     }
   } finally {
     await streamCallbacks.flush()

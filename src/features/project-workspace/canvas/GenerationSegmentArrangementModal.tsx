@@ -9,14 +9,15 @@ import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { readProjectEditScriptRequestErrorCode } from '@/lib/query/project-edit-script-error'
 import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
 
-const MAX_BLOCK_DURATION_SEC = 15
-const MAX_BLOCK_SHOT_COUNT = 9
+const MAX_SEGMENT_DURATION_SEC = 15
+const MAX_SEGMENT_SHOT_COUNT = 9
 
 type BoundaryMoveDirection = 'left' | 'right'
 
-interface ArrangementBlockDraft {
+interface ArrangementSegmentDraft {
   readonly id: string
   readonly shotNumbers: readonly number[]
+  readonly continuity: string
 }
 
 interface ShotViewModel {
@@ -27,12 +28,12 @@ interface ShotViewModel {
   readonly imageUrl: string | null
 }
 
-interface VideoBlockArrangementModalProps {
+interface GenerationSegmentArrangementModalProps {
   readonly editScript: ProjectEditScript
   readonly storyboards: readonly ProjectStoryboard[]
-  readonly initialBlockIndex: number
+  readonly initialSegmentIndex: number
   readonly onClose: () => void
-  readonly onSubmit: (blocks: readonly { readonly shotNumbers: readonly number[] }[]) => Promise<void>
+  readonly onSubmit: (segments: readonly { readonly shotNumbers: readonly number[]; readonly continuity: string }[]) => Promise<void>
 }
 
 function parseCandidateImages(value: string | null | undefined): readonly string[] {
@@ -54,10 +55,11 @@ function primaryPanelImageUrl(panel: ProjectPanel | null): string | null {
     ?? null
 }
 
-function buildInitialDraftBlocks(editScript: ProjectEditScript): readonly ArrangementBlockDraft[] {
-  return editScript.videoBlocks.map((block, index) => ({
-    id: `block:${index}:${block.shotNumbers.join(',')}`,
-    shotNumbers: [...block.shotNumbers],
+function buildInitialDraftSegments(editScript: ProjectEditScript): readonly ArrangementSegmentDraft[] {
+  return editScript.generationSegments.map((segment, index) => ({
+    id: `segment:${index}:${segment.shotNumbers.join(',')}`,
+    shotNumbers: [...segment.shotNumbers],
+    continuity: segment.continuity,
   }))
 }
 
@@ -66,78 +68,78 @@ function sameShotNumbers(left: readonly number[], right: readonly number[]): boo
   return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
-function durationForBlock(block: ArrangementBlockDraft, durationByShotNumber: ReadonlyMap<number, number>): number {
-  return block.shotNumbers.reduce((total, shotNumber) => total + (durationByShotNumber.get(shotNumber) ?? 0), 0)
+function durationForSegment(segment: ArrangementSegmentDraft, durationByShotNumber: ReadonlyMap<number, number>): number {
+  return segment.shotNumbers.reduce((total, shotNumber) => total + (durationByShotNumber.get(shotNumber) ?? 0), 0)
 }
 
-function targetBlockIndex(blockIndex: number, direction: BoundaryMoveDirection): number {
-  return direction === 'left' ? blockIndex - 1 : blockIndex + 1
+function targetSegmentIndex(segmentIndex: number, direction: BoundaryMoveDirection): number {
+  return direction === 'left' ? segmentIndex - 1 : segmentIndex + 1
 }
 
-function boundaryShotNumber(block: ArrangementBlockDraft, direction: BoundaryMoveDirection): number | null {
-  if (block.shotNumbers.length === 0) return null
+function boundaryShotNumber(segment: ArrangementSegmentDraft, direction: BoundaryMoveDirection): number | null {
+  if (segment.shotNumbers.length === 0) return null
   return direction === 'left'
-    ? block.shotNumbers[0] ?? null
-    : block.shotNumbers[block.shotNumbers.length - 1] ?? null
+    ? segment.shotNumbers[0] ?? null
+    : segment.shotNumbers[segment.shotNumbers.length - 1] ?? null
 }
 
 function canMoveBoundaryShot(input: {
-  readonly blocks: readonly ArrangementBlockDraft[]
-  readonly blockIndex: number
+  readonly segments: readonly ArrangementSegmentDraft[]
+  readonly segmentIndex: number
   readonly direction: BoundaryMoveDirection
   readonly durationByShotNumber: ReadonlyMap<number, number>
 }): boolean {
-  const sourceBlock = input.blocks[input.blockIndex]
-  if (!sourceBlock || sourceBlock.shotNumbers.length === 0) return false
+  const sourceSegment = input.segments[input.segmentIndex]
+  if (!sourceSegment || sourceSegment.shotNumbers.length === 0) return false
 
-  const targetIndex = targetBlockIndex(input.blockIndex, input.direction)
-  const targetBlock = input.blocks[targetIndex]
-  if (!targetBlock || targetBlock.shotNumbers.length >= MAX_BLOCK_SHOT_COUNT) return false
+  const targetIndex = targetSegmentIndex(input.segmentIndex, input.direction)
+  const targetSegment = input.segments[targetIndex]
+  if (!targetSegment || targetSegment.shotNumbers.length >= MAX_SEGMENT_SHOT_COUNT) return false
 
-  const shotNumber = boundaryShotNumber(sourceBlock, input.direction)
+  const shotNumber = boundaryShotNumber(sourceSegment, input.direction)
   if (shotNumber === null) return false
 
-  const nextTargetDuration = durationForBlock(targetBlock, input.durationByShotNumber)
+  const nextTargetDuration = durationForSegment(targetSegment, input.durationByShotNumber)
     + (input.durationByShotNumber.get(shotNumber) ?? 0)
-  return nextTargetDuration <= MAX_BLOCK_DURATION_SEC
+  return nextTargetDuration <= MAX_SEGMENT_DURATION_SEC
 }
 
 function moveBoundaryShot(input: {
-  readonly blocks: readonly ArrangementBlockDraft[]
-  readonly blockIndex: number
+  readonly segments: readonly ArrangementSegmentDraft[]
+  readonly segmentIndex: number
   readonly direction: BoundaryMoveDirection
   readonly durationByShotNumber: ReadonlyMap<number, number>
-}): readonly ArrangementBlockDraft[] {
-  const sourceBlock = input.blocks[input.blockIndex]
-  if (!sourceBlock) return input.blocks
-  const shotNumber = boundaryShotNumber(sourceBlock, input.direction)
-  if (shotNumber === null || !canMoveBoundaryShot(input)) return input.blocks
+}): readonly ArrangementSegmentDraft[] {
+  const sourceSegment = input.segments[input.segmentIndex]
+  if (!sourceSegment) return input.segments
+  const shotNumber = boundaryShotNumber(sourceSegment, input.direction)
+  if (shotNumber === null || !canMoveBoundaryShot(input)) return input.segments
 
-  const targetIndex = targetBlockIndex(input.blockIndex, input.direction)
-  return input.blocks.map((block, index) => {
-    if (index === input.blockIndex) {
+  const targetIndex = targetSegmentIndex(input.segmentIndex, input.direction)
+  return input.segments.map((segment, index) => {
+    if (index === input.segmentIndex) {
       return {
-        ...block,
+        ...segment,
         shotNumbers: input.direction === 'left'
-          ? block.shotNumbers.slice(1)
-          : block.shotNumbers.slice(0, -1),
+          ? segment.shotNumbers.slice(1)
+          : segment.shotNumbers.slice(0, -1),
       }
     }
     if (index === targetIndex) {
       return {
-        ...block,
+        ...segment,
         shotNumbers: input.direction === 'left'
-          ? [...block.shotNumbers, shotNumber]
-          : [shotNumber, ...block.shotNumbers],
+          ? [...segment.shotNumbers, shotNumber]
+          : [shotNumber, ...segment.shotNumbers],
       }
     }
-    return block
-  }).filter((block) => block.shotNumbers.length > 0)
+    return segment
+  }).filter((segment) => segment.shotNumbers.length > 0)
 }
 
-function clampBlockIndex(index: number, blockCount: number): number {
-  if (blockCount <= 0) return 0
-  return Math.min(Math.max(index, 0), blockCount - 1)
+function clampSegmentIndex(index: number, segmentCount: number): number {
+  if (segmentCount <= 0) return 0
+  return Math.min(Math.max(index, 0), segmentCount - 1)
 }
 
 function arrangementSubmitErrorMessage(
@@ -145,36 +147,33 @@ function arrangementSubmitErrorMessage(
   translate: ReturnType<typeof useTranslations>,
 ): string {
   const code = readProjectEditScriptRequestErrorCode(error)
-  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_RUNNING_VIDEO_GROUP') {
+  if (code === 'EDIT_SCRIPT_GENERATION_SEGMENT_LOCKED_BY_RUNNING_VIDEO') {
     return translate('runningVideoGroup')
   }
-  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_ORDER_INVALID') {
+  if (code === 'EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID' || code === 'EDIT_SCRIPT_GENERATION_SEGMENT_NOT_CONTINUOUS') {
     return translate('orderInvalid')
   }
-  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_DURATION_EXCEEDED') {
+  if (code === 'EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID') {
     return translate('durationExceeded')
-  }
-  if (code === 'EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT_BLOCK_SIZE_INVALID') {
-    return translate('blockSizeInvalid')
   }
   return error instanceof Error ? error.message : translate('submitFailed')
 }
 
-export default function VideoBlockArrangementModal({
+export default function GenerationSegmentArrangementModal({
   editScript,
   storyboards,
-  initialBlockIndex,
+  initialSegmentIndex,
   onClose,
   onSubmit,
-}: VideoBlockArrangementModalProps) {
-  const t = useTranslations('projectWorkflow.canvas.workspace.videoBlockArrangement')
-  const [draftBlocks, setDraftBlocks] = useState<readonly ArrangementBlockDraft[]>(() => buildInitialDraftBlocks(editScript))
+}: GenerationSegmentArrangementModalProps) {
+  const t = useTranslations('projectWorkflow.canvas.workspace.generationSegmentArrangement')
+  const [draftSegments, setDraftSegments] = useState<readonly ArrangementSegmentDraft[]>(() => buildInitialDraftSegments(editScript))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    setDraftBlocks(buildInitialDraftBlocks(editScript))
+    setDraftSegments(buildInitialDraftSegments(editScript))
     setErrorMessage(null)
   }, [editScript])
 
@@ -211,50 +210,54 @@ export default function VideoBlockArrangementModal({
         shotNumber: shot.shotNumber,
         durationSec: shot.durationSec,
         title: t('shotTitle', { shot: shot.shotNumber }),
-        description: panel?.description?.trim() || shot.visibleAction,
+        description: panel?.description?.trim() || shot.action,
         imageUrl: rawImageUrl ? toDisplayImageUrl(rawImageUrl) ?? rawImageUrl : null,
       })
     })
     return views
   }, [editScript.shots, panelByShotNumber, t])
 
-  const focusedBlockIndex = useMemo(
-    () => clampBlockIndex(initialBlockIndex, draftBlocks.length),
-    [draftBlocks.length, initialBlockIndex],
+  const focusedSegmentIndex = useMemo(
+    () => clampSegmentIndex(initialSegmentIndex, draftSegments.length),
+    [draftSegments.length, initialSegmentIndex],
   )
 
-  const visibleBlockIndexes = useMemo(() => {
-    const startIndex = Math.max(0, focusedBlockIndex - 1)
-    const endIndex = Math.min(draftBlocks.length - 1, focusedBlockIndex + 1)
+  const visibleSegmentIndexes = useMemo(() => {
+    const startIndex = Math.max(0, focusedSegmentIndex - 1)
+    const endIndex = Math.min(draftSegments.length - 1, focusedSegmentIndex + 1)
     const indexes: number[] = []
     for (let index = startIndex; index <= endIndex; index += 1) indexes.push(index)
     return indexes
-  }, [draftBlocks.length, focusedBlockIndex])
+  }, [draftSegments.length, focusedSegmentIndex])
 
   const visibleShotCount = useMemo(() => (
-    visibleBlockIndexes.reduce((total, blockIndex) => total + (draftBlocks[blockIndex]?.shotNumbers.length ?? 0), 0)
-  ), [draftBlocks, visibleBlockIndexes])
+    visibleSegmentIndexes.reduce((total, segmentIndex) => total + (draftSegments[segmentIndex]?.shotNumbers.length ?? 0), 0)
+  ), [draftSegments, visibleSegmentIndexes])
 
-  const invalidBlockIndexes = useMemo(() => {
+  const invalidSegmentIndexes = useMemo(() => {
     const invalid = new Set<number>()
-    draftBlocks.forEach((block, index) => {
-      const durationSec = durationForBlock(block, durationByShotNumber)
-      if (durationSec > MAX_BLOCK_DURATION_SEC || block.shotNumbers.length > MAX_BLOCK_SHOT_COUNT) invalid.add(index)
+    draftSegments.forEach((segment, index) => {
+      const durationSec = durationForSegment(segment, durationByShotNumber)
+      if (durationSec > MAX_SEGMENT_DURATION_SEC || segment.shotNumbers.length > MAX_SEGMENT_SHOT_COUNT) invalid.add(index)
     })
     return invalid
-  }, [draftBlocks, durationByShotNumber])
+  }, [draftSegments, durationByShotNumber])
 
   const hasChanges = useMemo(() => {
-    if (draftBlocks.length !== editScript.videoBlocks.length) return true
-    return draftBlocks.some((block, index) => !sameShotNumbers(block.shotNumbers, editScript.videoBlocks[index]?.shotNumbers ?? []))
-  }, [draftBlocks, editScript.videoBlocks])
+    if (draftSegments.length !== editScript.generationSegments.length) return true
+    return draftSegments.some((segment, index) => {
+      const sourceSegment = editScript.generationSegments[index]
+      return !sameShotNumbers(segment.shotNumbers, sourceSegment?.shotNumbers ?? [])
+        || segment.continuity !== (sourceSegment?.continuity ?? '')
+    })
+  }, [draftSegments, editScript.generationSegments])
 
-  const canSubmit = hasChanges && invalidBlockIndexes.size === 0 && !isSubmitting
+  const canSubmit = hasChanges && invalidSegmentIndexes.size === 0 && !isSubmitting
 
-  const moveShot = useCallback((blockIndex: number, direction: BoundaryMoveDirection) => {
-    setDraftBlocks((current) => moveBoundaryShot({
-      blocks: current,
-      blockIndex,
+  const moveShot = useCallback((segmentIndex: number, direction: BoundaryMoveDirection) => {
+    setDraftSegments((current) => moveBoundaryShot({
+      segments: current,
+      segmentIndex,
       direction,
       durationByShotNumber,
     }))
@@ -266,13 +269,16 @@ export default function VideoBlockArrangementModal({
     setIsSubmitting(true)
     setErrorMessage(null)
     try {
-      await onSubmit(draftBlocks.map((block) => ({ shotNumbers: block.shotNumbers })))
+      await onSubmit(draftSegments.map((segment) => ({
+        shotNumbers: segment.shotNumbers,
+        continuity: segment.continuity,
+      })))
     } catch (error: unknown) {
       setErrorMessage(arrangementSubmitErrorMessage(error, t))
     } finally {
       setIsSubmitting(false)
     }
-  }, [canSubmit, draftBlocks, onSubmit, t])
+  }, [canSubmit, draftSegments, onSubmit, t])
 
   const modal = (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
@@ -282,7 +288,7 @@ export default function VideoBlockArrangementModal({
           <div className="min-w-0">
             <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">{t('title')}</h2>
             <p className="mt-1 text-xs font-medium text-slate-500">
-              {t('localSummary', { blocks: visibleBlockIndexes.length, shots: visibleShotCount })}
+              {t('localSummary', { blocks: visibleSegmentIndexes.length, shots: visibleShotCount })}
             </p>
           </div>
           <button type="button" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50" onClick={onClose} aria-label={t('close')}>
@@ -292,53 +298,53 @@ export default function VideoBlockArrangementModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-5 app-scrollbar">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {visibleBlockIndexes.map((blockIndex) => {
-              const block = draftBlocks[blockIndex]
-              if (!block) return null
-              const durationSec = durationForBlock(block, durationByShotNumber)
-              const invalid = invalidBlockIndexes.has(blockIndex)
-              const isFocused = blockIndex === focusedBlockIndex
+            {visibleSegmentIndexes.map((segmentIndex) => {
+              const segment = draftSegments[segmentIndex]
+              if (!segment) return null
+              const durationSec = durationForSegment(segment, durationByShotNumber)
+              const invalid = invalidSegmentIndexes.has(segmentIndex)
+              const isFocused = segmentIndex === focusedSegmentIndex
               return (
                 <article
-                  key={block.id}
+                  key={segment.id}
                   className={`flex min-h-[480px] flex-col rounded-[18px] border bg-white shadow-sm ${invalid ? 'border-red-300 ring-2 ring-red-100' : isFocused ? 'border-sky-300 ring-2 ring-sky-100' : 'border-slate-200'}`}
                 >
                   <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
-                        <h3 className="truncate text-sm font-semibold text-slate-950">{t('blockTitle', { block: blockIndex + 1 })}</h3>
+                        <h3 className="truncate text-sm font-semibold text-slate-950">{t('blockTitle', { block: segmentIndex + 1 })}</h3>
                         {isFocused ? (
                           <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{t('currentBlock')}</span>
                         ) : null}
                       </div>
                       <p className={`mt-1 text-xs font-medium ${invalid ? 'text-red-600' : 'text-slate-500'}`}>
-                        {t('blockMeta', { shots: block.shotNumbers.length, duration: Number(durationSec.toFixed(1)) })}
+                        {t('blockMeta', { shots: segment.shotNumbers.length, duration: Number(durationSec.toFixed(1)) })}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${invalid ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                      {durationSec > MAX_BLOCK_DURATION_SEC ? t('overLimit') : t('durationShort', { duration: Number(durationSec.toFixed(1)) })}
+                      {durationSec > MAX_SEGMENT_DURATION_SEC ? t('overLimit') : t('durationShort', { duration: Number(durationSec.toFixed(1)) })}
                     </span>
                   </div>
 
                   <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 app-scrollbar">
-                    {block.shotNumbers.map((shotNumber, shotIndex) => {
+                    {segment.shotNumbers.map((shotNumber, shotIndex) => {
                       const shot = shotViewByNumber.get(shotNumber)
                       const isFirstShot = shotIndex === 0
-                      const isLastShot = shotIndex === block.shotNumbers.length - 1
+                      const isLastShot = shotIndex === segment.shotNumbers.length - 1
                       const canMoveLeft = isFirstShot && canMoveBoundaryShot({
-                        blocks: draftBlocks,
-                        blockIndex,
+                        segments: draftSegments,
+                        segmentIndex,
                         direction: 'left',
                         durationByShotNumber,
                       })
                       const canMoveRight = isLastShot && canMoveBoundaryShot({
-                        blocks: draftBlocks,
-                        blockIndex,
+                        segments: draftSegments,
+                        segmentIndex,
                         direction: 'right',
                         durationByShotNumber,
                       })
                       return (
-                        <div key={`${block.id}:${shotNumber}`} className="relative overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+                        <div key={`${segment.id}:${shotNumber}`} className="relative overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
                           <div className="relative aspect-video bg-slate-100">
                             {shot?.imageUrl ? (
                               <button
@@ -354,26 +360,26 @@ export default function VideoBlockArrangementModal({
                                 {t('shotFallback', { shot: shotNumber })}
                               </div>
                             )}
-                            {isFirstShot && blockIndex > 0 ? (
+                            {isFirstShot && segmentIndex > 0 ? (
                               <button
                                 type="button"
                                 className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
                                 aria-label={t('moveLeftShot', { shot: shotNumber })}
                                 title={canMoveLeft ? t('moveLeftShot', { shot: shotNumber }) : t('moveUnavailable')}
                                 disabled={!canMoveLeft}
-                                onClick={() => moveShot(blockIndex, 'left')}
+                                onClick={() => moveShot(segmentIndex, 'left')}
                               >
                                 <AppIcon name="chevronLeft" className="h-4 w-4" />
                               </button>
                             ) : null}
-                            {isLastShot && blockIndex < draftBlocks.length - 1 ? (
+                            {isLastShot && segmentIndex < draftSegments.length - 1 ? (
                               <button
                                 type="button"
                                 className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
                                 aria-label={t('moveRightShot', { shot: shotNumber })}
                                 title={canMoveRight ? t('moveRightShot', { shot: shotNumber }) : t('moveUnavailable')}
                                 disabled={!canMoveRight}
-                                onClick={() => moveShot(blockIndex, 'right')}
+                                onClick={() => moveShot(segmentIndex, 'right')}
                               >
                                 <AppIcon name="chevronRight" className="h-4 w-4" />
                               </button>
@@ -402,7 +408,7 @@ export default function VideoBlockArrangementModal({
           <div className="min-w-0 text-xs font-medium">
             {errorMessage ? (
               <span className="text-red-600">{errorMessage}</span>
-            ) : invalidBlockIndexes.size > 0 ? (
+            ) : invalidSegmentIndexes.size > 0 ? (
               <span className="text-red-600">{t('invalidSummary')}</span>
             ) : hasChanges ? (
               <span className="text-slate-500">{t('changedSummary')}</span>

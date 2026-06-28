@@ -4,7 +4,7 @@ import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution, type OperationPlan } from '@/lib/operations/planning'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { buildEpisodeVideoBlockPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceVideoBlockTask, readPlannedVideoGroupMetadataList } from './video-group-planning'
+import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceGenerationSegmentTask, readPlannedVideoGroupMetadataList } from './video-group-planning'
 
 export async function executeGenerateAssetReferenceVideoOperation(params: {
   ctx: ProjectAgentOperationContext
@@ -31,25 +31,25 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const blockIndex = typeof params.input.blockIndex === 'number' && Number.isInteger(params.input.blockIndex)
-    ? params.input.blockIndex
+  const segmentIndex = typeof params.input.segmentIndex === 'number' && Number.isInteger(params.input.segmentIndex)
+    ? params.input.segmentIndex
     : -1
-  if (blockIndex < 0) throw new Error('PROJECT_AGENT_ASSET_REFERENCE_BLOCK_REQUIRED')
-  const planned = await buildEpisodeVideoBlockPlan({
+  if (segmentIndex < 0) throw new Error('PROJECT_AGENT_ASSET_REFERENCE_SEGMENT_REQUIRED')
+  const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
   })
-  const item = planned.plan.items[blockIndex]
-  if (!item) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_BLOCK_NOT_FOUND:${blockIndex}`)
+  const item = planned.plan.items[segmentIndex]
+  if (!item) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_SEGMENT_NOT_FOUND:${segmentIndex}`)
 
-  const plannedTask = await planAssetReferenceVideoBlockTask({
+  const plannedTask = await planAssetReferenceGenerationSegmentTask({
     ctx: params.ctx,
     input: params.input,
     operationId: params.operationId,
     episodeId,
     item,
     shots: planned.shots,
-    blockIndex,
+    segmentIndex,
   })
   return {
     kind: 'task_submission',
@@ -60,7 +60,7 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
     metadata: {
       episodeId,
       sourceMode: 'asset_reference',
-      blockIndex,
+      segmentIndex,
       videoGroups: [plannedTask.metadata],
     },
   }
@@ -73,8 +73,8 @@ export async function commitGenerateAssetReferenceVideoPlan(params: {
   plan: OperationPlan
 }) {
   const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
-  const blockIndex = typeof metadata.blockIndex === 'number' && Number.isInteger(metadata.blockIndex)
-    ? metadata.blockIndex
+  const segmentIndex = typeof metadata.segmentIndex === 'number' && Number.isInteger(metadata.segmentIndex)
+    ? metadata.segmentIndex
     : -1
   const task = params.plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
@@ -108,7 +108,7 @@ export async function commitGenerateAssetReferenceVideoPlan(params: {
     targetId: groupMetadata.groupId,
     episodeId: groupMetadata.episodeId,
     sourceMode: 'asset_reference' as const,
-    blockIndex,
+    segmentIndex,
     shotNumbers: groupMetadata.shotNumbers,
     durationSec: groupMetadata.durationSec,
   }
@@ -139,21 +139,21 @@ export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const planned = await buildEpisodeVideoBlockPlan({
+  const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
   })
 
   const plannedTasks = []
-  for (const [blockIndex, item] of planned.plan.items.entries()) {
-    plannedTasks.push(await planAssetReferenceVideoBlockTask({
+  for (const [segmentIndex, item] of planned.plan.items.entries()) {
+    plannedTasks.push(await planAssetReferenceGenerationSegmentTask({
       ctx: params.ctx,
       input: params.input,
       operationId: params.operationId,
       episodeId,
       item,
       shots: planned.shots,
-      blockIndex,
+      segmentIndex,
     }))
   }
   return {

@@ -51,18 +51,6 @@ export async function resolveEditScriptStyleBibleForTask(input: {
   const episodeId = trimText(input.episodeId)
   if (!episodeId) return null
 
-  const script = await prisma.projectEditScript.findFirst({
-    where: {
-      projectId: input.projectId,
-      episodeId,
-    },
-    select: {
-      styleBibleJson: true,
-    },
-  })
-  const scriptStyleBible = styleBibleFromCarrier(script)
-  if (scriptStyleBible) return scriptStyleBible
-
   const screenplay = await prisma.projectEditScreenplay.findFirst({
     where: {
       projectId: input.projectId,

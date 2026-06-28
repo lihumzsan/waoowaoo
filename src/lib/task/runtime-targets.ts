@@ -92,11 +92,8 @@ export const TASK_RUNTIME_TARGETS = {
       TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     ])
   },
-  projectEditDirectorDecoupage(screenplayId: string | null | undefined) {
-    return target('ProjectEditScreenplay', screenplayId, [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE])
-  },
-  projectEditCinematographyShotPlan(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE])
+  projectEditShotExecutionPlan(editScriptId: string | null | undefined) {
+    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE])
   },
   projectEditStylePreviewImage(stylePreviewId: string | null | undefined) {
     return target('ProjectEditStylePreview', stylePreviewId, [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE])
@@ -151,8 +148,5 @@ export const TASK_RUNTIME_TARGETS = {
     return target('ProjectStoryboard', storyboardId, [
       TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
     ])
-  },
-  projectEditScriptStoryboardPrepare(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE])
   },
 } as const

@@ -29,14 +29,12 @@ function createEditScript(): ProjectEditScript {
     episodeId: 'episode-1',
     userPrompt: 'make a quiet short film',
     styleBible: null,
-    title: 'Quiet Assets',
-    logline: null,
     durationSec: 12,
     shotCount: 1,
     status: 'ready',
     assetReviewStatus: 'pending',
     shots: [],
-    videoBlocks: [],
+    generationSegments: [],
     requirements: [
       {
         id: 'req-1',
@@ -68,9 +66,8 @@ describe('resource-change-sync', () => {
 
     expect(changes.map((change) => change.kind)).toEqual([
       WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
-      WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
-      WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN,
+      WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
@@ -142,13 +139,10 @@ describe('resource-change-sync', () => {
       type: 'active',
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.project.editDirectorDecoupage('project-1', 'episode-1'),
-    })
-    expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.project.editScript('project-1', 'episode-1'),
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.project.editCinematographyShotPlan('project-1', 'episode-1'),
+      queryKey: queryKeys.project.editShotExecutionPlan('project-1', 'episode-1'),
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: queryKeys.storyboards.all('episode-1'),
@@ -164,26 +158,25 @@ describe('resource-change-sync', () => {
     })
   })
 
-  it('maps director decoupage task completion to the full edit pipeline resources', () => {
+  it('maps shot execution plan task completion to the full edit pipeline resources', () => {
     const changes = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-      taskType: TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE,
+      taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
       lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       projectId: 'project-1',
-      targetType: 'ProjectEditScreenplay',
-      targetId: 'screenplay-1',
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
       episodeId: null,
       payload: {
         episodeId: 'episode-1',
-        directorDecoupageId: 'director-1',
-        screenplayId: 'screenplay-1',
+        shotExecutionPlanId: 'execution-1',
+        editScriptId: 'edit-1',
       },
     })
 
     expect(changes.map((change) => change.kind)).toEqual([
       WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
-      WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
-      WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN,
+      WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
@@ -194,7 +187,6 @@ describe('resource-change-sync', () => {
       return []
     })
     expect(episodeIds).toEqual([
-      'episode-1',
       'episode-1',
       'episode-1',
       'episode-1',

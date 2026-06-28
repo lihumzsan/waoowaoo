@@ -1,7 +1,7 @@
 {
     "phases": {
         "planning": "Planning Storyboard",
-        "cinematography": "Cinematography Design",
+        "shotExecution": "Shot Execution",
         "acting": "Acting Direction",
         "detail": "Adding Details"
     },
@@ -379,7 +379,7 @@
         "position": "Position",
         "posture": "Posture",
         "facing": "Facing",
-        "photographyRules": "Photography Rules",
+        "executionSnapshot": "Shot Execution Snapshot",
         "viewData": "View Data",
         "jsonPreview": "JSON Preview",
         "actingNotes": "Acting Direction (acting_notes)",

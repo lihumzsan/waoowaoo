@@ -23,13 +23,11 @@ import {
   handleEditScreenplayReviseTask,
 } from './handlers/edit-screenplay-generate'
 import {
-  handleEditCinematographyShotPlanGenerateTask,
-  handleEditDirectorDecoupageGenerateTask,
+  handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
 import { handleEditStylePreviewsGenerateTask } from './handlers/edit-style-previews-generate'
 import {
   handleEditScriptStoryboardCameraPlanTask,
-  handleEditScriptStoryboardPrepareTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
 
 function readAssetKind(value: Record<string, unknown>): string {
@@ -456,8 +454,6 @@ async function processTextTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
 
   switch (job.data.type) {
-    case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE:
-      return await handleEditScriptStoryboardPrepareTask(job)
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
     case TASK_TYPE.EPISODE_SPLIT_LLM:
@@ -468,12 +464,10 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleEditScreenplayReviseTask(job)
     case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
       return await handleEditStylePreviewsGenerateTask(job)
-    case TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE:
-      return await handleEditDirectorDecoupageGenerateTask(job)
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:
       return await handleEditScriptGenerateTask(job)
-    case TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE:
-      return await handleEditCinematographyShotPlanGenerateTask(job)
+    case TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE:
+      return await handleEditShotExecutionPlanGenerateTask(job)
     case TASK_TYPE.AI_CREATE_CHARACTER:
     case TASK_TYPE.AI_CREATE_LOCATION:
     case TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER:

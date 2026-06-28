@@ -22,18 +22,13 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_edit_director_decoupage') {
-      await runtime.onGenerateEditDirectorDecoupage(action.screenplayId)
-      return
-    }
-
     if (action.type === 'generate_edit_script') {
       await runtime.onGenerateEditScript(action.screenplayId)
       return
     }
 
-    if (action.type === 'generate_edit_cinematography_shot_plan') {
-      await runtime.onGenerateEditCinematographyShotPlan(action.editScriptId)
+    if (action.type === 'generate_edit_shot_execution_plan') {
+      await runtime.onGenerateEditShotExecutionPlan(action.editScriptId)
       return
     }
 
@@ -66,7 +61,7 @@ export function useWorkspaceNodeCanvasActions() {
       await runtime.onGenerateStoryboardGridImages({
         episodeId: action.episodeId,
         editScriptId: action.editScriptId,
-        sourceVideoBlockId: action.sourceVideoBlockId,
+        sourceGenerationSegmentId: action.sourceGenerationSegmentId,
         panelIds: action.panelIds,
         generationMode: action.generationMode,
       })
@@ -108,7 +103,7 @@ export function useWorkspaceNodeCanvasActions() {
     }
 
     if (action.type === 'update_video_plan_prompt') {
-      await runtime.onUpdateVideoPlanPrompt(action.editScriptId, action.blockIndex, action.prompt)
+      await runtime.onUpdateGenerationSegmentContinuity(action.editScriptId, action.segmentIndex, action.continuity)
       return
     }
 
@@ -151,7 +146,7 @@ export function useWorkspaceNodeCanvasActions() {
       await runtime.onGenerateAllVideos({
         generationOptions: action.generationOptions,
         mode: 'asset-reference',
-        blockIndex: action.blockIndex,
+        segmentIndex: action.segmentIndex,
         referenceImageUrls: action.referenceImageUrls,
       })
       return
@@ -187,8 +182,5 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_edit_storyboard_spatial_blocking') {
-      await runtime.onGenerateEditStoryboardSpatialBlocking(action.editScriptId)
-    }
   }, [runtime])
 }

@@ -285,7 +285,7 @@ describe('sse invalidation behavior', () => {
 
   })
 
-  it('director decoupage task completion invalidates the persisted director decoupage resource', async () => {
+  it('shot execution plan task completion invalidates the persisted shot execution resource', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
 
     useSSE({
@@ -304,20 +304,19 @@ describe('sse invalidation behavior', () => {
       projectId: 'project-1',
       userId: 'user-1',
       ts: '2026-04-24T00:00:00.000Z',
-      taskType: 'edit_director_decoupage_generate',
-      targetType: 'ProjectEditScreenplay',
-      targetId: 'screenplay-1',
+      taskType: 'edit_shot_execution_plan_generate',
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
       episodeId: 'episode-1',
       payload: {
         lifecycleType: TASK_EVENT_TYPE.COMPLETED,
         episodeId: 'episode-1',
-        directorDecoupageId: 'director-1',
-        screenplayId: 'screenplay-1',
+        shotExecutionPlanId: 'execution-1',
+        editScriptId: 'edit-1',
         affectedResources: [
           { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
-          { kind: 'editDirectorDecoupage', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
-          { kind: 'editCinematographyShotPlan', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editShotExecutionPlan', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
@@ -329,18 +328,9 @@ describe('sse invalidation behavior', () => {
     expect(hasInvalidation((arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.project.editDirectorDecoupage('project-1', 'episode-1')[0]
+        && key[0] === queryKeys.project.editShotExecutionPlan('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
-        && key[2] === 'edit-director-decoupage'
-        && key[3] === 'episode-1'
-    })).toBe(true)
-
-    expect(hasInvalidation((arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.project.editCinematographyShotPlan('project-1', 'episode-1')[0]
-        && key[1] === 'project-1'
-        && key[2] === 'edit-cinematography-shot-plan'
+        && key[2] === 'edit-shot-execution-plan'
         && key[3] === 'episode-1'
     })).toBe(true)
   })

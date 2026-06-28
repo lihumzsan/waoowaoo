@@ -1,5 +1,7 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EditGenerationSegment, EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
+import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
@@ -11,6 +13,7 @@ type PanelRow = {
   imageUrl: string | null
   description: string | null
   firstLastFramePrompt: string | null
+  videoPrompt: string | null
   duration: number | null
 }
 
@@ -66,6 +69,9 @@ const videoGroupMocks = vi.hoisted(() => ({
     height: null,
     durationMs: 14000,
   })),
+}))
+const storyboardSourceMock = vi.hoisted(() => ({
+  buildStoryboardConsistencySource: vi.fn(),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -138,6 +144,9 @@ vi.mock('@/lib/ai-registry/api-config-catalog', () => ({
 vi.mock('@/lib/ai-exec/engine', () => ({
   executeAiTextStep: videoGroupMocks.executeAiTextStep,
 }))
+vi.mock('@/lib/edit-script/storyboard-consistency/source-snapshot', () => ({
+  buildStoryboardConsistencySource: storyboardSourceMock.buildStoryboardConsistencySource,
+}))
 vi.mock('@/lib/video-groups/grid-image', () => ({
   composeAndStoreGridReferenceImage: videoGroupMocks.composeAndStoreGridReferenceImage,
 }))
@@ -172,8 +181,142 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
     imageUrl: 'cos/panel-image.png',
     description: 'panel description',
     firstLastFramePrompt: null,
+    videoPrompt: 'panel video prompt',
     duration: 5,
     ...(overrides || {}),
+  }
+}
+
+function buildCorePlan(
+  shots: readonly { readonly shotNumber: number; readonly durationSec: number; readonly action: string; readonly sound: string }[] = [
+    { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
+    { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
+    { shotNumber: 3, durationSec: 4, action: 'Shot three', sound: 'rise' },
+    { shotNumber: 4, durationSec: 5, action: 'Shot four', sound: 'release' },
+  ],
+  generationSegments: readonly EditGenerationSegment[] = [
+    { shotNumbers: shots.map((shot) => shot.shotNumber), continuity: 'continuous group' },
+  ],
+): { readonly shots: readonly EditScriptShot[]; readonly generationSegments: readonly EditGenerationSegment[] } {
+  return {
+    shots: shots.map((shot) => ({
+      shotNumber: shot.shotNumber,
+      durationSec: shot.durationSec,
+      scene: { name: 'Test Room' },
+      action: shot.action,
+      characters: [
+        {
+          name: 'Hero',
+          visibility: 'visible',
+          role: 'focus',
+          performance: `Performs ${shot.action}`,
+        },
+      ],
+      keyObjects: [
+        { name: 'Chair', role: 'blocking_anchor' },
+      ],
+      sound: shot.sound,
+    })),
+    generationSegments,
+  }
+}
+
+function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
+  return {
+    shotNumber: shot.shotNumber,
+    camera: {
+      shotScale: '中景',
+      lens: '35mm',
+      focus: 'Hero and anchor object remain clear',
+      height: '视线高度',
+      position: 'room entrance left',
+      angle: '平视',
+      movement: '固定机位',
+      composition: 'Hero and chair preserve screen relation',
+      lighting: 'soft directional light preserves continuity',
+    },
+    blocking: {
+      axis: {
+        type: 'subject_line',
+        subjects: ['Hero', 'Chair'],
+        screenDirection: 'Hero remains screen left of Chair',
+      },
+      characters: [
+        {
+          name: 'Hero',
+          visibility: 'visible',
+          position: 'beside the chair',
+          screenPosition: 'screen left',
+          facing: 'toward the chair',
+          eyeline: 'toward the chair',
+        },
+      ],
+      objects: [
+        {
+          name: 'Chair',
+          position: 'center of the room',
+          screenPosition: 'screen center',
+        },
+      ],
+      spatialNote: 'Hero and chair preserve the same axis across shots',
+    },
+  }
+}
+
+function buildStoryboardSourceResult(
+  corePlan: { readonly shots: readonly EditScriptShot[]; readonly generationSegments: readonly EditGenerationSegment[] } = buildCorePlan(),
+): {
+  readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
+  readonly modelConfigSnapshot: { readonly analysisModel: string; readonly storyboardModel: string }
+} {
+  return {
+    modelConfigSnapshot: {
+      analysisModel: 'openai::gpt-4.1',
+      storyboardModel: 'google::imagen',
+    },
+    sourceSnapshot: {
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      project: { videoRatio: '9:16' },
+      editScript: {
+        id: 'edit-script-1',
+        durationSec: corePlan.shots.reduce((total, shot) => total + shot.durationSec, 0),
+        shotCount: corePlan.shots.length,
+        userPrompt: 'test prompt',
+        screenplayText: 'test screenplay',
+      },
+      styleBible: buildZenStyleBibleFixture(),
+      shots: corePlan.shots,
+      shotExecutionPlan: {
+        shots: corePlan.shots.map((shot) => buildExecutionShot(shot)),
+      },
+      generationSegments: corePlan.generationSegments.map((segment, index) => ({
+        ...segment,
+        segmentIndex: index,
+        sourceGenerationSegmentId: `edit-script-1:generationSegment:${index + 1}`,
+      })),
+      assets: [
+        {
+          requirementId: 'asset-character-hero',
+          kind: 'character',
+          name: 'Hero',
+          description: 'Hero reference',
+          shotNumbers: corePlan.shots.map((shot) => shot.shotNumber),
+          targetId: 'character-hero',
+          previewImageUrl: 'https://example.com/hero.png',
+        },
+        {
+          requirementId: 'asset-location-room',
+          kind: 'location',
+          name: 'Test Room',
+          description: 'Room reference',
+          shotNumbers: corePlan.shots.map((shot) => shot.shotNumber),
+          targetId: 'location-room',
+          previewImageUrl: 'https://example.com/room.png',
+          spatialProfile: null,
+        },
+      ],
+    },
   }
 }
 
@@ -210,76 +353,13 @@ describe('worker video processor behavior', () => {
       videoRatio: '9:16',
       artStyle: 'cinematic',
     })
+    const defaultCorePlan = buildCorePlan()
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
-      shotsJson: [
-        {
-          shotNumber: 1,
-          durationSec: 2,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot one',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot two',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'B',
-          sound: 'pulse',
-        },
-        {
-          shotNumber: 3,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot three',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'C',
-          sound: 'rise',
-        },
-        {
-          shotNumber: 4,
-          durationSec: 5,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot four',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'D',
-          sound: 'release',
-        },
-      ],
-      videoBlocksJson: [
-        {
-          kind: 'group',
-          shotNumbers: [1, 2, 3, 4],
-          gridMode: '2x2',
-          reason: 'continuous group',
-          prompt: 'stored continuous group prompt',
-        },
-      ],
+      id: 'edit-script-1',
+      corePlanJson: defaultCorePlan,
     })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
+    storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValue(buildStoryboardSourceResult(defaultCorePlan))
 
     const mod = await import('@/lib/workers/video.worker')
     mod.createVideoWorker()
@@ -327,7 +407,7 @@ describe('worker video processor behavior', () => {
         { url: 'images/panel-4.png', role: 'reference', order: 4, source: 'storyboard' },
       ],
       options: expect.objectContaining({
-        prompt: 'stored continuous group prompt',
+        prompt: expect.stringContaining('GENERATION_SEGMENT'),
         duration: 14,
         aspectRatio: '9:16',
       }),
@@ -353,48 +433,15 @@ describe('worker video processor behavior', () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
+    const twoShotCorePlan = buildCorePlan([
+      { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
+      { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
+    ])
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
-      shotsJson: [
-        {
-          shotNumber: 1,
-          durationSec: 2,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot one',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot two',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'B',
-          sound: 'pulse',
-        },
-      ],
-      videoBlocksJson: [
-        {
-          kind: 'group',
-          shotNumbers: [1, 2],
-          gridMode: '2x2',
-          reason: 'continuous group',
-          prompt: 'stored continuous group prompt',
-        },
-      ],
-      styleBibleJson: buildZenStyleBibleFixture(),
+      id: 'edit-script-1',
+      corePlanJson: twoShotCorePlan,
     })
+    storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValueOnce(buildStoryboardSourceResult(twoShotCorePlan))
     prismaMock.projectPanel.findMany.mockResolvedValueOnce([
       { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
       { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
@@ -414,17 +461,17 @@ describe('worker video processor behavior', () => {
 
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       options: expect.objectContaining({
-        prompt: expect.stringContaining('stored continuous group prompt'),
+        prompt: expect.stringContaining('GENERATION_SEGMENT'),
       }),
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       options: expect.objectContaining({
-        prompt: expect.stringContaining('用途：最终视频生成'),
+        prompt: expect.stringContaining('STYLE'),
       }),
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       options: expect.objectContaining({
-        prompt: expect.stringContaining('声音滤镜：低噪、近自然声场、不过度压缩。'),
+        prompt: expect.stringContaining('禅意电影感'),
       }),
     }))
   })
@@ -481,43 +528,17 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP asset_reference: appends Style Bible block inside asset-reference prompt', async () => {
+  it('VIDEO_GROUP asset_reference: uses payload prompt without reading a stored segment prompt', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
+    const twoShotCorePlan = buildCorePlan([
+      { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
+      { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
+    ])
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
-      shotsJson: [
-        {
-          shotNumber: 1,
-          durationSec: 2,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot one',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot two',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'B',
-          sound: 'pulse',
-        },
-      ],
-      videoBlocksJson: [],
-      styleBibleJson: buildZenStyleBibleFixture(),
+      id: 'edit-script-1',
+      corePlanJson: twoShotCorePlan,
     })
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-asset.mp4')
 
@@ -544,11 +565,7 @@ describe('worker video processor behavior', () => {
         prompt: expect.stringContaining('asset reference block prompt'),
       }),
     }))
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      options: expect.objectContaining({
-        prompt: expect.stringContaining('用途：最终视频生成'),
-      }),
-    }))
+    expect(storyboardSourceMock.buildStoryboardConsistencySource).not.toHaveBeenCalled()
   })
 
   it('VIDEO_GROUP asset_reference: allows Fal Seedance 2.0 multi-reference assets', async () => {
@@ -761,50 +778,22 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP: fails explicitly when the edit-first video block has no stored prompt', async () => {
+  it('VIDEO_GROUP: fails explicitly when no generation segment matches the requested shots', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
+    const twoShotCorePlan = buildCorePlan([
+      { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
+      { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
+    ], [
+      { shotNumbers: [1], continuity: 'shot one only' },
+      { shotNumbers: [2], continuity: 'shot two only' },
+    ])
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
-      shotsJson: [
-        {
-          shotNumber: 1,
-          durationSec: 2,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot one',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Shot two',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'B',
-          sound: 'pulse',
-        },
-      ],
-      videoBlocksJson: [
-        {
-          kind: 'group',
-          shotNumbers: [1, 2],
-          gridMode: '2x2',
-          reason: 'continuous group',
-        },
-      ],
+      id: 'edit-script-1',
+      corePlanJson: twoShotCorePlan,
     })
+    storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValueOnce(buildStoryboardSourceResult(twoShotCorePlan))
     prismaMock.projectPanel.findMany.mockResolvedValueOnce([
       { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
       { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
@@ -819,7 +808,7 @@ describe('worker video processor behavior', () => {
         gridMode: '2x2',
         shotNumbers: [1, 2],
       },
-    }))).rejects.toThrow('VIDEO_GROUP_PROMPT_REQUIRED:1,2')
+    }))).rejects.toThrow('VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:1,2')
 
     expect(videoGroupMocks.executeAiTextStep).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
@@ -871,13 +860,9 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: appends Style Bible block to final panel video prompt', async () => {
+  it('VIDEO_PANEL: uses the persisted panel video prompt', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
-
-    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
-      styleBibleJson: buildZenStyleBibleFixture(),
-    })
 
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
@@ -896,23 +881,7 @@ describe('worker video processor behavior', () => {
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          prompt: expect.stringContaining('panel description'),
-        }),
-      }),
-    )
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        options: expect.objectContaining({
-          prompt: expect.stringContaining('用途：最终视频生成'),
-        }),
-      }),
-    )
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        options: expect.objectContaining({
-          prompt: expect.stringContaining('声音滤镜：低噪、近自然声场、不过度压缩。'),
+          prompt: expect.stringContaining('panel video prompt'),
         }),
       }),
     )

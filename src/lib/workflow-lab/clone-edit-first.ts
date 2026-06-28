@@ -1,14 +1,13 @@
 import { Prisma } from '@prisma/client'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import { toInputJson, toNullableInputJson, mapWorkflowLabId, type WorkflowLabCloneMaps } from './clone-json'
+import { toInputJson, toNullableInputJson, mapWorkflowLabId, readMappedId, type WorkflowLabCloneMaps } from './clone-json'
 import {
   resolveWorkflowLabEditAssetReviewStatus,
   resolveWorkflowLabScreenplayStatus,
   resolveWorkflowLabStylePreviewStatus,
-  shouldWorkflowLabCloneCinematography,
-  shouldWorkflowLabCloneDirectorDecoupage,
   shouldWorkflowLabCloneEditScript,
   shouldWorkflowLabCloneScreenplay,
+  shouldWorkflowLabCloneShotExecutionPlan,
   shouldWorkflowLabCloneStylePreviews,
   shouldWorkflowLabKeepAssetRequirementTarget,
 } from './clone-stage'
@@ -29,7 +28,6 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       stylePreviews: {
         orderBy: { createdAt: 'asc' },
       },
-      directorDecoupage: true,
     },
   })
 
@@ -81,25 +79,6 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       }
     }
 
-    if (screenplay.directorDecoupage && shouldWorkflowLabCloneDirectorDecoupage(params.stage)) {
-      const createdDirectorDecoupage = await params.tx.projectEditDirectorDecoupage.create({
-        data: {
-          projectId: params.targetProjectId,
-          episodeId: params.targetEpisodeId,
-          editScreenplayId: createdScreenplay.id,
-          userPrompt: screenplay.directorDecoupage.userPrompt,
-          decoupageJson: toInputJson(screenplay.directorDecoupage.decoupageJson),
-          status: 'ready',
-        },
-        select: { id: true },
-      })
-      mapWorkflowLabId({
-        maps: params.maps,
-        scopedMap: params.maps.directorDecoupageIds,
-        sourceId: screenplay.directorDecoupage.id,
-        targetId: createdDirectorDecoupage.id,
-      })
-    }
   }
 
   if (!shouldWorkflowLabCloneEditScript(params.stage)) return
@@ -110,7 +89,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       requirements: {
         orderBy: { createdAt: 'asc' },
       },
-      cinematographyShotPlan: true,
+      shotExecutionPlan: true,
     },
   })
 
@@ -120,17 +99,12 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
     data: {
       projectId: params.targetProjectId,
       episodeId: params.targetEpisodeId,
-      userPrompt: editScript.userPrompt,
-      styleBibleJson: toNullableInputJson(editScript.styleBibleJson),
-      screenplayText: editScript.screenplayText,
-      title: editScript.title,
-      logline: editScript.logline,
+      editScreenplayId: readMappedId(params.maps.screenplayIds, editScript.editScreenplayId),
+      corePlanJson: toNullableInputJson(editScript.corePlanJson),
       durationSec: editScript.durationSec,
       shotCount: editScript.shotCount,
       status: editScript.status,
       assetReviewStatus: resolveWorkflowLabEditAssetReviewStatus(params.stage, editScript.assetReviewStatus),
-      shotsJson: toInputJson(editScript.shotsJson),
-      videoBlocksJson: toNullableInputJson(editScript.videoBlocksJson),
     },
     select: { id: true },
   })
@@ -156,7 +130,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
         kind: requirement.kind,
         name: requirement.name,
         description: requirement.description,
-        shotIndexes: toInputJson(requirement.shotIndexes),
+        requiredForShotNumbers: toInputJson(requirement.requiredForShotNumbers),
         status: keepTarget ? requirement.status : 'pending',
         targetId: mappedTargetId,
         errorMessage: keepTarget ? requirement.errorMessage : null,
@@ -171,21 +145,21 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
     })
   }
 
-  if (editScript.cinematographyShotPlan && shouldWorkflowLabCloneCinematography(params.stage)) {
-    const createdShotPlan = await params.tx.projectEditCinematographyShotPlan.create({
+  if (editScript.shotExecutionPlan && shouldWorkflowLabCloneShotExecutionPlan(params.stage)) {
+    const createdShotPlan = await params.tx.projectEditShotExecutionPlan.create({
       data: {
         projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
         editScriptId: createdEditScript.id,
-        shotPlanJson: toInputJson(editScript.cinematographyShotPlan.shotPlanJson),
-        status: editScript.cinematographyShotPlan.status,
+        executionPlanJson: toInputJson(editScript.shotExecutionPlan.executionPlanJson),
+        status: editScript.shotExecutionPlan.status,
       },
       select: { id: true },
     })
     mapWorkflowLabId({
       maps: params.maps,
-      scopedMap: params.maps.cinematographyShotPlanIds,
-      sourceId: editScript.cinematographyShotPlan.id,
+      scopedMap: params.maps.shotExecutionPlanIds,
+      sourceId: editScript.shotExecutionPlan.id,
       targetId: createdShotPlan.id,
     })
   }

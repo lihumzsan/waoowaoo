@@ -21,11 +21,6 @@ import {
   resolveNovelData,
 } from './image-task-handler-shared'
 import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image'
-import {
-  appendStyleBiblePromptBlock,
-  resolveEditScriptStyleBibleForStoryboardTask,
-} from '@/lib/edit-script/style-bible-prompt'
-import { buildPanelPrompt, buildPanelPromptContext } from './panel-image-prompt'
 import { parseStoryboardGridPayload, handlePanelGridImageTask } from './panel-grid-image-handler'
 import {
   applyPanelPromptFieldOmissions,
@@ -38,6 +33,25 @@ const EMPTY_PANEL_REFERENCE_COLLECTION = {
   issues: [],
   expectedCharacterReferenceCount: 0,
 } satisfies Awaited<ReturnType<typeof collectPanelReferenceImageItemsWithDiagnostics>>
+
+function requirePanelImagePrompt(panel: {
+  readonly id: string
+  readonly imagePrompt: string | null
+}): string {
+  const prompt = typeof panel.imagePrompt === 'string' ? panel.imagePrompt.trim() : ''
+  if (!prompt) throw new Error(`PANEL_IMAGE_PROMPT_MISSING:${panel.id}`)
+  return prompt
+}
+
+function requirePanelRenderFacts(panel: {
+  readonly id: string
+  readonly renderFactsJson: unknown
+}): unknown {
+  if (panel.renderFactsJson === null || panel.renderFactsJson === undefined) {
+    throw new Error(`PANEL_RENDER_FACTS_MISSING:${panel.id}`)
+  }
+  return panel.renderFactsJson
+}
 
 export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as AnyObj
@@ -148,50 +162,13 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     generationOptions: payload.generationOptions,
     context: 'panel_image',
   })
-  const aspectRatio = imageRuntimeOptions.aspectRatio
-  const promptContext = buildPanelPromptContext({
-    panel: {
-      id: panel.id,
-      shotType: panel.shotType,
-      cameraMove: panel.cameraMove,
-      description: panel.description,
-      imagePrompt: panel.imagePrompt,
-      videoPrompt: panel.videoPrompt,
-      location: panel.location,
-      characters: panel.characters,
-      srtSegment: panel.srtSegment,
-      photographyRules: panel.photographyRules,
-      actingNotes: panel.actingNotes,
-    },
-    projectData,
-    referenceImageNotes,
-    referenceImagesMap,
-  })
+  const promptContext = requirePanelRenderFacts(panel)
   const selectedPromptContext = applyPanelPromptFieldOmissions(promptContext, promptFieldOmissions)
   const contextJson = JSON.stringify(selectedPromptContext, null, 2)
-  const sourceText = promptFieldOmissions.includes('panel.source_text')
-    ? ''
-    : panel.srtSegment || panel.description || ''
-  const promptBase = buildPanelPrompt({
-    locale: job.data.locale,
-    aspectRatio,
-    styleText: '',
-    sourceText,
-    contextJson,
-  })
-  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask({
-    projectId: job.data.projectId,
-    episodeId: job.data.episodeId,
-    storyboardId: panel.storyboardId,
-  })
-  const prompt = promptFieldOmissions.includes('style_bible')
-    ? promptBase
-    : appendStyleBiblePromptBlock({
-      prompt: promptBase,
-      styleBible,
-      usage: 'storyboardImage',
-      locale: job.data.locale,
-    })
+  const sourceText = ''
+  const prompt = promptFieldOmissions.length > 0
+    ? JSON.stringify(selectedPromptContext, null, 2)
+    : requirePanelImagePrompt(panel)
   logger.info({
     message: 'panel image prompt resolved',
     details: {
@@ -200,7 +177,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   })
 
   const candidates: string[] = []
-  const effectiveReferenceImages = promptFieldOmissions.includes('context.reference_images') ? [] : referenceImages
+  const effectiveReferenceImages = promptFieldOmissions.includes('render_facts.REFERENCE_IMAGES') ? [] : referenceImages
 
   for (let i = 0; i < candidateCount; i++) {
     await reportTaskProgress(job, 18 + Math.floor((i / Math.max(candidateCount, 1)) * 58), {

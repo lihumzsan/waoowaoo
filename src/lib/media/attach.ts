@@ -113,17 +113,6 @@ async function attachMediaFieldsToStoryboard<T extends Record<string, unknown>>(
   const panels = await Promise.all(
     ((storyboard.panels as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToPanel),
   )
-  const blockingArtifacts = await Promise.all(
-    ((storyboard.blockingArtifacts as Array<Record<string, unknown>>) || []).map(async (artifact) => {
-      const imageMedia = await resolveMediaRef(artifact.imageMediaId, artifact.imageUrl)
-      return {
-        ...artifact,
-        media: imageMedia,
-        imageMedia,
-        imageUrl: imageMedia?.url || artifact.imageUrl || null,
-      }
-    }),
-  )
 
   return {
     ...storyboard,
@@ -131,7 +120,6 @@ async function attachMediaFieldsToStoryboard<T extends Record<string, unknown>>(
     storyboardImageMedia,
     storyboardImageUrl: storyboardImageMedia?.url || storyboard.storyboardImageUrl || null,
     panels,
-    blockingArtifacts,
   }
 }
 

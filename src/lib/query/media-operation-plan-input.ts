@@ -7,7 +7,7 @@ export interface BatchVideoGenerationPlanParams {
   mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
   gridMode?: '2x2' | '3x3'
   shotNumbers?: readonly number[]
-  blockIndex?: number
+  segmentIndex?: number
   referenceImageUrls?: readonly string[]
 }
 
@@ -20,7 +20,7 @@ export interface BatchVideoGenerationPlanRequest {
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
     shotNumbers?: readonly number[]
-    blockIndex?: number
+    segmentIndex?: number
     referenceImageUrls?: readonly string[]
   }
 }
@@ -42,7 +42,7 @@ export function resolveBatchVideoGenerationOperationId(params: {
 export function buildBatchVideoGenerationPlanRequest(params: BatchVideoGenerationPlanParams): BatchVideoGenerationPlanRequest {
   const all = !(
     (params.mode === 'grid' && Array.isArray(params.shotNumbers) && params.shotNumbers.length > 0)
-    || (params.mode === 'asset-reference' && typeof params.blockIndex === 'number')
+    || (params.mode === 'asset-reference' && typeof params.segmentIndex === 'number')
   )
   const input: BatchVideoGenerationPlanRequest['input'] = {
     all,
@@ -57,7 +57,7 @@ export function buildBatchVideoGenerationPlanRequest(params: BatchVideoGeneratio
       input.shotNumbers = params.shotNumbers
     }
   }
-  if (typeof params.blockIndex === 'number') input.blockIndex = params.blockIndex
+  if (typeof params.segmentIndex === 'number') input.segmentIndex = params.segmentIndex
   if (Array.isArray(params.referenceImageUrls) && params.referenceImageUrls.length > 0) {
     input.referenceImageUrls = params.referenceImageUrls
   }

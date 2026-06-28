@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildFinalRenderClips,
   buildFinalRenderMusicPrompt,
+  parseFinalRenderEditScriptCore,
   parseFinalRenderEditScriptShots,
-  parseFinalRenderEditScriptVideoBlocks,
   resolveFinalRenderDimensions,
   selectFinalRenderMusicDurationSeconds,
   type FinalRenderEditScriptInput,
@@ -13,46 +13,45 @@ import {
 const editScript: FinalRenderEditScriptInput = {
   id: 'edit-script-1',
   userPrompt: 'Make a tense neon rooftop chase.',
-  title: 'Rooftop Chase',
-  logline: 'A runner escapes through a neon city.',
   durationSec: 8,
-  videoBlocks: [
-    {
-      kind: 'group',
-      shotNumbers: [1, 2],
-      gridMode: '2x2',
-      reason: 'continuous rooftop movement and escalating danger',
-      prompt: 'Full-screen continuous rooftop chase with neon reflections and fast physical motion.',
-    },
-  ],
   shots: [
     {
       shotNumber: 1,
       durationSec: 3,
-      dramaticPurpose: 'test dramatic purpose',
-      visibleAction: 'Runner looks over the roof edge',
-      audienceFocus: 'test audience focus',
-      viewpoint: 'test viewpoint',
-      revealPlan: 'test reveal plan',
-      performanceBeat: 'test performance beat',
-      continuityIn: 'test continuity in',
-      continuityOut: 'test continuity out',
-      charactersAndScene: 'Runner on rooftop',
+      scene: { name: 'Neon rooftop' },
+      action: 'Runner looks over the roof edge',
+      characters: [
+        {
+          name: 'Runner',
+          visibility: 'visible',
+          role: 'focus',
+          performance: 'checks the drop below',
+        },
+      ],
+      keyObjects: [],
       sound: 'quiet suspense, sparse piano, low synth pulse',
     },
     {
       shotNumber: 2,
       durationSec: 5,
-      dramaticPurpose: 'test dramatic purpose',
-      visibleAction: 'Runner sprints and jumps',
-      audienceFocus: 'test audience focus',
-      viewpoint: 'test viewpoint',
-      revealPlan: 'test reveal plan',
-      performanceBeat: 'test performance beat',
-      continuityIn: 'test continuity in',
-      continuityOut: 'test continuity out',
-      charactersAndScene: 'Runner crossing rooftops',
+      scene: { name: 'Neon rooftop' },
+      action: 'Runner sprints and jumps',
+      characters: [
+        {
+          name: 'Runner',
+          visibility: 'visible',
+          role: 'focus',
+          performance: 'commits to the jump',
+        },
+      ],
+      keyObjects: [],
       sound: 'urgent percussion, rising strings, faster rhythm',
+    },
+  ],
+  generationSegments: [
+    {
+      shotNumbers: [1, 2],
+      continuity: 'continuous rooftop movement and escalating danger',
     },
   ],
 }
@@ -63,7 +62,6 @@ function panel(input: {
   readonly duration?: number
   readonly videoUrl?: string
   readonly storyboardTextJson?: string
-  readonly photographyRules?: string
 }): FinalRenderPanelInput {
   return {
     id: input.id,
@@ -72,7 +70,6 @@ function panel(input: {
     duration: input.duration ?? null,
     description: `panel ${input.panelNumber}`,
     videoUrl: input.videoUrl ?? `videos/${input.id}.mp4`,
-    photographyRules: input.photographyRules ?? null,
     storyboard: {
       id: `storyboard-${input.id}`,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -136,26 +133,6 @@ describe('final render plan', () => {
     }))
   })
 
-  it('rejects persisted videoBlocks that reorder edit-first shots', () => {
-    expect(() => parseFinalRenderEditScriptVideoBlocks({
-      value: [
-        {
-          kind: 'single',
-          shotNumbers: [2],
-          reason: 'manual first beat',
-          prompt: 'shot 2 first',
-        },
-        {
-          kind: 'single',
-          shotNumbers: [1],
-          reason: 'manual second beat',
-          prompt: 'shot 1 second',
-        },
-      ],
-      shots: editScript.shots,
-    })).toThrow('VIDEO_BLOCK_PLAN_SHOT_COVERAGE_INVALID')
-  })
-
   it('selects supported Lyria durations without exceeding Pro limits', () => {
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-clip-preview', 118)).toBe(30)
     expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 31)).toBe(60)
@@ -180,8 +157,8 @@ describe('final render plan', () => {
     expect(prompt).toContain('Complete edit-first core table JSON')
     expect(prompt).toContain('Project configuration JSON')
     expect(prompt).toContain('Actual rendered media timeline JSON')
-    expect(prompt).toContain('"kind": "group"')
-    expect(prompt).toContain('Full-screen continuous rooftop chase')
+    expect(prompt).toContain('"generationSegments"')
+    expect(prompt).toContain('continuous rooftop movement')
     expect(prompt).toContain('"styleBible": null')
     expect(prompt).not.toContain('artStylePrompt')
     expect(prompt).not.toContain('visualStylePreset')
@@ -193,35 +170,25 @@ describe('final render plan', () => {
   })
 
   it('parses persisted edit script shots through the shared edit script schema', () => {
-    const shots = parseFinalRenderEditScriptShots(editScript.shots)
+    const corePlan = {
+      shots: editScript.shots,
+      generationSegments: editScript.generationSegments,
+    }
+    const shots = parseFinalRenderEditScriptShots(corePlan)
 
     expect(shots).toHaveLength(2)
     expect(shots[0]?.shotNumber).toBe(1)
     expect(parseFinalRenderEditScriptShots([{ shotNumber: 1 }])).toEqual([])
   })
 
-  it('parses persisted edit script videoBlocks through the shared video block planner', () => {
-    const blocks = parseFinalRenderEditScriptVideoBlocks({
-      value: [
-        {
-          kind: 'group',
-          shotNumbers: [1, 2],
-          gridMode: '2x2',
-          reason: 'continuous rooftop movement',
-          prompt: 'combined group prompt',
-        },
-      ],
+  it('parses persisted edit script core plan through the shared schema', () => {
+    const core = parseFinalRenderEditScriptCore({
       shots: editScript.shots,
+      generationSegments: editScript.generationSegments,
     })
 
-    expect(blocks).toEqual([
-      {
-        kind: 'group',
-        shotNumbers: [1, 2],
-        gridMode: '2x2',
-        reason: 'continuous rooftop movement',
-        prompt: 'combined group prompt',
-      },
+    expect(core?.generationSegments).toEqual([
+      { shotNumbers: [1, 2], continuity: 'continuous rooftop movement and escalating danger' },
     ])
   })
 })

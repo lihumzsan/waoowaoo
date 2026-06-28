@@ -83,54 +83,39 @@ export interface EditScreenplayPayload {
   readonly status: string
 }
 
-export interface EditDirectorDecoupageShot {
-  readonly shotNumber: number
-  readonly durationSec: number
-  readonly dramaticPurpose: string
-  readonly visibleAction: string
-  readonly audienceFocus: string
-  readonly viewpoint: string
-  readonly revealPlan: string
-  readonly performanceBeat: string
-  readonly continuityIn: string
-  readonly continuityOut: string
-  readonly charactersAndScene: string
-  readonly sound: string
+export const EDIT_CHARACTER_VISIBILITIES = ['visible', 'partial', 'hidden', 'occluded', 'offscreen'] as const
+export type EditCharacterVisibility = (typeof EDIT_CHARACTER_VISIBILITIES)[number]
+
+export const EDIT_CHARACTER_ROLES = ['focus', 'supporting', 'listener', 'hidden_subject', 'background'] as const
+export type EditCharacterRole = (typeof EDIT_CHARACTER_ROLES)[number]
+
+export interface EditScriptCharacter {
+  readonly name: string
+  readonly visibility: EditCharacterVisibility
+  readonly role: EditCharacterRole
+  readonly performance: string
 }
 
-export interface EditDirectorDecoupagePayload {
-  readonly id: string
-  readonly projectId: string
-  readonly episodeId: string
-  readonly screenplayId: string
-  readonly userPrompt: string
-  readonly styleBible: EditScriptStyleBible
-  readonly screenplayText: string
-  readonly status: string
-  readonly shots: readonly EditDirectorDecoupageShot[]
+export interface EditScriptKeyObject {
+  readonly name: string
+  readonly role: string
 }
 
 export interface EditScriptShot {
   readonly shotNumber: number
   readonly durationSec: number
-  readonly dramaticPurpose: string
-  readonly visibleAction: string
-  readonly audienceFocus: string
-  readonly viewpoint: string
-  readonly revealPlan: string
-  readonly performanceBeat: string
-  readonly continuityIn: string
-  readonly continuityOut: string
-  readonly charactersAndScene: string
+  readonly scene: {
+    readonly name: string
+  }
+  readonly action: string
+  readonly characters: readonly EditScriptCharacter[]
+  readonly keyObjects: readonly EditScriptKeyObject[]
   readonly sound: string
 }
 
-export interface EditScriptVideoBlock {
-  readonly kind: 'single' | 'group'
+export interface EditGenerationSegment {
   readonly shotNumbers: readonly number[]
-  readonly gridMode?: '2x2' | '3x3'
-  readonly reason: string
-  readonly prompt: string
+  readonly continuity: string
 }
 
 export interface EditAssetRequirement {
@@ -182,17 +167,16 @@ export interface EditScriptPayload {
   readonly id?: string
   readonly projectId?: string
   readonly episodeId?: string
+  readonly screenplayId?: string
   readonly userPrompt?: string
   readonly styleBible: EditScriptStyleBible | null
   readonly screenplayText?: string | null
-  readonly title: string
-  readonly logline?: string | null
   readonly durationSec: number
   readonly shotCount: number
   readonly status?: string
   readonly assetReviewStatus: EditScriptAssetReviewStatus
   readonly shots: readonly EditScriptShot[]
-  readonly videoBlocks: readonly EditScriptVideoBlock[]
+  readonly generationSegments: readonly EditGenerationSegment[]
   readonly requirements: readonly EditAssetRequirement[]
 }
 
@@ -229,107 +213,134 @@ export interface EditScriptAssetRevisionPayload {
   readonly editScript: EditScriptPayload
 }
 
-export interface EditCinematographyShot {
-  readonly shotNumber: number
+export interface EditShotExecutionCamera {
   readonly shotScale: string
   readonly lens: string
-  readonly depthOfField: string
-  readonly cameraPosition: string
-  readonly cameraHeight: string
-  readonly cameraAngle: string
+  readonly focus: string
+  readonly height: string
+  readonly position: string
+  readonly angle: string
   readonly movement: string
   readonly composition: string
   readonly lighting: string
-  readonly axisAndEyeline: string
-  readonly continuityIn: string
-  readonly continuityOut: string
 }
 
-export interface EditCinematographyShotPlanPayload {
+export interface EditShotExecutionAxis {
+  readonly type: string
+  readonly subjects: readonly string[]
+  readonly screenDirection: string
+}
+
+export interface EditShotExecutionCharacter {
+  readonly name: string
+  readonly visibility: EditCharacterVisibility
+  readonly position: string
+  readonly screenPosition: string
+  readonly facing: string
+  readonly eyeline: string
+}
+
+export interface EditShotExecutionObject {
+  readonly name: string
+  readonly position: string
+  readonly screenPosition: string
+}
+
+export interface EditShotExecutionBlocking {
+  readonly axis: EditShotExecutionAxis
+  readonly characters: readonly EditShotExecutionCharacter[]
+  readonly objects: readonly EditShotExecutionObject[]
+  readonly spatialNote: string
+}
+
+export interface EditShotExecution {
+  readonly shotNumber: number
+  readonly camera: EditShotExecutionCamera
+  readonly blocking: EditShotExecutionBlocking
+}
+
+export interface EditShotExecutionPlanPayload {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
   readonly editScriptId: string
   readonly status: string
-  readonly shots: readonly EditCinematographyShot[]
+  readonly shots: readonly EditShotExecution[]
 }
+
+export const editScriptCharacterSchema = z.object({
+  name: z.string().trim().min(1),
+  visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+  role: z.enum(EDIT_CHARACTER_ROLES),
+  performance: z.string().trim().min(1),
+}).strict()
+
+export const editScriptKeyObjectSchema = z.object({
+  name: z.string().trim().min(1),
+  role: z.string().trim().min(1),
+}).strict()
 
 export const editScriptShotSchema = z.object({
   shotNumber: z.number().int().positive(),
   durationSec: z.number().int().min(1).max(5),
-  dramaticPurpose: z.string().trim().min(1),
-  visibleAction: z.string().trim().min(1),
-  audienceFocus: z.string().trim().min(1),
-  viewpoint: z.string().trim().min(1),
-  revealPlan: z.string().trim().min(1),
-  performanceBeat: z.string().trim().min(1),
-  continuityIn: z.string().trim().min(1),
-  continuityOut: z.string().trim().min(1),
-  charactersAndScene: z.string().trim().min(1),
+  scene: z.object({
+    name: z.string().trim().min(1),
+  }).strict(),
+  action: z.string().trim().min(1),
+  characters: z.array(editScriptCharacterSchema).min(0).max(20),
+  keyObjects: z.array(editScriptKeyObjectSchema).min(0).max(20),
   sound: z.string().trim().min(1),
-})
+}).strict()
 
-export const editScriptStructureShotSchema = editScriptShotSchema
+export const editGenerationSegmentSchema = z.object({
+  shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+  continuity: z.string().trim().min(1),
+}).strict()
 
 export const editScriptCoreSchema = z.object({
-  title: z.string().trim().min(1),
-  logline: z.string().trim().optional().nullable(),
-  durationSec: z.number().int().positive(),
   shots: z.array(editScriptShotSchema).min(1).max(60),
-  videoBlocks: z.array(z.object({
-    kind: z.enum(['single', 'group']),
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    gridMode: z.enum(['2x2', '3x3']).optional(),
-    reason: z.string().trim().min(1),
-    prompt: z.string().trim().min(1),
-  })).min(1).max(60),
-})
+  generationSegments: z.array(editGenerationSegmentSchema).min(1).max(60),
+}).strict()
 
-export const editScriptStructureSchema = z.object({
-  title: z.string().trim().min(1),
-  logline: z.string().trim().optional().nullable(),
-  durationSec: z.number().int().positive(),
-  shots: z.array(editScriptStructureShotSchema).min(1).max(60),
-  videoBlocks: z.array(z.object({
-    kind: z.enum(['single', 'group']),
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    gridMode: z.enum(['2x2', '3x3']).optional(),
-    reason: z.string().trim().min(1),
-  })).min(1).max(60),
-})
+export const editScriptStructureSchema = editScriptCoreSchema
 
-export const editScriptVideoPromptSchema = z.object({
+export const editShotExecutionPlanSchema = z.object({
   shots: z.array(z.object({
     shotNumber: z.number().int().positive(),
-    videoPrompt: z.string().trim().min(1),
-  })).min(1).max(60),
-  videoBlocks: z.array(z.object({
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    prompt: z.string().trim().min(1),
-  })).min(1).max(60),
-})
-
-export const editDirectorDecoupageSchema = z.object({
-  shots: z.array(editScriptShotSchema).min(1).max(60),
-})
-
-export const editCinematographyShotPlanSchema = z.object({
-  shots: z.array(z.object({
-    shotNumber: z.number().int().positive(),
-    shotScale: z.string().trim().min(1),
-    lens: z.string().trim().min(1),
-    depthOfField: z.string().trim().min(1),
-    cameraPosition: z.string().trim().min(1),
-    cameraHeight: z.string().trim().min(1),
-    cameraAngle: z.string().trim().min(1),
-    movement: z.string().trim().min(1),
-    composition: z.string().trim().min(1),
-    lighting: z.string().trim().min(1),
-    axisAndEyeline: z.string().trim().min(1),
-    continuityIn: z.string().trim().min(1),
-    continuityOut: z.string().trim().min(1),
-  })).min(1).max(60),
-})
+    camera: z.object({
+      shotScale: z.string().trim().min(1),
+      lens: z.string().trim().min(1),
+      focus: z.string().trim().min(1),
+      height: z.string().trim().min(1),
+      position: z.string().trim().min(1),
+      angle: z.string().trim().min(1),
+      movement: z.string().trim().min(1),
+      composition: z.string().trim().min(1),
+      lighting: z.string().trim().min(1),
+    }).strict(),
+    blocking: z.object({
+      axis: z.object({
+        type: z.string().trim().min(1),
+        subjects: z.array(z.string().trim().min(1)).min(1).max(10),
+        screenDirection: z.string().trim().min(1),
+      }).strict(),
+      characters: z.array(z.object({
+        name: z.string().trim().min(1),
+        visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+        position: z.string().trim().min(1),
+        screenPosition: z.string().trim().min(1),
+        facing: z.string().trim().min(1),
+        eyeline: z.string().trim().min(1),
+      }).strict()).min(0).max(20),
+      objects: z.array(z.object({
+        name: z.string().trim().min(1),
+        position: z.string().trim().min(1),
+        screenPosition: z.string().trim().min(1),
+      }).strict()).min(0).max(20),
+      spatialNote: z.string().trim().min(1),
+    }).strict(),
+  }).strict()).min(1).max(60),
+}).strict()
 
 export const editScriptStylePolicySchema = z.object({
   directing: z.object({
@@ -407,37 +418,21 @@ export const confirmEditStylePreviewRequestSchema = z.object({
   aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
 })
 
-export const editScriptVideoPromptBlockSchema = z.object({
-  sourceVideoBlockIndex: z.number().int().min(0).max(59),
-  shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-  shots: z.array(z.object({
-    shotNumber: z.number().int().positive(),
-    videoPrompt: z.string().trim().min(1),
-  })).min(1).max(9),
-  videoBlock: z.object({
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    prompt: z.string().trim().min(1),
-  }),
-})
-
-export const editScriptVideoBlockMergeSchema = z.object({
+export const editScriptGenerationSegmentMergeSchema = z.object({
   shotNumbers: z.array(z.number().int().positive()).min(2).max(9),
-  reason: z.string().trim().min(1),
-  prompt: z.string().trim().min(1),
+  continuity: z.string().trim().min(1),
 })
 
-export const editScriptVideoBlockArrangementSchema = z.object({
-  videoBlocks: z.array(z.object({
-    blockIndex: z.number().int().min(0).max(59),
+export const editScriptGenerationSegmentArrangementSchema = z.object({
+  generationSegments: z.array(z.object({
+    segmentIndex: z.number().int().min(0).max(59),
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    reason: z.string().trim().min(1),
-    prompt: z.string().trim().min(1),
+    continuity: z.string().trim().min(1),
   })).min(1).max(60),
 })
 
-export type EditScriptVideoPromptBlockOutput = z.infer<typeof editScriptVideoPromptBlockSchema>
-export type EditScriptVideoBlockMergeOutput = z.infer<typeof editScriptVideoBlockMergeSchema>
-export type EditScriptVideoBlockArrangementOutput = z.infer<typeof editScriptVideoBlockArrangementSchema>
+export type EditScriptGenerationSegmentMergeOutput = z.infer<typeof editScriptGenerationSegmentMergeSchema>
+export type EditScriptGenerationSegmentArrangementOutput = z.infer<typeof editScriptGenerationSegmentArrangementSchema>
 
 export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
@@ -457,21 +452,12 @@ export const createEditScriptRequestSchema = z.object({
   videoRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS).optional(),
 })
 
-export const createEditDirectorDecoupageRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  screenplayId: z.string().trim().min(1).optional(),
-})
-
-export const getEditDirectorDecoupageRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-})
-
-export const createEditCinematographyShotPlanRequestSchema = z.object({
+export const createEditShotExecutionPlanRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   editScriptId: z.string().trim().min(1).optional(),
 })
 
-export const getEditCinematographyShotPlanRequestSchema = z.object({
+export const getEditShotExecutionPlanRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
 })
 
@@ -490,27 +476,28 @@ export const getEditScriptRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
 })
 
-export const updateEditScriptVideoBlockPromptRequestSchema = z.object({
+export const updateEditScriptGenerationSegmentContinuityRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
   editScriptId: z.string().trim().min(1),
-  blockIndex: z.number().int().min(0).max(59),
-  prompt: z.string().trim().min(1),
+  segmentIndex: z.number().int().min(0).max(59),
+  continuity: z.string().trim().min(1),
 })
 
-export const mergeEditScriptVideoBlocksRequestSchema = z.object({
-  operation: z.literal('mergeVideoBlocks'),
+export const mergeEditScriptGenerationSegmentsRequestSchema = z.object({
+  operation: z.literal('mergeGenerationSegments'),
   episodeId: z.string().trim().min(1),
   editScriptId: z.string().trim().min(1),
-  leftBlockIndex: z.number().int().min(0).max(58),
-  rightBlockIndex: z.number().int().min(1).max(59),
+  leftSegmentIndex: z.number().int().min(0).max(58),
+  rightSegmentIndex: z.number().int().min(1).max(59),
 })
 
-export const arrangeEditScriptVideoBlocksRequestSchema = z.object({
-  operation: z.literal('arrangeVideoBlocks'),
+export const arrangeEditScriptGenerationSegmentsRequestSchema = z.object({
+  operation: z.literal('arrangeGenerationSegments'),
   episodeId: z.string().trim().min(1),
   editScriptId: z.string().trim().min(1),
-  blocks: z.array(z.object({
+  segments: z.array(z.object({
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+    continuity: z.string().trim().min(1),
   })).min(1).max(60),
 })
 

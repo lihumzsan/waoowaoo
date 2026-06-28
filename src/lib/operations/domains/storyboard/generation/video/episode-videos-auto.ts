@@ -1,14 +1,12 @@
-import { createMutationBatch } from '@/lib/mutation-batch/service'
 import { TASK_TYPE } from '@/lib/task/types'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { assertOperationPlanConfirmedCost, compensateSubmittedTasks, resolveConfirmedMaxCostForExecution, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
-import { type VideoBlockPlanItem, type VideoGridMode } from '@/lib/video-groups/types'
+import { type GenerationSegmentVideoPlanItem } from '@/lib/video-groups/types'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { planGeneratePanelVideoOperation, readPlannedPanelVideoMetadata, type PlannedPanelVideoMetadata } from './panel-video'
-import { buildEpisodeVideoBlockPlan, commitPlannedVideoGroupTask, parseShotNumbersJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, resolvePanelIdForVideoBlockShot, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
+import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, parseShotNumbersJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
 
 export async function executeGenerateEpisodeVideosAutoOperation(params: {
   ctx: ProjectAgentOperationContext
@@ -36,19 +34,12 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
 
-  const [singleVideoModel, groupVideoModel] = await Promise.all([
-    resolveSystemModelKey({
-      userId: params.ctx.userId,
-      projectId: params.ctx.projectId,
-      purpose: 'single-shot-video',
-    }),
-    resolveSystemModelKey({
-      userId: params.ctx.userId,
-      projectId: params.ctx.projectId,
-      purpose: 'sequence-video',
-    }),
-  ])
-  const planned = await buildEpisodeVideoBlockPlan({
+  const groupVideoModel = await resolveSystemModelKey({
+    userId: params.ctx.userId,
+    projectId: params.ctx.projectId,
+    purpose: 'sequence-video',
+  })
+  const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
   })
@@ -56,51 +47,16 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
   const tasks: PlannedTask[] = []
   const items: Array<{
     readonly planTaskId: string
-    readonly kind: VideoBlockPlanItem['kind']
+    readonly kind: GenerationSegmentVideoPlanItem['kind']
     readonly refId: string
-    readonly taskType: typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.VIDEO_GROUP
-    readonly targetType: 'ProjectPanel' | 'ProjectVideoGroup'
+    readonly taskType: typeof TASK_TYPE.VIDEO_GROUP
+    readonly targetType: 'ProjectVideoGroup'
     readonly shotNumbers: number[]
     readonly durationSec?: number
   }> = []
-  const panelMetadata: Array<PlannedPanelVideoMetadata & { planTaskId: string }> = []
   const videoGroups: PlannedVideoGroupTaskMetadata[] = []
 
   for (const item of planned.plan.items) {
-    if (item.kind === 'single') {
-      const panelId = await resolvePanelIdForVideoBlockShot({
-        episodeId,
-        shotNumber: item.shotNumbers[0],
-      })
-      const panelPlan = await planGeneratePanelVideoOperation({
-        ctx: params.ctx,
-        input: {
-          confirmed: params.input.confirmed,
-          panelId,
-          customPrompt: item.prompt,
-          generationOptions: params.input.generationOptions,
-        },
-        operationId: params.operationId,
-      })
-      const task = panelPlan.tasks[0]
-      if (!task) throw new Error('PROJECT_AGENT_AUTO_VIDEO_PANEL_PLAN_EMPTY')
-      tasks.push(task)
-      const metadata = readPlannedPanelVideoMetadata(panelPlan)
-      panelMetadata.push({
-        ...metadata,
-        planTaskId: task.id,
-      })
-      items.push({
-        planTaskId: task.id,
-        refId: panelId,
-        taskType: TASK_TYPE.VIDEO_PANEL,
-        targetType: 'ProjectPanel',
-        kind: 'single',
-        shotNumbers: [...item.shotNumbers],
-      })
-      continue
-    }
-
     if (!item.gridMode) throw new Error('PROJECT_AGENT_AUTO_VIDEO_GROUP_GRID_MODE_REQUIRED')
     const groupPlan = await planVideoGroupTask({
       ctx: params.ctx,
@@ -136,13 +92,11 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     metadata: {
       episodeId,
       items,
-      panels: panelMetadata,
       videoGroups,
-      videoBlockItems: planned.plan.items.map((item) => ({
+      generationSegmentItems: planned.plan.items.map((item) => ({
         ...item,
         shotNumbers: [...item.shotNumbers],
       })),
-      singleVideoModel,
       groupVideoModel,
     },
   }
@@ -155,15 +109,14 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
   plan: OperationPlan
 }) {
   const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
-  const episodeId = normalizeString(metadata.episodeId) || normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   const rawItems = Array.isArray(metadata.items) ? metadata.items : []
   const items = rawItems.flatMap((item) => {
     if (!isRecord(item)) return []
     const planTaskId = normalizeString(item.planTaskId)
     const refId = normalizeString(item.refId)
-    const kind: 'single' | 'group' = item.kind === 'group' ? 'group' : 'single'
-    const targetType = item.targetType === 'ProjectVideoGroup' ? 'ProjectVideoGroup' : 'ProjectPanel'
-    const taskType = item.taskType === TASK_TYPE.VIDEO_GROUP ? TASK_TYPE.VIDEO_GROUP : TASK_TYPE.VIDEO_PANEL
+    const kind = 'group' as const
+    const targetType = 'ProjectVideoGroup'
+    const taskType = TASK_TYPE.VIDEO_GROUP
     if (!planTaskId || !refId) return []
     return [{
       planTaskId,
@@ -176,41 +129,24 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     }]
   })
   const itemByTaskId = new Map(items.map((item) => [item.planTaskId, item]))
-  const videoBlockItems: Array<{
-    kind: 'single' | 'group'
+  const generationSegmentItems: Array<{
+    kind: 'group'
     shotNumbers: number[]
-    reason: string
-    prompt: string
-    gridMode?: VideoGridMode
-  }> = Array.isArray(metadata.videoBlockItems)
-    ? metadata.videoBlockItems.flatMap((item) => {
+    continuity: string
+    gridMode?: '2x2' | '3x3'
+  }> = Array.isArray(metadata.generationSegmentItems)
+    ? metadata.generationSegmentItems.flatMap((item) => {
       if (!isRecord(item)) return []
-      const kind: 'single' | 'group' = item.kind === 'group' ? 'group' : 'single'
       const shotNumbers = parseShotNumbersJson(item.shotNumbers)
-      const reason = normalizeString(item.reason)
-      const prompt = normalizeString(item.prompt)
+      const continuity = normalizeString(item.continuity)
       const gridMode = item.gridMode === '2x2' || item.gridMode === '3x3' ? item.gridMode : undefined
-      if (shotNumbers.length === 0 || !reason || !prompt) return []
+      if (shotNumbers.length === 0 || !continuity) return []
       return [{
-        kind,
+        kind: 'group' as const,
         shotNumbers,
-        reason,
-        prompt,
+        continuity,
         ...(gridMode ? { gridMode } : {}),
       }]
-    })
-    : []
-  const panelMetadata = Array.isArray(metadata.panels)
-    ? metadata.panels.flatMap((item) => {
-      if (!isRecord(item)) return []
-      const panelId = normalizeString(item.panelId)
-      const planTaskId = normalizeString(item.planTaskId)
-      return panelId && planTaskId ? [{
-        planTaskId,
-        panelId,
-        previousVideoUrl: normalizeString(item.previousVideoUrl) || null,
-        previousLastVideoGenerationOptions: item.previousLastVideoGenerationOptions,
-      }] : []
     })
     : []
   const videoGroupMetadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
@@ -223,27 +159,17 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     for (const task of params.plan.tasks) {
       const item = itemByTaskId.get(task.id)
       if (!item) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PLAN_ITEM_MISSING:${task.id}`)
-      if (item.taskType === TASK_TYPE.VIDEO_GROUP) {
-        const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
-        if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
-        const committed = await commitPlannedVideoGroupTask({
-          ctx: params.ctx,
-          input: params.input,
-          operationId: params.operationId,
-          task,
-          metadata: groupMetadata,
-        })
-        committedGroups.push(committed)
-        submitted.push({ task, result: committed.result })
-        continue
-      }
-      const result = await submitPlannedOperationTask({
+      const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
+      if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
+      const committed = await commitPlannedVideoGroupTask({
         ctx: params.ctx,
-        task,
+        input: params.input,
         operationId: params.operationId,
-        confirmed: params.input.confirmed === true,
+        task,
+        metadata: groupMetadata,
       })
-      submitted.push({ task, result })
+      committedGroups.push(committed)
+      submitted.push({ task, result: committed.result })
     }
   } catch (error) {
     const failures: string[] = []
@@ -261,26 +187,6 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
   }
 
   const taskIds = submitted.map((item) => item.result.taskId)
-  const mutationBatch = panelMetadata.length > 0
-    ? await createMutationBatch({
-      projectId: params.ctx.projectId,
-      userId: params.ctx.userId,
-      source: params.ctx.source,
-      operationId: params.operationId,
-      episodeId,
-      summary: `${params.operationId}:${episodeId}:auto`,
-      entries: panelMetadata.map((panel) => ({
-        kind: 'panel_video_restore',
-        targetType: 'ProjectPanel',
-        targetId: panel.panelId,
-        payload: {
-          previousVideoUrl: panel.previousVideoUrl,
-          previousLastVideoGenerationOptions: panel.previousLastVideoGenerationOptions,
-        },
-      })),
-    })
-    : null
-
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
     operationId: params.operationId,
     total: submitted.length,
@@ -296,7 +202,7 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
         billingReceipt: item.result.billingReceiptView,
       }
     }),
-    mutationBatchId: mutationBatch?.id ?? null,
+    mutationBatchId: null,
   })
 
   return {
@@ -312,16 +218,14 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
         taskType: item.task.taskType,
         targetType: item.task.target.targetType,
         targetId: item.task.target.targetId,
-        kind: plannedItem?.kind ?? ('single' as const),
+        kind: 'group' as const,
         shotNumbers: plannedItem?.shotNumbers ?? [],
         durationSec: plannedItem?.durationSec,
       }
     }),
     plan: {
-      items: videoBlockItems,
+      items: generationSegmentItems,
     },
-    singleVideoModel: normalizeString(metadata.singleVideoModel),
     groupVideoModel: normalizeString(metadata.groupVideoModel),
-    mutationBatchId: mutationBatch?.id ?? undefined,
   }
 }

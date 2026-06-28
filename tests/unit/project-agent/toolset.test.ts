@@ -108,17 +108,17 @@ describe('project agent live operation enablement', () => {
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
-    const current = workflow('ready_to_generate_director_decoupage', ['generate_edit_director_decoupage'])
+    const current = workflow('ready_to_generate_edit_script', ['generate_edit_script'])
 
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: current,
-      operationId: 'generate_edit_director_decoupage',
+      operationId: 'generate_edit_script',
     })).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: current,
-      operationId: 'generate_edit_script',
+      operationId: 'generate_edit_script_assets',
     })).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
@@ -131,27 +131,27 @@ describe('project agent live operation enablement', () => {
     const toolset = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
-      resumeOperationId: 'generate_edit_director_decoupage',
+      resumeOperationId: 'generate_edit_script',
     })
 
-    const beforeDecoupage = workflow('ready_to_generate_director_decoupage', ['generate_edit_director_decoupage'])
+    const beforeContinuation = workflow('edit_script_generating', [])
     expect(isProjectAgentOperationEnabled({
       toolset,
-      workflow: beforeDecoupage,
-      operationId: 'generate_edit_script',
+      workflow: beforeContinuation,
+      operationId: 'generate_edit_script_assets',
     })).toBe(false)
 
-    // The decoupage operation completed inside this run and advanced the stage:
-    // the edit-script tool must light up without re-registering the toolset.
-    const afterDecoupage = workflow('ready_to_generate_edit_script', ['generate_edit_script'])
+    // The resumed operation completed inside this run and advanced the stage:
+    // the next edit-script tool must light up without re-registering the toolset.
+    const afterContinuation = workflow('ready_to_generate_assets', ['generate_edit_script_assets'])
     expect(isProjectAgentOperationEnabled({
       toolset,
-      workflow: afterDecoupage,
-      operationId: 'generate_edit_script',
+      workflow: afterContinuation,
+      operationId: 'generate_edit_script_assets',
     })).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,
-      workflow: afterDecoupage,
+      workflow: afterContinuation,
       operationId: 'generate_edit_screenplay',
     })).toBe(false)
   })
@@ -230,7 +230,7 @@ describe('project agent live operation enablement', () => {
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,
-      operationId: 'generate_edit_director_decoupage',
+      operationId: 'generate_edit_script',
     })).toBe(false)
   })
 

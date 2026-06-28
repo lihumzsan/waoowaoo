@@ -21,7 +21,7 @@ describe('image preview modal', () => {
       'utf8',
     )
     const arrangementSource = readFileSync(
-      join(process.cwd(), 'src/features/project-workspace/canvas/VideoBlockArrangementModal.tsx'),
+      join(process.cwd(), 'src/features/project-workspace/canvas/GenerationSegmentArrangementModal.tsx'),
       'utf8',
     )
 

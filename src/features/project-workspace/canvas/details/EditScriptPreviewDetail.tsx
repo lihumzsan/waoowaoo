@@ -18,15 +18,10 @@ interface PreviewShot {
   readonly durationSec: number
   readonly startSec: number
   readonly endSec: number
-  readonly dramaticPurpose: string
-  readonly visibleAction: string
-  readonly audienceFocus: string
-  readonly viewpoint: string
-  readonly revealPlan: string
-  readonly performanceBeat: string
-  readonly continuityIn: string
-  readonly continuityOut: string
-  readonly charactersAndScene: string
+  readonly sceneName: string
+  readonly action: string
+  readonly characters: readonly string[]
+  readonly keyObjects: readonly string[]
   readonly imagePrompt: string | null
   readonly sound: string
   readonly imageUrl: string | null
@@ -55,12 +50,12 @@ function formatSeconds(value: number): string {
 }
 
 export function previewShotMediaKind(
-  shot: (Partial<PreviewShot> & Pick<PreviewShot, 'visibleAction'>) | null,
+  shot: (Partial<PreviewShot> & Pick<PreviewShot, 'action'>) | null,
 ): PreviewShotMediaKind {
   if (!shot) return 'empty'
   if (shot.videoUrl) return 'video'
   if (shot.imageUrl) return 'image'
-  return shot.visibleAction.trim() ? 'text' : 'empty'
+  return shot.action.trim() ? 'text' : 'empty'
 }
 
 export function initialPreviewDetailsExpanded(): boolean {
@@ -83,15 +78,10 @@ function buildPreviewShots(details: WorkspaceCanvasEditScriptDetails): readonly 
       durationSec: shot.durationSec,
       startSec,
       endSec: cursor,
-      dramaticPurpose: shot.dramaticPurpose,
-      visibleAction: shot.visibleAction,
-      audienceFocus: shot.audienceFocus,
-      viewpoint: shot.viewpoint,
-      revealPlan: shot.revealPlan,
-      performanceBeat: shot.performanceBeat,
-      continuityIn: shot.continuityIn,
-      continuityOut: shot.continuityOut,
-      charactersAndScene: shot.charactersAndScene,
+      sceneName: shot.sceneName,
+      action: shot.action,
+      characters: shot.characters,
+      keyObjects: shot.keyObjects,
       imagePrompt: shot.imagePrompt ?? null,
       sound: shot.sound,
       imageUrl: shot.imageUrl ?? null,
@@ -217,9 +207,9 @@ export default function EditScriptPreviewDetail({
                             {t('empty.noPreviewMedia')}
                           </p>
                           <p className="whitespace-pre-wrap break-words text-lg font-semibold leading-8 text-slate-100">
-                            {activeShot.visibleAction}
+                            {activeShot.action}
                           </p>
-                          <p className="text-sm leading-6 text-slate-400">{activeShot.audienceFocus}</p>
+                          <p className="text-sm leading-6 text-slate-400">{activeShot.sceneName}</p>
                         </div>
                       </div>
                     ) : (
@@ -281,7 +271,7 @@ export default function EditScriptPreviewDetail({
                         {formatSeconds(activeShot.durationSec)}
                       </span>
                     </div>
-                    <PromptBlock title={t('fields.visibleAction')} value={activeShot.visibleAction} emptyText={t('empty.noPreviewShot')} />
+                    <PromptBlock title={t('fields.action')} value={activeShot.action} emptyText={t('empty.noPreviewShot')} />
                     <button
                       type="button"
                       className="inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
@@ -294,14 +284,13 @@ export default function EditScriptPreviewDetail({
                       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
                         <div className="grid gap-3 md:grid-cols-2">
                           <PromptBlock title={t('fields.imagePrompt')} value={activeShot.imagePrompt} emptyText={t('empty.noImagePrompt')} />
-                          <PromptBlock title={t('fields.audienceFocus')} value={activeShot.audienceFocus} emptyText={t('empty.noPreviewShot')} />
+                          <PromptBlock title={t('fields.scene')} value={activeShot.sceneName} emptyText={t('empty.noPreviewShot')} />
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
-                          <PromptBlock title={t('fields.viewpoint')} value={activeShot.viewpoint} emptyText={t('empty.noPreviewShot')} />
-                          <PromptBlock title={t('fields.revealPlan')} value={activeShot.revealPlan} emptyText={t('empty.noPreviewShot')} />
+                          <PromptBlock title={t('fields.characters')} value={activeShot.characters.join('\n')} emptyText={t('empty.noPreviewShot')} />
+                          <PromptBlock title={t('fields.keyObjects')} value={activeShot.keyObjects.join('\n')} emptyText={t('empty.noPreviewShot')} />
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
-                          <PromptBlock title={t('fields.charactersAndScene')} value={activeShot.charactersAndScene} emptyText={t('empty.noPreviewShot')} />
                           <PromptBlock title={t('fields.sound')} value={activeShot.sound} emptyText={t('empty.noPreviewShot')} />
                         </div>
                       </div>
@@ -328,7 +317,7 @@ export default function EditScriptPreviewDetail({
                         <span className="text-xs font-semibold text-[var(--glass-text-primary)]">{t('labels.previewShot', { number: shot.shotNumber })}</span>
                         <span className="text-xs text-[var(--glass-text-tertiary)]">{formatSeconds(shot.durationSec)}</span>
                       </div>
-                      <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--glass-text-secondary)]">{shot.visibleAction}</p>
+                      <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--glass-text-secondary)]">{shot.action}</p>
                       <div className="mt-3 h-1 rounded-full bg-slate-100">
                         <div className={`h-full rounded-full ${active ? 'bg-slate-950' : 'bg-slate-300'}`} />
                       </div>

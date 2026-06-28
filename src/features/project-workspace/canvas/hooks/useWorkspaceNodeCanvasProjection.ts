@@ -3,121 +3,55 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import {
-  TASK_RUNTIME_TARGETS,
-  type TaskRuntimeTarget,
-} from '@/lib/task/runtime-targets'
+import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type {
-  ProjectEditCinematographyShotPlan,
-  ProjectEditDirectorDecoupage,
+  Location,
   ProjectEditAssetRequirement,
   ProjectEditScreenplay,
   ProjectEditScript,
+  ProjectEditScriptShot,
+  ProjectEditShotExecutionPlan,
   ProjectFinalVideo,
-  Location,
   ProjectPanel,
   ProjectStoryboard,
-  ProjectStoryboardBlockingArtifact,
   ProjectVideoGroup,
 } from '@/types/project'
 import type {
   WorkspaceCanvasAssetRef,
+  WorkspaceCanvasBgmScoreDetails,
+  WorkspaceCanvasEditPipelineStepItem,
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
-  WorkspaceCanvasEditPipelineStepItem,
   WorkspaceCanvasImageDetails,
-  WorkspaceCanvasNodeAction,
   WorkspaceCanvasNodeActionHandler,
   WorkspaceCanvasNodeData,
   WorkspaceCanvasProjection,
   WorkspaceCanvasShotDetails,
   WorkspaceCanvasStyleBibleDetails,
+  WorkspaceCanvasVideoPlanDetails,
 } from '../node-canvas-types'
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
-  WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+  WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS,
+  WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y,
+  WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+  WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
-  WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
   WORKSPACE_CANVAS_FINAL_NODE_SIZE,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
-import { alignFinalTimelineNodesToBgmScore, repairWorkspaceNodeOverlaps } from '../layout/workspace-node-auto-layout'
-import {
-  workspaceNodeId,
-  workspaceEditCinematographyShotPlanNodeId,
-  workspaceEditDirectorDecoupageNodeId,
-} from '../workspace-canvas-node-ids'
-import type { WorkspaceCanvasStreamKind, WorkspaceCanvasStreamTarget } from '../structured-stream/workspace-structured-stream-runtime-types'
-
-const DEFAULT_NODE_WIDTH = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width
-const DEFAULT_NODE_HEIGHT = WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height
-const VIDEO_PLAN_NODE_WIDTH = WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width
-const SPACE_CONSISTENCY_NODE_WIDTH = WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE.width
-const SPACE_CONSISTENCY_NODE_HEIGHT = WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE.height
-const VIDEO_PLAN_GRID_ROW_GAP_Y = 96
-const BGM_SCORE_NODE_WIDTH = WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width
-const BGM_SCORE_NODE_HEIGHT = WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height
-const FINAL_NODE_WIDTH = WORKSPACE_CANVAS_FINAL_NODE_SIZE.width
-const EDIT_SCREENPLAY_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width
-const EDIT_SCREENPLAY_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height
-const EDIT_STYLE_BIBLE_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width
-const EDIT_STYLE_BIBLE_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height
-const EDIT_STYLE_BIBLE_LAYER_GAP_Y = 120
-const EDIT_PIPELINE_STEP_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.width
-const EDIT_PIPELINE_STEP_NODE_HEIGHT = WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE.height
-const EDIT_CINEMATOGRAPHY_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH
-const EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT = 360
-const EDIT_PIPELINE_STEP_GRID_GAP_Y = 96
-const EDIT_PIPELINE_STEP_LAYER_GAP_Y = 150
-const EDIT_PIPELINE_TO_SCRIPT_GAP_Y = 180
-const EDIT_SCRIPT_NODE_MIN_HEIGHT = 420
-const EDIT_SCREENPLAY_NODE_HEADER_HEIGHT = 86
-const EDIT_SCREENPLAY_NODE_BODY_VERTICAL_PADDING = 40
-const EDIT_SCREENPLAY_NODE_FOOTER_HEIGHT = 66
-const EDIT_SCREENPLAY_SECTION_BASE_HEIGHT = 42
-const EDIT_SCREENPLAY_SECTION_GAP = 8
-const EDIT_SCREENPLAY_TEXT_LINE_HEIGHT = 20
-const STORY_COLUMN_X = 260
-const COLUMN_GAP = 940
-const ROW_GAP = 248
-const EDIT_SCRIPT_TABLE_NODE_WIDTH = WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH
-const EDIT_SCRIPT_NODE_BASE_HEIGHT = 300
-const EDIT_SCRIPT_ASSET_LAYER_GAP_Y = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
-const PANEL_GRID_COLUMNS = 5
-const PANEL_GRID_GAP_X = 44
-const SHOT_NODE_HEIGHT = 560
-const SHOT_GRID_ROW_GAP = 632
-const PANEL_GRID_BASE_X = STORY_COLUMN_X + COLUMN_GAP * 2
-const SPACE_CONSISTENCY_TO_CONTENT_GAP_X = 88
-const NODE_CONTENT_INLINE_PADDING = 40
-const DEFAULT_MEDIA_PREVIEW_HEIGHT = 118
-const MAX_MEDIA_PREVIEW_HEIGHT = 220
-const VIDEO_PLAN_HEADER_HEIGHT = 82
-const VIDEO_PLAN_CONTENT_VERTICAL_PADDING = 40
-const VIDEO_PLAN_SECTION_GAP = 12
-const VIDEO_PLAN_FOOTER_HEIGHT = 66
-const VIDEO_PLAN_SECTION_BASE_HEIGHT = 42
-const VIDEO_PLAN_TEXT_LINE_HEIGHT = 20
-const VIDEO_PLAN_ASSET_REFERENCE_IMAGE_HEIGHT = 112
-const VIDEO_PLAN_ASSET_REFERENCE_ACTION_HEIGHT = 34
-const VIDEO_PLAN_CONTENT_WIDTH = VIDEO_PLAN_NODE_WIDTH - NODE_CONTENT_INLINE_PADDING
-const VIDEO_PLAN_SEGMENTED_CONTROL_HEIGHT = 32
-const VIDEO_PLAN_REFERENCE_CARD_VERTICAL_PADDING = 24
-const VIDEO_PLAN_REFERENCE_GRID_GAP_Y = 8
+import { workspaceNodeId } from '../workspace-canvas-node-ids'
+import type { WorkspaceCanvasStreamTarget } from '../structured-stream/workspace-structured-stream-runtime-types'
 
 interface TranslateValues {
   readonly [key: string]: string | number
 }
 
 type Translate = (key: string, values?: TranslateValues) => string
-type EditPipelineStepKey = 'timeline' | 'visibleAction' | 'camera' | 'audio' | 'primaryTable' | 'assetExtract'
-type EditPipelineStepState = 'pending' | 'processing' | 'ready' | 'failed'
 
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
@@ -127,9 +61,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly locations?: readonly Location[]
   readonly storyboards: readonly ProjectStoryboard[]
   readonly editScreenplay?: ProjectEditScreenplay | null
-  readonly editDirectorDecoupage?: ProjectEditDirectorDecoupage | null
   readonly editScript?: ProjectEditScript | null
-  readonly editCinematographyShotPlan?: ProjectEditCinematographyShotPlan | null
+  readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
   readonly activeAssistantOperationId?: string | null
   readonly editScriptPending?: boolean
   readonly streamTargets?: readonly WorkspaceCanvasStreamTarget[]
@@ -144,92 +77,149 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
 
 type JsonRecord = Record<string, unknown>
 
+const STORY_COLUMN_X = 260
+const COLUMN_GAP_X = 900
+const ROW_GAP_Y = 170
+const SHOT_GRID_COLUMNS = 5
+const SHOT_GRID_GAP_X = 44
+const SHOT_GRID_GAP_Y = 620
+const SHOT_NODE_HEIGHT = 560
+const ASSET_GROUP_Y_OFFSET = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function stringValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
-function numberValue(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+function readJsonRecord(value: unknown): JsonRecord | null {
+  return isRecord(value) ? value : null
 }
 
-function runtimeTargets(
-  ...targets: Array<TaskRuntimeTarget | null>
-): readonly TaskRuntimeTarget[] {
-  return targets.filter((target): target is TaskRuntimeTarget => target !== null)
-}
-
-function firstStreamTarget(
-  targets: readonly WorkspaceCanvasStreamTarget[],
-  streamKind: WorkspaceCanvasStreamKind,
-): WorkspaceCanvasStreamTarget | null {
-  return targets.find((target) => target.streamKind === streamKind) ?? null
-}
-
-function hasStreamTarget(
-  targets: readonly WorkspaceCanvasStreamTarget[],
-  streamKind: WorkspaceCanvasStreamKind,
-  targetId: string,
-): boolean {
-  return targets.some((target) => target.streamKind === streamKind && target.targetId === targetId)
-}
-
-function parseJson(value: string | null | undefined): unknown | null {
-  if (!value?.trim()) return null
+function parseJsonRecord(value: unknown): JsonRecord | null {
+  if (isRecord(value)) return value
+  if (typeof value !== 'string' || !value.trim()) return null
   try {
-    return JSON.parse(value) as unknown
+    const parsed = JSON.parse(value) as unknown
+    return readJsonRecord(parsed)
   } catch {
     return null
   }
 }
 
-function readJsonRecord(value: unknown): JsonRecord {
-  if (isRecord(value)) return value
-  return {}
+function parseStringList(value: string | null | undefined): string[] {
+  if (!value?.trim()) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    }
+  } catch {
+    return value.split(',').map((item) => item.trim()).filter(Boolean)
+  }
+  return value.split(',').map((item) => item.trim()).filter(Boolean)
 }
 
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>()
-  const output: string[] = []
+function uniqueNumbers(values: readonly number[]): number[] {
+  const seen = new Set<number>()
+  const output: number[] = []
   values.forEach((value) => {
-    const normalized = value.trim()
-    if (!normalized || seen.has(normalized)) return
-    seen.add(normalized)
-    output.push(normalized)
+    if (!Number.isInteger(value) || seen.has(value)) return
+    seen.add(value)
+    output.push(value)
   })
   return output
 }
 
-function readStringArray(value: unknown): string[] {
+function readShotNumbers(value: unknown): number[] {
   if (!Array.isArray(value)) return []
-  return uniqueStrings(value.flatMap((item) => (typeof item === 'string' ? [item] : [])))
+  return uniqueNumbers(value.flatMap((item) => (typeof item === 'number' ? [item] : [])))
+}
+
+function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((shotNumber, index) => shotNumber === right[index])
+}
+
+function runtimeTargets(...targets: Array<TaskRuntimeTarget | null>): readonly TaskRuntimeTarget[] {
+  return targets.filter((target): target is TaskRuntimeTarget => target !== null)
+}
+
+function hasStreamTarget(
+  targets: readonly WorkspaceCanvasStreamTarget[],
+  streamKind: WorkspaceCanvasStreamTarget['streamKind'],
+  targetId: string,
+): boolean {
+  return targets.some((target) => target.streamKind === streamKind && target.targetId === targetId)
+}
+
+function statusLabel(status: string | null | undefined, translate: Translate): string {
+  if (status === 'ready' || status === 'completed' || status === 'confirmed') return translate('status.ready')
+  if (status === 'failed') return translate('status.failed')
+  if (status === 'generating' || status === 'pending') return translate('status.processing')
+  return translate('status.pending')
+}
+
+function primaryPanelImageUrl(panel: ProjectPanel | null): string | null {
+  if (!panel) return null
+  return panel.media?.url
+    ?? panel.imageUrl
+    ?? parseStringList(panel.candidateImages).find((url) => !url.startsWith('PENDING:'))
+    ?? null
+}
+
+function resolvePanelShotNumber(panel: ProjectPanel): number {
+  return panel.sourceShotNumber ?? panel.panelNumber ?? panel.panelIndex + 1
+}
+
+function collectPanels(storyboards: readonly ProjectStoryboard[]): ProjectPanel[] {
+  return storyboards.flatMap((storyboard) => storyboard.panels ?? [])
+}
+
+function panelByShotNumber(storyboards: readonly ProjectStoryboard[]): ReadonlyMap<number, ProjectPanel> {
+  const panels = new Map<number, ProjectPanel>()
+  collectPanels(storyboards).forEach((panel) => {
+    const shotNumber = resolvePanelShotNumber(panel)
+    if (!panels.has(shotNumber)) panels.set(shotNumber, panel)
+  })
+  return panels
+}
+
+function videoGroupForShotNumbers(
+  videoGroups: readonly ProjectVideoGroup[],
+  shotNumbers: readonly number[],
+): ProjectVideoGroup | null {
+  return videoGroups.find((group) => sameShotNumbers(readShotNumbers(group.shotNumbers), shotNumbers)) ?? null
+}
+
+function inferGridMode(shotCount: number): '2x2' | '3x3' | undefined {
+  if (shotCount >= 2 && shotCount <= 4) return '2x2'
+  if (shotCount >= 5 && shotCount <= 9) return '3x3'
+  return undefined
 }
 
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
-  const visualValues = Object.values(details.visual)
-  const cameraValues = Object.values(details.camera)
-  const soundValues = Object.values(details.sound)
   return [
     details.rawUserStyle,
     details.styleSummary,
-	    ...visualValues,
-	    ...cameraValues,
-	    ...soundValues,
-	  ].some((value) => typeof value === 'string' && value.trim().length > 0)
+    ...Object.values(details.visual),
+    ...Object.values(details.camera),
+    ...Object.values(details.sound),
+  ].some((value) => typeof value === 'string' && value.trim().length > 0)
 }
 
 function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetails | null {
-  if (!isRecord(value)) return null
-  const stylePolicy = readJsonRecord(value.stylePolicy)
-  const visual = readJsonRecord(stylePolicy.visual)
-  const camera = readJsonRecord(stylePolicy.camera)
-  const sound = readJsonRecord(stylePolicy.sound)
+  const root = readJsonRecord(value)
+  if (!root) return null
+  const stylePolicy = readJsonRecord(root.stylePolicy) ?? {}
+  const visual = readJsonRecord(stylePolicy.visual) ?? {}
+  const camera = readJsonRecord(stylePolicy.camera) ?? {}
+  const sound = readJsonRecord(stylePolicy.sound) ?? {}
   const details: WorkspaceCanvasStyleBibleDetails = {
-    rawUserStyle: stringValue(value.rawUserStyle),
-    styleSummary: stringValue(value.styleSummary),
+    rawUserStyle: stringValue(root.rawUserStyle),
+    styleSummary: stringValue(root.styleSummary),
     visual: {
       imageFilterPrompt: stringValue(visual.imageFilterPrompt),
       lightingPrompt: stringValue(visual.lightingPrompt),
@@ -242,592 +232,85 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
       lensAndDepthPrompt: stringValue(camera.lensAndDepthPrompt),
       videoRhythmPrompt: stringValue(camera.videoRhythmPrompt),
     },
-	    sound: {
-	      soundFilterPrompt: stringValue(sound.soundFilterPrompt),
-	    },
-	  }
+    sound: {
+      soundFilterPrompt: stringValue(sound.soundFilterPrompt),
+    },
+  }
   return styleBibleHasPolicyText(details) ? details : null
 }
 
 function confirmedStylePreviewImageUrl(screenplay: ProjectEditScreenplay | null | undefined): string | null {
-  const confirmedPreview = screenplay?.stylePreviews?.find((preview) => (
+  return screenplay?.stylePreviews?.find((preview) => (
     preview.status === 'confirmed' && Boolean(stringValue(preview.imageUrl))
-  ))
-  return stringValue(confirmedPreview?.imageUrl)
+  ))?.imageUrl ?? null
 }
 
-function parseStringList(value: string | null | undefined): string[] {
-  if (!value?.trim()) return []
-  const parsed = parseJson(value)
-  if (Array.isArray(parsed)) {
-    return uniqueStrings(parsed.flatMap((item) => {
-      if (typeof item === 'string') return [item]
-      if (isRecord(item)) {
-        const name = stringValue(item.name) ?? stringValue(item.location) ?? stringValue(item.title)
-        return name ? [name] : []
-      }
-      return []
-    }))
-  }
-  return uniqueStrings(value.split(','))
+function locationPreviewUrl(location: Location): string | null {
+  const selected = location.images.find((image) => image.id === location.selectedImageId)
+  const first = selected ?? location.images.find((image) => Boolean(image.imageUrl || image.media?.url))
+  return first?.media?.url ?? first?.imageUrl ?? null
 }
 
-function parseAssetRefs(value: string | null | undefined): WorkspaceCanvasAssetRef[] {
-  if (!value?.trim()) return []
-  const parsed = parseJson(value)
-  if (Array.isArray(parsed)) {
-    const refs = parsed.flatMap((item): WorkspaceCanvasAssetRef[] => {
-      if (typeof item === 'string' && item.trim()) return [{ name: item.trim() }]
-      if (!isRecord(item)) return []
-      const name = stringValue(item.name)
-      if (!name) return []
-      return [{ name, appearance: stringValue(item.appearance) }]
-    })
-    const seen = new Set<string>()
-    return refs.filter((ref) => {
-      const key = `${ref.name}::${ref.appearance ?? ''}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }
-  return parseStringList(value).map((name) => ({ name }))
+function assetPreviewUrl(requirement: ProjectEditAssetRequirement): string | null {
+  return requirement.previewImageUrl ?? null
 }
 
-function formatTimeRange(start: number | null | undefined, end: number | null | undefined): string | null {
-  if (typeof start !== 'number' || typeof end !== 'number') return null
-  return `${start}s - ${end}s`
+function shotCharacters(shot: ProjectEditScriptShot): string[] {
+  return shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`)
 }
 
-function parseCandidateImages(value: string | null | undefined): string[] {
-  const parsed = parseJson(value)
-  if (!Array.isArray(parsed)) return []
-  return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+function shotKeyObjects(shot: ProjectEditScriptShot): string[] {
+  return shot.keyObjects.map((object) => `${object.name} / ${object.role}`)
 }
 
-function createImageDetails(panel: ProjectPanel): WorkspaceCanvasImageDetails {
-  return {
-    imagePrompt: panel.imagePrompt,
-    description: panel.description,
-    candidateImages: parseCandidateImages(panel.candidateImages),
-    imageHistory: panel.imageHistory,
-    sketchImageUrl: panel.sketchImageMedia?.url ?? panel.sketchImageUrl,
-    previousImageUrl: panel.previousImageMedia?.url ?? panel.previousImageUrl,
-    errorMessage: panel.imageErrorMessage,
-  }
+function shotAssetRefs(panel: ProjectPanel): WorkspaceCanvasAssetRef[] {
+  return parseStringList(panel.characters).map((name) => ({ name }))
 }
 
-function primaryPanelImageUrl(panel: ProjectPanel): string | null {
-  return panel.media?.url
-    ?? panel.imageUrl
-    ?? parseCandidateImages(panel.candidateImages).find((url) => !url.startsWith('PENDING:'))
-    ?? null
-}
-
-function mediaAspectRatio(media: { readonly width?: number | null; readonly height?: number | null } | null | undefined): number | null {
-  const width = media?.width
-  const height = media?.height
-  if (typeof width !== 'number' || typeof height !== 'number') return null
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
-  return width / height
-}
-
-function panelImageAspectRatio(panel: ProjectPanel): number | null {
-  return mediaAspectRatio(panel.media)
-}
-
-function panelVideoAspectRatio(panel: ProjectPanel): number | null {
-  return mediaAspectRatio(panel.videoMedia)
-    ?? panelImageAspectRatio(panel)
-}
-
-function estimateMediaPreviewHeight(nodeWidth: number, aspectRatio: number | null): number {
-  if (!aspectRatio || aspectRatio <= 0 || !Number.isFinite(aspectRatio)) return DEFAULT_MEDIA_PREVIEW_HEIGHT
-  const contentWidth = Math.max(120, nodeWidth - NODE_CONTENT_INLINE_PADDING)
-  return Math.min(MAX_MEDIA_PREVIEW_HEIGHT, Math.max(96, Math.round(contentWidth / aspectRatio)))
-}
-
-function estimateShotPreviewHeight(nodeWidth: number, aspectRatio: number | null, hasPreviewImage: boolean): number {
-  if (!aspectRatio || aspectRatio <= 0 || !Number.isFinite(aspectRatio)) {
-    return hasPreviewImage ? MAX_MEDIA_PREVIEW_HEIGHT : DEFAULT_MEDIA_PREVIEW_HEIGHT
-  }
-  return estimateMediaPreviewHeight(nodeWidth, aspectRatio)
-}
-
-function estimateMediaNodeHeight(baseHeight: number, previewHeight: number): number {
-  return baseHeight + Math.max(0, previewHeight - DEFAULT_MEDIA_PREVIEW_HEIGHT)
-}
-
-function shotBlockingFromPhotographyRules(photographyRules: string | null | undefined): Record<string, unknown> | null {
-  const rules = readJsonRecord(parseJson(photographyRules))
-  const consistencyMetadata = readJsonRecord(rules.consistencyMetadata)
-  const directCameraPlan = readJsonRecord(rules.cameraPlan)
-  const metadataCameraPlan = readJsonRecord(consistencyMetadata.cameraPlan)
-  const directShotBlocking = directCameraPlan.shotBlocking
-  if (isRecord(directShotBlocking)) return directShotBlocking
-  const metadataShotBlocking = metadataCameraPlan.shotBlocking
-  if (isRecord(metadataShotBlocking)) return metadataShotBlocking
-  return isRecord(rules.shotBlocking) ? rules.shotBlocking : null
-}
-
-function createShotDetails(
-  panel: ProjectPanel,
-  storyboard: ProjectStoryboard,
-): WorkspaceCanvasShotDetails {
+function shotDetails(panel: ProjectPanel): WorkspaceCanvasShotDetails {
   return {
     shotType: panel.shotType,
     cameraMove: panel.cameraMove,
-    characters: parseAssetRefs(panel.characters),
+    characters: shotAssetRefs(panel),
     location: panel.location,
     props: parseStringList(panel.props),
     srtSegment: panel.srtSegment,
-    timeRange: formatTimeRange(panel.srtStart, panel.srtEnd),
+    timeRange: panel.srtStart !== null && panel.srtEnd !== null ? `${panel.srtStart} - ${panel.srtEnd}` : null,
     duration: panel.duration,
     imagePrompt: panel.imagePrompt,
     videoPrompt: panel.videoPrompt,
-    photographyRules: panel.photographyRules,
-    shotBlocking: shotBlockingFromPhotographyRules(panel.photographyRules),
+    executionSnapshot: parseJsonRecord(panel.executionSnapshotJson),
+    renderFacts: parseJsonRecord(panel.renderFactsJson),
     actingNotes: panel.actingNotes,
-    storyboardTextJson: storyboard.storyboardTextJson,
-    photographyPlan: storyboard.photographyPlan,
-    errorMessage: panel.imageErrorMessage ?? storyboard.lastError,
+    storyboardTextJson: null,
+    photographyPlan: null,
+    errorMessage: panel.imageErrorMessage ?? panel.videoErrorMessage ?? null,
   }
 }
 
-function compactText(value: string | null | undefined, fallback: string): string {
-  const text = value?.trim()
-  if (!text) return fallback
-  return text.length > 220 ? `${text.slice(0, 220)}...` : text
-}
-
-function estimateWrappedLineCount(text: string | null | undefined, charactersPerLine: number): number {
-  const normalized = text?.trim()
-  if (!normalized) return 1
-  return normalized
-    .split(/\r?\n/)
-    .reduce((total, line) => total + Math.max(1, Math.ceil(line.trim().length / charactersPerLine)), 0)
-}
-
-function normalizeOptionalText(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function estimateClampedTextHeight(text: string | null | undefined, charactersPerLine: number, maxLines: number): number {
-  return Math.min(maxLines, estimateWrappedLineCount(text, charactersPerLine)) * VIDEO_PLAN_TEXT_LINE_HEIGHT
-}
-
-function estimateVideoPlanTextSectionHeight(text: string | null | undefined, charactersPerLine: number, maxLines: number): number {
-  if (!text?.trim()) return 0
-  return VIDEO_PLAN_SECTION_BASE_HEIGHT + estimateClampedTextHeight(text, charactersPerLine, maxLines)
-}
-
-function estimateVideoPlanPreviewHeight(input: {
-  readonly outputAspectRatio: number | null
-  readonly hasOutput: boolean
-  readonly referenceCount: number
-}): number {
-  const aspectRatio = input.outputAspectRatio && input.outputAspectRatio > 0 ? input.outputAspectRatio : 16 / 9
-  const mediaHeight = Math.round(VIDEO_PLAN_CONTENT_WIDTH / aspectRatio)
-  if (input.hasOutput) {
-    return VIDEO_PLAN_SEGMENTED_CONTROL_HEIGHT + VIDEO_PLAN_SECTION_GAP + mediaHeight
-  }
-  if (input.referenceCount <= 0) return mediaHeight
-  const imageRows = Math.ceil(input.referenceCount / 2)
-  return VIDEO_PLAN_REFERENCE_CARD_VERTICAL_PADDING
-    + imageRows * VIDEO_PLAN_ASSET_REFERENCE_IMAGE_HEIGHT
-    + Math.max(0, imageRows - 1) * VIDEO_PLAN_REFERENCE_GRID_GAP_Y
-}
-
-function estimateVideoPlanGenerationModeSectionHeight(showsModelHint: boolean): number {
-  const hintHeight = showsModelHint ? VIDEO_PLAN_TEXT_LINE_HEIGHT + 8 : 0
-  const hintGap = showsModelHint ? VIDEO_PLAN_REFERENCE_GRID_GAP_Y : 0
-  return VIDEO_PLAN_SECTION_BASE_HEIGHT
-    + VIDEO_PLAN_SEGMENTED_CONTROL_HEIGHT
-    + VIDEO_PLAN_REFERENCE_GRID_GAP_Y
-    + VIDEO_PLAN_ASSET_REFERENCE_ACTION_HEIGHT
-    + hintGap
-    + hintHeight
-}
-
-function estimateVideoPlanNodeHeight(input: {
-  readonly outputAspectRatio: number | null
-  readonly hasOutput: boolean
-  readonly shotCount: number
-  readonly assetReferenceCount: number
-  readonly showsModelHint: boolean
-  readonly prompt: string | null | undefined
-  readonly errorMessage: string | null | undefined
-  readonly validationMessage: string | null | undefined
-}): number {
-  const sections = [
-    estimateVideoPlanPreviewHeight({
-      outputAspectRatio: input.outputAspectRatio,
-      hasOutput: input.hasOutput,
-      referenceCount: input.shotCount > 0 ? input.shotCount : input.assetReferenceCount,
-    }),
-    estimateVideoPlanGenerationModeSectionHeight(input.showsModelHint),
-    VIDEO_PLAN_SECTION_BASE_HEIGHT + VIDEO_PLAN_TEXT_LINE_HEIGHT * 2,
-    estimateVideoPlanTextSectionHeight(input.prompt, 54, 3),
-    estimateVideoPlanTextSectionHeight(input.errorMessage, 54, 5),
-    estimateVideoPlanTextSectionHeight(input.validationMessage, 54, 4),
-  ].filter((height) => height > 0)
-
-  const contentHeight = sections.reduce((total, height) => total + height, 0)
-    + Math.max(0, sections.length - 1) * VIDEO_PLAN_SECTION_GAP
-
-  return Math.max(
-    0,
-    VIDEO_PLAN_HEADER_HEIGHT + VIDEO_PLAN_CONTENT_VERTICAL_PADDING + contentHeight + VIDEO_PLAN_FOOTER_HEIGHT,
-  )
-}
-
-function estimateEditScriptNodeHeight(editScript: ProjectEditScript): number {
-  const rowHeightTotal = editScript.shots.reduce((total, shot) => {
-    const maxLineCount = Math.max(
-      estimateWrappedLineCount(shot.visibleAction, 24),
-      estimateWrappedLineCount(shot.audienceFocus, 18),
-      estimateWrappedLineCount(shot.revealPlan, 18),
-      estimateWrappedLineCount(shot.charactersAndScene, 16),
-      estimateWrappedLineCount(shot.sound, 18),
-    )
-    return total + Math.max(86, 36 + maxLineCount * 22)
-  }, 0)
-  const summaryHeight = estimateWrappedLineCount(editScript.logline || editScript.userPrompt, 90) * 22
-  const screenplayHeight = editScript.screenplayText
-    ? Math.min(8, estimateWrappedLineCount(editScript.screenplayText, 120)) * 22 + 48
-    : 0
-  return Math.max(EDIT_SCRIPT_NODE_MIN_HEIGHT, EDIT_SCRIPT_NODE_BASE_HEIGHT + summaryHeight + screenplayHeight + rowHeightTotal)
-}
-
-function estimateEditScreenplayNodeHeight(editScreenplay: ProjectEditScreenplay): number {
-  const screenplayText = normalizeOptionalText(editScreenplay.screenplayText)
-  const userPrompt = normalizeOptionalText(editScreenplay.userPrompt)
-  const screenplayLines = estimateWrappedLineCount(screenplayText, 34)
-  const screenplaySectionHeight = EDIT_SCREENPLAY_SECTION_BASE_HEIGHT
-    + screenplayLines * EDIT_SCREENPLAY_TEXT_LINE_HEIGHT
-  const userPromptSectionHeight = userPrompt.trim()
-    ? EDIT_SCREENPLAY_SECTION_GAP
-      + EDIT_SCREENPLAY_SECTION_BASE_HEIGHT
-      + estimateWrappedLineCount(userPrompt, 34) * EDIT_SCREENPLAY_TEXT_LINE_HEIGHT
-    : 0
-
-  return Math.max(
-    EDIT_SCREENPLAY_NODE_HEIGHT,
-    EDIT_SCREENPLAY_NODE_HEADER_HEIGHT
-      + EDIT_SCREENPLAY_NODE_BODY_VERTICAL_PADDING
-      + screenplaySectionHeight
-      + userPromptSectionHeight
-      + EDIT_SCREENPLAY_NODE_FOOTER_HEIGHT,
-  )
-}
-
-function extractEditScreenplayTitle(screenplayText: string): string {
-  const firstLine = screenplayText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-  if (!firstLine) return ''
-  return firstLine
-    .replace(/^#+\s*/, '')
-    .replace(/^标题[:：]\s*/, '')
-    .replace(/^《(.+)》$/, '$1')
-    .trim()
-}
-
-function editScriptShotDurationByNumber(editScript: ProjectEditScript | null | undefined): Map<number, number> {
-  const durations = new Map<number, number>()
-  editScript?.shots.forEach((shot) => {
-    durations.set(shot.shotNumber, shot.durationSec)
-  })
-  return durations
-}
-
-function videoBlockDuration(shotNumbers: readonly number[], durations: ReadonlyMap<number, number>): number {
-  return shotNumbers.reduce((total, shotNumber) => total + (durations.get(shotNumber) ?? 0), 0)
-}
-
-function videoBlockValidationKey(input: {
-  readonly kind: 'single' | 'group'
-  readonly shotNumbers: readonly number[]
-  readonly durationSec: number
-}): 'videoPlanSingleInvalid' | 'videoPlanGroupCountInvalid' | 'videoPlanGroupDurationInvalid' | null {
-  if (input.kind === 'single') return input.shotNumbers.length === 1 ? null : 'videoPlanSingleInvalid'
-  if (input.shotNumbers.length < 2 || input.shotNumbers.length > 9) return 'videoPlanGroupCountInvalid'
-  if (input.durationSec < 2 || input.durationSec > 15) return 'videoPlanGroupDurationInvalid'
-  return null
-}
-
-function normalizeShotNumbers(value: unknown): number[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item) && item > 0)
-}
-
-function shotNumbersKey(shotNumbers: readonly number[]): string {
-  return shotNumbers.join(',')
-}
-
-function findVideoGroupForBlock(
-  videoGroups: readonly ProjectVideoGroup[],
-  shotNumbers: readonly number[],
-  preferredGridMode?: string | null,
-): ProjectVideoGroup | null {
-  const expectedKey = shotNumbersKey(shotNumbers)
-  const matches = videoGroups.filter((group) => shotNumbersKey(normalizeShotNumbers(group.shotNumbers)) === expectedKey)
-  if (matches.length === 0) return null
-  if (preferredGridMode) {
-    return matches.find((group) => group.gridMode === preferredGridMode) ?? matches[0] ?? null
-  }
-  return matches[0] ?? null
-}
-
-function intersectsShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  const rightSet = new Set(right)
-  return left.some((shotNumber) => rightSet.has(shotNumber))
-}
-
-function assetReferencesForVideoBlock(
-  editScript: ProjectEditScript,
-  shotNumbers: readonly number[],
-): Array<{
-  readonly id: string
-  readonly name: string
-  readonly kind: 'character' | 'location'
-  readonly imageUrl?: string | null
-  readonly shotNumbers: readonly number[]
-}> {
-  return editScript.requirements.flatMap((requirement) => {
-    const imageUrl = stringValue(requirement.previewImageUrl)
-    if (!intersectsShotNumbers(requirement.shotNumbers, shotNumbers)) return []
-    return [{
-      id: requirement.id,
-      name: requirement.name,
-      kind: requirement.kind,
-      imageUrl,
-      shotNumbers: requirement.shotNumbers,
-    }]
-  })
-}
-
-function editAssetHasPreview(asset: ProjectEditAssetRequirement): boolean {
-  return asset.status === 'completed' && Boolean(asset.targetId) && Boolean(stringValue(asset.previewImageUrl))
-}
-
-function editAssetRuntimeTarget(asset: ProjectEditAssetRequirement): TaskRuntimeTarget | null {
-  return TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType ?? null, asset.taskTargetId ?? null)
-}
-
-function missingLocationReferenceNames(editScript: ProjectEditScript): string[] {
-  const names = editScript.requirements
-    .filter((asset) => asset.kind === 'location' && !editAssetHasPreview(asset))
-    .map((asset) => asset.name)
-    .filter((name) => stringValue(name))
-  return Array.from(new Set(names))
-}
-
-function hasReadyLocationReference(editScript: ProjectEditScript): boolean {
-  return editScript.requirements.some((asset) => asset.kind === 'location' && editAssetHasPreview(asset))
-}
-
-function storyboardUsesSpatialBlocking(storyboard: ProjectStoryboard): boolean {
-  const plan = readJsonRecord(parseJson(storyboard.photographyPlan))
-  return stringValue(plan.consistencyMode) === 'spatial_text_blocking'
-}
-
-function storyboardSpatialBlockingReady(storyboard: ProjectStoryboard): boolean {
-  if (!storyboardUsesSpatialBlocking(storyboard)) return false
-  const plan = readJsonRecord(parseJson(storyboard.photographyPlan))
-  const stage = stringValue(plan.currentStage)
-  return stage === 'spatial_profile_ready' || stage === 'panel_prompts_ready'
-}
-
-function spatialProfilesFromProfileOutput(
-  profileOutput: unknown,
-): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>['spatialProfiles'] {
-  const output = readJsonRecord(profileOutput)
-  const locations = output.locations
-  if (!Array.isArray(locations)) return []
-  return locations.flatMap((location) => {
-    if (!isRecord(location)) return []
-    const spatialProfile = readJsonRecord(location.spatialProfile)
-    const anchors = spatialProfile.anchors
-    const depthLayout = readJsonRecord(spatialProfile.depthLayout)
-    const shotNumbers = location.shotNumbers
-    return [{
-      requirementId: stringValue(location.requirementId),
-      targetId: stringValue(location.targetId),
-      name: stringValue(location.name),
-      shotNumbers: Array.isArray(shotNumbers)
-        ? shotNumbers.flatMap((shotNumber) => {
-            const value = numberValue(shotNumber)
-            return value === null ? [] : [value]
-          })
-        : [],
-      sceneSummary: stringValue(spatialProfile.sceneSummary),
-      anchors: Array.isArray(anchors)
-        ? anchors.flatMap((anchor) => {
-            if (!isRecord(anchor)) return []
-            return [{
-              label: stringValue(anchor.label),
-              screenArea: stringValue(anchor.screenArea),
-              depthLayer: stringValue(anchor.depthLayer),
-              spatialRelations: readStringArray(anchor.spatialRelations),
-            }]
-          })
-        : [],
-      depthLayout: Object.keys(depthLayout).length > 0
-        ? {
-          foreground: stringValue(depthLayout.foreground),
-          midground: stringValue(depthLayout.midground),
-          background: stringValue(depthLayout.background),
-        }
-        : null,
-      lightingDirection: stringValue(spatialProfile.lightingDirection),
-      rawProfile: Object.keys(spatialProfile).length > 0 ? spatialProfile : null,
-    }]
-  })
-}
-
-function spatialProfileOutputFromArtifacts(
-  artifacts: readonly ProjectStoryboardBlockingArtifact[] | null | undefined,
-): Record<string, unknown> {
-  const locations = (artifacts ?? [])
-    .filter((artifact) => artifact.kind === 'spatial_profile')
-    .sort((left, right) => (left.groupIndex ?? 0) - (right.groupIndex ?? 0))
-    .flatMap((artifact) => {
-      const metadata = readJsonRecord(artifact.metadataJson)
-      return Object.keys(metadata).length > 0 ? [metadata] : []
-    })
+function imageDetails(panel: ProjectPanel): WorkspaceCanvasImageDetails {
   return {
-    locations,
+    imagePrompt: panel.imagePrompt,
+    description: panel.description,
+    candidateImages: parseStringList(panel.candidateImages),
+    imageHistory: panel.imageHistory,
+    sketchImageUrl: panel.sketchImageUrl,
+    previousImageUrl: panel.previousImageUrl,
+    errorMessage: panel.imageErrorMessage ?? null,
   }
 }
 
-function cameraPlansFromValue(cameraPlanOutput: unknown): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']>['cameraPlans'] {
-  const output = readJsonRecord(cameraPlanOutput)
-  const panels = output.panels
-  if (!Array.isArray(panels)) return []
-  return panels.flatMap((panel) => {
-    if (!isRecord(panel)) return []
-    return [{
-      panelIndex: numberValue(panel.panelIndex),
-      sourceShotNumber: numberValue(panel.sourceShotNumber),
-      sourceVideoBlockId: stringValue(panel.sourceVideoBlockId),
-      shotScale: stringValue(panel.shotScale),
-      cameraPosition: stringValue(panel.cameraPosition),
-      cameraHeight: stringValue(panel.cameraHeight),
-      cameraAngle: stringValue(panel.cameraAngle),
-      composition: stringValue(panel.composition),
-      cameraMovement: stringValue(panel.cameraMovement),
-      lensAndDepth: stringValue(panel.lensAndDepth),
-      screenDirection: stringValue(panel.screenDirection),
-      aestheticIntent: stringValue(panel.aestheticIntent),
-      emotionalEffect: stringValue(panel.emotionalEffect),
-      continuityNote: stringValue(panel.continuityNote),
-      shotBlocking: isRecord(panel.shotBlocking) ? panel.shotBlocking : null,
-    }]
-  })
-}
-
-function createSpaceConsistencyDetails(storyboard: ProjectStoryboard): NonNullable<WorkspaceCanvasNodeData['spaceConsistencyDetails']> {
-  const plan = readJsonRecord(parseJson(storyboard.photographyPlan))
-  const cameraPlans = cameraPlansFromValue(plan.cameraPlanOutput)
-  const spatialProfiles = spatialProfilesFromProfileOutput(spatialProfileOutputFromArtifacts(storyboard.blockingArtifacts))
-  return {
-    storyboardId: storyboard.id,
-    stage: stringValue(plan.currentStage),
-    spatialProfileCount: spatialProfiles.length,
-    cameraPlanCount: cameraPlans.length,
-    spatialProfiles,
-    cameraPlans,
-  }
-}
-
-function primarySpaceConsistencyImageUrl(storyboard: ProjectStoryboard): string | null {
-  void storyboard
-  return null
-}
-
-function sortPanels(panels: readonly ProjectPanel[]): ProjectPanel[] {
-  return [...panels].sort((a, b) => {
-    const aNumber = a.panelNumber ?? a.panelIndex
-    const bNumber = b.panelNumber ?? b.panelIndex
-    return aNumber - bNumber
-  })
-}
-
-function sortedStoryboards(storyboards: readonly ProjectStoryboard[]): ProjectStoryboard[] {
-  return [...storyboards].sort((a, b) => {
-    const aTime = Date.parse(String(a.createdAt ?? ''))
-    const bTime = Date.parse(String(b.createdAt ?? ''))
-    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime
-    return a.id.localeCompare(b.id)
-  })
-}
-
-function gridPosition(input: {
-  readonly index: number
-  readonly baseX: number
-  readonly baseY: number
-  readonly width: number
-  readonly rowGap: number
-}): { readonly x: number; readonly y: number } {
-  const column = input.index % PANEL_GRID_COLUMNS
-  const row = Math.floor(input.index / PANEL_GRID_COLUMNS)
-  return {
-    x: input.baseX + column * (input.width + PANEL_GRID_GAP_X),
-    y: input.baseY + row * input.rowGap,
-  }
-}
-
-function layoutStyle(width: number, height: number): CSSProperties {
+function styleForNode(width: number, height: number): CSSProperties {
   return { width, height }
 }
 
-function resolvePosition(params: {
-  readonly nodeKey: string
-  readonly fallbackX: number
-  readonly fallbackY: number
-  readonly savedLayoutByKey: ReadonlyMap<string, CanvasNodeLayout>
-  readonly ignoreSavedLayout?: boolean
-}): { readonly x: number; readonly y: number } {
-  if (params.ignoreSavedLayout) return { x: params.fallbackX, y: params.fallbackY }
-  const saved = params.savedLayoutByKey.get(params.nodeKey)
-  if (!saved) return { x: params.fallbackX, y: params.fallbackY }
-  return { x: saved.x, y: saved.y }
-}
-
-function createNode(params: {
-  readonly id: string
-  readonly fallbackX: number
-  readonly fallbackY: number
-  readonly zIndex: number
-  readonly data: WorkspaceCanvasNodeData
-  readonly savedLayoutByKey: ReadonlyMap<string, CanvasNodeLayout>
-  readonly ignoreSavedLayout?: boolean
-}): WorkspaceCanvasFlowNode {
-  const position = resolvePosition({
-    nodeKey: params.id,
-    fallbackX: params.fallbackX,
-    fallbackY: params.fallbackY,
-    savedLayoutByKey: params.savedLayoutByKey,
-    ignoreSavedLayout: params.ignoreSavedLayout,
-  })
-
-  return {
-    id: params.id,
-    type: 'workspaceNode',
-    position,
-    zIndex: params.zIndex,
-    draggable: true,
-    selectable: true,
-    style: layoutStyle(params.data.width, params.data.height),
-    data: {
-      ...params.data,
-      nodeId: params.id,
-    },
-  }
+function layoutPosition(
+  savedLayouts: readonly CanvasNodeLayout[],
+  nodeId: string,
+  fallback: { readonly x: number; readonly y: number },
+): { readonly x: number; readonly y: number } {
+  const saved = savedLayouts.find((layout) => layout.nodeKey === nodeId)
+  return saved ? { x: saved.x, y: saved.y } : fallback
 }
 
 function createEdge(id: string, source: string, target: string): WorkspaceCanvasFlowEdge {
@@ -837,1603 +320,700 @@ function createEdge(id: string, source: string, target: string): WorkspaceCanvas
     target,
     type: 'smoothstep',
     animated: false,
-    style: {
-      stroke: '#64748b',
-      strokeWidth: 1.5,
-    },
   }
 }
 
-function hasImage(panel: ProjectPanel): boolean {
-  return Boolean(
-    panel.imageUrl ||
-    panel.media?.url ||
-    panel.imageTaskRunning ||
-    panel.candidateImages ||
-    panel.imageHistory ||
-    panel.sketchImageUrl ||
-    panel.sketchImageMedia?.url ||
-    panel.previousImageUrl ||
-    panel.previousImageMedia?.url ||
-    panel.imageErrorMessage
-  )
-}
-
-function hasGeneratedVideo(panel: ProjectPanel): boolean {
-  return Boolean(panel.videoUrl || panel.videoMedia?.url)
-}
-
-function panelDisplayNumber(panel: ProjectPanel): string {
-  return String(panel.panelNumber ?? panel.panelIndex + 1).padStart(2, '0')
-}
-
-function assetStatusLabel(status: ProjectEditAssetRequirement['status'], translate: Translate): string {
-  if (status === 'generating') return translate('status.processing')
-  if (status === 'failed') return translate('status.failed')
-  if (status === 'completed') return translate('status.ready')
-  return translate('status.pending')
-}
-
-function assetKindLabel(kind: ProjectEditAssetRequirement['kind'], translate: Translate): string {
-  return kind === 'character' ? translate('nodeFields.characterAsset') : translate('nodeFields.locationAsset')
-}
-
-function numberedTitle(label: string, index: number): string {
-  return `${label} ${index}`
-}
-
-function durationLabel(durationSec: number): string {
-  return `${durationSec}s`
-}
-
-function createEditPipelineStepItems(
-  editScript: ProjectEditScript,
-  stepKey: EditPipelineStepKey,
-  translate: Translate,
-): WorkspaceCanvasEditPipelineStepItem[] {
-  if (stepKey === 'timeline') {
-    if (editScript.shots.length === 0) return []
-    return editScript.shots.map((shot) => ({
-      title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-      fields: [
-        { label: translate('nodeFields.duration'), value: durationLabel(shot.durationSec) },
-      ],
-    }))
+function createNode(input: {
+  readonly id: string
+  readonly position: { readonly x: number; readonly y: number }
+  readonly data: Omit<WorkspaceCanvasNodeData, 'nodeId' | 'width' | 'height'>
+  readonly width: number
+  readonly height: number
+}): WorkspaceCanvasFlowNode {
+  const data = {
+    ...input.data,
+    nodeId: input.id,
+    width: input.width,
+    height: input.height,
+    layoutBasePosition: input.position,
+  } as WorkspaceCanvasNodeData
+  return {
+    id: input.id,
+    type: 'workspaceNode',
+    position: input.position,
+    style: styleForNode(input.width, input.height),
+    data,
   }
+}
 
-  if (stepKey === 'visibleAction') {
-    if (!editScript.shots.every((shot) => stringValue(shot.visibleAction) && stringValue(shot.charactersAndScene))) return []
-    return editScript.shots.map((shot) => ({
-      title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-      fields: [
-        { label: translate('nodeFields.charactersAndScene'), value: shot.charactersAndScene },
-      ],
-      body: shot.visibleAction,
-    }))
-  }
-
-  if (stepKey === 'camera') {
-    if (!editScript.shots.every((shot) => stringValue(shot.dramaticPurpose) && stringValue(shot.audienceFocus) && stringValue(shot.viewpoint) && stringValue(shot.revealPlan))) return []
-    return editScript.shots.map((shot) => ({
-      title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-      fields: [
-        { label: translate('nodeFields.dramaticPurpose'), value: shot.dramaticPurpose },
-        { label: translate('nodeFields.audienceFocus'), value: shot.audienceFocus },
-        { label: translate('nodeFields.viewpoint'), value: shot.viewpoint },
-        { label: translate('nodeFields.revealPlan'), value: shot.revealPlan },
-      ],
-    }))
-  }
-
-  if (stepKey === 'audio') {
-    if (!editScript.shots.every((shot) => stringValue(shot.sound))) return []
-    return editScript.shots.map((shot) => ({
-      title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-      fields: [
-        { label: translate('nodeFields.sound'), value: shot.sound },
-      ],
-    }))
-  }
-
-  if (stepKey === 'primaryTable') {
-    const videoBlockItems = editScript.videoBlocks.map((block, index) => ({
-      title: numberedTitle(translate('nodeFields.videoBlock'), index + 1),
-      fields: [
-        {
-          label: translate('nodeFields.generationMode'),
-          value: block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle'),
-        },
-      ],
-      body: block.reason,
-      chips: block.shotNumbers.map((shotNumber) => String(shotNumber)),
-    }))
-    if (videoBlockItems.length > 0) return videoBlockItems
-    return []
-  }
-
-  return editScript.requirements.map((asset) => ({
-    title: asset.name,
+function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate): WorkspaceCanvasEditPipelineStepItem[] {
+  return plan.shots.map((shot) => ({
+    title: translate('generationSegmentArrangement.shotTitle', { shot: shot.shotNumber }),
     fields: [
-      { label: translate('nodeFields.assetKind'), value: assetKindLabel(asset.kind, translate) },
+      { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
+      { label: translate('nodeFields.lens'), value: shot.camera.lens },
+      { label: translate('nodeFields.focus'), value: shot.camera.focus },
+      { label: translate('nodeFields.cameraPosition'), value: shot.camera.position },
+      { label: translate('nodeFields.lighting'), value: shot.camera.lighting },
+      { label: translate('nodeFields.axisAndEyeline'), value: shot.blocking.axis.screenDirection },
     ],
-    body: asset.description,
-    chips: asset.shotNumbers.map((shotNumber) => String(shotNumber)),
+    body: shot.blocking.spatialNote,
+    chips: [
+      ...shot.blocking.characters.map((character) => `${character.name} / ${character.visibility}`),
+      ...shot.blocking.objects.map((object) => object.name),
+    ],
   }))
 }
 
-function createDirectorDecoupageItems(
-  decoupage: ProjectEditDirectorDecoupage,
-  translate: Translate,
-): WorkspaceCanvasEditPipelineStepItem[] {
-  return decoupage.shots.map((shot) => ({
-    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-    fields: [
-      { label: translate('nodeFields.duration'), value: durationLabel(shot.durationSec) },
-      { label: translate('nodeFields.dramaticPurpose'), value: shot.dramaticPurpose },
-      { label: translate('nodeFields.audienceFocus'), value: shot.audienceFocus },
-      { label: translate('nodeFields.viewpoint'), value: shot.viewpoint },
-      { label: translate('nodeFields.revealPlan'), value: shot.revealPlan },
-      { label: translate('nodeFields.performanceBeat'), value: shot.performanceBeat },
-      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
-      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
-      { label: translate('nodeFields.sound'), value: shot.sound },
-    ],
-    body: shot.visibleAction,
-    chips: [String(shot.shotNumber)],
-  }))
+function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasBgmScoreDetails | undefined {
+  const bgmScore = finalVideo?.bgmScore
+  if (!bgmScore) return undefined
+  return {
+    status: bgmScore.status,
+    durationSeconds: bgmScore.durationSeconds,
+    musicModel: bgmScore.musicModel,
+    hasPromptDesign: Boolean(bgmScore.plan),
+    promptDesignMissing: !bgmScore.plan,
+    designSectionCount: bgmScore.plan?.scoreDesign.sections.length ?? 0,
+    promptSectionCount: bgmScore.plan?.promptSections.length ?? 0,
+    virtualLayerCount: bgmScore.plan?.virtualLayers.length ?? 0,
+    mixUrl: bgmScore.mix?.url ?? null,
+    errorMessage: bgmScore.errorMessage ?? null,
+    scoreOverview: bgmScore.plan?.scoreDesign.overview ?? null,
+    designSections: bgmScore.plan?.scoreDesign.sections ?? [],
+    promptSections: bgmScore.plan?.promptSections ?? [],
+    virtualLayers: bgmScore.plan?.virtualLayers ?? [],
+    finalPrompt: bgmScore.plan?.finalPrompt ?? null,
+  }
 }
 
-function createCinematographyShotPlanItems(
-  shotPlan: ProjectEditCinematographyShotPlan,
-  translate: Translate,
-): WorkspaceCanvasEditPipelineStepItem[] {
-  return shotPlan.shots.map((shot) => ({
-    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-    fields: [
-      { label: translate('nodeFields.shotScale'), value: shot.shotScale },
-      { label: translate('nodeFields.lens'), value: shot.lens },
-      { label: translate('nodeFields.depthOfField'), value: shot.depthOfField },
-      { label: translate('nodeFields.cameraPosition'), value: shot.cameraPosition },
-      { label: translate('nodeFields.cameraHeight'), value: shot.cameraHeight },
-      { label: translate('nodeFields.cameraAngle'), value: shot.cameraAngle },
-      { label: translate('nodeFields.movement'), value: shot.movement },
-      { label: translate('nodeFields.lighting'), value: shot.lighting },
-      { label: translate('nodeFields.axisAndEyeline'), value: shot.axisAndEyeline },
-      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
-      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
-    ],
-    body: shot.composition,
-    chips: [String(shot.shotNumber)],
-  }))
+function videoPlanDetails(input: {
+  readonly editScript: ProjectEditScript
+  readonly segmentIndex: number
+  readonly videoGroup: ProjectVideoGroup | null
+  readonly panelsByShot: ReadonlyMap<number, ProjectPanel>
+  readonly requirements: readonly ProjectEditAssetRequirement[]
+  readonly defaultVideoModel?: string | null
+}): WorkspaceCanvasVideoPlanDetails {
+  const segment = input.editScript.generationSegments[input.segmentIndex]
+  if (!segment) throw new Error(`GENERATION_SEGMENT_MISSING:${input.segmentIndex}`)
+  const durationSec = segment.shotNumbers.reduce((total, shotNumber) => {
+    const shot = input.editScript.shots.find((candidate) => candidate.shotNumber === shotNumber)
+    return total + (shot?.durationSec ?? 0)
+  }, 0)
+  const sourceImages = segment.shotNumbers.map((shotNumber) => {
+    const panel = input.panelsByShot.get(shotNumber) ?? null
+    return {
+      panelId: panel?.id ?? null,
+      storyboardId: panel?.storyboardId ?? null,
+      panelIndex: panel?.panelIndex ?? null,
+      shotNumber,
+      imageUrl: primaryPanelImageUrl(panel),
+      aspectRatio: null,
+    }
+  })
+  return {
+    editScriptId: input.editScript.id,
+    segmentIndex: input.segmentIndex,
+    kind: 'group',
+    videoGroupId: input.videoGroup?.id ?? null,
+    shotNumbers: segment.shotNumbers,
+    durationSec,
+    gridMode: inferGridMode(segment.shotNumbers.length),
+    continuity: segment.continuity,
+    prompt: input.videoGroup?.prompt ?? null,
+    assetReferenceVideoModel: input.defaultVideoModel ?? null,
+    outputUrl: input.videoGroup?.videoMedia?.url ?? input.videoGroup?.videoUrl ?? null,
+    outputAspectRatio: null,
+    errorMessage: input.videoGroup?.errorMessage ?? null,
+    sourceImages,
+    assetReferences: input.requirements
+      .filter((requirement) => requirement.shotNumbers.some((shotNumber) => segment.shotNumbers.includes(shotNumber)))
+      .map((requirement) => ({
+        id: requirement.id,
+        name: requirement.name,
+        kind: requirement.kind,
+        imageUrl: assetPreviewUrl(requirement),
+        shotNumbers: requirement.shotNumbers,
+      })),
+    validationMessage: null,
+  }
 }
 
-function editPipelineStepReady(editScript: ProjectEditScript, stepKey: EditPipelineStepKey): boolean {
-  if (stepKey === 'timeline') return editScript.shots.length > 0 && editScript.shots.every((shot) => shot.durationSec > 0)
-  if (stepKey === 'visibleAction') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.visibleAction) && stringValue(shot.charactersAndScene))
-  if (stepKey === 'camera') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.dramaticPurpose) && stringValue(shot.audienceFocus) && stringValue(shot.viewpoint) && stringValue(shot.revealPlan))
-  if (stepKey === 'audio') return editScript.shots.length > 0 && editScript.shots.every((shot) => stringValue(shot.sound))
-  if (stepKey === 'primaryTable') return editScript.videoBlocks.length > 0 && editScript.shots.length > 0
-  return editScript.requirements.length > 0
-}
+export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
+  const {
+    projectId,
+    episodeId,
+    episodeName,
+    storyText,
+    locations = [],
+    storyboards,
+    editScreenplay = null,
+    editScript = null,
+    editShotExecutionPlan = null,
+    activeAssistantOperationId = null,
+    editScriptPending = false,
+    streamTargets = [],
+    finalVideo = null,
+    videoGroups = [],
+    defaultVideoModel = null,
+    defaultSequenceVideoModel = null,
+    savedLayouts,
+    translate,
+    onAction,
+  } = input
 
-function editPipelineStepState(
-  editScript: ProjectEditScript,
-  stepKey: EditPipelineStepKey,
-  firstIncompleteStep: EditPipelineStepKey | null,
-): EditPipelineStepState {
-  if (editPipelineStepReady(editScript, stepKey)) return 'ready'
-  if (editScript.status === 'failed') return firstIncompleteStep === stepKey ? 'failed' : 'pending'
-  if (editScript.status === 'generating') return firstIncompleteStep === stepKey ? 'processing' : 'pending'
-  return 'pending'
-}
-
-export function buildWorkspaceNodeCanvasProjection({
-  episodeId,
-  storyText,
-  storyboards,
-  editScreenplay,
-  editDirectorDecoupage,
-  editScript,
-  editCinematographyShotPlan,
-  activeAssistantOperationId = null,
-  editScriptPending = false,
-  streamTargets = [],
-  finalVideo,
-  videoGroups = [],
-  defaultSequenceVideoModel,
-  savedLayouts,
-  translate,
-  onAction,
-}: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
-  const savedLayoutByKey = new Map(savedLayouts.map((layout) => [layout.nodeKey, layout]))
   const nodes: WorkspaceCanvasFlowNode[] = []
   const edges: WorkspaceCanvasFlowEdge[] = []
-  let zIndex = 0
-  let editScriptCanvasRightX: number | null = null
-  let editScriptCanvasCenterY: number | null = null
-  let editCinematographyShotPlanNodeId: string | null = null
-  let editCinematographyCanvasRightX: number | null = null
-  let editCinematographyCanvasCenterY: number | null = null
+  const panelsByShot = panelByShotNumber(storyboards)
+  const styleBibleDetails = buildStyleBibleDetails(editScreenplay?.styleBible)
+  const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editScreenplay)
+  const screenplayRunning = activeAssistantOperationId === 'generate_edit_screenplay'
+    || (editScreenplay ? hasStreamTarget(streamTargets, 'editScreenplay', editScreenplay.id) : false)
 
-  const storyBody = storyText.trim()
-  const hasStory = storyBody.length > 0
   const analysisNodeId = workspaceNodeId.analysis(episodeId)
-  const panelsWithStoryboard = sortedStoryboards(storyboards).flatMap((storyboard) => (
-    sortPanels(storyboard.panels ?? []).map((panel) => ({ storyboard, panel }))
-  ))
-  const editScriptStoryboards = editScript
-    ? storyboards.filter((storyboard) => storyboard.editScriptId === editScript.id)
-    : []
-  const editScriptPanelsWithStoryboard = editScript
-    ? panelsWithStoryboard.filter(({ storyboard }) => storyboard.editScriptId === editScript.id)
-    : []
-  const hasEditScriptStoryboardPanels = editScriptPanelsWithStoryboard.length > 0
-  const spatialBlockingStoryboards = editScriptStoryboards.filter(storyboardUsesSpatialBlocking)
-  const directorDecoupageRunning = activeAssistantOperationId === 'generate_edit_director_decoupage'
-  const cinematographyShotPlanRunning = activeAssistantOperationId === 'generate_edit_cinematography_shot_plan'
-  const spatialBlockingRunning = activeAssistantOperationId === 'generate_edit_script_storyboard_spatial_blocking'
-  const storyboardPanelGenerationRunning = activeAssistantOperationId === 'generate_edit_script_storyboard'
-  const editScreenplayStreamTarget = firstStreamTarget(streamTargets, 'editScreenplay')
-  const directorDecoupageStreamTarget = firstStreamTarget(streamTargets, 'editDirectorDecoupage')
-  const editScriptStreamTarget = firstStreamTarget(streamTargets, 'editScript')
-  const bgmScoreStreaming = hasStreamTarget(streamTargets, 'bgmScore', episodeId)
-  const storyboardPanelGenerationStreamStoryboardIds = new Set(
-    streamTargets
-      .filter((target) => target.streamKind === 'storyboardPanelGeneration')
-      .map((target) => target.targetId),
-  )
-  const panelByShotNumberForVideoPlan = new Map<number, ProjectPanel>()
-  editScriptPanelsWithStoryboard.forEach(({ panel }) => {
-    const shotNumber = panel.panelNumber ?? panel.panelIndex + 1
-    panelByShotNumberForVideoPlan.set(shotNumber, panel)
-  })
-  if (hasStory) {
-    nodes.push(createNode({
-      id: analysisNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: 180,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      data: {
-        kind: 'analysis',
-        layoutNodeType: 'analysis',
-        targetType: 'episode',
-        targetId: episodeId,
-        title: translate('nodes.analysis.title'),
-        eyebrow: translate('nodes.analysis.eyebrow'),
-        body: translate('nodes.analysis.body', {
-          storyboards: storyboards.length,
-          panels: storyboards.reduce((total, storyboard) => total + (storyboard.panels?.length ?? 0), 0),
-        }),
-        meta: translate('nodes.analysis.meta'),
-        statusLabel: translate('status.ready'),
-        width: DEFAULT_NODE_WIDTH,
-        height: DEFAULT_NODE_HEIGHT,
-        onAction,
-      },
-    }))
-  }
+  nodes.push(createNode({
+    id: analysisNodeId,
+    position: layoutPosition(savedLayouts, analysisNodeId, { x: STORY_COLUMN_X, y: 120 }),
+    width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+    height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+    data: {
+      projectId,
+      episodeName,
+      kind: 'analysis',
+      layoutNodeType: 'analysis',
+      targetType: 'episode',
+      targetId: episodeId,
+      title: translate('nodes.analysis.title'),
+      eyebrow: translate('nodes.analysis.eyebrow'),
+      body: storyText?.trim() || translate('empty.screenplay'),
+      meta: episodeName ?? translate('nodes.analysis.meta'),
+      statusLabel: storyText?.trim() ? translate('status.ready') : translate('status.empty'),
+      onAction,
+    },
+  }))
 
-  const editScreenplayTargetId = editScreenplay?.id ?? editScreenplayStreamTarget?.targetId ?? null
-  const editScreenplayNodeId = editScreenplayTargetId ? workspaceNodeId.editScreenplay(editScreenplayTargetId) : null
-  const editScreenplayFallbackY = hasStory ? 430 : 180
-  const editScreenplayHeight = editScreenplay
-    ? estimateEditScreenplayNodeHeight(editScreenplay)
-    : EDIT_SCREENPLAY_NODE_HEIGHT
-  if (editScreenplayNodeId && editScreenplayTargetId) {
-    const screenplayText = editScreenplay ? normalizeOptionalText(editScreenplay.screenplayText) : ''
-    const userPrompt = editScreenplay ? normalizeOptionalText(editScreenplay.userPrompt) : ''
-    const screenplayTitle = extractEditScreenplayTitle(screenplayText)
+  let screenplayNodeId: string | null = null
+  if (editScreenplay || editScriptPending || screenplayRunning) {
+    screenplayNodeId = editScreenplay
+      ? workspaceNodeId.editScreenplay(editScreenplay.id)
+      : workspaceNodeId.editScreenplay(`pending:${episodeId}`)
     nodes.push(createNode({
-      id: editScreenplayNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: editScreenplayFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
+      id: screenplayNodeId,
+      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: 120 + ROW_GAP_Y + 80 }),
+      width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
       data: {
+        projectId,
+        episodeName,
         kind: 'editScreenplay',
         layoutNodeType: 'editScreenplay',
         targetType: 'editScreenplay',
-        targetId: editScreenplayTargetId,
-        title: screenplayTitle || (editScreenplay ? translate('nodes.editScreenplay.title') : translate('nodes.editScreenplay.pendingTitle')),
+        targetId: editScreenplay?.id ?? `pending:${episodeId}`,
+        title: translate('nodes.editScreenplay.title'),
         eyebrow: translate('nodes.editScreenplay.eyebrow'),
-        body: editScreenplay ? compactText(screenplayText, translate('empty.screenplay')) : translate('empty.screenplay'),
-        meta: editScreenplay ? translate('nodes.editScreenplay.meta') : translate('nodes.editScreenplay.pendingMeta'),
-        statusLabel: !editScreenplay
-          ? translate('status.processing')
-          : editScreenplay.status === 'ready'
-          ? translate('status.ready')
-          : editScreenplay.status === 'screenplay_ready'
-            ? translate('status.awaitingScreenplayReview')
-            : editScreenplay.status === 'style_preview_ready'
-              ? translate('status.awaitingStyleConfirmation')
-              : editScreenplay.status === 'failed'
-                ? translate('status.failed')
-                : translate('status.processing'),
-        isRunning: !editScreenplay
-          || (editScreenplay.status !== 'ready' && editScreenplay.status !== 'screenplay_ready' && editScreenplay.status !== 'style_preview_ready' && editScreenplay.status !== 'failed'),
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditScreenplay(editScreenplayTargetId)),
-        width: EDIT_SCREENPLAY_NODE_WIDTH,
-        height: editScreenplayHeight,
-        indexLabel: 'S',
-        editScreenplayDetails: {
-          screenplayText,
-          userPrompt,
-        },
-        actionLabel: editScreenplay?.status === 'ready' && !editDirectorDecoupage && !editScript && !editScriptPending
-          ? translate('actions.generateEditDirectorDecoupage')
-          : editScreenplay?.status === 'ready' && editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
-            ? translate('actions.generateEditScript')
-            : undefined,
-        action: editScreenplay?.status === 'ready' && !editDirectorDecoupage && !editScript && !editScriptPending
-          ? { type: 'generate_edit_director_decoupage', screenplayId: editScreenplay.id }
-          : editScreenplay?.status === 'ready' && editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
-            ? { type: 'generate_edit_script', screenplayId: editScreenplay.id }
-            : undefined,
-        onAction,
-      },
-    }))
-    if (hasStory) {
-      edges.push(createEdge(`edge:analysis-edit-screenplay:${editScreenplayTargetId}`, analysisNodeId, editScreenplayNodeId))
-    }
-  }
-
-  const styleBibleSourceValue = editScreenplay?.styleBible ?? editScript?.styleBible ?? null
-  const styleBibleSourceId = editScreenplay && editScreenplay.styleBible !== undefined && editScreenplay.styleBible !== null
-    ? editScreenplay.id
-    : editScript && editScript.styleBible !== undefined && editScript.styleBible !== null
-      ? editScript.id
-      : null
-  const styleBibleDetails = buildStyleBibleDetails(styleBibleSourceValue)
-  const styleBiblePreviewImageUrl = styleBibleSourceId === editScreenplay?.id
-    ? confirmedStylePreviewImageUrl(editScreenplay)
-    : null
-  const editStyleBibleNodeId = styleBibleDetails && styleBibleSourceId ? workspaceNodeId.editStyleBible(styleBibleSourceId) : null
-  const editStyleBibleFallbackY = editScreenplayNodeId
-    ? editScreenplayFallbackY + editScreenplayHeight + EDIT_STYLE_BIBLE_LAYER_GAP_Y
-    : hasStory ? 430 : 180
-  const editStyleSourceBottomY = editStyleBibleNodeId
-    ? editStyleBibleFallbackY + EDIT_STYLE_BIBLE_NODE_HEIGHT
-    : editScreenplayNodeId
-      ? editScreenplayFallbackY + editScreenplayHeight
-      : null
-  if (styleBibleDetails && styleBibleSourceId && editStyleBibleNodeId) {
-    nodes.push(createNode({
-      id: editStyleBibleNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: editStyleBibleFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'editStyleBible',
-        layoutNodeType: 'editStyleBible',
-        targetType: 'editStyleBible',
-        targetId: styleBibleSourceId,
-        title: translate('nodes.editStyleBible.title'),
-        eyebrow: translate('nodes.editStyleBible.eyebrow'),
-        body: compactText(
-          styleBibleDetails.styleSummary
-            ?? styleBibleDetails.visual.imageFilterPrompt
-            ?? translate('nodes.editStyleBible.body'),
-          translate('nodes.editStyleBible.body'),
-        ),
-        meta: translate('nodes.editStyleBible.meta'),
-        statusLabel: translate('status.ready'),
-        width: EDIT_STYLE_BIBLE_NODE_WIDTH,
-        height: EDIT_STYLE_BIBLE_NODE_HEIGHT,
-        indexLabel: 'B',
-        previewImageUrl: styleBiblePreviewImageUrl,
-        previewDisplayHeight: styleBiblePreviewImageUrl ? 170 : undefined,
-        styleBibleDetails,
-        onAction,
-      },
-    }))
-    if (editScreenplayNodeId) {
-      edges.push(createEdge(`edge:edit-screenplay-edit-style-bible:${styleBibleSourceId}`, editScreenplayNodeId, editStyleBibleNodeId))
-    } else if (hasStory) {
-      edges.push(createEdge(`edge:analysis-edit-style-bible:${styleBibleSourceId}`, analysisNodeId, editStyleBibleNodeId))
-    }
-  }
-
-  const editDirectorDecoupageSourceScreenplayId = editDirectorDecoupage?.screenplayId
-    ?? directorDecoupageStreamTarget?.targetId
-    ?? (editScreenplay?.status === 'ready' ? editScreenplay.id : null)
-  const shouldShowEditDirectorDecoupageNode = Boolean(
-    editDirectorDecoupageSourceScreenplayId
-    && (
-      editDirectorDecoupage
-      || directorDecoupageStreamTarget
-      || (
-        editScreenplay?.status === 'ready'
-        && !editScript
-        && !editScriptPending
-      )
-    ),
-  )
-  const editDirectorDecoupageNodeId = shouldShowEditDirectorDecoupageNode && editDirectorDecoupageSourceScreenplayId
-    ? workspaceEditDirectorDecoupageNodeId(editDirectorDecoupageSourceScreenplayId)
-    : null
-  const editDirectorDecoupageFallbackY = editStyleSourceBottomY !== null
-    ? editStyleSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
-    : hasStory ? 430 : 180
-  const editDirectorSourceBottomY = editDirectorDecoupageNodeId
-    ? editDirectorDecoupageFallbackY + EDIT_PIPELINE_STEP_NODE_HEIGHT
-    : editStyleSourceBottomY
-  if (editDirectorDecoupageNodeId && editDirectorDecoupageSourceScreenplayId) {
-    const directorDecoupageStreaming = hasStreamTarget(streamTargets, 'editDirectorDecoupage', editDirectorDecoupageSourceScreenplayId)
-    const decoupageItems = editDirectorDecoupage
-      ? createDirectorDecoupageItems(editDirectorDecoupage, translate)
-      : []
-    const decoupageStatusLabel = editDirectorDecoupage
-      ? editDirectorDecoupage.status === 'ready'
-        ? translate('status.ready')
-        : editDirectorDecoupage.status === 'failed'
-          ? translate('status.failed')
-          : translate('status.processing')
-      : directorDecoupageRunning || directorDecoupageStreaming
-        ? translate('status.processing')
-        : translate('status.pending')
-    const canGenerateDirectorDecoupage = !editDirectorDecoupage && !directorDecoupageStreaming && editScreenplay?.status === 'ready'
-    nodes.push(createNode({
-      id: editDirectorDecoupageNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: editDirectorDecoupageFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'editDirectorDecoupage',
-        layoutNodeType: 'editDirectorDecoupage',
-        targetType: 'editScreenplay',
-        targetId: editDirectorDecoupageSourceScreenplayId,
-        title: translate('nodes.editDirectorDecoupage.title'),
-        eyebrow: translate('nodes.editDirectorDecoupage.eyebrow'),
-        body: editDirectorDecoupage
-          ? compactText(
-              editDirectorDecoupage.shots.slice(0, 3).map((shot) => shot.visibleAction).join('\n'),
-              translate('nodes.editDirectorDecoupage.body'),
-            )
-          : translate('nodes.editDirectorDecoupage.body'),
-        meta: translate('nodes.editDirectorDecoupage.meta', {
-          shots: editDirectorDecoupage?.shots.length ?? 0,
-          duration: editDirectorDecoupage?.shots.reduce((total, shot) => total + shot.durationSec, 0) ?? 0,
-        }),
-        statusLabel: decoupageStatusLabel,
-        isRunning: Boolean(editDirectorDecoupage && editDirectorDecoupage.status !== 'ready') || directorDecoupageRunning || directorDecoupageStreaming,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditDirectorDecoupage(editDirectorDecoupageSourceScreenplayId)),
-        width: EDIT_PIPELINE_STEP_NODE_WIDTH,
-        height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
-        indexLabel: 'D',
-        editPipelineStepDetails: {
-          items: decoupageItems,
-        },
-        actionLabel: editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
-          ? translate('actions.generateEditScript')
-          : canGenerateDirectorDecoupage && !directorDecoupageRunning
-            ? translate('actions.generateEditDirectorDecoupage')
-            : undefined,
-        action: editDirectorDecoupage?.status === 'ready' && !editScript && !editScriptPending
-          ? { type: 'generate_edit_script', screenplayId: editDirectorDecoupage.screenplayId }
-          : canGenerateDirectorDecoupage && !directorDecoupageRunning
-            ? { type: 'generate_edit_director_decoupage', screenplayId: editDirectorDecoupageSourceScreenplayId }
-            : undefined,
-        onAction,
-      },
-    }))
-    if (editStyleBibleNodeId) {
-      edges.push(createEdge(`edge:edit-style-bible-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, editStyleBibleNodeId, editDirectorDecoupageNodeId))
-    } else if (editScreenplayNodeId) {
-      edges.push(createEdge(`edge:edit-screenplay-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, editScreenplayNodeId, editDirectorDecoupageNodeId))
-    } else if (hasStory) {
-      edges.push(createEdge(`edge:analysis-director-decoupage:${editDirectorDecoupageSourceScreenplayId}`, analysisNodeId, editDirectorDecoupageNodeId))
-    }
-  }
-
-  const editPipelineBaseY = editDirectorSourceBottomY !== null
-    ? editDirectorSourceBottomY + EDIT_PIPELINE_STEP_LAYER_GAP_Y
-    : hasStory ? 430 : 180
-  const pendingEditScriptFallbackY = editPipelineBaseY + EDIT_PIPELINE_STEP_NODE_HEIGHT + EDIT_PIPELINE_TO_SCRIPT_GAP_Y
-
-  if (editScript) {
-    const editScriptNodeId = workspaceNodeId.editScript(episodeId)
-    const editScriptIsGenerating = editScript.status === 'generating'
-    const editScriptIsFailed = editScript.status === 'failed'
-    const editScriptIsReady = !editScriptIsGenerating && !editScriptIsFailed
-    const shouldShowPipelineSteps = editScriptIsReady || editScriptIsGenerating || editScriptIsFailed
-    const pipelineStepRows = shouldShowPipelineSteps ? 1 : 0
-    const pipelineStepLayerHeight = pipelineStepRows > 0
-      ? pipelineStepRows * EDIT_PIPELINE_STEP_NODE_HEIGHT + (pipelineStepRows - 1) * EDIT_PIPELINE_STEP_GRID_GAP_Y
-      : 0
-    const editScriptFallbackY = shouldShowPipelineSteps
-      ? editPipelineBaseY + pipelineStepLayerHeight + EDIT_PIPELINE_TO_SCRIPT_GAP_Y
-      : editDirectorSourceBottomY !== null
-        ? editDirectorSourceBottomY + 170
-        : hasStory ? 430 : 180
-    const editScriptHasRows = editScript.shots.length > 0
-    const editScriptHeight = editScriptIsGenerating && !editScriptHasRows
-      ? 520
-      : estimateEditScriptNodeHeight(editScript)
-    editScriptCanvasRightX = STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH
-    editScriptCanvasCenterY = editScriptFallbackY + editScriptHeight / 2
-    const assetsToGenerate = editScript.requirements.some((asset) => !editAssetHasPreview(asset))
-    const completedAssets = editScript.requirements.filter((asset) => asset.status === 'completed').length
-    const locationReferenceReady = hasReadyLocationReference(editScript)
-    const spatialBlockingReady = editScriptStoryboards.some(storyboardSpatialBlockingReady)
-    const cinematographyShotPlanReady = editCinematographyShotPlan?.status === 'ready' && editCinematographyShotPlan.editScriptId === editScript.id
-    const editScriptAction = !editScriptIsReady
-      ? null
-      : assetsToGenerate
-      ? { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
-      : hasEditScriptStoryboardPanels
-        ? null
-        : cinematographyShotPlanRunning
-          ? null
-          : !cinematographyShotPlanReady && locationReferenceReady
-          ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
-          : !cinematographyShotPlanReady
-            ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
-        : spatialBlockingReady
-          ? null
-          : locationReferenceReady
-            ? spatialBlockingRunning
-              ? null
-              : { label: translate('actions.generateSpatialBlockingFirst'), action: { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id } as const, disabled: true }
-            : { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
-    const pipelineStepDefinitions = [
-      { key: 'timeline', title: translate('nodeFields.editStepTimeline') },
-      { key: 'visibleAction', title: translate('nodeFields.editStepVisualAction') },
-      { key: 'camera', title: translate('nodeFields.editStepDirectorIntent') },
-      { key: 'audio', title: translate('nodeFields.editStepAudio') },
-      { key: 'primaryTable', title: translate('nodeFields.editStepPrimaryTable') },
-      { key: 'assetExtract', title: translate('nodeFields.editStepAssetExtract') },
-    ] as const
-    const firstIncompleteStep = pipelineStepDefinitions.find((step) => !editPipelineStepReady(editScript, step.key))?.key ?? null
-    // 「生成过程」：把 P1–P6 收纳进一张可折叠卡（步骤网格），替代原来的 6 个独立节点
-    const processGroupNodeId = shouldShowPipelineSteps ? workspaceNodeId.editProcessGroup(episodeId) : null
-
-    if (shouldShowPipelineSteps && processGroupNodeId) {
-      const processSteps = pipelineStepDefinitions.map((step, index) => {
-        const stepState = editPipelineStepState(editScript, step.key, firstIncompleteStep)
-        return {
-          key: step.key,
-          badge: `P${index + 1}`,
-          title: step.title,
-          statusLabel: stepState === 'ready'
-            ? translate('status.ready')
-            : stepState === 'processing'
-              ? translate('status.processing')
-              : stepState === 'failed'
-                ? translate('status.failed')
-                : translate('status.pending'),
-          items: createEditPipelineStepItems(editScript, step.key, translate),
-        }
-      })
-      const processRunning = processSteps.some((step) => editPipelineStepState(editScript, step.key as EditPipelineStepKey, firstIncompleteStep) === 'processing')
-      nodes.push(createNode({
-        id: processGroupNodeId,
-        fallbackX: STORY_COLUMN_X,
-        fallbackY: editPipelineBaseY,
-        zIndex: zIndex++,
-        savedLayoutByKey,
-        ignoreSavedLayout: true,
-        data: {
-          kind: 'editProcessGroup',
-          layoutNodeType: 'editPipelineStep',
-          targetType: 'editPipelineStep',
-          targetId: editScript.id,
-          title: translate('nodes.editProcessGroup.title'),
-          eyebrow: translate('nodes.editProcessGroup.eyebrow'),
-          body: translate('nodes.editProcessGroup.body'),
-          meta: translate('nodes.editProcessGroup.meta', { count: processSteps.length }),
-          statusLabel: processRunning ? translate('status.processing') : translate('status.ready'),
-          isRunning: processRunning,
-          width: EDIT_PIPELINE_STEP_NODE_WIDTH,
-          height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
-          indexLabel: 'P',
-          editProcessGroupDetails: {
-            steps: processSteps,
-          },
-          onAction,
-        },
-      }))
-    }
-
-    nodes.push(createNode({
-      id: editScriptNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: editScriptFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'editScript',
-        layoutNodeType: 'editScript',
-        targetType: 'editScript',
-        targetId: editScript.id,
-        title: editScriptIsGenerating && !editScriptHasRows ? translate('nodes.editScript.pendingTitle') : editScript.title,
-        eyebrow: translate('nodes.editScript.eyebrow'),
-        body: editScriptIsGenerating && !editScript.logline
-          ? translate('nodes.editScript.pendingBody')
-          : compactText(editScript.logline || editScript.userPrompt, translate('empty.editScript')),
-        meta: editScriptIsGenerating && !editScriptHasRows
-          ? translate('nodes.editScript.pendingMeta')
-          : translate('nodes.editScript.meta', {
-              shots: editScript.shotCount,
-              duration: editScript.durationSec,
-              assets: editScript.requirements.length,
-              completed: completedAssets,
-            }),
-        statusLabel: editScriptIsGenerating
-          ? translate('status.processing')
-          : editScriptIsFailed
-            ? translate('status.failed')
-            : translate('status.ready'),
-        isRunning: editScriptIsGenerating,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
-        width: EDIT_SCRIPT_TABLE_NODE_WIDTH,
-        height: editScriptHeight,
-        indexLabel: 'E',
-        editScriptDetails: editScriptHasRows ? {
-          screenplayText: editScript.screenplayText,
-          durationSec: editScript.durationSec,
-          shotCount: editScript.shotCount,
-          shots: editScript.shots.map((shot) => {
-            const panel = panelByShotNumberForVideoPlan.get(shot.shotNumber) ?? null
-            return {
-              ...shot,
-              imagePrompt: panel?.imagePrompt ?? null,
-              imageUrl: panel?.imageUrl ?? null,
-              videoUrl: panel?.videoUrl ?? null,
+        body: editScreenplay?.screenplayText ?? translate('nodes.editScreenplay.pendingBody'),
+        meta: editScreenplay ? statusLabel(editScreenplay.status, translate) : translate('status.processing'),
+        statusLabel: editScreenplay ? statusLabel(editScreenplay.status, translate) : translate('status.processing'),
+        isRunning: screenplayRunning || Boolean(editScreenplay && editScreenplay.status !== 'ready'),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditScreenplay(editScreenplay?.id ?? null)),
+        editScreenplayDetails: editScreenplay
+          ? {
+              screenplayText: editScreenplay.screenplayText,
+              userPrompt: editScreenplay.userPrompt,
             }
-          }),
-        } : undefined,
-        actionLabel: editScriptAction?.label,
-        action: editScriptAction?.action,
-        actionDisabled: editScriptAction && 'disabled' in editScriptAction ? editScriptAction.disabled : false,
-        onAction,
-      },
-    }))
-    if (processGroupNodeId) {
-      if (editDirectorDecoupageNodeId) {
-        edges.push(createEdge(`edge:director-decoupage-edit-process:${editScript.id}`, editDirectorDecoupageNodeId, processGroupNodeId))
-      } else if (editStyleBibleNodeId) {
-        edges.push(createEdge(`edge:edit-style-bible-edit-process:${editScript.id}`, editStyleBibleNodeId, processGroupNodeId))
-      } else if (editScreenplayNodeId) {
-        edges.push(createEdge(`edge:edit-screenplay-edit-process:${editScript.id}`, editScreenplayNodeId, processGroupNodeId))
-      } else if (hasStory) {
-        edges.push(createEdge(`edge:analysis-edit-process:${editScript.id}`, analysisNodeId, processGroupNodeId))
-      }
-      edges.push(createEdge(`edge:edit-process-edit-script:${editScript.id}`, processGroupNodeId, editScriptNodeId))
-    } else if (editDirectorDecoupageNodeId) {
-      edges.push(createEdge(`edge:director-decoupage-edit-script:${editScript.id}`, editDirectorDecoupageNodeId, editScriptNodeId))
-    } else if (editStyleBibleNodeId) {
-      edges.push(createEdge(`edge:edit-style-bible-edit-script:${editScript.id}`, editStyleBibleNodeId, editScriptNodeId))
-    } else if (editScreenplayNodeId) {
-      edges.push(createEdge(`edge:edit-screenplay-edit-script:${editScript.id}`, editScreenplayNodeId, editScriptNodeId))
-    } else if (hasStory) {
-      edges.push(createEdge(`edge:analysis-edit-script:${editScript.id}`, analysisNodeId, editScriptNodeId))
-    }
-
-    const assetBaseY = editScriptFallbackY + editScriptHeight + EDIT_SCRIPT_ASSET_LAYER_GAP_Y
-    const editAssetNodeIds: string[] = []
-    // 资产合并为单张「editAssetGroup」卡：卡内网格展示各资产缩略图，并保留逐个生成/重新生成操作
-    if (editScriptIsReady && editScript.requirements.length > 0) {
-      const assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
-      editAssetNodeIds.push(assetGroupNodeId)
-      const assetItems = editScript.requirements.map((asset) => {
-        const assetRuntimeTarget = editAssetRuntimeTarget(asset)
-        const canGenerateAsset = asset.status === 'pending' || asset.status === 'failed'
-        const canRegenerateAsset = asset.status === 'completed' && Boolean(asset.targetId)
-        const assetAction: WorkspaceCanvasNodeAction | undefined = canGenerateAsset
-          ? { type: 'generate_edit_asset', editScriptId: editScript.id, requirementId: asset.id }
-          : canRegenerateAsset && asset.targetId
-            ? { type: 'regenerate_edit_asset_image', assetId: asset.targetId, kind: asset.kind }
-            : undefined
-        return {
-          requirementId: asset.id,
-          kind: asset.kind,
-          name: asset.name,
-          eyebrow: assetKindLabel(asset.kind, translate),
-          description: asset.description,
-          shotNumbers: asset.shotNumbers,
-          statusLabel: assetStatusLabel(asset.status, translate),
-          isRunning: asset.status === 'generating',
-          previewImageUrl: asset.previewImageUrl,
-          runtimeTarget: assetRuntimeTarget,
-          action: assetAction,
-          actionLabel: assetAction
-            ? canGenerateAsset ? translate('actions.generateEditAsset') : translate('actions.regenerateImage')
-            : undefined,
-        }
-      })
-      const charCount = assetItems.filter((asset) => asset.kind === 'character').length
-      const locationCount = assetItems.length - charCount
-      const assetRuntimeTargets = assetItems
-        .map((asset) => asset.runtimeTarget)
-        .filter((target): target is TaskRuntimeTarget => target !== null)
-      nodes.push(createNode({
-        id: assetGroupNodeId,
-        fallbackX: STORY_COLUMN_X,
-        fallbackY: assetBaseY,
-        zIndex: zIndex++,
-        savedLayoutByKey,
-        ignoreSavedLayout: true,
-        data: {
-          kind: 'editAssetGroup',
-          layoutNodeType: 'editAssetGroup',
-          targetType: 'editAssetRequirement',
-          targetId: editScript.id,
-          title: translate('nodes.editAssetGroup.title'),
-          eyebrow: translate('nodes.editAssetGroup.eyebrow'),
-          body: translate('nodes.editAssetGroup.body'),
-          meta: translate('nodes.editAssetGroup.meta', { characters: charCount, locations: locationCount }),
-          statusLabel: assetItems.some((asset) => asset.isRunning) ? translate('status.processing') : translate('status.ready'),
-          isRunning: assetItems.some((asset) => asset.isRunning),
-          runtimeTargets: assetRuntimeTargets,
-          width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-          height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
-          indexLabel: 'A',
-          editAssetGroupDetails: {
-            editScriptId: editScript.id,
-            assets: assetItems,
-          },
-          onAction,
-        },
-      }))
-      edges.push(createEdge(`edge:edit-script-asset-group:${editScript.id}`, editScriptNodeId, assetGroupNodeId))
-    }
-    if (editScriptIsReady) {
-      const matchingShotPlan = editCinematographyShotPlan?.editScriptId === editScript.id
-        ? editCinematographyShotPlan
-        : null
-      const cinematographyShotPlanStreaming = hasStreamTarget(streamTargets, 'editCinematographyShotPlan', editScript.id)
-      const nodeId = workspaceEditCinematographyShotPlanNodeId(editScript.id)
-      const items = matchingShotPlan?.status === 'ready'
-        ? createCinematographyShotPlanItems(matchingShotPlan, translate)
-        : []
-      const statusLabel = matchingShotPlan
-        ? matchingShotPlan.status === 'ready' ? translate('status.ready') : translate('status.processing')
-        : cinematographyShotPlanRunning || cinematographyShotPlanStreaming
-          ? translate('status.processing')
-        : translate('status.pending')
-      const canGenerateShotPlan = !matchingShotPlan && locationReferenceReady
-      const action = cinematographyShotPlanRunning || cinematographyShotPlanStreaming
-        ? null
-        : canGenerateShotPlan
-        ? { label: translate('actions.generateCinematographyShotPlan'), action: { type: 'generate_edit_cinematography_shot_plan', editScriptId: editScript.id } as const, disabled: false }
-        : !matchingShotPlan
-          ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const, disabled: true }
-          : null
-      editCinematographyShotPlanNodeId = nodeId
-      editCinematographyCanvasRightX = (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72 + EDIT_CINEMATOGRAPHY_NODE_WIDTH
-      editCinematographyCanvasCenterY = editScriptCanvasCenterY
-      nodes.push(createNode({
-        id: nodeId,
-        fallbackX: (editScriptCanvasRightX ?? STORY_COLUMN_X + EDIT_SCRIPT_TABLE_NODE_WIDTH) + 72,
-        fallbackY: editScriptCanvasCenterY !== null
-          ? editScriptCanvasCenterY - EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT / 2
-          : editScriptFallbackY,
-        zIndex: zIndex++,
-        savedLayoutByKey,
-        ignoreSavedLayout: true,
-        data: {
-          kind: 'editCinematographyShotPlan',
-          layoutNodeType: 'editCinematographyShotPlan',
-          targetType: 'editScript',
-          targetId: editScript.id,
-          title: translate('nodes.editCinematographyShotPlan.title'),
-          eyebrow: translate('nodes.editCinematographyShotPlan.eyebrow'),
-          body: matchingShotPlan?.status === 'ready'
-            ? translate('nodes.editCinematographyShotPlan.body')
-            : !locationReferenceReady
-              ? translate('nodes.editCinematographyShotPlan.locationImageRequired')
-              : translate('nodes.editCinematographyShotPlan.pendingBody'),
-          meta: translate('nodes.editCinematographyShotPlan.meta', {
-            shots: matchingShotPlan?.shots.length ?? editScript.shotCount,
-          }),
-          statusLabel,
-          isRunning: Boolean(matchingShotPlan && matchingShotPlan.status !== 'ready') || cinematographyShotPlanRunning || cinematographyShotPlanStreaming,
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditCinematographyShotPlan(editScript.id)),
-          width: EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-          height: EDIT_CINEMATOGRAPHY_NODE_MIN_HEIGHT,
-          indexLabel: 'C',
-          editPipelineStepDetails: {
-            items,
-          },
-          actionLabel: action?.label,
-          action: action?.action,
-          actionDisabled: action?.disabled ?? false,
-          onAction,
-        },
-      }))
-      edges.push(createEdge(`edge:edit-script-cinematography-shot-plan:${editScript.id}`, editScriptNodeId, nodeId))
-      editAssetNodeIds.forEach((assetNodeId) => {
-        edges.push(createEdge(`edge:edit-asset-cinematography-shot-plan:${assetNodeId}`, assetNodeId, nodeId))
-      })
-    }
-  }
-  if (!editScript && (editScriptPending || editScriptStreamTarget)) {
-    const pendingEditScriptNodeId = workspaceNodeId.editScript(episodeId)
-    nodes.push(createNode({
-      id: pendingEditScriptNodeId,
-      fallbackX: STORY_COLUMN_X,
-      fallbackY: pendingEditScriptFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'editScript',
-        layoutNodeType: 'editScript',
-        targetType: 'episode',
-        targetId: episodeId,
-        title: translate('nodes.editScript.pendingTitle'),
-        eyebrow: translate('nodes.editScript.eyebrow'),
-        body: translate('nodes.editScript.pendingBody'),
-        meta: translate('nodes.editScript.pendingMeta'),
-        statusLabel: translate('status.processing'),
-        isRunning: true,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
-        width: EDIT_SCRIPT_TABLE_NODE_WIDTH,
-        height: 520,
-        indexLabel: 'E',
-        onAction,
-      },
-    }))
-    if (editDirectorDecoupageNodeId) {
-      edges.push(createEdge(`edge:director-decoupage-edit-script-pending:${episodeId}`, editDirectorDecoupageNodeId, pendingEditScriptNodeId))
-    } else if (editStyleBibleNodeId) {
-      edges.push(createEdge(`edge:edit-style-bible-edit-script-pending:${episodeId}`, editStyleBibleNodeId, pendingEditScriptNodeId))
-    } else if (editScreenplayNodeId) {
-      edges.push(createEdge(`edge:edit-screenplay-edit-script-pending:${episodeId}`, editScreenplayNodeId, pendingEditScriptNodeId))
-    } else if (hasStory) {
-      edges.push(createEdge(`edge:analysis-edit-script-pending:${episodeId}`, analysisNodeId, pendingEditScriptNodeId))
-    }
-  }
-
-  const hasExistingSpaceConsistencyLayer = spatialBlockingStoryboards.length > 0
-  const hasVideoBlocks = editScript?.status === 'ready' && Boolean(editScript.videoBlocks?.length)
-  const hasReadyCinematographyShotPlan = Boolean(
-    editScript
-      && editCinematographyShotPlan?.status === 'ready'
-      && editCinematographyShotPlan.editScriptId === editScript.id,
-  )
-  const canShowVideoPlanLayer = hasVideoBlocks && hasEditScriptStoryboardPanels
-  const shouldShowPendingSpaceConsistencyLayer = editScript?.status === 'ready'
-    && hasVideoBlocks
-    && hasReadyCinematographyShotPlan
-    && !hasEditScriptStoryboardPanels
-    && !hasExistingSpaceConsistencyLayer
-  const shouldRouteThroughSpaceConsistency = Boolean(editScript && (hasExistingSpaceConsistencyLayer || shouldShowPendingSpaceConsistencyLayer))
-  const spaceConsistencyBaseX = editCinematographyCanvasRightX !== null
-    ? editCinematographyCanvasRightX + 72
-    : editScriptCanvasRightX !== null
-      ? editScriptCanvasRightX + 72
-    : PANEL_GRID_BASE_X - SPACE_CONSISTENCY_NODE_WIDTH - 90
-  const storyboardFlowBaseX = shouldRouteThroughSpaceConsistency
-    ? Math.max(
-        PANEL_GRID_BASE_X,
-        spaceConsistencyBaseX + SPACE_CONSISTENCY_NODE_WIDTH + SPACE_CONSISTENCY_TO_CONTENT_GAP_X,
-      )
-    : PANEL_GRID_BASE_X
-  const panelGridRows = Math.max(1, Math.ceil(panelsWithStoryboard.length / PANEL_GRID_COLUMNS))
-  const shotPreviewByPanelId = new Map<string, { aspectRatio: number | null; height: number; nodeHeight: number }>()
-  panelsWithStoryboard.forEach(({ panel }) => {
-    const shotAspectRatio = panelImageAspectRatio(panel)
-    const shotPreviewHeight = estimateShotPreviewHeight(DEFAULT_NODE_WIDTH, shotAspectRatio, Boolean(primaryPanelImageUrl(panel)))
-    shotPreviewByPanelId.set(panel.id, {
-      aspectRatio: shotAspectRatio,
-      height: shotPreviewHeight,
-      nodeHeight: estimateMediaNodeHeight(SHOT_NODE_HEIGHT, shotPreviewHeight),
-    })
-  })
-  const shotGridRowGap = Math.max(
-    SHOT_GRID_ROW_GAP,
-    ...Array.from(shotPreviewByPanelId.values()).map((preview) => preview.nodeHeight + 72),
-  )
-  const shotGridBaseY = 24
-  const videoPlanBaseY = shotGridBaseY + panelGridRows * shotGridRowGap + 150
-  const firstPanelIdByStoryboardId = new Map<string, string>()
-  panelsWithStoryboard.forEach(({ storyboard, panel }) => {
-    if (!firstPanelIdByStoryboardId.has(storyboard.id)) firstPanelIdByStoryboardId.set(storyboard.id, panel.id)
-  })
-
-  const shotNodeIds = new Map<string, string>()
-  const spaceConsistencyNodeIds = new Map<string, string>()
-  sortedStoryboards(spatialBlockingStoryboards).forEach((storyboard, index) => {
-    const details = createSpaceConsistencyDetails(storyboard)
-    const nodeId = workspaceNodeId.spaceConsistency(storyboard.id)
-    spaceConsistencyNodeIds.set(storyboard.id, nodeId)
-    const storyboardHasPanels = (storyboard.panels?.length ?? 0) > 0
-    const previewImageUrl = primarySpaceConsistencyImageUrl(storyboard)
-    const canGeneratePanelsFromSpatialBlocking = editScript?.status === 'ready'
-      && hasReadyCinematographyShotPlan
-      && !storyboardHasPanels
-      && storyboardSpatialBlockingReady(storyboard)
-    nodes.push(createNode({
-      id: nodeId,
-      fallbackX: spaceConsistencyBaseX,
-      fallbackY: ((editCinematographyCanvasCenterY ?? editScriptCanvasCenterY) !== null
-        ? (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY ?? 0) - SPACE_CONSISTENCY_NODE_HEIGHT / 2
-        : shotGridBaseY) + index * (SPACE_CONSISTENCY_NODE_HEIGHT + 92),
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'spaceConsistency',
-        layoutNodeType: 'spaceConsistency',
-        targetType: 'storyboard',
-        targetId: storyboard.id,
-        storyboardId: storyboard.id,
-        title: translate('nodes.spaceConsistency.title'),
-        eyebrow: translate('nodes.spaceConsistency.eyebrow'),
-        body: translate('nodes.spaceConsistency.body'),
-        meta: translate('nodes.spaceConsistency.meta', {
-          profiles: details.spatialProfileCount,
-          cameraPlans: details.cameraPlanCount,
-        }),
-        statusLabel: storyboard.lastError
-          ? translate('status.failed')
-          : translate('status.ready'),
-        isRunning: false,
-        runtimeTargets: runtimeTargets(
-          TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript?.id),
-        ),
-        width: SPACE_CONSISTENCY_NODE_WIDTH,
-        height: SPACE_CONSISTENCY_NODE_HEIGHT,
-        indexLabel: 'G',
-        previewImageUrl,
-        previewAspectRatio: 16 / 9,
-        spaceConsistencyDetails: details,
-        actionLabel: editScript?.status === 'ready' && hasReadyCinematographyShotPlan && !storyboardPanelGenerationRunning ? translate('actions.regenerateSpatialBlocking') : undefined,
-        action: editScript?.status === 'ready' && hasReadyCinematographyShotPlan && !storyboardPanelGenerationRunning
-          ? { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id }
           : undefined,
         onAction,
       },
     }))
-    const editScriptSourceNodeId = editScript && storyboard.editScriptId === editScript.id
-      ? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
-      : null
-    const sourceNodeId = editScriptSourceNodeId
-    if (sourceNodeId) {
-      edges.push(createEdge(`edge:space-consistency-source:${storyboard.id}`, sourceNodeId, nodeId))
-    }
+    edges.push(createEdge(`edge:${analysisNodeId}:${screenplayNodeId}`, analysisNodeId, screenplayNodeId))
+  }
 
-    const storyboardPanelGenerationStreaming = storyboardPanelGenerationStreamStoryboardIds.has(storyboard.id)
-    if (!storyboardHasPanels && (canGeneratePanelsFromSpatialBlocking || storyboardPanelGenerationRunning || storyboardPanelGenerationStreaming) && editScript) {
-      const panelGenerationNodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
+  let styleBibleNodeId: string | null = null
+  if (styleBibleDetails && editScreenplay) {
+    styleBibleNodeId = workspaceNodeId.editStyleBible(editScreenplay.id)
+    nodes.push(createNode({
+      id: styleBibleNodeId,
+      position: layoutPosition(savedLayouts, styleBibleNodeId, { x: STORY_COLUMN_X, y: 120 + (ROW_GAP_Y + 80) * 2 }),
+      width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editStyleBible',
+        layoutNodeType: 'editStyleBible',
+        targetType: 'editStyleBible',
+        targetId: editScreenplay.id,
+        title: translate('nodes.editStyleBible.title'),
+        eyebrow: translate('nodes.editStyleBible.eyebrow'),
+        body: styleBibleDetails.styleSummary ?? translate('nodes.editStyleBible.body'),
+        meta: translate('status.ready'),
+        statusLabel: translate('status.ready'),
+        previewImageUrl: stylePreviewImageUrl,
+        loadingStyleImageUrl: stylePreviewImageUrl,
+        styleBibleDetails,
+        onAction,
+      },
+    }))
+    edges.push(createEdge(`edge:${screenplayNodeId ?? analysisNodeId}:${styleBibleNodeId}`, screenplayNodeId ?? analysisNodeId, styleBibleNodeId))
+  }
+
+  let editScriptNodeId: string | null = null
+  if (editScript || editScriptPending) {
+    const editScriptTargetId = editScript?.id ?? `pending:${episodeId}`
+    editScriptNodeId = workspaceNodeId.editScript(episodeId)
+    const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
+      || (editScript ? hasStreamTarget(streamTargets, 'editScript', editScript.id) : false)
+      || editScriptPending
+    const editScriptDetails = editScript
+      ? {
+          screenplayText: editScript.screenplayText,
+          durationSec: editScript.durationSec,
+          shotCount: editScript.shotCount,
+          shots: editScript.shots.map((shot) => {
+            const panel = panelsByShot.get(shot.shotNumber) ?? null
+            return {
+              shotNumber: shot.shotNumber,
+              durationSec: shot.durationSec,
+              sceneName: shot.scene.name,
+              action: shot.action,
+              characters: shotCharacters(shot),
+              keyObjects: shotKeyObjects(shot),
+              imagePrompt: panel?.imagePrompt ?? null,
+              sound: shot.sound,
+              imageUrl: primaryPanelImageUrl(panel),
+              videoUrl: panel?.videoMedia?.url ?? panel?.videoUrl ?? null,
+            }
+          }),
+        }
+      : undefined
+    nodes.push(createNode({
+      id: editScriptNodeId,
+      position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 }),
+      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+      height: 420,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editScript',
+        layoutNodeType: 'editScript',
+        targetType: 'editScript',
+        targetId: editScriptTargetId,
+        title: translate('nodes.editScript.title'),
+        eyebrow: translate('nodes.editScript.eyebrow'),
+        body: editScript?.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.action}`).join('\n')
+          ?? translate('nodes.editScript.pendingBody'),
+        meta: editScript
+          ? translate('nodes.editScript.meta', { shots: editScript.shotCount, duration: editScript.durationSec })
+          : translate('nodes.editScript.pendingMeta'),
+        statusLabel: editScript ? statusLabel(editScript.status, translate) : translate('status.processing'),
+        isRunning: editScriptRunning || Boolean(editScript && editScript.status !== 'ready'),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+        actionLabel: editScript ? undefined : translate('actions.generateEditScript'),
+        action: editScreenplay && !editScript ? { type: 'generate_edit_script', screenplayId: editScreenplay.id } : undefined,
+        actionDisabled: !editScreenplay,
+        editScriptDetails,
+        onAction,
+      },
+    }))
+    edges.push(createEdge(`edge:${styleBibleNodeId ?? screenplayNodeId ?? analysisNodeId}:${editScriptNodeId}`, styleBibleNodeId ?? screenplayNodeId ?? analysisNodeId, editScriptNodeId))
+  }
+
+  let assetGroupNodeId: string | null = null
+  if (editScript) {
+    assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
+    const assetsReady = editScript.requirements.length > 0
+      && editScript.requirements.every((requirement) => requirement.status === 'completed')
+    nodes.push(createNode({
+      id: assetGroupNodeId,
+      position: layoutPosition(savedLayouts, assetGroupNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 + 420 + ASSET_GROUP_Y_OFFSET }),
+      width: 720,
+      height: Math.max(300, Math.ceil(editScript.requirements.length / WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS) * WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE.height + WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y),
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editAssetGroup',
+        layoutNodeType: 'editAssetGroup',
+        targetType: 'editAssetRequirement',
+        targetId: editScript.id,
+        title: translate('nodes.editAssetGroup.title'),
+        eyebrow: translate('nodes.editAssetGroup.eyebrow'),
+        body: editScript.requirements.map((requirement) => `${requirement.name} / ${requirement.kind}`).join('\n') || translate('empty.editAsset'),
+        meta: translate('nodes.editAssetGroup.meta', { assets: editScript.requirements.length }),
+        statusLabel: assetsReady ? translate('status.ready') : translate('status.pending'),
+        actionLabel: assetsReady ? undefined : translate('actions.generateEditAssets'),
+        action: { type: 'generate_edit_assets', editScriptId: editScript.id },
+        editAssetGroupDetails: {
+          editScriptId: editScript.id,
+          assets: editScript.requirements.map((requirement) => ({
+            requirementId: requirement.id,
+            kind: requirement.kind,
+            name: requirement.name,
+            eyebrow: requirement.kind,
+            description: requirement.description,
+            shotNumbers: requirement.shotNumbers,
+            statusLabel: statusLabel(requirement.status, translate),
+            isRunning: requirement.status === 'generating',
+            previewImageUrl: assetPreviewUrl(requirement),
+            runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(requirement.taskTargetType ?? null, requirement.taskTargetId ?? null),
+            taskProgress: null,
+            action: requirement.status === 'completed'
+              ? { type: 'regenerate_edit_asset_image', assetId: requirement.targetId ?? requirement.id, kind: requirement.kind }
+              : { type: 'generate_edit_asset', editScriptId: editScript.id, requirementId: requirement.id },
+            actionLabel: requirement.status === 'completed' ? translate('actions.regenerateImage') : translate('actions.generateEditAsset'),
+          })),
+        },
+        onAction,
+      },
+    }))
+    if (editScriptNodeId) edges.push(createEdge(`edge:${editScriptNodeId}:${assetGroupNodeId}`, editScriptNodeId, assetGroupNodeId))
+  }
+
+  let executionNodeId: string | null = null
+  if (editScript) {
+    const matchingExecutionPlan = editShotExecutionPlan?.editScriptId === editScript.id ? editShotExecutionPlan : null
+    const executionRunning = activeAssistantOperationId === 'generate_edit_shot_execution_plan'
+      || hasStreamTarget(streamTargets, 'editShotExecutionPlan', editScript.id)
+      || Boolean(matchingExecutionPlan && matchingExecutionPlan.status !== 'ready')
+    executionNodeId = workspaceNodeId.editShotExecutionPlan(editScript.id)
+    nodes.push(createNode({
+      id: executionNodeId,
+      position: layoutPosition(savedLayouts, executionNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 2, y: 120 }),
+      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+      height: 420,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editShotExecutionPlan',
+        layoutNodeType: 'editShotExecutionPlan',
+        targetType: 'editShotExecutionPlan',
+        targetId: editScript.id,
+        title: translate('nodes.editShotExecutionPlan.title'),
+        eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
+        body: matchingExecutionPlan
+          ? matchingExecutionPlan.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`).join('\n')
+          : translate('nodes.editShotExecutionPlan.pendingBody'),
+        meta: matchingExecutionPlan
+          ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
+          : translate('status.pending'),
+        statusLabel: matchingExecutionPlan ? statusLabel(matchingExecutionPlan.status, translate) : translate('status.pending'),
+        isRunning: executionRunning,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(editScript.id)),
+        actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
+        action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: editScript.id },
+        editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, translate) } : undefined,
+        onAction,
+      },
+    }))
+    edges.push(createEdge(`edge:${assetGroupNodeId ?? editScriptNodeId}:${executionNodeId}`, assetGroupNodeId ?? editScriptNodeId ?? analysisNodeId, executionNodeId))
+  }
+
+  const storyboardGenerationNodeIds = new Map<string, string>()
+  if (editScript && executionNodeId) {
+    storyboards.forEach((storyboard, index) => {
+      const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
+      storyboardGenerationNodeIds.set(storyboard.id, nodeId)
       nodes.push(createNode({
-        id: panelGenerationNodeId,
-        fallbackX: storyboardFlowBaseX,
-        fallbackY: shotGridBaseY + index * (EDIT_PIPELINE_STEP_NODE_HEIGHT + 92),
-        zIndex: zIndex++,
-        savedLayoutByKey,
-        ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
+        id: nodeId,
+        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 3, y: 120 + index * 260 }),
+        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+        height: 260,
         data: {
+          projectId,
+          episodeName,
           kind: 'storyboardPanelGeneration',
           layoutNodeType: 'storyboardPanelGeneration',
           targetType: 'storyboardPanelGeneration',
           targetId: storyboard.id,
-          storyboardId: storyboard.id,
           title: translate('nodes.storyboardPanelGeneration.title'),
           eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
-          body: translate('nodes.storyboardPanelGeneration.body'),
-          meta: translate('nodes.storyboardPanelGeneration.meta', { panels: 0 }),
-          statusLabel: storyboardPanelGenerationStreaming ? translate('status.processing') : translate('status.ready'),
-          isRunning: storyboardPanelGenerationStreaming,
-          runtimeTargets: runtimeTargets(
-            TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration(storyboard.id),
-          ),
-          width: EDIT_PIPELINE_STEP_NODE_WIDTH,
-          height: EDIT_PIPELINE_STEP_NODE_HEIGHT,
-          indexLabel: 'P',
-          actionLabel: !storyboardPanelGenerationRunning && !storyboardPanelGenerationStreaming ? translate('actions.generateStoryboard') : undefined,
-          action: !storyboardPanelGenerationRunning && !storyboardPanelGenerationStreaming
-            ? { type: 'generate_edit_storyboard', editScriptId: editScript.id }
-            : undefined,
+          body: storyboard.lastError ?? translate('nodes.storyboardPanelGeneration.body'),
+          meta: translate('nodes.storyboardPanelGeneration.meta', { panels: storyboard.panels?.length ?? storyboard.panelCount }),
+          statusLabel: storyboard.storyboardTaskRunning ? translate('status.processing') : translate('status.ready'),
+          isRunning: storyboard.storyboardTaskRunning,
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration(storyboard.id)),
           onAction,
         },
       }))
-      edges.push(createEdge(`edge:space-consistency-storyboard-panel-generation:${storyboard.id}`, nodeId, panelGenerationNodeId))
-    }
-  })
-  if (shouldShowPendingSpaceConsistencyLayer) {
-    const assetsReady = editScript.requirements.length > 0
-      && editScript.requirements.every(editAssetHasPreview)
-    const missingLocationNames = missingLocationReferenceNames(editScript)
-    const locationReferenceReady = hasReadyLocationReference(editScript)
-    const locationReferenceBlocked = assetsReady && !locationReferenceReady
-    const body = locationReferenceBlocked
-      ? translate('nodes.spaceConsistency.locationReferenceRequired')
-      : missingLocationNames.length > 0
-        ? translate('nodes.spaceConsistency.locationImageRequired', { assets: missingLocationNames.join(', ') })
-        : translate('nodes.spaceConsistency.body')
-    const action = spatialBlockingRunning
-      ? null
-      : assetsReady && locationReferenceReady
-      ? { label: translate('actions.generateSpatialBlocking'), action: { type: 'generate_edit_storyboard_spatial_blocking', editScriptId: editScript.id } as const }
-      : locationReferenceBlocked
-        ? { label: translate('actions.generateSceneAssetImagesFirst'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
-        : { label: translate('actions.generateEditAssets'), action: { type: 'generate_edit_assets', editScriptId: editScript.id } as const }
-    const nodeId = workspaceNodeId.pendingSpaceConsistencyForEditScript(editScript.id)
-    nodes.push(createNode({
-      id: nodeId,
-      fallbackX: spaceConsistencyBaseX,
-      fallbackY: (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY) !== null
-        ? (editCinematographyCanvasCenterY ?? editScriptCanvasCenterY ?? 0) - SPACE_CONSISTENCY_NODE_HEIGHT / 2
-        : shotGridBaseY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: true,
-      data: {
-        kind: 'spaceConsistency',
-        layoutNodeType: 'spaceConsistency',
-        targetType: 'editScript',
-        targetId: editScript.id,
-        title: translate('nodes.spaceConsistency.title'),
-        eyebrow: translate('nodes.spaceConsistency.eyebrow'),
-        body,
-        meta: translate('nodes.spaceConsistency.meta', {
-          profiles: 0,
-          cameraPlans: 0,
-        }),
-        statusLabel: spatialBlockingRunning ? translate('status.processing') : translate('status.pending'),
-        isRunning: spatialBlockingRunning,
-        runtimeTargets: runtimeTargets(
-          TASK_RUNTIME_TARGETS.projectEditScriptStoryboardPrepare(editScript.id),
-        ),
-        width: SPACE_CONSISTENCY_NODE_WIDTH,
-        height: SPACE_CONSISTENCY_NODE_HEIGHT,
-        indexLabel: 'G',
-        previewImageUrl: null,
-        previewAspectRatio: 16 / 9,
-        actionLabel: action?.label,
-        action: action?.action,
-        actionDisabled: action ? locationReferenceBlocked : false,
-        onAction,
-      },
-    }))
-    edges.push(createEdge(
-      `edge:edit-script-space-consistency:${editScript.id}`,
-      editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId),
-      nodeId,
-    ))
-  }
-  panelsWithStoryboard.forEach(({ storyboard, panel }, index) => {
-    const nodeId = workspaceNodeId.shot(panel.id)
-    shotNodeIds.set(panel.id, nodeId)
-    const position = gridPosition({
-      index,
-      baseX: storyboardFlowBaseX,
-      baseY: shotGridBaseY,
-      width: DEFAULT_NODE_WIDTH,
-      rowGap: shotGridRowGap,
+      edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
     })
-    const preview = shotPreviewByPanelId.get(panel.id)
+
+    if (storyboards.length === 0) {
+      const nodeId = workspaceNodeId.storyboardPanelGeneration(editScript.id)
+      nodes.push(createNode({
+        id: nodeId,
+        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 3, y: 120 }),
+        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+        height: 260,
+        data: {
+          projectId,
+          episodeName,
+          kind: 'storyboardPanelGeneration',
+          layoutNodeType: 'storyboardPanelGeneration',
+          targetType: 'storyboardPanelGeneration',
+          targetId: editScript.id,
+          title: translate('nodes.storyboardPanelGeneration.title'),
+          eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
+          body: translate('nodes.storyboardPanelGeneration.body'),
+          meta: translate('status.pending'),
+          statusLabel: translate('status.pending'),
+          actionLabel: translate('actions.generateStoryboard'),
+          action: { type: 'generate_edit_storyboard', editScriptId: editScript.id },
+          onAction,
+        },
+      }))
+      edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
+    }
+  }
+
+  const shotNodeIdsByShotNumber = new Map<number, string>()
+  collectPanels(storyboards).forEach((panel, index) => {
+    const shotNumber = resolvePanelShotNumber(panel)
+    const nodeId = workspaceNodeId.shot(panel.id)
+    shotNodeIdsByShotNumber.set(shotNumber, nodeId)
+    const column = index % SHOT_GRID_COLUMNS
+    const row = Math.floor(index / SHOT_GRID_COLUMNS)
+    const previewImageUrl = primaryPanelImageUrl(panel)
+    const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
     nodes.push(createNode({
       id: nodeId,
-      fallbackX: position.x,
-      fallbackY: position.y,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
+      position: layoutPosition(savedLayouts, nodeId, {
+        x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width + SHOT_GRID_GAP_X),
+        y: 460 + row * SHOT_GRID_GAP_Y,
+      }),
+      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+      height: SHOT_NODE_HEIGHT,
       data: {
+        projectId,
+        episodeName,
         kind: 'shot',
         layoutNodeType: 'shot',
         targetType: 'panel',
         targetId: panel.id,
         storyboardId: panel.storyboardId,
         panelIndex: panel.panelIndex,
-        title: translate('nodes.shot.title', { index: panelDisplayNumber(panel) }),
+        title: translate('nodes.shot.title', { shot: shotNumber }),
         eyebrow: translate('nodes.shot.eyebrow'),
-        body: compactText(panel.description || panel.imagePrompt || panel.videoPrompt, translate('empty.panel')),
-        meta: translate('nodes.shot.meta', {
-          location: panel.location || translate('empty.location'),
-        }),
-        statusLabel: panel.imageTaskRunning ? translate('status.processing') : translate('status.ready'),
-        isRunning: panel.imageTaskRunning,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id)),
-        width: DEFAULT_NODE_WIDTH,
-        height: preview?.nodeHeight ?? SHOT_NODE_HEIGHT,
-        indexLabel: panelDisplayNumber(panel),
-        previewImageUrl: primaryPanelImageUrl(panel),
-        previewAspectRatio: preview?.aspectRatio ?? null,
-        previewDisplayHeight: preview?.height ?? DEFAULT_MEDIA_PREVIEW_HEIGHT,
-        shotDetails: createShotDetails(panel, storyboard),
-        imageDetails: createImageDetails(panel),
-        actionLabel: panel.imageTaskRunning
-          ? undefined
-          : hasImage(panel)
-            ? translate('actions.regenerateImage')
-            : translate('actions.generateImage'),
-        action: panel.imageTaskRunning
-          ? undefined
-          : { type: 'generate_image', panelId: panel.id },
+        body: panel.description ?? translate('empty.panel'),
+        meta: panel.location ?? translate('empty.location'),
+        statusLabel: panel.imageTaskRunning || panel.videoTaskRunning ? translate('status.processing') : translate('status.ready'),
+        isRunning: panel.imageTaskRunning || panel.videoTaskRunning,
+        previewImageUrl,
+        loadingStyleImageUrl: stylePreviewImageUrl,
+        runtimeTargets: runtimeTargets(
+          TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
+          TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
+        ),
+        actionLabel: translate('actions.generateImage'),
+        action: { type: 'generate_image', panelId: panel.id },
+        shotDetails: shotDetails(panel),
+        imageDetails: imageDetails(panel),
+        videoDetails: {
+          videoPrompt: panel.videoPrompt,
+          firstLastFramePrompt: panel.firstLastFramePrompt ?? null,
+          videoGenerationMode: panel.videoGenerationMode,
+          lastVideoGenerationOptions: [],
+          videoUrl: panel.videoMedia?.url ?? panel.videoUrl,
+          videoModel: panel.videoModel,
+          linkedToNextPanel: panel.linkedToNextPanel,
+          errorMessage: panel.videoErrorMessage ?? null,
+        },
         onAction,
       },
     }))
-
-    const spaceSource = spaceConsistencyNodeIds.get(storyboard.id) ?? null
-    const editScriptSource = editScript && storyboard.editScriptId === editScript.id
-      ? spaceSource ?? editCinematographyShotPlanNodeId ?? workspaceNodeId.editScript(episodeId)
-      : null
-    const source = editScriptSource ?? (hasStory ? analysisNodeId : null)
-    if (source) {
-      edges.push(createEdge(`edge:storyboard-shot:${panel.id}`, source, nodeId))
-    }
-    if (firstPanelIdByStoryboardId.get(storyboard.id) === panel.id) {
-      const spaceNodeId = spaceConsistencyNodeIds.get(storyboard.id)
-      if (spaceNodeId && source !== spaceNodeId) edges.push(createEdge(`edge:space-consistency-shot:${storyboard.id}`, spaceNodeId, nodeId))
-    }
+    edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
   })
 
-  let videoPlanLayerHeight = 0
-  if (editScript?.videoBlocks?.length && canShowVideoPlanLayer) {
-    const durations = editScriptShotDurationByNumber(editScript)
-    const editScriptVideoSourceNodeId = workspaceNodeId.editScript(episodeId)
-    let videoPlanRowY = videoPlanBaseY
-    let videoPlanRowMaxHeight = 0
-
-    editScript.videoBlocks.forEach((block, index) => {
-      const durationSec = videoBlockDuration(block.shotNumbers, durations)
-      const validationKey = videoBlockValidationKey({
-        kind: block.kind,
-        shotNumbers: block.shotNumbers,
-        durationSec,
-      })
-      const preferredGroupMode = block.kind === 'group' ? block.gridMode : 'asset_reference'
-      const matchingGroup = findVideoGroupForBlock(videoGroups, block.shotNumbers, preferredGroupMode)
-      const singlePanel = block.kind === 'single' ? panelByShotNumberForVideoPlan.get(block.shotNumbers[0]) ?? null : null
-      const groupOutputUrl = matchingGroup?.videoMedia?.url ?? matchingGroup?.videoUrl ?? null
-      const panelOutputUrl = singlePanel?.videoMedia?.url ?? singlePanel?.videoUrl ?? null
-      const outputUrl = groupOutputUrl ?? panelOutputUrl ?? null
-      const outputAspectRatio = matchingGroup
-        ? mediaAspectRatio(matchingGroup.videoMedia) ?? mediaAspectRatio(matchingGroup.referenceImageMedia) ?? null
-        : singlePanel ? panelVideoAspectRatio(singlePanel) : null
-      const isGroupRunning = matchingGroup?.status === 'queued' || matchingGroup?.status === 'processing'
-      const isRunning = isGroupRunning || (block.kind === 'single' && singlePanel?.videoTaskRunning === true)
-      const groupFailedWithoutOutput = matchingGroup?.status === 'failed' && !outputUrl
-      const sequenceVideoModel = typeof defaultSequenceVideoModel === 'string' ? defaultSequenceVideoModel.trim() : ''
-      const assetReferenceVideoModel = sequenceVideoModel
-      const sequenceModelMissing = !sequenceVideoModel
-      const runtimeErrorMessage = sequenceModelMissing
-        ? translate('errors.sequenceVideoModelMissing')
-        : groupFailedWithoutOutput
-          ? matchingGroup.errorMessage || translate('status.failed')
-          : block.kind === 'single'
-            ? singlePanel?.videoErrorMessage ?? null
-            : null
-      const blockHasPanelImages = block.shotNumbers.every((shotNumber) => {
-        const panel = panelByShotNumberForVideoPlan.get(shotNumber)
-        return Boolean(panel && primaryPanelImageUrl(panel))
-      })
-      const blockPanelIds = block.shotNumbers
-        .map((shotNumber) => panelByShotNumberForVideoPlan.get(shotNumber)?.id ?? null)
-        .filter((panelId): panelId is string => Boolean(panelId))
-      const statusLabel = isRunning
-        ? translate('status.processing')
-        : validationKey || runtimeErrorMessage
-          ? translate('status.failed')
-          : outputUrl
-            ? translate('status.ready')
-            : translate('status.pending')
-      const assetReferences = assetReferencesForVideoBlock(editScript, block.shotNumbers)
-      const action: WorkspaceCanvasNodeAction | undefined = validationKey || runtimeErrorMessage || isRunning
-        ? undefined
-        : block.kind === 'group'
-          ? blockHasPanelImages ? {
-              type: 'generate_video_group',
-              gridMode: block.gridMode === '3x3' ? '3x3' : '2x2',
-              shotNumbers: block.shotNumbers,
-            } : undefined
-          : singlePanel && blockHasPanelImages
-            ? {
-                type: 'generate_video',
-                storyboardId: singlePanel.storyboardId,
-                panelIndex: singlePanel.panelIndex,
-                panelId: singlePanel.id,
-              }
-            : undefined
-      const arrangementAction: WorkspaceCanvasNodeAction | undefined = !isRunning
-        ? {
-            type: 'open_video_block_arrangement',
-            editScriptId: editScript.id,
-            blockIndex: index,
-          }
-        : undefined
-      const storyboardGridImageAction: WorkspaceCanvasNodeAction | undefined = !isRunning && blockPanelIds.length > 1
-        ? {
-            type: 'generate_storyboard_grid_images',
-            episodeId,
-            editScriptId: editScript.id,
-            sourceVideoBlockId: `${editScript.id}:video-block:${index + 1}`,
-            panelIds: blockPanelIds,
-            generationMode: 'grid',
-          }
-        : undefined
-      const storyboardSingleImageAction: WorkspaceCanvasNodeAction | undefined = !isRunning && blockPanelIds.length > 0
-        ? {
-            type: 'generate_storyboard_grid_images',
-            episodeId,
-            editScriptId: editScript.id,
-            sourceVideoBlockId: `${editScript.id}:video-block:${index + 1}`,
-            panelIds: blockPanelIds,
-            generationMode: 'single',
-          }
-        : undefined
-      const primaryAction = action ?? (!blockHasPanelImages ? storyboardSingleImageAction : undefined)
-      const primaryActionLabel = action
-        ? translate('actions.generateVideo')
-        : !blockHasPanelImages && storyboardSingleImageAction
-          ? translate('actions.generateStoryboardSingleImages')
-          : undefined
-      const modeLabel = block.kind === 'group' ? translate('nodeFields.videoPlanGroup') : translate('nodeFields.videoPlanSingle')
+  if (editScript?.generationSegments.length) {
+    editScript.generationSegments.forEach((segment, index) => {
       const nodeId = workspaceNodeId.videoPlan(editScript.id, index + 1)
-      const validationMessage = validationKey ? translate(`errors.${validationKey}`) : null
-      const videoPlanHeight = estimateVideoPlanNodeHeight({
-        outputAspectRatio,
-        hasOutput: Boolean(outputUrl),
-        shotCount: block.shotNumbers.length,
-        assetReferenceCount: assetReferences.length,
-        showsModelHint: assetReferences.length > 0 && assetReferenceVideoModel.length === 0,
-        prompt: block.prompt,
-        errorMessage: runtimeErrorMessage,
-        validationMessage,
+      const videoGroup = videoGroupForShotNumbers(videoGroups, segment.shotNumbers)
+      const details = videoPlanDetails({
+        editScript,
+        segmentIndex: index,
+        videoGroup,
+        panelsByShot,
+        requirements: editScript.requirements,
+        defaultVideoModel: defaultSequenceVideoModel ?? defaultVideoModel,
       })
-      const column = index % PANEL_GRID_COLUMNS
-      if (column === 0 && index > 0) {
-        videoPlanLayerHeight += videoPlanRowMaxHeight + VIDEO_PLAN_GRID_ROW_GAP_Y
-        videoPlanRowY = videoPlanBaseY + videoPlanLayerHeight
-        videoPlanRowMaxHeight = 0
-      }
-      const position = {
-        x: storyboardFlowBaseX + column * (VIDEO_PLAN_NODE_WIDTH + PANEL_GRID_GAP_X),
-        y: videoPlanRowY,
-      }
-      videoPlanRowMaxHeight = Math.max(videoPlanRowMaxHeight, videoPlanHeight)
+      const gridMode = inferGridMode(segment.shotNumbers.length)
+      const canGenerateGroup = Boolean(gridMode && details.sourceImages.every((image) => Boolean(image.imageUrl)))
       nodes.push(createNode({
         id: nodeId,
-        fallbackX: position.x,
-        fallbackY: position.y,
-        zIndex: zIndex++,
-        savedLayoutByKey,
-        ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
+        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 4, y: 120 + index * (WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + 80) }),
+        width: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height,
         data: {
+          projectId,
+          episodeName,
           kind: 'videoPlan',
           layoutNodeType: 'videoPlan',
-          targetType: 'editScript',
-          targetId: `${editScript.id}:video-block:${index + 1}`,
+          targetType: 'videoGroup',
+          targetId: videoGroup?.id ?? `${editScript.id}:generationSegment:${index + 1}`,
           title: translate('nodes.videoPlan.title', { index: index + 1 }),
           eyebrow: translate('nodes.videoPlan.eyebrow'),
-          body: compactText(block.reason, translate('nodes.videoPlan.body')),
-          meta: translate('nodes.videoPlan.meta', {
-            mode: modeLabel,
-            shots: block.shotNumbers.join(', '),
-            duration: durationSec,
-          }),
-          statusLabel,
-          isRunning,
-          runtimeTargets: runtimeTargets(
-            block.kind === 'single'
-              ? TASK_RUNTIME_TARGETS.projectPanelVideo(singlePanel?.id)
-              : TASK_RUNTIME_TARGETS.projectVideoGroup(matchingGroup?.id),
-          ),
-          width: VIDEO_PLAN_NODE_WIDTH,
-          height: videoPlanHeight,
-          indexLabel: `B${index + 1}`,
-          previewImageUrl: outputUrl ?? null,
-          previewAspectRatio: outputAspectRatio,
-          videoPlanDetails: {
-            editScriptId: editScript.id,
-            blockIndex: index,
-            kind: block.kind,
-            videoGroupId: matchingGroup?.id ?? null,
-            shotNumbers: block.shotNumbers,
-            durationSec,
-            gridMode: block.gridMode,
-            reason: block.reason,
-            prompt: block.prompt,
-            assetReferenceVideoModel,
-            outputUrl,
-            outputAspectRatio,
-            errorMessage: runtimeErrorMessage,
-            sourceImages: block.shotNumbers.map((shotNumber) => {
-              const panel = panelByShotNumberForVideoPlan.get(shotNumber)
-              return {
-                panelId: panel?.id ?? null,
-                storyboardId: panel?.storyboardId ?? null,
-                panelIndex: panel?.panelIndex ?? null,
-                shotNumber,
-                imageUrl: panel ? primaryPanelImageUrl(panel) : null,
-                aspectRatio: panel ? panelImageAspectRatio(panel) : null,
+          body: segment.continuity,
+          meta: translate('nodes.videoPlan.meta', { shots: segment.shotNumbers.length, duration: details.durationSec }),
+          statusLabel: videoGroup ? statusLabel(videoGroup.status, translate) : translate('status.pending'),
+          isRunning: Boolean(videoGroup && (videoGroup.status === 'queued' || videoGroup.status === 'generating')),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
+          actionLabel: canGenerateGroup ? translate('actions.generateVideo') : undefined,
+          action: canGenerateGroup && gridMode
+            ? {
+                type: 'generate_video_group',
+                gridMode,
+                shotNumbers: segment.shotNumbers,
               }
-            }),
-            assetReferences,
-            validationMessage,
-          },
-          actionLabel: primaryActionLabel,
-          action: primaryAction,
-          secondaryActionLabel: arrangementAction ? translate('actions.arrangeVideoBlocks') : undefined,
-          secondaryAction: arrangementAction,
-          tertiaryActionLabel: storyboardGridImageAction ? translate('actions.generateStoryboardGridImages') : undefined,
-          tertiaryAction: storyboardGridImageAction,
+            : undefined,
+          secondaryActionLabel: translate('actions.arrangeGenerationSegments'),
+          secondaryAction: { type: 'open_video_block_arrangement', editScriptId: editScript.id, segmentIndex: index },
+          tertiaryActionLabel: canGenerateGroup ? translate('actions.generateStoryboardGridImages') : undefined,
+          tertiaryAction: canGenerateGroup
+            ? {
+                type: 'generate_storyboard_grid_images',
+                episodeId,
+                editScriptId: editScript.id,
+                sourceGenerationSegmentId: `${editScript.id}:generationSegment:${index + 1}`,
+                panelIds: details.sourceImages.flatMap((image) => (image.panelId ? [image.panelId] : [])),
+                generationMode: 'grid',
+              }
+            : undefined,
+          videoPlanDetails: details,
           onAction,
         },
       }))
-
-      edges.push(createEdge(`edge:edit-script-video-plan:${nodeId}`, editScriptVideoSourceNodeId, nodeId))
-      const firstShotPanel = panelByShotNumberForVideoPlan.get(block.shotNumbers[0])
-      const firstShotNodeId = firstShotPanel ? shotNodeIds.get(firstShotPanel.id) : null
-      if (firstShotNodeId) edges.push(createEdge(`edge:shot-video-plan:${nodeId}`, firstShotNodeId, nodeId))
+      segment.shotNumbers.forEach((shotNumber) => {
+        const shotNodeId = shotNodeIdsByShotNumber.get(shotNumber)
+        if (shotNodeId) edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotNumber}`, shotNodeId, nodeId))
+      })
+      if (!segment.shotNumbers.some((shotNumber) => shotNodeIdsByShotNumber.has(shotNumber)) && executionNodeId) {
+        edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
+      }
     })
-    videoPlanLayerHeight += videoPlanRowMaxHeight
   }
 
-  const bgmScoreBaseY = videoPlanBaseY + (canShowVideoPlanLayer ? videoPlanLayerHeight + 130 : 0)
-  const videoOutputNodeIds = nodes
-    .filter((node) => node.data.kind === 'videoPlan')
-    .map((node) => node.id)
-  if (videoOutputNodeIds.length > 0) {
-    const finalNodeId = workspaceNodeId.finalTimeline(episodeId)
-    const bgmScoreNodeId = workspaceNodeId.bgmScore(episodeId)
-    const totalDuration = panelsWithStoryboard.reduce((total, item) => total + (item.panel.duration ?? 0), 0)
-    const imageCount = panelsWithStoryboard.filter((item) => hasImage(item.panel)).length
-    const generatedVideoCount = canShowVideoPlanLayer && editScript?.videoBlocks
-      ? editScript.videoBlocks.filter((block) => {
-          const preferredMode = block.kind === 'group' ? block.gridMode : 'asset_reference'
-          const group = findVideoGroupForBlock(videoGroups, block.shotNumbers, preferredMode)
-          if (group?.videoMedia?.url ?? group?.videoUrl) return true
-          const panel = panelByShotNumberForVideoPlan.get(block.shotNumbers[0])
-          return panel ? hasGeneratedVideo(panel) : false
-        }).length
-      : 0
-    const isFinalRenderRunning = finalVideo?.renderStatus === 'queued' || finalVideo?.renderStatus === 'processing'
-    const isFinalRenderFailed = finalVideo?.renderStatus === 'failed'
-    const bgmScore = finalVideo?.bgmScore ?? null
-    const isBgmScoreRunning = bgmScore?.status === 'generating' || bgmScoreStreaming
-    const isBgmScoreFailed = bgmScore?.status === 'failed'
-    const hasBgmScore = bgmScore?.status === 'completed' && Boolean(bgmScore.mix?.url)
-    const bgmScorePlan = bgmScore?.plan ?? null
-    const bgmDesignSections = bgmScorePlan?.scoreDesign?.sections ?? []
-    const bgmPromptSections = bgmScorePlan?.promptSections ?? []
-    const bgmVirtualLayers = bgmScorePlan?.virtualLayers ?? []
-    const hasBgmPromptDesign = Boolean(
-      bgmScorePlan?.finalPrompt
-      || bgmScorePlan?.scoreDesign?.overview
-      || bgmDesignSections.length > 0
-      || bgmPromptSections.length > 0
-      || bgmVirtualLayers.length > 0,
-    )
-    const isBgmPromptDesignMissing = hasBgmScore && !hasBgmPromptDesign
-    const hasFinalOutput = Boolean(finalVideo?.outputUrl && finalVideo.renderStatus === 'completed')
-    const bgmScoreFallbackX = storyboardFlowBaseX
-    const bgmScoreFallbackY = bgmScoreBaseY + 180
+  const bgmNodeId = workspaceNodeId.bgmScore(episodeId)
+  const bgmDetails = bgmScoreDetails(finalVideo)
+  nodes.push(createNode({
+    id: bgmNodeId,
+    position: layoutPosition(savedLayouts, bgmNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 5, y: 120 }),
+    width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
+    height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
+    data: {
+      projectId,
+      episodeName,
+      kind: 'bgmScore',
+      layoutNodeType: 'bgmScore',
+      targetType: 'episode',
+      targetId: episodeId,
+      title: translate('nodes.bgmScore.title'),
+      eyebrow: translate('nodes.bgmScore.eyebrow'),
+      body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body'),
+      meta: bgmDetails?.musicModel ?? '',
+      statusLabel: bgmDetails ? statusLabel(bgmDetails.status, translate) : translate('status.pending'),
+      actionLabel: translate('actions.generateBgmScore'),
+      action: { type: 'generate_bgm_score' },
+      runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
+      bgmScoreDetails: bgmDetails,
+      onAction,
+    },
+  }))
+
+  const finalNodeId = workspaceNodeId.finalTimeline(episodeId)
+  const panelList = collectPanels(storyboards)
+  nodes.push(createNode({
+    id: finalNodeId,
+    position: layoutPosition(savedLayouts, finalNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 5, y: 120 + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height + 120 }),
+    width: WORKSPACE_CANVAS_FINAL_NODE_SIZE.width,
+    height: WORKSPACE_CANVAS_FINAL_NODE_SIZE.height,
+    data: {
+      projectId,
+      episodeName,
+      kind: 'finalTimeline',
+      layoutNodeType: 'finalTimeline',
+      targetType: 'episode',
+      targetId: episodeId,
+      title: translate('nodes.finalTimeline.title'),
+      eyebrow: translate('nodes.finalTimeline.eyebrow'),
+      body: finalVideo?.outputUrl ?? translate('nodes.finalTimeline.body'),
+      meta: finalVideo?.renderStatus ?? '',
+      statusLabel: finalVideo?.outputUrl ? translate('status.finalReady') : statusLabel(finalVideo?.renderStatus, translate),
+      actionLabel: translate('actions.renderFinalVideo'),
+      action: { type: 'render_final_video' },
+      runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
+      finalDetails: {
+        totalShots: editScript?.shotCount ?? panelList.length,
+        totalImages: panelList.filter((panel) => Boolean(primaryPanelImageUrl(panel))).length,
+        totalVideos: panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).length + videoGroups.filter((group) => Boolean(group.videoMedia?.url ?? group.videoUrl)).length,
+        totalDuration: editScript?.durationSec ?? null,
+        orderedVideoLabels: [
+          ...videoGroups.map((group) => group.shotNumbers).map((shotNumbers) => readShotNumbers(shotNumbers).join(', ')),
+          ...panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).map((panel) => String(resolvePanelShotNumber(panel))),
+        ],
+        outputUrl: finalVideo?.outputUrl,
+        renderStatus: finalVideo?.renderStatus,
+      },
+      onAction,
+    },
+  }))
+
+  if (editScript?.generationSegments.length) {
+    editScript.generationSegments.forEach((_segment, index) => {
+      edges.push(createEdge(`edge:video-plan-final:${index}`, workspaceNodeId.videoPlan(editScript.id, index + 1), finalNodeId))
+    })
+  }
+  edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
+
+  locations.forEach((location, index) => {
+    const preview = locationPreviewUrl(location)
+    if (!preview) return
+    const nodeId = `location-asset:${location.id}`
     nodes.push(createNode({
-      id: bgmScoreNodeId,
-      fallbackX: bgmScoreFallbackX,
-      fallbackY: bgmScoreFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
+      id: nodeId,
+      position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 860 + index * 260 }),
+      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+      height: 240,
       data: {
-        kind: 'bgmScore',
-        layoutNodeType: 'bgmScore',
-        targetType: 'episode',
-        targetId: episodeId,
-        title: translate('nodes.bgmScore.title'),
-        eyebrow: translate('nodes.bgmScore.eyebrow'),
-        body: translate('nodes.bgmScore.body', { videos: videoOutputNodeIds.length }),
-        meta: isBgmScoreFailed
-          ? bgmScore?.errorMessage ?? translate('nodes.bgmScore.failed')
-          : hasBgmScore
-            ? isBgmPromptDesignMissing
-              ? translate('nodes.bgmScore.readyMissingPromptDesign')
-              : translate('nodes.bgmScore.ready', { count: bgmPromptSections.length })
-            : translate('nodes.bgmScore.meta'),
-        statusLabel: isBgmScoreRunning
-          ? translate('status.generatingBgm')
-          : isBgmScoreFailed
-            ? translate('status.failed')
-            : hasBgmScore
-              ? translate('status.ready')
-              : translate('status.pending'),
-        isRunning: isBgmScoreRunning,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
-        defaultExpanded: hasBgmScore || isBgmScoreFailed,
-        width: BGM_SCORE_NODE_WIDTH,
-        height: BGM_SCORE_NODE_HEIGHT,
-        indexLabel: 'M',
-        bgmScoreDetails: {
-          status: bgmScore?.status ?? (isBgmScoreRunning ? 'generating' : 'pending'),
-          durationSeconds: bgmScore?.durationSeconds ?? null,
-          musicModel: bgmScore?.musicModel ?? null,
-          hasPromptDesign: hasBgmPromptDesign,
-          promptDesignMissing: isBgmPromptDesignMissing,
-          designSectionCount: bgmDesignSections.length,
-          promptSectionCount: bgmPromptSections.length,
-          virtualLayerCount: bgmVirtualLayers.length,
-          mixUrl: bgmScore?.mix?.url ?? null,
-          errorMessage: bgmScore?.errorMessage ?? null,
-          scoreOverview: bgmScorePlan?.scoreDesign.overview ?? null,
-          designSections: bgmDesignSections.map((section) => ({
-            category: section.category ?? null,
-            title: section.title,
-            purpose: section.purpose ?? null,
-            startSec: section.startSec ?? null,
-            endSec: section.endSec ?? null,
-            content: section.content,
-          })),
-          promptSections: bgmPromptSections.map((section) => ({
-            category: section.category ?? null,
-            title: section.title,
-            purpose: section.purpose ?? null,
-            startSec: section.startSec ?? null,
-            endSec: section.endSec ?? null,
-            content: section.content,
-          })),
-          virtualLayers: bgmVirtualLayers.map((layer) => ({
-            name: layer.name,
-            purpose: layer.purpose,
-            content: layer.content,
-          })),
-          finalPrompt: bgmScorePlan?.finalPrompt ?? null,
-        },
-        actionLabel: isBgmScoreRunning ? translate('actions.generatingBgm') : translate('actions.generateBgmScore'),
-        action: { type: 'generate_bgm_score' },
-        actionDisabled: isBgmScoreRunning,
+        projectId,
+        episodeName,
+        kind: 'imageAsset',
+        layoutNodeType: 'imageAsset',
+        targetType: 'projectLocation',
+        targetId: location.id,
+        title: location.name,
+        eyebrow: translate('nodeFields.location'),
+        body: location.summary ?? '',
+        meta: '',
+        statusLabel: translate('status.ready'),
+        previewImageUrl: preview,
         onAction,
       },
     }))
-    nodes.push(createNode({
-      id: finalNodeId,
-      fallbackX: bgmScoreFallbackX + BGM_SCORE_NODE_WIDTH + WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X,
-      fallbackY: bgmScoreFallbackY,
-      zIndex: zIndex++,
-      savedLayoutByKey,
-      ignoreSavedLayout: shouldRouteThroughSpaceConsistency,
-      data: {
-        kind: 'finalTimeline',
-        layoutNodeType: 'finalTimeline',
-        targetType: 'episode',
-        targetId: episodeId,
-        title: translate('nodes.final.title'),
-        eyebrow: translate('nodes.final.eyebrow'),
-        body: translate('nodes.final.body', { videos: videoOutputNodeIds.length }),
-        meta: isFinalRenderFailed
-          ? translate('status.failed')
-          : hasFinalOutput
-            ? translate('nodes.final.outputReady')
-            : translate('nodes.final.meta'),
-        statusLabel: isFinalRenderRunning
-          ? translate('status.aiEditing')
-          : isFinalRenderFailed
-            ? translate('status.failed')
-            : hasFinalOutput
-              ? translate('status.finalReady')
-              : translate('status.ready'),
-        isRunning: isFinalRenderRunning,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
-        width: FINAL_NODE_WIDTH,
-        height: 280,
-        finalDetails: {
-          totalShots: panelsWithStoryboard.length,
-          totalImages: imageCount,
-          totalVideos: generatedVideoCount,
-          totalDuration: totalDuration > 0 ? totalDuration : null,
-          orderedVideoLabels: videoOutputNodeIds.map((videoNodeId) => videoNodeId.replace('video:', '').replace('video-plan:', '')),
-          outputUrl: finalVideo?.outputUrl ?? null,
-          renderStatus: finalVideo?.renderStatus ?? null,
-        },
-        actionLabel: isFinalRenderRunning ? translate('actions.aiEditing') : translate('actions.renderFinalVideo'),
-        action: { type: 'render_final_video' },
-        actionDisabled: isFinalRenderRunning || !hasBgmScore,
-        onAction,
-      },
-    }))
-    videoOutputNodeIds.forEach((videoNodeId) => {
-      edges.push(createEdge(`edge:video-bgm:${videoNodeId}`, videoNodeId, bgmScoreNodeId))
-    })
-    edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmScoreNodeId, finalNodeId))
-  }
+  })
 
-  // 指向「生产中」节点的连线点亮：流动 + 系统天蓝色描边与微弱发光，
-  // 与卡片聚焦效果（workspace-node-running-breathing）保持同一套视觉语言。
-  const runningNodeIds = new Set(
-    nodes.filter((node) => node.data?.isRunning === true).map((node) => node.id),
-  )
-  const decoratedEdges = edges.map((edge) =>
-    runningNodeIds.has(edge.target)
-      ? {
-          ...edge,
-          animated: true,
-          style: {
-            ...edge.style,
-            stroke: '#38bdf8',
-            strokeWidth: 2,
-            filter: 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.65))',
-          },
-        }
-      : edge,
-  )
-
-  // 给所有待生成媒体节点统一附上加载背景图(用户选中的视觉风格图),供统一加载组件使用。
-  const nodesWithLoadingStyleImage = nodes.map((node) =>
-    node.data.kind === 'shot' || node.data.kind === 'imageAsset' || node.data.kind === 'videoClip' || node.data.kind === 'editAssetGroup'
-      ? { ...node, data: { ...node.data, loadingStyleImageUrl: styleBiblePreviewImageUrl } }
-      : node,
-  )
-
-  return {
-    nodes: repairWorkspaceNodeOverlaps(alignFinalTimelineNodesToBgmScore(nodesWithLoadingStyleImage)),
-    edges: decoratedEdges,
-  }
+  return { nodes, edges }
 }
 
-export function useWorkspaceNodeCanvasProjection({
-  projectId,
-  episodeId,
-  episodeName,
-  storyText,
-  locations,
-  storyboards,
-  editScreenplay,
-  editDirectorDecoupage,
-  editScript,
-  editCinematographyShotPlan,
-  activeAssistantOperationId,
-  editScriptPending,
-  streamTargets,
-  finalVideo,
-  videoGroups,
-  defaultSequenceVideoModel,
-  savedLayouts,
-  translate,
-  onAction,
-}: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
-  return useMemo(
-    () => buildWorkspaceNodeCanvasProjection({
-      projectId,
-      episodeId,
-      episodeName,
-      storyText,
-      locations,
-      storyboards,
-      editScreenplay,
-      editDirectorDecoupage,
-      editScript,
-      editCinematographyShotPlan,
-      activeAssistantOperationId,
-      editScriptPending,
-      streamTargets,
-      finalVideo,
-      videoGroups,
-      defaultSequenceVideoModel,
-      savedLayouts,
-      translate,
-      onAction,
-    }),
-    [
-      locations,
-      episodeId,
-      episodeName,
-      onAction,
-      projectId,
-      defaultSequenceVideoModel,
-      finalVideo,
-      videoGroups,
-      savedLayouts,
-      editCinematographyShotPlan,
-      activeAssistantOperationId,
-      editDirectorDecoupage,
-      editScreenplay,
-      editScript,
-      editScriptPending,
-      streamTargets,
-      storyText,
-      storyboards,
-      translate,
-    ],
-  )
+export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
+  return useMemo(() => buildWorkspaceNodeCanvasProjection(input), [
+    input.projectId,
+    input.episodeId,
+    input.episodeName,
+    input.storyText,
+    input.locations,
+    input.storyboards,
+    input.editScreenplay,
+    input.editScript,
+    input.editShotExecutionPlan,
+    input.activeAssistantOperationId,
+    input.editScriptPending,
+    input.streamTargets,
+    input.finalVideo,
+    input.videoGroups,
+    input.defaultVideoModel,
+    input.defaultSequenceVideoModel,
+    input.savedLayouts,
+    input.translate,
+    input.onAction,
+  ])
 }

@@ -12,10 +12,9 @@ export interface WorkflowLabCloneMaps {
   readonly panelIds: WorkflowLabIdMap
   readonly screenplayIds: WorkflowLabIdMap
   readonly stylePreviewIds: WorkflowLabIdMap
-  readonly directorDecoupageIds: WorkflowLabIdMap
   readonly editScriptIds: WorkflowLabIdMap
   readonly assetRequirementIds: WorkflowLabIdMap
-  readonly cinematographyShotPlanIds: WorkflowLabIdMap
+  readonly shotExecutionPlanIds: WorkflowLabIdMap
   readonly videoGroupIds: WorkflowLabIdMap
 }
 
@@ -30,10 +29,9 @@ export function createWorkflowLabCloneMaps(): WorkflowLabCloneMaps {
     panelIds: new Map(),
     screenplayIds: new Map(),
     stylePreviewIds: new Map(),
-    directorDecoupageIds: new Map(),
     editScriptIds: new Map(),
     assetRequirementIds: new Map(),
-    cinematographyShotPlanIds: new Map(),
+    shotExecutionPlanIds: new Map(),
     videoGroupIds: new Map(),
   }
 }

@@ -5,7 +5,7 @@ export type WorkspaceCanvasLayoutLane =
   | 'editPipeline'
   | 'editScript'
   | 'assets'
-  | 'spaceConsistency'
+  | 'execution'
   | 'shots'
   | 'videoPlan'
   | 'bgm'
@@ -80,7 +80,6 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'editScreenplay':
     case 'editStylePreview':
     case 'editStyleBible':
-    case 'editDirectorDecoupage':
       return 'story'
     case 'editPipelineStep':
     case 'editProcessGroup':
@@ -91,9 +90,8 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
     case 'editAssetGroup':
     case 'imageAsset':
       return 'assets'
-    case 'spaceConsistency':
-    case 'editCinematographyShotPlan':
-      return 'spaceConsistency'
+    case 'editShotExecutionPlan':
+      return 'execution'
     case 'storyboardPanelGeneration':
     case 'shot':
       return 'shots'
@@ -112,7 +110,7 @@ function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: Work
     case 'story':
     case 'editPipeline':
     case 'editScript':
-    case 'spaceConsistency':
+    case 'execution':
     case 'bgm':
     case 'final':
       return lane

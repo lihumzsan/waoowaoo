@@ -20,8 +20,9 @@ export interface WorkspaceVideoModelOption {
   videoPricingTiers?: VideoPricingTier[]
 }
 
-export interface WorkspaceVideoBlockArrangementBlock {
+export interface WorkspaceGenerationSegmentArrangementItem {
   readonly shotNumbers: readonly number[]
+  readonly continuity: string
 }
 
 export interface WorkspaceEditScreenplayGenerationInput {
@@ -45,14 +46,13 @@ export interface WorkspaceRuntimeValue {
   onVideoRatioChange: (value: string) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
   onGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
-  onGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   onGenerateStoryboardGridImages: (payload: {
     readonly episodeId: string
     readonly editScriptId: string
-    readonly sourceVideoBlockId: string
+    readonly sourceGenerationSegmentId: string
     readonly panelIds: readonly string[]
     readonly generationMode?: StoryboardPanelImageGenerationMode
   }) => Promise<void>
@@ -73,18 +73,17 @@ export interface WorkspaceRuntimeValue {
   onGenerateBgmScore: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
-  onGenerateEditCinematographyShotPlan: (editScriptId: string) => Promise<void>
+  onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
   onRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   onGenerateEditStoryboard: (editScriptId: string) => Promise<void>
-  onGenerateEditStoryboardSpatialBlocking: (editScriptId: string) => Promise<void>
   onUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,
     value: string,
     field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
-  onUpdateVideoPlanPrompt: (editScriptId: string, blockIndex: number, prompt: string) => Promise<void>
-  onArrangeVideoBlocks: (editScriptId: string, blocks: readonly WorkspaceVideoBlockArrangementBlock[]) => Promise<void>
+  onUpdateGenerationSegmentContinuity: (editScriptId: string, segmentIndex: number, continuity: string) => Promise<void>
+  onArrangeGenerationSegments: (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => Promise<void>
   onUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onOpenAssetLibraryForCharacter: (characterId?: string | null, refreshAssets?: boolean) => void

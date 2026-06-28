@@ -18,9 +18,9 @@
 写出一段干净的最终音乐提示词，根据完整剪辑核心表、项目整体配置和实际成片素材时间线，为整条时间线设计统一但会随镜头变化的背景配乐。它应该像一首为成片定制的配乐，而不是多个互不相关的短音乐片段拼接。
 
 读取优先级：
-- 必须先理解完整剪辑核心表 JSON。videoBlocks 是 block-first 生成计划，决定音乐段落结构、连续性、single/group 区分和剪辑意图。
-- 必须读取 videoBlocks[].kind、shotNumbers、reason、prompt；group 要视为一个连续剧情/运动段落，single 要视为独立剪辑点。
-- 必须读取 shots[] 的 durationSec、dramaticPurpose、visibleAction、audienceFocus、viewpoint、revealPlan、performanceBeat、charactersAndScene、sound。不要只看 sound 字段。
+- 必须先理解完整剪辑核心表 JSON。generationSegments 是生成分段计划，决定音乐段落结构和连续性。
+- 必须读取 generationSegments[].shotNumbers 和 continuity；每个分段都要视为一个连续剧情/运动段落。
+- 必须读取 shots[] 的 durationSec、scene、action、characters[].performance、keyObjects 和 sound。不要只看 sound 字段。
 - 必须读取项目整体配置 JSON 的 videoRatio，并读取完整剪辑核心表 JSON 中的 styleBible；把画幅、Style Bible 的视觉/声音策略转化为音乐气质、声场、节奏密度和配器取向。
 - 必须参考实际成片素材时间线 JSON，保证音乐段落长度贴合最终可渲染素材；如果实际素材时间线和剪辑核心表有差异，以实际素材时间线的时长为准，但音乐叙事仍以剪辑核心表为主。
 - 下方“逐段情绪与节奏表”只是便捷摘要，不得替代完整剪辑核心表。
@@ -39,7 +39,7 @@
 
 编曲结构：
 使用下方带时间码的结构。请为每个时间段描述音乐事件、强度级别、过渡方式，以及它如何连接前后段落。整支配乐要保持统一主题，同时允许合理的上升、释放、drop、停顿和织体变化。
-必须显式体现 videoBlocks 的连续性：group 内部可以有细微音乐事件变化，但必须保持同一段落主题和运动惯性；single 之间如果发生时空/情绪跳跃，必须设计清晰的音乐切点、留白、转场或动机变化。
+必须显式体现 generationSegments 的连续性：分段内部可以有细微音乐事件变化，但必须保持同一段落主题和运动惯性；分段之间如果发生时空/情绪跳跃，必须设计清晰的音乐切点、留白、转场或动机变化。
 
 声场与氛围：
 根据视觉动作和故事背景推导适合的空间感、混响、环境质感或声音纹理。它们应该作为音乐织体使用，不要变成简单音效，除非剪辑先行脚本明确要求。

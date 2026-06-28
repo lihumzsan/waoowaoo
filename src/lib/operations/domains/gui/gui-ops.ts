@@ -745,7 +745,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const storyboards = await prisma.projectStoryboard.findMany({
           where: { episodeId: input.episodeId },
           include: {
-            blockingArtifacts: { orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }] },
             panels: { orderBy: { panelIndex: 'asc' } },
           },
           orderBy: { createdAt: 'asc' },
@@ -873,7 +872,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
                 linkedToNextPanel: panel.linkedToNextPanel,
                 sketchImageUrl: includeImages ? panel.sketchImageUrl : null,
                 sketchImageMediaId: includeImages ? panel.sketchImageMediaId : null,
-                photographyRules: panel.photographyRules,
                 actingNotes: panel.actingNotes,
               })),
             })
@@ -969,7 +967,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               linkedToNextPanel: false,
               sketchImageUrl: includeImages ? sourcePanel.sketchImageUrl : null,
               sketchImageMediaId: includeImages ? sourcePanel.sketchImageMediaId : null,
-              photographyRules: sourcePanel.photographyRules,
               actingNotes: sourcePanel.actingNotes,
               previousImageUrl: includeImages ? sourcePanel.previousImageUrl : null,
               previousImageMediaId: includeImages ? sourcePanel.previousImageMediaId : null,
@@ -1178,7 +1175,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           include: {
             storyboards: {
               include: {
-                blockingArtifacts: { orderBy: [{ groupIndex: 'asc' }, { createdAt: 'asc' }] },
                 panels: { orderBy: { panelIndex: 'asc' } },
               },
               orderBy: { createdAt: 'asc' },
@@ -1220,7 +1216,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         return {
           episode: {
             ...episodeWithSignedUrls,
-            finalVideo: normalizeFinalVideoSummary(episodeWithSignedUrls.finalOutput),
+            finalVideo: normalizeFinalVideoSummary(episode.finalOutput),
           },
         }
       },

@@ -5,22 +5,22 @@ describe('storyboard grid compare lab input parsing', () => {
   it('preserves previous grid image url for serial grid-set tests', () => {
     const parsed = parseStoryboardGridCompareSubmitBody({
       episodeId: 'episode-1',
-      sourceVideoBlockId: 'edit-1:video-block:2',
+      sourceGenerationSegmentId: 'edit-1:generationSegment:2',
       panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
       mode: 'grid_2x2',
       locale: 'zh',
       previousGridImageUrl: 'images/previous-grid.png',
-      omittedFields: ['panel.image_prompt'],
+      omittedFields: ['render_facts.STILL_FRAME.camera'],
     })
 
     expect(parsed).toEqual({
       episodeId: 'episode-1',
-      sourceVideoBlockId: 'edit-1:video-block:2',
+      sourceGenerationSegmentId: 'edit-1:generationSegment:2',
       panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
       mode: 'grid_2x2',
       locale: 'zh',
       previousGridImageUrl: 'images/previous-grid.png',
-      omittedFields: ['panel.image_prompt'],
+      omittedFields: ['render_facts.STILL_FRAME.camera'],
     })
   })
 })

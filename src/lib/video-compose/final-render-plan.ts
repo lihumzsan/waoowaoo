@@ -1,7 +1,6 @@
-import { z } from 'zod'
 import { AI_PROMPT_IDS, buildAiPrompt, type AiPromptLocale } from '@/lib/ai-prompts'
-import { editScriptShotSchema, type EditScriptStyleBible } from '@/lib/edit-script/types'
-import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
+import { editScriptCoreSchema, type EditGenerationSegment, type EditScriptShot, type EditScriptStyleBible } from '@/lib/edit-script/types'
+import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
 
 export type FinalRenderAspectRatio = '9:16' | '16:9' | '21:9'
 
@@ -30,7 +29,6 @@ export interface FinalRenderPanelInput {
   readonly description?: string | null
   readonly videoUrl?: string | null
   readonly videoMedia?: FinalRenderMediaRefInput | null
-  readonly photographyRules?: string | null
   readonly storyboard: FinalRenderStoryboardInput
 }
 
@@ -48,35 +46,10 @@ export interface FinalRenderVideoGroupInput {
 export interface FinalRenderEditScriptInput {
   readonly id: string
   readonly userPrompt: string
-  readonly title: string
-  readonly logline?: string | null
   readonly durationSec: number
   readonly styleBible?: EditScriptStyleBible | null
-  readonly shots: readonly FinalRenderEditShot[]
-  readonly videoBlocks: readonly FinalRenderEditVideoBlock[]
-}
-
-export interface FinalRenderEditShot {
-  readonly shotNumber: number
-  readonly durationSec: number
-  readonly dramaticPurpose: string
-  readonly visibleAction: string
-  readonly audienceFocus: string
-  readonly viewpoint: string
-  readonly revealPlan: string
-  readonly performanceBeat: string
-  readonly continuityIn: string
-  readonly continuityOut: string
-  readonly charactersAndScene?: string
-  readonly sound: string
-}
-
-export interface FinalRenderEditVideoBlock {
-  readonly kind: 'single' | 'group'
-  readonly shotNumbers: readonly number[]
-  readonly gridMode?: '2x2' | '3x3'
-  readonly reason: string
-  readonly prompt: string
+  readonly shots: readonly EditScriptShot[]
+  readonly generationSegments: readonly EditGenerationSegment[]
 }
 
 export interface FinalRenderClipPlan {
@@ -104,7 +77,7 @@ export interface FinalRenderMusicPromptInput {
   readonly locale?: AiPromptLocale
 }
 
-const editScriptShotsSchema = z.array(editScriptShotSchema)
+const editScriptCorePlanSchema = editScriptCoreSchema
 const LYRIA_PRO_DURATIONS = [30, 60, 90, 120, 180] as const
 
 function normalizeString(value: string | null | undefined): string {
@@ -169,7 +142,7 @@ function shotSoundForGroup(shotNumbers: readonly number[], editScript: FinalRend
 function shotDescriptionForGroup(shotNumbers: readonly number[], editScript: FinalRenderEditScriptInput | null, fallback?: string | null): string | null {
   if (!editScript) return normalizeString(fallback) || null
   const descriptions = shotNumbers
-    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.visibleAction)
+    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.action)
     .map((value) => normalizeString(value))
     .filter(Boolean)
   return descriptions.length > 0 ? descriptions.join(' / ') : normalizeString(fallback) || null
@@ -182,13 +155,7 @@ function storyboardReferencesEditScript(storyboard: FinalRenderStoryboardInput, 
   return raw.includes(editScriptId)
 }
 
-function panelReferencesEditScript(panel: FinalRenderPanelInput, editScriptId: string): boolean {
-  const raw = normalizeString(panel.photographyRules)
-  if (!raw) return false
-  return raw.includes(editScriptId)
-}
-
-function findShotByPanel(panel: FinalRenderPanelInput, editScript: FinalRenderEditScriptInput | null): FinalRenderEditShot | null {
+function findShotByPanel(panel: FinalRenderPanelInput, editScript: FinalRenderEditScriptInput | null): EditScriptShot | null {
   if (!editScript) return null
   const panelNumber = panel.panelNumber
   if (typeof panelNumber === 'number' && Number.isInteger(panelNumber)) {
@@ -197,7 +164,7 @@ function findShotByPanel(panel: FinalRenderPanelInput, editScript: FinalRenderEd
   return null
 }
 
-function shotNumberForPanelClip(shot: FinalRenderEditShot | null, panel: FinalRenderPanelInput): number | null {
+function shotNumberForPanelClip(shot: EditScriptShot | null, panel: FinalRenderPanelInput): number | null {
   const value = shot?.shotNumber ?? panel.panelNumber ?? null
   return typeof value === 'number' && Number.isInteger(value) ? value : null
 }
@@ -209,8 +176,7 @@ function sortPanelsForFinalRender(
   let scopedPanels: readonly FinalRenderPanelInput[] = panels
   if (editScript) {
     const explicitlyLinked = panels.filter((panel) =>
-      storyboardReferencesEditScript(panel.storyboard, editScript.id)
-      || panelReferencesEditScript(panel, editScript.id))
+      storyboardReferencesEditScript(panel.storyboard, editScript.id))
     scopedPanels = explicitlyLinked.length > 0
       ? explicitlyLinked
       : panels.filter((panel) => findShotByPanel(panel, editScript) !== null)
@@ -243,23 +209,23 @@ export function selectFinalRenderMusicDurationSeconds(modelKey: string, targetDu
   return LYRIA_PRO_DURATIONS[LYRIA_PRO_DURATIONS.length - 1]
 }
 
-export function parseFinalRenderEditScriptShots(value: unknown): readonly FinalRenderEditShot[] {
-  const parsed = editScriptShotsSchema.safeParse(value)
+export function parseFinalRenderEditScriptShots(value: unknown): readonly EditScriptShot[] {
+  const parsed = editScriptCorePlanSchema.safeParse(value)
   if (!parsed.success) return []
-  return parsed.data
+  return parsed.data.shots
 }
 
-export function parseFinalRenderEditScriptVideoBlocks(input: {
-  readonly value: unknown
-  readonly shots: readonly FinalRenderEditShot[]
-}): readonly FinalRenderEditVideoBlock[] {
-  if (!Array.isArray(input.value) || input.value.length === 0) return []
-  return normalizeVideoBlockPlanResponse({
-    response: { items: input.value },
-    allShotNumbers: input.shots.map((shot) => shot.shotNumber),
-    shots: input.shots,
-    enforceSingleMinDuration: false,
-  }).items
+export function parseFinalRenderEditScriptCore(value: unknown): {
+  readonly shots: readonly EditScriptShot[]
+  readonly generationSegments: readonly EditGenerationSegment[]
+} | null {
+  const parsed = editScriptCorePlanSchema.safeParse(value)
+  if (!parsed.success) return null
+  const normalized = normalizeEditScriptStructure(parsed.data)
+  return {
+    shots: normalized.shots,
+    generationSegments: normalized.generationSegments,
+  }
 }
 
 function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
@@ -308,27 +274,27 @@ function buildEditScriptOrderedFinalRenderClips(input: {
   const clips: FinalRenderClipPlan[] = []
   const coveredShotNumbers = new Set<number>()
 
-  input.editScript.videoBlocks.forEach((block) => {
-    const matchingGroup = groups.find((item) => sameShotNumbers(item.shotNumbers, block.shotNumbers))
+  input.editScript.generationSegments.forEach((segment) => {
+    const matchingGroup = groups.find((item) => sameShotNumbers(item.shotNumbers, segment.shotNumbers))
     const source = matchingGroup ? resolveVideoGroupSource(matchingGroup.group) : null
-    if (matchingGroup && source) {
-      block.shotNumbers.forEach((shotNumber) => coveredShotNumbers.add(shotNumber))
+    if (matchingGroup) {
+      segment.shotNumbers.forEach((shotNumber) => coveredShotNumbers.add(shotNumber))
       clips.push({
         panelId: matchingGroup.group.id,
         groupId: matchingGroup.group.id,
         sourceKind: 'videoGroup',
-        source,
-        durationSeconds: clampPositiveDuration(matchingGroup.group.durationSec, block.shotNumbers.length * 3),
+        source: source ?? '',
+        durationSeconds: clampPositiveDuration(matchingGroup.group.durationSec, segment.shotNumbers.length * 3),
         order: 0,
-        shotNumber: block.shotNumbers[0] ?? null,
-        shotNumbers: block.shotNumbers,
-        description: shotDescriptionForGroup(block.shotNumbers, input.editScript, matchingGroup.group.prompt ?? block.prompt),
-        sound: shotSoundForGroup(block.shotNumbers, input.editScript),
+        shotNumber: segment.shotNumbers[0] ?? null,
+        shotNumbers: segment.shotNumbers,
+        description: shotDescriptionForGroup(segment.shotNumbers, input.editScript, matchingGroup.group.prompt ?? segment.continuity),
+        sound: shotSoundForGroup(segment.shotNumbers, input.editScript),
       })
       return
     }
 
-    block.shotNumbers.forEach((shotNumber) => {
+    segment.shotNumbers.forEach((shotNumber) => {
       const panel = panelByShotNumber.get(shotNumber)
       if (!panel) return
       coveredShotNumbers.add(shotNumber)
@@ -354,7 +320,7 @@ export function buildFinalRenderClips(input: {
   readonly videoGroups?: readonly FinalRenderVideoGroupInput[]
   readonly editScript: FinalRenderEditScriptInput | null
 }): FinalRenderClipPlan[] {
-  if (input.editScript?.videoBlocks.length) {
+  if (input.editScript?.generationSegments.length) {
     return buildEditScriptOrderedFinalRenderClips({
       panels: input.panels,
       videoGroups: input.videoGroups ?? [],
@@ -455,31 +421,21 @@ function buildEditScriptJson(editScript: FinalRenderEditScriptInput | null): str
   return safeJsonStringify({
     id: editScript.id,
     userPrompt: editScript.userPrompt,
-    title: editScript.title,
-    logline: editScript.logline ?? null,
     durationSec: editScript.durationSec,
     styleBible: editScript.styleBible ?? null,
     shotCount: editScript.shots.length,
-    videoBlocks: editScript.videoBlocks.map((block, index) => ({
-      blockNumber: index + 1,
-      kind: block.kind,
-      shotNumbers: block.shotNumbers,
-      gridMode: block.gridMode ?? null,
-      reason: block.reason,
-      prompt: block.prompt,
+    generationSegments: editScript.generationSegments.map((segment, index) => ({
+      segmentNumber: index + 1,
+      shotNumbers: segment.shotNumbers,
+      continuity: segment.continuity,
     })),
     shots: editScript.shots.map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      dramaticPurpose: shot.dramaticPurpose,
-      visibleAction: shot.visibleAction,
-      audienceFocus: shot.audienceFocus,
-      viewpoint: shot.viewpoint,
-      revealPlan: shot.revealPlan,
-      performanceBeat: shot.performanceBeat,
-      continuityIn: shot.continuityIn,
-      continuityOut: shot.continuityOut,
-      charactersAndScene: shot.charactersAndScene ?? '',
+      scene: shot.scene,
+      action: shot.action,
+      characters: shot.characters,
+      keyObjects: shot.keyObjects,
       sound: shot.sound,
     })),
   })
@@ -500,8 +456,8 @@ function buildRenderedTimelineJson(clips: readonly FinalRenderClipPlan[]): strin
 }
 
 export function buildFinalRenderMusicPrompt(input: FinalRenderMusicPromptInput): string {
-  const title = normalizeString(input.editScript?.title) || 'final video'
-  const storyContext = normalizeString(input.editScript?.logline) || 'No additional story context provided.'
+  const title = 'final video'
+  const storyContext = normalizeString(input.editScript?.userPrompt) || 'No additional story context provided.'
   let cursorSeconds = 0
   const timelineMap = input.clips.map((clip) => {
     const start = cursorSeconds

@@ -4,10 +4,11 @@ import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/pr
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution, type OperationPlan } from '@/lib/operations/planning'
-import { chunkVideoGroupShots } from '@/lib/video-groups/core'
+import { inferVideoGridModeForShotCount } from '@/lib/video-groups/core'
 import { type VideoGridMode } from '@/lib/video-groups/types'
+import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, parseEditScriptShots, planVideoGroupTask, readPlannedVideoGroupMetadataList, readStoryboardVideoGridMode } from './video-group-planning'
+import { commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planVideoGroupTask, readPlannedVideoGroupMetadataList, readStoryboardVideoGridMode } from './video-group-planning'
 
 export async function executeGenerateVideoGroupOperation(params: {
   ctx: ProjectAgentOperationContext
@@ -128,18 +129,14 @@ export async function planGenerateEpisodeVideoGroupsOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const gridMode: '2x2' | '3x3' = params.input.gridMode === '3x3' ? '3x3' : '2x2'
   const editScript = await prisma.projectEditScript.findFirst({
     where: { episodeId, projectId: params.ctx.projectId },
-    select: { shotsJson: true },
+    select: { corePlanJson: true },
   })
   if (!editScript) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_REQUIRED')
-  const shots = parseEditScriptShots(editScript.shotsJson)
-  const chunks = chunkVideoGroupShots({
-    gridMode,
-    shotNumbers: shots.map((shot) => shot.shotNumber),
-  })
-  if (chunks.length === 0) {
+  const core = normalizeEditScriptStructure(editScript.corePlanJson)
+  const generationSegments = core.generationSegments.filter((segment) => segment.shotNumbers.length >= 2)
+  if (generationSegments.length === 0) {
     return {
       kind: 'task_submission',
       operationId: params.operationId,
@@ -150,21 +147,20 @@ export async function planGenerateEpisodeVideoGroupsOperation(params: {
         noop: true,
         reason: 'NO_VIDEO_GROUPS_TO_GENERATE',
         episodeId,
-        gridMode,
         videoGroups: [],
       },
     }
   }
 
   const planned = []
-  for (const shotNumbers of chunks) {
+  for (const segment of generationSegments) {
     planned.push(await planVideoGroupTask({
       ctx: params.ctx,
       input: params.input,
       operationId: params.operationId,
       episodeId,
-      gridMode,
-      shotNumbers,
+      gridMode: inferVideoGridModeForShotCount(segment.shotNumbers.length),
+      shotNumbers: segment.shotNumbers,
     }))
   }
   return {
@@ -175,7 +171,6 @@ export async function planGenerateEpisodeVideoGroupsOperation(params: {
     tasks: planned.map((item) => item.task),
     metadata: {
       episodeId,
-      gridMode,
       videoGroups: planned.map((item) => item.metadata),
     },
   }

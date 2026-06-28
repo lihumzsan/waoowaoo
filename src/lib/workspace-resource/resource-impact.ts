@@ -4,9 +4,8 @@ type UnknownRecord = Record<string, unknown>
 
 export const WORKSPACE_RESOURCE_KIND = {
   EDIT_SCREENPLAY: 'editScreenplay',
-  EDIT_DIRECTOR_DECOUPAGE: 'editDirectorDecoupage',
   EDIT_SCRIPT: 'editScript',
-  EDIT_CINEMATOGRAPHY_SHOT_PLAN: 'editCinematographyShotPlan',
+  EDIT_SHOT_EXECUTION_PLAN: 'editShotExecutionPlan',
   STORYBOARDS: 'storyboards',
   PROJECT_ASSETS: 'projectAssets',
   GLOBAL_ASSETS: 'globalAssets',
@@ -80,9 +79,8 @@ export function readWorkspaceResourceRefs(value: unknown): WorkspaceResourceRef[
 function editPipelineRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
   return [
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN, projectId, episodeId),
+    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.STORYBOARDS, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
@@ -151,9 +149,8 @@ function globalAssetRefs(projectId: string): WorkspaceResourceRef[] {
 function isEditPipelineTaskType(taskType: string | null): boolean {
   return taskType === TASK_TYPE.EDIT_SCREENPLAY_GENERATE ||
     taskType === TASK_TYPE.EDIT_SCREENPLAY_REVISE ||
-    taskType === TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE ||
     taskType === TASK_TYPE.EDIT_SCRIPT_GENERATE ||
-    taskType === TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE
+    taskType === TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
 }
 
 function isEditStylePreviewTaskType(taskType: string | null): boolean {
@@ -185,8 +182,7 @@ function isGlobalAssetTaskType(taskType: string | null): boolean {
 }
 
 function isStoryboardTaskType(taskType: string | null): boolean {
-  return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE ||
-    taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
+  return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
     taskType === TASK_TYPE.INSERT_PANEL ||
     taskType === TASK_TYPE.IMAGE_PANEL ||
     taskType === TASK_TYPE.PANEL_VARIANT ||
@@ -252,7 +248,7 @@ function isEditScriptRecord(value: unknown): value is UnknownRecord {
     readString(value.projectId)
       && readString(value.episodeId)
       && Array.isArray(value.shots)
-      && Array.isArray(value.videoBlocks),
+      && Array.isArray(value.generationSegments),
   )
 }
 
@@ -262,17 +258,7 @@ function readEditScriptRecord(value: unknown): UnknownRecord | null {
   return isEditScriptRecord(value.editScript) ? value.editScript : null
 }
 
-function isEditDirectorDecoupageRecord(value: unknown): value is UnknownRecord {
-  if (!isRecord(value)) return false
-  return Boolean(
-    readString(value.projectId)
-      && readString(value.episodeId)
-      && readString(value.screenplayId)
-      && Array.isArray(value.shots),
-  )
-}
-
-function isEditCinematographyShotPlanRecord(value: unknown): value is UnknownRecord {
+function isEditShotExecutionPlanRecord(value: unknown): value is UnknownRecord {
   if (!isRecord(value)) return false
   return Boolean(
     readString(value.projectId)
@@ -289,7 +275,7 @@ export function extractWorkspaceResourceRefsFromWriteResult(params: {
 }): WorkspaceResourceRef[] {
   const refs: WorkspaceResourceRef[] = []
   for (const data of readWriteResultData(params.result)) {
-    if (isEditScreenplayRecord(data) || isEditDirectorDecoupageRecord(data) || isEditCinematographyShotPlanRecord(data)) {
+    if (isEditScreenplayRecord(data) || isEditShotExecutionPlanRecord(data)) {
       const projectId = readString(data.projectId) ?? params.fallbackProjectId
       const episodeId = readString(data.episodeId)
       if (!episodeId) continue

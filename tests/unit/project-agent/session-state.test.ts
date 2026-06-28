@@ -243,6 +243,7 @@ describe('project agent session-state', () => {
       approvalId: 'approval-1',
       operationId: 'generate_edit_script_assets',
       toolCallId: 'tool-1',
+      operationPlan: null,
     })
     expect(state.currentRun).toEqual({
       runId: 'run-1',
@@ -478,7 +479,7 @@ describe('project agent session-state', () => {
       runId: 'run-active-1',
       type: 'operation',
       status: 'running',
-      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+      operationId: 'generate_edit_shot_execution_plan',
       sourceOperationId: null,
       toolCallId: 'tool-active-1',
       choiceType: null,
@@ -489,7 +490,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-active-1',
       type: 'approval',
       status: 'consumed',
-      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+      operationId: 'generate_edit_shot_execution_plan',
       approvalId: 'approval-active-1',
       toolCallId: 'tool-active-1',
       payload: {},
@@ -511,7 +512,7 @@ describe('project agent session-state', () => {
     expect(state.currentActivity).toEqual(expect.objectContaining({
       runId: 'run-active-1',
       type: 'operation',
-      operationId: 'generate_edit_script_storyboard_spatial_blocking',
+      operationId: 'generate_edit_shot_execution_plan',
     }))
   })
 })

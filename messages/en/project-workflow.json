@@ -189,21 +189,16 @@
       },
       "actions": {
         "generateScript": "Generate Screenplay",
-        "generateEditDirectorDecoupage": "Generate Director Decoupage",
         "confirmEditStylePreview": "Confirm This Style",
         "generateEditScript": "Generate Edit Table",
-        "generateCinematographyShotPlan": "Generate Cinematography Plan",
+        "generateShotExecutionPlan": "Generate Shot Execution Plan",
         "generateStoryboard": "Generate Storyboard",
         "generateImage": "Generate Image",
         "generateStoryboardSingleImages": "Generate Single Images",
         "generateStoryboardGridImages": "Generate Group Images",
         "regenerateImage": "Regenerate",
         "generateVideo": "Generate Video",
-        "mergeVideoBlocks": "Merge Segments",
-        "arrangeVideoBlocks": "Arrange Segments",
-        "selectVideoBlockToMerge": "Select Segment",
-        "mergeWithSelectedVideoBlock": "Merge With Selected",
-        "cancelVideoBlockMerge": "Cancel Selection",
+        "arrangeGenerationSegments": "Arrange Generation Segments",
         "generateAllVideos": "Batch Generate",
         "generateBgmScore": "Generate BGM",
         "generatingBgm": "Generating BGM",
@@ -211,10 +206,8 @@
         "aiEditing": "AI Editing",
         "generateEditAssets": "Generate All",
         "generateEditAsset": "Generate Image",
-        "generateSpatialBlocking": "Generate Spatial Blocking",
-        "regenerateSpatialBlocking": "Regenerate Spatial Blocking",
         "generateSceneAssetImagesFirst": "Generate Scene Asset Images First",
-        "generateSpatialBlockingFirst": "Generate Spatial Blocking First"
+        "generateShotExecutionPlanFirst": "Generate Shot Execution Plan First"
       },
       "status": {
         "empty": "Empty",
@@ -252,11 +245,10 @@
         "videoPlanGroupCountInvalid": "A continuous segment must contain 2-9 shots",
         "videoPlanGroupDurationInvalid": "A continuous segment must be 2-15 seconds",
         "sequenceVideoModelMissing": "Choose a video segment generation model in project settings first",
-        "videoBlockMergeAdjacentRequired": "Only adjacent video segments can be merged. Select a segment next to the selected one.",
-        "videoBlockMergeDurationExceeded": "The merged segment would be {duration} seconds, above the {max}-second limit.",
-        "videoBlockMergeUnavailable": "The edit table changed. Select the video segments again."
+        "generationSegmentDurationExceeded": "The adjusted generation segment would be {duration} seconds, above the {max}-second limit.",
+        "generationSegmentUnavailable": "The edit table changed. Select the generation segments again."
       },
-      "videoBlockArrangement": {
+      "generationSegmentArrangement": {
         "title": "Video Segment Arrangement",
         "summary": "{blocks} segments · {shots} shots",
         "localSummary": "Adjusting {blocks} adjacent segments · {shots} shots",
@@ -324,14 +316,10 @@
         "duration": "Duration",
         "shotCount": "Shot Count",
         "shotCore": "Shot Info",
-        "dramaticPurpose": "Dramatic Purpose",
-        "visibleAction": "Visible Action",
-        "audienceFocus": "Audience Focus",
-        "viewpoint": "Viewpoint",
-        "revealPlan": "Reveal Plan",
-        "performanceBeat": "Performance Beat",
-        "continuityIn": "Continuity In",
-        "continuityOut": "Continuity Out",
+        "action": "Action",
+        "performance": "Performance State",
+        "generationSegments": "Generation Segments",
+        "segmentContinuity": "Segment Continuity",
         "shotScale": "Shot Scale",
         "lens": "Lens",
         "depthOfField": "Depth Of Field",
@@ -349,7 +337,7 @@
         "imagePrompt": "Image Prompt",
         "fullFinalPrompt": "Full Final Prompt",
         "videoPrompt": "Video Prompt",
-        "photographyRules": "Photography Rules",
+        "executionSnapshot": "Shot Execution Snapshot",
         "actingNotes": "Acting Notes",
         "promptShot": "Prompt Shot Data",
         "sequence": "Sequence",
@@ -457,9 +445,9 @@
         "editScriptMeta": "Edit Table Info",
         "shotIndexHeader": "Shot",
         "shotIndex": "Shot {index}",
-        "charactersAndScene": "Characters / Scene",
+        "sceneCharacters": "Characters / Scene",
         "sound": "Sound",
-        "videoBlock": "Video Segment",
+        "generationSegment": "Generation Segment",
         "assetKind": "Asset Type",
         "linkedShots": "Linked Shots",
         "targetAsset": "Asset ID",
@@ -513,11 +501,8 @@
           "characters": "Characters",
           "props": "Props",
           "shotType": "Shot Type",
-          "dramaticPurpose": "Dramatic Purpose",
-          "visibleAction": "Visible Action",
-          "audienceFocus": "Audience Focus",
-          "viewpoint": "Viewpoint",
-          "revealPlan": "Reveal Plan",
+          "action": "Action",
+          "performance": "Performance State",
           "cameraMove": "Camera Move",
           "description": "Description",
           "location": "Location",
@@ -527,9 +512,9 @@
           "videoPrompt": "Video Prompt",
           "shotCount": "Shot Count",
           "currentShot": "Current Shot",
-          "charactersAndScene": "Characters / Scene",
+          "sceneCharacters": "Characters / Scene",
           "sound": "Sound",
-          "photographyRules": "Photography Rules JSON",
+          "executionSnapshot": "Shot Execution Snapshot JSON",
           "actingNotes": "Acting Notes JSON",
           "insertPrompt": "Insert Shot Request",
           "variantTitle": "Variant Title",
@@ -750,12 +735,6 @@
           "body": "Shared visual, camera, and sound-filter style rules for the full chain.",
           "meta": "The single style source for assets, storyboards, and video prompts"
         },
-        "editDirectorDecoupage": {
-          "title": "Director Decoupage",
-          "eyebrow": "Director Module",
-          "body": "Full shot-level director decoupage, defining why each shot exists, what the audience watches, whose viewpoint it follows, and how it connects.",
-          "meta": "{shots} director shot(s) · {duration}s"
-        },
         "editPipelineStep": {
           "eyebrow": "Edit Generation Step",
           "body": "Step fields projected from the edit-first table",
@@ -775,13 +754,13 @@
           "pendingBody": "AI is generating the edit-first table from the current video brief, including characters, locations, shot rhythm, video segments, and sound design.",
           "pendingMeta": "This will become an editable edit table when generation completes"
         },
-        "editCinematographyShotPlan": {
-          "title": "Cinematography Shot Plan",
-          "eyebrow": "Cinematography Module",
-          "body": "Shot scale, lens, depth of field, camera position, composition, lighting, axis, and continuity are locked for every shot.",
-          "pendingBody": "Waiting to generate the full shot-level cinematography plan from the edit table, assets, and spatial profiles.",
-          "locationImageRequired": "Generate scene asset images first. A final scene image is required before camera position, axis, and composition can be planned reliably.",
-          "meta": "{shots} cinematography shot plan(s)"
+        "editShotExecutionPlan": {
+          "title": "Shot Execution Plan",
+          "eyebrow": "Camera And Blocking",
+          "body": "Shot scale, lens, camera position, composition, lighting, axis, character positions, and key object positions are locked for every shot.",
+          "pendingBody": "Waiting to generate the full shot-level execution plan from the core edit table, assets, and spatial profiles.",
+          "locationImageRequired": "Generate scene asset images first. A final scene image is required before camera position, axis, composition, and blocking can be planned reliably.",
+          "meta": "{shots} shot execution item(s)"
         },
         "spaceConsistency": {
           "title": "Space Consistency",
@@ -794,7 +773,7 @@
         "storyboardPanelGeneration": {
           "title": "Storyboard Panel Generation",
           "eyebrow": "Storyboard Structure",
-          "body": "AI is converting spatial blocking, cinematography, and the edit table into per-shot storyboard panel prompts.",
+          "body": "The system is converting the shot execution plan, spatial profiles, and core edit table into per-shot storyboard panel prompts.",
           "meta": "{panels} storyboard panel(s)"
         },
         "editAsset": {

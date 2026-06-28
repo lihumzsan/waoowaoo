@@ -20,7 +20,7 @@ export const POST = apiHandler(async (
     projectId,
     userId: authResult.session.user.id,
     episodeId: body.episodeId,
-    sourceVideoBlockId: body.sourceVideoBlockId,
+    sourceGenerationSegmentId: body.sourceGenerationSegmentId,
     panelIds: body.panelIds,
     mode: body.mode,
     locale: body.locale,

@@ -127,7 +127,6 @@ describe('episode artifact readiness', () => {
             imageUrl: null,
             imageHistory: null,
             videoUrl: 'https://example.com/video.mp4',
-            photographyRules: null,
             actingNotes: null,
           }],
         },

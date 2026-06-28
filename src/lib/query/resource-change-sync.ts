@@ -24,18 +24,13 @@ function policyForResource(ref: WorkspaceResourceRef): ResourceSyncPolicy {
     return { invalidate: [queryKey], refetchActive: [queryKey] }
   }
 
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_DIRECTOR_DECOUPAGE && ref.episodeId) {
-    const queryKey = queryKeys.project.editDirectorDecoupage(ref.projectId, ref.episodeId)
-    return { invalidate: [queryKey], refetchActive: [queryKey] }
-  }
-
   if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT && ref.episodeId) {
     const queryKey = queryKeys.project.editScript(ref.projectId, ref.episodeId)
     return { invalidate: [queryKey], refetchActive: [queryKey] }
   }
 
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_CINEMATOGRAPHY_SHOT_PLAN && ref.episodeId) {
-    const queryKey = queryKeys.project.editCinematographyShotPlan(ref.projectId, ref.episodeId)
+  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN && ref.episodeId) {
+    const queryKey = queryKeys.project.editShotExecutionPlan(ref.projectId, ref.episodeId)
     return { invalidate: [queryKey], refetchActive: [queryKey] }
   }
 

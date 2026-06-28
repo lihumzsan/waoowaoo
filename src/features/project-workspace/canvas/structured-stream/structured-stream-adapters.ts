@@ -1,9 +1,8 @@
-import { z } from 'zod'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
+  editShotExecutionPlanSchema,
   editScriptShotSchema,
-  type EditCinematographyShot,
-  type EditDirectorDecoupageShot,
+  type EditShotExecution,
   type EditScriptShot,
 } from '@/lib/edit-script/types'
 import {
@@ -14,33 +13,9 @@ import {
   type BgmScorePromptSection,
   type BgmScoreVirtualLayer,
 } from '@/lib/bgm-score/types'
-import { shotBlockingSchema } from '@/lib/edit-script/storyboard-consistency/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
-const editCinematographyShotSchema = z.object({
-  shotNumber: z.number().int().positive(),
-  shotScale: z.string().trim().min(1),
-  lens: z.string().trim().min(1),
-  depthOfField: z.string().trim().min(1),
-  cameraPosition: z.string().trim().min(1),
-  cameraHeight: z.string().trim().min(1),
-  cameraAngle: z.string().trim().min(1),
-  movement: z.string().trim().min(1),
-  composition: z.string().trim().min(1),
-  lighting: z.string().trim().min(1),
-  axisAndEyeline: z.string().trim().min(1),
-  continuityIn: z.string().trim().min(1),
-  continuityOut: z.string().trim().min(1),
-})
-
-const storyboardPanelFinalPromptSchema = z.object({
-  panelIndex: z.number().int().min(0),
-  sourceShotNumber: z.number().int().positive(),
-  sourceVideoBlockId: z.string().trim().min(1),
-  shotBlocking: shotBlockingSchema,
-  finalPanelPrompt: z.string().trim().min(30),
-  finalVideoPrompt: z.string().trim().min(30),
-}).strict()
+const editShotExecutionPlanShotSchema = editShotExecutionPlanSchema.shape.shots.element
 
 export interface StructuredStreamTaskEventMeta {
   readonly taskType: string | null
@@ -49,9 +24,7 @@ export interface StructuredStreamTaskEventMeta {
 
 export type StructuredStreamAdapterKey =
   | 'editScript.shots'
-  | 'directorDecoupage.shots'
-  | 'cinematography.shots'
-  | 'storyboard.panels'
+  | 'shotExecutionPlan.shots'
   | 'bgm.scoreDesign.sections'
   | 'bgm.promptSections'
   | 'bgm.virtualLayers'
@@ -65,16 +38,8 @@ export type StructuredStreamParsedItem =
     readonly shot: EditScriptShot
   }
   | {
-    readonly kind: 'directorDecoupageShot'
-    readonly shot: EditDirectorDecoupageShot
-  }
-  | {
-    readonly kind: 'cinematographyShot'
-    readonly shot: EditCinematographyShot
-  }
-  | {
-    readonly kind: 'storyboardPanel'
-    readonly panel: z.infer<typeof storyboardPanelFinalPromptSchema>
+    readonly kind: 'shotExecutionPlanShot'
+    readonly shot: EditShotExecution
   }
   | {
     readonly kind: 'bgmDesignSection'
@@ -134,45 +99,17 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
       : String(fallbackIndex + 1),
   },
   {
-    key: 'directorDecoupage.shots',
-    taskTypes: [TASK_TYPE.EDIT_DIRECTOR_DECOUPAGE_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE],
+    key: 'shotExecutionPlan.shots',
+    taskTypes: [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN],
     mode: 'array',
     path: ['shots'],
     parseItem: (value) => ({
-      kind: 'directorDecoupageShot',
-      shot: editScriptShotSchema.parse(value),
+      kind: 'shotExecutionPlanShot',
+      shot: editShotExecutionPlanShotSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'directorDecoupageShot'
+    itemKey: (item, fallbackIndex) => item.kind === 'shotExecutionPlanShot'
       ? numberKey(item.shot.shotNumber, fallbackIndex)
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'cinematography.shots',
-    taskTypes: [TASK_TYPE.EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN],
-    mode: 'array',
-    path: ['shots'],
-    parseItem: (value) => ({
-      kind: 'cinematographyShot',
-      shot: editCinematographyShotSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'cinematographyShot'
-      ? numberKey(item.shot.shotNumber, fallbackIndex)
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'storyboard.panels',
-    taskTypes: [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK],
-    mode: 'array',
-    path: ['panelFinalPromptBlockOutput', 'panels'],
-    parseItem: (value) => ({
-      kind: 'storyboardPanel',
-      panel: storyboardPanelFinalPromptSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'storyboardPanel'
-      ? numberKey(item.panel.panelIndex, fallbackIndex)
       : String(fallbackIndex + 1),
   },
   {

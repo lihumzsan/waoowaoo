@@ -70,7 +70,7 @@ describe('task service operation metadata', () => {
         imageModel: 'fal::image-model',
         storyboardGrid: {
           mode: '2x2',
-          sourceVideoBlockId: 'block-1',
+          sourceGenerationSegmentId: 'segment-1',
           panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
         },
         meta: {
@@ -105,7 +105,7 @@ describe('task service operation metadata', () => {
           imageModel: 'fal::image-model',
           storyboardGrid: {
             mode: '2x2',
-            sourceVideoBlockId: 'block-1',
+            sourceGenerationSegmentId: 'segment-1',
             panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
           },
           stage: 'generate_panel_grid',

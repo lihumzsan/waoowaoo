@@ -55,7 +55,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       panelIndex: true,
       imageUrl: true,
       imageMediaId: true,
-      photographyRules: true,
+      sourceGenerationSegmentId: true,
     },
   })
   const missingPanels = panels.filter((panel) => !normalizeString(panel.imageUrl) && !normalizeString(panel.imageMediaId))
@@ -115,7 +115,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
         ? {
           storyboardGrid: {
             mode: '2x2',
-            sourceVideoBlockId: group.sourceVideoBlockId,
+            sourceGenerationSegmentId: group.sourceGenerationSegmentId,
             panelIds: group.panels.map((panel) => panel.id),
           },
         }
@@ -132,7 +132,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       aspectRatio: projectModelConfig.videoRatio,
     })
     const planTaskId = group.kind === 'grid2x2'
-      ? `generate_edit_script_storyboard_images:grid:${group.sourceVideoBlockId}`
+      ? `generate_edit_script_storyboard_images:grid:${group.sourceGenerationSegmentId}`
       : `generate_edit_script_storyboard_images:panel:${primaryPanel.id}`
     plannedTasks.push(createPlannedTask({
       id: planTaskId,
@@ -147,7 +147,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       }),
       dedupeKey: group.kind === 'grid2x2'
         ? createTaskDedupeKey('edit_first_panel_grid_image', {
-          sourceVideoBlockId: group.sourceVideoBlockId,
+          sourceGenerationSegmentId: group.sourceGenerationSegmentId,
           panelIds: group.panels.map((panel) => panel.id),
           styleBibleSignature,
         })

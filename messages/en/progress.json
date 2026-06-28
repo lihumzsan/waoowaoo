@@ -46,8 +46,8 @@
     "imagePanel": "Storyboard image",
     "editStylePreviewsGenerate": "Visual style generation",
     "editStylePreviewImage": "Edit style preview grid",
-    "editScriptStoryboardPrepare": "Edit table spatial blocking preparation",
-    "editScriptStoryboardCameraPlan": "Edit table camera language design",
+    "editScriptStoryboardPrepare": "Storyboard facts preparation",
+    "editScriptStoryboardCameraPlan": "Storyboard panel build",
     "imageCharacter": "Character image",
     "imageLocation": "Location image",
     "musicGenerate": "Music generation",
@@ -158,7 +158,7 @@
     "splitClips": "Split clips",
     "screenplayConversion": "Convert screenplay",
     "storyboardPlan": "Plan storyboard",
-    "cinematographyRules": "Generate cinematography rules",
+    "shotExecutionRules": "Generate shot execution rules",
     "actingDirection": "Generate acting direction",
     "storyboardDetailRefine": "Refine storyboard details"
   }

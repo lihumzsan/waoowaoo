@@ -1,7 +1,7 @@
 {
     "phases": {
         "planning": "规划分镜",
-        "cinematography": "设计摄影",
+        "shotExecution": "镜头执行",
         "acting": "设计演技",
         "detail": "补充细节"
     },
@@ -379,7 +379,7 @@
         "position": "位置",
         "posture": "姿势",
         "facing": "朝向",
-        "photographyRules": "摄影规则 (photography_rules)",
+        "executionSnapshot": "镜头执行快照",
         "viewData": "查看数据",
         "jsonPreview": "JSON 预览",
         "actingNotes": "演技指导 (acting_notes)",

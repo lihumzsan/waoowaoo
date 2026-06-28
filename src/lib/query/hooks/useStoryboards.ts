@@ -55,7 +55,7 @@ interface BatchVideoGenerationParams {
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
     shotNumbers?: readonly number[]
-    blockIndex?: number
+    segmentIndex?: number
     referenceImageUrls?: readonly string[]
 }
 
@@ -284,7 +284,7 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                 mode: params.mode,
                 gridMode: params.gridMode,
                 shotNumbers: params.shotNumbers,
-                blockIndex: params.blockIndex,
+                segmentIndex: params.segmentIndex,
                 referenceImageUrls: params.referenceImageUrls,
             })
             const confirmedMaxCost = await mediaOperationBillingPlan(request.operationId, request.input)

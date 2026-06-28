@@ -101,6 +101,35 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   } as unknown as Job<TaskJobData>
 }
 
+function buildCorePlan() {
+  return {
+    shots: [
+      {
+        shotNumber: 1,
+        durationSec: 3,
+        scene: { name: 'A scene' },
+        action: 'A shot',
+        characters: [
+          {
+            name: 'Hero',
+            visibility: 'visible',
+            role: 'focus',
+            performance: 'holds tension',
+          },
+        ],
+        keyObjects: [],
+        sound: 'tense pulse, sparse piano',
+      },
+    ],
+    generationSegments: [
+      {
+        shotNumbers: [1],
+        continuity: 'single test shot',
+      },
+    ],
+  }
+}
+
 describe('final video render worker', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -158,34 +187,12 @@ describe('final video render worker', () => {
     prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
     prismaMock.projectEditScript.findUnique.mockResolvedValue({
       id: 'edit-script-1',
-      userPrompt: 'Render a final test edit.',
-      title: 'Final Edit',
-      logline: 'A test edit.',
       durationSec: 3,
-      shotsJson: [
-        {
-          shotNumber: 1,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'A shot',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A scene',
-          sound: 'tense pulse, sparse piano',
-        },
-      ],
-      videoBlocksJson: [
-        {
-          kind: 'single',
-          shotNumbers: [1],
-          reason: 'single test shot',
-          prompt: 'single test video prompt',
-        },
-      ],
+      editScreenplay: {
+        userPrompt: 'Render a final test edit.',
+        styleBibleJson: null,
+      },
+      corePlanJson: buildCorePlan(),
     })
     prismaMock.projectPanel.findMany.mockResolvedValue([
       {
@@ -196,7 +203,8 @@ describe('final video render worker', () => {
         description: 'panel 1',
         videoUrl: null,
         videoMedia: null,
-        photographyRules: JSON.stringify({ source: 'edit_script', editScriptId: 'edit-script-1' }),
+        sourceShotNumber: 1,
+        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
         storyboard: {
           id: 'storyboard-1',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -312,7 +320,8 @@ describe('final video render worker', () => {
           storageKey: 'video/source.mp4',
           url: '/m/source-video',
         },
-        photographyRules: JSON.stringify({ source: 'edit_script', editScriptId: 'edit-script-1' }),
+        sourceShotNumber: 1,
+        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
         storyboard: {
           id: 'storyboard-1',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),

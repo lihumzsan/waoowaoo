@@ -1,11 +1,9 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { Locale } from '@/i18n/routing'
 import type {
-  ShotBlocking,
   StoryboardConsistencyAssetSnapshot,
   StoryboardConsistencySourceSnapshot,
-  StoryboardConsistencySourceVideoBlock,
+  StoryboardConsistencyGenerationSegment,
   StoryboardPanelPromptDraft,
 } from './types'
 
@@ -15,6 +13,14 @@ interface StoryboardCharacterRef {
   readonly appearanceId: string
   readonly appearanceIndex: number
   readonly appearance: string
+  readonly visibility: string
+  readonly role: string
+  readonly performance: string
+  readonly position: string | null
+  readonly screenPosition: string | null
+  readonly facing: string | null
+  readonly eyeline: string | null
+  readonly referenceImageUrl: string | null
 }
 
 interface PanelDraft {
@@ -32,51 +38,34 @@ interface PanelDraft {
   readonly duration: number
   readonly imagePrompt: string
   readonly videoPrompt: string
-  readonly shotBlocking: ShotBlocking
-  readonly photographyRules: string
   readonly actingNotes: string | null
   readonly sourceShotNumber: number
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
+  readonly executionSnapshotJson: Prisma.InputJsonValue
+  readonly renderFactsJson: Prisma.InputJsonValue
 }
 
-function editStoryboardPanelSourceToJson(source: Record<string, unknown>): string {
-  return JSON.stringify({
-    source: 'edit_script',
-    ...source,
-  })
+function toInputJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function assetKey(value: string): string {
+  return value.trim().toLocaleLowerCase()
 }
 
-function cameraPlanForPanel(generated: StoryboardPanelPromptDraft): Record<string, unknown> {
-  const metadataCameraPlan = isRecord(generated.metadata.cameraPlan) ? generated.metadata.cameraPlan : {}
-  return {
-    ...metadataCameraPlan,
-    shotBlocking: generated.shotBlocking,
-  }
+function segmentForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number): StoryboardConsistencyGenerationSegment {
+  const segment = snapshot.generationSegments.find((item) => item.shotNumbers.includes(shotNumber))
+  if (!segment) throw new Error(`EDIT_SCRIPT_STORYBOARD_SEGMENT_MISSING:${shotNumber}`)
+  return segment
 }
 
 function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number) {
   return snapshot.assets.find((asset) => asset.kind === 'location' && asset.shotNumbers.includes(shotNumber)) ?? null
 }
 
-function blockForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number): StoryboardConsistencySourceVideoBlock {
-  const block = snapshot.videoBlocks.find((item) => item.shotNumbers.includes(shotNumber))
-  if (!block) throw new Error(`EDIT_SCRIPT_STORYBOARD_VIDEO_BLOCK_MISSING:${shotNumber}`)
-  return block
-}
-
-function cinematographyForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number) {
-  const shot = snapshot.cinematographyShotPlan.shots.find((item) => item.shotNumber === shotNumber)
-  if (!shot) throw new Error(`EDIT_SCRIPT_STORYBOARD_CINEMATOGRAPHY_SHOT_MISSING:${shotNumber}`)
-  return shot
-}
-
-async function buildCharacterRefsByRequirementId(
+async function buildCharacterRefsByAssetName(
   assets: readonly StoryboardConsistencyAssetSnapshot[],
-): Promise<Map<string, StoryboardCharacterRef>> {
+): Promise<Map<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>> {
   const characterAssets = assets.filter((asset) => asset.kind === 'character')
   const characters = await prisma.projectCharacter.findMany({
     where: {
@@ -97,14 +86,14 @@ async function buildCharacterRefsByRequirementId(
     },
   })
   const characterById = new Map(characters.map((character) => [character.id, character]))
-  const output = new Map<string, StoryboardCharacterRef>()
+  const output = new Map<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>()
   for (const asset of characterAssets) {
     const character = characterById.get(asset.targetId)
     const appearance = character?.appearances[0]
     if (!character || !appearance) {
       throw new Error(`EDIT_SCRIPT_STORYBOARD_CHARACTER_ASSET_INVALID:${asset.name}`)
     }
-    output.set(asset.requirementId, {
+    output.set(assetKey(asset.name), {
       characterId: character.id,
       name: character.name,
       appearanceId: appearance.id,
@@ -115,25 +104,18 @@ async function buildCharacterRefsByRequirementId(
   return output
 }
 
-function buildVideoBlockBindings(input: {
-  readonly snapshot: StoryboardConsistencySourceSnapshot
-  readonly panelDrafts: readonly PanelDraft[]
-}) {
-  const draftByShotNumber = new Map(input.panelDrafts.map((draft) => [draft.sourceShotNumber, draft]))
-  return input.snapshot.videoBlocks.map((block) => {
-    const drafts = block.shotNumbers.map((shotNumber) => {
-      const draft = draftByShotNumber.get(shotNumber)
-      if (!draft) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_DRAFT_MISSING:${shotNumber}`)
-      return draft
-    })
-    return {
-      sourceVideoBlockId: block.sourceVideoBlockId,
-      blockIndex: block.blockIndex,
-      kind: block.kind,
-      shotNumbers: block.shotNumbers,
-      panelNumbers: drafts.map((draft) => draft.panelNumber),
-      panelIndexes: drafts.map((draft) => draft.panelIndex),
-    }
+function buildStoryboardTextJson(snapshot: StoryboardConsistencySourceSnapshot): string {
+  return JSON.stringify({
+    source: 'edit_script',
+    sourceType: 'editScriptStoryboard',
+    editScriptId: snapshot.editScript.id,
+    shots: snapshot.shots,
+    generationSegments: snapshot.generationSegments.map((segment) => ({
+      sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
+      segmentIndex: segment.segmentIndex,
+      shotNumbers: segment.shotNumbers,
+      continuity: segment.continuity,
+    })),
   })
 }
 
@@ -148,15 +130,7 @@ export async function upsertEditScriptStoryboard(input: {
       panels: { orderBy: { panelIndex: 'asc' } },
     },
   })
-
-  const storyboardTextJson = JSON.stringify({
-    source: 'edit_script',
-    sourceType: 'editScriptStoryboard',
-    editScriptId,
-    title: input.snapshot.editScript.title,
-    shots: input.snapshot.shots,
-    videoBlocks: input.snapshot.videoBlocks,
-  })
+  const storyboardTextJson = buildStoryboardTextJson(input.snapshot)
 
   if (existing) {
     return await prisma.projectStoryboard.update({
@@ -189,54 +163,70 @@ export async function upsertEditScriptStoryboard(input: {
 function buildPanelDrafts(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
-  readonly characterRefsByRequirementId: ReadonlyMap<string, StoryboardCharacterRef>
-  readonly locale: Locale
+  readonly characterRefsByAssetName: ReadonlyMap<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>
 }): PanelDraft[] {
   const generatedByShotNumber = new Map(input.generatedPanels.map((panel) => [panel.sourceShotNumber, panel]))
   let cursor = 0
   return input.snapshot.shots.map((shot, index) => {
-    const block = blockForShot(input.snapshot, shot.shotNumber)
+    const segment = segmentForShot(input.snapshot, shot.shotNumber)
     const generated = generatedByShotNumber.get(shot.shotNumber)
-    const characterRefs = input.snapshot.assets
-      .filter((asset) => asset.kind === 'character' && asset.shotNumbers.includes(shot.shotNumber))
-      .map((asset) => input.characterRefsByRequirementId.get(asset.requirementId))
-      .filter((reference): reference is StoryboardCharacterRef => Boolean(reference))
     const location = locationForShot(input.snapshot, shot.shotNumber)
+    const execution = input.snapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shot.shotNumber)
+    if (!generated || !execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FACTS_MISSING:${shot.shotNumber}`)
     const srtStart = cursor
     const srtEnd = cursor + shot.durationSec
     cursor = srtEnd
-    if (!generated) throw new Error(`EDIT_SCRIPT_STORYBOARD_FINAL_PROMPT_MISSING:${shot.shotNumber}`)
-    const source = {
-      sourceType: 'editScriptShot',
-      editScriptId: input.snapshot.editScript.id,
-      sourceShotNumber: shot.shotNumber,
-      sourceVideoBlockId: block.sourceVideoBlockId,
-      sourceVideoBlockIndex: block.blockIndex,
-      sourceVideoBlockKind: block.kind,
-      consistencyMode: 'spatial_text_blocking',
-      cameraPlan: cameraPlanForPanel(generated),
-      consistencyMetadata: generated?.metadata ?? null,
-    }
+    const characters = shot.characters.map((character): StoryboardCharacterRef | null => {
+      const refBase = input.characterRefsByAssetName.get(assetKey(character.name))
+      const placement = execution.blocking.characters.find((candidate) => assetKey(candidate.name) === assetKey(character.name))
+      const promptCharacter = generated.renderFacts.CHARACTER_GRAPH
+      const referenceImageUrl = Array.isArray(promptCharacter)
+        ? promptCharacter
+            .map((item) => (typeof item === 'object' && item !== null ? item as Record<string, unknown> : null))
+            .find((item) => item?.name === character.name)?.referenceImageUrl
+        : null
+      if (!refBase) return null
+      return {
+        ...refBase,
+        visibility: character.visibility,
+        role: character.role,
+        performance: character.performance,
+        position: placement?.position ?? null,
+        screenPosition: placement?.screenPosition ?? null,
+        facing: placement?.facing ?? null,
+        eyeline: placement?.eyeline ?? null,
+        referenceImageUrl: typeof referenceImageUrl === 'string' ? referenceImageUrl : null,
+      }
+    }).filter((item): item is StoryboardCharacterRef => Boolean(item))
+    const props = shot.keyObjects.map((object) => {
+      const placement = execution.blocking.objects.find((candidate) => assetKey(candidate.name) === assetKey(object.name))
+      return {
+        name: object.name,
+        role: object.role,
+        position: placement?.position ?? null,
+        screenPosition: placement?.screenPosition ?? null,
+      }
+    })
     return {
       panelIndex: index,
       panelNumber: shot.shotNumber,
-      shotType: cinematographyForShot(input.snapshot, shot.shotNumber).shotScale,
-      cameraMove: cinematographyForShot(input.snapshot, shot.shotNumber).movement,
-      description: shot.visibleAction,
-      location: location?.name ?? null,
-      characters: characterRefs.length > 0 ? JSON.stringify(characterRefs) : null,
-      props: null,
-      srtSegment: shot.visibleAction,
+      shotType: execution.camera.shotScale,
+      cameraMove: execution.camera.movement,
+      description: shot.action,
+      location: location?.name ?? shot.scene.name,
+      characters: characters.length > 0 ? JSON.stringify(characters) : null,
+      props: props.length > 0 ? JSON.stringify(props) : null,
+      srtSegment: [shot.action, shot.sound].filter(Boolean).join('\n'),
       srtStart,
       srtEnd,
       duration: shot.durationSec,
       imagePrompt: generated.prompt,
       videoPrompt: generated.videoPrompt,
-      shotBlocking: generated.shotBlocking,
-      photographyRules: editStoryboardPanelSourceToJson(source),
       actingNotes: null,
       sourceShotNumber: shot.shotNumber,
-      sourceVideoBlockId: block.sourceVideoBlockId,
+      sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
+      executionSnapshotJson: toInputJson(generated.executionSnapshot),
+      renderFactsJson: toInputJson(generated.renderFacts),
     }
   })
 }
@@ -245,32 +235,18 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
   readonly storyboardId: string
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
-  readonly locale: Locale
 }): Promise<readonly { readonly id: string; readonly panelIndex: number }[]> {
-  const characterRefsByRequirementId = await buildCharacterRefsByRequirementId(input.snapshot.assets)
+  const characterRefsByAssetName = await buildCharacterRefsByAssetName(input.snapshot.assets)
   const panelDrafts = buildPanelDrafts({
     snapshot: input.snapshot,
     generatedPanels: input.generatedPanels,
-    characterRefsByRequirementId,
-    locale: input.locale,
-  })
-  const videoBlockBindings = buildVideoBlockBindings({
-    snapshot: input.snapshot,
-    panelDrafts,
-  })
-  const storyboardTextJson = JSON.stringify({
-    source: 'edit_script',
-    sourceType: 'editScriptStoryboard',
-    editScriptId: input.snapshot.editScript.id,
-    title: input.snapshot.editScript.title,
-    shots: input.snapshot.shots,
-    videoBlocks: videoBlockBindings,
+    characterRefsByAssetName,
   })
   const storyboard = await prisma.projectStoryboard.update({
     where: { id: input.storyboardId },
     data: {
       panelCount: panelDrafts.length,
-      storyboardTextJson,
+      storyboardTextJson: buildStoryboardTextJson(input.snapshot),
     },
     include: {
       panels: { orderBy: { panelIndex: 'asc' } },
@@ -297,8 +273,11 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
       imageMedia: { disconnect: true },
       candidateImages: null,
       videoPrompt: draft.videoPrompt,
-      photographyRules: draft.photographyRules,
       actingNotes: draft.actingNotes,
+      sourceShotNumber: draft.sourceShotNumber,
+      sourceGenerationSegmentId: draft.sourceGenerationSegmentId,
+      executionSnapshotJson: draft.executionSnapshotJson,
+      renderFactsJson: draft.renderFactsJson,
     } satisfies Prisma.ProjectPanelUpdateInput
     if (existingPanel) {
       const panel = await prisma.projectPanel.update({
@@ -324,11 +303,12 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
         srtEnd: draft.srtEnd,
         duration: draft.duration,
         imagePrompt: draft.imagePrompt,
-        imageUrl: null,
-        candidateImages: null,
         videoPrompt: draft.videoPrompt,
-        photographyRules: draft.photographyRules,
         actingNotes: draft.actingNotes,
+        sourceShotNumber: draft.sourceShotNumber,
+        sourceGenerationSegmentId: draft.sourceGenerationSegmentId,
+        executionSnapshotJson: draft.executionSnapshotJson,
+        renderFactsJson: draft.renderFactsJson,
       },
     })
     panelTargets.push({ id: panel.id, panelIndex: panel.panelIndex })

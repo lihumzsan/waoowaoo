@@ -85,7 +85,6 @@ const storyboardMutationInputSchema = z.object({
   selectedImageUrl: z.string().optional(),
   previousImageUrl: z.string().nullable().optional(),
   actingNotes: z.unknown().optional(),
-  photographyRules: z.unknown().optional(),
   orderedPanelIds: z.array(z.string().min(1)).min(1).optional(),
 }).passthrough()
 
@@ -152,7 +151,6 @@ export const updateStoryboardPanelFieldsInputSchema = z.object({
   duration: z.unknown().optional(),
   linkedToNextPanel: z.unknown().optional(),
   actingNotes: z.unknown().optional(),
-  photographyRules: z.unknown().optional(),
   videoPrompt: z.string().nullable().optional(),
   firstLastFramePrompt: z.string().nullable().optional(),
 }).passthrough().refine((value) => Boolean(value.panelId || typeof value.panelIndex === 'number'), {
@@ -601,7 +599,6 @@ export async function executeStoryboardMutationOperation(
         linkedToNextPanel: true,
         sketchImageUrl: true,
         sketchImageMediaId: true,
-        photographyRules: true,
         actingNotes: true,
         previousImageUrl: true,
         previousImageMediaId: true,
@@ -704,7 +701,6 @@ export async function executeStoryboardMutationOperation(
       updateData.linkedToNextPanel = input.linkedToNextPanel === true
     }
     if (Object.prototype.hasOwnProperty.call(input, 'actingNotes')) updateData.actingNotes = toStructuredJsonField(input.actingNotes, 'actingNotes')
-    if (Object.prototype.hasOwnProperty.call(input, 'photographyRules')) updateData.photographyRules = toStructuredJsonField(input.photographyRules, 'photographyRules')
 
     if (Object.keys(updateData).length === 0) {
       return { success: true, panelId: panelId || null, noop: true }
@@ -731,7 +727,6 @@ export async function executeStoryboardMutationOperation(
             firstLastFramePrompt: true,
             linkedToNextPanel: true,
             actingNotes: true,
-            photographyRules: true,
           },
         })
       : panelIndex === null
@@ -761,7 +756,6 @@ export async function executeStoryboardMutationOperation(
               firstLastFramePrompt: true,
               linkedToNextPanel: true,
               actingNotes: true,
-              photographyRules: true,
             },
           })
 

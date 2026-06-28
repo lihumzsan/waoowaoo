@@ -170,7 +170,7 @@ describe('task service dedupe + orphan recovery', () => {
           imageModel: 'fal::image-model',
           storyboardGrid: {
             mode: '2x2',
-            sourceVideoBlockId: 'block-1',
+            sourceGenerationSegmentId: 'segment-1',
             panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
           },
           meta: {
@@ -208,7 +208,7 @@ describe('task service dedupe + orphan recovery', () => {
     expect(payload.stage).toBe('generate_panel_grid')
     expect(storyboardGrid).toEqual({
       mode: '2x2',
-      sourceVideoBlockId: 'block-1',
+      sourceGenerationSegmentId: 'segment-1',
       panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
     })
     expect(payload.imageModel).toBe('fal::image-model')

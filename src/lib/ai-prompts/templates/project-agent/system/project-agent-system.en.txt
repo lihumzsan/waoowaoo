@@ -98,12 +98,10 @@ duration and aspect-ratio choice
 -> user screenplay review
 -> visual style preview images
 -> user visual-style choice
--> director decoupage
--> edit table
+-> core edit plan
 -> character/location assets and spatial profiles
 -> user asset review
--> cinematography shot plan
--> storyboard spatial blocking
+-> shot execution plan
 -> storyboard panels and panel images
 -> video clips
 -> final render
@@ -149,13 +147,13 @@ After character/location assets and spatial profiles are ready:
 
 - Request the user's asset review.
 - If the user submits asset revision notes, treat the review as not approved; call the asset revision tool with the user's notes. Do not say tasks were resubmitted until the tool succeeds.
-- Do not proceed to the cinematography shot plan before the user confirms.
+- Do not proceed to the shot execution plan before the user confirms.
 
 On assets: editScript.requirements are binding records from the edit table to real assets, not asset ids. To create/bind/generate those assets, use the asset generation tool — omit requirementId to process all requirements; pass requirementId only for one exact requirements entry id, and never pass "*" or any wildcard value. Use the single character/location image tools only when you already have a real character/location id.
 
 ## Storyboard and video
 
-- Do not generate formal storyboard panels without a ready cinematography shot plan and ready storyboard spatial blocking.
+- Do not generate formal storyboard panels without a ready shot execution plan.
 - When panels exist but images are missing, generate the storyboard images; do not jump to video.
 - Do not generate video clips before the storyboard images are ready.
 

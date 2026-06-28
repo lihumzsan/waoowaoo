@@ -309,10 +309,10 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_generate_cinematography'),
+      workflow: workflow('ready_to_generate_shot_execution_plan'),
       choiceType: 'asset_review',
       toolCallId: 'tool-call-1',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=ready_to_generate_cinematography')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=ready_to_generate_shot_execution_plan')
   })
 
 })

@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { readProjectEditScript } from '@/lib/edit-script/service'
-import type { EditScriptVideoBlock } from '@/lib/edit-script/types'
+import type { EditGenerationSegment } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
@@ -31,12 +31,11 @@ export type StoryboardGridComparePanel = {
 }
 
 export type StoryboardGridCompareBlock = {
-  readonly blockIndex: number
-  readonly sourceVideoBlockId: string
-  readonly kind: EditScriptVideoBlock['kind']
+  readonly segmentIndex: number
+  readonly sourceGenerationSegmentId: string
+  readonly kind: 'group'
   readonly shotNumbers: readonly number[]
-  readonly reason: string
-  readonly prompt: string
+  readonly continuity: string
   readonly panels: readonly StoryboardGridComparePanel[]
 }
 
@@ -51,7 +50,7 @@ type CompareSubmitInput = {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
   readonly panelIds: readonly string[]
   readonly mode: StoryboardGridCompareMode
   readonly locale: Locale
@@ -74,13 +73,13 @@ function panelShotNumber(panel: { readonly panelNumber: number | null; readonly 
   return panel.panelNumber ?? panel.panelIndex + 1
 }
 
-function buildSourceVideoBlockId(editScriptId: string, blockIndex: number): string {
-  return `${editScriptId}:video-block:${blockIndex + 1}`
+function buildSourceGenerationSegmentId(editScriptId: string, segmentIndex: number): string {
+  return `${editScriptId}:generationSegment:${segmentIndex + 1}`
 }
 
 export function parseStoryboardGridCompareSubmitBody(value: unknown): {
   readonly episodeId: string
-  readonly sourceVideoBlockId: string
+  readonly sourceGenerationSegmentId: string
   readonly panelIds: readonly string[]
   readonly mode: StoryboardGridCompareMode
   readonly locale: Locale
@@ -92,13 +91,13 @@ export function parseStoryboardGridCompareSubmitBody(value: unknown): {
   }
   const record = value as Record<string, unknown>
   const episodeId = normalizeString(record.episodeId)
-  const sourceVideoBlockId = normalizeString(record.sourceVideoBlockId)
+  const sourceGenerationSegmentId = normalizeString(record.sourceGenerationSegmentId)
   const panelIds = normalizeStringArray(record.panelIds).slice(0, 4)
   const mode = normalizeString(record.mode)
   const locale = locales.find((candidate) => candidate === normalizeString(record.locale))
   const omittedFields = parseStoryboardPromptFieldOmissions(record.omittedFields)
   const previousGridImageUrl = normalizeString(record.previousGridImageUrl) || null
-  if (!episodeId || !sourceVideoBlockId || panelIds.length < 2) {
+  if (!episodeId || !sourceGenerationSegmentId || panelIds.length < 2) {
     throw new ApiError('INVALID_PARAMS')
   }
   if (mode !== 'single_parallel' && mode !== 'grid_2x2') {
@@ -110,7 +109,7 @@ export function parseStoryboardGridCompareSubmitBody(value: unknown): {
       field: 'locale',
     })
   }
-  return { episodeId, sourceVideoBlockId, panelIds, mode, locale, omittedFields, previousGridImageUrl }
+  return { episodeId, sourceGenerationSegmentId, panelIds, mode, locale, omittedFields, previousGridImageUrl }
 }
 
 export async function getStoryboardGridCompareSource(input: {
@@ -159,15 +158,14 @@ export async function getStoryboardGridCompareSource(input: {
     }
   }
 
-  const blocks = editScript.videoBlocks
-    .map((block, index): StoryboardGridCompareBlock => ({
-      blockIndex: index,
-      sourceVideoBlockId: buildSourceVideoBlockId(editScriptId, index),
-      kind: block.kind,
-      shotNumbers: block.shotNumbers,
-      reason: block.reason,
-      prompt: block.prompt,
-      panels: block.shotNumbers
+  const blocks = editScript.generationSegments
+    .map((segment: EditGenerationSegment, index): StoryboardGridCompareBlock => ({
+      segmentIndex: index,
+      sourceGenerationSegmentId: buildSourceGenerationSegmentId(editScriptId, index),
+      kind: 'group',
+      shotNumbers: segment.shotNumbers,
+      continuity: segment.continuity,
+      panels: segment.shotNumbers
         .map((shotNumber) => panelsByShotNumber.get(shotNumber))
         .filter((panel): panel is StoryboardGridComparePanel => Boolean(panel))
         .slice(0, 4),
@@ -274,7 +272,7 @@ export async function submitStoryboardGridCompareRun(input: CompareSubmitInput) 
       } : {}),
       storyboardGrid: {
         mode: '2x2',
-        sourceVideoBlockId: input.sourceVideoBlockId,
+        sourceGenerationSegmentId: input.sourceGenerationSegmentId,
         panelIds,
       },
       meta: { locale },
@@ -357,7 +355,7 @@ export async function submitStoryboardGridCompareRun(input: CompareSubmitInput) 
     success: true,
     mode: input.mode,
     episodeId: input.episodeId,
-    sourceVideoBlockId: input.sourceVideoBlockId,
+    sourceGenerationSegmentId: input.sourceGenerationSegmentId,
     omittedFields: input.omittedFields,
     tasks,
   }

@@ -5,11 +5,10 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const serviceMock = vi.hoisted(() => ({
   generateProjectEditScript: vi.fn(async () => ({
     id: 'edit-script-1',
-    title: 'Orbital Dock',
     durationSec: 60,
     shotCount: 15,
     requirements: [{ id: 'asset-1' }],
-    videoBlocks: [{ kind: 'group', shotNumbers: [1, 2, 3] }],
+    generationSegments: [{ shotNumbers: [1, 2, 3], continuity: 'continuous approach' }],
   })),
 }))
 
@@ -89,12 +88,11 @@ describe('worker edit-script-generate behavior', () => {
     expect(streamMock.flush).toHaveBeenCalled()
     expect(result).toEqual({
       editScriptId: 'edit-script-1',
-      title: 'Orbital Dock',
       episodeId: 'episode-1',
       durationSec: 60,
       shotCount: 15,
       requirementCount: 1,
-      videoBlockCount: 1,
+      generationSegmentCount: 1,
     })
   })
 })

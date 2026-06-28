@@ -183,22 +183,19 @@ export {
 } from './useProjectData'
 
 export {
-    useProjectEditCinematographyShotPlan,
-    useProjectEditDirectorDecoupage,
     useProjectEditScreenplay,
     useProjectEditScript,
-    useCreateProjectEditCinematographyShotPlan,
-    useCreateProjectEditDirectorDecoupage,
+    useProjectEditShotExecutionPlan,
+    useCreateProjectEditShotExecutionPlan,
     useCreateProjectEditScreenplay,
     useCreateProjectEditScript,
     useConfirmProjectEditStylePreview,
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
-    useGenerateProjectEditScriptStoryboardSpatialBlocking,
-    useArrangeProjectEditScriptVideoBlocks,
-    useMergeProjectEditScriptVideoBlocks,
+    useArrangeProjectEditScriptGenerationSegments,
+    useMergeProjectEditScriptGenerationSegments,
     useUpdateProjectEditScriptAssetRequirementDescription,
-    useUpdateProjectEditScriptVideoBlockPrompt,
+    useUpdateProjectEditScriptGenerationSegmentContinuity,
 } from './useProjectEditScript'
 
 export {

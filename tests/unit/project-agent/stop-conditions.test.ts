@@ -280,7 +280,7 @@ describe('project agent business stop signals', () => {
       toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
     ])).toBeNull()
     const stopPart = controller.evaluateStep([{
-      toolName: 'generate_edit_director_decoupage',
+      toolName: 'generate_edit_shot_execution_plan',
       output: {
         ok: true,
         data: {

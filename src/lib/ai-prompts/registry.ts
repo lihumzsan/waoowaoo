@@ -85,14 +85,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'style',
     ],
   },
-  [AI_PROMPT_IDS.PANEL_IMAGE_GENERATE]: {
-    pathStem: 'image/panel-generate',
-    variableKeys: ['storyboard_text_json_input', 'source_text', 'aspect_ratio', 'style'],
-  },
-  [AI_PROMPT_IDS.PANEL_GRID_IMAGE_GENERATE]: {
-    pathStem: 'image/panel-grid-generate',
-    variableKeys: ['storyboard_grid_json_input', 'source_text', 'aspect_ratio', 'style'],
-  },
   [AI_PROMPT_IDS.IMAGE_UPDATE_SHOT_PROMPT]: {
     pathStem: 'image/update-shot-prompt',
     variableKeys: ['prompt_input', 'user_input', 'video_prompt_input'],
@@ -125,16 +117,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/screenplay-revision',
     variableKeys: ['original_user_request', 'current_screenplay_text', 'revision_instruction', 'duration_guidance', 'aspect_ratio'],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_DIRECTOR_DECOUPAGE]: {
-    pathStem: 'edit-script/director-decoupage',
-    variableKeys: ['user_request', 'screenplay_text', 'style_bible_json', 'duration_guidance', 'aspect_ratio'],
-  },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE]: {
     pathStem: 'edit-script/structure',
     variableKeys: [
       'user_request',
       'screenplay_text',
-      'director_decoupage_json',
       'duration_guidance',
       'aspect_ratio',
       'style_bible_json',
@@ -144,86 +131,13 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-script/asset-extract',
     variableKeys: ['structure_json'],
   },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK]: {
-    pathStem: 'edit-script/video-prompt-block',
-    variableKeys: [
-      'user_request',
-      'screenplay_text',
-      'video_block_json',
-      'block_shots_json',
-      'asset_context_json',
-      'adjacent_blocks_json',
-      'aspect_ratio',
-      'style_bible_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_ARRANGEMENT]: {
-    pathStem: 'edit-script/video-block-arrangement',
-    variableKeys: [
-      'user_request',
-      'screenplay_text',
-      'previous_video_blocks_json',
-      'draft_video_blocks_json',
-      'changed_video_blocks_json',
-      'changed_block_shots_json',
-      'asset_context_json',
-      'aspect_ratio',
-      'style_bible_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_BLOCK_MERGE]: {
-    pathStem: 'edit-script/video-block-merge',
-    variableKeys: [
-      'user_request',
-      'screenplay_text',
-      'merged_video_block_json',
-      'source_video_blocks_json',
-      'merged_block_shots_json',
-      'asset_context_json',
-      'adjacent_blocks_json',
-      'aspect_ratio',
-      'style_bible_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL]: {
-    pathStem: 'edit-script/storyboard-panel',
-    variableKeys: [
-      'shot_json',
-      'video_block_json',
-      'character_assets_json',
-      'location_assets_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_CINEMATOGRAPHY_SHOT_PLAN]: {
-    pathStem: 'edit-script/cinematography-shot-plan',
+  [AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN]: {
+    pathStem: 'edit-script/shot-execution-plan',
     variableKeys: [
       'style_bible_json',
-      'director_decoupage_json',
       'structure_json',
       'asset_context_json',
       'spatial_profiles_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_CAMERA_STYLE_BIBLE]: {
-    pathStem: 'edit-script/storyboard-camera-style-bible',
-    variableKeys: [
-      'source_snapshot_json',
-      'spatial_profile_output_json',
-    ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_STORYBOARD_PANEL_FINAL_PROMPT_BLOCK]: {
-    pathStem: 'edit-script/storyboard-panel-final-prompt-block',
-    variableKeys: [
-      'director_decoupage_json',
-      'cinematography_shot_plan_json',
-      'full_structure_json',
-      'source_snapshot_json',
-      'spatial_profile_output_json',
-      'video_block_json',
-      'block_shots_json',
-      'previous_block_json',
-      'next_block_json',
-      'panel_contract_json',
     ],
   },
 }

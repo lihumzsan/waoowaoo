@@ -182,7 +182,7 @@ describe('api contract - project media generation routes (operation adapter)', (
     const body = {
       episodeId: 'episode-1',
       editScriptId: 'edit-script-1',
-      sourceVideoBlockId: 'edit-script-1:video-block:1',
+      sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
       panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
     }
     const res = await generateStoryboardGridImagesPost(

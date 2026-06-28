@@ -189,21 +189,16 @@
       },
       "actions": {
         "generateScript": "生成剧本",
-        "generateEditDirectorDecoupage": "生成导演拆镜",
         "confirmEditStylePreview": "确认此风格",
         "generateEditScript": "生成剪辑表",
-        "generateCinematographyShotPlan": "生成摄影方案",
+        "generateShotExecutionPlan": "生成镜头执行计划",
         "generateStoryboard": "生成分镜",
         "generateImage": "生成图片",
         "generateStoryboardSingleImages": "单张生成分镜",
         "generateStoryboardGridImages": "成组生成分镜",
         "regenerateImage": "重新生成",
         "generateVideo": "生成视频",
-        "mergeVideoBlocks": "融合片段",
-        "arrangeVideoBlocks": "调整片段",
-        "selectVideoBlockToMerge": "选择融合片段",
-        "mergeWithSelectedVideoBlock": "与已选片段融合",
-        "cancelVideoBlockMerge": "取消选择",
+        "arrangeGenerationSegments": "调整生成分段",
         "generateAllVideos": "批量生成",
         "generateBgmScore": "生成 BGM",
         "generatingBgm": "BGM 生成中",
@@ -211,10 +206,8 @@
         "aiEditing": "AI剪辑中",
         "generateEditAssets": "全部生成",
         "generateEditAsset": "生成图片",
-        "generateSpatialBlocking": "生成空间定位",
-        "regenerateSpatialBlocking": "重新生成空间定位",
         "generateSceneAssetImagesFirst": "请先生成场景资产图片",
-        "generateSpatialBlockingFirst": "请先生成空间定位"
+        "generateShotExecutionPlanFirst": "请先生成镜头执行计划"
       },
       "status": {
         "empty": "待输入",
@@ -252,11 +245,10 @@
         "videoPlanGroupCountInvalid": "连续片段必须包含 2-9 个镜头",
         "videoPlanGroupDurationInvalid": "连续片段时长必须在 2-15 秒之间",
         "sequenceVideoModelMissing": "请先在项目设置中选择视频片段生成模型",
-        "videoBlockMergeAdjacentRequired": "只能融合相邻的视频片段，请选择已选片段前后相邻的片段。",
-        "videoBlockMergeDurationExceeded": "融合后的片段时长为 {duration} 秒，超过 {max} 秒上限。",
-        "videoBlockMergeUnavailable": "当前剪辑表已变化，请重新选择要融合的视频片段。"
+        "generationSegmentDurationExceeded": "调整后的生成分段时长为 {duration} 秒，超过 {max} 秒上限。",
+        "generationSegmentUnavailable": "当前剪辑表已变化，请重新选择生成分段。"
       },
-      "videoBlockArrangement": {
+      "generationSegmentArrangement": {
         "title": "视频片段编排",
         "summary": "{blocks} 个片段 · {shots} 个分镜",
         "localSummary": "正在调整 {blocks} 个相邻片段 · {shots} 个分镜",
@@ -324,14 +316,10 @@
         "duration": "时长",
         "shotCount": "镜头数",
         "shotCore": "镜头信息",
-        "dramaticPurpose": "戏剧目的",
-        "visibleAction": "可见动作",
-        "audienceFocus": "观众焦点",
-        "viewpoint": "观看视角",
-        "revealPlan": "信息释放",
-        "performanceBeat": "表演节拍",
-        "continuityIn": "入镜衔接",
-        "continuityOut": "出镜衔接",
+        "action": "动作",
+        "performance": "表演状态",
+        "generationSegments": "生成分段",
+        "segmentContinuity": "分段连续性",
         "shotScale": "景别",
         "lens": "焦段",
         "depthOfField": "景深",
@@ -349,7 +337,7 @@
         "imagePrompt": "图片提示词",
         "fullFinalPrompt": "完整最终提示词",
         "videoPrompt": "视频提示词",
-        "photographyRules": "摄影规则",
+        "executionSnapshot": "镜头执行快照",
         "actingNotes": "表演指导",
         "promptShot": "Prompt 镜头数据",
         "sequence": "顺序",
@@ -457,9 +445,9 @@
         "editScriptMeta": "剪辑表信息",
         "shotIndexHeader": "镜头",
         "shotIndex": "镜头 {index}",
-        "charactersAndScene": "人物/场景",
+        "sceneCharacters": "人物/场景",
         "sound": "声音",
-        "videoBlock": "视频片段",
+        "generationSegment": "生成分段",
         "assetKind": "资产类型",
         "linkedShots": "关联镜头",
         "targetAsset": "资产 ID",
@@ -513,11 +501,8 @@
           "characters": "角色",
           "props": "道具",
           "shotType": "景别",
-          "dramaticPurpose": "戏剧目的",
-          "visibleAction": "可见动作",
-          "audienceFocus": "观众焦点",
-          "viewpoint": "观看视角",
-          "revealPlan": "信息释放",
+          "action": "动作",
+          "performance": "表演状态",
           "cameraMove": "运镜",
           "description": "描述",
           "location": "场景",
@@ -527,9 +512,9 @@
           "videoPrompt": "视频提示词",
           "shotCount": "镜头数",
           "currentShot": "当前镜头",
-          "charactersAndScene": "人物/场景",
+          "sceneCharacters": "人物/场景",
           "sound": "声音",
-          "photographyRules": "摄影规则 JSON",
+          "executionSnapshot": "镜头执行快照 JSON",
           "actingNotes": "表演指导 JSON",
           "insertPrompt": "插入镜头要求",
           "variantTitle": "变体标题",
@@ -750,12 +735,6 @@
           "body": "全链路统一使用的画面、镜头和声音滤镜风格规则。",
           "meta": "资产、分镜和视频提示词共用的唯一风格来源"
         },
-        "editDirectorDecoupage": {
-          "title": "导演拆镜",
-          "eyebrow": "导演模块",
-          "body": "全片 shot 级导演拆镜，定义每个镜头为什么存在、观众看什么、从谁的视角看以及如何衔接。",
-          "meta": "{shots} 个导演镜头 · {duration} 秒"
-        },
         "editPipelineStep": {
           "eyebrow": "剪辑生成步骤",
           "body": "从剪辑先行表拆出的阶段字段",
@@ -775,13 +754,13 @@
           "pendingBody": "AI 正在根据当前短片需求生成剪辑先行表，并提取人物、场景、镜头节奏、视频片段和声音设计。",
           "pendingMeta": "生成完成后会替换为可编辑剪辑表"
         },
-        "editCinematographyShotPlan": {
-          "title": "摄影指导方案",
-          "eyebrow": "摄影指导模块",
-          "body": "已锁定每个 shot 的景别、焦段、景深、机位、构图、光线、轴线与衔接。",
-          "pendingBody": "等待根据完整剪辑表、资产和空间画像生成全片 shot 级摄影方案。",
-          "locationImageRequired": "请先完成场景资产图片。没有最终场景图时，摄影方案无法可靠决定机位、轴线和构图。",
-          "meta": "{shots} 个镜头摄影方案"
+        "editShotExecutionPlan": {
+          "title": "镜头执行计划",
+          "eyebrow": "摄影与空间执行",
+          "body": "已锁定每个 shot 的景别、焦段、机位、构图、光线、轴线、人物位置和关键物体位置。",
+          "pendingBody": "等待根据核心剪辑表、资产和空间画像生成全片 shot 级执行计划。",
+          "locationImageRequired": "请先完成场景资产图片。没有最终场景图时，无法可靠决定机位、轴线、构图和空间 blocking。",
+          "meta": "{shots} 个镜头执行项"
         },
         "spaceConsistency": {
           "title": "空间一致性",
@@ -794,7 +773,7 @@
         "storyboardPanelGeneration": {
           "title": "分镜面板生成",
           "eyebrow": "分镜结构",
-          "body": "AI 正在把空间定位、摄影方案和剪辑表转化为逐镜分镜面板提示。",
+          "body": "系统正在把镜头执行计划、空间档案和核心剪辑表转化为逐镜分镜面板提示。",
           "meta": "{panels} 个分镜面板"
         },
         "editAsset": {

@@ -34,7 +34,7 @@ export function extractStoryboardGridPanelIds(payload: unknown): string[] {
   const payloadObject = parseObject(payload)
   const storyboardGrid = parseObject(payloadObject?.storyboardGrid)
   if (normalizeString(storyboardGrid?.mode) !== '2x2') return []
-  if (!normalizeString(storyboardGrid?.sourceVideoBlockId)) return []
+  if (!normalizeString(storyboardGrid?.sourceGenerationSegmentId)) return []
   const panelIds = uniqueStringArray(storyboardGrid?.panelIds).slice(0, STORYBOARD_GRID_CELL_COUNT)
   return panelIds.length >= 2 ? panelIds : []
 }

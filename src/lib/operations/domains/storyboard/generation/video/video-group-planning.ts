@@ -5,9 +5,9 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
-import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
-import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
-import { type VideoBlockPlan, type VideoBlockPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
+import { inferVideoGridModeForShotCount, totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
+import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
+import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
 import { ASSET_REFERENCE_GRID_MODE, applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
 
 export function parseShotNumbersJson(value: unknown): number[] {
@@ -51,91 +51,56 @@ async function findExistingVideoGroup(params: {
 }
 
 export function parseEditScriptShots(value: unknown): VideoGroupShot[] {
-  if (!Array.isArray(value)) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_SHOTS_INVALID')
-  return value.map((item) => {
-    if (!isRecord(item)) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_SHOT_INVALID')
-    const shotNumber = Number(item.shotNumber)
-    const durationSec = Number(item.durationSec)
-    if (!Number.isInteger(shotNumber) || shotNumber <= 0) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_SHOT_NUMBER_INVALID')
-    if (!Number.isInteger(durationSec) || durationSec < 1 || durationSec > 5) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_SHOT_DURATION_INVALID')
-    return {
-      shotNumber,
-      durationSec,
-      dramaticPurpose: normalizeString(item.dramaticPurpose),
-      visibleAction: normalizeString(item.visibleAction),
-      audienceFocus: normalizeString(item.audienceFocus),
-      viewpoint: normalizeString(item.viewpoint),
-      revealPlan: normalizeString(item.revealPlan),
-      performanceBeat: normalizeString(item.performanceBeat),
-      continuityIn: normalizeString(item.continuityIn),
-      continuityOut: normalizeString(item.continuityOut),
-      charactersAndScene: normalizeString(item.charactersAndScene),
-      sound: normalizeString(item.sound),
-    }
-  })
+  const core = normalizeEditScriptStructure(value)
+  return core.shots.map((shot) => ({
+    shotNumber: shot.shotNumber,
+    durationSec: shot.durationSec,
+    action: shot.action,
+    sceneName: shot.scene.name,
+    characters: shot.characters.map((character) => character.name),
+    sound: shot.sound,
+  }))
 }
 
-export async function buildEpisodeVideoBlockPlan(params: {
+function buildGenerationSegmentVideoPlanFromCore(value: unknown): GenerationSegmentVideoPlan {
+  const core = normalizeEditScriptStructure(value)
+  return {
+    items: core.generationSegments
+      .filter((segment) => segment.shotNumbers.length >= 2)
+      .map((segment) => ({
+        kind: 'group',
+        shotNumbers: segment.shotNumbers,
+        gridMode: inferVideoGridModeForShotCount(segment.shotNumbers.length),
+        continuity: segment.continuity,
+      })),
+  }
+}
+
+export async function buildEpisodeGenerationSegmentVideoPlan(params: {
   ctx: ProjectAgentOperationContext
   episodeId: string
 }): Promise<{
   readonly editScript: {
-    readonly title: string
-    readonly logline: string | null
-    readonly shotsJson: Prisma.JsonValue
-    readonly videoBlocksJson: Prisma.JsonValue | null
+    readonly corePlanJson: Prisma.JsonValue | null
   }
   readonly shots: readonly VideoGroupShot[]
-  readonly plan: VideoBlockPlan
+  readonly plan: GenerationSegmentVideoPlan
 }> {
   const editScript = await prisma.projectEditScript.findFirst({
     where: { projectId: params.ctx.projectId, episodeId: params.episodeId },
     select: {
-      title: true,
-      logline: true,
-      shotsJson: true,
-      videoBlocksJson: true,
+      corePlanJson: true,
     },
   })
   if (!editScript) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_REQUIRED')
-  if (!Array.isArray(editScript.videoBlocksJson) || editScript.videoBlocksJson.length === 0) {
-    throw new Error('PROJECT_AGENT_VIDEO_BLOCKS_REQUIRED')
-  }
-  const shots = parseEditScriptShots(editScript.shotsJson)
+  const shots = parseEditScriptShots(editScript.corePlanJson)
   if (shots.length === 0) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_SHOTS_EMPTY')
 
   return {
     editScript,
     shots,
-    plan: normalizeVideoBlockPlanResponse({
-      response: { items: editScript.videoBlocksJson },
-      allShotNumbers: shots.map((shot) => shot.shotNumber),
-      shots,
-      enforceSingleMinDuration: false,
-    }),
+    plan: buildGenerationSegmentVideoPlanFromCore(editScript.corePlanJson),
   }
-}
-
-export async function resolvePanelIdForVideoBlockShot(params: {
-  episodeId: string
-  shotNumber: number
-}): Promise<string> {
-  const panel = await prisma.projectPanel.findFirst({
-    where: {
-      storyboard: { episodeId: params.episodeId },
-      panelNumber: params.shotNumber,
-    },
-    select: {
-      id: true,
-      imageUrl: true,
-      imageMediaId: true,
-    },
-  })
-  if (!panel) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PANEL_NOT_FOUND:${params.shotNumber}`)
-  if (!panel.imageUrl && !panel.imageMediaId) {
-    throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PANEL_IMAGE_MISSING:${params.shotNumber}`)
-  }
-  return panel.id
 }
 
 async function resolveVideoGroupInput(params: {
@@ -155,7 +120,7 @@ async function resolveVideoGroupInput(params: {
     }),
     prisma.projectEditScript.findFirst({
       where: { episodeId: params.episodeId, projectId: params.projectId },
-      select: { id: true, title: true, logline: true, shotsJson: true },
+      select: { id: true, corePlanJson: true },
     }),
     prisma.projectPanel.findMany({
       where: {
@@ -172,7 +137,7 @@ async function resolveVideoGroupInput(params: {
   ])
   if (!episode) throw new Error('PROJECT_AGENT_EPISODE_NOT_FOUND')
   if (!editScript) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_REQUIRED')
-  const shots = parseEditScriptShots(editScript.shotsJson)
+  const shots = parseEditScriptShots(editScript.corePlanJson)
   const selectedShots = shotNumbers.map((shotNumber) => {
     const shot = shots.find((item) => item.shotNumber === shotNumber)
     if (!shot) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
@@ -213,9 +178,8 @@ function durationForShotNumbers(shots: readonly VideoGroupShot[], shotNumbers: r
   }, 0)
 }
 
-function gridModeForAssetReferenceItem(item: VideoBlockPlanItem): string {
-  if (item.kind === 'group') return item.gridMode ?? ASSET_REFERENCE_GRID_MODE
-  return ASSET_REFERENCE_GRID_MODE
+function gridModeForAssetReferenceItem(item: GenerationSegmentVideoPlanItem): string {
+  return item.gridMode ?? inferVideoGridModeForShotCount(item.shotNumbers.length)
 }
 
 export function readStoryboardVideoGridMode(value: unknown): VideoGridMode {
@@ -236,7 +200,7 @@ export type PlannedVideoGroupTaskMetadata = {
   sourceMode?: 'asset_reference' | null
   prompt?: string | null
   referenceImageUrls?: string[]
-  blockIndex?: number
+  segmentIndex?: number
 }
 
 export type CommittedVideoGroupTask = {
@@ -268,7 +232,7 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
     sourceMode: value.sourceMode === 'asset_reference' ? 'asset_reference' : null,
     prompt: normalizeString(value.prompt) || null,
     referenceImageUrls: normalizeStringList(value.referenceImageUrls),
-    blockIndex: typeof value.blockIndex === 'number' && Number.isInteger(value.blockIndex) ? value.blockIndex : undefined,
+    segmentIndex: typeof value.segmentIndex === 'number' && Number.isInteger(value.segmentIndex) ? value.segmentIndex : undefined,
   }
 }
 
@@ -362,14 +326,14 @@ export async function rollbackCommittedVideoGroups(committed: readonly Committed
   }
 }
 
-export async function planAssetReferenceVideoBlockTask(params: {
+export async function planAssetReferenceGenerationSegmentTask(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
   operationId: string
   episodeId: string
-  item: VideoBlockPlanItem
+  item: GenerationSegmentVideoPlanItem
   shots: readonly VideoGroupShot[]
-  blockIndex?: number
+  segmentIndex?: number
 }): Promise<{
   task: PlannedTask
   metadata: PlannedVideoGroupTaskMetadata
@@ -391,7 +355,6 @@ export async function planAssetReferenceVideoBlockTask(params: {
   payload.shotNumbers = shotNumbers
   payload.durationSec = durationSec
   payload.sourceMode = 'asset_reference'
-  payload.prompt = params.item.prompt
   payload.referenceImageUrls = referenceImageUrls
 
   await validateVideoTaskPayloadOrThrow({
@@ -408,7 +371,7 @@ export async function planAssetReferenceVideoBlockTask(params: {
     shotNumbers,
   })
   const groupId = previous?.id ?? randomUUID()
-  const planTaskId = `${params.operationId}:asset_reference:${params.blockIndex ?? shotNumbers.join('-')}:${groupId}`
+  const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotNumbers.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
   return {
     task: createPlannedTask({
@@ -434,9 +397,8 @@ export async function planAssetReferenceVideoBlockTask(params: {
       durationSec,
       previous,
       sourceMode: 'asset_reference',
-      prompt: params.item.prompt,
       referenceImageUrls,
-      blockIndex: params.blockIndex,
+      segmentIndex: params.segmentIndex,
     },
   }
 }

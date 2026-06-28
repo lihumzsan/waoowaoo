@@ -424,12 +424,12 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'generate_edit_screenplay',
     'revise_edit_screenplay',
     'generate_edit_style_previews',
-    'generate_edit_director_decoupage',
+    'generate_edit_script',
     'generate_edit_script',
     'generate_edit_script_assets',
     'revise_edit_script_assets',
-    'generate_edit_cinematography_shot_plan',
-    'generate_edit_script_storyboard_spatial_blocking',
+    'generate_edit_shot_execution_plan',
+    'generate_edit_shot_execution_plan',
     'generate_edit_script_storyboard',
     'generate_edit_script_storyboard_images',
     'generate_episode_videos',
@@ -929,13 +929,13 @@ describe('project agent runtime deterministic tool injection', () => {
   })
 
   it('enables spatial blocking but not storyboard panels immediately after cinematography', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_storyboard_spatial_blocking', [
-      'generate_edit_script_storyboard_spatial_blocking',
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_shot_execution_plan', [
+      'generate_edit_shot_execution_plan',
     ])
 
     await runAssistant({ text: '继续生成下一步' })
 
-    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_storyboard_spatial_blocking')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_shot_execution_plan')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_storyboard')
   })
 
@@ -1030,8 +1030,8 @@ describe('project agent runtime deterministic tool injection', () => {
   })
 
   it('fails loudly when live workflow refresh fails after a tool mutates state', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_director_decoupage', [
-      'generate_edit_director_decoupage',
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', [
+      'generate_edit_script',
     ])
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
     workflowRefreshState.resolveEditFirstWorkflowState.mockRejectedValueOnce(new Error('DB_WORKFLOW_REFRESH_FAILED'))
@@ -1040,7 +1040,7 @@ describe('project agent runtime deterministic tool injection', () => {
       /PROJECT_AGENT_RUN_FAILED requestId=req-1: DB_WORKFLOW_REFRESH_FAILED/,
     )
 
-    expect(streamState.executedToolNames).toEqual(['generate_edit_director_decoupage'])
+    expect(streamState.executedToolNames).toEqual(['generate_edit_script'])
     expect(streamState.capturedEnabledToolNamesAfterExecution).toEqual([])
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',

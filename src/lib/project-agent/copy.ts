@@ -56,8 +56,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Generate the edit-first screenplay. You must pass prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection confirmed through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo it to the user in chat; do not merely say it was generated or tell the user to view the canvas.',
   },
   revise_edit_screenplay: {
-    zh: '修改当前剪辑先行剧本。仅在剧本已生成、用户尚未确认进入风格候选/导演拆镜/剪辑表前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；必须传入 revisionInstruction、durationTier、aspectRatio，修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
-    en: 'Revise the current edit-first screenplay. Use only after the screenplay exists and before the user approves progression to style previews, director decoupage, or the edit table. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass revisionInstruction, durationTier, and aspectRatio. The result remains in screenplay review. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo the revised screenplay to the user in chat; do not merely say it was revised or tell the user to view the canvas.',
+    zh: '修改当前剪辑先行剧本。仅在剧本已生成、用户尚未确认进入风格候选/核心剪辑计划前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；必须传入 revisionInstruction、durationTier、aspectRatio，修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
+    en: 'Revise the current edit-first screenplay. Use only after the screenplay exists and before the user approves progression to style previews or the core edit plan. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass revisionInstruction, durationTier, and aspectRatio. The result remains in screenplay review. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo the revised screenplay to the user in chat; do not merely say it was revised or tell the user to view the canvas.',
   },
   generate_edit_style_previews: {
     zh: '用户审核确认剧本后，基于剧本生成或重新生成 1-3 个视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；用 styleDirection 传入用户方向，count 上限为 3，重新生成会追加候选。',
@@ -71,13 +71,13 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '在资产审核未通过时，按用户提交的 revisionNotes 返工剪辑资产图片。必须传入 revisionNotes；只有要处理单个需求时才传真实 editScript.requirements[].id。工具成功返回前，不要声称已经重新提交任务。',
     en: 'Revise edit-first asset images after asset review is not approved. Pass revisionNotes. Pass requirementId only for one exact editScript.requirements[].id. Do not claim tasks were resubmitted until this tool succeeds.',
   },
-  generate_edit_script_storyboard_spatial_blocking: {
-    zh: '在摄影 shot plan ready 后、生成分镜面板前，生成分镜空间定位/空间一致性准备。只有当前 workflow 暴露该工具时才调用；不要跳过它直接生成分镜面板。',
-    en: 'After the cinematography shot plan is ready and before storyboard panels, generate storyboard spatial blocking / space-consistency preparation. Call it only when the current workflow exposes this tool; do not skip it and generate panels directly.',
+  generate_edit_shot_execution_plan: {
+    zh: '在核心剪辑表、资产和场景空间档案 ready 后，生成镜头执行计划；它统一包含摄影方案、空间 blocking、轴线、光线、人物和物体位置。只有当前 workflow 暴露该工具时才调用。',
+    en: 'After the core edit plan, assets, and location spatial profiles are ready, generate the shot execution plan. It contains cinematography, spatial blocking, axis, lighting, character positions, and object positions. Call it only when the current workflow exposes this tool.',
   },
   generate_edit_script_storyboard: {
-    zh: '从已 ready 的空间定位/空间一致性准备生成正式分镜面板。只有空间定位已 ready 且当前 workflow 暴露该工具时才调用；如果空间定位未 ready，先调用 generate_edit_script_storyboard_spatial_blocking。',
-    en: 'Generate formal storyboard panels from ready spatial blocking / space-consistency preparation. Call it only after spatial blocking is ready and the current workflow exposes this tool; if spatial blocking is not ready, call generate_edit_script_storyboard_spatial_blocking first.',
+    zh: '从已 ready 的核心剪辑表和镜头执行计划生成正式分镜面板。只有镜头执行计划已 ready 且当前 workflow 暴露该工具时才调用。',
+    en: 'Generate formal storyboard panels from the ready core edit plan and shot execution plan. Call it only after the shot execution plan is ready and the current workflow exposes this tool.',
   },
   generate_edit_script_storyboard_images: {
     zh: '为剪辑先行流程中已经生成分镜面板但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
@@ -133,10 +133,6 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成视觉风格',
     en: 'Generate visual styles',
   },
-  generate_edit_director_decoupage: {
-    zh: '生成导演拆镜',
-    en: 'Generate director decoupage',
-  },
   generate_edit_script: {
     zh: '生成剪辑表',
     en: 'Generate edit table',
@@ -149,13 +145,9 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '返工剪辑资产',
     en: 'Revise edit assets',
   },
-  generate_edit_cinematography_shot_plan: {
-    zh: '生成摄影方案',
-    en: 'Generate cinematography shot plan',
-  },
-  generate_edit_script_storyboard_spatial_blocking: {
-    zh: '生成空间一致性提示',
-    en: 'Generate space-consistency prompts',
+  generate_edit_shot_execution_plan: {
+    zh: '生成镜头执行计划',
+    en: 'Generate shot execution plan',
   },
   generate_edit_script_storyboard: {
     zh: '生成分镜面板',

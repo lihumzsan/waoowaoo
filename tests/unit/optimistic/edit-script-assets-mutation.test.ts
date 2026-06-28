@@ -63,14 +63,12 @@ function buildEditScript(): ProjectEditScript {
     userPrompt: 'prompt',
     styleBible: null,
     screenplayText: null,
-    title: 'Edit',
-    logline: null,
     durationSec: 30,
     shotCount: 1,
     status: 'ready',
     assetReviewStatus: 'pending',
     shots: [],
-    videoBlocks: [],
+    generationSegments: [],
     requirements: [
       {
         id: 'req-character',

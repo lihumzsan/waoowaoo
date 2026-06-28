@@ -4,10 +4,9 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { submitTask } from '@/lib/task/submitter'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
-import { isStoryboardSpatialProfileStageReady } from '@/lib/project-workflow/edit-first-readiness'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 
-interface SubmitSpatialBlockingStoryboardInput {
+interface SubmitEditScriptStoryboardInput {
   readonly projectId: string
   readonly episodeId: string
   readonly editScriptId?: string
@@ -16,27 +15,7 @@ interface SubmitSpatialBlockingStoryboardInput {
   readonly requestId?: string | null
 }
 
-function readRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
-}
-
-function parseJsonRecord(value: string | null): Record<string, unknown> {
-  if (!value) return {}
-  try {
-    return readRecord(JSON.parse(value))
-  } catch {
-    throw new Error('EDIT_SCRIPT_STORYBOARD_PHOTOGRAPHY_PLAN_INVALID')
-  }
-}
-
-async function resolveEditScriptId(input: Pick<SubmitSpatialBlockingStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
+async function resolveEditScriptId(input: Pick<SubmitEditScriptStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
   if (input.editScriptId) return input.editScriptId
   const editScript = await prisma.projectEditScript.findFirst({
     where: {
@@ -50,66 +29,8 @@ async function resolveEditScriptId(input: Pick<SubmitSpatialBlockingStoryboardIn
   return editScript.id
 }
 
-export async function submitEditScriptSpatialBlockingStoryboard(input: SubmitSpatialBlockingStoryboardInput) {
+export async function submitEditScriptStoryboardPanels(input: SubmitEditScriptStoryboardInput) {
   const editScriptId = await resolveEditScriptId(input)
-  const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    editScriptId,
-    userId: input.userId,
-  })
-  const submitted = await submitTask({
-    userId: input.userId,
-    locale: input.locale,
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
-    targetType: 'ProjectEditScript',
-    targetId: editScriptId,
-    operationId: 'generate_edit_script_storyboard_spatial_blocking',
-    operationSource: 'project-ui',
-    requestId: input.requestId || null,
-    payload: await buildEditFirstTextTaskPayload({
-      projectId: input.projectId,
-      userId: input.userId,
-      payload: {
-        editScriptId,
-        sourceSnapshot,
-        modelConfigSnapshot,
-        count: sourceSnapshot.shots.length,
-      },
-    }),
-    dedupeKey: `edit_script_storyboard_prepare:${input.projectId}:${input.episodeId}:${editScriptId}`,
-  })
-  return {
-    ...submitted,
-    editScriptId,
-  }
-}
-
-export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlockingStoryboardInput) {
-  const editScriptId = await resolveEditScriptId(input)
-  const storyboard = await prisma.projectStoryboard.findFirst({
-    where: {
-      episodeId: input.episodeId,
-      editScriptId,
-      episode: {
-        projectId: input.projectId,
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      id: true,
-      photographyPlan: true,
-    },
-  })
-  const plan = parseJsonRecord(storyboard?.photographyPlan ?? null)
-  if (!storyboard || !isStoryboardSpatialProfileStageReady(readString(plan.currentStage))) {
-    throw new ApiError('CONFLICT', {
-      code: 'STORYBOARD_SPATIAL_BLOCKING_REQUIRED',
-      message: 'Ready storyboard spatial blocking is required before generating storyboard panels',
-    })
-  }
   const { sourceSnapshot, modelConfigSnapshot } = await buildStoryboardConsistencySource({
     projectId: input.projectId,
     episodeId: input.episodeId,
@@ -122,8 +43,8 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
     projectId: input.projectId,
     episodeId: input.episodeId,
     type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-    targetType: 'ProjectStoryboard',
-    targetId: storyboard.id,
+    targetType: 'ProjectEditScript',
+    targetId: editScriptId,
     operationId: 'generate_edit_script_storyboard',
     operationSource: 'project-ui',
     requestId: input.requestId || null,
@@ -132,15 +53,14 @@ export async function submitEditScriptStoryboardPanels(input: SubmitSpatialBlock
       userId: input.userId,
       payload: {
         editScriptId,
-        storyboardId: storyboard.id,
         sourceSnapshot,
         modelConfigSnapshot,
       },
     }),
-    dedupeKey: `edit_script_storyboard_camera_plan:${storyboard.id}`,
+    dedupeKey: `edit_script_storyboard:${input.projectId}:${input.episodeId}:${editScriptId}`,
   })
   return {
     ...submitted,
-    storyboardId: storyboard.id,
+    editScriptId,
   }
 }

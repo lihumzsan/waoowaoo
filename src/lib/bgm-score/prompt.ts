@@ -18,31 +18,22 @@ function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): 
   if (!editScript) return null
   return {
     id: editScript.id,
-    title: editScript.title,
-    logline: editScript.logline ?? null,
+    userPrompt: editScript.userPrompt,
     durationSec: editScript.durationSec,
     styleBible: editScript.styleBible ?? null,
     shots: editScript.shots.map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      dramaticPurpose: shot.dramaticPurpose,
-      visibleAction: shot.visibleAction,
-      audienceFocus: shot.audienceFocus,
-      viewpoint: shot.viewpoint,
-      revealPlan: shot.revealPlan,
-      performanceBeat: shot.performanceBeat,
-      continuityIn: shot.continuityIn,
-      continuityOut: shot.continuityOut,
-      charactersAndScene: shot.charactersAndScene ?? '',
+      scene: shot.scene,
+      action: shot.action,
+      characters: shot.characters,
+      keyObjects: shot.keyObjects,
       sound: shot.sound,
     })),
-    videoBlocks: editScript.videoBlocks.map((block, index) => ({
-      blockNumber: index + 1,
-      kind: block.kind,
-      shotNumbers: block.shotNumbers,
-      gridMode: block.gridMode ?? null,
-      reason: block.reason,
-      prompt: block.prompt,
+    generationSegments: editScript.generationSegments.map((segment, index) => ({
+      segmentNumber: index + 1,
+      shotNumbers: segment.shotNumbers,
+      continuity: segment.continuity,
     })),
   }
 }

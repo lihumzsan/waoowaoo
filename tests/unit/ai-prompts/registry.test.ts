@@ -36,16 +36,16 @@ describe('ai prompt registry', () => {
 
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const variantTemplate = getAiPromptTemplate(AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE, 'zh')
-    const videoBlockTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_BLOCK, 'zh')
+    const executionTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN, 'zh')
 
     expect(variantTemplate).toContain('所有会写入画布或给用户展示的提示词字段必须全中文')
     expect(variantTemplate).toContain('❌ video_prompt 使用英文句子（必须中文）')
     expect(variantTemplate).not.toContain('必须英文')
     expect(variantTemplate).not.toContain('POV shot of a smartphone screen')
 
-    expect(videoBlockTemplate).toContain('shots[].videoPrompt 与 videoBlock.prompt 必须整体使用中文自然语言')
-    expect(videoBlockTemplate).toContain('安静的路边公交站单镜头')
-    expect(videoBlockTemplate).not.toContain('Quiet roadside bus-stop shot')
-    expect(videoBlockTemplate).not.toContain('Sound effects only')
+    expect(executionTemplate).toContain('ShotExecutionPlan')
+    expect(executionTemplate).toContain('camera.lighting')
+    expect(executionTemplate).toContain('blocking.axis')
+    expect(executionTemplate).toContain('不输出最终渲染提示词')
   })
 })

@@ -3,11 +3,11 @@ import { WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X } from '../node-presentation-
 
 const DEFAULT_NODE_GAP = 72
 const DRAG_NODE_GAP = 24
-const SPACE_CONSISTENCY_TO_EDIT_SCRIPT_GAP = 72
-const SPACE_CONSISTENCY_STACK_GAP = 56
-const SPACE_CONSISTENCY_TO_CONTENT_LANE_GAP = 88
+const EXECUTION_PLAN_TO_EDIT_SCRIPT_GAP = 72
+const EXECUTION_PLAN_STACK_GAP = 56
+const EXECUTION_PLAN_TO_CONTENT_LANE_GAP = 88
 const POSITION_EPSILON = 0.5
-const SPACE_CONSISTENCY_CONTENT_LANE_NODE_KINDS = new Set<WorkspaceCanvasFlowNode['data']['kind']>([
+const EXECUTION_PLAN_CONTENT_LANE_NODE_KINDS = new Set<WorkspaceCanvasFlowNode['data']['kind']>([
   'storyboardPanelGeneration',
   'shot',
   'videoPlan',
@@ -200,7 +200,7 @@ export function repairWorkspaceNodeOverlaps(
   })
 }
 
-export function alignSpaceConsistencyNodesToMeasuredEditScript(
+export function alignExecutionPlanNodesToMeasuredEditScript(
   nodes: readonly WorkspaceCanvasFlowNode[],
   options?: {
     readonly preservedNodeIds?: ReadonlySet<string>
@@ -209,27 +209,27 @@ export function alignSpaceConsistencyNodesToMeasuredEditScript(
   const editScriptNode = nodes.find((node) => node.data.kind === 'editScript')
   if (!editScriptNode) return [...nodes]
 
-  const spaceNodes = nodes.filter((node) => node.data.kind === 'spaceConsistency')
-  if (spaceNodes.length === 0) return [...nodes]
+  const executionNodes = nodes.filter((node) => node.data.kind === 'editShotExecutionPlan')
+  if (executionNodes.length === 0) return [...nodes]
 
   const editScriptSize = nodeSize(editScriptNode)
   const editScriptCenterY = editScriptNode.position.y + editScriptSize.height / 2
-  const spaceNodeRects = spaceNodes.map((node, index) => ({
+  const executionNodeRects = executionNodes.map((node, index) => ({
     id: node.id,
     height: nodeSize(node).height,
     order: index,
   }))
-  const totalSpaceHeight = spaceNodeRects.reduce((total, rect) => total + rect.height, 0)
-    + Math.max(0, spaceNodeRects.length - 1) * SPACE_CONSISTENCY_STACK_GAP
-  let nextY = editScriptCenterY - totalSpaceHeight / 2
+  const totalExecutionHeight = executionNodeRects.reduce((total, rect) => total + rect.height, 0)
+    + Math.max(0, executionNodeRects.length - 1) * EXECUTION_PLAN_STACK_GAP
+  let nextY = editScriptCenterY - totalExecutionHeight / 2
   const nextPositionById = new Map<string, { readonly x: number; readonly y: number }>()
 
-  for (const rect of spaceNodeRects) {
+  for (const rect of executionNodeRects) {
     nextPositionById.set(rect.id, {
-      x: editScriptNode.position.x + editScriptSize.width + SPACE_CONSISTENCY_TO_EDIT_SCRIPT_GAP,
+      x: editScriptNode.position.x + editScriptSize.width + EXECUTION_PLAN_TO_EDIT_SCRIPT_GAP,
       y: nextY,
     })
-    nextY += rect.height + SPACE_CONSISTENCY_STACK_GAP
+    nextY += rect.height + EXECUTION_PLAN_STACK_GAP
   }
 
   return nodes.map((node) => {
@@ -249,28 +249,28 @@ export function alignSpaceConsistencyNodesToMeasuredEditScript(
   })
 }
 
-export function avoidExpandedSpaceConsistencyLaneOverlaps(
+export function avoidExpandedExecutionPlanLaneOverlaps(
   nodes: readonly WorkspaceCanvasFlowNode[],
   options?: {
     readonly gap?: number
   },
 ): WorkspaceCanvasFlowNode[] {
-  const expandedSpaceConsistencyRects = nodes
-    .filter((node) => node.data.kind === 'spaceConsistency' && node.data.expanded === true)
+  const expandedExecutionRects = nodes
+    .filter((node) => node.data.kind === 'editShotExecutionPlan' && node.data.expanded === true)
     .map(nodeRect)
 
-  if (expandedSpaceConsistencyRects.length === 0) return [...nodes]
+  if (expandedExecutionRects.length === 0) return [...nodes]
 
-  const gap = options?.gap ?? SPACE_CONSISTENCY_TO_CONTENT_LANE_GAP
-  const leftAnchorX = Math.min(...expandedSpaceConsistencyRects.map((rect) => rect.x))
-  const requiredContentLaneX = Math.max(...expandedSpaceConsistencyRects.map((rect) => rect.x + rect.width + gap))
+  const gap = options?.gap ?? EXECUTION_PLAN_TO_CONTENT_LANE_GAP
+  const leftAnchorX = Math.min(...expandedExecutionRects.map((rect) => rect.x))
+  const requiredContentLaneX = Math.max(...expandedExecutionRects.map((rect) => rect.x + rect.width + gap))
   const contentLaneRects = nodes
     .map(nodeRect)
     .filter((rect) => {
       const node = nodes[rect.order]
       return Boolean(
         node
-        && SPACE_CONSISTENCY_CONTENT_LANE_NODE_KINDS.has(node.data.kind)
+        && EXECUTION_PLAN_CONTENT_LANE_NODE_KINDS.has(node.data.kind)
         && rect.x > leftAnchorX,
       )
     })
@@ -407,7 +407,7 @@ export function applyWorkspaceNodeDynamicLayout(
   options?: WorkspaceNodeDynamicLayoutOptions,
 ): WorkspaceCanvasFlowNode[] {
   const fixedNodeIds = preservedNodeIds(options?.preservedNodePositions)
-  const laneAdjustedNodes = avoidExpandedSpaceConsistencyLaneOverlaps(nodes)
+  const laneAdjustedNodes = avoidExpandedExecutionPlanLaneOverlaps(nodes)
   const finalTimelineAdjustedNodes = alignFinalTimelineNodesToBgmScore(laneAdjustedNodes, {
     preservedNodeIds: fixedNodeIds,
   })

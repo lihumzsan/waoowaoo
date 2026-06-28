@@ -32,16 +32,12 @@ describe('workspace canvas node presentation profiles', () => {
     })).toEqual({ width: 320, height: 560 })
   })
 
-  it('gives director and cinematography nodes distinct expanded profiles', () => {
-    const directorProfile = getWorkspaceCanvasNodePresentationProfile('editDirectorDecoupage')
-    const cinematographyProfile = getWorkspaceCanvasNodePresentationProfile('editCinematographyShotPlan')
+  it('gives shot execution plan nodes an expanded profile', () => {
+    const executionProfile = getWorkspaceCanvasNodePresentationProfile('editShotExecutionPlan')
 
-    expect(directorProfile.collapsed).toEqual({ width: 420, height: 360 })
-    expect(directorProfile.expanded).toEqual({ width: 620, height: 720 })
-    // 摄影指导改为「网格 · 整行展开」后，采用固定宽度 + 自适应高度（不再有独立 expanded 尺寸）
-    expect(cinematographyProfile.collapsed).toEqual({ width: 760, height: 360 })
-    expect(cinematographyProfile.expanded).toBeUndefined()
-    expect(cinematographyProfile.expandedLayout).toBe('stack')
+    expect(executionProfile.collapsed).toEqual({ width: 760, height: 360 })
+    expect(executionProfile.expanded).toBeUndefined()
+    expect(executionProfile.expandedLayout).toBe('stack')
   })
 
   it('allows measured video plan nodes to shrink to actual content height', () => {

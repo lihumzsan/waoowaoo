@@ -16,17 +16,49 @@ export async function seedMinimalDomainState() {
   const project = await createFixtureProject(user.id)
   const novelProject = await createFixtureNovelProject(project.id)
   const episode = await createFixtureEpisode(novelProject.id)
-
-  const editScript = await prisma.projectEditScript.create({
+  const editScreenplay = await prisma.projectEditScreenplay.create({
     data: {
       projectId: project.id,
       episodeId: episode.id,
       userPrompt: 'seed prompt',
       screenplayText: 'seed screenplay',
-      title: 'seed edit script',
+      status: 'ready',
+    },
+  })
+
+  const editScript = await prisma.projectEditScript.create({
+    data: {
+      projectId: project.id,
+      episodeId: episode.id,
+      editScreenplayId: editScreenplay.id,
+      corePlanJson: {
+        shots: [
+          {
+            shotNumber: 1,
+            durationSec: 3,
+            scene: { name: 'Office' },
+            action: 'seed panel',
+            characters: [
+              {
+                name: 'Narrator',
+                visibility: 'visible',
+                role: 'focus',
+                performance: 'stands in the office',
+              },
+            ],
+            keyObjects: [],
+            sound: 'room tone',
+          },
+        ],
+        generationSegments: [
+          {
+            shotNumbers: [1],
+            continuity: 'seed panel continuity',
+          },
+        ],
+      },
       durationSec: 30,
       shotCount: 1,
-      shotsJson: [{ shotNumber: 1, durationSec: 3, visibleAction: 'seed panel' }],
     },
   })
 

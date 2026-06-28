@@ -12,8 +12,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/lib/workers/handlers/llm-stream'
 import {
   buildFinalRenderClips,
-  parseFinalRenderEditScriptShots,
-  parseFinalRenderEditScriptVideoBlocks,
+  parseFinalRenderEditScriptCore,
   selectFinalRenderMusicDurationSeconds,
   type FinalRenderClipPlan,
   type FinalRenderEditScriptInput,
@@ -110,30 +109,26 @@ async function buildEditScript(episodeId: string): Promise<FinalRenderEditScript
     where: { episodeId },
     select: {
       id: true,
-      userPrompt: true,
-      title: true,
-      logline: true,
+      editScreenplay: {
+        select: {
+          userPrompt: true,
+          styleBibleJson: true,
+        },
+      },
       durationSec: true,
-      styleBibleJson: true,
-      shotsJson: true,
-      videoBlocksJson: true,
+      corePlanJson: true,
     },
   })
   if (!script) return null
-  const shots = parseFinalRenderEditScriptShots(script.shotsJson)
-  if (shots.length === 0) return null
+  const core = parseFinalRenderEditScriptCore(script.corePlanJson)
+  if (!core || core.shots.length === 0) return null
   return {
     id: script.id,
-    userPrompt: script.userPrompt,
-    title: script.title,
-    logline: script.logline,
+    userPrompt: script.editScreenplay.userPrompt,
     durationSec: script.durationSec,
-    styleBible: parseNullableEditScriptStyleBible(script.styleBibleJson),
-    shots,
-    videoBlocks: parseFinalRenderEditScriptVideoBlocks({
-      value: script.videoBlocksJson,
-      shots,
-    }),
+    styleBible: parseNullableEditScriptStyleBible(script.editScreenplay.styleBibleJson),
+    shots: core.shots,
+    generationSegments: core.generationSegments,
   }
 }
 

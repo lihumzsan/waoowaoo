@@ -42,7 +42,7 @@ describe('task state service helpers', () => {
       extractStoryboardGridPanelIds({
         storyboardGrid: {
           mode: '2x2',
-          sourceVideoBlockId: 'edit-1:video-block:1',
+          sourceGenerationSegmentId: 'edit-1:generationSegment:1',
           panelIds: ['panel-1', 'panel-2', 'panel-2', '', 123],
         },
       }),
@@ -178,7 +178,7 @@ describe('task state service helpers', () => {
         payload: {
           storyboardGrid: {
             mode: '2x2',
-            sourceVideoBlockId: 'edit-1:video-block:1',
+            sourceGenerationSegmentId: 'edit-1:generationSegment:1',
             panelIds: ['panel-1', 'panel-2', 'panel-3'],
           },
           ui: {

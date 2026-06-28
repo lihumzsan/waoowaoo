@@ -181,8 +181,8 @@ async function buildStyleAndRatioChoiceCard(params: {
     choiceType: 'style',
     title: isEnglish ? 'Choose Visual Style' : '选择视觉风格',
     description: isEnglish
-      ? `Choose one style candidate before generating the director decoupage. The selected aspect ratio is ${selectedAspectRatio}.`
-      : `请先选择一个风格候选，再继续生成导演拆镜。已选画面比例为 ${selectedAspectRatio}。`,
+      ? `Choose one style candidate before generating the core edit plan. The selected aspect ratio is ${selectedAspectRatio}.`
+      : `请先选择一个风格候选，再继续生成核心剪辑计划。已选画面比例为 ${selectedAspectRatio}。`,
     groups: [
       {
         key: 'stylePreviewId',
@@ -253,7 +253,7 @@ function buildAssetReviewChoiceCard(params: {
     title: isEnglish ? 'Review Required Assets' : '审核分镜资产',
     description: isEnglish
       ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
-      : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成摄影 shot plan。',
+      : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成镜头执行计划。',
     groups: [],
     submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
     submit: {

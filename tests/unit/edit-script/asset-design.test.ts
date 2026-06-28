@@ -16,15 +16,19 @@ const shots: readonly EditScriptShot[] = [
   {
     shotNumber: 1,
     durationSec: 8,
-    dramaticPurpose: 'test dramatic purpose',
-    visibleAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
-    audienceFocus: 'test audience focus',
-    viewpoint: 'test viewpoint',
-    revealPlan: 'test reveal plan',
-    performanceBeat: 'test performance beat',
-    continuityIn: 'test continuity in',
-    continuityOut: 'test continuity out',
-    charactersAndScene: '冷静研究员 / 环形太空舱中控室',
+    scene: { name: '环形太空舱中控室' },
+    action: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+    characters: [
+      {
+        name: '冷静研究员',
+        visibility: 'visible',
+        role: 'focus',
+        performance: '克制地观察控制台',
+      },
+    ],
+    keyObjects: [
+      { name: '环形中控台', role: 'operation_surface' },
+    ],
     sound: '低频舱体嗡鸣',
   },
 ]
@@ -95,7 +99,7 @@ describe('edit script asset design', () => {
       readonly task: string
       readonly styleBible: EditScriptStyleBible
       readonly asset: { readonly kind: string; readonly name: string; readonly description: string | null }
-      readonly linkedShots: ReadonlyArray<{ readonly shotNumber: number; readonly visibleAction: string }>
+      readonly linkedShots: ReadonlyArray<Pick<EditScriptShot, 'shotNumber' | 'durationSec' | 'scene' | 'action' | 'characters' | 'keyObjects' | 'sound'>>
       readonly constraints: readonly string[]
     }
     expect(parsed.task).toBe('design_edit_first_required_asset_for_image_generation')
@@ -106,14 +110,20 @@ describe('edit script asset design', () => {
     expect(parsed.linkedShots).toEqual([
       expect.objectContaining({
         shotNumber: 1,
-        dramaticPurpose: 'test dramatic purpose',
-        visibleAction: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
-        audienceFocus: 'test audience focus',
-        viewpoint: 'test viewpoint',
-        revealPlan: 'test reveal plan',
-        performanceBeat: 'test performance beat',
-        continuityIn: 'test continuity in',
-        continuityOut: 'test continuity out',
+        action: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
+        scene: { name: '环形太空舱中控室' },
+        characters: [
+          {
+            name: '冷静研究员',
+            visibility: 'visible',
+            role: 'focus',
+            performance: '克制地观察控制台',
+          },
+        ],
+        keyObjects: [
+          { name: '环形中控台', role: 'operation_surface' },
+        ],
+        sound: '低频舱体嗡鸣',
       }),
     ])
   })

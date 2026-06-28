@@ -3,15 +3,15 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
-import { editCinematographyShotPlanSchema, editDirectorDecoupageSchema, editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { normalizeEditScriptStructure, normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
 import { parseLocationSpatialProfile, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
-import type { EditAssetRequirement, EditScriptPayload, EditScriptShot } from '@/lib/edit-script/types'
+import type { EditAssetRequirement, EditScriptPayload } from '@/lib/edit-script/types'
 import type {
   StoryboardConsistencyAssetSnapshot,
+  StoryboardConsistencyGenerationSegment,
   StoryboardConsistencyModelConfigSnapshot,
   StoryboardConsistencySourceSnapshot,
-  StoryboardConsistencySourceVideoBlock,
 } from './types'
 
 interface PersistedRequirement {
@@ -19,32 +19,10 @@ interface PersistedRequirement {
   readonly kind: string
   readonly name: string
   readonly description: string
-  readonly shotIndexes: Prisma.JsonValue
+  readonly requiredForShotNumbers: Prisma.JsonValue
   readonly status: string
   readonly targetId: string | null
   readonly errorMessage: string | null
-}
-
-interface PersistedEditScript {
-  readonly id: string
-  readonly projectId: string
-  readonly episodeId: string
-  readonly userPrompt: string
-  readonly styleBibleJson: Prisma.JsonValue | null
-  readonly screenplayText: string | null
-  readonly title: string
-  readonly logline: string | null
-  readonly durationSec: number
-  readonly shotCount: number
-  readonly status: string
-  readonly assetReviewStatus: string
-  readonly shotsJson: Prisma.JsonValue
-  readonly videoBlocksJson: Prisma.JsonValue | null
-  readonly requirements: readonly PersistedRequirement[]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function readShotNumbers(value: Prisma.JsonValue): number[] {
@@ -54,75 +32,34 @@ function readShotNumbers(value: Prisma.JsonValue): number[] {
     .filter((item): item is number => item !== null)
 }
 
-function parseShotsJson(value: Prisma.JsonValue): EditScriptShot[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item): EditScriptShot[] => {
-    if (!isRecord(item)) return []
-    return [{
-      shotNumber: Number(item.shotNumber),
-      durationSec: Number(item.durationSec),
-      dramaticPurpose: String(item.dramaticPurpose ?? ''),
-      visibleAction: String(item.visibleAction ?? ''),
-      audienceFocus: String(item.audienceFocus ?? ''),
-      viewpoint: String(item.viewpoint ?? ''),
-      revealPlan: String(item.revealPlan ?? ''),
-      performanceBeat: String(item.performanceBeat ?? ''),
-      continuityIn: String(item.continuityIn ?? ''),
-      continuityOut: String(item.continuityOut ?? ''),
-      charactersAndScene: String(item.charactersAndScene ?? ''),
-      sound: String(item.sound ?? ''),
-    }]
-  })
-}
-
 function mapRequirements(requirements: readonly PersistedRequirement[]): EditAssetRequirement[] {
   return requirements.map((requirement) => ({
     id: requirement.id,
     kind: requirement.kind === 'location' ? 'location' : 'character',
     name: requirement.name,
     description: requirement.description,
-    shotNumbers: readShotNumbers(requirement.shotIndexes),
+    shotNumbers: readShotNumbers(requirement.requiredForShotNumbers),
     status: requirement.status === 'completed' ? 'completed' : requirement.status === 'generating' ? 'generating' : requirement.status === 'failed' ? 'failed' : 'pending',
     targetId: requirement.targetId,
     errorMessage: requirement.errorMessage,
   }))
 }
 
-function mapEditScript(script: PersistedEditScript): EditScriptPayload {
-  const shots = parseShotsJson(script.shotsJson)
-  return {
-    id: script.id,
-    projectId: script.projectId,
-    episodeId: script.episodeId,
-    userPrompt: script.userPrompt,
-    styleBible: editScriptStyleBibleSchema.parse({ styleBible: script.styleBibleJson }).styleBible,
-    screenplayText: script.screenplayText,
-    title: script.title,
-    logline: script.logline,
-    durationSec: script.durationSec,
-    shotCount: script.shotCount,
-    status: script.status,
-    assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
-    shots,
-    videoBlocks: normalizeVideoBlockPlanResponse({
-      response: { items: Array.isArray(script.videoBlocksJson) ? script.videoBlocksJson : [] },
-      allShotNumbers: shots.map((shot) => shot.shotNumber),
-      shots,
-      enforceSingleMinDuration: false,
-    }).items,
-    requirements: mapRequirements(script.requirements),
-  }
+function parseStyleBible(value: Prisma.JsonValue | null) {
+  const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
+  if (!parsed.success) throw new Error('EDIT_SCRIPT_STYLE_BIBLE_REQUIRED')
+  return parsed.data.styleBible
 }
 
-export function buildEditStoryboardVideoBlockId(editScriptId: string, blockIndex: number): string {
-  return `${editScriptId}:videoBlock:${blockIndex + 1}`
+export function buildEditStoryboardGenerationSegmentId(editScriptId: string, segmentIndex: number): string {
+  return `${editScriptId}:generationSegment:${segmentIndex + 1}`
 }
 
 function requireModelConfig(config: Awaited<ReturnType<typeof getProjectModelConfig>>): StoryboardConsistencyModelConfigSnapshot {
   if (!config.analysisModel || !config.storyboardModel) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCRIPT_STORYBOARD_MODELS_NOT_CONFIGURED',
-      message: 'Analysis model and storyboard image model are required before generating spatial blocking storyboard panels',
+      message: 'Analysis model and storyboard image model are required before generating storyboard panels',
     })
   }
   return {
@@ -178,7 +115,7 @@ async function resolveAssetImage(requirement: EditAssetRequirement): Promise<Res
   })
   const image = location?.images.find((item) => item.id === location.selectedImageId)
     ?? location?.images.find((item) => item.isSelected)
-    ?? location?.images.find((item) => !!item.imageUrl)
+    ?? location?.images.find((item) => Boolean(item.imageUrl))
     ?? null
   if (!image?.imageUrl) return { previewImageUrl: null, spatialProfile: null }
   if (image.spatialProfileStatus !== 'ready' || !image.spatialProfileJson) {
@@ -197,7 +134,7 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   if (requirements.length === 0) {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_ASSETS_REQUIRED',
-      message: 'Completed edit-script assets are required before spatial blocking storyboard generation',
+      message: 'Completed edit-script assets are required before storyboard generation',
     })
   }
   const snapshots = await Promise.all(requirements.map(async (requirement) => {
@@ -230,7 +167,7 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   if (notReady.length > 0) {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
-      message: `Edit script assets must be completed before spatial blocking storyboard generation: ${notReady.map((item) => item.name).join(', ')}`,
+      message: `Edit script assets must be completed before storyboard generation: ${notReady.map((item) => item.name).join(', ')}`,
     })
   }
   const staleRequirementIds = snapshots
@@ -248,6 +185,45 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   })
 }
 
+function mapEditScriptPayload(input: {
+  readonly script: {
+    readonly id: string
+    readonly projectId: string
+    readonly episodeId: string
+    readonly editScreenplayId: string
+    readonly corePlanJson: Prisma.JsonValue | null
+    readonly durationSec: number
+    readonly shotCount: number
+    readonly status: string
+    readonly assetReviewStatus: string
+    readonly editScreenplay: {
+      readonly userPrompt: string
+      readonly styleBibleJson: Prisma.JsonValue | null
+      readonly screenplayText: string
+    }
+    readonly requirements: readonly PersistedRequirement[]
+  }
+}): EditScriptPayload {
+  if (!input.script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${input.script.id}`)
+  const core = normalizeEditScriptStructure(input.script.corePlanJson)
+  return {
+    id: input.script.id,
+    projectId: input.script.projectId,
+    episodeId: input.script.episodeId,
+    screenplayId: input.script.editScreenplayId,
+    userPrompt: input.script.editScreenplay.userPrompt,
+    styleBible: parseStyleBible(input.script.editScreenplay.styleBibleJson),
+    screenplayText: input.script.editScreenplay.screenplayText,
+    durationSec: core.durationSec,
+    shotCount: core.shotCount,
+    status: input.script.status,
+    assetReviewStatus: input.script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
+    shots: core.shots,
+    generationSegments: core.generationSegments,
+    requirements: mapRequirements(input.script.requirements),
+  }
+}
+
 export async function buildStoryboardConsistencySource(input: {
   readonly projectId: string
   readonly episodeId: string
@@ -257,7 +233,7 @@ export async function buildStoryboardConsistencySource(input: {
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
 }> {
-  const [project, script, directorDecoupage, cinematographyShotPlan, config] = await Promise.all([
+  const [project, script, executionPlan, config] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -272,6 +248,7 @@ export async function buildStoryboardConsistencySource(input: {
         episodeId: input.episodeId,
       },
       include: {
+        editScreenplay: true,
         requirements: {
           orderBy: [
             { kind: 'asc' },
@@ -280,13 +257,7 @@ export async function buildStoryboardConsistencySource(input: {
         },
       },
     }),
-    prisma.projectEditDirectorDecoupage.findFirst({
-      where: {
-        projectId: input.projectId,
-        episodeId: input.episodeId,
-      },
-    }),
-    prisma.projectEditCinematographyShotPlan.findFirst({
+    prisma.projectEditShotExecutionPlan.findFirst({
       where: {
         projectId: input.projectId,
         episodeId: input.episodeId,
@@ -296,25 +267,19 @@ export async function buildStoryboardConsistencySource(input: {
     getProjectModelConfig(input.projectId, input.userId),
   ])
   if (!project || !script) throw new ApiError('NOT_FOUND')
-  if (!directorDecoupage || directorDecoupage.status !== 'ready') {
-    throw new ApiError('CONFLICT', {
-      code: 'EDIT_DIRECTOR_DECOUPAGE_REQUIRED',
-      message: 'Ready director decoupage is required before storyboard generation',
-    })
-  }
-  if (!cinematographyShotPlan || cinematographyShotPlan.status !== 'ready') {
-    throw new ApiError('CONFLICT', {
-      code: 'EDIT_CINEMATOGRAPHY_SHOT_PLAN_REQUIRED',
-      message: 'Ready cinematography shot plan is required before storyboard generation',
-    })
-  }
-  const editScript = mapEditScript(script)
-  if (editScript.status !== 'ready') {
+  if (script.status !== 'ready') {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_NOT_READY',
-      message: 'A ready edit script is required before storyboard generation',
+      message: 'A ready edit core plan is required before storyboard generation',
     })
   }
+  if (!executionPlan || executionPlan.status !== 'ready') {
+    throw new ApiError('CONFLICT', {
+      code: 'EDIT_SHOT_EXECUTION_PLAN_REQUIRED',
+      message: 'Ready shot execution plan is required before storyboard generation',
+    })
+  }
+  const editScript = mapEditScriptPayload({ script })
   if (!editScript.id) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
   const styleBible = editScript.styleBible
   if (!styleBible) {
@@ -323,17 +288,15 @@ export async function buildStoryboardConsistencySource(input: {
       message: 'Style Bible is required before storyboard generation',
     })
   }
-  const modelConfigSnapshot = requireModelConfig(config)
-  const parsedDirectorDecoupage = editDirectorDecoupageSchema.parse(directorDecoupage.decoupageJson)
-  const parsedCinematographyShotPlan = editCinematographyShotPlanSchema.parse(cinematographyShotPlan.shotPlanJson)
+  const parsedExecutionPlan = normalizeEditShotExecutionPlan(executionPlan.executionPlanJson, editScript.shots)
   const assets = await buildAssetSnapshots(editScript.requirements)
-  const videoBlocks: StoryboardConsistencySourceVideoBlock[] = editScript.videoBlocks.map((block, blockIndex) => ({
-    ...block,
-    blockIndex,
-    sourceVideoBlockId: buildEditStoryboardVideoBlockId(editScript.id ?? input.editScriptId, blockIndex),
+  const generationSegments: StoryboardConsistencyGenerationSegment[] = editScript.generationSegments.map((segment, segmentIndex) => ({
+    ...segment,
+    segmentIndex,
+    sourceGenerationSegmentId: buildEditStoryboardGenerationSegmentId(editScript.id ?? input.editScriptId, segmentIndex),
   }))
   return {
-    modelConfigSnapshot,
+    modelConfigSnapshot: requireModelConfig(config),
     sourceSnapshot: {
       projectId: input.projectId,
       episodeId: input.episodeId,
@@ -342,8 +305,6 @@ export async function buildStoryboardConsistencySource(input: {
       },
       editScript: {
         id: editScript.id,
-        title: editScript.title,
-        logline: editScript.logline,
         durationSec: editScript.durationSec,
         shotCount: editScript.shotCount,
         userPrompt: editScript.userPrompt,
@@ -351,13 +312,10 @@ export async function buildStoryboardConsistencySource(input: {
       },
       styleBible,
       shots: editScript.shots,
-      directorDecoupage: {
-        shots: parsedDirectorDecoupage.shots,
+      shotExecutionPlan: {
+        shots: parsedExecutionPlan.shots,
       },
-      cinematographyShotPlan: {
-        shots: parsedCinematographyShotPlan.shots,
-      },
-      videoBlocks,
+      generationSegments,
       assets,
     },
   }

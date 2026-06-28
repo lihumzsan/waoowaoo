@@ -47,7 +47,6 @@ export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
   EDIT_STYLE_PREVIEWS_GENERATE: 'edit_style_previews_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
-  EDIT_SCRIPT_STORYBOARD_PREPARE: 'edit_script_storyboard_prepare',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
@@ -64,9 +63,8 @@ export const TASK_TYPE = {
   ASSET_HUB_MODIFY: 'asset_hub_modify',
   EDIT_SCREENPLAY_GENERATE: 'edit_screenplay_generate',
   EDIT_SCREENPLAY_REVISE: 'edit_screenplay_revise',
-  EDIT_DIRECTOR_DECOUPAGE_GENERATE: 'edit_director_decoupage_generate',
   EDIT_SCRIPT_GENERATE: 'edit_script_generate',
-  EDIT_CINEMATOGRAPHY_SHOT_PLAN_GENERATE: 'edit_cinematography_shot_plan_generate',
+  EDIT_SHOT_EXECUTION_PLAN_GENERATE: 'edit_shot_execution_plan_generate',
   AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
   AI_MODIFY_LOCATION: 'ai_modify_location',
   AI_MODIFY_PROP: 'ai_modify_prop',
@@ -164,9 +162,8 @@ export type MutationBatchSSEEvent = {
 
 export type WorkspaceResourceName =
   | 'editScreenplay'
-  | 'editDirectorDecoupage'
   | 'editScript'
-  | 'editCinematographyShotPlan'
+  | 'editShotExecutionPlan'
   | 'storyboards'
   | 'projectAssets'
   | 'globalAssets'

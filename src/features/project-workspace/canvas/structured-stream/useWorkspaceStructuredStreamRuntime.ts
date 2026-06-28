@@ -24,11 +24,7 @@ import {
   type TextStreamAdapter,
   type TextStreamAdapterKey,
 } from './structured-stream-adapters'
-import {
-  workspaceNodeId,
-  workspaceEditCinematographyShotPlanNodeId,
-  workspaceEditDirectorDecoupageNodeId,
-} from '../workspace-canvas-node-ids'
+import { workspaceNodeId } from '../workspace-canvas-node-ids'
 import type {
   WorkspaceCanvasStreamKind,
   WorkspaceCanvasStreamPatch,
@@ -110,10 +106,6 @@ function readString(value: unknown): string | null {
 
 function readRawString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
-}
-
-function durationLabel(seconds: number): string {
-  return `${seconds}s`
 }
 
 function createAccumulatorKey(input: {
@@ -386,76 +378,29 @@ function itemsOfKind<K extends StructuredStreamParsedItem['kind']>(
     .flatMap((item) => (item.value.kind === kind ? [item.value as Extract<StructuredStreamParsedItem, { readonly kind: K }>] : []))
 }
 
-function findSnapshotTargetId(
-  snapshots: readonly StructuredStreamSnapshot[],
-  adapterKey: StructuredStreamAdapterKey,
-  targetType: string,
-): string | null {
-  return snapshots.find((snapshot) => (
-    snapshot.adapterKey === adapterKey
-    && snapshot.targetType === targetType
-    && snapshot.targetId
-  ))?.targetId ?? null
-}
-
-function pipelineItemsFromDirectorShots(
-  items: Array<Extract<StructuredStreamParsedItem, { readonly kind: 'directorDecoupageShot' }>>,
+function pipelineItemsFromShotExecutionPlan(
+  items: Array<Extract<StructuredStreamParsedItem, { readonly kind: 'shotExecutionPlanShot' }>>,
   translate: Translate,
 ): WorkspaceCanvasEditPipelineStepItem[] {
   return items.map(({ shot }) => ({
     title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
     fields: [
-      { label: translate('nodeFields.duration'), value: durationLabel(shot.durationSec) },
-      { label: translate('nodeFields.dramaticPurpose'), value: shot.dramaticPurpose },
-      { label: translate('nodeFields.audienceFocus'), value: shot.audienceFocus },
-      { label: translate('nodeFields.viewpoint'), value: shot.viewpoint },
-      { label: translate('nodeFields.revealPlan'), value: shot.revealPlan },
-      { label: translate('nodeFields.performanceBeat'), value: shot.performanceBeat },
-      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
-      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
-      { label: translate('nodeFields.sound'), value: shot.sound },
+      { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
+      { label: translate('nodeFields.lens'), value: shot.camera.lens },
+      { label: translate('nodeFields.focus'), value: shot.camera.focus },
+      { label: translate('nodeFields.cameraPosition'), value: shot.camera.position },
+      { label: translate('nodeFields.cameraHeight'), value: shot.camera.height },
+      { label: translate('nodeFields.cameraAngle'), value: shot.camera.angle },
+      { label: translate('nodeFields.movement'), value: shot.camera.movement },
+      { label: translate('nodeFields.lighting'), value: shot.camera.lighting },
+      { label: translate('nodeFields.axisAndEyeline'), value: shot.blocking.axis.screenDirection },
     ],
-    body: shot.visibleAction,
-    chips: [String(shot.shotNumber)],
-  }))
-}
-
-function pipelineItemsFromCinematographyShots(
-  items: Array<Extract<StructuredStreamParsedItem, { readonly kind: 'cinematographyShot' }>>,
-  translate: Translate,
-): WorkspaceCanvasEditPipelineStepItem[] {
-  return items.map(({ shot }) => ({
-    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
-    fields: [
-      { label: translate('nodeFields.shotScale'), value: shot.shotScale },
-      { label: translate('nodeFields.lens'), value: shot.lens },
-      { label: translate('nodeFields.depthOfField'), value: shot.depthOfField },
-      { label: translate('nodeFields.cameraPosition'), value: shot.cameraPosition },
-      { label: translate('nodeFields.cameraHeight'), value: shot.cameraHeight },
-      { label: translate('nodeFields.cameraAngle'), value: shot.cameraAngle },
-      { label: translate('nodeFields.movement'), value: shot.movement },
-      { label: translate('nodeFields.lighting'), value: shot.lighting },
-      { label: translate('nodeFields.axisAndEyeline'), value: shot.axisAndEyeline },
-      { label: translate('nodeFields.continuityIn'), value: shot.continuityIn },
-      { label: translate('nodeFields.continuityOut'), value: shot.continuityOut },
+    body: shot.blocking.spatialNote,
+    chips: [
+      String(shot.shotNumber),
+      ...shot.blocking.characters.map((character) => `${character.name}/${character.visibility}`),
+      ...shot.blocking.objects.map((object) => object.name),
     ],
-    body: shot.composition,
-    chips: [String(shot.shotNumber)],
-  }))
-}
-
-function pipelineItemsFromStoryboardPanels(
-  panels: readonly Extract<StructuredStreamParsedItem, { readonly kind: 'storyboardPanel' }>['panel'][],
-  translate: Translate,
-): WorkspaceCanvasEditPipelineStepItem[] {
-  return panels.map((panel) => ({
-    title: translate('nodeFields.shotIndex', { index: panel.sourceShotNumber }),
-    fields: [
-      { label: translate('nodeFields.imagePrompt'), value: panel.finalPanelPrompt },
-      { label: translate('nodeFields.videoPrompt'), value: panel.finalVideoPrompt },
-    ],
-    body: panel.finalPanelPrompt,
-    chips: [String(panel.sourceShotNumber)],
   }))
 }
 
@@ -566,8 +511,14 @@ function buildEditScriptRuntimeEntry(
         durationSec,
         shotCount: shotItems.length,
         shots: shotItems.map(({ shot }) => ({
-          ...shot,
+          shotNumber: shot.shotNumber,
+          durationSec: shot.durationSec,
+          sceneName: shot.scene.name,
+          action: shot.action,
+          characters: shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`),
+          keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
           imagePrompt: null,
+          sound: shot.sound,
           imageUrl: null,
           videoUrl: null,
         })),
@@ -576,109 +527,38 @@ function buildEditScriptRuntimeEntry(
   })
 }
 
-function buildDirectorRuntimeEntry(
+function buildShotExecutionRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const shotItems = itemsOfKind(snapshots, 'directorDecoupage.shots', 'directorDecoupageShot')
+  const shotItems = itemsOfKind(snapshots, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
   if (shotItems.length === 0) return null
   const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'directorDecoupage.shots')
+    .filter((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots')
     .flatMap((snapshot) => snapshot.items)
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'directorDecoupage.shots') ?? null
-  const screenplayId = findSnapshotTargetId(snapshots, 'directorDecoupage.shots', 'ProjectEditScreenplay')
-  if (!screenplayId) return null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots') ?? null
   if (!firstSnapshot) return null
-  const nodeId = workspaceEditDirectorDecoupageNodeId(screenplayId)
-  return createStreamRuntimeEntry({
-    nodeId,
-    streamKind: 'editDirectorDecoupage',
-    taskId: firstSnapshot.taskId,
-    taskType: firstSnapshot.taskType,
-    targetType: firstSnapshot.targetType,
-    targetId: screenplayId,
-    episodeId: firstSnapshot.episodeId,
-    data: {
-      body: translate('nodes.editDirectorDecoupage.body'),
-      meta: translate('nodes.editDirectorDecoupage.meta', {
-        shots: shotItems.length,
-        duration: shotItems.reduce((total, item) => total + item.shot.durationSec, 0),
-      }),
-      statusLabel: translate('status.processing'),
-      isRunning: true,
-      streamPresentation: streamPresentation(rawItems),
-      editPipelineStepDetails: {
-        items: pipelineItemsFromDirectorShots(shotItems, translate),
-      },
-    },
-  })
-}
-
-function buildCinematographyRuntimeEntry(
-  snapshots: readonly StructuredStreamSnapshot[],
-  translate: Translate,
-): WorkspaceCanvasStreamRuntimeEntry | null {
-  const shotItems = itemsOfKind(snapshots, 'cinematography.shots', 'cinematographyShot')
-  if (shotItems.length === 0) return null
-  const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'cinematography.shots')
-    .flatMap((snapshot) => snapshot.items)
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'cinematography.shots') ?? null
-  const editScriptId = findSnapshotTargetId(snapshots, 'cinematography.shots', 'ProjectEditScript')
+  const editScriptId = firstSnapshot.targetId
   if (!editScriptId) return null
-  if (!firstSnapshot) return null
-  const nodeId = workspaceEditCinematographyShotPlanNodeId(editScriptId)
+  const nodeId = workspaceNodeId.editShotExecutionPlan(editScriptId)
   return createStreamRuntimeEntry({
     nodeId,
-    streamKind: 'editCinematographyShotPlan',
+    streamKind: 'editShotExecutionPlan',
     taskId: firstSnapshot.taskId,
     taskType: firstSnapshot.taskType,
     targetType: firstSnapshot.targetType,
     targetId: editScriptId,
     episodeId: firstSnapshot.episodeId,
     data: {
-      body: translate('nodes.editCinematographyShotPlan.pendingBody'),
-      meta: translate('nodes.editCinematographyShotPlan.meta', { shots: shotItems.length }),
+      body: translate('nodes.editShotExecutionPlan.pendingBody'),
+      meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
       statusLabel: translate('status.processing'),
       isRunning: true,
       streamPresentation: streamPresentation(rawItems),
       editPipelineStepDetails: {
-        items: pipelineItemsFromCinematographyShots(shotItems, translate),
+        items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
       },
     },
-  })
-}
-
-function buildStoryboardPanelGenerationRuntimeEntries(
-  snapshots: readonly StructuredStreamSnapshot[],
-  translate: Translate,
-): readonly WorkspaceCanvasStreamRuntimeEntry[] {
-  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'storyboard.panels')
-  return matchingSnapshots.flatMap((snapshot) => {
-    const storyboardId = snapshot.targetId
-    if (!storyboardId) return []
-    const panels = snapshot.items.flatMap((item) => item.value.kind === 'storyboardPanel' ? [item.value.panel] : [])
-    if (panels.length === 0 && !snapshot.errorMessage) return []
-    const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboardId)
-    return [createStreamRuntimeEntry({
-      nodeId,
-      streamKind: 'storyboardPanelGeneration',
-      taskId: snapshot.taskId,
-      taskType: snapshot.taskType,
-      targetType: snapshot.targetType,
-      targetId: storyboardId,
-      episodeId: snapshot.episodeId,
-      data: {
-        body: snapshot.errorMessage ?? translate('nodes.storyboardPanelGeneration.body'),
-        meta: translate('nodes.storyboardPanelGeneration.meta', { panels: panels.length }),
-        statusLabel: snapshot.errorMessage ? translate('status.failed') : translate('status.processing'),
-        isRunning: !snapshot.errorMessage,
-        streamPresentation: streamPresentation(snapshot.items),
-        editPipelineStepDetails: {
-          items: pipelineItemsFromStoryboardPanels(panels, translate),
-        },
-      },
-    })]
   })
 }
 
@@ -759,10 +639,8 @@ function buildStreamRuntimeEntries(
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   return [
     ...buildEditScreenplayRuntimeEntries(textSnapshots, translate),
-    buildDirectorRuntimeEntry(snapshots, translate),
     buildEditScriptRuntimeEntry(snapshots, episodeId, translate),
-    buildCinematographyRuntimeEntry(snapshots, translate),
-    ...buildStoryboardPanelGenerationRuntimeEntries(snapshots, translate),
+    buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
@@ -796,16 +674,8 @@ function hasPersistedStreamContentForPatch(
       return true
     }
     if (
-      patch.streamKind === 'editDirectorDecoupage'
-      && baseNode.data.kind === 'editDirectorDecoupage'
-      && (baseNode.data.editPipelineStepDetails?.items.length ?? 0) > 0
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'editCinematographyShotPlan'
-      && baseNode.data.kind === 'editCinematographyShotPlan'
+      patch.streamKind === 'editShotExecutionPlan'
+      && baseNode.data.kind === 'editShotExecutionPlan'
       && (baseNode.data.editPipelineStepDetails?.items.length ?? 0) > 0
       && baseNode.data.isRunning !== true
     ) {

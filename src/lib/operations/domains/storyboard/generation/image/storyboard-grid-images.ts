@@ -17,7 +17,7 @@ export type GenerateStoryboardGridImagesInput = {
   confirmedMaxCost?: number
   episodeId: string
   editScriptId: string
-  sourceVideoBlockId: string
+  sourceGenerationSegmentId: string
   panelIds: readonly string[]
 }
 
@@ -27,9 +27,9 @@ export async function planGenerateStoryboardGridImagesOperation(
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId)
   const editScriptId = normalizeString(input.editScriptId)
-  const sourceVideoBlockId = normalizeString(input.sourceVideoBlockId)
+  const sourceGenerationSegmentId = normalizeString(input.sourceGenerationSegmentId)
   const panelIds = normalizeStringArray(input.panelIds).slice(0, 4)
-  if (!episodeId || !editScriptId || !sourceVideoBlockId || panelIds.length < 2) {
+  if (!episodeId || !editScriptId || !sourceGenerationSegmentId || panelIds.length < 2) {
     throw new Error('STORYBOARD_GRID_IMAGE_INPUT_INVALID')
   }
 
@@ -88,7 +88,7 @@ export async function planGenerateStoryboardGridImagesOperation(
     referenceMode: 'asset',
     storyboardGrid: {
       mode: '2x2',
-      sourceVideoBlockId,
+      sourceGenerationSegmentId,
       panelIds,
     },
     meta: {
@@ -116,7 +116,7 @@ export async function planGenerateStoryboardGridImagesOperation(
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_storyboard_grid_images:${sourceVideoBlockId}`,
+        id: `generate_storyboard_grid_images:${sourceGenerationSegmentId}`,
         taskType: TASK_TYPE.IMAGE_PANEL,
         targetType: 'ProjectPanel',
         targetId: primaryGridPanelId,
@@ -127,7 +127,7 @@ export async function planGenerateStoryboardGridImagesOperation(
           hasOutputAtStart,
         }),
         dedupeKey: createTaskDedupeKey('storyboard_grid_image', {
-          sourceVideoBlockId,
+          sourceGenerationSegmentId,
           panelIds,
           styleBibleSignature,
         }),
@@ -136,7 +136,7 @@ export async function planGenerateStoryboardGridImagesOperation(
     ],
     metadata: {
       episodeId,
-      sourceVideoBlockId,
+      sourceGenerationSegmentId,
       panelIds,
       primaryGridPanelId,
     },
@@ -151,9 +151,9 @@ export async function commitGenerateStoryboardGridImagesOperation(
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
   const episodeId = typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : input.episodeId
-  const sourceVideoBlockId = typeof plan.metadata?.sourceVideoBlockId === 'string'
-    ? plan.metadata.sourceVideoBlockId
-    : input.sourceVideoBlockId
+  const sourceGenerationSegmentId = typeof plan.metadata?.sourceGenerationSegmentId === 'string'
+    ? plan.metadata.sourceGenerationSegmentId
+    : input.sourceGenerationSegmentId
   const panelIds = Array.isArray(plan.metadata?.panelIds)
     ? normalizeStringArray(plan.metadata.panelIds)
     : normalizeStringArray(input.panelIds)
@@ -173,7 +173,7 @@ export async function commitGenerateStoryboardGridImagesOperation(
     source: ctx.source,
     operationId: 'generate_storyboard_grid_images',
     episodeId,
-    summary: `generate_storyboard_grid_images:${sourceVideoBlockId}`,
+    summary: `generate_storyboard_grid_images:${sourceGenerationSegmentId}`,
     entries: panelIds.map((panelId) => ({
       kind: 'panel_candidate_cancel',
       targetType: 'ProjectPanel',
@@ -199,7 +199,7 @@ export async function commitGenerateStoryboardGridImagesOperation(
   return {
     ...result,
     episodeId,
-    sourceVideoBlockId,
+    sourceGenerationSegmentId,
     panelIds,
     taskType: TASK_TYPE.IMAGE_PANEL,
     targetType: 'ProjectPanel',

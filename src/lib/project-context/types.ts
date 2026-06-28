@@ -53,12 +53,9 @@ export interface ProjectContextEditScriptSnapshot {
   id: string
   status: string
   assetReviewStatus: 'pending' | 'approved'
-  title: string
-  logline: string | null
   durationSec: number
   shotCount: number
-  singleBlockCount: number
-  groupBlockCount: number
+  generationSegmentCount: number
   requirementCount: number
   pendingRequirementCount: number
   updatedAt: string

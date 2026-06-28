@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { resolveProjectContextPolicy } from './policy'
 import type { ProjectContextSnapshot } from './types'
 
@@ -17,37 +18,8 @@ function compactPreview(value: string, maxLength: number): string {
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function countEditScriptVideoBlocks(value: unknown): {
-  singleBlockCount: number
-  groupBlockCount: number
-} {
-  if (!Array.isArray(value)) {
-    return {
-      singleBlockCount: 0,
-      groupBlockCount: 0,
-    }
-  }
-
-  let singleBlockCount = 0
-  let groupBlockCount = 0
-  for (const item of value) {
-    if (!isRecord(item)) continue
-    const kind = typeof item.kind === 'string'
-      ? item.kind
-      : typeof item.type === 'string'
-        ? item.type
-        : ''
-    if (kind === 'single') singleBlockCount += 1
-    if (kind === 'group') groupBlockCount += 1
-  }
-  return {
-    singleBlockCount,
-    groupBlockCount,
-  }
+function countGenerationSegments(corePlanJson: unknown): number {
+  return editScriptStructureSchema.parse(corePlanJson).generationSegments.length
 }
 
 async function listLatestArtifactsForContext(params: {
@@ -177,11 +149,9 @@ export async function assembleProjectContext(params: {
             id: true,
             status: true,
             assetReviewStatus: true,
-            title: true,
-            logline: true,
             durationSec: true,
             shotCount: true,
-            videoBlocksJson: true,
+            corePlanJson: true,
             updatedAt: true,
             requirements: {
               select: {
@@ -272,7 +242,7 @@ export async function assembleProjectContext(params: {
   )
   const storyboardCount = episode?.storyboards.length || 0
   const panelCount = panelSnapshots.length
-  const videoBlockCounts = countEditScriptVideoBlocks(editScript?.videoBlocksJson ?? null)
+  const generationSegmentCount = editScript ? countGenerationSegments(editScript.corePlanJson) : 0
 
   return {
     projectId: project.id,
@@ -316,12 +286,9 @@ export async function assembleProjectContext(params: {
             id: editScript.id,
             status: editScript.status,
             assetReviewStatus: editScript.assetReviewStatus === 'approved' ? 'approved' : 'pending',
-            title: editScript.title,
-            logline: editScript.logline,
             durationSec: editScript.durationSec,
             shotCount: editScript.shotCount,
-            singleBlockCount: videoBlockCounts.singleBlockCount,
-            groupBlockCount: videoBlockCounts.groupBlockCount,
+            generationSegmentCount,
             requirementCount: editScript.requirements.length,
             pendingRequirementCount: editScript.requirements.filter((requirement) => requirement.status !== 'completed').length,
             updatedAt: editScript.updatedAt.toISOString(),

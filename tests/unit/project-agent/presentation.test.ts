@@ -100,12 +100,9 @@ describe('project agent presentation', () => {
           id: 'edit-1',
           status: 'ready',
           assetReviewStatus: 'pending',
-          title: 'Dock',
-          logline: 'A pilot waits.',
           durationSec: 30,
           shotCount: 6,
-          singleBlockCount: 2,
-          groupBlockCount: 1,
+          generationSegmentCount: 2,
           requirementCount: 3,
           pendingRequirementCount: 1,
           updatedAt: '2026-01-01T00:00:00.000Z',
@@ -133,7 +130,7 @@ describe('project agent presentation', () => {
 
     expect(snapshot.editFirstWorkflow).toEqual(editFirstWorkflow)
     expect(snapshot.editScreenplay?.id).toBe('screenplay-1')
-    expect(snapshot.editScript?.groupBlockCount).toBe(1)
+    expect(snapshot.editScript?.generationSegmentCount).toBe(2)
     expect(snapshot.recentOperationResults[0]?.media?.url).toBe('https://audio.example/music.mp3')
   })
 

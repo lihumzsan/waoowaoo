@@ -6,24 +6,21 @@ const WORKFLOW_LAB_STAGE_ORDER: Record<EditFirstWorkflowStage, number> = {
   screenplay_ready_for_review: 2,
   style_preview_generating: 3,
   needs_style_choice: 4,
-  ready_to_generate_director_decoupage: 5,
-  ready_to_generate_edit_script: 6,
-  edit_script_generating: 7,
-  ready_to_generate_assets: 8,
-  assets_generating: 9,
-  assets_ready_for_review: 10,
-  ready_to_generate_cinematography: 11,
-  ready_to_generate_storyboard_spatial_blocking: 12,
-  storyboard_spatial_blocking_generating: 13,
-  ready_to_generate_storyboard: 14,
-  storyboard_generating: 15,
-  ready_to_generate_storyboard_images: 16,
-  storyboard_images_generating: 17,
-  ready_to_generate_videos: 18,
-  videos_generating: 19,
-  ready_to_render_final: 20,
-  completed: 21,
-  failed: 22,
+  ready_to_generate_edit_script: 5,
+  edit_script_generating: 6,
+  ready_to_generate_assets: 7,
+  assets_generating: 8,
+  assets_ready_for_review: 9,
+  ready_to_generate_shot_execution_plan: 10,
+  ready_to_generate_storyboard: 11,
+  storyboard_generating: 12,
+  ready_to_generate_storyboard_images: 13,
+  storyboard_images_generating: 14,
+  ready_to_generate_videos: 15,
+  videos_generating: 16,
+  ready_to_render_final: 17,
+  completed: 18,
+  failed: 19,
 }
 
 export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold: EditFirstWorkflowStage): boolean {
@@ -38,16 +35,12 @@ export function shouldWorkflowLabCloneStylePreviews(stage: EditFirstWorkflowStag
   return workflowLabStageAtLeast(stage, 'needs_style_choice')
 }
 
-export function shouldWorkflowLabCloneDirectorDecoupage(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'ready_to_generate_edit_script')
-}
-
 export function shouldWorkflowLabCloneEditScript(stage: EditFirstWorkflowStage): boolean {
   return workflowLabStageAtLeast(stage, 'ready_to_generate_assets')
 }
 
-export function shouldWorkflowLabCloneCinematography(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'ready_to_generate_storyboard_spatial_blocking')
+export function shouldWorkflowLabCloneShotExecutionPlan(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_storyboard')
 }
 
 export function shouldWorkflowLabCloneStoryboards(stage: EditFirstWorkflowStage): boolean {
@@ -61,7 +54,7 @@ export function shouldWorkflowLabCloneVideos(stage: EditFirstWorkflowStage): boo
 export function resolveWorkflowLabScreenplayStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
   if (!shouldWorkflowLabCloneScreenplay(stage)) return sourceStatus
   if (!shouldWorkflowLabCloneStylePreviews(stage)) return 'screenplay_ready'
-  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_director_decoupage')) return 'style_preview_ready'
+  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_edit_script')) return 'style_preview_ready'
   return 'ready'
 }
 
@@ -71,7 +64,7 @@ export function resolveWorkflowLabStylePreviewStatus(stage: EditFirstWorkflowSta
 }
 
 export function resolveWorkflowLabEditAssetReviewStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
-  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_cinematography')) return 'pending'
+  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_shot_execution_plan')) return 'pending'
   return sourceStatus === 'approved' ? sourceStatus : 'approved'
 }
 

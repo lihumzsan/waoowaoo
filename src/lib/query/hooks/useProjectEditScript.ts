@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { ProjectEditCinematographyShotPlan, ProjectEditDirectorDecoupage, ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
+import type { ProjectEditScreenplay, ProjectEditScript, ProjectEditShotExecutionPlan } from '@/types/project'
 import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 
@@ -34,12 +34,8 @@ interface EditScreenplayResponse {
   screenplay: ProjectEditScreenplay | null
 }
 
-interface EditDirectorDecoupageResponse {
-  directorDecoupage: ProjectEditDirectorDecoupage | null
-}
-
-interface EditCinematographyShotPlanResponse {
-  cinematographyShotPlan: ProjectEditCinematographyShotPlan | null
+interface EditShotExecutionPlanResponse {
+  shotExecutionPlan: ProjectEditShotExecutionPlan | null
 }
 
 interface CreateEditScriptInput {
@@ -61,12 +57,7 @@ interface ConfirmEditStylePreviewInput {
   aspectRatio: EditScriptVideoRatio
 }
 
-interface CreateEditDirectorDecoupageInput {
-  episodeId: string
-  screenplayId?: string
-}
-
-interface CreateEditCinematographyShotPlanInput {
+interface CreateEditShotExecutionPlanInput {
   episodeId: string
   editScriptId?: string
 }
@@ -100,25 +91,26 @@ interface GenerateEditScriptTaskResponse {
   targetId?: string
 }
 
-interface UpdateEditScriptVideoBlockPromptInput {
+interface UpdateEditScriptGenerationSegmentContinuityInput {
   episodeId: string
   editScriptId: string
-  blockIndex: number
-  prompt: string
+  segmentIndex: number
+  continuity: string
 }
 
-interface MergeEditScriptVideoBlocksInput {
+interface MergeEditScriptGenerationSegmentsInput {
   episodeId: string
   editScriptId: string
-  leftBlockIndex: number
-  rightBlockIndex: number
+  leftSegmentIndex: number
+  rightSegmentIndex: number
 }
 
-interface ArrangeEditScriptVideoBlocksInput {
+interface ArrangeEditScriptGenerationSegmentsInput {
   episodeId: string
   editScriptId: string
-  blocks: readonly {
+  segments: readonly {
     readonly shotNumbers: readonly number[]
+    readonly continuity: string
   }[]
 }
 
@@ -169,36 +161,18 @@ export function useProjectEditScreenplay(projectId: string | null, episodeId: st
   })
 }
 
-export function useProjectEditDirectorDecoupage(projectId: string | null, episodeId: string | null) {
+export function useProjectEditShotExecutionPlan(projectId: string | null, episodeId: string | null) {
   return useQuery({
-    queryKey: queryKeys.project.editDirectorDecoupage(projectId || '', episodeId || ''),
+    queryKey: queryKeys.project.editShotExecutionPlan(projectId || '', episodeId || ''),
     queryFn: async () => {
       if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
       const search = new URLSearchParams({ episodeId })
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/director-decoupage?${search.toString()}`)
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/shot-execution-plan?${search.toString()}`)
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to load director decoupage')
+        throw await readJsonError(response, 'Failed to load shot execution plan')
       }
-      const data = await response.json() as EditDirectorDecoupageResponse
-      return data.directorDecoupage
-    },
-    enabled: Boolean(projectId && episodeId),
-    staleTime: 5000,
-  })
-}
-
-export function useProjectEditCinematographyShotPlan(projectId: string | null, episodeId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.project.editCinematographyShotPlan(projectId || '', episodeId || ''),
-    queryFn: async () => {
-      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
-      const search = new URLSearchParams({ episodeId })
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/cinematography-shot-plan?${search.toString()}`)
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to load cinematography shot plan')
-      }
-      const data = await response.json() as EditCinematographyShotPlanResponse
-      return data.cinematographyShotPlan
+      const data = await response.json() as EditShotExecutionPlanResponse
+      return data.shotExecutionPlan
     },
     enabled: Boolean(projectId && episodeId),
     staleTime: 5000,
@@ -286,8 +260,8 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
       queryClient.setQueryData(queryKeys.project.editScreenplay(projectId, screenplay.episodeId), screenplay)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
@@ -295,57 +269,27 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
   })
 }
 
-export function useCreateProjectEditDirectorDecoupage(projectId: string | null) {
+export function useCreateProjectEditShotExecutionPlan(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: CreateEditDirectorDecoupageInput) => {
+    mutationFn: async (input: CreateEditShotExecutionPlanInput) => {
       if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/director-decoupage`, {
+      const response = await apiFetch(`/api/projects/${projectId}/edit-script/shot-execution-plan`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
       })
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate director decoupage')
+        throw await readJsonError(response, 'Failed to generate shot execution plan')
       }
       const data = await response.json() as GenerateEditScriptTaskResponse
-      if (data.async !== true || !data.taskId) throw new Error('EDIT_DIRECTOR_DECOUPAGE_TASK_RESPONSE_EMPTY')
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_SHOT_EXECUTION_PLAN_TASK_RESPONSE_EMPTY')
       return data
     },
     onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editDirectorDecoupage(projectId, variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
-      ])
-    },
-  })
-}
-
-export function useCreateProjectEditCinematographyShotPlan(projectId: string | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: CreateEditCinematographyShotPlanInput) => {
-      if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/cinematography-shot-plan`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate cinematography shot plan')
-      }
-      const data = await response.json() as GenerateEditScriptTaskResponse
-      if (data.async !== true || !data.taskId) throw new Error('EDIT_CINEMATOGRAPHY_SHOT_PLAN_TASK_RESPONSE_EMPTY')
-      return data
-    },
-    onSuccess: async (_result, variables) => {
-      if (!projectId) return
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editCinematographyShotPlan(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
@@ -427,37 +371,10 @@ export function useGenerateProjectEditScriptStoryboard(projectId: string | null)
   })
 }
 
-export function useGenerateProjectEditScriptStoryboardSpatialBlocking(projectId: string | null) {
+export function useUpdateProjectEditScriptGenerationSegmentContinuity(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: GenerateEditScriptStoryboardInput) => {
-      if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/spatial-blocking/generate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate storyboard spatial blocking')
-      }
-      return await response.json() as GenerateEditScriptStoryboardResponse
-    },
-    onSuccess: async (_result, variables) => {
-      if (!projectId) return
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
-      ])
-    },
-  })
-}
-
-export function useUpdateProjectEditScriptVideoBlockPrompt(projectId: string | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: UpdateEditScriptVideoBlockPromptInput) => {
+    mutationFn: async (input: UpdateEditScriptGenerationSegmentContinuityInput) => {
       if (!projectId) throw new Error('Project ID is required')
       const response = await apiFetch(`/api/projects/${projectId}/edit-script`, {
         method: 'PATCH',
@@ -465,7 +382,7 @@ export function useUpdateProjectEditScriptVideoBlockPrompt(projectId: string | n
         body: JSON.stringify(input),
       })
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to update video arrangement prompt')
+        throw await readJsonError(response, 'Failed to update generation segment continuity')
       }
       const data = await response.json() as EditScriptResponse
       if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')
@@ -481,16 +398,16 @@ export function useUpdateProjectEditScriptVideoBlockPrompt(projectId: string | n
   })
 }
 
-export function useMergeProjectEditScriptVideoBlocks(projectId: string | null) {
+export function useMergeProjectEditScriptGenerationSegments(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: MergeEditScriptVideoBlocksInput) => {
+    mutationFn: async (input: MergeEditScriptGenerationSegmentsInput) => {
       if (!projectId) throw new Error('Project ID is required')
       const response = await apiFetch(`/api/projects/${projectId}/edit-script`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          operation: 'mergeVideoBlocks',
+          operation: 'mergeGenerationSegments',
           ...input,
         }),
       })
@@ -511,16 +428,16 @@ export function useMergeProjectEditScriptVideoBlocks(projectId: string | null) {
   })
 }
 
-export function useArrangeProjectEditScriptVideoBlocks(projectId: string | null) {
+export function useArrangeProjectEditScriptGenerationSegments(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: ArrangeEditScriptVideoBlocksInput) => {
+    mutationFn: async (input: ArrangeEditScriptGenerationSegmentsInput) => {
       if (!projectId) throw new Error('Project ID is required')
       const response = await apiFetch(`/api/projects/${projectId}/edit-script`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          operation: 'arrangeVideoBlocks',
+          operation: 'arrangeGenerationSegments',
           ...input,
         }),
       })

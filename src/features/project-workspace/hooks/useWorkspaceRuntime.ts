@@ -3,8 +3,8 @@
 import { useMemo } from 'react'
 import type {
   WorkspaceEditScreenplayGenerationInput,
+  WorkspaceGenerationSegmentArrangementItem,
   WorkspaceRuntimeValue,
-  WorkspaceVideoBlockArrangementBlock,
 } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
@@ -36,14 +36,13 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
   handleGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
-  handleGenerateEditDirectorDecoupage: (screenplayId?: string) => Promise<void>
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   handleGenerateStoryboardGridImages: (payload: {
     readonly episodeId: string
     readonly editScriptId: string
-    readonly sourceVideoBlockId: string
+    readonly sourceGenerationSegmentId: string
     readonly panelIds: readonly string[]
     readonly generationMode?: StoryboardPanelImageGenerationMode
   }) => Promise<void>
@@ -64,18 +63,17 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateBgmScore: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
-  handleGenerateEditCinematographyShotPlan: (editScriptId: string) => Promise<void>
+  handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
   handleRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
-  handleGenerateEditStoryboardSpatialBlocking: (editScriptId: string) => Promise<void>
   handleUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,
     value: string,
     field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
   ) => Promise<void>
-  handleUpdateVideoPlanPrompt: (editScriptId: string, blockIndex: number, prompt: string) => Promise<void>
-  handleArrangeVideoBlocks: (editScriptId: string, blocks: readonly WorkspaceVideoBlockArrangementBlock[]) => Promise<void>
+  handleUpdateGenerationSegmentContinuity: (editScriptId: string, segmentIndex: number, continuity: string) => Promise<void>
+  handleArrangeGenerationSegments: (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
 }
@@ -95,7 +93,6 @@ export function useWorkspaceRuntime({
   handleUpdateConfig,
   onRequestAssistantGuidance,
   handleGenerateEditScreenplay,
-  handleGenerateEditDirectorDecoupage,
   handleGenerateEditScript,
   openAssetLibrary,
   handleGeneratePanelImage,
@@ -107,13 +104,12 @@ export function useWorkspaceRuntime({
   handleGenerateBgmScore,
   handleRenderFinalVideo,
   handleGenerateEditAssets,
-  handleGenerateEditCinematographyShotPlan,
+  handleGenerateEditShotExecutionPlan,
   handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
-  handleGenerateEditStoryboardSpatialBlocking,
   handleUpdateVideoPrompt,
-  handleUpdateVideoPlanPrompt,
-  handleArrangeVideoBlocks,
+  handleUpdateGenerationSegmentContinuity,
+  handleArrangeGenerationSegments,
   handleUpdateEditAssetRequirementDescription,
   handleUpdatePanelVideoModel,
 }: UseWorkspaceRuntimeParams) {
@@ -137,7 +133,6 @@ export function useWorkspaceRuntime({
     onVideoRatioChange: (value) => handleUpdateConfig('videoRatio', value),
     onRequestAssistantGuidance,
     onGenerateEditScreenplay: handleGenerateEditScreenplay,
-    onGenerateEditDirectorDecoupage: handleGenerateEditDirectorDecoupage,
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
@@ -149,13 +144,12 @@ export function useWorkspaceRuntime({
     onGenerateBgmScore: handleGenerateBgmScore,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditAssets: handleGenerateEditAssets,
-    onGenerateEditCinematographyShotPlan: handleGenerateEditCinematographyShotPlan,
+    onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
     onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
-    onGenerateEditStoryboardSpatialBlocking: handleGenerateEditStoryboardSpatialBlocking,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
-    onUpdateVideoPlanPrompt: handleUpdateVideoPlanPrompt,
-    onArrangeVideoBlocks: handleArrangeVideoBlocks,
+    onUpdateGenerationSegmentContinuity: handleUpdateGenerationSegmentContinuity,
+    onArrangeGenerationSegments: handleArrangeGenerationSegments,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
@@ -165,10 +159,9 @@ export function useWorkspaceRuntime({
     handleGenerateBgmScore,
     handleRenderFinalVideo,
     handleGenerateEditAssets,
-    handleGenerateEditCinematographyShotPlan,
+    handleGenerateEditShotExecutionPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleGenerateEditStoryboardSpatialBlocking,
     handleGeneratePanelImage,
     handleGenerateStoryboardGridImages,
     handleSelectPanelCandidate,
@@ -177,12 +170,11 @@ export function useWorkspaceRuntime({
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditScreenplay,
-    handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
-    handleArrangeVideoBlocks,
+    handleArrangeGenerationSegments,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,
-    handleUpdateVideoPlanPrompt,
+    handleUpdateGenerationSegmentContinuity,
     handleUpdateVideoPrompt,
     isConfirmingAssets,
     isAssistantWorkflowStarting,

@@ -4,28 +4,21 @@ export type VideoGridMode = (typeof VIDEO_GRID_MODES)[number]
 export interface VideoGroupShot {
   readonly shotNumber: number
   readonly durationSec: number
-  readonly dramaticPurpose: string
-  readonly visibleAction: string
-  readonly audienceFocus: string
-  readonly viewpoint: string
-  readonly revealPlan: string
-  readonly performanceBeat: string
-  readonly continuityIn: string
-  readonly continuityOut: string
-  readonly charactersAndScene?: string | null
+  readonly action: string
+  readonly sceneName: string
+  readonly characters: readonly string[]
   readonly sound: string
 }
 
-export type VideoBlockPlanItemKind = 'single' | 'group'
+export type GenerationSegmentVideoPlanItemKind = 'group'
 
-export interface VideoBlockPlanItem {
-  readonly kind: VideoBlockPlanItemKind
+export interface GenerationSegmentVideoPlanItem {
+  readonly kind: GenerationSegmentVideoPlanItemKind
   readonly shotNumbers: readonly number[]
   readonly gridMode?: VideoGridMode
-  readonly reason: string
-  readonly prompt: string
+  readonly continuity: string
 }
 
-export interface VideoBlockPlan {
-  readonly items: readonly VideoBlockPlanItem[]
+export interface GenerationSegmentVideoPlan {
+  readonly items: readonly GenerationSegmentVideoPlanItem[]
 }

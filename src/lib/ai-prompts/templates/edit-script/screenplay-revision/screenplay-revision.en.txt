@@ -30,7 +30,7 @@ Apply the requested changes to plot, characters, structure, mood, theme, or endi
 - Dialogue paragraphs must contain only what a character actually says aloud. If tone, pause, or performance manner is needed, put it in parentheses after the character name.
 - When a character first appears, they must be identifiable from the Character List by stable identity and traits. Do not suddenly change appearance, costume, or identity in action paragraphs.
 - The ending must have a clear emotional landing, reveal, action result, or suspenseful pause.
-- Output only the revised screenplay body. Do not output style candidates, director decoupage, cut structure, assets, storyboard, or video prompts.
+- Output only the revised screenplay body. Do not output style candidates, core edit plans, shot execution plans, assets, storyboard, or generation prompts.
 
 # Input
 

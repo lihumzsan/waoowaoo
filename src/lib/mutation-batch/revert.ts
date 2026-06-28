@@ -142,7 +142,6 @@ async function restoreDeletedPanel(params: {
         linkedToNextPanel: panel.linkedToNextPanel === true,
         sketchImageUrl: typeof panel.sketchImageUrl === 'string' ? panel.sketchImageUrl : null,
         sketchImageMediaId: typeof panel.sketchImageMediaId === 'string' ? panel.sketchImageMediaId : null,
-        photographyRules: typeof panel.photographyRules === 'string' ? panel.photographyRules : null,
         actingNotes: typeof panel.actingNotes === 'string' ? panel.actingNotes : null,
         previousImageUrl: typeof panel.previousImageUrl === 'string' ? panel.previousImageUrl : null,
         previousImageMediaId: typeof panel.previousImageMediaId === 'string' ? panel.previousImageMediaId : null,
@@ -329,7 +328,6 @@ export async function revertMutationEntry(entry: {
             : null,
           linkedToNextPanel: previous.linkedToNextPanel === true,
           actingNotes: previous.actingNotes === null || typeof previous.actingNotes === 'string' ? previous.actingNotes : null,
-          photographyRules: previous.photographyRules === null || typeof previous.photographyRules === 'string' ? previous.photographyRules : null,
         },
       })
       return

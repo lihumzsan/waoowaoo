@@ -19,9 +19,6 @@ export async function cloneWorkflowLabStoryboards(params: {
       panels: {
         orderBy: { panelIndex: 'asc' },
       },
-      blockingArtifacts: {
-        orderBy: { createdAt: 'asc' },
-      },
       supplementaryPanels: {
         orderBy: { createdAt: 'asc' },
       },
@@ -84,7 +81,14 @@ export async function cloneWorkflowLabStoryboards(params: {
           linkedToNextPanel: panel.linkedToNextPanel,
           sketchImageUrl: panel.sketchImageUrl,
           sketchImageMediaId: panel.sketchImageMediaId,
-          photographyRules: panel.photographyRules,
+          sourceShotNumber: panel.sourceShotNumber,
+          sourceGenerationSegmentId: panel.sourceGenerationSegmentId,
+          executionSnapshotJson: panel.executionSnapshotJson === null
+            ? Prisma.JsonNull
+            : toInputJson(panel.executionSnapshotJson),
+          renderFactsJson: panel.renderFactsJson === null
+            ? Prisma.JsonNull
+            : toInputJson(panel.renderFactsJson),
           actingNotes: panel.actingNotes,
           previousImageUrl: panel.previousImageUrl,
           previousImageMediaId: panel.previousImageMediaId,
@@ -96,24 +100,6 @@ export async function cloneWorkflowLabStoryboards(params: {
         scopedMap: params.maps.panelIds,
         sourceId: panel.id,
         targetId: createdPanel.id,
-      })
-    }
-
-    for (const artifact of storyboard.blockingArtifacts) {
-      await params.tx.projectStoryboardBlockingArtifact.create({
-        data: {
-          storyboardId: createdStoryboard.id,
-          kind: artifact.kind,
-          sourceVideoBlockId: artifact.sourceVideoBlockId,
-          groupIndex: artifact.groupIndex,
-          prompt: artifact.prompt,
-          imageUrl: artifact.imageUrl,
-          imageMediaId: artifact.imageMediaId,
-          candidateImages: artifact.candidateImages,
-          metadataJson: artifact.metadataJson === null ? Prisma.JsonNull : toInputJson(artifact.metadataJson),
-          status: artifact.status,
-          errorMessage: artifact.errorMessage,
-        },
       })
     }
 

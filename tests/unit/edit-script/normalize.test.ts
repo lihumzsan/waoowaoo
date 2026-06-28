@@ -1,433 +1,255 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyEditScriptVideoPrompts,
-  normalizeEditAssetRequirements,
   normalizeEditScriptCore,
-  normalizeEditScriptStructure,
+  normalizeEditShotExecutionPlan,
 } from '@/lib/edit-script/normalize'
-import {
-  readEditFirstDurationTierFromText,
-  requireEditFirstDurationSpecFromPrompt,
-} from '@/lib/edit-script/duration-tier'
+import type { EditScriptShot } from '@/lib/edit-script/types'
 
-describe('edit script normalization', () => {
-  it('keeps the minimum edit table fields and enforces continuous shot numbers', () => {
-    const normalized = normalizeEditScriptCore({
-      title: 'Orbital Silence',
-      durationSec: 60,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 5,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'A pilot crosses a white corridor.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / White Corridor',
-          sound: 'low air-conditioning hum',
+function corePlan() {
+  return {
+    shots: [
+      {
+        shotNumber: 1,
+        durationSec: 3,
+        scene: { name: 'Cabin' },
+        action: 'Anna studies the high-backed chair.',
+        characters: [
+          {
+            name: 'Anna',
+            visibility: 'visible',
+            role: 'focus',
+            performance: 'steps closer with caution',
+          },
+          {
+            name: 'Disguised Grandmother',
+            visibility: 'hidden',
+            role: 'hidden_subject',
+            performance: 'sits silently inside the high-backed chair',
+          },
+        ],
+        keyObjects: [
+          { name: 'High-backed chair', role: 'reveal_device' },
+        ],
+        sound: 'Soft floor creak.',
+      },
+      {
+        shotNumber: 2,
+        durationSec: 3,
+        scene: { name: 'Cabin' },
+        action: 'Anna reaches the chair.',
+        characters: [
+          {
+            name: 'Anna',
+            visibility: 'partial',
+            role: 'focus',
+            performance: 'leans toward the chair',
+          },
+          {
+            name: 'Disguised Grandmother',
+            visibility: 'hidden',
+            role: 'hidden_subject',
+            performance: 'remains seated behind the chair back',
+          },
+        ],
+        keyObjects: [
+          { name: 'High-backed chair', role: 'reveal_device' },
+        ],
+        sound: 'Chair hinge starts to groan.',
+      },
+    ],
+    generationSegments: [
+      {
+        shotNumbers: [1, 2],
+        continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
+      },
+    ],
+  } as const
+}
+
+function executionPlan() {
+  return {
+    shots: [
+      {
+        shotNumber: 1,
+        camera: {
+          shotScale: 'medium',
+          lens: '35mm',
+          focus: 'chair area sharp',
+          height: 'eye level',
+          position: 'inside doorway left',
+          angle: 'slightly low frontal',
+          movement: 'locked off',
+          composition: 'chair centered',
+          lighting: 'cold top light hides the seated figure in shadow',
         },
-        {
-          shotNumber: 2,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'The corridor opens to a red observation room.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Red Observation Room',
-          sound: 'sub-bass pulse',
+        blocking: {
+          axis: {
+            type: 'subject_line',
+            subjects: ['Anna', 'High-backed chair'],
+            screenDirection: 'chair remains center; Anna approaches from screen left',
+          },
+          characters: [
+            {
+              name: 'Anna',
+              visibility: 'visible',
+              position: 'near the doorway',
+              screenPosition: 'left foreground',
+              facing: 'toward the chair',
+              eyeline: 'chair center',
+            },
+            {
+              name: 'Disguised Grandmother',
+              visibility: 'hidden',
+              position: 'seated inside the high-backed chair',
+              screenPosition: 'behind the chair back',
+              facing: 'away from the doorway',
+              eyeline: 'not visible',
+            },
+          ],
+          objects: [
+            {
+              name: 'High-backed chair',
+              position: 'center of the cabin',
+              screenPosition: 'frame center',
+            },
+          ],
+          spatialNote: 'The hidden subject remains present but concealed by the chair back.',
         },
-      ],
-      videoBlocks: [
-        { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'continuous corridor movement', prompt: 'final continuous corridor prompt' },
-      ],
-    })
+      },
+      {
+        shotNumber: 2,
+        camera: {
+          shotScale: 'medium close',
+          lens: '50mm',
+          focus: 'Anna and chair edge sharp',
+          height: 'eye level',
+          position: 'inside doorway left, closer',
+          angle: 'frontal',
+          movement: 'slow push',
+          composition: 'Anna left, chair center',
+          lighting: 'top light still keeps the seated figure hidden',
+        },
+        blocking: {
+          axis: {
+            type: 'subject_line',
+            subjects: ['Anna', 'High-backed chair'],
+            screenDirection: 'Anna remains screen left and chair remains center',
+          },
+          characters: [
+            {
+              name: 'Anna',
+              visibility: 'partial',
+              position: 'beside the chair',
+              screenPosition: 'left midground',
+              facing: 'toward the chair',
+              eyeline: 'chair back',
+            },
+            {
+              name: 'Disguised Grandmother',
+              visibility: 'hidden',
+              position: 'seated inside the high-backed chair',
+              screenPosition: 'behind the chair back',
+              facing: 'away from Anna',
+              eyeline: 'not visible',
+            },
+          ],
+          objects: [
+            {
+              name: 'High-backed chair',
+              position: 'center of the cabin',
+              screenPosition: 'frame center',
+            },
+          ],
+          spatialNote: 'The hidden subject remains physically in the chair.',
+        },
+      },
+    ],
+  } as const
+}
+
+describe('edit-first core plan normalization', () => {
+  it('normalizes the compact core plan and preserves hidden_subject characters', () => {
+    const normalized = normalizeEditScriptCore(corePlan())
 
     expect(normalized.shotCount).toBe(2)
-    expect(normalized.durationSec).toBe(9)
-    expect(normalized.videoBlocks).toEqual([
-      { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'continuous corridor movement', prompt: 'final continuous corridor prompt' },
-    ])
-    expect(normalized.shots[0]).toEqual({
-      shotNumber: 1,
-      durationSec: 5,
-      dramaticPurpose: 'test dramatic purpose',
-      visibleAction: 'A pilot crosses a white corridor.',
-      audienceFocus: 'test audience focus',
-      viewpoint: 'test viewpoint',
-      revealPlan: 'test reveal plan',
-      performanceBeat: 'test performance beat',
-      continuityIn: 'test continuity in',
-      continuityOut: 'test continuity out',
-      charactersAndScene: 'Pilot / White Corridor',
-      sound: 'low air-conditioning hum',
-    })
-  })
-
-  it('rejects gaps in shot numbering', () => {
-    expect(() => normalizeEditScriptCore({
-      title: 'Gap',
-      durationSec: 60,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'First.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 3,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Third.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-      ],
-      videoBlocks: [
-        { kind: 'group', shotNumbers: [1, 3], gridMode: '2x2', reason: 'invalid gap should fail earlier', prompt: 'invalid gap prompt' },
-      ],
-    })).toThrow('EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS')
-  })
-
-  it('rejects edit-first shots longer than five seconds', () => {
-    expect(() => normalizeEditScriptCore({
-      title: 'Too Long',
-      durationSec: 6,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 6,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'One shot holds too long.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-      ],
-      videoBlocks: [
-        { kind: 'single', shotNumbers: [1], reason: 'single long shot', prompt: 'single long prompt' },
-      ],
-    })).toThrow()
-  })
-
-  it('rejects videoBlocks whose grouped duration exceeds Seedance 2.0 limit', () => {
-    expect(() => normalizeEditScriptCore({
-      title: 'Too Long Group',
-      durationSec: 17,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 5,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'First move.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Second move.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 3,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Third move.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-        {
-          shotNumber: 4,
-          durationSec: 5,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Fourth move.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'A / Room',
-          sound: 'tone',
-        },
-      ],
-      videoBlocks: [
-        { kind: 'group', shotNumbers: [1, 2, 3, 4], gridMode: '2x2', reason: 'too long for one Seedance segment', prompt: 'too long group prompt' },
-      ],
-    })).toThrow('VIDEO_BLOCK_PLAN_GROUP_DURATION_UNSUPPORTED:17')
-  })
-
-  it('extracts only character and location requirements linked to real shots', () => {
-    const shots = normalizeEditScriptCore({
-      title: 'Assets',
-      durationSec: 16,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot waits.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'hum',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot enters.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'door',
-        },
-      ],
-      videoBlocks: [
-        { kind: 'group', shotNumbers: [1, 2], gridMode: '2x2', reason: 'shared dock motion', prompt: 'shared dock prompt' },
-      ],
-    }).shots
-
-    const assets = normalizeEditAssetRequirements({
-      assets: [
-        {
-          kind: 'character',
-          name: 'Pilot',
-          description: 'A quiet astronaut in a minimal pressure suit.',
-          shotNumbers: [2, 1, 2],
-        },
-        {
-          kind: 'location',
-          name: 'Dock',
-          description: 'A sterile orbital docking bay with red warning light.',
-          shotNumbers: [1, 3],
-        },
-      ],
-    }, shots)
-
-    expect(assets).toEqual([
+    expect(normalized.durationSec).toBe(6)
+    expect(normalized.generationSegments).toEqual([
       {
-        kind: 'character',
-        name: 'Pilot',
-        description: 'A quiet astronaut in a minimal pressure suit.',
         shotNumbers: [1, 2],
-        status: 'pending',
-        targetId: null,
-        errorMessage: null,
-      },
-      {
-        kind: 'location',
-        name: 'Dock',
-        description: 'A sterile orbital docking bay with red warning light.',
-        shotNumbers: [1],
-        status: 'pending',
-        targetId: null,
-        errorMessage: null,
+        continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
       },
     ])
+    expect(normalized.shots[0]?.characters).toContainEqual({
+      name: 'Disguised Grandmother',
+      visibility: 'hidden',
+      role: 'hidden_subject',
+      performance: 'sits silently inside the high-backed chair',
+    })
   })
 
-  it('accepts character assets with visual description only', () => {
-    const shots = normalizeEditScriptCore({
-      title: 'Assets',
-      durationSec: 4,
+  it('rejects non-continuous shot numbers and unordered generation segment coverage', () => {
+    const plan = corePlan()
+    const nonContinuous = {
+      ...plan,
       shots: [
-        {
-          shotNumber: 1,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot enters the dock.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'door',
-        },
+        plan.shots[0],
+        { ...plan.shots[1], shotNumber: 3 },
       ],
-      videoBlocks: [
-        { kind: 'single', shotNumbers: [1], reason: 'single beat', prompt: 'single prompt' },
-      ],
-    }).shots
+    }
+    expect(() => normalizeEditScriptCore(nonContinuous)).toThrow('EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS')
 
-    const assets = normalizeEditAssetRequirements({
-      assets: [
-        {
-          kind: 'character',
-          name: 'Pilot',
-          description: 'A quiet astronaut in a minimal pressure suit.',
-          shotNumbers: [1],
-        },
-      ],
-    }, shots)
-
-    expect(assets[0]).toEqual(expect.objectContaining({
-      kind: 'character',
-      name: 'Pilot',
-      description: 'A quiet astronaut in a minimal pressure suit.',
-    }))
+    const reordered = {
+      ...plan,
+      generationSegments: [{ shotNumbers: [2, 1], continuity: 'wrong order' }],
+    }
+    expect(() => normalizeEditScriptCore(reordered)).toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID')
   })
+})
 
-  it('splits structure normalization from final video prompt rendering', () => {
-    const structure = normalizeEditScriptStructure({
-      title: 'Prompt Later',
-      durationSec: 6,
-      shots: [
-        {
-          shotNumber: 1,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot steps into the dock.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'room tone',
-        },
-        {
-          shotNumber: 2,
-          durationSec: 3,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot reaches the console.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'console beep continues',
-        },
-      ],
-      videoBlocks: [
-        { kind: 'group', shotNumbers: [1, 2], reason: 'continuous dock movement' },
-      ],
-    })
+describe('shot execution plan normalization', () => {
+  it('requires execution blocking to cover every core character and object', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const normalizedExecution = normalizeEditShotExecutionPlan(executionPlan(), normalizedCore.shots)
 
-    expect(structure.videoBlocks[0]?.prompt).toBe('Pending final video prompt.')
-
-    const completed = applyEditScriptVideoPrompts(structure, {
-      shots: [
-        { shotNumber: 1, videoPrompt: 'Pilot enters the dock, wide push.' },
-        { shotNumber: 2, videoPrompt: 'Pilot reaches the console, medium track.' },
-      ],
-      videoBlocks: [
-        { shotNumbers: [1, 2], prompt: 'Continuous dock prompt with asset identity.' },
-      ],
-    })
-
-    expect(completed.shots.map((shot) => shot.visibleAction)).toEqual([
-      'Pilot steps into the dock.',
-      'Pilot reaches the console.',
+    expect(normalizedExecution.shots).toHaveLength(2)
+    expect(normalizedExecution.shots[0]?.blocking.characters.map((character) => character.name)).toEqual([
+      'Anna',
+      'Disguised Grandmother',
     ])
-    expect(completed.videoBlocks[0]?.prompt).toBe('Continuous dock prompt with asset identity.')
+    expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
+    expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
   })
 
-  it('rejects video prompt output that changes locked block coverage', () => {
-    const structure = normalizeEditScriptStructure({
-      title: 'Locked',
-      durationSec: 3,
+  it('rejects execution plans that drop in-scene characters or required objects', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const missingCharacter = {
       shots: [
         {
-          shotNumber: 1,
-          durationSec: 4,
-          dramaticPurpose: 'test dramatic purpose',
-          visibleAction: 'Pilot waits.',
-          audienceFocus: 'test audience focus',
-          viewpoint: 'test viewpoint',
-          revealPlan: 'test reveal plan',
-          performanceBeat: 'test performance beat',
-          continuityIn: 'test continuity in',
-          continuityOut: 'test continuity out',
-          charactersAndScene: 'Pilot / Dock',
-          sound: 'hum',
+          ...executionPlan().shots[0],
+          blocking: {
+            ...executionPlan().shots[0].blocking,
+            characters: [executionPlan().shots[0].blocking.characters[0]],
+          },
         },
+        executionPlan().shots[1],
       ],
-      videoBlocks: [
-        { kind: 'single', shotNumbers: [1], reason: 'isolated beat' },
+    }
+    expect(() => normalizeEditShotExecutionPlan(missingCharacter, normalizedCore.shots as readonly EditScriptShot[]))
+      .toThrow('EDIT_SHOT_EXECUTION_CHARACTER_MISSING')
+
+    const missingObject = {
+      shots: [
+        {
+          ...executionPlan().shots[0],
+          blocking: {
+            ...executionPlan().shots[0].blocking,
+            objects: [],
+          },
+        },
+        executionPlan().shots[1],
       ],
-    })
-
-    expect(() => applyEditScriptVideoPrompts(structure, {
-      shots: [{ shotNumber: 1, videoPrompt: 'Pilot waits.' }],
-      videoBlocks: [{ shotNumbers: [2], prompt: 'Wrong block.' }],
-    })).toThrow('EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_MISSING:1')
-  })
-
-  it('maps explicit edit-first duration text to duration tiers without prescribing exact seconds', () => {
-    expect(readEditFirstDurationTierFromText('给我一个一分钟科幻短片')).toBe('medium')
-    expect(readEditFirstDurationTierFromText('make it 30 seconds')).toBe('short')
-    expect(readEditFirstDurationTierFromText('make it 90 seconds')).toBe('long')
-    expect(readEditFirstDurationTierFromText('make it 2 minutes')).toBe('long')
-    expect(readEditFirstDurationTierFromText('make it 300 seconds')).toBeNull()
-  })
-
-  it('requires a persisted duration tier before downstream generation', () => {
-    expect(() => requireEditFirstDurationSpecFromPrompt('给我一个库布里克风格科幻短片')).toThrow('EDIT_FIRST_DURATION_TIER_REQUIRED')
-    expect(requireEditFirstDurationSpecFromPrompt('短片结构化参数：时长档位 medium（中，约 60 秒）；最终画面比例 16:9。')).toMatchObject({
-      tier: 'medium',
-      targetSeconds: 60,
-    })
+    }
+    expect(() => normalizeEditShotExecutionPlan(missingObject, normalizedCore.shots as readonly EditScriptShot[]))
+      .toThrow('EDIT_SHOT_EXECUTION_OBJECT_MISSING')
   })
 })

@@ -20,20 +20,18 @@ import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
 import {
   useAssetActions,
-  useCreateProjectEditCinematographyShotPlan,
-  useCreateProjectEditDirectorDecoupage,
   useCreateProjectEditScreenplay,
   useCreateProjectEditScript,
+  useCreateProjectEditShotExecutionPlan,
+  useArrangeProjectEditScriptGenerationSegments,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
-  useGenerateProjectEditScriptStoryboardSpatialBlocking,
-  useArrangeProjectEditScriptVideoBlocks,
+  useUpdateProjectEditScriptGenerationSegmentContinuity,
   useUpdateProjectEditScriptAssetRequirementDescription,
-  useUpdateProjectEditScriptVideoBlockPrompt,
 } from '@/lib/query/hooks'
 import type {
   WorkspaceEditScreenplayGenerationInput,
-  WorkspaceVideoBlockArrangementBlock,
+  WorkspaceGenerationSegmentArrangementItem,
 } from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
@@ -124,16 +122,14 @@ export function useProjectWorkspaceController({
     episodeId,
   })
   const createEditScreenplay = useCreateProjectEditScreenplay(projectId)
-  const createEditDirectorDecoupage = useCreateProjectEditDirectorDecoupage(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
-  const createEditCinematographyShotPlan = useCreateProjectEditCinematographyShotPlan(projectId)
+  const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
-  const generateEditStoryboardSpatialBlocking = useGenerateProjectEditScriptStoryboardSpatialBlocking(projectId)
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
-  const updateVideoPlanPrompt = useUpdateProjectEditScriptVideoBlockPrompt(projectId)
-  const arrangeVideoBlocks = useArrangeProjectEditScriptVideoBlocks(projectId)
+  const updateGenerationSegmentContinuity = useUpdateProjectEditScriptGenerationSegmentContinuity(projectId)
+  const arrangeGenerationSegments = useArrangeProjectEditScriptGenerationSegments(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
   const handleGenerateEditScreenplay = async (input: WorkspaceEditScreenplayGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
@@ -145,14 +141,6 @@ export function useProjectWorkspaceController({
     })
     await onRefresh({ mode: 'full' })
   }
-  const handleGenerateEditDirectorDecoupage = async (screenplayId?: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await createEditDirectorDecoupage.mutateAsync({
-      episodeId,
-      ...(screenplayId ? { screenplayId } : {}),
-    })
-    await onRefresh({ mode: 'full' })
-  }
   const handleGenerateEditScript = async (screenplayId?: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await createEditScript.mutateAsync({
@@ -161,9 +149,9 @@ export function useProjectWorkspaceController({
     })
     await onRefresh({ mode: 'full' })
   }
-  const handleGenerateEditCinematographyShotPlan = async (editScriptId: string) => {
+  const handleGenerateEditShotExecutionPlan = async (editScriptId: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await createEditCinematographyShotPlan.mutateAsync({
+    await createEditShotExecutionPlan.mutateAsync({
       episodeId,
       editScriptId,
     })
@@ -185,19 +173,14 @@ export function useProjectWorkspaceController({
     await generateEditStoryboard.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
-  const handleGenerateEditStoryboardSpatialBlocking = async (editScriptId: string) => {
+  const handleUpdateGenerationSegmentContinuity = async (editScriptId: string, segmentIndex: number, continuity: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await generateEditStoryboardSpatialBlocking.mutateAsync({ episodeId, editScriptId })
+    await updateGenerationSegmentContinuity.mutateAsync({ episodeId, editScriptId, segmentIndex, continuity })
     await onRefresh({ mode: 'full' })
   }
-  const handleUpdateVideoPlanPrompt = async (editScriptId: string, blockIndex: number, prompt: string) => {
+  const handleArrangeGenerationSegments = async (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await updateVideoPlanPrompt.mutateAsync({ episodeId, editScriptId, blockIndex, prompt })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleArrangeVideoBlocks = async (editScriptId: string, blocks: readonly WorkspaceVideoBlockArrangementBlock[]) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await arrangeVideoBlocks.mutateAsync({ episodeId, editScriptId, blocks })
+    await arrangeGenerationSegments.mutateAsync({ episodeId, editScriptId, segments })
     await onRefresh({ mode: 'full' })
   }
   const handleUpdateEditAssetRequirementDescription = async (editScriptId: string, requirementId: string, description: string) => {
@@ -210,7 +193,7 @@ export function useProjectWorkspaceController({
     assetsLoading,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isAssistantWorkflowStarting: createEditScreenplay.isPending || createEditDirectorDecoupage.isPending || createEditScript.isPending || createEditCinematographyShotPlan.isPending,
+    isAssistantWorkflowStarting: createEditScreenplay.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     videoModel: projectSnapshot.videoModel,
     singleShotVideoModel: projectSnapshot.singleShotVideoModel,
@@ -221,7 +204,6 @@ export function useProjectWorkspaceController({
     handleUpdateConfig: configActions.handleUpdateConfig,
     onRequestAssistantGuidance: execution.requestAssistantGuidance,
     handleGenerateEditScreenplay,
-    handleGenerateEditDirectorDecoupage,
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,
@@ -233,13 +215,12 @@ export function useProjectWorkspaceController({
     handleGenerateBgmScore: videoActions.handleGenerateBgmScore,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditAssets,
-    handleGenerateEditCinematographyShotPlan,
+    handleGenerateEditShotExecutionPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleGenerateEditStoryboardSpatialBlocking,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
-    handleUpdateVideoPlanPrompt,
-    handleArrangeVideoBlocks,
+    handleUpdateGenerationSegmentContinuity,
+    handleArrangeGenerationSegments,
     handleUpdateEditAssetRequirementDescription,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
   })

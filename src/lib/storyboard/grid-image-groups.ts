@@ -6,7 +6,7 @@ export type StoryboardGridGroupingPanel = {
   readonly id: string
   readonly storyboardId: string
   readonly panelIndex: number
-  readonly photographyRules: string | null
+  readonly sourceGenerationSegmentId: string | null
 }
 
 export type StoryboardPanelImageSubmissionGroup =
@@ -16,7 +16,7 @@ export type StoryboardPanelImageSubmissionGroup =
   }
   | {
     readonly kind: 'grid2x2'
-    readonly sourceVideoBlockId: string
+    readonly sourceGenerationSegmentId: string
     readonly panels: readonly StoryboardGridGroupingPanel[]
   }
 
@@ -24,32 +24,13 @@ export function normalizeStoryboardPanelImageGenerationMode(value: unknown): Sto
   return value === 'single' ? 'single' : 'grid'
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function readPanelSourceVideoBlockId(panel: StoryboardGridGroupingPanel): string {
-  if (!panel.photographyRules) return ''
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(panel.photographyRules)
-  } catch {
-    return ''
-  }
-  if (!isRecord(parsed)) return ''
-  const sourceVideoBlockKind = normalizeString(parsed.sourceVideoBlockKind)
-  const sourceVideoBlockId = normalizeString(parsed.sourceVideoBlockId)
-  if (sourceVideoBlockKind !== 'group' || !sourceVideoBlockId) return ''
-  return sourceVideoBlockId
-}
-
 function pushChunkedGridGroups(
   output: StoryboardPanelImageSubmissionGroup[],
-  sourceVideoBlockId: string,
+  sourceGenerationSegmentId: string,
   panels: readonly StoryboardGridGroupingPanel[],
 ) {
   for (let index = 0; index < panels.length; index += GRID_CELL_COUNT) {
@@ -60,7 +41,7 @@ function pushChunkedGridGroups(
     }
     output.push({
       kind: 'grid2x2',
-      sourceVideoBlockId,
+      sourceGenerationSegmentId,
       panels: chunk,
     })
   }
@@ -78,31 +59,31 @@ export function planStoryboardPanelImageSubmissionGroups(
     return sortedPanels.map((panel) => ({ kind: 'single', panels: [panel] }))
   }
   const groupedPanels = new Map<string, {
-    readonly sourceVideoBlockId: string
+    readonly sourceGenerationSegmentId: string
     readonly panels: StoryboardGridGroupingPanel[]
   }>()
   const output: StoryboardPanelImageSubmissionGroup[] = []
 
   for (const panel of sortedPanels) {
-    const sourceVideoBlockId = readPanelSourceVideoBlockId(panel)
-    if (!sourceVideoBlockId) {
+    const sourceGenerationSegmentId = normalizeString(panel.sourceGenerationSegmentId)
+    if (!sourceGenerationSegmentId) {
       output.push({ kind: 'single', panels: [panel] })
       continue
     }
-    const key = `${panel.storyboardId}:${sourceVideoBlockId}`
+    const key = `${panel.storyboardId}:${sourceGenerationSegmentId}`
     const existing = groupedPanels.get(key)
     if (existing) {
       existing.panels.push(panel)
       continue
     }
     groupedPanels.set(key, {
-      sourceVideoBlockId,
+      sourceGenerationSegmentId,
       panels: [panel],
     })
   }
 
   for (const group of groupedPanels.values()) {
-    pushChunkedGridGroups(output, group.sourceVideoBlockId, group.panels)
+    pushChunkedGridGroups(output, group.sourceGenerationSegmentId, group.panels)
   }
 
   return output.sort((left, right) => left.panels[0].panelIndex - right.panels[0].panelIndex)

@@ -132,13 +132,13 @@ export function useGenerateStoryboardGridImages(projectId: string, episodeId?: s
         mutationFn: async (payload: {
             episodeId: string
             editScriptId: string
-            sourceVideoBlockId: string
+            sourceGenerationSegmentId: string
             panelIds: readonly string[]
         }) => {
             const confirmedMaxCost = await mediaOperationBillingPlan('generate_storyboard_grid_images', {
                 episodeId: payload.episodeId,
                 editScriptId: payload.editScriptId,
-                sourceVideoBlockId: payload.sourceVideoBlockId,
+                sourceGenerationSegmentId: payload.sourceGenerationSegmentId,
                 panelIds: [...payload.panelIds],
             })
             const res = await apiFetch(`/api/projects/${projectId}/edit-script/storyboard/images/block-grid/generate`, {

@@ -135,9 +135,8 @@ model ProjectEpisode {
   canvasLayout            ProjectCanvasLayout?
   editScreenplay          ProjectEditScreenplay?
   editStylePreviews       ProjectEditStylePreview[]
-  editDirectorDecoupage   ProjectEditDirectorDecoupage?
   editScript              ProjectEditScript?
-  editCinematographyShotPlan ProjectEditCinematographyShotPlan?
+  editShotExecutionPlan   ProjectEditShotExecutionPlan?
   editAssetRequirements   ProjectEditAssetRequirement[]
   videoGroups             ProjectVideoGroup[]
 
@@ -160,7 +159,7 @@ model ProjectEditScreenplay {
   project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   stylePreviews  ProjectEditStylePreview[]
-  directorDecoupage ProjectEditDirectorDecoupage?
+  editScript     ProjectEditScript?
 
   @@index([projectId])
   @@index([episodeId])
@@ -196,60 +195,37 @@ model ProjectEditStylePreview {
   @@map("project_edit_style_previews")
 }
 
-model ProjectEditDirectorDecoupage {
-  id              String                @id @default(uuid())
-  projectId       String
-  episodeId       String                @unique
-  editScreenplayId String                @unique
-  userPrompt      String                @db.LongText
-  decoupageJson   Json
-  status          String                @default("ready")
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @default(now()) @updatedAt
-  project         Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode         ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScreenplay  ProjectEditScreenplay @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([editScreenplayId])
-  @@map("project_edit_director_decoupages")
-}
-
 model ProjectEditScript {
   id             String                         @id @default(uuid())
   projectId      String
   episodeId      String                         @unique
-  userPrompt     String                         @db.LongText
-  styleBibleJson Json?
-  screenplayText String?                        @db.LongText
-  title          String
-  logline        String?                        @db.LongText
+  editScreenplayId String                       @unique
+  corePlanJson  Json?
   durationSec    Int
   shotCount      Int
   status         String                         @default("ready")
   assetReviewStatus String                      @default("pending")
-  shotsJson      Json
-  videoBlocksJson Json?
   createdAt      DateTime                       @default(now())
   updatedAt      DateTime                       @default(now()) @updatedAt
   project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  cinematographyShotPlan ProjectEditCinematographyShotPlan?
+  editScreenplay ProjectEditScreenplay          @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+  shotExecutionPlan ProjectEditShotExecutionPlan?
   requirements   ProjectEditAssetRequirement[]
   storyboard      ProjectStoryboard?
 
   @@index([projectId])
   @@index([episodeId])
+  @@index([editScreenplayId])
   @@map("project_edit_scripts")
 }
 
-model ProjectEditCinematographyShotPlan {
+model ProjectEditShotExecutionPlan {
   id            String            @id @default(uuid())
   projectId     String
   episodeId     String            @unique
   editScriptId  String            @unique
-  shotPlanJson  Json
+  executionPlanJson Json
   status        String            @default("ready")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @default(now()) @updatedAt
@@ -260,7 +236,7 @@ model ProjectEditCinematographyShotPlan {
   @@index([projectId])
   @@index([episodeId])
   @@index([editScriptId])
-  @@map("project_edit_cinematography_shot_plans")
+  @@map("project_edit_shot_execution_plans")
 }
 
 model ProjectEditAssetRequirement {
@@ -271,7 +247,7 @@ model ProjectEditAssetRequirement {
   kind         String
   name         String
   description  String            @db.LongText
-  shotIndexes  Json
+  requiredForShotNumbers Json
   status       String            @default("pending")
   targetId     String?
   errorMessage String?           @db.LongText
@@ -371,7 +347,10 @@ model ProjectPanel {
   sketchImageUrl       String?                   @db.Text
   sketchImageMediaId   String?
   sketchImageMedia     MediaObject?              @relation("ProjectPanelSketchMedia", fields: [sketchImageMediaId], references: [id], onDelete: SetNull)
-  photographyRules     String?                   @db.Text
+  sourceShotNumber     Int?
+  sourceGenerationSegmentId String?              @db.Text
+  executionSnapshotJson Json?
+  renderFactsJson      Json?
   actingNotes          String?                   @db.Text // 演技指导数据 JSON
   previousImageUrl     String?                   @db.Text
   previousImageMediaId String?
@@ -384,6 +363,7 @@ model ProjectPanel {
   @@index([videoMediaId])
   @@index([sketchImageMediaId])
   @@index([previousImageMediaId])
+  @@index([sourceShotNumber])
   @@map("project_panels")
 }
 
@@ -738,7 +718,6 @@ model ProjectStoryboard {
   lastError           String?
   photographyPlan     String?               @db.Text
   panels              ProjectPanel[]
-  blockingArtifacts   ProjectStoryboardBlockingArtifact[]
   editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   supplementaryPanels SupplementaryPanel[]
@@ -746,31 +725,6 @@ model ProjectStoryboard {
   @@index([editScriptId])
   @@index([episodeId])
   @@map("project_storyboards")
-}
-
-model ProjectStoryboardBlockingArtifact {
-  id                 String            @id @default(uuid())
-  storyboardId       String
-  kind               String
-  sourceVideoBlockId String?
-  groupIndex         Int?
-  prompt             String?           @db.LongText
-  imageUrl           String?           @db.Text
-  imageMediaId       String?
-  imageMedia         MediaObject?      @relation("ProjectStoryboardBlockingArtifactImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  candidateImages    String?           @db.Text
-  metadataJson       Json?
-  status             String            @default("pending")
-  errorMessage       String?           @db.LongText
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @default(now()) @updatedAt
-  storyboard         ProjectStoryboard @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
-
-  @@index([storyboardId])
-  @@index([kind])
-  @@index([sourceVideoBlockId])
-  @@index([imageMediaId])
-  @@map("project_storyboard_blocking_artifacts")
 }
 
 model SupplementaryPanel {
@@ -835,9 +789,8 @@ model Project {
   episodes           ProjectEpisode[]
   editScreenplays    ProjectEditScreenplay[]
   editStylePreviews  ProjectEditStylePreview[]
-  editDirectorDecoupages ProjectEditDirectorDecoupage[]
   editScripts        ProjectEditScript[]
-  editCinematographyShotPlans ProjectEditCinematographyShotPlan[]
+  editShotExecutionPlans ProjectEditShotExecutionPlan[]
   editAssetRequirements ProjectEditAssetRequirement[]
   planRuns           PlanRun[]
   characters         ProjectCharacter[]
@@ -1420,7 +1373,6 @@ model MediaObject {
   projectPanelPreviousImages     ProjectPanel[]       @relation("ProjectPanelPreviousImageMedia")
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
-  projectStoryboardBlockingArtifactImages ProjectStoryboardBlockingArtifact[] @relation("ProjectStoryboardBlockingArtifactImageMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
   projectEpisodeFinalOutputVideos        ProjectEpisodeFinalOutput[] @relation("ProjectEpisodeFinalOutputMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")

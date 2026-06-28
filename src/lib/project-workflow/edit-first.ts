@@ -2,8 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   isStoryboardPanelPromptsStageFailed,
-  isStoryboardSpatialProfileStageFailed,
-  isStoryboardSpatialProfileStageReady,
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
@@ -23,15 +21,12 @@ export type EditFirstWorkflowStage =
   | 'screenplay_ready_for_review'
   | 'style_preview_generating'
   | 'needs_style_choice'
-  | 'ready_to_generate_director_decoupage'
   | 'ready_to_generate_edit_script'
   | 'edit_script_generating'
   | 'ready_to_generate_assets'
   | 'assets_generating'
   | 'assets_ready_for_review'
-  | 'ready_to_generate_cinematography'
-  | 'ready_to_generate_storyboard_spatial_blocking'
-  | 'storyboard_spatial_blocking_generating'
+  | 'ready_to_generate_shot_execution_plan'
   | 'ready_to_generate_storyboard'
   | 'storyboard_generating'
   | 'ready_to_generate_storyboard_images'
@@ -75,8 +70,6 @@ export interface EditFirstWorkflowSnapshot {
   completedStylePreviewCount: number
   confirmedStylePreviewCount: number
   failedStylePreviewCount: number
-  hasDirectorDecoupage: boolean
-  directorDecoupageStatus: string | null
   hasEditScript: boolean
   editScriptStatus: string | null
   editScriptAssetReviewStatus: string | null
@@ -85,12 +78,9 @@ export interface EditFirstWorkflowSnapshot {
   generatingAssetRequirementCount: number
   requiredLocationSpatialProfileCount: number
   readyLocationSpatialProfileCount: number
-  hasCinematographyShotPlan: boolean
-  cinematographyShotPlanStatus: string | null
+  hasShotExecutionPlan: boolean
+  shotExecutionPlanStatus: string | null
   storyboardCount: number
-  spatialBlockingReady: boolean
-  spatialBlockingFailed: boolean
-  activeSpatialBlockingTaskCount: number
   storyboardPanelPromptFailed: boolean
   activeStoryboardPanelTaskCount: number
   panelCount: number
@@ -171,8 +161,6 @@ function parseJsonRecord(value: string | null): Record<string, unknown> {
 
 interface StoryboardPlanStageSummary {
   readonly matchingStoryboardIds: string[]
-  readonly spatialBlockingReady: boolean
-  readonly spatialBlockingFailed: boolean
   readonly storyboardPanelPromptFailed: boolean
 }
 
@@ -183,8 +171,6 @@ function resolveStoryboardPlanStageSummary(input: {
   if (!input.editScriptId) {
     return {
       matchingStoryboardIds: [],
-      spatialBlockingReady: false,
-      spatialBlockingFailed: false,
       storyboardPanelPromptFailed: false,
     }
   }
@@ -198,8 +184,6 @@ function resolveStoryboardPlanStageSummary(input: {
   })
   return {
     matchingStoryboardIds: matching.map((storyboard) => storyboard.id),
-    spatialBlockingReady: matching.some((storyboard) => isStoryboardSpatialProfileStageReady(storyboard.stage)),
-    spatialBlockingFailed: matching.some((storyboard) => isStoryboardSpatialProfileStageFailed(storyboard.stage)),
     storyboardPanelPromptFailed: matching.some((storyboard) => isStoryboardPanelPromptsStageFailed(storyboard.stage)),
   }
 }
@@ -210,9 +194,8 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (!snapshot.hasEpisode) return EDIT_FIRST_WORKFLOW_EMPTY_STATE
 
   const hasAnyEditFirstArtifact = snapshot.hasScreenplay
-    || snapshot.hasDirectorDecoupage
     || snapshot.hasEditScript
-    || snapshot.hasCinematographyShotPlan
+    || snapshot.hasShotExecutionPlan
 
   if (!snapshot.hasScreenplay) {
     return state({
@@ -290,28 +273,6 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (!snapshot.hasDirectorDecoupage) {
-    return state({
-      stage: 'ready_to_generate_director_decoupage',
-      nextAction: workflowAction('generate_edit_director_decoupage', 'Generate director decoupage'),
-    })
-  }
-
-  if (snapshot.directorDecoupageStatus === 'failed') {
-    return state({
-      stage: 'failed',
-      blocking: { kind: 'failed', reason: 'director decoupage generation failed' },
-      nextAction: workflowAction('generate_edit_director_decoupage', 'Regenerate director decoupage'),
-    })
-  }
-
-  if (snapshot.directorDecoupageStatus !== 'ready') {
-    return state({
-      stage: 'ready_to_generate_director_decoupage',
-      blocking: { kind: 'processing', reason: 'director decoupage is not ready' },
-    })
-  }
-
   if (!snapshot.hasEditScript) {
     return state({
       stage: 'ready_to_generate_edit_script',
@@ -348,53 +309,31 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (!snapshot.hasCinematographyShotPlan) {
+  if (!snapshot.hasShotExecutionPlan) {
     if (snapshot.editAssetRequirementCount > 0 && snapshot.editScriptAssetReviewStatus !== 'approved') {
       return state({
         stage: 'assets_ready_for_review',
-        blocking: { kind: 'needs_user_choice', reason: 'review and approve required edit-first assets before cinematography planning' },
+        blocking: { kind: 'needs_user_choice', reason: 'review and approve required edit-first assets before shot execution planning' },
       })
     }
     return state({
-      stage: 'ready_to_generate_cinematography',
-      nextAction: workflowAction('generate_edit_cinematography_shot_plan', 'Generate cinematography shot plan'),
+      stage: 'ready_to_generate_shot_execution_plan',
+      nextAction: workflowAction('generate_edit_shot_execution_plan', 'Generate shot execution plan'),
     })
   }
 
-  if (snapshot.cinematographyShotPlanStatus === 'failed') {
+  if (snapshot.shotExecutionPlanStatus === 'failed') {
     return state({
       stage: 'failed',
-      blocking: { kind: 'failed', reason: 'cinematography shot plan generation failed' },
-      nextAction: workflowAction('generate_edit_cinematography_shot_plan', 'Regenerate cinematography shot plan'),
+      blocking: { kind: 'failed', reason: 'shot execution plan generation failed' },
+      nextAction: workflowAction('generate_edit_shot_execution_plan', 'Regenerate shot execution plan'),
     })
   }
 
-  if (snapshot.cinematographyShotPlanStatus !== 'ready') {
+  if (snapshot.shotExecutionPlanStatus !== 'ready') {
     return state({
-      stage: 'ready_to_generate_cinematography',
-      blocking: { kind: 'processing', reason: 'cinematography shot plan is not ready' },
-    })
-  }
-
-  if (!snapshot.spatialBlockingReady) {
-    if (snapshot.activeSpatialBlockingTaskCount > 0) {
-      return state({
-        stage: 'storyboard_spatial_blocking_generating',
-        blocking: { kind: 'processing', reason: 'storyboard spatial blocking is still generating' },
-      })
-    }
-    if (snapshot.spatialBlockingFailed) {
-      const nextAction = workflowAction('generate_edit_script_storyboard_spatial_blocking', 'Regenerate space-consistency prompts')
-      return state({
-        stage: 'failed',
-        blocking: { kind: 'failed', reason: 'storyboard spatial blocking generation failed' },
-        nextAction,
-        allowedOperationIds: [nextAction.operationId],
-      })
-    }
-    return state({
-      stage: 'ready_to_generate_storyboard_spatial_blocking',
-      nextAction: workflowAction('generate_edit_script_storyboard_spatial_blocking', 'Generate space-consistency prompts'),
+      stage: 'ready_to_generate_shot_execution_plan',
+      blocking: { kind: 'processing', reason: 'shot execution plan is not ready' },
     })
   }
 
@@ -469,8 +408,6 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return []
     case 'needs_style_choice':
       return ['generate_edit_style_previews']
-    case 'ready_to_generate_director_decoupage':
-      return ['generate_edit_director_decoupage']
     case 'ready_to_generate_edit_script':
       return ['generate_edit_script']
     case 'edit_script_generating':
@@ -481,12 +418,8 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return []
     case 'assets_ready_for_review':
       return ['revise_edit_script_assets']
-    case 'ready_to_generate_cinematography':
-      return ['generate_edit_cinematography_shot_plan']
-    case 'ready_to_generate_storyboard_spatial_blocking':
-      return ['generate_edit_script_storyboard_spatial_blocking']
-    case 'storyboard_spatial_blocking_generating':
-      return []
+    case 'ready_to_generate_shot_execution_plan':
+      return ['generate_edit_shot_execution_plan']
     case 'ready_to_generate_storyboard':
       return ['generate_edit_script_storyboard']
     case 'storyboard_generating':
@@ -530,9 +463,8 @@ export async function resolveEditFirstWorkflowState(params: {
 
   const [
     screenplay,
-    directorDecoupage,
     editScript,
-    cinematographyShotPlan,
+    shotExecutionPlan,
     storyboards,
     panels,
   ] = await Promise.all([
@@ -549,16 +481,6 @@ export async function resolveEditFirstWorkflowState(params: {
             status: true,
           },
         },
-      },
-    }),
-    prisma.projectEditDirectorDecoupage.findFirst({
-      where: {
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-      },
-      select: {
-        id: true,
-        status: true,
       },
     }),
     prisma.projectEditScript.findFirst({
@@ -579,7 +501,7 @@ export async function resolveEditFirstWorkflowState(params: {
         },
       },
     }),
-    prisma.projectEditCinematographyShotPlan.findFirst({
+    prisma.projectEditShotExecutionPlan.findFirst({
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
@@ -660,25 +582,13 @@ export async function resolveEditFirstWorkflowState(params: {
   const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
   const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
   const storyboardImageReadiness = resolveStoryboardImageReadiness(editScriptPanels)
-  const activeSpatialBlockingTaskCount = editScript?.id
+  const activeStoryboardPanelTaskCount = editScript?.id
     ? await prisma.task.count({
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
         targetType: 'ProjectEditScript',
         targetId: editScript.id,
-        type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE,
-        status: { in: ['queued', 'processing'] },
-      },
-    })
-    : 0
-  const activeStoryboardPanelTaskCount = storyboardPlanStageSummary.matchingStoryboardIds.length > 0
-    ? await prisma.task.count({
-      where: {
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-        targetType: 'ProjectStoryboard',
-        targetId: { in: storyboardPlanStageSummary.matchingStoryboardIds },
         type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
         status: { in: ['queued', 'processing'] },
       },
@@ -718,8 +628,6 @@ export async function resolveEditFirstWorkflowState(params: {
     completedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
     confirmedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
     failedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'failed').length ?? 0,
-    hasDirectorDecoupage: Boolean(directorDecoupage),
-    directorDecoupageStatus: directorDecoupage?.status ?? null,
     hasEditScript: Boolean(editScript),
     editScriptStatus: editScript?.status ?? null,
     editScriptAssetReviewStatus: editScript?.assetReviewStatus ?? null,
@@ -728,12 +636,9 @@ export async function resolveEditFirstWorkflowState(params: {
     generatingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status === 'generating').length ?? 0,
     requiredLocationSpatialProfileCount: locationSpatialProfileReadiness.requiredCount,
     readyLocationSpatialProfileCount: locationSpatialProfileReadiness.readyCount,
-    hasCinematographyShotPlan: Boolean(cinematographyShotPlan),
-    cinematographyShotPlanStatus: cinematographyShotPlan?.status ?? null,
+    hasShotExecutionPlan: Boolean(shotExecutionPlan),
+    shotExecutionPlanStatus: shotExecutionPlan?.status ?? null,
     storyboardCount: editScriptStoryboardIds.size,
-    spatialBlockingReady: storyboardPlanStageSummary.spatialBlockingReady,
-    spatialBlockingFailed: storyboardPlanStageSummary.spatialBlockingFailed,
-    activeSpatialBlockingTaskCount,
     storyboardPanelPromptFailed: storyboardPlanStageSummary.storyboardPanelPromptFailed,
     activeStoryboardPanelTaskCount,
     panelCount: storyboardImageReadiness.panelCount,

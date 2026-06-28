@@ -1,15 +1,15 @@
 import type {
   EditAssetRequirement,
+  EditGenerationSegment,
   EditScriptPayload,
   EditScriptShot,
+  EditShotExecution,
+  EditShotExecutionPlanPayload,
 } from './types'
-import { normalizeVideoBlockPlanResponse } from '@/lib/video-groups/planner'
 import {
-  editDirectorDecoupageSchema,
   editAssetExtractionSchema,
   editScriptCoreSchema,
-  editScriptStructureSchema,
-  editScriptVideoPromptSchema,
+  editShotExecutionPlanSchema,
 } from './types'
 
 function uniquePositiveNumbers(values: readonly number[]): number[] {
@@ -23,171 +23,154 @@ function uniquePositiveNumbers(values: readonly number[]): number[] {
   return output.sort((left, right) => left - right)
 }
 
-export function normalizeEditScriptCore(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
-  const parsed = editScriptCoreSchema.parse(raw)
-
-  const shots: EditScriptShot[] = parsed.shots
-    .map((shot) => ({
-      shotNumber: shot.shotNumber,
-      durationSec: shot.durationSec,
-      dramaticPurpose: shot.dramaticPurpose.trim(),
-      visibleAction: shot.visibleAction.trim(),
-      audienceFocus: shot.audienceFocus.trim(),
-      viewpoint: shot.viewpoint.trim(),
-      revealPlan: shot.revealPlan.trim(),
-      performanceBeat: shot.performanceBeat.trim(),
-      continuityIn: shot.continuityIn.trim(),
-      continuityOut: shot.continuityOut.trim(),
-      charactersAndScene: shot.charactersAndScene.trim(),
-      sound: shot.sound.trim(),
-    }))
-    .sort((left, right) => left.shotNumber - right.shotNumber)
-
+function assertContinuousShotNumbers(shots: readonly { readonly shotNumber: number }[]): void {
   shots.forEach((shot, index) => {
     const expectedNumber = index + 1
     if (shot.shotNumber !== expectedNumber) {
       throw new Error(`EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS:${shot.shotNumber}:${expectedNumber}`)
     }
   })
-
-  const durationSec = shots.reduce((total, shot) => total + shot.durationSec, 0)
-  const videoBlocks = normalizeVideoBlockPlanResponse({
-    response: { items: parsed.videoBlocks },
-    allShotNumbers: shots.map((shot) => shot.shotNumber),
-    shots,
-  }).items
-  return {
-    title: parsed.title.trim(),
-    logline: parsed.logline?.trim() || null,
-    durationSec,
-    shotCount: shots.length,
-    shots,
-    videoBlocks,
-  }
 }
 
-export function normalizeEditScriptStructure(raw: unknown): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
-  const parsed = editScriptStructureSchema.parse(raw)
-
-  const shots: EditScriptShot[] = parsed.shots
-    .map((shot) => ({
-      shotNumber: shot.shotNumber,
-      durationSec: shot.durationSec,
-      dramaticPurpose: shot.dramaticPurpose.trim(),
-      visibleAction: shot.visibleAction.trim(),
-      audienceFocus: shot.audienceFocus.trim(),
-      viewpoint: shot.viewpoint.trim(),
-      revealPlan: shot.revealPlan.trim(),
-      performanceBeat: shot.performanceBeat.trim(),
-      continuityIn: shot.continuityIn.trim(),
-      continuityOut: shot.continuityOut.trim(),
-      charactersAndScene: shot.charactersAndScene.trim(),
-      sound: shot.sound.trim(),
-    }))
-    .sort((left, right) => left.shotNumber - right.shotNumber)
-
-  shots.forEach((shot, index) => {
-    const expectedNumber = index + 1
-    if (shot.shotNumber !== expectedNumber) {
-      throw new Error(`EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS:${shot.shotNumber}:${expectedNumber}`)
-    }
-  })
-
-  const durationSec = shots.reduce((total, shot) => total + shot.durationSec, 0)
-  const videoBlocks = normalizeVideoBlockPlanResponse({
-    response: {
-      items: parsed.videoBlocks.map((block) => ({
-        ...block,
-        prompt: 'Pending final video prompt.',
-      })),
-    },
-    allShotNumbers: shots.map((shot) => shot.shotNumber),
-    shots,
-  }).items
-
-  return {
-    title: parsed.title.trim(),
-    logline: parsed.logline?.trim() || null,
-    durationSec,
-    shotCount: shots.length,
-    shots,
-    videoBlocks,
-  }
-}
-
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
-}
-
-export function applyEditScriptVideoPrompts(
-  structure: Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'>,
-  raw: unknown,
-): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
-  const parsed = editScriptVideoPromptSchema.parse(raw)
-  const expectedShotNumbers = structure.shots.map((shot) => shot.shotNumber)
-  const providedShotNumbers = parsed.shots.map((shot) => shot.shotNumber).sort((left, right) => left - right)
-  if (!sameShotNumbers(providedShotNumbers, expectedShotNumbers)) {
-    throw new Error('EDIT_SCRIPT_VIDEO_PROMPT_SHOT_COVERAGE_INVALID')
-  }
-  if (parsed.videoBlocks.length !== structure.videoBlocks.length) {
-    throw new Error('EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_COUNT_INVALID')
-  }
-
-  const remainingBlockIndexes = new Set(structure.videoBlocks.map((_, index) => index))
-  const nextBlocks = structure.videoBlocks.map((block) => {
-    const matchIndex = parsed.videoBlocks.findIndex((candidate, index) =>
-      remainingBlockIndexes.has(index) && sameShotNumbers(candidate.shotNumbers, block.shotNumbers),
-    )
-    if (matchIndex < 0) {
-      throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_MISSING:${block.shotNumbers.join(',')}`)
-    }
-    remainingBlockIndexes.delete(matchIndex)
-    const matched = parsed.videoBlocks[matchIndex]
-    if (!matched) throw new Error(`EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_MISSING:${block.shotNumbers.join(',')}`)
-    return {
-      ...block,
-      prompt: matched.prompt.trim(),
-    }
-  })
-  if (remainingBlockIndexes.size > 0) {
-    throw new Error('EDIT_SCRIPT_VIDEO_PROMPT_BLOCK_COUNT_INVALID')
-  }
-
-  return {
-    ...structure,
-    shots: structure.shots,
-    videoBlocks: nextBlocks,
-  }
-}
-
-export function normalizeDirectorDecoupage(raw: unknown) {
-  const parsed = editDirectorDecoupageSchema.parse(raw)
-  const shots = parsed.shots
+function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptShot[] {
+  const normalized = shots
     .map((shot): EditScriptShot => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      dramaticPurpose: shot.dramaticPurpose.trim(),
-      visibleAction: shot.visibleAction.trim(),
-      audienceFocus: shot.audienceFocus.trim(),
-      viewpoint: shot.viewpoint.trim(),
-      revealPlan: shot.revealPlan.trim(),
-      performanceBeat: shot.performanceBeat.trim(),
-      continuityIn: shot.continuityIn.trim(),
-      continuityOut: shot.continuityOut.trim(),
-      charactersAndScene: shot.charactersAndScene.trim(),
+      scene: { name: shot.scene.name.trim() },
+      action: shot.action.trim(),
+      characters: shot.characters.map((character) => ({
+        name: character.name.trim(),
+        visibility: character.visibility,
+        role: character.role,
+        performance: character.performance.trim(),
+      })),
+      keyObjects: shot.keyObjects.map((object) => ({
+        name: object.name.trim(),
+        role: object.role.trim(),
+      })),
       sound: shot.sound.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
-  shots.forEach((shot, index) => {
-    const expectedNumber = index + 1
-    if (shot.shotNumber !== expectedNumber) {
-      throw new Error(`EDIT_SCRIPT_SHOT_NUMBER_NOT_CONTINUOUS:${shot.shotNumber}:${expectedNumber}`)
+  assertContinuousShotNumbers(normalized)
+  return normalized
+}
+
+function assertGenerationSegments(
+  segments: readonly EditGenerationSegment[],
+  shots: readonly EditScriptShot[],
+): readonly EditGenerationSegment[] {
+  const shotNumbers = shots.map((shot) => shot.shotNumber)
+  const flattened = segments.flatMap((segment) => segment.shotNumbers)
+  if (flattened.length !== shotNumbers.length) {
+    throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID:${flattened.length}:${shotNumbers.length}`)
+  }
+  flattened.forEach((shotNumber, index) => {
+    if (shotNumber !== shotNumbers[index]) {
+      throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID:${shotNumber}:${shotNumbers[index]}`)
     }
   })
+  return segments.map((segment) => {
+    segment.shotNumbers.forEach((shotNumber, index) => {
+      if (index > 0 && shotNumber !== segment.shotNumbers[index - 1] + 1) {
+        throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_NOT_CONTINUOUS:${segment.shotNumbers.join(',')}`)
+      }
+    })
+    return {
+      shotNumbers: [...segment.shotNumbers],
+      continuity: segment.continuity.trim(),
+    }
+  })
+}
+
+export function normalizeEditScriptCore(
+  raw: unknown,
+): Omit<EditScriptPayload, 'requirements' | 'styleBible' | 'assetReviewStatus'> {
+  const parsed = editScriptCoreSchema.parse(raw)
+  const shots = normalizeShots(parsed.shots)
+  const generationSegments = assertGenerationSegments(parsed.generationSegments, shots)
+  const durationSec = shots.reduce((total, shot) => total + shot.durationSec, 0)
   return {
+    durationSec,
+    shotCount: shots.length,
     shots,
+    generationSegments,
   }
+}
+
+export const normalizeEditScriptStructure = normalizeEditScriptCore
+
+function names(values: readonly { readonly name: string }[]): Set<string> {
+  return new Set(values.map((value) => value.name.trim().toLocaleLowerCase()))
+}
+
+export function normalizeEditShotExecutionPlan(
+  raw: unknown,
+  coreShots: readonly EditScriptShot[],
+): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'editScriptId' | 'status'> {
+  const parsed = editShotExecutionPlanSchema.parse(raw)
+  const shots = parsed.shots
+    .map((shot): EditShotExecution => ({
+      shotNumber: shot.shotNumber,
+      camera: {
+        shotScale: shot.camera.shotScale.trim(),
+        lens: shot.camera.lens.trim(),
+        focus: shot.camera.focus.trim(),
+        height: shot.camera.height.trim(),
+        position: shot.camera.position.trim(),
+        angle: shot.camera.angle.trim(),
+        movement: shot.camera.movement.trim(),
+        composition: shot.camera.composition.trim(),
+        lighting: shot.camera.lighting.trim(),
+      },
+      blocking: {
+        axis: {
+          type: shot.blocking.axis.type.trim(),
+          subjects: shot.blocking.axis.subjects.map((subject) => subject.trim()),
+          screenDirection: shot.blocking.axis.screenDirection.trim(),
+        },
+        characters: shot.blocking.characters.map((character) => ({
+          name: character.name.trim(),
+          visibility: character.visibility,
+          position: character.position.trim(),
+          screenPosition: character.screenPosition.trim(),
+          facing: character.facing.trim(),
+          eyeline: character.eyeline.trim(),
+        })),
+        objects: shot.blocking.objects.map((object) => ({
+          name: object.name.trim(),
+          position: object.position.trim(),
+          screenPosition: object.screenPosition.trim(),
+        })),
+        spatialNote: shot.blocking.spatialNote.trim(),
+      },
+    }))
+    .sort((left, right) => left.shotNumber - right.shotNumber)
+  assertContinuousShotNumbers(shots)
+  if (shots.length !== coreShots.length) {
+    throw new Error(`EDIT_SHOT_EXECUTION_PLAN_COVERAGE_INVALID:${shots.length}:${coreShots.length}`)
+  }
+  shots.forEach((shot, index) => {
+    const coreShot = coreShots[index]
+    if (!coreShot || shot.shotNumber !== coreShot.shotNumber) {
+      throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_MISMATCH:${shot.shotNumber}:${coreShot?.shotNumber ?? 'missing'}`)
+    }
+    const coreCharacters = names(coreShot.characters)
+    const executionCharacters = names(shot.blocking.characters)
+    coreCharacters.forEach((name) => {
+      if (!executionCharacters.has(name)) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_MISSING:${shot.shotNumber}:${name}`)
+    })
+    executionCharacters.forEach((name) => {
+      if (!coreCharacters.has(name)) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_UNKNOWN:${shot.shotNumber}:${name}`)
+    })
+    const executionObjects = names(shot.blocking.objects)
+    coreShot.keyObjects.forEach((object) => {
+      if (!executionObjects.has(object.name.trim().toLocaleLowerCase())) {
+        throw new Error(`EDIT_SHOT_EXECUTION_OBJECT_MISSING:${shot.shotNumber}:${object.name}`)
+      }
+    })
+  })
+  return { shots }
 }
 
 export function normalizeEditAssetRequirements(

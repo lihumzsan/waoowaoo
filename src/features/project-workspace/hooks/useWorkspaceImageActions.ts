@@ -24,7 +24,7 @@ export function useWorkspaceImageActions({
   const handleGenerateStoryboardGridImages = useCallback(async (payload: {
     episodeId: string
     editScriptId: string
-    sourceVideoBlockId: string
+    sourceGenerationSegmentId: string
     panelIds: readonly string[]
     generationMode?: StoryboardPanelImageGenerationMode
   }) => {
@@ -46,7 +46,7 @@ export function useWorkspaceImageActions({
       await generateStoryboardGridImagesMutation.mutateAsync({
         episodeId: payload.episodeId,
         editScriptId: payload.editScriptId,
-        sourceVideoBlockId: payload.sourceVideoBlockId,
+        sourceGenerationSegmentId: payload.sourceGenerationSegmentId,
         panelIds,
       })
     }

@@ -76,12 +76,11 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
 
     return {
       editScriptId: editScript.id ?? null,
-      title: editScript.title,
       episodeId,
       durationSec: editScript.durationSec,
       shotCount: editScript.shotCount,
       requirementCount: editScript.requirements.length,
-      videoBlockCount: editScript.videoBlocks.length,
+      generationSegmentCount: editScript.generationSegments.length,
     }
   } finally {
     await streamCallbacks.flush()

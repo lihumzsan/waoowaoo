@@ -92,7 +92,7 @@ const generateAssetReferenceVideoInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
-  blockIndex: z.number().int().min(0).max(59),
+  segmentIndex: z.number().int().min(0).max(59),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
@@ -149,19 +149,17 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       results: z.array(z.object({
         refId: z.string().min(1),
         taskId: z.string().min(1),
-        kind: z.enum(['single', 'group']),
+        kind: z.literal('group'),
         shotNumbers: z.array(z.number().int().positive()),
         durationSec: z.number().int().positive().optional(),
       }).passthrough()),
-      singleVideoModel: z.string().min(1),
       groupVideoModel: z.string().min(1),
       plan: z.object({
         items: z.array(z.object({
-          kind: z.enum(['single', 'group']),
+          kind: z.literal('group'),
           shotNumbers: z.array(z.number().int().positive()),
           gridMode: z.enum(VIDEO_GRID_MODES).optional(),
-          reason: z.string().min(1),
-          prompt: z.string().min(1),
+          continuity: z.string().min(1),
         })),
       }),
     }).passthrough(),
@@ -172,7 +170,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       groupId: z.string().min(1),
       episodeId: z.string().min(1),
       sourceMode: z.literal('asset_reference'),
-      blockIndex: z.number().int().min(0),
+      segmentIndex: z.number().int().min(0),
       shotNumbers: z.array(z.number().int().positive()),
       durationSec: z.number().int().positive(),
     }).passthrough(),
@@ -344,7 +342,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
 
     generate_episode_videos_auto: defineOperation({
       id: 'generate_episode_videos_auto',
-      summary: 'Generate episode videos from edit-first videoBlocks, using single-shot tasks and Seedance 2.0 continuous groups.',
+      summary: 'Generate episode videos from edit-first generation segments.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -358,7 +356,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       confirmation: {
         required: true,
-        summary: '将按剪辑先行表中的视频片段提交单镜头和 Seedance 2.0 连续片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑计划中的生成分段提交连续视频任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEpisodeVideosAutoInputSchema,
       outputSchema: generateEpisodeVideosAutoOutputSchema,
@@ -382,7 +380,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
 
     generate_asset_reference_video: defineOperation({
       id: 'generate_asset_reference_video',
-      summary: 'Generate one edit-first video block directly from reference assets and text prompt.',
+      summary: 'Generate one edit-first generation segment directly from reference assets.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -396,7 +394,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       confirmation: {
         required: true,
-        summary: '将使用参考资产图和剪辑先行提示词直接生成一个视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用参考资产图和结构化生成分段事实直接生成一个视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateAssetReferenceVideoInputSchema,
       outputSchema: generateAssetReferenceVideoOutputSchema,
@@ -420,7 +418,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
 
     generate_episode_asset_reference_videos: defineOperation({
       id: 'generate_episode_asset_reference_videos',
-      summary: 'Batch generate edit-first video blocks directly from reference assets and text prompts.',
+      summary: 'Batch generate edit-first generation segments directly from reference assets.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -434,7 +432,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       confirmation: {
         required: true,
-        summary: '将使用参考资产图和剪辑先行提示词批量直接生成视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用参考资产图和结构化生成分段事实批量直接生成视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEpisodeAssetReferenceVideosInputSchema,
       outputSchema: generateEpisodeAssetReferenceVideosOutputSchema,

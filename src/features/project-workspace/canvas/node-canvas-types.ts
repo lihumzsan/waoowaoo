@@ -15,19 +15,17 @@ export type WorkspaceCanvasNodeKind =
   | 'editScreenplay'
   | 'editStylePreview'
   | 'editStyleBible'
-  | 'editDirectorDecoupage'
   | 'editPipelineStep'
   | 'editProcessGroup'
   | 'editScript'
-  | 'editCinematographyShotPlan'
-  | 'spaceConsistency'
+  | 'editShotExecutionPlan'
   | 'storyboardPanelGeneration'
   | 'videoPlan'
   | 'bgmScore'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editDirectorDecoupage' | 'editPipelineStep' | 'editScript' | 'editCinematographyShotPlan' | 'storyboardPanelGeneration' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'storyboardPanelGeneration' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {
@@ -36,9 +34,8 @@ export type WorkspaceCanvasNodeAction =
       readonly durationTier: EditFirstDurationTier
       readonly aspectRatio: EditScriptVideoRatio
     }
-  | { readonly type: 'generate_edit_director_decoupage'; readonly screenplayId?: string }
   | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
-  | { readonly type: 'generate_edit_cinematography_shot_plan'; readonly editScriptId: string }
+  | { readonly type: 'generate_edit_shot_execution_plan'; readonly editScriptId: string }
   | { readonly type: 'open_asset_library'; readonly characterId?: string | null }
   | {
       readonly type: 'update_panel'
@@ -69,7 +66,7 @@ export type WorkspaceCanvasNodeAction =
       readonly type: 'generate_storyboard_grid_images'
       readonly episodeId: string
       readonly editScriptId: string
-      readonly sourceVideoBlockId: string
+      readonly sourceGenerationSegmentId: string
       readonly panelIds: readonly string[]
       readonly generationMode: StoryboardPanelImageGenerationMode
     }
@@ -105,13 +102,13 @@ export type WorkspaceCanvasNodeAction =
   | {
       readonly type: 'update_video_plan_prompt'
       readonly editScriptId: string
-      readonly blockIndex: number
-      readonly prompt: string
+      readonly segmentIndex: number
+      readonly continuity: string
     }
   | {
       readonly type: 'open_video_block_arrangement'
       readonly editScriptId: string
-      readonly blockIndex: number
+      readonly segmentIndex: number
     }
   | {
       readonly type: 'update_edit_asset_requirement_description'
@@ -133,7 +130,7 @@ export type WorkspaceCanvasNodeAction =
     }
   | {
       readonly type: 'generate_asset_reference_video'
-      readonly blockIndex: number
+      readonly segmentIndex: number
       readonly referenceImageUrls: readonly string[]
       readonly generationOptions?: Record<string, string | number | boolean>
     }
@@ -143,7 +140,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
   | { readonly type: 'generate_edit_storyboard'; readonly editScriptId: string }
-  | { readonly type: 'generate_edit_storyboard_spatial_blocking'; readonly editScriptId: string }
 
 export type WorkspaceCanvasNodeActionHandler = (
   action: WorkspaceCanvasNodeAction,
@@ -172,8 +168,8 @@ export interface WorkspaceCanvasShotDetails {
   readonly duration?: number | null
   readonly imagePrompt?: string | null
   readonly videoPrompt?: string | null
-  readonly photographyRules?: string | null
-  readonly shotBlocking?: Record<string, unknown> | null
+  readonly executionSnapshot?: Record<string, unknown> | null
+  readonly renderFacts?: Record<string, unknown> | null
   readonly actingNotes?: string | null
   readonly storyboardTextJson?: string | null
   readonly photographyPlan?: string | null
@@ -249,15 +245,10 @@ export interface WorkspaceCanvasEditScriptDetails {
   readonly shots: readonly {
     readonly shotNumber: number
     readonly durationSec: number
-    readonly dramaticPurpose: string
-    readonly visibleAction: string
-    readonly audienceFocus: string
-    readonly viewpoint: string
-    readonly revealPlan: string
-    readonly performanceBeat: string
-    readonly continuityIn: string
-    readonly continuityOut: string
-    readonly charactersAndScene: string
+    readonly sceneName: string
+    readonly action: string
+    readonly characters: readonly string[]
+    readonly keyObjects: readonly string[]
     readonly imagePrompt?: string | null
     readonly sound: string
     readonly imageUrl?: string | null
@@ -324,13 +315,13 @@ export interface WorkspaceCanvasStyleBibleDetails {
 
 export interface WorkspaceCanvasVideoPlanDetails {
   readonly editScriptId: string
-  readonly blockIndex: number
-  readonly kind: 'single' | 'group'
+  readonly segmentIndex: number
+  readonly kind: 'group'
   readonly videoGroupId?: string | null
   readonly shotNumbers: readonly number[]
   readonly durationSec: number
   readonly gridMode?: '2x2' | '3x3'
-  readonly reason: string
+  readonly continuity: string
   readonly prompt?: string | null
   readonly assetReferenceVideoModel?: string | null
   readonly outputUrl?: string | null
@@ -390,50 +381,6 @@ export interface WorkspaceCanvasEditAssetGroupItem {
 export interface WorkspaceCanvasEditAssetGroupDetails {
   readonly editScriptId: string
   readonly assets: readonly WorkspaceCanvasEditAssetGroupItem[]
-}
-
-export interface WorkspaceCanvasSpaceConsistencyDetails {
-  readonly storyboardId: string
-  readonly stage?: string | null
-  readonly spatialProfileCount: number
-  readonly cameraPlanCount: number
-  readonly spatialProfiles: readonly {
-    readonly requirementId?: string | null
-    readonly targetId?: string | null
-    readonly name?: string | null
-    readonly shotNumbers: readonly number[]
-    readonly sceneSummary?: string | null
-    readonly anchors: readonly {
-      readonly label?: string | null
-      readonly screenArea?: string | null
-      readonly depthLayer?: string | null
-      readonly spatialRelations: readonly string[]
-    }[]
-    readonly depthLayout?: {
-      readonly foreground?: string | null
-      readonly midground?: string | null
-      readonly background?: string | null
-    } | null
-    readonly lightingDirection?: string | null
-    readonly rawProfile?: unknown | null
-  }[]
-  readonly cameraPlans: readonly {
-    readonly panelIndex?: number | null
-    readonly sourceShotNumber?: number | null
-    readonly sourceVideoBlockId?: string | null
-    readonly shotScale?: string | null
-    readonly cameraPosition?: string | null
-    readonly cameraHeight?: string | null
-    readonly cameraAngle?: string | null
-    readonly composition?: string | null
-    readonly cameraMovement?: string | null
-    readonly lensAndDepth?: string | null
-    readonly screenDirection?: string | null
-    readonly aestheticIntent?: string | null
-    readonly emotionalEffect?: string | null
-    readonly continuityNote?: string | null
-    readonly shotBlocking?: Record<string, unknown> | null
-  }[]
 }
 
 export interface WorkspaceCanvasStreamPresentation {
@@ -502,7 +449,6 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly editPipelineStepDetails?: WorkspaceCanvasEditPipelineStepDetails
   readonly editProcessGroupDetails?: WorkspaceCanvasEditProcessGroupDetails
   readonly editScriptDetails?: WorkspaceCanvasEditScriptDetails
-  readonly spaceConsistencyDetails?: WorkspaceCanvasSpaceConsistencyDetails
   readonly videoPlanDetails?: WorkspaceCanvasVideoPlanDetails
   readonly editAssetDetails?: WorkspaceCanvasEditAssetDetails
   readonly editAssetGroupDetails?: WorkspaceCanvasEditAssetGroupDetails
