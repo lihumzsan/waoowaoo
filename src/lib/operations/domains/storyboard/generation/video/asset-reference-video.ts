@@ -1,0 +1,211 @@
+import { TASK_TYPE } from '@/lib/task/types'
+import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
+import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import { writeOperationDataPart } from '@/lib/operations/types'
+import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution, type OperationPlan } from '@/lib/operations/planning'
+import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
+import { buildEpisodeVideoBlockPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceVideoBlockTask, readPlannedVideoGroupMetadataList } from './video-group-planning'
+
+export async function executeGenerateAssetReferenceVideoOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}) {
+  const plan = await planGenerateAssetReferenceVideoOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateAssetReferenceVideoPlan({ ...params, plan })
+}
+
+export async function planGenerateAssetReferenceVideoOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
+  assertNoManagedVideoModelInput(params.input)
+  const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const blockIndex = typeof params.input.blockIndex === 'number' && Number.isInteger(params.input.blockIndex)
+    ? params.input.blockIndex
+    : -1
+  if (blockIndex < 0) throw new Error('PROJECT_AGENT_ASSET_REFERENCE_BLOCK_REQUIRED')
+  const planned = await buildEpisodeVideoBlockPlan({
+    ctx: params.ctx,
+    episodeId,
+  })
+  const item = planned.plan.items[blockIndex]
+  if (!item) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_BLOCK_NOT_FOUND:${blockIndex}`)
+
+  const plannedTask = await planAssetReferenceVideoBlockTask({
+    ctx: params.ctx,
+    input: params.input,
+    operationId: params.operationId,
+    episodeId,
+    item,
+    shots: planned.shots,
+    blockIndex,
+  })
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: [plannedTask.task],
+    metadata: {
+      episodeId,
+      sourceMode: 'asset_reference',
+      blockIndex,
+      videoGroups: [plannedTask.metadata],
+    },
+  }
+}
+
+export async function commitGenerateAssetReferenceVideoPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const metadata = isRecord(params.plan.metadata) ? params.plan.metadata : {}
+  const blockIndex = typeof metadata.blockIndex === 'number' && Number.isInteger(metadata.blockIndex)
+    ? metadata.blockIndex
+    : -1
+  const task = params.plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const groupMetadata = readPlannedVideoGroupMetadataList(params.plan)[0]
+  if (!groupMetadata) throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_MISSING')
+  const submitted = await commitPlannedVideoGroupTask({
+    ctx: params.ctx,
+    input: params.input,
+    operationId: params.operationId,
+    task,
+    metadata: groupMetadata,
+  })
+  writeOperationDataPart<TaskSubmittedPartData>(params.ctx.writer, 'data-task-submitted', {
+    operationId: params.operationId,
+    taskId: submitted.result.taskId,
+    status: submitted.result.status,
+    runId: submitted.result.runId || null,
+    deduped: submitted.result.deduped,
+    billingReceipt: submitted.result.billingReceiptView,
+    projectId: params.ctx.projectId,
+    episodeId: groupMetadata.episodeId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: groupMetadata.groupId,
+  })
+  return {
+    ...submitted.result,
+    groupId: groupMetadata.groupId,
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    targetType: 'ProjectVideoGroup',
+    targetId: groupMetadata.groupId,
+    episodeId: groupMetadata.episodeId,
+    sourceMode: 'asset_reference' as const,
+    blockIndex,
+    shotNumbers: groupMetadata.shotNumbers,
+    durationSec: groupMetadata.durationSec,
+  }
+}
+
+export async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}) {
+  const plan = await planGenerateEpisodeAssetReferenceVideosOperation(params)
+  await assertOperationPlanConfirmedCost({
+    plan,
+    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+      ctx: params.ctx,
+      input: params.input,
+      plan,
+    }),
+  })
+  return await commitGenerateEpisodeAssetReferenceVideosPlan({ ...params, plan })
+}
+
+export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+}): Promise<OperationPlan> {
+  assertNoManagedVideoModelInput(params.input)
+  const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const planned = await buildEpisodeVideoBlockPlan({
+    ctx: params.ctx,
+    episodeId,
+  })
+
+  const plannedTasks = []
+  for (const [blockIndex, item] of planned.plan.items.entries()) {
+    plannedTasks.push(await planAssetReferenceVideoBlockTask({
+      ctx: params.ctx,
+      input: params.input,
+      operationId: params.operationId,
+      episodeId,
+      item,
+      shots: planned.shots,
+      blockIndex,
+    }))
+  }
+  return {
+    kind: 'task_submission',
+    operationId: params.operationId,
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    tasks: plannedTasks.map((item) => item.task),
+    metadata: {
+      episodeId,
+      sourceMode: 'asset_reference',
+      videoGroups: plannedTasks.map((item) => item.metadata),
+    },
+  }
+}
+
+export async function commitGenerateEpisodeAssetReferenceVideosPlan(params: {
+  ctx: ProjectAgentOperationContext
+  input: UnknownObject
+  operationId: string
+  plan: OperationPlan
+}) {
+  const submitted = await commitPlannedVideoGroupBatch(params)
+  const taskIds = submitted.map((item) => item.result.taskId)
+  writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
+    operationId: params.operationId,
+    total: submitted.length,
+    taskIds,
+    results: submitted.map((item) => ({
+      refId: item.metadata.groupId,
+      taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.metadata.groupId,
+      billingReceipt: item.result.billingReceiptView,
+    })),
+  })
+
+  return {
+    success: true,
+    async: true,
+    total: submitted.length,
+    taskIds,
+    results: submitted.map((item) => ({
+      refId: item.metadata.groupId,
+      taskId: item.result.taskId,
+      taskType: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: item.metadata.groupId,
+      shotNumbers: item.metadata.shotNumbers,
+      durationSec: item.metadata.durationSec,
+    })),
+    sourceMode: 'asset_reference' as const,
+  }
+}

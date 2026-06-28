@@ -37,7 +37,7 @@ vi.mock('@/lib/model-access/system-model-resolver', () => ({
   resolveSystemModelKey: resolveSystemModelKeyMock,
 }))
 
-import { createVideoGenerationOperations } from '@/lib/operations/domains/storyboard/generation/video-generation-ops'
+import { createVideoGenerationOperations } from '@/lib/operations/domains/storyboard/generation/video'
 
 const ENV_KEYS = [
   'DEPLOYMENT_EDITION',

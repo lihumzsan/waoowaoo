@@ -81,7 +81,7 @@ vi.mock('@/lib/operations/types', async () => {
   }
 })
 
-import { createStoryboardPanelImageOperations } from '@/lib/operations/domains/storyboard/generation/panel-image-ops'
+import { createStoryboardPanelImageOperations } from '@/lib/operations/domains/storyboard/generation/image'
 
 function buildContext(): ProjectAgentOperationContext {
   return {
