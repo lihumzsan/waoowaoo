@@ -37,6 +37,12 @@ export interface ProjectAgentRunRecord {
   controlKind: ProjectAgentRunControlKind
 }
 
+// Matches the run lock TTL; once both expire with no durable wait, the run is orphaned.
+export const PROJECT_AGENT_STALE_RUNNING_RECONCILE_MS = 10 * 60 * 1000
+
+const PROJECT_AGENT_ACTIVE_WAIT_STATUSES = ['pending', 'resolved', 'claimed'] as const
+const PROJECT_AGENT_STALE_RUNNING_ERROR_MESSAGE = 'Project agent run stayed running without a pending approval, choice, or task wait.'
+
 const projectAgentRunLogger = createScopedLogger({
   module: 'project-agent.runs',
 })
@@ -176,6 +182,58 @@ export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRun
     status: normalizeRunStatus(run.status),
     controlKind: normalizeControlKind(run.controlKind),
   }))
+}
+
+export async function reconcileStaleRunningProjectAgentRunsForScope(params: ProjectAgentRunScope & {
+  now?: Date
+}): Promise<string[]> {
+  const { assistantId, scopeRef } = buildRunScope(params)
+  const now = params.now ?? new Date()
+  const staleBefore = new Date(now.getTime() - PROJECT_AGENT_STALE_RUNNING_RECONCILE_MS)
+  const staleRuns = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      status: 'running',
+      updatedAt: {
+        lt: staleBefore,
+      },
+      interruptions: {
+        none: {
+          status: 'pending',
+        },
+      },
+      waits: {
+        none: {
+          status: {
+            in: [...PROJECT_AGENT_ACTIVE_WAIT_STATUSES],
+          },
+        },
+      },
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: 20,
+  })
+  if (staleRuns.length === 0) return []
+
+  const ids = staleRuns.map((run) => run.id)
+  await prisma.projectAgentRun.updateMany({
+    where: {
+      id: { in: ids },
+      status: 'running',
+    },
+    data: {
+      status: 'failed',
+      stopReason: 'stale_running_reconciled',
+      errorCode: 'PROJECT_AGENT_STALE_RUNNING_RECONCILED',
+      errorMessage: PROJECT_AGENT_STALE_RUNNING_ERROR_MESSAGE,
+      failedAt: now,
+    },
+  })
+  return ids
 }
 
 export async function updateProjectAgentRunStatus(params: {

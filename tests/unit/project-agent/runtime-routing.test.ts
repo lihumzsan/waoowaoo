@@ -485,13 +485,56 @@ describe('project agent runtime deterministic tool injection', () => {
     await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedModelSettings).not.toHaveProperty('toolChoice')
+    expect(streamState.capturedModelSettings).toHaveProperty('toolChoice', 'generate_edit_screenplay')
     // continuation guidance travels as a synthetic in-band tool result, not via system prompt
     expect(streamState.capturedSystem).not.toContain('剪辑先行选择卡续跑指令')
     const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
     expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
     expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
     expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).not.toContain('request_edit_first_choice')
+  })
+
+  it('forces style preview generation after screenplay approval choice continuation', async () => {
+    const continuation = resolveEditFirstChoiceContinuation({
+      choiceType: 'screenplay_review',
+      toolCallId: 'tool-choice-1',
+      latestUserText: '民俗恐怖片',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })
+    expect(continuation).not.toBeNull()
+    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_edit_screenplay',
+    ])
+
+    const response = await createProjectAgentChatResponse({
+      request: buildRequest(),
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: { episodeId: 'episode-1' },
+      assistantPermissionMode: 'ask',
+      run: buildRun('choice_response'),
+      control: {
+        kind: 'choice',
+        interruptionId: 'choice-interruption-1',
+        choiceType: 'screenplay_review',
+        toolCallId: 'tool-choice-1',
+        cardId: 'edit-first-screenplay-review',
+        continuation: continuation!,
+      },
+      messages: [
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] },
+      ],
+    })
+    await flushAsyncWork()
+
+    expect(response.status).toBe(200)
+    expect(streamState.capturedModelSettings).toHaveProperty('toolChoice', 'generate_edit_style_previews')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).not.toContain('request_edit_first_choice')
   })
 

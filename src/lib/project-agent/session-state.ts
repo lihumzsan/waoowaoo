@@ -15,6 +15,7 @@ import {
 } from './interruptions'
 import {
   listRecentProjectAgentRunsForScope,
+  reconcileStaleRunningProjectAgentRunsForScope,
   type ProjectAgentRunRecord,
   type ProjectAgentRunStatus,
 } from './runs'
@@ -299,6 +300,12 @@ export async function getProjectAgentSessionState(
     ...input,
     assistantId,
   }
+  await reconcileStaleRunningProjectAgentRunsForScope({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId,
+  })
   const [workflow, runs, waits, pendingInterruption] = await Promise.all([
     resolveEditFirstWorkflowState({
       projectId: input.projectId,

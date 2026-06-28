@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProjectAgentInterruptionSnapshot } from '@/lib/project-agent/interruptions'
 
 const workflow = {
   active: true,
@@ -34,6 +35,7 @@ const workflowMock = vi.hoisted(() => ({
 }))
 
 const runsMock = vi.hoisted(() => ({
+  reconcileStaleRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
   listRecentProjectAgentRunsForScope: vi.fn(async () => [
     {
       id: 'run-1',
@@ -50,7 +52,7 @@ const runsMock = vi.hoisted(() => ({
 }))
 
 const interruptionsMock = vi.hoisted(() => ({
-  getPendingProjectAgentInterruptionForScope: vi.fn(async () => ({
+  getPendingProjectAgentInterruptionForScope: vi.fn(async (): Promise<ProjectAgentInterruptionSnapshot | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
     type: 'approval',
@@ -60,7 +62,7 @@ const interruptionsMock = vi.hoisted(() => ({
     toolCallId: 'tool-1',
     payload: {},
   })),
-  getLatestProjectAgentInterruptionForRun: vi.fn(async () => ({
+  getLatestProjectAgentInterruptionForRun: vi.fn(async (): Promise<ProjectAgentInterruptionSnapshot | null> => ({
     id: 'interruption-1',
     runId: 'run-1',
     type: 'approval',
@@ -140,6 +142,7 @@ describe('project agent session-state', () => {
         controlKind: 'approval_response',
       },
     ])
+    runsMock.reconcileStaleRunningProjectAgentRunsForScope.mockResolvedValue([])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValue([
       {
         runId: 'run-1',
@@ -208,6 +211,47 @@ describe('project agent session-state', () => {
       targetId: 'location-image-1',
       status: 'processing',
     }])
+  })
+
+  it('reconciles stale running runs before selecting the current session run', async () => {
+    runsMock.reconcileStaleRunningProjectAgentRunsForScope.mockResolvedValueOnce(['run-stale-1'])
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
+      {
+        id: 'run-completed-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantId: 'workspace-command',
+        scopeRef: 'episode:episode-1',
+        episodeId: 'episode-1',
+        requestId: 'request-completed-1',
+        status: 'completed',
+        controlKind: 'user_turn',
+      },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce(null)
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(runsMock.reconcileStaleRunningProjectAgentRunsForScope).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })
+    expect(state.currentRun).toEqual({
+      runId: 'run-completed-1',
+      status: 'completed',
+      controlKind: 'user_turn',
+      operationId: null,
+    })
   })
 
   it('rebuilds a pending choice card from the pending interruption row', async () => {

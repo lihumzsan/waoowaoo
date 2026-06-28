@@ -650,13 +650,19 @@ export async function createProjectAgentChatResponse(input: {
     episodeId: context.episodeId || 'unknown',
     assistantPermissionMode: input.assistantPermissionMode,
   })
+  const modelSettings = choiceContinuation
+    ? {
+        temperature: 0.2,
+        toolChoice: choiceContinuation.operationId,
+      }
+    : {
+        temperature: 0.2,
+      }
   const agent = new Agent<ProjectAgentAgentsRunContext>({
     name: 'Project Workspace Agent',
     instructions: systemPrompt,
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
-    modelSettings: {
-      temperature: 0.2,
-    },
+    modelSettings,
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
       const stopPart = stopController.evaluateStep(collectFunctionToolOutputs(toolResults))
